@@ -1,472 +1,205 @@
-import type * as React from 'react';
-import { act, isValidElement } from 'react';
-import * as ReactDOM from 'react-dom/client';
+/**
+ * frontend/src/modules/global/components/GlobalViewClusters.test.tsx
+ *
+ * The Global Clusters view lists every open cluster with its connection state
+ * and, for clusters that can serve one, its overview; closing and reopening a
+ * cluster changes only that cluster's row and overview read and keeps the
+ * table's own state; a cluster's name opens that cluster's Overview. Runs in
+ * the full app, entered through the Global tab, over a faked backend
+ * (test-utils/appState).
+ */
+
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { backend } from '@/core/backend-api/models';
+import { makeClusterOverviewSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
+import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { requireValue } from '@/test-utils/requireValue';
 
-const mocks = vi.hoisted(() => ({
-  setActiveKubeconfig: vi.fn(),
-  setClusterNavigationTarget: vi.fn(),
-  activateClusterWorkspace: vi.fn(),
-  setSidebarSelectionForCluster: vi.fn(),
-  requestRefreshDomain: vi.fn(() => Promise.resolve({ status: 'executed' })),
-  acquireRefreshDomainLease: vi.fn(),
-  releaseRefreshDomainLease: vi.fn(),
-  selectedKubeconfigs: [
-    '/kube/config:alpha',
-    '/kube/config:beta',
-    '/kube/config:gamma',
-  ] as string[],
-  tableProps: null as null | Record<string, unknown>,
-  persistenceParams: null as null | Record<string, unknown>,
-}));
+const app = installAppStateHarness();
+let alpha: TestCluster;
+let beta: TestCluster;
+let view: MountedApp;
 
-const overview = {
-  clusterId: 'cluster-a',
-  clusterName: 'alpha',
-  overview: {
-    clusterVersion: 'v1.32.1',
-    clusterType: 'EKS',
-    readyNodes: 3,
-    totalNodes: 4,
-    notReadyNodes: 1,
-    readyPods: 25,
-    totalPods: 30,
-    failingPods: 2,
-    pendingPods: 1,
-    totalNamespaces: 8,
-    cpuUsageMilli: 1200,
-    cpuRequestsMilli: 2400,
-    cpuLimitsMilli: 6000,
-    cpuAllocatableMilli: 8000,
-    memoryUsageBytes: 8 * 1024 ** 3,
-    memoryRequestsBytes: 12 * 1024 ** 3,
-    memoryLimitsBytes: 24 * 1024 ** 3,
-    memoryAllocatableBytes: 32 * 1024 ** 3,
-    unavailableResources: [],
-  },
-  metrics: {
-    collectedAt: 1_700_001_000,
-    stale: false,
-    successCount: 2,
-    failureCount: 0,
-  },
+const overviewScope = (cluster: TestCluster) =>
+  buildClusterRefreshScope('cluster-overview', cluster.clusterId);
+
+const serveOverview = (cluster: TestCluster) => {
+  const base = makeClusterOverviewSnapshotPayload();
+  app.snapshots.serve(
+    'cluster-overview',
+    overviewScope(cluster),
+    makeClusterOverviewSnapshotPayload({
+      clusterId: cluster.clusterId,
+      clusterName: cluster.clusterName,
+      overview: {
+        ...base.overview,
+        clusterVersion: 'v1.32.1',
+        clusterType: 'EKS',
+        readyNodes: 3,
+        totalNodes: 4,
+        notReadyNodes: 1,
+        readyPods: 25,
+        totalPods: 30,
+        failingPods: 2,
+        totalNamespaces: 8,
+        cpuUsageMilli: 1200,
+        cpuRequestsMilli: 2400,
+        cpuLimitsMilli: 6000,
+        cpuAllocatableMilli: 8000,
+        memoryUsageBytes: 8 * 1024 ** 3,
+        memoryRequestsBytes: 12 * 1024 ** 3,
+        memoryLimitsBytes: 24 * 1024 ** 3,
+        memoryAllocatableBytes: 32 * 1024 ** 3,
+      },
+      metrics: { collectedAt: 1_700_001_000, stale: false, successCount: 2, failureCount: 0 },
+    })
+  );
 };
 
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({
-    selectedKubeconfigs: [...mocks.selectedKubeconfigs],
-    selectedClusterIds: mocks.selectedKubeconfigs.map((selection) => {
-      const parts = selection.split(':');
-      const name = parts[parts.length - 1];
-      return `cluster-${name === 'alpha' ? 'a' : name === 'beta' ? 'b' : 'c'}`;
-    }),
-    selectedClusterId: 'cluster-a',
-    kubeconfigsLoading: false,
-    getClusterMeta: (selection: string) => {
-      const parts = selection.split(':');
-      const name = parts[parts.length - 1] ?? '';
-      const suffix = name === 'alpha' ? 'a' : name === 'beta' ? 'b' : 'c';
-      return { id: `cluster-${suffix}`, name };
-    },
-    setActiveKubeconfig: mocks.setActiveKubeconfig,
-  }),
-}));
+const overviewReads = () =>
+  app.snapshots.reads('cluster-overview').map((read) => read.scope.split('|')[0]);
+const overviewStreams = () =>
+  app.streams.active().filter((stream) => stream.startsWith('cluster-overview '));
 
-vi.mock('@/core/contexts/ClusterLifecycleContext', () => ({
-  useClusterLifecycle: () => ({
-    getClusterState: (clusterId: string) =>
-      ({ 'cluster-a': 'ready', 'cluster-b': 'loading', 'cluster-c': 'auth_failed' })[clusterId],
-  }),
-}));
+const rows = () => Array.from(view.container.querySelectorAll<HTMLElement>('.gridtable-row'));
+const rowOf = (name: string) =>
+  requireValue(
+    rows().find((row) => row.querySelector('[data-column="name"]')?.textContent === name),
+    `expected the ${name} row`
+  );
+const rowNames = () =>
+  rows().map((row) => row.querySelector('[data-column="name"]')?.textContent?.trim());
+const cellText = (name: string, column: string) =>
+  rowOf(name).querySelector(`[data-column="${column}"]`)?.textContent?.trim();
 
-vi.mock('@/core/contexts/AuthErrorContext', async (importOriginal) => {
-  const original = await importOriginal<typeof import('@/core/contexts/AuthErrorContext')>();
-  return {
-    ...original,
-    useAuthError: () => ({
-      getClusterAuthState: (clusterId: string) => ({
-        hasError: clusterId === 'cluster-c',
-        reason: clusterId === 'cluster-c' ? 'token expired' : '',
-        clusterName: clusterId,
-        isRecovering: false,
-        secondsUntilRetry: 0,
-        errorClass: clusterId === 'cluster-c' ? 'auth' : '',
-        execCommand: '',
-        diagnosticKind: '',
-        diagnosticSummary: '',
-      }),
-    }),
-  };
-});
+const click = async (element: HTMLElement) => {
+  await act(async () => element.click());
+  await app.settle();
+};
 
-vi.mock('@/core/contexts/ViewStateContext', () => ({
-  useViewState: () => ({
-    setClusterNavigationTarget: mocks.setClusterNavigationTarget,
-    activateClusterWorkspace: mocks.activateClusterWorkspace,
-  }),
-}));
-
-vi.mock('@/core/contexts/SidebarStateContext', () => ({
-  useSidebarState: () => ({
-    setSidebarSelectionForCluster: mocks.setSidebarSelectionForCluster,
-  }),
-}));
-
-vi.mock('@/core/data-access', () => ({
-  requestRefreshDomain: mocks.requestRefreshDomain,
-  acquireRefreshDomainLease: mocks.acquireRefreshDomainLease,
-  releaseRefreshDomainLease: mocks.releaseRefreshDomainLease,
-}));
-
-vi.mock('@/core/data-access/dataAccess', () => ({
-  requestRefreshDomain: mocks.requestRefreshDomain,
-  acquireRefreshDomainLease: mocks.acquireRefreshDomainLease,
-  releaseRefreshDomainLease: mocks.releaseRefreshDomainLease,
-}));
-
-vi.mock('@/core/refresh', () => ({
-  useRefreshScopedDomainStates: () => ({
-    'cluster-a|': {
-      status: 'ready',
-      data: overview,
-      stats: null,
-      error: null,
-      droppedAutoRefreshes: 0,
-    },
-  }),
-}));
-
-vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
-  useGridTablePersistence: (params: Record<string, unknown>) => {
-    mocks.persistenceParams = params;
-    return {
-      sortConfig: { key: 'name', direction: 'asc' },
-      setSortConfig: vi.fn(),
-      columnWidths: null,
-      setColumnWidths: vi.fn(),
-      columnVisibility: null,
-      setColumnVisibility: vi.fn(),
-      filters: {
-        search: '',
-        kinds: [],
-        namespaces: [],
-        includeMetadata: false,
-      },
-      setFilters: vi.fn(),
-      pageSize: null,
-      setPageSize: vi.fn(),
-      resetState: vi.fn(),
-      hydrated: true,
-    };
-  },
-}));
-
-vi.mock('@modules/resource-grid/useResourceGridTable', () => ({
-  useClusterResourceGridTable: ({ data, keyExtractor }: Record<string, unknown>) => ({
-    gridTableProps: { data, keyExtractor },
-    favModal: null,
-  }),
-}));
-
-vi.mock('@modules/resource-grid/ResourceInventoryTable', () => ({
-  default: (props: Record<string, unknown>) => {
-    mocks.tableProps = props;
-    const source = props.source as { rows: Array<Record<string, unknown>> };
-    const columns = props.columns as Array<{
-      key: string;
-      render: (row: Record<string, unknown>) => React.ReactNode;
-    }>;
-    const name = columns.find((column) => column.key === 'name');
-    const attention = columns.find((column) => column.key === 'attention');
-    return (
-      <div data-testid="global-clusters-table">
-        {source.rows.map((row) => (
-          <div key={String(row.clusterId)} data-testid={`global-clusters-${row.clusterId}`}>
-            {name?.render(row)}
-            <span>{String(row.connection)}</span>
-            {attention?.render(row)}
-          </div>
-        ))}
-      </div>
-    );
-  },
-}));
-
-const renderGlobalClusters = async () => {
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = ReactDOM.createRoot(container);
-  let renderVersion = 0;
-  const render = async () => {
-    const { default: GlobalViewClusters } = await import('./GlobalViewClusters');
-    const TestableGlobalViewClusters = GlobalViewClusters as React.ComponentType<{
-      renderVersion: number;
-    }>;
-    root.render(<TestableGlobalViewClusters renderVersion={renderVersion} />);
-  };
-  await act(async () => {
-    await render();
-    await Promise.resolve();
-  });
-  return {
-    container,
-    rerender: async () => {
-      await act(async () => {
-        renderVersion += 1;
-        await render();
-        await Promise.resolve();
-      });
-    },
-    unmount: async () => {
-      await act(async () => root.unmount());
-      container.remove();
-    },
-  };
+const openGlobalClusters = async () => {
+  const globalTab = requireValue(
+    Array.from(view.container.querySelectorAll<HTMLElement>('[role="tab"]')).find(
+      (tab) => tab.textContent?.trim() === 'Global'
+    ),
+    'expected the Global tab'
+  );
+  await click(globalTab);
+  await view.goTo({ globalView: 'fleet' });
 };
 
 beforeEach(() => {
-  vi.clearAllMocks();
-  mocks.selectedKubeconfigs = ['/kube/config:alpha', '/kube/config:beta', '/kube/config:gamma'];
-  mocks.tableProps = null;
-  mocks.persistenceParams = null;
+  alpha = app.cluster({ name: 'alpha', context: 'alpha' });
+  beta = app.cluster({
+    name: 'beta',
+    context: 'beta',
+    lifecycle: backend.ClusterLifecycleState.ClusterStateLoading,
+  });
+  // gamma's credentials were rejected.
+  app.cluster({
+    name: 'gamma',
+    context: 'gamma',
+    lifecycle: backend.ClusterLifecycleState.ClusterStateAuthFailed,
+  });
+  app.startScreen(alpha);
+  app.namespaces(alpha, ['default']);
+  app.namespaces(beta, ['default']);
+  serveOverview(alpha);
+  serveOverview(beta);
 });
 
 afterEach(() => {
-  document.body.innerHTML = '';
+  vi.useRealTimers();
 });
 
-const getTableProps = (): Record<string, unknown> => {
-  if (!mocks.tableProps) {
-    throw new Error('expected Clusters table props');
-  }
-  return mocks.tableProps;
-};
-
-const getPersistenceParams = (): Record<string, unknown> => {
-  if (!mocks.persistenceParams) {
-    throw new Error('expected Clusters persistence params');
-  }
-  return mocks.persistenceParams;
-};
-
 describe('GlobalViewClusters', () => {
-  it('removes only the closed cluster owner and retains the Global table owner', async () => {
-    const { rerender, unmount } = await renderGlobalClusters();
+  it('lists every open cluster with its state, reading overviews only where a cluster can serve one', async () => {
+    view = await app.mountApp();
+    await openGlobalClusters();
 
-    expect(mocks.acquireRefreshDomainLease).toHaveBeenCalledWith({
-      domain: 'cluster-overview',
-      scope: 'cluster-a|',
-      preserveState: true,
-      demand: 'snapshot',
-    });
-    expect(mocks.acquireRefreshDomainLease).toHaveBeenCalledWith({
-      domain: 'cluster-overview',
-      scope: 'cluster-b|',
-      preserveState: true,
-      demand: 'snapshot',
-    });
-    const initialPersistenceIdentity = getPersistenceParams().clusterIdentity;
-    const initialCacheKey = (getTableProps().source as { cacheKey?: string }).cacheKey;
-
-    mocks.acquireRefreshDomainLease.mockClear();
-    mocks.releaseRefreshDomainLease.mockClear();
-    mocks.requestRefreshDomain.mockClear();
-    mocks.selectedKubeconfigs = ['/kube/config:alpha', '/kube/config:gamma'];
-    await rerender();
-
-    expect(mocks.releaseRefreshDomainLease).toHaveBeenCalledOnce();
-    expect(mocks.releaseRefreshDomainLease).toHaveBeenCalledWith({
-      domain: 'cluster-overview',
-      scope: 'cluster-b|',
-      preserveState: true,
-      demand: 'snapshot',
-    });
-    expect(mocks.acquireRefreshDomainLease).not.toHaveBeenCalled();
-    expect(mocks.requestRefreshDomain).not.toHaveBeenCalled();
-    expect(getPersistenceParams().clusterIdentity).toBe(initialPersistenceIdentity);
-    expect((getTableProps().source as { cacheKey?: string }).cacheKey).toBe(initialCacheKey);
-
-    mocks.acquireRefreshDomainLease.mockClear();
-    mocks.releaseRefreshDomainLease.mockClear();
-    mocks.requestRefreshDomain.mockClear();
-    mocks.selectedKubeconfigs = ['/kube/config:alpha', '/kube/config:beta', '/kube/config:gamma'];
-    await rerender();
-
-    expect(mocks.acquireRefreshDomainLease).toHaveBeenCalledOnce();
-    expect(mocks.acquireRefreshDomainLease).toHaveBeenCalledWith({
-      domain: 'cluster-overview',
-      scope: 'cluster-b|',
-      preserveState: true,
-      demand: 'snapshot',
-    });
-    expect(mocks.releaseRefreshDomainLease).not.toHaveBeenCalled();
-    expect(mocks.requestRefreshDomain).toHaveBeenCalledOnce();
-    expect(mocks.requestRefreshDomain).toHaveBeenCalledWith({
-      domain: 'cluster-overview',
-      scope: 'cluster-b|',
-      reason: 'startup',
-      label: 'Clusters overview: beta',
-    });
-    expect(getPersistenceParams().clusterIdentity).toBe(initialPersistenceIdentity);
-    expect((getTableProps().source as { cacheKey?: string }).cacheKey).toBe(initialCacheKey);
-
-    await unmount();
+    expect(rowNames()).toEqual(['alpha', 'beta', 'gamma']);
+    expect(cellText('alpha', 'connection')).toBe('Ready');
+    expect(cellText('beta', 'connection')).toBe('Loading');
+    expect(cellText('gamma', 'connection')).toBe('Authentication required');
+    // The overview's counts and capacity, from the cluster's own snapshot.
+    expect(cellText('alpha', 'clusterVersion')).toBe('v1.32.1');
+    expect(cellText('alpha', 'nodes')).toBe('3 / 4');
+    expect(cellText('alpha', 'pods')).toBe('25 / 30');
+    expect(
+      rowOf('alpha')
+        .querySelector('[data-column="cpu"] [data-gridtable-export-text]')
+        ?.getAttribute('data-gridtable-export-text')
+    ).toBe('1200');
+    // An auth-failed cluster has no overview to read.
+    expect(rowOf('gamma').querySelector('[data-column="cpu"] [data-gridtable-export-text]')).toBe(
+      null
+    );
+    expect(new Set(overviewReads())).toEqual(new Set([alpha.clusterId, beta.clusterId]));
   });
 
-  it('renders complete cluster identity and mixed ready, loading, and auth-failed states', async () => {
-    const { container, unmount } = await renderGlobalClusters();
-
-    expect(
-      container.querySelector('[data-testid="global-clusters-cluster-a"]')?.textContent
-    ).toContain('Ready');
-    expect(
-      container.querySelector('[data-testid="global-clusters-cluster-b"]')?.textContent
-    ).toContain('Loading');
-    expect(
-      container.querySelector('[data-testid="global-clusters-cluster-c"]')?.textContent
-    ).toContain('Authentication required');
-
-    const tableProps = mocks.tableProps;
-    if (!tableProps) {
-      throw new Error('expected Clusters table props');
-    }
-    const rows = (tableProps.source as { rows: Array<Record<string, unknown>> }).rows;
-    expect(rows.map(({ clusterId, name }) => ({ clusterId, name }))).toEqual([
-      { clusterId: 'cluster-a', name: 'alpha' },
-      { clusterId: 'cluster-b', name: 'beta' },
-      { clusterId: 'cluster-c', name: 'gamma' },
-    ]);
-    const columns = tableProps.columns as Array<{
-      key: string;
-      header?: React.ReactNode;
-      render?: (row: Record<string, unknown>) => React.ReactNode;
-      sortValue?: (row: Record<string, unknown>) => string | number;
-    }>;
-    expect(columns.map(({ key }) => key)).toEqual([
-      'name',
-      'connection',
-      'metrics',
-      'clusterType',
-      'clusterVersion',
-      'totalNamespaces',
-      'nodes',
-      'pods',
-      'attention',
-      'cpu',
-      'memory',
-    ]);
-    expect(Object.fromEntries(columns.map(({ key, header }) => [key, header]))).toMatchObject({
-      connection: 'Status',
-      nodes: 'Nodes',
-      pods: 'Pods',
-      totalNamespaces: 'NS',
-    });
-    const statusColumn = columns.find(({ key }) => key === 'connection');
-    expect(statusColumn?.render?.(rows[0])).toBe('Ready');
-    for (const row of rows.slice(1)) {
-      const statusCell = statusColumn?.render?.(row);
-      expect(isValidElement<{ className?: string }>(statusCell)).toBe(true);
-      if (!isValidElement<{ className?: string }>(statusCell)) {
-        throw new Error('expected warning Status cell');
-      }
-      expect(statusCell.props.className).toBe('status-text warning');
-    }
-    const cpuCell = columns.find(({ key }) => key === 'cpu')?.render?.(rows[0]);
-    expect(isValidElement<Record<string, unknown>>(cpuCell)).toBe(true);
-    if (!isValidElement<Record<string, unknown>>(cpuCell)) {
-      throw new Error('expected CPU ResourceBar');
-    }
-    expect(cpuCell.props).toMatchObject({
-      usage: 1200,
-      request: 2400,
-      limit: 6000,
-      allocatable: 8000,
-      type: 'cpu',
-      variant: 'compact',
-      metricsStale: false,
-      animationScopeKey: 'cluster:cluster-a:cpu',
-    });
-    const memoryCell = columns.find(({ key }) => key === 'memory')?.render?.(rows[0]);
-    expect(isValidElement<Record<string, unknown>>(memoryCell)).toBe(true);
-    if (!isValidElement<Record<string, unknown>>(memoryCell)) {
-      throw new Error('expected Memory ResourceBar');
-    }
-    expect(memoryCell.props).toMatchObject({
-      usage: 8 * 1024 ** 3,
-      request: 12 * 1024 ** 3,
-      limit: 24 * 1024 ** 3,
-      allocatable: 32 * 1024 ** 3,
-      type: 'memory',
-      variant: 'compact',
-      animationScopeKey: 'cluster:cluster-a:memory',
-    });
-    expect(columns.find(({ key }) => key === 'cpu')?.render?.(rows[1])).toBe('—');
-    expect(columns.find(({ key }) => key === 'memory')?.render?.(rows[1])).toBe('—');
-    expect(columns.find(({ key }) => key === 'cpu')?.sortValue?.(rows[0])).toBe(1200);
-    expect(columns.find(({ key }) => key === 'memory')?.sortValue?.(rows[0])).toBe(8 * 1024 ** 3);
-    const keyExtractor = (
-      tableProps.gridTableProps as {
-        keyExtractor: (row: Record<string, unknown>) => string;
-      }
-    ).keyExtractor;
-    expect(keyExtractor(rows[0])).toBe('cluster-a|cluster-a');
-    expect(mocks.requestRefreshDomain).toHaveBeenCalledWith({
-      domain: 'cluster-overview',
-      scope: 'cluster-a|',
-      reason: 'startup',
-      label: 'Clusters overview: alpha',
-    });
-    expect(mocks.requestRefreshDomain).toHaveBeenCalledWith({
-      domain: 'cluster-overview',
-      scope: 'cluster-b|',
-      reason: 'startup',
-      label: 'Clusters overview: beta',
-    });
-    expect(mocks.requestRefreshDomain).not.toHaveBeenCalledWith(
-      expect.objectContaining({ scope: 'cluster-c|' })
+  it('changes only the closed or reopened cluster and keeps the table’s own sort', async () => {
+    vi.useFakeTimers();
+    // Reopening makes beta the selected cluster, whose sidebar reads its start screen.
+    app.startScreen(beta);
+    app.backend.answer('DeleteGridTablePersistenceEntries', () => undefined);
+    view = await app.mountApp();
+    await openGlobalClusters();
+    await click(
+      requireValue(
+        view.container.querySelector<HTMLElement>('[aria-label="Sort by Cluster"]'),
+        'expected the Cluster sort control'
+      )
     );
-    expect(tableProps.spinnerMessage).toBe('Loading clusters...');
-    expect(tableProps.updatingMessage).toBe('Updating clusters…');
-    expect(tableProps.emptyMessage).toBe('Open at least one cluster to compare cluster state');
-    expect(tableProps.diagnosticsLabel).toBe('Clusters');
+    const nameSort = () =>
+      view.container.querySelector('th[data-column="name"]')?.getAttribute('aria-sort');
+    expect(nameSort()).toBe('descending');
+    expect(rowNames()).toEqual(['gamma', 'beta', 'alpha']);
+    app.snapshots.clearReads();
 
-    await unmount();
+    await click(
+      requireValue(
+        view.container.querySelector<HTMLElement>('[aria-label="Close beta"]'),
+        'expected the beta tab close button'
+      )
+    );
+    // A released stream closes after the unsubscribe debounce (resourceStreamManager.ts).
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+
+    expect(rowNames()).toEqual(['gamma', 'alpha']);
+    expect(overviewStreams()).toEqual([`cluster-overview ${overviewScope(alpha)}`]);
+    expect(overviewReads()).toEqual([]);
+
+    await act(async () => view.owners().kubeconfig.openKubeconfig(beta.selection));
+    await app.settle();
+
+    expect(rowNames()).toEqual(['gamma', 'beta', 'alpha']);
+    expect(new Set(overviewReads())).toEqual(new Set([beta.clusterId]));
+    expect(nameSort()).toBe('descending');
   });
 
-  it('prepares target-cluster navigation before activating the cluster tab', async () => {
-    const { container, unmount } = await renderGlobalClusters();
-    expect(mocks.tableProps).not.toHaveProperty('onRowClick');
-    expect(mocks.tableProps).not.toHaveProperty('onRowPointerClick');
-    const cluster = container.querySelector<HTMLButtonElement>(
-      '[data-testid="global-clusters-cluster-b"] .object-panel-link'
-    );
-    expect(cluster?.className).toContain('gridtable-link');
+  it('opens the cluster’s Overview from its name, whatever view the cluster last showed', async () => {
+    app.serveTable(alpha, 'cluster-config');
+    view = await app.mountApp();
+    await view.goTo({ clusterView: 'config' });
+    await openGlobalClusters();
 
-    await act(async () => cluster?.click());
-
-    expect(mocks.setClusterNavigationTarget).toHaveBeenCalledWith('cluster-b', {
-      viewType: 'overview',
-      activeClusterView: null,
-    });
-    expect(mocks.setSidebarSelectionForCluster).toHaveBeenCalledWith('cluster-b', {
-      type: 'overview',
-      value: 'overview',
-    });
-    expect(mocks.setActiveKubeconfig).toHaveBeenCalledWith('/kube/config:beta');
-    expect(mocks.activateClusterWorkspace).toHaveBeenCalledWith();
-    expect(mocks.setClusterNavigationTarget.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.activateClusterWorkspace.mock.invocationCallOrder[0]
-    );
-    expect(mocks.activateClusterWorkspace.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.setActiveKubeconfig.mock.invocationCallOrder[0]
+    await click(
+      requireValue(
+        rowOf('alpha').querySelector<HTMLElement>('[data-column="name"] button'),
+        'expected the alpha link'
+      )
     );
 
-    const attention = container.querySelector<HTMLElement>(
-      '[data-testid="global-clusters-cluster-a"] [data-testid="global-clusters-attention"]'
-    );
-    expect(attention?.tagName).toBe('SPAN');
-    expect(mocks.setClusterNavigationTarget).toHaveBeenCalledTimes(1);
-
-    await unmount();
+    const owners = view.owners();
+    expect(owners.kubeconfig.selectedClusterId).toBe(alpha.clusterId);
+    expect(owners.viewState?.viewType).toBe('overview');
   });
 });

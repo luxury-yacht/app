@@ -1,858 +1,552 @@
 /**
  * frontend/src/core/capabilities/hooks.test.tsx
  *
- * Test suite for hooks.
- * Covers key behaviors and edge cases for hooks.
+ * useCapabilities answers whether the UI may act. Kind-level capabilities
+ * come from the permission store that the app fills when a cluster connects
+ * and a namespace is selected; until a check answers, a capability is pending
+ * and never allowed, and a failed check is an error rather than a denial.
+ * Named-object capabilities are checked with the object's complete identity,
+ * only once their cluster is operational, never reuse another object's answer
+ * (even one that arrives late), keep denials, review errors, and transient
+ * activation failures distinct, and re-check on demand or when the cluster
+ * becomes ready. useCapabilityDiagnostics follows checks in flight. Runs inside
+ * the production shell over a faked backend (test-utils/appState); permission
+ * answers come from the faked QueryPermissions RPC.
  */
 
-import type React from 'react';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { eventBus } from '@/core/events';
-import { type UseCapabilitiesOptions, useCapabilities, useCapabilityDiagnostics } from './hooks';
-import type { PermissionQueryDiagnostics, PermissionStatus } from './permissionTypes';
+import { backend } from '@/core/backend-api/models';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type PermissionQuery,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { requireValue } from '@/test-utils/requireValue';
+import {
+  type UseCapabilitiesOptions,
+  type UseCapabilitiesResult,
+  useCapabilities,
+  useCapabilityDiagnostics,
+} from './hooks';
+import type { PermissionQueryDiagnostics } from './permissionTypes';
 import type { CapabilityDescriptor } from './types';
 
-const lifecycleMock = vi.hoisted(() => ({
-  current: undefined as
-    | undefined
-    | {
-        getClusterState: (
-          clusterId: string
-        ) => 'connecting' | 'loading_slow' | 'degraded' | 'ready' | undefined;
-      },
-}));
-const queryPermissionsBridge = vi.hoisted(() => ({
-  current: null as ((...args: unknown[]) => Promise<unknown>) | null,
-}));
+const app = installAppStateHarness();
 
-const installQueryPermissions = (query: (...args: unknown[]) => Promise<unknown>) => {
-  queryPermissionsBridge.current = query;
-  return () => {
-    if (queryPermissionsBridge.current === query) {
-      queryPermissionsBridge.current = null;
-    }
-  };
+let capabilitiesResult: UseCapabilitiesResult | null = null;
+let diagnosticsResult: PermissionQueryDiagnostics[] | null = null;
+
+function CapabilitiesProbe({
+  descriptors,
+  options,
+}: Readonly<{ descriptors: CapabilityDescriptor[]; options?: UseCapabilitiesOptions }>) {
+  capabilitiesResult = useCapabilities(descriptors, options);
+  return null;
+}
+
+function DiagnosticsProbe() {
+  diagnosticsResult = useCapabilityDiagnostics();
+  return null;
+}
+
+const capabilities = () => requireValue(capabilitiesResult, 'expected useCapabilities to render');
+
+let view: MountedApp;
+
+const openCluster = (
+  name: string,
+  context: string,
+  lifecycle?: backend.ClusterLifecycleState
+): TestCluster => {
+  const cluster = app.cluster({ name, context, lifecycle });
+  app.namespaces(cluster, ['alpha', 'beta']);
+  return cluster;
 };
 
-vi.mock('@core/backend-api', () => ({
-  QueryPermissions: (...args: unknown[]) => {
-    if (!queryPermissionsBridge.current) {
-      throw new Error('QueryPermissions test mock was not installed');
-    }
-    return queryPermissionsBridge.current(...args);
-  },
-}));
-
-vi.mock('@core/desktop-runtime', () => ({
-  desktopRuntimeAvailable: () => true,
-  onEvent: () => () => undefined,
-}));
-
-vi.mock('@/core/contexts/ClusterLifecycleContext', () => ({
-  useOptionalClusterLifecycle: () => lifecycleMock.current,
-}));
-
-const permissionStore: { map: Map<string, PermissionStatus> } = { map: new Map() };
-const setPermissionMap = (map: Map<string, PermissionStatus>) => {
-  permissionStore.map = map;
+const start = async () => {
+  view = await app.render(null);
 };
 
-const diagnosticListeners = new Set<() => void>();
-let diagnosticsSnapshot: PermissionQueryDiagnostics[] = [];
-const setDiagnosticsSnapshot = (next: PermissionQueryDiagnostics[]) => {
-  diagnosticsSnapshot = next;
-};
-const emitDiagnosticsUpdate = () => {
-  diagnosticListeners.forEach((listener) => {
-    listener();
+const show = (descriptors: CapabilityDescriptor[], options?: UseCapabilitiesOptions) =>
+  view.show(<CapabilitiesProbe descriptors={descriptors} options={options} />);
+
+const selectNamespace = async (cluster: TestCluster, namespace: string) => {
+  await act(async () => {
+    view.owners().namespace.setSelectedNamespace(namespace, cluster.clusterId);
   });
+  await app.settle();
 };
 
-vi.mock('./permissionStore', () => {
-  const subscribeDiagnostics = vi.fn((listener: () => void) => {
-    diagnosticListeners.add(listener);
-    return () => {
-      diagnosticListeners.delete(listener);
-    };
-  });
-  const getPermissionQueryDiagnosticsSnapshot = vi.fn(() => diagnosticsSnapshot);
+/** QueryPermissions calls that checked a named object (not the app's kind-level checks). */
+const namedChecks = () =>
+  app.backend
+    .calls('QueryPermissions')
+    .map(([queries]) => queries ?? [])
+    .filter((queries) => queries.some((query) => query.name));
 
-  const getPermissionKey = (
-    resourceKind: string,
-    verb: string,
-    namespace?: string | null,
-    subresource?: string | null
-  ) => {
-    const kind = resourceKind.toLowerCase();
-    const action = verb.toLowerCase();
-    const ns = namespace ? namespace.toLowerCase() : 'cluster';
-    const sub = subresource ? subresource.toLowerCase() : '';
-    return `${kind}|${action}|${ns}|${sub}`;
-  };
+interface ResultFields {
+  allowed: boolean;
+  source: string;
+  reason?: string;
+  error?: string;
+}
 
-  // useUserPermissions reads the store via useSyncExternalStore; tests drive
-  // updates by swapping the map and re-rendering, so subscribe is inert.
-  const subscribeUserPermissions = vi.fn(() => () => undefined);
-  const getUserPermissionMap = vi.fn(() => permissionStore.map);
-
-  return {
-    __esModule: true,
-    subscribeDiagnostics,
-    getPermissionQueryDiagnosticsSnapshot,
-    getPermissionKey,
-    subscribeUserPermissions,
-    getUserPermissionMap,
-  };
+/** The backend's response with `fields` for each query (backend/resource_gateway_permissions.go). */
+const respond = (
+  queries: PermissionQuery[] | null,
+  fields: (query: PermissionQuery) => ResultFields
+) => ({
+  results: (queries ?? []).map((query) => ({ ...query, ...fields(query) })),
+  diagnostics: [],
 });
 
-const deferred = <T,>() => {
-  let resolve!: (value: T) => void;
+const allowedBySsar = (): ResultFields => ({ allowed: true, source: 'ssar' });
+
+const deferred = () => {
+  let resolve!: () => void;
   let reject!: (reason: unknown) => void;
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+  const promise = new Promise<void>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
     reject = rejectPromise;
   });
   return { promise, resolve, reject };
 };
 
-const renderCapabilitiesHook = async (
-  descriptors: CapabilityDescriptor[],
-  options: UseCapabilitiesOptions = {}
-) => {
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = ReactDOM.createRoot(container);
-
-  const props = { descriptors, options };
-  const result: { current: ReturnType<typeof useCapabilities> | null } = { current: null };
-
-  const HookConsumer: React.FC<typeof props> = (incoming) => {
-    result.current = useCapabilities(incoming.descriptors, incoming.options);
-    return null;
-  };
-
-  const render = async () => {
-    await act(async () => {
-      root.render(<HookConsumer {...props} />);
-      await Promise.resolve();
-    });
-    await act(async () => {
-      await Promise.resolve();
-    });
-  };
-
-  await render();
-
-  return {
-    get current() {
-      if (!result.current) {
-        throw new Error('Hook result not initialised');
-      }
-      return result.current;
-    },
-    async rerender(
-      update: { descriptors?: CapabilityDescriptor[]; options?: UseCapabilitiesOptions } = {}
-    ) {
-      if (update.descriptors) {
-        props.descriptors = update.descriptors;
-      }
-      if (update.options) {
-        props.options = update.options;
-      }
-      await render();
-    },
-    async unmount() {
-      await act(async () => {
-        root.unmount();
-      });
-      container.remove();
-    },
-  };
-};
-
-const renderDiagnosticsHook = async () => {
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = ReactDOM.createRoot(container);
-  const result: { current: PermissionQueryDiagnostics[] | null } = { current: null };
-
-  const HookConsumer: React.FC = () => {
-    result.current = useCapabilityDiagnostics();
-    return null;
-  };
-
+const settle = async (run?: () => void) => {
   await act(async () => {
-    root.render(<HookConsumer />);
-    await Promise.resolve();
+    run?.();
   });
-
-  return {
-    get current() {
-      if (!result.current) {
-        throw new Error('Diagnostics hook not initialised');
-      }
-      return result.current;
-    },
-    async rerender() {
-      await act(async () => {
-        root.render(<HookConsumer />);
-        await Promise.resolve();
-      });
-    },
-    async unmount() {
-      await act(async () => {
-        root.unmount();
-      });
-      container.remove();
-    },
-  };
+  await app.settle();
 };
 
-describe('useCapabilities', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    eventBus.clear();
-    lifecycleMock.current = undefined;
-    setPermissionMap(new Map());
-    setDiagnosticsSnapshot([]);
-    diagnosticListeners.clear();
-  });
+const namedPod = (cluster: TestCluster, overrides: Partial<CapabilityDescriptor> = {}) =>
+  ({
+    id: 'edit-yaml',
+    clusterId: cluster.clusterId,
+    group: '',
+    version: 'v1',
+    resourceKind: 'Pod',
+    verb: 'patch',
+    namespace: 'alpha',
+    name: 'api',
+    ...overrides,
+  }) satisfies CapabilityDescriptor;
 
-  afterEach(() => {
-    eventBus.clear();
-    vi.clearAllMocks();
-  });
+const namedNode = (cluster: TestCluster): CapabilityDescriptor => ({
+  id: 'cordon',
+  clusterId: cluster.clusterId,
+  group: '',
+  version: 'v1',
+  resourceKind: 'Node',
+  verb: 'patch',
+  name: 'node-a',
+});
 
-  it('returns idle state for descriptors not yet in the permission map', async () => {
-    const hook = await renderCapabilitiesHook([
+// The permission store notifies its subscribers on a zero-delay timer;
+// fake timers let app.settle deliver it.
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe('useCapabilities with kind-level capabilities', () => {
+  it('keeps a capability no check has covered pending and not allowed', async () => {
+    const dev = openCluster('dev', 'alpha');
+    await start();
+    await show([
       {
-        id: 'namespace:pods:get:default',
+        id: 'delete-pod',
+        clusterId: dev.clusterId,
         resourceKind: 'Pod',
-        verb: 'get',
-        namespace: 'default',
+        verb: 'delete',
+        namespace: 'beta',
       },
     ]);
 
-    // Unnamed descriptor not in the map => idle/pending state.
-    expect(hook.current.loading).toBe(true);
-    expect(hook.current.ready).toBe(false);
-    expect(hook.current.isAllowed('namespace:pods:get:default')).toBe(false);
-    expect(hook.current.getState('namespace:pods:get:default')).toMatchObject({
+    expect(capabilities().isAllowed('delete-pod')).toBe(false);
+    expect(capabilities().getState('delete-pod')).toMatchObject({ pending: true, status: 'idle' });
+    expect(capabilities().loading).toBe(true);
+    expect(capabilities().ready).toBe(false);
+  });
+
+  it('answers cluster capabilities on connect and namespace capabilities once the namespace is selected', async () => {
+    const dev = openCluster('dev', 'alpha');
+    app.denyPermissions([{ verb: 'delete', resourceKind: 'Pod', namespace: 'alpha' }]);
+    await start();
+    await show([
+      { id: 'list-nodes', clusterId: dev.clusterId, resourceKind: 'Node', verb: 'list' },
+      {
+        id: 'delete-pod',
+        clusterId: dev.clusterId,
+        resourceKind: 'Pod',
+        verb: 'delete',
+        namespace: 'alpha',
+      },
+    ]);
+    expect(capabilities().isAllowed('list-nodes')).toBe(true);
+    expect(capabilities().getState('delete-pod').pending).toBe(true);
+
+    const release = app.backend.hold('QueryPermissions');
+    await selectNamespace(dev, 'alpha');
+    expect(capabilities().getState('delete-pod')).toMatchObject({
       allowed: false,
       pending: true,
-      status: 'idle',
+      status: 'loading',
     });
+    expect(capabilities().loading).toBe(true);
 
-    await hook.unmount();
+    await settle(release);
+
+    expect(capabilities().getState('delete-pod')).toMatchObject({
+      allowed: false,
+      pending: false,
+      status: 'ready',
+      reason: 'no matching rule',
+    });
+    expect(capabilities().loading).toBe(false);
+    expect(capabilities().ready).toBe(true);
   });
 
-  it('filters out invalid descriptors (empty id or missing verb/resourceKind)', async () => {
-    const hook = await renderCapabilitiesHook([
+  it('reports a namespace check that failed as an error, not a denial', async () => {
+    const dev = openCluster('dev', 'alpha');
+    app.backend.answer('QueryPermissions', (queries) => {
+      if (queries?.some((query) => query.namespace === 'alpha')) {
+        throw new Error('permission transport failed');
+      }
+      return respond(queries, allowedBySsar);
+    });
+    await start();
+    await show([
       {
-        id: ' namespace:pods:get:default ',
-        resourceKind: ' Pod ',
-        verb: ' get ',
-        namespace: ' default ',
-      },
-      {
-        id: '',
-        resourceKind: 'Deployment',
-        verb: 'patch',
+        id: 'delete-pod',
+        clusterId: dev.clusterId,
+        resourceKind: 'Pod',
+        verb: 'delete',
+        namespace: 'alpha',
       },
     ]);
+    await selectNamespace(dev, 'alpha');
 
-    // The second descriptor has an empty id after normalization, so it should be filtered out.
-    // Only the first descriptor should produce a state entry.
-    expect(hook.current.getState('namespace:pods:get:default')).toMatchObject({
-      pending: true,
-      status: 'idle',
+    expect(capabilities().getState('delete-pod')).toMatchObject({
+      allowed: false,
+      pending: false,
+      status: 'error',
+      reason: 'Error: permission transport failed',
     });
-
-    await hook.unmount();
+    expect(capabilities().ready).toBe(true);
   });
 
-  it('does nothing when disabled', async () => {
-    const hook = await renderCapabilitiesHook(
+  it('matches a padded descriptor to its trimmed identity and ignores one without an id', async () => {
+    const dev = openCluster('dev', 'alpha');
+    await start();
+    await show([
+      {
+        id: ' list-nodes ',
+        clusterId: ` ${dev.clusterId} `,
+        resourceKind: ' Node ',
+        verb: ' LIST ',
+      },
+      { id: '', clusterId: dev.clusterId, resourceKind: 'Pod', verb: 'delete' },
+    ]);
+
+    expect(capabilities().getState('list-nodes')).toMatchObject({
+      allowed: true,
+      status: 'ready',
+    });
+    expect(capabilities().ready).toBe(true);
+  });
+
+  it('evaluates and checks nothing while disabled', async () => {
+    const dev = openCluster('dev', 'alpha');
+    await start();
+    await show(
       [
-        {
-          id: 'cluster:nodes:list',
-          resourceKind: 'Node',
-          verb: 'list',
-        },
+        { id: 'list-nodes', clusterId: dev.clusterId, resourceKind: 'Node', verb: 'list' },
+        namedPod(dev),
       ],
       { enabled: false }
     );
 
-    expect(hook.current.loading).toBe(false);
-    expect(hook.current.ready).toBe(false);
-    expect(hook.current.getState('cluster:nodes:list')).toMatchObject({
+    expect(namedChecks()).toEqual([]);
+    expect(capabilities().getState('list-nodes')).toMatchObject({
       allowed: false,
-      pending: true,
       status: 'idle',
     });
-
-    await hook.unmount();
+    expect(capabilities().loading).toBe(false);
+    expect(capabilities().ready).toBe(false);
   });
+});
 
-  it('derives capability states from the permission map', async () => {
-    const descriptors: CapabilityDescriptor[] = [
-      { id: 'cluster:nodes:list', resourceKind: 'Node', verb: 'list' },
-      {
-        id: 'namespace:pods:delete:alpha',
-        resourceKind: 'Pod',
-        verb: 'delete',
-        namespace: 'alpha',
-      },
-    ];
+describe('useCapabilities with named-object capabilities', () => {
+  it('checks a named object with its complete identity', async () => {
+    const dev = openCluster('dev', 'alpha');
+    await start();
+    await show([namedPod(dev)]);
 
-    const allowedStatus: PermissionStatus = {
-      id: 'cluster:nodes:list',
-      allowed: true,
-      pending: false,
-      descriptor: {
-        clusterId: 'default',
-        group: null,
-        version: null,
-        resourceKind: 'Node',
-        verb: 'list',
-        namespace: null,
-        subresource: null,
-      },
-      entry: {
-        status: 'ready',
-      },
-      reason: null,
-      error: null,
-      source: 'ssrr',
-      feature: undefined,
-    };
-
-    const pendingStatus: PermissionStatus = {
-      id: 'namespace:pods:delete:alpha',
-      allowed: false,
-      pending: true,
-      descriptor: {
-        clusterId: 'default',
-        group: null,
-        version: null,
-        resourceKind: 'Pod',
-        verb: 'delete',
-        namespace: 'alpha',
-        subresource: null,
-      },
-      entry: {
-        status: 'loading',
-      },
-      reason: null,
-      error: null,
-      source: null,
-      feature: undefined,
-    };
-
-    // The getPermissionKey mock uses kind|verb|ns|sub format.
-    setPermissionMap(
-      new Map([
-        ['node|list|cluster|', allowedStatus],
-        ['pod|delete|alpha|', pendingStatus],
-      ])
-    );
-
-    const hook = await renderCapabilitiesHook(descriptors);
-
-    expect(hook.current.loading).toBe(true);
-    expect(hook.current.ready).toBe(false);
-    expect(hook.current.isAllowed('cluster:nodes:list')).toBe(true);
-    expect(hook.current.getState('namespace:pods:delete:alpha')).toMatchObject({
-      pending: true,
-      status: 'loading',
-    });
-
-    const deniedStatus: PermissionStatus = {
-      ...pendingStatus,
-      pending: false,
-      error: 'denied',
-      descriptor: pendingStatus.descriptor,
-      entry: {
-        status: 'error',
-      },
-    };
-
-    setPermissionMap(
-      new Map([
-        ['node|list|cluster|', allowedStatus],
-        ['pod|delete|alpha|', deniedStatus],
-      ])
-    );
-
-    await hook.rerender();
-
-    expect(hook.current.loading).toBe(false);
-    expect(hook.current.ready).toBe(true);
-    expect(hook.current.getState('namespace:pods:delete:alpha')).toMatchObject({
-      pending: false,
-      status: 'error',
-      reason: 'denied',
-    });
-
-    await hook.unmount();
-  });
-
-  it('queries named-resource descriptors via QueryPermissions RPC', async () => {
-    const mockQueryPermissions = vi.fn().mockResolvedValue({
-      results: [
-        {
-          id: 'named:pods:get:default:my-pod',
-          clusterId: '',
+    const checks = namedChecks().flat();
+    expect(checks.length).toBeGreaterThan(0);
+    expect(checks).toEqual(
+      checks.map(() =>
+        expect.objectContaining({
+          clusterId: dev.clusterId,
+          group: '',
+          version: 'v1',
           resourceKind: 'Pod',
-          verb: 'get',
-          namespace: 'default',
-          subresource: '',
-          name: 'my-pod',
-          allowed: true,
-          source: 'ssar',
-          reason: '',
-          error: '',
-        },
-      ],
-    });
-
-    const restoreQueryPermissions = installQueryPermissions(mockQueryPermissions);
-
-    const hook = await renderCapabilitiesHook([
-      {
-        id: 'named:pods:get:default:my-pod',
-        clusterId: 'test-cluster',
-        group: '',
-        version: 'v1',
-        resourceKind: 'Pod',
-        verb: 'get',
-        namespace: 'default',
-        name: 'my-pod',
-      },
-    ]);
-
-    // Wait for the async QueryPermissions call to resolve.
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(mockQueryPermissions).toHaveBeenCalledWith([
-      expect.objectContaining({
-        clusterId: 'test-cluster',
-        group: '',
-        version: 'v1',
-        resourceKind: 'Pod',
-        namespace: 'default',
-        name: 'my-pod',
-      }),
-    ]);
-    expect(hook.current.isAllowed('named:pods:get:default:my-pod')).toBe(true);
-    expect(hook.current.getState('named:pods:get:default:my-pod')).toMatchObject({
+          verb: 'patch',
+          namespace: 'alpha',
+          name: 'api',
+        })
+      )
+    );
+    expect(capabilities().getState('edit-yaml')).toMatchObject({
       allowed: true,
       pending: false,
       status: 'ready',
     });
-
-    await hook.unmount();
-
-    // Clean up.
-    restoreQueryPermissions();
   });
 
   it.each(['clusterId', 'group', 'version', 'name'] as const)(
-    'does not reuse named permission results after %s changes',
+    'does not reuse a named answer after the object’s %s changes',
     async (field) => {
-      const descriptor: CapabilityDescriptor = {
-        id: 'edit-yaml',
-        clusterId: 'config:Production',
-        group: '',
-        version: 'v1',
-        resourceKind: 'Pod',
-        verb: 'patch',
-        namespace: 'default',
-        name: 'api',
-      };
-      const next = {
+      // Two contexts whose cluster ids differ only by case.
+      const upper = openCluster('config', 'Production');
+      const lower = openCluster('config', 'production');
+      const descriptor = namedPod(upper);
+      const changed = {
         ...descriptor,
-        [field]: field === 'clusterId' ? 'config:production' : 'other',
+        [field]: field === 'clusterId' ? lower.clusterId : 'other',
       };
-      const response = (allowed: boolean) => ({
-        results: [{ ...descriptor, allowed, source: 'ssar', reason: '', error: '' }],
+      // Only the original object is allowed.
+      app.permissions(
+        (query) =>
+          !query.name ||
+          (query.clusterId === descriptor.clusterId &&
+            query.group === descriptor.group &&
+            query.version === descriptor.version &&
+            query.name === descriptor.name)
+      );
+      await start();
+      await show([descriptor]);
+      expect(capabilities().isAllowed('edit-yaml')).toBe(true);
+
+      const release = app.backend.hold('QueryPermissions');
+      await show([changed]);
+      expect(capabilities().getState('edit-yaml')).toMatchObject({
+        allowed: false,
+        pending: true,
       });
-      const pending = deferred<ReturnType<typeof response>>();
-      const query = vi
-        .fn()
-        .mockResolvedValueOnce(response(true))
-        .mockReturnValueOnce(pending.promise);
-      const restore = installQueryPermissions(query);
-      const hook = await renderCapabilitiesHook([descriptor]);
-      expect(hook.current.isAllowed('edit-yaml')).toBe(true);
-      await hook.rerender({ descriptors: [next] });
-      expect(hook.current.getState('edit-yaml')).toMatchObject({ allowed: false, pending: true });
-      await act(async () => {
-        pending.resolve(response(false));
+
+      await settle(release);
+      expect(capabilities().getState('edit-yaml')).toMatchObject({
+        allowed: false,
+        pending: false,
       });
-      expect(hook.current.getState('edit-yaml')).toMatchObject({ allowed: false, pending: false });
-      await hook.unmount();
-      restore();
     }
   );
 
   it.each(['resolve', 'reject'] as const)(
-    'ignores a previous object request that later %ss',
+    'ignores the previous object’s check when it %ss after a switch',
     async (settlement) => {
-      const descriptor: CapabilityDescriptor = {
-        id: 'edit-yaml',
-        clusterId: 'cluster-a',
-        group: 'apps',
-        version: 'v1',
-        resourceKind: 'Deployment',
-        verb: 'patch',
-        namespace: 'default',
-        name: 'api',
-      };
-      const response = (allowed: boolean) => ({
-        results: [{ ...descriptor, allowed, source: 'ssar', reason: '', error: '' }],
+      const devA = openCluster('dev', 'a');
+      const devB = openCluster('dev', 'b');
+      // Every check of the first object answers only after the switch.
+      const previous = deferred();
+      app.backend.answer('QueryPermissions', async (queries) => {
+        if (!queries?.some((query) => query.name)) {
+          return respond(queries, allowedBySsar);
+        }
+        if (queries.some((query) => query.clusterId === devA.clusterId)) {
+          await previous.promise;
+          return respond(queries, allowedBySsar);
+        }
+        return respond(queries, () => ({ allowed: false, source: 'ssar', reason: 'denied' }));
       });
-      const old = deferred<ReturnType<typeof response>>();
-      const query = vi.fn().mockReturnValueOnce(old.promise).mockResolvedValueOnce(response(false));
-      const restore = installQueryPermissions(query);
-      const hook = await renderCapabilitiesHook([descriptor]);
-      await hook.rerender({ descriptors: [{ ...descriptor, clusterId: 'cluster-b' }] });
-      expect(hook.current.getState('edit-yaml')).toMatchObject({ allowed: false, status: 'ready' });
-      await act(async () => {
+      await start();
+      await show([namedPod(devA)]);
+      await show([namedPod(devB)]);
+      expect(capabilities().getState('edit-yaml')).toMatchObject({
+        allowed: false,
+        status: 'ready',
+      });
+
+      await settle(() => {
         if (settlement === 'resolve') {
-          old.resolve(response(true));
+          previous.resolve();
         } else {
-          old.reject(new Error('previous cluster disconnected'));
+          previous.reject(new Error('previous cluster disconnected'));
         }
       });
-      expect(hook.current.getState('edit-yaml')).toMatchObject({ allowed: false, status: 'ready' });
-      await hook.unmount();
-      restore();
+
+      expect(capabilities().getState('edit-yaml')).toMatchObject({
+        allowed: false,
+        status: 'ready',
+      });
     }
   );
 
-  it('keeps named denials, review errors and transient activation failures distinct', async () => {
-    const descriptors: CapabilityDescriptor[] = ['allowed', 'denied', 'failed', 'inactive'].map(
-      (id) => ({
-        id,
-        clusterId: 'test-cluster',
-        group: '',
-        version: 'v1',
-        resourceKind: 'Pod',
-        verb: 'get',
-        namespace: 'default',
-        name: id,
-      })
+  it('keeps named denials, review errors, and transient activation failures distinct', async () => {
+    const dev = openCluster('dev', 'alpha');
+    const outcomes: Record<string, ResultFields> = {
+      allowed: { allowed: true, source: 'ssar' },
+      denied: { allowed: false, source: 'ssar', reason: 'RBAC denied' },
+      failed: { allowed: false, source: 'error', error: 'review failed' },
+      inactive: { allowed: false, source: 'error', error: `cluster ${dev.clusterId} not active` },
+    };
+    app.backend.answer('QueryPermissions', (queries) =>
+      respond(queries, (query) => (query.name ? outcomes[query.name] : allowedBySsar()))
     );
-    const query = vi.fn().mockResolvedValue({
-      results: descriptors.map((descriptor) => ({
-        ...descriptor,
-        subresource: '',
-        allowed: descriptor.id === 'allowed',
-        source: ['failed', 'inactive'].includes(descriptor.id) ? 'error' : 'ssar',
-        reason: descriptor.id === 'denied' ? 'RBAC denied' : '',
-        error:
-          descriptor.id === 'inactive'
-            ? 'cluster test-cluster not active'
-            : descriptor.id === 'failed'
-              ? 'review failed'
-              : '',
-      })),
-    });
-    const restore = installQueryPermissions(query);
-    const hook = await renderCapabilitiesHook(descriptors);
-    expect(hook.current.getState('allowed')).toMatchObject({
+    await start();
+    await show(Object.keys(outcomes).map((id) => namedPod(dev, { id, name: id })));
+
+    expect(capabilities().getState('allowed')).toMatchObject({
       allowed: true,
       pending: false,
       status: 'ready',
     });
-    expect(hook.current.getState('denied')).toMatchObject({
+    expect(capabilities().getState('denied')).toMatchObject({
       allowed: false,
       pending: false,
       status: 'ready',
       reason: 'RBAC denied',
     });
-    expect(hook.current.getState('failed')).toMatchObject({
+    expect(capabilities().getState('failed')).toMatchObject({
       allowed: false,
       pending: false,
       status: 'error',
       reason: 'review failed',
     });
-    expect(hook.current.getState('inactive')).toMatchObject({
+    expect(capabilities().getState('inactive')).toMatchObject({
       allowed: false,
       pending: true,
       status: 'loading',
     });
-    expect(hook.current.loading).toBe(true);
-    expect(hook.current.ready).toBe(false);
-    await hook.unmount();
-    restore();
+    expect(capabilities().loading).toBe(true);
+    expect(capabilities().ready).toBe(false);
   });
 
   it.each([
-    ['cluster test-cluster not active', 'loading', true],
+    ['cluster dev:alpha not active', 'loading', true],
     ['review transport failed', 'error', false],
-  ] as const)('publishes a rejected named query as %s', async (message, status, pending) => {
-    const restore = installQueryPermissions(vi.fn().mockRejectedValue(new Error(message)));
-    const hook = await renderCapabilitiesHook([
-      {
-        id: 'pod',
-        clusterId: 'test-cluster',
-        group: '',
-        version: 'v1',
-        resourceKind: 'Pod',
-        verb: 'get',
-        namespace: 'default',
-        name: 'pod',
-      },
-    ]);
-    expect(hook.current.getState('pod')).toMatchObject({ allowed: false, pending, status });
-    expect(hook.current.loading).toBe(pending);
-    expect(hook.current.ready).toBe(!pending);
-    await hook.unmount();
-    restore();
+  ] as const)('publishes a rejected named check “%s” as %s', async (message, status, pending) => {
+    const dev = openCluster('dev', 'alpha');
+    app.backend.answer('QueryPermissions', (queries) => {
+      if (queries?.some((query) => query.name)) {
+        throw new Error(message);
+      }
+      return respond(queries, allowedBySsar);
+    });
+    await start();
+    await show([namedPod(dev)]);
+
+    expect(capabilities().getState('edit-yaml')).toMatchObject({
+      allowed: false,
+      pending,
+      status,
+    });
+    expect(capabilities().loading).toBe(pending);
+    expect(capabilities().ready).toBe(!pending);
   });
 
-  it('requeries named-resource descriptors when refreshKey changes', async () => {
-    const mockQueryPermissions = vi.fn().mockResolvedValue({ results: [] });
-    const restoreQueryPermissions = installQueryPermissions(mockQueryPermissions);
-    const descriptors: CapabilityDescriptor[] = [
-      {
-        id: 'named:pods:get:default:my-pod',
-        clusterId: 'test-cluster',
-        group: '',
-        version: 'v1',
-        resourceKind: 'Pod',
-        verb: 'get',
-        namespace: 'default',
-        name: 'my-pod',
-      },
-    ];
-    const hook = await renderCapabilitiesHook(descriptors, { refreshKey: 0 });
+  it('re-checks a named object when the refresh key changes', async () => {
+    const dev = openCluster('dev', 'alpha');
+    const descriptors = [namedPod(dev)];
+    await start();
+    await show(descriptors, { refreshKey: 0 });
+    const checked = namedChecks().length;
 
-    expect(mockQueryPermissions).toHaveBeenCalledTimes(1);
+    await show(descriptors, { refreshKey: 1 });
 
-    await hook.rerender({ options: { refreshKey: 1 } });
-
-    expect(mockQueryPermissions).toHaveBeenCalledTimes(2);
-
-    await hook.unmount();
-    restoreQueryPermissions();
+    expect(namedChecks()).toHaveLength(checked + 1);
   });
 
-  it('waits for an operational cluster before querying named-resource descriptors', async () => {
-    lifecycleMock.current = {
-      getClusterState: () => 'loading_slow',
-    };
-    const mockQueryPermissions = vi.fn().mockResolvedValue({
-      results: [
-        {
-          id: 'named:nodes:patch:node-a',
-          clusterId: 'test-cluster',
-          resourceKind: 'Node',
-          verb: 'patch',
-          namespace: '',
-          subresource: '',
-          name: 'node-a',
-          allowed: true,
-          source: 'ssar',
-          reason: '',
-          error: '',
-        },
-      ],
-    });
+  it('waits for an operational cluster before checking a named object', async () => {
+    const dev = openCluster('dev', 'alpha', backend.ClusterLifecycleState.ClusterStateLoadingSlow);
+    await start();
+    await show([namedNode(dev)]);
 
-    const restoreQueryPermissions = installQueryPermissions(mockQueryPermissions);
-
-    const hook = await renderCapabilitiesHook([
-      {
-        id: 'named:nodes:patch:node-a',
-        clusterId: 'test-cluster',
-        group: '',
-        version: 'v1',
-        resourceKind: 'Node',
-        verb: 'patch',
-        name: 'node-a',
-      },
-    ]);
-
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(mockQueryPermissions).not.toHaveBeenCalled();
-    expect(hook.current.getState('named:nodes:patch:node-a')).toMatchObject({
+    expect(namedChecks()).toEqual([]);
+    expect(capabilities().getState('cordon')).toMatchObject({
       allowed: false,
       pending: true,
       status: 'loading',
       reason: 'Cluster is not ready',
     });
 
-    lifecycleMock.current = {
-      getClusterState: (clusterId: string) =>
-        clusterId === 'test-cluster' ? 'degraded' : undefined,
-    };
-    await act(async () => {
-      eventBus.emit('cluster:lifecycle', {
-        clusterId: 'test-cluster',
-        state: 'degraded',
-      });
-      await Promise.resolve();
-      await Promise.resolve();
+    await settle(() => {
+      app.events.emit('cluster:lifecycle', { clusterId: dev.clusterId, state: 'degraded' });
     });
 
-    await vi.waitFor(() => expect(mockQueryPermissions).toHaveBeenCalledTimes(1));
-    expect(hook.current.getState('named:nodes:patch:node-a')).toMatchObject({
+    expect(namedChecks()).toHaveLength(1);
+    expect(capabilities().getState('cordon')).toMatchObject({
       allowed: true,
       pending: false,
       status: 'ready',
     });
-
-    await hook.unmount();
-    restoreQueryPermissions();
   });
 
-  it('keeps transient cluster activation errors pending and retries named descriptors on ready', async () => {
-    const mockQueryPermissions = vi
-      .fn()
-      .mockResolvedValueOnce({
-        results: [
-          {
-            id: 'named:nodes:patch:node-a',
-            clusterId: 'test-cluster',
-            resourceKind: 'Node',
-            verb: 'patch',
-            namespace: '',
-            subresource: '',
-            name: 'node-a',
-            allowed: false,
-            source: 'error',
-            reason:
-              'failed to resolve resource kind "Node": cluster test-cluster:test-cluster not active',
-            error: '',
-          },
-        ],
-      })
-      .mockResolvedValueOnce({
-        results: [
-          {
-            id: 'named:nodes:patch:node-a',
-            clusterId: 'test-cluster',
-            resourceKind: 'Node',
-            verb: 'patch',
-            namespace: '',
-            subresource: '',
-            name: 'node-a',
-            allowed: true,
-            source: 'ssar',
-            reason: '',
-            error: '',
-          },
-        ],
-      });
-
-    const restoreQueryPermissions = installQueryPermissions(mockQueryPermissions);
-
-    const hook = await renderCapabilitiesHook([
-      {
-        id: 'named:nodes:patch:node-a',
-        clusterId: 'test-cluster',
-        group: '',
-        version: 'v1',
-        resourceKind: 'Node',
-        verb: 'patch',
-        name: 'node-a',
-      },
-    ]);
-
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
+  it('keeps a transient activation failure pending and re-checks when the cluster becomes ready', async () => {
+    const dev = openCluster('dev', 'alpha', backend.ClusterLifecycleState.ClusterStateDegraded);
+    // The backend reports the cluster not active until it becomes ready.
+    let clusterActive = false;
+    app.backend.answer('QueryPermissions', (queries) => {
+      if (!queries?.some((query) => query.name)) {
+        return respond(queries, allowedBySsar);
+      }
+      return respond(queries, () =>
+        !clusterActive
+          ? {
+              allowed: false,
+              source: 'error',
+              reason: `failed to resolve resource kind "Node": cluster ${dev.clusterId} not active`,
+            }
+          : allowedBySsar()
+      );
     });
-
-    expect(mockQueryPermissions).toHaveBeenCalledTimes(1);
-    expect(hook.current.getState('named:nodes:patch:node-a')).toMatchObject({
+    await start();
+    await show([namedNode(dev)]);
+    expect(capabilities().getState('cordon')).toMatchObject({
       allowed: false,
       pending: true,
       status: 'loading',
     });
+    const checked = namedChecks().length;
 
-    await act(async () => {
-      eventBus.emit('cluster:lifecycle', {
-        clusterId: 'test-cluster',
-        state: 'ready',
-      });
-      await Promise.resolve();
-      await Promise.resolve();
+    await settle(() => {
+      clusterActive = true;
+      app.events.emit('cluster:lifecycle', { clusterId: dev.clusterId, state: 'ready' });
     });
 
-    await vi.waitFor(() => expect(mockQueryPermissions).toHaveBeenCalledTimes(2));
-    expect(hook.current.getState('named:nodes:patch:node-a')).toMatchObject({
+    expect(namedChecks()).toHaveLength(checked + 1);
+    expect(capabilities().getState('cordon')).toMatchObject({
       allowed: true,
       pending: false,
       status: 'ready',
     });
-
-    await hook.unmount();
-    restoreQueryPermissions();
   });
 });
 
 describe('useCapabilityDiagnostics', () => {
-  beforeEach(() => {
-    setDiagnosticsSnapshot([]);
-    vi.clearAllMocks();
-  });
+  it('follows a namespace’s permission check from in flight to completed', async () => {
+    const dev = openCluster('dev', 'alpha');
+    await start();
+    await view.show(<DiagnosticsProbe />);
+    const namespaceEntry = () =>
+      requireValue(diagnosticsResult, 'expected useCapabilityDiagnostics to render').find(
+        (entry) => entry.clusterId === dev.clusterId && entry.namespace === 'alpha'
+      );
+    expect(namespaceEntry()).toBeUndefined();
 
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
+    const release = app.backend.hold('QueryPermissions');
+    await selectNamespace(dev, 'alpha');
+    expect(namespaceEntry()?.inFlightCount).toBeGreaterThan(0);
 
-  it('subscribes to diagnostics updates and reflects new snapshots', async () => {
-    setDiagnosticsSnapshot([
-      {
-        key: 'namespace:alpha',
-        namespace: 'alpha',
-        method: 'ssrr',
-        pendingCount: 1,
-        inFlightCount: 0,
-        consecutiveFailureCount: 0,
-        totalChecks: 0,
-        lastDescriptors: [],
-      },
-    ]);
+    await settle(release);
 
-    const hook = await renderDiagnosticsHook();
-    expect(hook.current).toHaveLength(1);
-    expect(hook.current[0]?.namespace).toBe('alpha');
-
-    setDiagnosticsSnapshot([
-      {
-        key: 'namespace:beta',
-        namespace: 'beta',
-        method: 'ssrr',
-        pendingCount: 0,
-        inFlightCount: 1,
-        consecutiveFailureCount: 2,
-        totalChecks: 0,
-        lastDescriptors: [],
-      },
-    ]);
-    await act(async () => {
-      emitDiagnosticsUpdate();
-    });
-
-    await hook.rerender();
-    expect(hook.current).toHaveLength(1);
-    expect(hook.current[0]?.namespace).toBe('beta');
-
-    await hook.unmount();
+    expect(namespaceEntry()).toMatchObject({ inFlightCount: 0, lastResult: 'success' });
   });
 });

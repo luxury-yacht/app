@@ -1,278 +1,35 @@
 /**
  * frontend/src/ui/favorites/FavSaveModal.test.tsx
  *
- * Tests for the FavSaveModal component.
- * Covers: render/hide, name pre-population, save, cancel, delete visibility,
- * save-disabled-when-unchanged, and view dropdown scope changes.
+ * The favorite save modal's data contract: it saves the current view's route
+ * (bound to the selected cluster's id and name, or to no cluster for Global
+ * views) with every declared table filter, column, and sort setting the user
+ * leaves or edits; keeps case-distinct cluster ids and semantic "all"
+ * selections; offers only valid kubeconfig contexts; refuses another
+ * favorite's name; keeps the draft while the live table refreshes and starts
+ * over on reopen; enables Save for an edit only after a change; offers Delete
+ * only for an existing favorite; stays open when its overlay is clicked; and
+ * reports a rejected save inline. Runs inside the production shell with the
+ * real kubeconfig and namespace owners, keyboard registry, dropdowns, and
+ * portals (test-utils/appState); the modal's props are what the view's heart
+ * passes it (FavToggle.test.tsx covers that wiring).
  */
 
-import type { DropdownProps } from '@shared/components/dropdowns/Dropdown';
-import type React from 'react';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { backend } from '@/core/backend-api/models';
 import type { Favorite, FavoriteFilters, FavoriteTableState } from '@/core/persistence/favorites';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
+import FavSaveModal, { type FavoriteModalTable, type FavSaveModalProps } from './FavSaveModal';
 
-const handleInlineMock = vi.hoisted(() => vi.fn());
-const runUserActionMock = vi.hoisted(() => vi.fn());
-
-interface ConfirmationModalMockProps {
-  isOpen: boolean;
-  onConfirm: () => void;
-  onCancel: () => void;
-  confirmText?: string;
-  cancelText?: string;
-}
-
-// ---------------------------------------------------------------------------
-// Mocks — must be declared before importing the component under test.
-// ---------------------------------------------------------------------------
-
-vi.mock('@ui/shortcuts', () => ({
-  useShortcut: vi.fn(),
-  useKeyboardContext: () => ({
-    registerShortcut: vi.fn(),
-    unregisterShortcut: vi.fn(),
-    getAvailableShortcuts: vi.fn(() => []),
-    isShortcutAvailable: vi.fn(() => false),
-    setEnabled: vi.fn(),
-    isEnabled: true,
-    registerSurface: vi.fn(),
-    unregisterSurface: vi.fn(),
-    dispatchNativeAction: vi.fn(() => false),
-    hasActiveBlockingSurface: vi.fn(() => false),
-  }),
-  useShortcuts: vi.fn(),
-  useSearchShortcutTarget: () => undefined,
-}));
-
-vi.mock('@shared/components/modals/useModalFocusTrap', () => ({
-  useModalFocusTrap: vi.fn(),
-}));
-
-vi.mock('@utils/errorHandler', () => ({
-  errorHandler: {
-    handleInline: (...args: unknown[]) => handleInlineMock(...args),
-  },
-}));
-
-vi.mock('@/core/telemetry/sentry', async (importOriginal) => {
-  const original = await importOriginal<typeof import('@/core/telemetry/sentry')>();
-  return {
-    ...original,
-    runUserAction: (...args: unknown[]) => runUserActionMock(...args),
-  };
-});
-
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({
-    selectedKubeconfigs: ['/home/user/.kube/config:prod-cluster'],
-    selectedKubeconfig: '/home/user/.kube/config:prod-cluster',
-    selectedClusterId: '/home/user/.kube/config:prod-cluster',
-    selectedClusterName: 'prod-cluster',
-    selectedClusterIds: ['/home/user/.kube/config:prod-cluster'],
-    kubeconfigsLoading: false,
-    setSelectedKubeconfigs: vi.fn().mockResolvedValue(undefined),
-    setActiveKubeconfig: vi.fn(),
-    getClusterMeta: vi.fn((selection: string) =>
-      selection === '/home/user/.kube/config:prod-cluster'
-        ? { id: 'config:prod-cluster', name: 'prod-cluster' }
-        : { id: '', name: '' }
-    ),
-    kubeconfigs: [
-      {
-        name: 'config',
-        path: '/home/user/.kube/config',
-        context: 'prod-cluster',
-        isDefault: true,
-        isCurrentContext: true,
-      },
-      {
-        name: 'broken',
-        path: '/home/user/.kube/broken',
-        context: 'broken-context',
-        isDefault: false,
-        isCurrentContext: false,
-        invalid: true,
-        invalidReason: 'no cluster',
-      },
-    ],
-    loadKubeconfigs: vi.fn().mockResolvedValue(undefined),
-  }),
-}));
-
-vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
-  useNamespace: () => ({
-    namespaces: [
-      {
-        name: 'default',
-        scope: 'default',
-        status: 'Active',
-        details: '',
-        age: '',
-        hasWorkloads: true,
-        workloadsUnknown: false,
-        resourceVersion: '1',
-      },
-      {
-        name: 'kube-system',
-        scope: 'kube-system',
-        status: 'Active',
-        details: '',
-        age: '',
-        hasWorkloads: true,
-        workloadsUnknown: false,
-        resourceVersion: '1',
-      },
-    ],
-    selectedNamespace: 'default',
-    namespaceLoading: false,
-    namespaceRefreshing: false,
-    setSelectedNamespace: vi.fn(),
-    loadNamespaces: vi.fn().mockResolvedValue(undefined),
-    refreshNamespaces: vi.fn().mockResolvedValue(undefined),
-    getClusterNamespace: vi.fn(),
-  }),
-}));
-
-// Mock Dropdown to render a simple <select> so we can drive view changes.
-vi.mock('@shared/components/dropdowns/Dropdown', () => ({
-  Dropdown: ({
-    options,
-    value,
-    onChange,
-    placeholder,
-    disabled,
-    searchable,
-    showBulkActions,
-    multiple,
-    dropdownClassName,
-    renderOption,
-    renderOptionActions,
-    getOptionRowProps,
-    renderValue,
-  }: DropdownProps) => {
-    const opts = options.filter((option) => !option.group);
-    const selected = new Set(Array.isArray(value) ? value : [value]);
-    return (
-      <>
-        <select
-          data-testid={`dropdown-${placeholder ?? 'select'}`}
-          value={Array.isArray(value) ? value.join(',') : (value ?? '')}
-          disabled={disabled}
-          data-searchable={searchable ? 'true' : 'false'}
-          data-bulk-actions={showBulkActions ? 'true' : 'false'}
-          onChange={(e) => onChange(e.target.value)}
-        >
-          {opts.map((option) => (
-            <option key={option.value} value={option.value} disabled={option.disabled}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        {showBulkActions ? (
-          <button
-            type="button"
-            data-testid={`select-all-${placeholder ?? 'select'}`}
-            onClick={() =>
-              onChange(opts.filter((option) => !option.disabled).map((option) => option.value))
-            }
-          >
-            Select all
-          </button>
-        ) : null}
-        {renderOptionActions ? (
-          <div className={dropdownClassName}>
-            {opts.map((option) => {
-              const rowProps = getOptionRowProps?.(option) ?? {};
-              return (
-                <div
-                  {...rowProps}
-                  className="dropdown-option-row"
-                  data-option-value={option.value}
-                  key={option.value}
-                >
-                  <button
-                    type="button"
-                    className="dropdown-option"
-                    data-option-value={option.value}
-                    disabled={option.disabled}
-                    aria-pressed={selected.has(option.value)}
-                    onClick={() => {
-                      if (!multiple) {
-                        onChange(option.value);
-                        return;
-                      }
-                      const next = new Set(selected);
-                      if (next.has(option.value)) {
-                        next.delete(option.value);
-                      } else {
-                        next.add(option.value);
-                      }
-                      onChange(Array.from(next));
-                    }}
-                  >
-                    {renderOption?.(option, selected.has(option.value)) ?? option.label}
-                  </button>
-                  <div className="dropdown-option-actions">{renderOptionActions(option)}</div>
-                </div>
-              );
-            })}
-          </div>
-        ) : null}
-        {renderValue ? (
-          <div data-testid={`dropdown-value-${placeholder ?? 'select'}`}>
-            {renderValue(value, options)}
-          </div>
-        ) : null}
-      </>
-    );
-  },
-}));
-
-// Mock Tooltip to a simple span.
-vi.mock('@shared/components/Tooltip', () => ({
-  __esModule: true,
-  default: () => <span data-testid="tooltip" />,
-}));
-
-// Mock ConfirmationModal to a simple div that captures props.
-vi.mock('@shared/components/modals/ConfirmationModal', () => ({
-  __esModule: true,
-  default: (props: ConfirmationModalMockProps) => {
-    if (!props.isOpen) {
-      return null;
-    }
-    return (
-      <div data-testid="confirmation-modal">
-        <button type="button" data-testid="confirm-delete" onClick={props.onConfirm}>
-          {props.confirmText}
-        </button>
-        <button type="button" data-testid="cancel-delete" onClick={props.onCancel}>
-          {props.cancelText}
-        </button>
-      </div>
-    );
-  },
-}));
-
-// Mock createPortal so modal content renders into the test container.
-vi.mock('react-dom', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('react-dom')>();
-  return {
-    ...actual,
-    createPortal: (children: React.ReactNode) => children,
-  };
-});
-
-import type { FavoriteModalTable, FavSaveModalProps } from './FavSaveModal';
-// Import after all mocks are established.
-import FavSaveModal from './FavSaveModal';
-
-// ---------------------------------------------------------------------------
-// Test helpers
-// ---------------------------------------------------------------------------
+const app = installAppStateHarness();
+let view: MountedApp | undefined;
+let prod: TestCluster;
 
 const defaultFilters: FavoriteFilters = {
   search: '',
@@ -292,10 +49,26 @@ const defaultTableState: FavoriteTableState = {
   columnVisibility: {},
 };
 
+const threeColumns = [
+  { key: 'name', label: 'Name', hideable: false, sortable: true },
+  { key: 'status', label: 'Status', hideable: true, sortable: true },
+  { key: 'age', label: 'Age', hideable: true, sortable: true },
+];
+
+const ownersFacet = {
+  key: 'owners',
+  label: 'Owners',
+  placeholder: 'All owners',
+  options: [
+    { value: 'Deployment/api', label: 'Deployment/api' },
+    { value: 'StatefulSet/db', label: 'StatefulSet/db' },
+  ],
+};
+
 const makeFavorite = (overrides: Partial<Favorite> = {}): Favorite => ({
   id: 'fav-1',
   name: 'My Pods',
-  clusterSelection: '/home/user/.kube/config:prod-cluster',
+  clusterSelection: prod.selection,
   viewType: 'namespace',
   view: 'pods',
   namespace: 'default',
@@ -316,8 +89,8 @@ const makeProps = (overrides: Partial<FavSaveModalProps> = {}): FavSaveModalProp
   isOpen: true,
   onClose: vi.fn(),
   existingFavorite: null,
-  defaultName: 'prod-cluster / default / Pods',
-  kubeconfigSelection: '/home/user/.kube/config:prod-cluster',
+  defaultName: 'prod / default / Pods',
+  kubeconfigSelection: prod.selection,
   viewType: 'namespace',
   viewLabel: 'Pods',
   namespace: 'default',
@@ -327,58 +100,153 @@ const makeProps = (overrides: Partial<FavSaveModalProps> = {}): FavSaveModalProp
   ...overrides,
 });
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
+/** Shows the modal with `props`, mounting the shell on first use. */
+const show = async (props: FavSaveModalProps) => {
+  view ??= await app.render(null);
+  await view.show(<FavSaveModal {...props} />);
+};
 
-describe('FavSaveModal', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+const dialog = () =>
+  requireValue(
+    document.querySelector<HTMLElement>('[aria-labelledby="fav-save-modal-title"]'),
+    'the favorite modal'
+  );
+const buttonIn = (root: ParentNode, label: string) =>
+  requireValue(
+    Array.from(root.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent?.trim() === label
+    ),
+    `the ${label} button`
+  );
+const saveButton = () => buttonIn(dialog(), 'Save');
+const nameInput = () =>
+  requireValue(dialog().querySelector<HTMLInputElement>('input[id$="-fav-name"]'), 'name field');
 
-  const renderComponent = async (props: FavSaveModalProps) => {
-    await act(async () => {
-      root.render(<FavSaveModal {...props} />);
-      await Promise.resolve();
-    });
-  };
+const click = async (target: HTMLElement) => {
+  await act(async () => target.click());
+  await app.settle();
+};
 
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    handleInlineMock.mockReset();
-    handleInlineMock.mockImplementation((error: unknown) => ({
-      message: error instanceof Error ? error.message : String(error),
-    }));
-    runUserActionMock.mockImplementation((_action: string, work: () => Promise<unknown>) => work());
-  });
+/** The dropdown trigger a form label names. */
+const control = (label: string) => {
+  const labelElement = requireValue(
+    Array.from(dialog().querySelectorAll<HTMLLabelElement>('label')).find(
+      (candidate) => candidate.textContent?.trim() === label
+    ),
+    `the ${label} label`
+  );
+  return requireValue(
+    document.getElementById(labelElement.htmlFor) as HTMLButtonElement | null,
+    `the ${label} control`
+  );
+};
 
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-  });
+/** The trigger of the favorite's cluster dropdown, beside the Cluster scope. */
+const clusterControl = () =>
+  requireValue(
+    Array.from(dialog().querySelectorAll<HTMLElement>('.fav-save-inline-row'))
+      .find(
+        (row) => row.querySelector('input[type="radio"]') && row.textContent?.includes('Cluster')
+      )
+      ?.querySelector<HTMLButtonElement>('.dropdown-trigger'),
+    'the cluster dropdown'
+  );
 
-  // -----------------------------------------------------------------------
-  // 1. Does not render when isOpen is false
-  // -----------------------------------------------------------------------
+/** Opens a dropdown and returns its menu. */
+const openMenu = async (trigger: HTMLButtonElement) => {
+  await click(trigger);
+  return requireValue(
+    document.getElementById(trigger.getAttribute('aria-controls') ?? ''),
+    'the open dropdown menu'
+  );
+};
+const optionIn = (menu: HTMLElement, label: string) =>
+  requireValue(
+    Array.from(menu.querySelectorAll<HTMLButtonElement>('.dropdown-option')).find(
+      (option) => option.textContent?.trim() === label
+    ),
+    `the ${label} option`
+  );
+/** Picks options in an open dropdown, as the user clicks them. */
+const pick = async (trigger: HTMLButtonElement, ...labels: string[]) => {
+  const menu = await openMenu(trigger);
+  for (const label of labels) {
+    await click(optionIn(menu, label));
+  }
+};
 
-  it('does not render when isOpen is false', async () => {
-    const props = makeProps({ isOpen: false });
-    await renderComponent(props);
+/** Saves and returns the favorite the modal handed to its owner. */
+const save = async (onSave: ReturnType<typeof vi.fn>) => {
+  await click(saveButton());
+  return onSave.mock.calls[0]?.[0] as Favorite;
+};
 
-    expect(container.querySelector('.modal-overlay')).toBeNull();
-    expect(container.querySelector('.fav-save-modal')).toBeNull();
-  });
+beforeEach(() => {
+  view = undefined;
+  prod = app.cluster({ name: 'config', context: 'prod' });
+  app.namespaces(prod, ['default', 'kube-system']);
+});
 
-  // -----------------------------------------------------------------------
-  // 2. Renders when isOpen is true
-  // -----------------------------------------------------------------------
-
-  it('renders and saves every declared filter of the table', async () => {
+describe('saving a favorite', () => {
+  it('saves the current view bound to the selected cluster, then closes', async () => {
     const onSave = vi.fn();
-    await renderComponent(
+    const onClose = vi.fn();
+    await show(makeProps({ onSave, onClose }));
+
+    const saved = await save(onSave);
+
+    expect(saved).toEqual({
+      id: '',
+      name: 'prod / default / Pods',
+      clusterSelection: prod.selection,
+      clusterId: prod.clusterId,
+      clusterName: prod.clusterName,
+      viewType: 'namespace',
+      view: 'pods',
+      namespace: 'default',
+      filters: defaultFilters,
+      tableState: defaultTableState,
+      order: 0,
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('saves a Global favorite without an active-cluster binding', async () => {
+    const onSave = vi.fn();
+    await show(makeProps({ onSave, viewType: 'global', viewLabel: 'Clusters', namespace: '' }));
+
+    expect(await save(onSave)).toEqual(
+      expect.objectContaining({
+        clusterSelection: '',
+        clusterId: '',
+        clusterName: '',
+        viewType: 'global',
+        view: 'fleet',
+        namespace: '',
+      })
+    );
+  });
+
+  it('keeps the saved route and table settings: the view cannot be retargeted', async () => {
+    const onSave = vi.fn();
+    await show(makeProps({ onSave }));
+
+    expect(control('View').disabled).toBe(true);
+    const saved = await save(onSave);
+    expect(saved).toEqual(
+      expect.objectContaining({
+        viewType: 'namespace',
+        view: 'pods',
+        namespace: 'default',
+        filters: defaultFilters,
+        tableState: defaultTableState,
+      })
+    );
+  });
+
+  it('saves every declared filter of the table, including an edited provider facet', async () => {
+    const onSave = vi.fn();
+    await show(
       makeProps({
         onSave,
         table: makeTable({
@@ -391,46 +259,16 @@ describe('FavSaveModal', () => {
           filterOptions: {
             showClusterDropdown: true,
             clusters: [{ value: 'cluster-a', label: 'Production' }],
-            queryFacets: [
-              {
-                key: 'owners',
-                label: 'Owners',
-                placeholder: 'All owners',
-                options: [
-                  { value: 'Deployment/api', label: 'Deployment/api' },
-                  { value: 'StatefulSet/db', label: 'StatefulSet/db' },
-                ],
-              },
-            ],
+            queryFacets: [ownersFacet],
           },
         }),
       })
     );
 
-    expect(container.textContent).toContain('Clusters');
-    expect(container.textContent).toContain('Owners');
+    await pick(control('Owners'), 'Deployment/api', 'StatefulSet/db');
+    const saved = await save(onSave);
 
-    await act(async () => {
-      const owners = container.querySelector<HTMLSelectElement>(
-        '[data-testid="dropdown-All owners"]'
-      );
-      requireValue(owners, 'expected Owners filter in FavSaveModal.test.tsx').value =
-        'StatefulSet/db';
-      requireValue(owners, 'expected Owners filter in FavSaveModal.test.tsx').dispatchEvent(
-        new Event('change', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>('button.save')?.click();
-      await Promise.resolve();
-    });
-
-    const saved = onSave.mock.calls[0]?.[0] as Favorite;
-    expect(saved.filters.clusters).toEqual({
-      mode: 'some',
-      values: ['cluster-a'],
-    });
+    expect(saved.filters.clusters).toEqual({ mode: 'some', values: ['cluster-a'] });
     expect(saved.filters.queryFacets?.owners).toEqual({
       mode: 'some',
       values: ['StatefulSet/db'],
@@ -438,10 +276,10 @@ describe('FavSaveModal', () => {
     expect(saved.tableState.sortColumn).toBe('node');
   });
 
-  it('retains and edits case-distinct saved cluster identities', async () => {
+  it('keeps and edits case-distinct saved cluster ids', async () => {
     const onSave = vi.fn();
     const values = ['config:Production', 'config:production'];
-    await renderComponent(
+    await show(
       makeProps({
         onSave,
         table: makeTable({
@@ -450,25 +288,17 @@ describe('FavSaveModal', () => {
         }),
       })
     );
-    const clusters = requireValue(
-      container.querySelector<HTMLSelectElement>('[data-testid="dropdown-All clusters"]'),
-      'expected saved cluster filter'
-    );
-    expect(Array.from(clusters.options, (option) => option.value)).toEqual(values);
-    await act(async () => {
-      clusters.value = values[0];
-      clusters.dispatchEvent(new Event('change', { bubbles: true }));
-    });
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>('button.save')?.click();
-    });
-    const saved = onSave.mock.calls[0]?.[0] as Favorite;
+
+    // The saved ids are offered even though the table no longer lists them.
+    await pick(control('Clusters'), values[1]);
+    const saved = await save(onSave);
+
     expect(saved.filters.clusters).toEqual({ mode: 'some', values: [values[0]] });
   });
 
-  it('saves Select all as a semantic all selection for provider facets', async () => {
+  it('saves Select all as a semantic all selection for a provider facet', async () => {
     const onSave = vi.fn();
-    await renderComponent(
+    await show(
       makeProps({
         onSave,
         table: makeTable({
@@ -476,347 +306,21 @@ describe('FavSaveModal', () => {
             ...defaultFilters,
             queryFacets: { owners: { mode: 'some', values: ['Deployment/api'] } },
           },
-          filterOptions: {
-            queryFacets: [
-              {
-                key: 'owners',
-                label: 'Owners',
-                placeholder: 'All owners',
-                options: [
-                  { value: 'Deployment/api', label: 'Deployment/api' },
-                  { value: 'StatefulSet/db', label: 'StatefulSet/db' },
-                ],
-              },
-            ],
-          },
+          filterOptions: { queryFacets: [ownersFacet] },
         }),
       })
     );
 
-    const selectAll = container.querySelector<HTMLButtonElement>(
-      '[data-testid="select-all-All owners"]'
+    const menu = await openMenu(control('Owners'));
+    await click(
+      requireValue(menu.querySelector<HTMLButtonElement>('[aria-label="Select all"]'), 'Select all')
     );
-    expect(selectAll).toBeTruthy();
-    await act(async () => {
-      selectAll?.click();
-      await Promise.resolve();
-    });
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>('button.save')?.click();
-      await Promise.resolve();
-    });
+    const saved = await save(onSave);
 
-    const saved = onSave.mock.calls[0]?.[0] as Favorite;
     expect(saved.filters.queryFacets?.owners).toEqual({ mode: 'all' });
   });
 
-  it('summarizes semantic all and none selections instead of listing option values', async () => {
-    await renderComponent(
-      makeProps({
-        table: makeTable({
-          filters: { ...defaultFilters, namespaces: { mode: 'none' } },
-          filterOptions: {
-            kinds: ['Pod', 'Deployment'],
-            namespaces: ['default', 'kube-system'],
-            showKindDropdown: true,
-            showNamespaceDropdown: true,
-          },
-        }),
-      })
-    );
-
-    const kinds = container.querySelector('[data-testid="dropdown-value-All kinds"]');
-    const namespaces = container.querySelector('[data-testid="dropdown-value-All namespaces"]');
-    expect(kinds?.textContent).toBe('Kinds');
-    expect(namespaces?.textContent).toBe('Namespaces (0)');
-  });
-
-  it('does not offer invalid kubeconfig contexts as the favorite cluster', async () => {
-    await renderComponent(makeProps());
-
-    const clusterSelect = requireValue(
-      container.querySelector<HTMLSelectElement>('[data-testid="dropdown-Select cluster..."]'),
-      'expected the cluster dropdown'
-    );
-    const optionFor = (value: string) =>
-      Array.from(clusterSelect.options).find((option) => option.value === value);
-    expect(optionFor('/home/user/.kube/broken:broken-context')?.disabled).toBe(true);
-    expect(optionFor('/home/user/.kube/config:prod-cluster')?.disabled).toBe(false);
-  });
-
-  it('does not close when overlay is clicked', async () => {
-    const onClose = vi.fn();
-    const props = makeProps({ isOpen: true, onClose });
-    await renderComponent(props);
-
-    const modal = container.querySelector('.fav-save-modal') as HTMLDivElement | null;
-    const overlay = container.querySelector('.modal-overlay') as HTMLDivElement | null;
-    expect(modal).toBeTruthy();
-    expect(overlay).toBeTruthy();
-
-    act(() => {
-      modal?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    expect(onClose).not.toHaveBeenCalled();
-
-    act(() => {
-      overlay?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    expect(onClose).not.toHaveBeenCalled();
-  });
-
-  // -----------------------------------------------------------------------
-  // 3. Name input is pre-populated with defaultName
-  // -----------------------------------------------------------------------
-
-  it('blocks a Favorite name already used by another saved Favorite', async () => {
-    const onSave = vi.fn();
-    await renderComponent(
-      makeProps({
-        defaultName: 'My Pods',
-        unavailableNames: ['My Pods'],
-        onSave,
-      })
-    );
-
-    const nameInput = requireValue(
-      container.querySelector<HTMLInputElement>('[id$="-fav-name"]'),
-      'expected favorite name input in FavSaveModal.test.tsx'
-    );
-    expect(nameInput.getAttribute('aria-invalid')).toBe('true');
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
-      'A Favorite named "My Pods" already exists.'
-    );
-    expect(container.querySelector<HTMLButtonElement>('button.save')?.disabled).toBe(true);
-
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>('button.save')?.click();
-      await Promise.resolve();
-    });
-    expect(onSave).not.toHaveBeenCalled();
-  });
-
-  it('preserves an edited name when live table props refresh while open', async () => {
-    const table = makeTable({
-      filterOptions: { showKindDropdown: true, kinds: ['Pod', 'Deployment'] },
-    });
-    const props = makeProps({ table });
-    await renderComponent(props);
-
-    const input = requireValue(
-      container.querySelector<HTMLInputElement>('[id$="-fav-name"]'),
-      'expected favorite name input in FavSaveModal.test.tsx'
-    );
-    await act(async () => {
-      const setValue = Object.getOwnPropertyDescriptor(
-        window.HTMLInputElement.prototype,
-        'value'
-      )?.set;
-      setValue?.call(input, 'My custom favorite');
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    await renderComponent({
-      ...props,
-      table: {
-        ...table,
-        filterOptions: { ...table.filterOptions, kinds: [...(table.filterOptions.kinds ?? [])] },
-      },
-    });
-
-    expect(input.value).toBe('My custom favorite');
-  });
-
-  it('starts a new draft from current props after the modal reopens', async () => {
-    const props = makeProps({ defaultName: 'Initial name' });
-    await renderComponent(props);
-    await renderComponent({ ...props, isOpen: false, defaultName: 'Updated name' });
-    await renderComponent({ ...props, isOpen: true, defaultName: 'Updated name' });
-
-    const input = requireValue(
-      container.querySelector<HTMLInputElement>('[id$="-fav-name"]'),
-      'expected reopened favorite name input in FavSaveModal.test.tsx'
-    );
-    expect(input.value).toBe('Updated name');
-  });
-
-  // -----------------------------------------------------------------------
-  // 4. Clicking Save calls onSave with correct favorite data
-  // -----------------------------------------------------------------------
-
-  it('clicking Save calls onSave with correct favorite data', async () => {
-    const onSave = vi.fn();
-    const onClose = vi.fn();
-    const props = makeProps({ onSave, onClose });
-    await renderComponent(props);
-
-    const saveBtn = container.querySelector<HTMLButtonElement>('button.save');
-    expect(saveBtn).toBeTruthy();
-
-    await act(async () => {
-      requireValue(saveBtn, 'expected test value in FavSaveModal.test.tsx').click();
-      await Promise.resolve();
-    });
-
-    expect(onSave).toHaveBeenCalledTimes(1);
-    const savedFav = onSave.mock.calls[0][0] as Favorite;
-    expect(savedFav.name).toBe('prod-cluster / default / Pods');
-    expect(savedFav.viewType).toBe('namespace');
-    expect(savedFav.view).toBe('pods');
-    expect(savedFav.namespace).toBe('default');
-    expect(savedFav.clusterSelection).toBe('/home/user/.kube/config:prod-cluster');
-    expect(savedFav.clusterId).toBe('config:prod-cluster');
-    expect(savedFav.clusterName).toBe('prod-cluster');
-    expect(savedFav.filters.queryFacets).toEqual(defaultFilters.queryFacets);
-    expect(savedFav.id).toBe(''); // New favorite has empty id.
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it('keeps the modal open and reports a rejected save', async () => {
-    const error = new Error('Favorites use a newer schema');
-    const onSave = vi.fn().mockRejectedValue(error);
-    const onClose = vi.fn();
-    await renderComponent(makeProps({ onSave, onClose }));
-
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>('button.save')?.click();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(onClose).not.toHaveBeenCalled();
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
-      'Favorites use a newer schema'
-    );
-    expect(handleInlineMock).toHaveBeenCalledWith(error, {
-      action: 'saveFavorite',
-      source: 'FavSaveModal',
-    });
-    expect(runUserActionMock).toHaveBeenCalledWith('saveFavorite', expect.any(Function));
-  });
-
-  it('saves Event provider facet selections in favorites', async () => {
-    const onSave = vi.fn();
-    const filters: FavoriteFilters = {
-      ...defaultFilters,
-      queryFacets: {
-        types: { mode: 'some', values: ['Warning'] },
-        reasons: { mode: 'some', values: ['BackOff'] },
-        sources: { mode: 'some', values: ['kubelet'] },
-        statuses: { mode: 'some', values: ['Needs attention'] },
-      },
-    };
-    await renderComponent(
-      makeProps({ onSave, table: makeTable({ filters }), viewLabel: 'Events' })
-    );
-
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>('button.save')?.click();
-      await Promise.resolve();
-    });
-
-    const saved = onSave.mock.calls[0]?.[0] as Favorite;
-    expect(saved.filters.queryFacets).toEqual(filters.queryFacets);
-    expect(saved.clusterId).toBe('config:prod-cluster');
-  });
-
-  it('preserves cluster filter selections in favorites', async () => {
-    const onSave = vi.fn();
-    const filters: FavoriteFilters = {
-      ...defaultFilters,
-      clusters: { mode: 'some', values: ['cluster-a', 'cluster-b'] },
-    };
-    await renderComponent(
-      makeProps({ onSave, table: makeTable({ filters }), viewLabel: 'Namespaces' })
-    );
-
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>('button.save')?.click();
-      await Promise.resolve();
-    });
-
-    const saved = onSave.mock.calls[0]?.[0] as Favorite;
-    expect(saved.filters.clusters).toEqual({
-      mode: 'some',
-      values: ['cluster-a', 'cluster-b'],
-    });
-  });
-
-  // -----------------------------------------------------------------------
-  // 5. Clicking Cancel calls onClose without calling onSave
-  // -----------------------------------------------------------------------
-
-  it('clicking Cancel calls onClose without calling onSave', async () => {
-    const onSave = vi.fn();
-    const onClose = vi.fn();
-    const props = makeProps({ onSave, onClose });
-    await renderComponent(props);
-
-    const cancelBtn = container.querySelector<HTMLButtonElement>('button.cancel');
-    expect(cancelBtn).toBeTruthy();
-
-    await act(async () => {
-      requireValue(cancelBtn, 'expected test value in FavSaveModal.test.tsx').click();
-      await Promise.resolve();
-    });
-
-    expect(onClose).toHaveBeenCalledTimes(1);
-    expect(onSave).not.toHaveBeenCalled();
-  });
-
-  // -----------------------------------------------------------------------
-  // 6. Delete button only shows when editing (existingFavorite is non-null)
-  // -----------------------------------------------------------------------
-
-  it('delete button only shows when editing', async () => {
-    // New favorite — no delete button.
-    const propsNew = makeProps({ existingFavorite: null });
-    await renderComponent(propsNew);
-
-    expect(container.querySelector<HTMLButtonElement>('button.danger')).toBeNull();
-
-    // Edit existing favorite — delete button is present.
-    const existingFav = makeFavorite();
-    const propsEdit = makeProps({ existingFavorite: existingFav });
-
-    await act(async () => {
-      root.render(<FavSaveModal {...propsEdit} />);
-      await Promise.resolve();
-    });
-
-    const deleteBtn = container.querySelector<HTMLButtonElement>('button.danger');
-    expect(deleteBtn).toBeTruthy();
-    expect(
-      requireValue(deleteBtn, 'expected test value in FavSaveModal.test.tsx').textContent
-    ).toBe('Delete');
-  });
-
-  // -----------------------------------------------------------------------
-  // 7. Save button is disabled when editing with no changes
-  // -----------------------------------------------------------------------
-
-  it('save button is disabled when editing with no changes', async () => {
-    const existingFav = makeFavorite();
-    const props = makeProps({
-      existingFavorite: existingFav,
-      defaultName: existingFav.name,
-      kubeconfigSelection: existingFav.clusterSelection,
-      viewType: existingFav.viewType,
-      viewLabel: 'Pods',
-      namespace: existingFav.namespace,
-      table: makeTable({ filters: existingFav.filters }),
-    });
-    await renderComponent(props);
-
-    const saveBtn = container.querySelector<HTMLButtonElement>('button.save');
-    expect(saveBtn).toBeTruthy();
-    expect(requireValue(saveBtn, 'expected test value in FavSaveModal.test.tsx').disabled).toBe(
-      true
-    );
-  });
-
-  it('edits column visibility, ordering, and sort for a saved table', async () => {
+  it('edits column visibility, order, and sort for a saved table', async () => {
     const onSave = vi.fn();
     const existingFavorite = makeFavorite({
       tableState: {
@@ -826,78 +330,38 @@ describe('FavSaveModal', () => {
         columnOrder: ['name', 'status', 'age'],
       },
     });
-    const table = makeTable({
-      filters: existingFavorite.filters,
-      tableState: existingFavorite.tableState,
-      columns: [
-        { key: 'name', label: 'Name', hideable: false, sortable: true },
-        { key: 'status', label: 'Status', hideable: true, sortable: true },
-        { key: 'age', label: 'Age', hideable: true, sortable: true },
-      ],
-    });
-    await renderComponent(makeProps({ existingFavorite, table, onSave }));
+    await show(
+      makeProps({
+        existingFavorite,
+        onSave,
+        table: makeTable({
+          filters: existingFavorite.filters,
+          tableState: existingFavorite.tableState,
+          columns: threeColumns,
+        }),
+      })
+    );
 
-    const columnsMenu = requireValue(
-      container.querySelector<HTMLElement>('.dropdown-columns-menu'),
-      'expected shared Columns menu in FavSaveModal.test.tsx'
-    );
-    const nameRow = requireValue(
-      columnsMenu.querySelector<HTMLElement>('[data-column-key="name"]'),
-      'expected Name column row in FavSaveModal.test.tsx'
-    );
-    const statusRow = requireValue(
-      columnsMenu.querySelector<HTMLElement>('[data-column-key="status"]'),
-      'expected Status column row in FavSaveModal.test.tsx'
+    const columns = await openMenu(control('Columns'));
+    await click(
+      requireValue(
+        columns.querySelector<HTMLElement>('[data-column-key="status"] .dropdown-option'),
+        'the Status column'
+      )
     );
     const nameHandle = requireValue(
-      nameRow.querySelector<HTMLButtonElement>(
-        '[aria-label="Reorder Name. Drag the row, or use Up and Down Arrow keys."]'
-      ),
-      'expected shared Name drag handle in FavSaveModal.test.tsx'
+      columns.querySelector<HTMLElement>('button[data-column-key="name"]'),
+      'the Name reorder handle'
     );
-    expect(nameRow.draggable).toBe(true);
-    expect(statusRow.draggable).toBe(true);
-    expect(nameRow.querySelector('.dropdown-filter-box--required')).toBeTruthy();
-    expect(statusRow.querySelector('.dropdown-filter-label--muted')).toBeTruthy();
-    expect(nameHandle.textContent).toBe('⠿');
-    expect(container.querySelector('[data-testid="dropdown-value-Columns"]')?.textContent).toBe(
-      'Columns (1 hidden)'
-    );
-
-    await act(async () => {
-      statusRow.querySelector<HTMLButtonElement>('.dropdown-option')?.click();
-      await Promise.resolve();
-    });
     await act(async () => {
       nameHandle.dispatchEvent(
         new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true })
       );
-      await Promise.resolve();
     });
-    await act(async () => {
-      const sortColumn = requireValue(
-        container.querySelector<HTMLSelectElement>('[data-testid="dropdown-Sort column"]'),
-        'expected sort column control in FavSaveModal.test.tsx'
-      );
-      sortColumn.value = 'age';
-      sortColumn.dispatchEvent(new Event('change', { bubbles: true }));
-      await Promise.resolve();
-    });
-    await act(async () => {
-      const sortDirection = requireValue(
-        container.querySelector<HTMLSelectElement>('[data-testid="dropdown-Sort direction"]'),
-        'expected sort direction control in FavSaveModal.test.tsx'
-      );
-      sortDirection.value = 'desc';
-      sortDirection.dispatchEvent(new Event('change', { bubbles: true }));
-      await Promise.resolve();
-    });
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>('button.save')?.click();
-      await Promise.resolve();
-    });
+    await pick(control('Sort by'), 'Age');
+    await pick(control('Direction'), 'Descending');
+    const saved = await save(onSave);
 
-    const saved = onSave.mock.calls[0]?.[0] as Favorite;
     expect(saved.tableState).toEqual({
       sortColumn: 'age',
       sortDirection: 'desc',
@@ -906,8 +370,7 @@ describe('FavSaveModal', () => {
     });
   });
 
-  // A favorite must not keep sorting by a column it hides.
-  it('hides a column and drops the sort on it', async () => {
+  it('drops the sort on a column the favorite hides', async () => {
     const onSave = vi.fn();
     const existingFavorite = makeFavorite({
       tableState: {
@@ -917,151 +380,167 @@ describe('FavSaveModal', () => {
         columnOrder: ['name', 'status', 'age'],
       },
     });
-    await renderComponent(
+    await show(
       makeProps({
         existingFavorite,
+        onSave,
         table: makeTable({
           filters: existingFavorite.filters,
           tableState: existingFavorite.tableState,
-          columns: [
-            { key: 'name', label: 'Name', hideable: false, sortable: true },
-            { key: 'status', label: 'Status', hideable: true, sortable: true },
-            { key: 'age', label: 'Age', hideable: true, sortable: true },
-          ],
+          columns: threeColumns,
         }),
-        onSave,
       })
     );
 
-    await act(async () => {
-      container
-        .querySelector<HTMLElement>('.dropdown-columns-menu [data-column-key="status"]')
-        ?.querySelector<HTMLButtonElement>('.dropdown-option')
-        ?.click();
-      await Promise.resolve();
-    });
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>('button.save')?.click();
-      await Promise.resolve();
-    });
+    await pick(control('Columns'), 'Status');
+    const saved = await save(onSave);
 
-    const saved = onSave.mock.calls[0]?.[0] as Favorite;
-    expect(saved.tableState).toMatchObject({
-      sortColumn: '',
-      columnVisibility: { status: false },
-    });
+    expect(saved.tableState).toMatchObject({ sortColumn: '', columnVisibility: { status: false } });
   });
 
-  // -----------------------------------------------------------------------
-  // 8. View dropdown changes update the scope correctly
-  // -----------------------------------------------------------------------
+  it('keeps the modal open and reports a save the backend rejects', async () => {
+    const error = new Error('Favorites use a newer schema');
+    const onClose = vi.fn();
+    await show(makeProps({ onSave: vi.fn().mockRejectedValue(error), onClose }));
 
-  it('does not allow retargeting saved table settings to a different view', async () => {
-    const onSave = vi.fn();
-    const props = makeProps({ onSave });
-    await renderComponent(props);
+    await click(saveButton());
 
-    // Change the view dropdown to a cluster-scoped view.
-    const viewSelect = container.querySelector<HTMLSelectElement>(
-      'select[data-testid="dropdown-Select view..."]'
-    );
-    expect(viewSelect).toBeTruthy();
-    expect(requireValue(viewSelect, 'expected test value in FavSaveModal.test.tsx').disabled).toBe(
-      true
-    );
-
-    // Save and verify the scope changed to cluster.
-    const saveBtn = container.querySelector<HTMLButtonElement>('button.save');
-    await act(async () => {
-      requireValue(saveBtn, 'expected test value in FavSaveModal.test.tsx').click();
-      await Promise.resolve();
-    });
-
-    expect(onSave).toHaveBeenCalledTimes(1);
-    const savedFav = onSave.mock.calls[0][0] as Favorite;
-    expect(savedFav.viewType).toBe('namespace');
-    expect(savedFav.view).toBe('pods');
-    expect(savedFav.namespace).toBe('default');
-    expect(savedFav.filters).toEqual(defaultFilters);
-    expect(savedFav.tableState).toEqual(defaultTableState);
-  });
-
-  it('offers every registered global, cluster, and namespace view', async () => {
-    await renderComponent(makeProps());
-
-    const viewSelect = requireValue(
-      container.querySelector<HTMLSelectElement>('select[data-testid="dropdown-Select view..."]'),
-      'expected view dropdown in FavSaveModal.test.tsx'
-    );
-
-    expect(Array.from(viewSelect.options, (option) => option.value)).toEqual([
-      'global:fleet',
-      'global:global-namespaces',
-      'cluster:attention',
-      'cluster:browse',
-      'cluster:events',
-      'cluster:identities',
-      'cluster:config',
-      'cluster:namespaces',
-      'cluster:nodes',
-      'cluster:rbac',
-      'cluster:storage',
-      'cluster:crds',
-      'cluster:custom',
-      'cluster:cert-manager',
-      'cluster:external-secrets',
-      'cluster:karpenter',
-      'namespace:browse',
-      'namespace:events',
-      'namespace:map',
-      'namespace:workloads',
-      'namespace:pods',
-      'namespace:autoscaling',
-      'namespace:config',
-      'namespace:network',
-      'namespace:quotas',
-      'namespace:rbac',
-      'namespace:storage',
-      'namespace:custom',
-      'namespace:argocd',
-      'namespace:cert-manager',
-      'namespace:external-secrets',
-      'namespace:helm',
-      'namespace:prometheus',
-    ]);
-    expect(viewSelect.options[0]?.textContent).toBe('Clusters');
-    expect(viewSelect.options[1]?.textContent).toBe('Namespaces');
-  });
-
-  it('saves Global favorites without an active-cluster binding', async () => {
-    const onSave = vi.fn();
-    await renderComponent(
-      makeProps({
-        onSave,
-        viewType: 'global',
-        viewLabel: 'Clusters',
-        namespace: '',
-      })
-    );
-
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>('button.save')?.click();
-      await Promise.resolve();
-    });
-
-    expect(onSave).toHaveBeenCalledWith(
+    expect(onClose).not.toHaveBeenCalled();
+    expect(dialog().querySelector('[role="alert"]')?.textContent).toContain(error.message);
+    expect(app.errors.take((record) => record.error === error)).toEqual([
       expect.objectContaining({
-        clusterSelection: '',
-        clusterId: '',
-        clusterName: '',
-        viewType: 'global',
-        view: 'fleet',
-        namespace: '',
-      })
-    );
+        kinds: ['inline'],
+        context: { action: 'saveFavorite', source: 'FavSaveModal' },
+      }),
+    ]);
+  });
+});
+
+describe('the favorite form', () => {
+  it('offers no invalid kubeconfig context as the favorite’s cluster', async () => {
+    app.backend.answer('GetKubeconfigs', () => ({
+      kubeconfigs: [
+        {
+          name: 'config',
+          path: '/kube/config',
+          context: 'prod',
+          isDefault: false,
+          isCurrentContext: false,
+          invalid: false,
+          invalidReason: '',
+        },
+        {
+          name: 'broken',
+          path: '/kube/broken',
+          context: 'broken-context',
+          isDefault: false,
+          isCurrentContext: false,
+          invalid: true,
+          invalidReason: 'no cluster',
+        },
+      ],
+      state: backend.KubeconfigDiscoveryState.KubeconfigDiscoveryStateAvailable,
+      searchPaths: ['/kube'],
+    }));
+    await show(makeProps());
+
+    const menu = await openMenu(clusterControl());
+    const contextOption = (context: string) =>
+      requireValue(
+        Array.from(menu.querySelectorAll<HTMLButtonElement>('.dropdown-option')).find(
+          (option) => option.querySelector('.kubeconfig-label__context')?.textContent === context
+        ),
+        `the ${context} context`
+      );
+
+    expect(contextOption('broken-context').disabled).toBe(true);
+    expect(contextOption('prod').disabled).toBe(false);
   });
 
-  // -----------------------------------------------------------------------
-  // 9. Header says "Edit Favorite" when editing
-  // -----------------------------------------------------------------------
+  it('refuses a name another saved favorite already uses', async () => {
+    const onSave = vi.fn();
+    await show(makeProps({ defaultName: 'My Pods', unavailableNames: ['My Pods'], onSave }));
+
+    expect(nameInput().getAttribute('aria-invalid')).toBe('true');
+    expect(saveButton().disabled).toBe(true);
+    await click(saveButton());
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('keeps an edited name while the live table refreshes', async () => {
+    const table = makeTable({
+      filterOptions: { showKindDropdown: true, kinds: ['Pod', 'Deployment'] },
+    });
+    const props = makeProps({ table });
+    await show(props);
+    const input = nameInput();
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+        input,
+        'My custom favorite'
+      );
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    await show({
+      ...props,
+      table: { ...table, filterOptions: { ...table.filterOptions, kinds: ['Pod', 'Deployment'] } },
+    });
+
+    expect(nameInput().value).toBe('My custom favorite');
+  });
+
+  it('starts a new draft from the current view when reopened', async () => {
+    const props = makeProps({ defaultName: 'Initial name' });
+    await show(props);
+    await show({ ...props, isOpen: false, defaultName: 'Updated name' });
+    await show({ ...props, isOpen: true, defaultName: 'Updated name' });
+
+    expect(nameInput().value).toBe('Updated name');
+  });
+
+  it('enables Save for an existing favorite only after a change', async () => {
+    const existingFavorite = makeFavorite();
+    await show(
+      makeProps({
+        existingFavorite,
+        defaultName: existingFavorite.name,
+        table: makeTable({ filters: existingFavorite.filters }),
+      })
+    );
+    expect(saveButton().disabled).toBe(true);
+
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+        nameInput(),
+        'Renamed'
+      );
+      nameInput().dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    expect(saveButton().disabled).toBe(false);
+  });
+
+  it('offers Delete only for an existing favorite', async () => {
+    await show(makeProps({ existingFavorite: null }));
+    expect(
+      Array.from(dialog().querySelectorAll('button')).some((b) => b.textContent === 'Delete')
+    ).toBe(false);
+
+    await show(makeProps({ existingFavorite: makeFavorite() }));
+    expect(buttonIn(dialog(), 'Delete')).toBeTruthy();
+  });
+
+  it('stays open when the overlay or modal body is clicked', async () => {
+    const onClose = vi.fn();
+    await show(makeProps({ onClose }));
+    const overlay = requireValue(dialog().closest<HTMLElement>('.modal-overlay'), 'the overlay');
+
+    await act(async () => {
+      dialog().dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      overlay.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });

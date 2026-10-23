@@ -183,8 +183,6 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
             return '-';
           },
           {
-            sortValue: (resource) =>
-              resource.updated || resource.info?.last_deployed || resource.lastDeployed,
             getClassName: (resource) =>
               resource.updated || resource.info?.last_deployed || resource.lastDeployed
                 ? 'last-updated'
@@ -236,7 +234,6 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
         ? cf.withNamespaceColumn(baseColumns, {
             afterColumnKey: 'name',
             accessor: (resource) => resource.ref.namespace,
-            sortValue: (resource) => (resource.ref.namespace || '').toLowerCase(),
             ...namespaceColumnLink,
           })
         : baseColumns;

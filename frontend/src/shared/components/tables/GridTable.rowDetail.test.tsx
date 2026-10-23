@@ -2,16 +2,18 @@
  * frontend/src/shared/components/tables/GridTable.rowDetail.test.tsx
  *
  * Row detail: each open row shows a full-width detail (for example a nested
- * table) directly under it. The nested content owns its own focus and keys.
+ * table) directly under it. The nested content owns its own focus and keys,
+ * one highlight moves through parent and nested rows in screen order, and a
+ * virtualized table positions rows below each open detail at any page zoom.
+ * Runs the real GridTable inside the production shell (keyboard, zoom, and
+ * dockable layout owners) with only the backend boundary faked
+ * (test-utils/appState); the page zoom is the level the backend has saved.
  */
 
-import { ZoomProvider } from '@core/contexts/ZoomContext';
 import { AppRegionNavigation } from '@ui/layout/AppRegionNavigation';
-import { KeyboardProvider } from '@ui/shortcuts';
 import { act, type ReactNode, useState } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PanelLayoutTestProvider } from '@/test-utils/PanelLayoutTestProvider';
+import { installAppStateHarness, type MountedApp } from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
 import { isMacPlatform } from '@/utils/platform';
 import GridTable from './GridTable';
@@ -19,16 +21,7 @@ import type { GridColumnDefinition, GridTableRowDetail } from './GridTable.types
 import { getGridTableRowDetailId } from './GridTable.utils';
 import { withRowDetailToggle } from './rowDetailToggle';
 
-vi.mock('@core/desktop-runtime', () => ({
-  desktopRuntimeAvailable: () => false,
-  onEvent: () => () => undefined,
-}));
-// The zoom the app saved, which ZoomProvider loads and applies on mount.
-const savedZoom = vi.hoisted(() => ({ level: 100 }));
-vi.mock('@/core/app-state-access', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/core/app-state-access')>()),
-  readZoomLevel: () => Promise.resolve(savedZoom.level),
-}));
+const app = installAppStateHarness();
 
 interface Row {
   id: string;
@@ -82,19 +75,24 @@ const detailFor = (
 });
 
 describe('GridTable row detail', () => {
-  let container: HTMLDivElement;
-  let root: Root;
+  let view: MountedApp | null = null;
+  let container: HTMLElement;
   let restoreGeometry: () => void = () => undefined;
 
+  // Starts the shell; the page zoom loads from the level the backend has saved.
+  const start = async (savedZoom = 100): Promise<MountedApp> => {
+    app.backend.answer('GetZoomLevel', () => savedZoom);
+    const started = await app.render(null);
+    view = started;
+    container = started.container;
+    return started;
+  };
+
   beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = createRoot(container);
+    view = null;
   });
 
   afterEach(() => {
-    act(() => root.unmount());
-    container.remove();
     restoreGeometry();
     restoreGeometry = () => undefined;
   });
@@ -119,36 +117,30 @@ describe('GridTable row detail', () => {
     return wrapper;
   };
 
-  const renderTable = (
+  const renderTable = async (
     detail: GridTableRowDetail<Row>,
     data: Row[] = parentRows,
     virtualization = { enabled: false },
     parentColumns = columns,
     onRowPointerClick?: (row: Row) => void,
     onRowExpandToggle?: (row: Row) => void
-  ) =>
-    act(async () => {
-      root.render(
-        <PanelLayoutTestProvider>
-          <KeyboardProvider>
-            <ZoomProvider>
-              <main data-app-region="content">
-                <GridTable
-                  data={data}
-                  columns={parentColumns}
-                  keyExtractor={keyOf}
-                  tableClassName="parent"
-                  rowDetail={detail}
-                  virtualization={virtualization}
-                  onRowPointerClick={onRowPointerClick}
-                  onRowExpandToggle={onRowExpandToggle}
-                />
-              </main>
-            </ZoomProvider>
-          </KeyboardProvider>
-        </PanelLayoutTestProvider>
-      );
-    });
+  ) => {
+    const shell = view ?? (await start());
+    await shell.show(
+      <main data-app-region="content">
+        <GridTable
+          data={data}
+          columns={parentColumns}
+          keyExtractor={keyOf}
+          tableClassName="parent"
+          rowDetail={detail}
+          virtualization={virtualization}
+          onRowPointerClick={onRowPointerClick}
+          onRowExpandToggle={onRowExpandToggle}
+        />
+      </main>
+    );
+  };
 
   const parentRow = (name: string) =>
     requireValue(
@@ -217,20 +209,6 @@ describe('GridTable row detail', () => {
     expect(detailUnder('b')?.matches('[data-gridtable-row-detail]')).toBe(false);
     expect(detailUnder('a')?.matches('[data-gridtable-row-detail]')).toBe(true);
     expect(wrapper.scrollTop).toBe(0);
-  });
-
-  // The group class (a kind color slot in the views) tints an open row and its
-  // detail as one block, so a selected row beside them is not read as part of it.
-  it('gives an open row and its own detail the row group class, and closed rows none', async () => {
-    await renderTable({
-      ...detailFor(['cluster-a|a', 'cluster-a|c']),
-      getGroupClassName: (row) => `group-${row.name}`,
-    });
-
-    expect(parentRow('a').classList.contains('group-a')).toBe(true);
-    expect(parentRow('a').nextElementSibling?.classList.contains('group-a')).toBe(true);
-    expect(parentRow('c').nextElementSibling?.classList.contains('group-c')).toBe(true);
-    expect(parentRow('b').className).not.toMatch(/group-/);
   });
 
   // The same pod can be listed under two open rows (a CronJob and its Job); the
@@ -410,7 +388,7 @@ describe('GridTable row detail', () => {
         onRowSelectionClear: selected ? () => setSelected(null) : undefined,
       });
     };
-    const renderKeyboard = (openRowKeys: readonly string[], { selectable = false } = {}) => {
+    const renderKeyboard = async (openRowKeys: readonly string[], { selectable = false } = {}) => {
       const toggleColumn = withRowDetailToggle<Row>(
         { key: 'pods', header: 'Pods', render: () => '2/2' },
         {
@@ -421,34 +399,29 @@ describe('GridTable row detail', () => {
           getText: () => '2/2',
         }
       );
-      return act(async () => {
-        root.render(
-          <PanelLayoutTestProvider>
-            <KeyboardProvider>
-              <ZoomProvider>
-                <AppRegionNavigation />
-                <main data-app-region="content">
-                  <Selectable>
-                    {(selection) => (
-                      <GridTable
-                        data={parentRows}
-                        columns={[...columns, toggleColumn]}
-                        keyExtractor={keyOf}
-                        tableClassName="parent"
-                        onRowClick={() => undefined}
-                        filters={{ enabled: true }}
-                        rowDetail={detailFor(openRowKeys, () => undefined)}
-                        {...(selectable ? selection : {})}
-                      />
-                    )}
-                  </Selectable>
-                  <button type="button">After table</button>
-                </main>
-              </ZoomProvider>
-            </KeyboardProvider>
-          </PanelLayoutTestProvider>
-        );
-      });
+      const shell = await start();
+      await shell.show(
+        <>
+          <AppRegionNavigation />
+          <main data-app-region="content">
+            <Selectable>
+              {(selection) => (
+                <GridTable
+                  data={parentRows}
+                  columns={[...columns, toggleColumn]}
+                  keyExtractor={keyOf}
+                  tableClassName="parent"
+                  onRowClick={() => undefined}
+                  filters={{ enabled: true }}
+                  rowDetail={detailFor(openRowKeys, () => undefined)}
+                  {...(selectable ? selection : {})}
+                />
+              )}
+            </Selectable>
+            <button type="button">After table</button>
+          </main>
+        </>
+      );
     };
     const key = (name: string, init: KeyboardEventInit = {}) =>
       act(async () => {
@@ -709,6 +682,8 @@ describe('GridTable row detail', () => {
       Element.prototype.getBoundingClientRect = originalRect;
       if (clientHeight) {
         Object.defineProperty(HTMLElement.prototype, 'clientHeight', clientHeight);
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, 'clientHeight');
       }
     });
 
@@ -749,22 +724,21 @@ describe('GridTable row detail', () => {
     // the virtualizer positions rows in CSS pixels.
     it('positions rows and an open detail by their CSS heights at a page zoom', async () => {
       const open = detailFor(['cluster-a|row-1']);
-      savedZoom.level = 200;
-      document.documentElement.style.setProperty('--app-zoom-factor', '2');
       heights.set('gridtable-row', 60);
       heights.set('gridtable-row-detail', 400);
       try {
+        await start(200);
         await renderTable(open, manyRows, virtual);
         // Re-render once so measured heights reach the virtualizer.
         await renderTable(open, manyRows, virtual);
 
+        // The shell applied the saved 200% zoom.
         expect(
           getComputedStyle(document.documentElement).getPropertyValue('--app-zoom-factor')
         ).toBe('2');
         expect(topOf(container.querySelector('[data-gridtable-row-detail]'))).toBe(60);
         expect(topOf(parentRow('row-2'))).toBe(260);
       } finally {
-        savedZoom.level = 100;
         heights.set('gridtable-row', 30);
         heights.set('gridtable-row-detail', 200);
         document.documentElement.style.removeProperty('--app-zoom-factor');

@@ -20,7 +20,7 @@ import {
 import StatusIndicator, { type StatusState } from '@shared/components/status/StatusIndicator';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { errorHandler } from '@utils/errorHandler';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { CloseShellSession, StopPortForward } from '@/core/backend-api';
 import { type ShellSessionInfo, useRuntimeOperationStatus } from './runtimeOperationStatus';
 import type { PortForwardSession } from './runtimeOperationStatusAdapter';
@@ -93,13 +93,11 @@ const isKeptForCleanup = (session: ShellSessionInfo): boolean =>
 
 const ShellSessionItem = ({
   session,
-  jumpingShellSessionId,
   isEnding,
   onOpen,
   onEnd,
 }: {
   session: ShellSessionInfo;
-  jumpingShellSessionId: string | null;
   isEnding: boolean;
   onOpen: (session: ShellSessionInfo) => void;
   onEnd: (sessionId: string) => Promise<void>;
@@ -126,7 +124,6 @@ const ShellSessionItem = ({
         type="button"
         className="as-shell-session-jump"
         onClick={() => onOpen(session)}
-        disabled={Boolean(jumpingShellSessionId)}
         title="Click to open this shell session"
         aria-label={`Open shell session tab for ${session.target.name || 'pod'}`}
       >
@@ -139,7 +136,7 @@ const ShellSessionItem = ({
           )}
         </div>
         <span className="as-shell-open-affordance" aria-hidden="true">
-          {jumpingShellSessionId === session.sessionId ? '…' : <OpenIcon width={14} height={14} />}
+          <OpenIcon width={14} height={14} />
         </span>
       </button>
       <div className="ss-session-actions as-pf-actions">
@@ -249,17 +246,11 @@ const runPendingSessionAction = async (
 
 const SessionsStatus: React.FC = () => {
   const { openWithObject } = useObjectPanel();
-  const { selectedClusterId, selectedKubeconfigs, getClusterMeta, setActiveKubeconfig } =
-    useKubeconfig();
+  const { selectedClusterId } = useKubeconfig();
   const { shellSessions: filteredShellSessions, portForwardSessions: filteredPortForwards } =
     useRuntimeOperationStatus(selectedClusterId);
   const [stoppingPortForwardIds, setStoppingPortForwardIds] = useState<Set<string>>(new Set());
   const [endingShellSessionIds, setEndingShellSessionIds] = useState<Set<string>>(new Set());
-  const [pendingShellJump, setPendingShellJump] = useState<{
-    session: ShellSessionInfo;
-    targetClusterId: string;
-  } | null>(null);
-  const jumpingShellSessionId = pendingShellJump?.session.sessionId ?? null;
   const [statusPopoverCloseSignal, setStatusPopoverCloseSignal] = useState(0);
 
   const handleStopPortForward = useCallback(
@@ -291,11 +282,8 @@ const SessionsStatus: React.FC = () => {
           ...session.target,
           clusterName: session.clusterName?.trim() || undefined,
         });
-        const panelId = objectPanelId(targetRef);
         openWithObject(targetRef);
-        if (!requestObjectPanelTab(panelId, 'shell')) {
-          throw new Error('Shell session tab request was not accepted.');
-        }
+        requestObjectPanelTab(objectPanelId(targetRef), 'shell');
         setStatusPopoverCloseSignal((signal) => signal + 1);
       } catch (error) {
         errorHandler.handle(error, {
@@ -309,33 +297,12 @@ const SessionsStatus: React.FC = () => {
     [openWithObject]
   );
 
-  const clusterSelectionById = useMemo(() => {
-    const map = new Map<string, string>();
-    // Build a clusterId -> selection lookup so jumps can switch clusters safely.
-    selectedKubeconfigs.forEach((selection) => {
-      const id = getClusterMeta(selection).id;
-      if (id && !map.has(id)) {
-        map.set(id, selection);
-      }
-    });
-    return map;
-  }, [getClusterMeta, selectedKubeconfigs]);
-
   const handleJumpToShellSession = useCallback(
     (session: ShellSessionInfo) => {
-      if (jumpingShellSessionId) {
-        return;
-      }
-
       const targetClusterId = session.clusterId?.trim() || '';
-
-      if (!targetClusterId || selectedClusterId === targetClusterId) {
-        openShellSessionTab(session);
-        return;
-      }
-
-      const targetSelection = clusterSelectionById.get(targetClusterId);
-      if (!targetSelection) {
+      // Rows list the selected cluster's sessions; with no cluster selected,
+      // a session's cluster is not open in this window.
+      if (targetClusterId && selectedClusterId !== targetClusterId) {
         errorHandler.handle(new Error('Session cluster tab is not active.'), {
           action: 'jumpToShellSession',
           sessionId: session.sessionId,
@@ -344,47 +311,10 @@ const SessionsStatus: React.FC = () => {
         });
         return;
       }
-
-      setPendingShellJump({ session, targetClusterId });
-      setActiveKubeconfig(targetSelection);
+      openShellSessionTab(session);
     },
-    [
-      clusterSelectionById,
-      jumpingShellSessionId,
-      openShellSessionTab,
-      selectedClusterId,
-      setActiveKubeconfig,
-    ]
+    [openShellSessionTab, selectedClusterId]
   );
-
-  useEffect(() => {
-    if (!pendingShellJump) {
-      return;
-    }
-    // Defer the open until the target cluster becomes active to keep panel state scoped correctly.
-    if (
-      pendingShellJump.targetClusterId &&
-      selectedClusterId !== pendingShellJump.targetClusterId
-    ) {
-      return;
-    }
-    openShellSessionTab(pendingShellJump.session);
-    setPendingShellJump(null);
-  }, [openShellSessionTab, pendingShellJump, selectedClusterId]);
-
-  useEffect(() => {
-    if (!pendingShellJump) {
-      return;
-    }
-    const stillExists = filteredShellSessions.some(
-      (session) =>
-        session.sessionId === pendingShellJump.session.sessionId &&
-        session.clusterId === pendingShellJump.targetClusterId
-    );
-    if (!stillExists) {
-      setPendingShellJump(null);
-    }
-  }, [filteredShellSessions, pendingShellJump]);
 
   const shellCount = filteredShellSessions.length;
   const portForwardCount = filteredPortForwards.length;
@@ -432,7 +362,6 @@ const SessionsStatus: React.FC = () => {
                       <ShellSessionItem
                         key={JSON.stringify([session.clusterId, session.sessionId])}
                         session={session}
-                        jumpingShellSessionId={jumpingShellSessionId}
                         isEnding={endingShellSessionIds.has(session.sessionId)}
                         onOpen={handleJumpToShellSession}
                         onEnd={handleEndShellSession}
@@ -474,7 +403,6 @@ const SessionsStatus: React.FC = () => {
       handleEndShellSession,
       handleJumpToShellSession,
       handleStopPortForward,
-      jumpingShellSessionId,
       portForwardCount,
       shellCount,
       stoppingPortForwardIds,

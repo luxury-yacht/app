@@ -303,7 +303,6 @@ export function NamespaceAggregatedResourceGridView<
     return cf.withNamespaceColumn(core.columns, {
       afterColumnKey: 'name',
       accessor: (row: D) => row.ref.namespace ?? '',
-      sortValue: (row: D) => (row.ref.namespace || '').toLowerCase(),
       ...namespaceColumnLink,
     });
   }, [core.columns, namespaceColumnLink, showNamespaceColumn]);

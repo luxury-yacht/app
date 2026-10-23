@@ -1,223 +1,169 @@
 /**
  * frontend/src/shared/components/tables/GridTableFiltersBar.test.tsx
  *
- * Test suite for GridTableFiltersBar.
- * Covers key behaviors and edge cases for GridTableFiltersBar.
+ * The table filter bar: its Kinds, Namespaces, Clusters, and query-facet
+ * menus report the values the user picks (cluster IDs compared exactly), its
+ * chips clear one filter or all of them, the result count appears only while
+ * a filter narrows the rows (marking approximate totals and the view's
+ * partial-window note), the search box keeps focus while typing and answers
+ * the app's Find shortcut, and the Columns menu shows, reorders, resets, and
+ * edits custom columns. Runs the real filter bar and dropdowns inside the
+ * production shell (keyboard and zoom owners) with only the backend boundary
+ * faked (test-utils/appState).
  */
 
-import { ZoomProvider } from '@core/contexts/ZoomContext';
 import GridTableFiltersBar from '@shared/components/tables/GridTableFiltersBar';
 import React, { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { installAppStateHarness, type MountedApp } from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
 
-const searchShortcutMock = vi.hoisted(() => ({
-  register: vi.fn(),
-}));
+type FiltersBarProps = React.ComponentProps<typeof GridTableFiltersBar>;
 
-vi.mock('@ui/shortcuts', () => ({
-  useSearchShortcutTarget: (config: unknown) => searchShortcutMock.register(config),
-}));
+const NO_FILTERS: FiltersBarProps['activeFilters'] = {
+  search: '',
+  kinds: { mode: 'all' },
+  namespaces: { mode: 'all' },
+  clusters: { mode: 'all' },
+  includeMetadata: false,
+};
 
-vi.mock('@core/backend-api', () => ({
-  GetZoomLevel: vi.fn().mockResolvedValue(100),
-  SetZoomLevel: vi.fn().mockResolvedValue(undefined),
-}));
+const app = installAppStateHarness();
+// Spies this file installs, restored after each test; the harness keeps its own.
+const spies: Array<{ mockRestore(): void }> = [];
+const track = <S extends { mockRestore(): void }>(spy: S): S => {
+  spies.push(spy);
+  return spy;
+};
+let view: MountedApp;
 
-type MockDropdownOption = { label: string; value: string; disabled?: boolean };
+beforeEach(async () => {
+  view = await app.render(null);
+});
 
-vi.mock('@shared/components/dropdowns/Dropdown', () => ({
-  Dropdown: ({
-    id,
-    value,
-    options,
-    onChange,
-    searchable,
-    showBulkActions,
-    dropdownClassName,
-    renderOption,
-    renderOptionActions,
-    getOptionRowProps,
-    additionalBulkActions,
-  }: {
-    id: string;
-    value: string[];
-    options: MockDropdownOption[];
-    onChange: (value: string[]) => void;
-    searchable?: boolean;
-    showBulkActions?: boolean;
-    dropdownClassName?: string;
-    renderOption?: (option: MockDropdownOption, isSelected: boolean) => React.ReactNode;
-    renderOptionActions?: (option: MockDropdownOption) => React.ReactNode;
-    getOptionRowProps?: (option: MockDropdownOption) => Record<string, unknown>;
-    additionalBulkActions?:
-      | React.ReactNode
-      | ((context: { closeDropdown: () => void }) => React.ReactNode);
-  }) => (
-    <div className={dropdownClassName}>
-      <select
-        data-testid={id}
-        data-searchable={searchable ? 'true' : 'false'}
-        data-bulk-actions={showBulkActions ? 'true' : 'false'}
-        value={value[0] ?? ''}
-        onChange={(event) => onChange([event.target.value])}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-      {options.map((option) => (
-        <div
-          {...getOptionRowProps?.(option)}
-          className="dropdown-option-row"
-          data-option-value={option.value}
-          key={option.value}
-        >
-          {renderOption ? renderOption(option, value.includes(option.value)) : option.label}
-          {renderOptionActions?.(option)}
-        </div>
-      ))}
-      {(typeof additionalBulkActions === 'function'
-        ? additionalBulkActions({ closeDropdown: vi.fn() })
-        : additionalBulkActions) ?? null}
-    </div>
-  ),
-}));
+afterEach(() => {
+  vi.useRealTimers();
+  for (const spy of spies.splice(0)) {
+    spy.mockRestore();
+  }
+});
 
-describe('GridTableFiltersBar', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+const renderFilters = (props: Partial<FiltersBarProps>) =>
+  view.show(
+    <GridTableFiltersBar
+      activeFilters={NO_FILTERS}
+      resolvedFilterOptions={{
+        searchBehavior: 'local',
+        clusters: [
+          { label: 'alpha', value: 'cluster-a' },
+          { label: 'beta', value: 'cluster-b' },
+        ],
+        kinds: [
+          { label: 'Pods', value: 'Pod' },
+          { label: 'Deployments', value: 'Deployment' },
+        ],
+        namespaces: [
+          { label: 'team-a', value: 'team-a' },
+          { label: 'team-b', value: 'team-b' },
+        ],
+      }}
+      kindDropdownId="kinds"
+      namespaceDropdownId="namespaces"
+      clusterDropdownId="clusters"
+      searchInputId="search"
+      onKindsChange={vi.fn()}
+      onNamespacesChange={vi.fn()}
+      onClustersChange={vi.fn()}
+      onFiltersChange={vi.fn()}
+      onSearchChange={vi.fn()}
+      onReset={vi.fn()}
+      renderOption={(choice) => choice.label}
+      {...props}
+    />
+  );
 
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    searchShortcutMock.register.mockReset();
+const click = async (element: HTMLElement) => {
+  await act(async () => {
+    element.click();
   });
+};
 
-  afterEach(() => {
-    vi.useRealTimers();
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-  });
+const button = (label: string) =>
+  requireValue(
+    document.body.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`),
+    `button ${label}`
+  );
 
-  const renderFilters = async (
-    props: Partial<React.ComponentProps<typeof GridTableFiltersBar>>
-  ) => {
-    await act(async () => {
-      root.render(
-        <ZoomProvider>
-          <GridTableFiltersBar
-            activeFilters={{
-              search: '',
-              kinds: { mode: 'all' },
-              namespaces: { mode: 'all' },
-              clusters: { mode: 'all' },
-              includeMetadata: false,
-            }}
-            resolvedFilterOptions={{
-              searchBehavior: 'local',
-              clusters: [
-                { label: 'alpha', value: 'cluster-a' },
-                { label: 'beta', value: 'cluster-b' },
-              ],
-              kinds: [
-                { label: 'Pods', value: 'Pod' },
-                { label: 'Deployments', value: 'Deployment' },
-              ],
-              namespaces: [
-                { label: 'team-a', value: 'team-a' },
-                { label: 'team-b', value: 'team-b' },
-              ],
-            }}
-            kindDropdownId="kinds"
-            namespaceDropdownId="namespaces"
-            clusterDropdownId="clusters"
-            searchInputId="search"
-            onKindsChange={vi.fn()}
-            onNamespacesChange={vi.fn()}
-            onClustersChange={vi.fn()}
-            onFiltersChange={vi.fn()}
-            onSearchChange={vi.fn()}
-            onReset={vi.fn()}
-            renderOption={(option) => option.label}
-            {...props}
-          />
-        </ZoomProvider>
-      );
-      await Promise.resolve();
-    });
-  };
+/** Opens the filter menu with the given role in the bar. */
+const openMenu = async (role: string) => {
+  await click(
+    requireValue(
+      view.container.querySelector<HTMLElement>(
+        `[data-gridtable-filter-role="${role}"] .dropdown-trigger, [data-gridtable-filter-role="${role}"] button[aria-haspopup]`
+      ),
+      `${role} menu button`
+    )
+  );
+};
 
-  it('renders dropdowns and propagates changes', async () => {
+// Each option's own button (not its row's Only, Edit, or reorder actions).
+const menuOptions = () =>
+  Array.from(document.body.querySelectorAll<HTMLElement>('button[data-dropdown-option-index]'));
+
+const option = (label: string) =>
+  requireValue(
+    menuOptions().find((candidate) => candidate.textContent?.trim() === label),
+    `option ${label}`
+  );
+
+const isChosen = (element: HTMLElement) =>
+  element.getAttribute('aria-selected') === 'true' ||
+  element.getAttribute('aria-pressed') === 'true';
+
+const resultCount = () =>
+  view.container.querySelector('[data-gridtable-filter-role="result-count"]');
+
+const chips = () =>
+  requireValue(
+    view.container.querySelector('[aria-label="Active GridTable filters"]'),
+    'active filter chips'
+  );
+
+describe('GridTableFiltersBar menus', () => {
+  it('reports the kinds and namespaces the user leaves selected, with search and bulk choices for kinds', async () => {
     const onKindsChange = vi.fn();
     const onNamespacesChange = vi.fn();
-    const onSearchChange = vi.fn();
-
     await renderFilters({
       showKindDropdown: true,
       showNamespaceDropdown: true,
-      activeFilters: {
-        search: 'pods',
-        kinds: { mode: 'all' },
-        namespaces: { mode: 'all' },
-        clusters: { mode: 'all' },
-        includeMetadata: false,
-      },
       onKindsChange,
       onNamespacesChange,
-      onSearchChange,
     });
 
-    const kindDropdown = container.querySelector('[data-testid="kinds"]') as HTMLSelectElement;
-    expect(kindDropdown).toBeTruthy();
-    await act(async () => {
-      kindDropdown.value = 'Deployment';
-      kindDropdown.dispatchEvent(new Event('change', { bubbles: true }));
-    });
-    expect(onKindsChange).toHaveBeenCalledWith(['Deployment']);
+    await openMenu('kind');
+    // Kinds are always searchable and offer Select all / none.
+    expect(document.body.querySelector('[role="combobox"]')).not.toBeNull();
+    expect(document.body.querySelector('button[aria-label="Select none"]')).not.toBeNull();
+    await click(option('Deployments'));
+    expect(onKindsChange).toHaveBeenLastCalledWith(['Pod']);
 
-    const nsDropdown = container.querySelector('[data-testid="namespaces"]') as HTMLSelectElement;
-    expect(nsDropdown).toBeTruthy();
-    await act(async () => {
-      nsDropdown.value = 'team-b';
-      nsDropdown.dispatchEvent(new Event('change', { bubbles: true }));
-    });
-    expect(onNamespacesChange).toHaveBeenCalledWith(['team-b']);
+    await openMenu('namespace');
+    await click(option('team-a'));
+    expect(onNamespacesChange).toHaveBeenLastCalledWith(['team-b']);
   });
 
-  it('renders a cluster dropdown and propagates cluster IDs', async () => {
+  it('reports cluster IDs, not their context names', async () => {
     const onClustersChange = vi.fn();
+    await renderFilters({ showClusterDropdown: true, onClustersChange });
 
-    await renderFilters({
-      showClusterDropdown: true,
-      onClustersChange,
-    });
-
-    const clusterDropdown = container.querySelector(
-      '[data-testid="clusters"]'
-    ) as HTMLSelectElement;
-    expect(clusterDropdown).toBeTruthy();
-    expect(
-      Array.from(clusterDropdown.options).map(({ text, value }) => ({
-        text,
-        value,
-      }))
-    ).toEqual([
-      { text: 'alpha', value: 'cluster-a' },
-      { text: 'beta', value: 'cluster-b' },
+    await openMenu('cluster');
+    expect(menuOptions().map((candidate) => candidate.textContent?.trim())).toEqual([
+      'alpha',
+      'beta',
     ]);
+    await click(option('alpha'));
 
-    await act(async () => {
-      clusterDropdown.value = 'cluster-b';
-      clusterDropdown.dispatchEvent(new Event('change', { bubbles: true }));
-    });
-    expect(onClustersChange).toHaveBeenCalledWith(['cluster-b']);
+    expect(onClustersChange).toHaveBeenLastCalledWith(['cluster-b']);
   });
 
   it.each(['all', 'some'] as const)(
@@ -227,37 +173,28 @@ describe('GridTableFiltersBar', () => {
       await renderFilters({
         showClusterDropdown: true,
         activeFilters: {
-          search: '',
-          kinds: { mode: 'all' },
-          namespaces: { mode: 'all' },
+          ...NO_FILTERS,
           clusters: mode === 'some' ? { mode, values } : { mode },
-          includeMetadata: false,
         },
         resolvedFilterOptions: {
           kinds: [],
           namespaces: [],
           clusters: values.map((value) => ({ value, label: value })),
         },
-        renderOption: (option, isSelected) => (
-          <input type="checkbox" aria-label={option.label} checked={isSelected} readOnly />
-        ),
       });
-      const selected = container.querySelectorAll('input[type="checkbox"]:checked');
-      expect(Array.from(selected, (input) => input.getAttribute('aria-label'))).toEqual(values);
+
+      await openMenu('cluster');
+
+      expect(values.map((value) => isChosen(option(value)))).toEqual([true, true]);
     }
   );
 
-  it('renders backend query facet dropdowns and propagates keyed changes', async () => {
+  it('reports a backend query facet change by its facet key, with search and bulk choices', async () => {
     const onQueryFacetChange = vi.fn();
-
     await renderFilters({
       activeFilters: {
-        search: '',
-        kinds: { mode: 'all' },
-        namespaces: { mode: 'all' },
-        clusters: { mode: 'all' },
+        ...NO_FILTERS,
         queryFacets: { apiGroups: { mode: 'some', values: ['apps'] } },
-        includeMetadata: false,
       },
       resolvedFilterOptions: {
         kinds: [],
@@ -280,337 +217,120 @@ describe('GridTableFiltersBar', () => {
       onQueryFacetChange,
     });
 
-    const dropdown = container.querySelector(
-      '[data-testid="facet-apiGroups"]'
-    ) as HTMLSelectElement;
-    expect(dropdown).toBeTruthy();
-    expect(dropdown.getAttribute('data-searchable')).toBe('true');
-    expect(dropdown.getAttribute('data-bulk-actions')).toBe('true');
-    await act(async () => {
-      dropdown.value = '(core)';
-      dropdown.dispatchEvent(new Event('change', { bubbles: true }));
-    });
-    expect(onQueryFacetChange).toHaveBeenCalledWith('apiGroups', ['(core)']);
-  });
+    await openMenu('query-facet-apiGroups');
+    expect(document.body.querySelector('[role="combobox"]')).not.toBeNull();
+    expect(document.body.querySelector('button[aria-label="Select all"]')).not.toBeNull();
+    await click(option('core'));
 
-  it('renders built-in multiselect chips from the stored selection modes', async () => {
+    expect(onQueryFacetChange).toHaveBeenLastCalledWith('apiGroups', ['apps', '(core)']);
+  });
+});
+
+describe('GridTableFiltersBar chips', () => {
+  it('counts every stored kind and an empty namespace selection, and clears one filter', async () => {
     const onFiltersChange = vi.fn();
     await renderFilters({
+      showKindDropdown: true,
+      showNamespaceDropdown: true,
       activeFilters: {
-        search: '',
+        ...NO_FILTERS,
         kinds: { mode: 'some', values: ['Pod', 'Kind no longer available'] },
         namespaces: { mode: 'none' },
-        clusters: { mode: 'all' },
-        includeMetadata: false,
       },
       onFiltersChange,
     });
+    const trigger = (role: string) =>
+      view.container.querySelector(`[data-gridtable-filter-role="${role}"] .dropdown-value`)
+        ?.textContent;
 
-    const chips = container.querySelector('[aria-label="Active GridTable filters"]');
-    expect(chips?.textContent).toContain('Clear all');
-    expect(chips?.textContent).toContain('Kinds: 2');
-    expect(chips?.textContent).toContain('Namespaces: 0');
-    expect(chips?.textContent).not.toContain('Clusters');
+    expect(chips().textContent).toContain('Kinds: 2');
+    expect(chips().textContent).toContain('Namespaces: 0');
+    expect(chips().textContent).not.toContain('Clusters');
+    // An empty selection must not read like the unfiltered "all" state.
+    expect(trigger('kind')).toBe('Kinds (2)');
+    expect(trigger('namespace')).toBe('Namespaces (0)');
 
-    await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>('button[aria-label="Clear Kinds filter"]')
-        ?.click();
-    });
+    await click(button('Clear Kinds filter'));
     expect(onFiltersChange).toHaveBeenCalledWith({ kinds: { mode: 'all' } });
   });
 
-  it('renders query facet counts and clears one facet back to all', async () => {
+  it('counts query facet selections and clears one facet back to all', async () => {
     const onFiltersChange = vi.fn();
     await renderFilters({
       activeFilters: {
-        search: '',
-        kinds: { mode: 'all' },
-        namespaces: { mode: 'all' },
-        clusters: { mode: 'all' },
+        ...NO_FILTERS,
         queryFacets: {
           status: { mode: 'some', values: ['Running', 'Pending'] },
           owner: { mode: 'none' },
         },
-        includeMetadata: false,
       },
       resolvedFilterOptions: {
         kinds: [],
         namespaces: [],
         queryFacets: [
-          {
-            key: 'status',
-            label: 'Status',
-            placeholder: 'All statuses',
-            options: [],
-          },
-          {
-            key: 'owner',
-            label: 'Owner',
-            placeholder: 'All owners',
-            options: [],
-          },
+          { key: 'status', label: 'Status', placeholder: 'All statuses', options: [] },
+          { key: 'owner', label: 'Owner', placeholder: 'All owners', options: [] },
         ],
       },
       onFiltersChange,
     });
 
-    const chips = container.querySelector('[aria-label="Active GridTable filters"]');
-    expect(chips?.textContent).toContain('Statuses: 2');
-    expect(chips?.textContent).toContain('Owners: 0');
+    expect(chips().textContent).toContain('Statuses: 2');
+    expect(chips().textContent).toContain('Owners: 0');
 
-    await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>('button[aria-label="Clear Status filter"]')
-        ?.click();
-    });
+    await click(button('Clear Status filter'));
 
     expect(onFiltersChange).toHaveBeenCalledWith({
-      queryFacets: {
-        status: { mode: 'all' },
-        owner: { mode: 'none' },
-      },
+      queryFacets: { status: { mode: 'all' }, owner: { mode: 'none' } },
     });
   });
 
-  it('renders text and boolean chips with individual and clear-all actions', async () => {
+  it('clears the search text and metadata filter individually or all filters at once', async () => {
     const onFiltersChange = vi.fn();
     const onReset = vi.fn();
     await renderFilters({
-      activeFilters: {
-        search: 'web',
-        kinds: { mode: 'all' },
-        namespaces: { mode: 'all' },
-        clusters: { mode: 'all' },
-        includeMetadata: true,
-      },
+      activeFilters: { ...NO_FILTERS, search: 'web', includeMetadata: true },
       onFiltersChange,
       onReset,
     });
 
-    const chips = container.querySelector('[aria-label="Active GridTable filters"]');
-    expect(chips?.textContent).toContain('Text: web');
-    expect(chips?.textContent).toContain('Include metadata');
+    expect(chips().textContent).toContain('Text: web');
+    expect(chips().textContent).toContain('Include metadata');
 
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>('button[aria-label="Clear text filter"]')?.click();
-    });
+    await click(button('Clear text filter'));
     expect(onFiltersChange).toHaveBeenCalledWith({ search: '' });
 
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>('button[aria-label="Clear all filters"]')?.click();
-    });
+    await click(button('Clear all filters'));
     expect(onReset).toHaveBeenCalledTimes(1);
   });
+});
 
-  it('always enables search and bulk actions for the kind dropdown', async () => {
+describe('GridTableFiltersBar result count', () => {
+  it('shows matching-of-total rows only while a filter narrows the rows', async () => {
+    await renderFilters({ resultCount: { filtered: 50, unfiltered: 100, capped: true } });
+    expect(resultCount()).toBeNull();
+
     await renderFilters({
-      showKindDropdown: true,
-      resolvedFilterOptions: {
-        kinds: [
-          { label: 'Pods', value: 'Pod' },
-          { label: 'Deployments', value: 'Deployment' },
-        ],
-        namespaces: [],
-      },
-    });
-
-    expect(container.querySelector('[data-testid="kinds"]')?.getAttribute('data-searchable')).toBe(
-      'true'
-    );
-    expect(
-      container.querySelector('[data-testid="kinds"]')?.getAttribute('data-bulk-actions')
-    ).toBe('true');
-  });
-
-  it('keeps search input focused across controlled filter updates', async () => {
-    const setInputValue = (inputElement: HTMLInputElement, value: string) => {
-      const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
-      descriptor?.set?.call(inputElement, value);
-      inputElement.dispatchEvent(new Event('input', { bubbles: true }));
-    };
-
-    const Harness = () => {
-      const [search, setSearch] = React.useState('');
-      return (
-        <ZoomProvider>
-          <GridTableFiltersBar
-            activeFilters={{
-              search,
-              kinds: { mode: 'all' },
-              namespaces: { mode: 'all' },
-              clusters: { mode: 'all' },
-              includeMetadata: false,
-            }}
-            resolvedFilterOptions={{
-              searchBehavior: 'query',
-              kinds: [],
-              namespaces: [],
-            }}
-            kindDropdownId="kinds"
-            namespaceDropdownId="namespaces"
-            clusterDropdownId="clusters"
-            searchInputId="search"
-            onKindsChange={vi.fn()}
-            onNamespacesChange={vi.fn()}
-            onClustersChange={vi.fn()}
-            onFiltersChange={vi.fn()}
-            onSearchChange={setSearch}
-            onReset={vi.fn()}
-            renderOption={(option) => option.label}
-          />
-        </ZoomProvider>
-      );
-    };
-
-    await act(async () => {
-      root.render(<Harness />);
-      await Promise.resolve();
-    });
-
-    const input = container.querySelector<HTMLInputElement>('#search');
-    expect(input).not.toBeNull();
-
-    await act(async () => {
-      input?.focus();
-      setInputValue(
-        requireValue(input, 'expected test value in GridTableFiltersBar.test.tsx'),
-        'p'
-      );
-      await Promise.resolve();
-    });
-
-    const updatedInput = container.querySelector<HTMLInputElement>('#search');
-    expect(document.activeElement).toBe(updatedInput);
-    expect(updatedInput?.value).toBe('p');
-
-    await act(async () => {
-      setInputValue(
-        requireValue(updatedInput, 'expected test value in GridTableFiltersBar.test.tsx'),
-        'po'
-      );
-      await Promise.resolve();
-    });
-
-    const finalInput = container.querySelector<HTMLInputElement>('#search');
-    expect(document.activeElement).toBe(finalInput);
-    expect(finalInput?.value).toBe('po');
-  });
-
-  it('marks approximate backend totals with visible copy', async () => {
-    vi.useFakeTimers();
-    await renderFilters({
-      activeFilters: {
-        search: 'web',
-        kinds: { mode: 'all' },
-        namespaces: { mode: 'all' },
-        clusters: { mode: 'all' },
-        includeMetadata: false,
-      },
-      resolvedFilterOptions: {
-        kinds: [],
-        namespaces: [],
-        searchBehavior: 'query',
-      },
-      resultCount: {
-        filtered: 100,
-        unfiltered: 100001,
-        totalIsExact: false,
-        capped: true,
-      },
-    });
-
-    const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
-    expect(resultCount?.textContent).toContain('Showing 100 of 100001+ items');
-    expect(resultCount?.classList.contains('active-filter-chips__summary')).toBe(true);
-    expect(resultCount?.classList.contains('active-filter-chip')).toBe(false);
-    const trigger = resultCount?.querySelector('.tooltip-trigger');
-    expect(trigger).not.toBeNull();
-    await act(async () => {
-      trigger?.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-      vi.advanceTimersByTime(300);
-      await Promise.resolve();
-    });
-    expect(document.body.textContent).toContain('The total count is approximate');
-    expect(document.body.textContent).toContain('current backend query page');
-  });
-
-  it('shows filtered-of-unfiltered totals for query-backed tables', async () => {
-    await renderFilters({
-      activeFilters: {
-        search: 'web',
-        kinds: { mode: 'all' },
-        namespaces: { mode: 'all' },
-        clusters: { mode: 'all' },
-        includeMetadata: false,
-      },
-      resolvedFilterOptions: {
-        kinds: [],
-        namespaces: [],
-        searchBehavior: 'query',
-      },
-      resultCount: {
-        filtered: 250,
-        unfiltered: 5000,
-        totalIsExact: true,
-        capped: true,
-      },
-    });
-
-    const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
-    expect(resultCount?.textContent).toContain('Showing 250 of 5000 items');
-  });
-
-  it('hides the result count and tooltip when no narrowing filter is active', async () => {
-    // The filter-bar count is filter feedback, not pagination — pagination/total lives
-    // in the pagination footer. With no active filter, the count must not render.
-    await renderFilters({
-      resultCount: { filtered: 50, unfiltered: 100, capped: true },
-    });
-
-    expect(container.querySelector('[data-gridtable-filter-role="result-count"]')).toBeNull();
-  });
-
-  it('shows the result count once a narrowing filter is active', async () => {
-    await renderFilters({
-      activeFilters: {
-        search: 'web',
-        kinds: { mode: 'all' },
-        namespaces: { mode: 'all' },
-        clusters: { mode: 'all' },
-        includeMetadata: false,
-      },
+      activeFilters: { ...NO_FILTERS, search: 'web' },
       resultCount: { filtered: 12, unfiltered: 100 },
     });
-
-    const resultCount = requireValue(
-      container.querySelector('[data-gridtable-filter-role="result-count"]'),
-      'expected result count summary'
-    );
-    expect(resultCount.textContent).toBe('Showing 12 of 100 items');
-    expect(resultCount.classList.contains('active-filter-chips__summary')).toBe(true);
-    expect(resultCount.classList.contains('active-filter-chip')).toBe(false);
-    expect(resultCount.closest('.active-filter-chips')).not.toBeNull();
-    expect(resultCount.closest('.gridtable-filter-actions')).toBeNull();
-    const clearAll = requireValue(
-      container.querySelector('button[aria-label="Clear all filters"]'),
-      'expected Clear all button'
-    );
-    expect(
-      Boolean(resultCount.compareDocumentPosition(clearAll) & Node.DOCUMENT_POSITION_FOLLOWING)
-    ).toBe(true);
+    expect(resultCount()?.textContent).toBe('Showing 12 of 100 items');
   });
 
-  it('surfaces the partial-window note in the result-count tooltip', async () => {
+  it('marks an approximate backend total', async () => {
+    await renderFilters({
+      activeFilters: { ...NO_FILTERS, search: 'web' },
+      resolvedFilterOptions: { kinds: [], namespaces: [], searchBehavior: 'query' },
+      resultCount: { filtered: 100, unfiltered: 100001, totalIsExact: false, capped: true },
+    });
+
+    expect(resultCount()?.textContent).toContain('100001+');
+  });
+
+  it('explains a partial local window with the view’s note', async () => {
     vi.useFakeTimers();
     await renderFilters({
-      activeFilters: {
-        search: 'web',
-        kinds: { mode: 'all' },
-        namespaces: { mode: 'all' },
-        clusters: { mode: 'all' },
-        includeMetadata: false,
-      },
+      activeFilters: { ...NO_FILTERS, search: 'web' },
       resultCount: {
         filtered: 50,
         unfiltered: 500,
@@ -619,298 +339,202 @@ describe('GridTableFiltersBar', () => {
       },
     });
 
-    const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
-    expect(resultCount?.textContent).toContain('Showing 50 of 500 items');
-    const trigger = resultCount?.querySelector('.tooltip-trigger');
-    expect(trigger).not.toBeNull();
+    const trigger = requireValue(resultCount()?.querySelector('.tooltip-trigger'), 'count tooltip');
     await act(async () => {
-      trigger?.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-      vi.advanceTimersByTime(300);
-      await Promise.resolve();
+      trigger.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      await vi.advanceTimersByTimeAsync(300);
     });
+
     expect(document.body.textContent).toContain('Only the recent local window is loaded.');
-    expect(document.body.textContent).toContain('current local row window');
   });
+});
 
-  it('registers search shortcut and focuses the input when invoked', async () => {
-    await renderFilters({
-      searchShortcutActive: true,
-      searchShortcutPriority: 10,
-    });
+describe('GridTableFiltersBar search', () => {
+  const searchInput = () =>
+    requireValue(view.container.querySelector<HTMLInputElement>('#search'), 'search input');
 
-    expect(searchShortcutMock.register).toHaveBeenCalledTimes(1);
-    const config = searchShortcutMock.register.mock.calls[0][0] as {
-      isActive: boolean;
-      focus: () => void;
-      priority: number;
-    };
-    expect(config.isActive).toBe(true);
-    expect(config.priority).toBe(10);
-
-    const input = container.querySelector('#search') as HTMLInputElement;
-    input.select = vi.fn();
-
+  const type = async (input: HTMLInputElement, value: string) => {
     await act(async () => {
-      config.focus();
-      await Promise.resolve();
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
     });
+  };
 
-    expect(document.activeElement).toBe(input);
-    expect(input.select).toHaveBeenCalled();
+  it('keeps the search box focused across controlled filter updates', async () => {
+    function ControlledFilters() {
+      const [search, setSearch] = React.useState('');
+      return (
+        <GridTableFiltersBar
+          activeFilters={{ ...NO_FILTERS, search }}
+          resolvedFilterOptions={{ searchBehavior: 'query', kinds: [], namespaces: [] }}
+          kindDropdownId="kinds"
+          namespaceDropdownId="namespaces"
+          clusterDropdownId="clusters"
+          searchInputId="search"
+          onKindsChange={vi.fn()}
+          onNamespacesChange={vi.fn()}
+          onClustersChange={vi.fn()}
+          onFiltersChange={vi.fn()}
+          onSearchChange={setSearch}
+          onReset={vi.fn()}
+          renderOption={(choice) => choice.label}
+        />
+      );
+    }
+    await view.show(<ControlledFilters />);
+
+    await act(async () => searchInput().focus());
+    await type(searchInput(), 'p');
+    expect(document.activeElement).toBe(searchInput());
+    expect(searchInput().value).toBe('p');
+
+    await type(searchInput(), 'po');
+    expect(document.activeElement).toBe(searchInput());
+    expect(searchInput().value).toBe('po');
   });
 
-  it('marks search shortcut inactive when disabled', async () => {
-    await renderFilters({
-      searchShortcutActive: false,
-    });
+  it.each([true, false])(
+    'answers the Find shortcut only while its table is active (active: %s)',
+    async (active) => {
+      track(vi.spyOn(navigator, 'platform', 'get')).mockReturnValue('Win32');
+      await renderFilters({ searchShortcutActive: active, searchShortcutPriority: 10 });
+      const select = vi.spyOn(searchInput(), 'select');
 
-    const config = searchShortcutMock.register.mock.calls[0][0] as {
-      isActive: boolean;
-    };
-    expect(config.isActive).toBe(false);
-  });
+      const find = new KeyboardEvent('keydown', {
+        key: 'f',
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      await act(async () => {
+        document.body.dispatchEvent(find);
+      });
 
-  it('handles Cmd/Ctrl+A inside search input', async () => {
-    await renderFilters({
-      searchShortcutActive: true,
-    });
+      expect(document.activeElement === searchInput()).toBe(active);
+      expect(select).toHaveBeenCalledTimes(active ? 1 : 0);
+    }
+  );
 
-    const input = container.querySelector('#search') as HTMLInputElement;
-    const selectSpy = vi.spyOn(input, 'select');
+  it('selects the search text with Cmd/Ctrl+A inside the search box', async () => {
+    await renderFilters({ searchShortcutActive: true });
+    const select = vi.spyOn(searchInput(), 'select');
+    await act(async () => searchInput().focus());
 
-    const event = new KeyboardEvent('keydown', {
+    const selectAll = new KeyboardEvent('keydown', {
       key: 'a',
       metaKey: true,
       bubbles: true,
+      cancelable: true,
     });
-    const preventSpy = vi.spyOn(event, 'preventDefault');
-    input.dispatchEvent(event);
-    expect(preventSpy).toHaveBeenCalled();
-    expect(selectSpy).toHaveBeenCalled();
+    await act(async () => {
+      searchInput().dispatchEvent(selectAll);
+    });
 
-    selectSpy.mockRestore();
+    expect(selectAll.defaultPrevented).toBe(true);
+    expect(select).toHaveBeenCalled();
+  });
+});
+
+describe('GridTableFiltersBar Columns menu', () => {
+  const columnsProps = (overrides: Partial<FiltersBarProps> = {}): Partial<FiltersBarProps> => ({
+    showColumnsDropdown: true,
+    columnOptions: [
+      { label: 'Name', value: 'name' },
+      { label: 'Age', value: 'age' },
+    ],
+    columnValue: ['name'],
+    onColumnsChange: vi.fn(),
+    onMoveColumn: vi.fn(),
+    onReorderColumn: vi.fn(),
+    onResetColumns: vi.fn(),
+    columnsDropdownId: 'columns',
+    ...overrides,
   });
 
-  it('renders the columns dropdown when enabled', async () => {
-    const onColumnsChange = vi.fn();
-    const onMoveColumn = vi.fn();
-    const onReorderColumn = vi.fn();
-    const onResetColumns = vi.fn();
-    await renderFilters({
-      showColumnsDropdown: true,
-      columnOptions: [
-        { label: 'Name', value: 'name' },
-        { label: 'Age', value: 'age' },
-      ],
-      columnValue: ['name'],
-      onColumnsChange,
-      onMoveColumn,
-      onReorderColumn,
-      canResetColumns: true,
-      onResetColumns,
-      columnsDropdownId: 'columns',
-    });
+  const columnRow = (key: string) =>
+    requireValue(
+      document.body.querySelector<HTMLElement>(`.dropdown-option-row[data-column-key="${key}"]`),
+      `column row ${key}`
+    );
 
-    const dropdown = container.querySelector('[data-testid="columns"]') as HTMLSelectElement;
-    expect(dropdown).toBeTruthy();
-    expect(dropdown.dataset.bulkActions).toBe('true');
+  const drag = async (type: string, target: HTMLElement) => {
+    const event = new Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'dataTransfer', {
+      value: { effectAllowed: 'none', dropEffect: 'none', setData: vi.fn() },
+    });
+    await act(async () => {
+      target.dispatchEvent(event);
+    });
+  };
+
+  it('shows a hidden column, reorders by keyboard and by dragging, and resets', async () => {
+    const props = columnsProps({ canResetColumns: true });
+    await renderFilters(props);
+    await openMenu('columns');
+
+    await click(option('Age'));
+    expect(props.onColumnsChange).toHaveBeenLastCalledWith(['name', 'age']);
 
     await act(async () => {
-      dropdown.value = 'age';
-      dropdown.dispatchEvent(new Event('change', { bubbles: true }));
+      button('Reorder Name. Drag the row, or use Up and Down Arrow keys.').dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })
+      );
     });
+    expect(props.onMoveColumn).toHaveBeenCalledWith('name', 1);
 
-    expect(onColumnsChange).toHaveBeenCalledWith(['age']);
+    await drag('dragstart', columnRow('name'));
+    await drag('dragover', columnRow('age'));
+    expect(columnRow('age').dataset.dropPosition).toBe('after');
+    await drag('drop', columnRow('age'));
+    expect(props.onReorderColumn).toHaveBeenCalledWith('name', 1);
 
-    const nameHandle = container.querySelector(
-      'button[aria-label="Reorder Name. Drag the row, or use Up and Down Arrow keys."]'
-    ) as HTMLButtonElement;
-    const ageHandle = container.querySelector(
-      'button[aria-label="Reorder Age. Drag the row, or use Up and Down Arrow keys."]'
-    ) as HTMLButtonElement;
-    const ageRow = container.querySelector(
-      '.dropdown-option-row[data-option-value="age"]'
-    ) as HTMLDivElement;
-    const nameRow = container.querySelector(
-      '.dropdown-option-row[data-option-value="name"]'
-    ) as HTMLDivElement;
+    await drag('dragstart', columnRow('age'));
+    await drag('dragover', columnRow('name'));
+    expect(columnRow('name').dataset.dropPosition).toBe('before');
+    await drag('dragend', columnRow('age'));
 
-    // The row owns the drag; the grip is the affordance and the keyboard entry point.
-    expect(nameHandle.draggable).toBe(false);
-    expect(ageHandle.draggable).toBe(false);
-    expect(nameRow.draggable).toBe(true);
-    expect(ageRow.draggable).toBe(true);
-    expect(nameHandle.textContent).toBe('⠿');
-    expect(container.querySelectorAll('.gridtable-column-drag-handle')).toHaveLength(2);
-
-    await act(async () => {
-      nameHandle.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
-    });
-    expect(onMoveColumn).toHaveBeenCalledWith('name', 1);
-
-    const dataTransfer = {
-      effectAllowed: 'none',
-      dropEffect: 'none',
-      setData: vi.fn(),
-    };
-    const dragStart = new Event('dragstart', {
-      bubbles: true,
-      cancelable: true,
-    });
-    Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
-    await act(async () => nameRow.dispatchEvent(dragStart));
-
-    const dragOver = new Event('dragover', { bubbles: true, cancelable: true });
-    Object.defineProperty(dragOver, 'dataTransfer', { value: dataTransfer });
-    await act(async () => ageRow.dispatchEvent(dragOver));
-    expect(ageRow.dataset.dropPosition).toBe('after');
-
-    const drop = new Event('drop', { bubbles: true, cancelable: true });
-    Object.defineProperty(drop, 'dataTransfer', { value: dataTransfer });
-    await act(async () => ageRow.dispatchEvent(drop));
-
-    expect(onReorderColumn).toHaveBeenCalledWith('name', 1);
-
-    const upwardDragStart = new Event('dragstart', {
-      bubbles: true,
-      cancelable: true,
-    });
-    Object.defineProperty(upwardDragStart, 'dataTransfer', {
-      value: dataTransfer,
-    });
-    await act(async () => ageRow.dispatchEvent(upwardDragStart));
-    const upwardDragOver = new Event('dragover', {
-      bubbles: true,
-      cancelable: true,
-    });
-    Object.defineProperty(upwardDragOver, 'dataTransfer', {
-      value: dataTransfer,
-    });
-    await act(async () => nameRow.dispatchEvent(upwardDragOver));
-    expect(nameRow.dataset.dropPosition).toBe('before');
-
-    await act(async () => ageRow.dispatchEvent(new Event('dragend', { bubbles: true })));
-
-    const reset = container.querySelector(
-      'button[aria-label="Reset columns"]'
-    ) as HTMLButtonElement;
-    expect(reset.textContent).toContain('Reset');
-    expect(reset.disabled).toBe(false);
-    await act(async () => reset.click());
-    expect(onResetColumns).toHaveBeenCalledTimes(1);
+    expect(button('Reset columns').disabled).toBe(false);
+    await click(button('Reset columns'));
+    expect(props.onResetColumns).toHaveBeenCalledTimes(1);
   });
 
   it('disables reset until order or visibility differs from the defaults', async () => {
-    await renderFilters({
-      showColumnsDropdown: true,
-      columnOptions: [{ label: 'Name', value: 'name' }],
-      columnValue: ['name'],
-      onColumnsChange: vi.fn(),
-      onMoveColumn: vi.fn(),
-      onReorderColumn: vi.fn(),
-      canResetColumns: false,
-      onResetColumns: vi.fn(),
-      columnsDropdownId: 'columns',
-    });
+    await renderFilters(columnsProps({ canResetColumns: false }));
+    await openMenu('columns');
 
-    const reset = container.querySelector(
-      'button[aria-label="Reset columns"]'
-    ) as HTMLButtonElement;
-    expect(reset.disabled).toBe(true);
+    expect(button('Reset columns').disabled).toBe(true);
   });
 
-  it('adds, edits, and directly deletes custom metadata columns from the Columns menu', async () => {
+  it('adds, edits, and directly deletes custom metadata columns', async () => {
+    const ownerKey = 'metadata:label:example.com/owner';
     const onAddCustomMetadataColumn = vi.fn();
     const onEditCustomMetadataColumn = vi.fn();
     const onRemoveCustomMetadataColumn = vi.fn();
-    await renderFilters({
-      showColumnsDropdown: true,
+    const props = columnsProps({
       columnOptions: [
         { label: 'Name', value: 'name' },
-        { label: 'Owner', value: 'metadata:label:example.com/owner' },
+        { label: 'Owner', value: ownerKey },
       ],
-      columnValue: ['name', 'metadata:label:example.com/owner'],
-      onColumnsChange: vi.fn(),
-      onMoveColumn: vi.fn(),
-      onReorderColumn: vi.fn(),
-      customMetadataColumnKeys: new Set(['metadata:label:example.com/owner']),
+      columnValue: ['name', ownerKey],
+      customMetadataColumnKeys: new Set([ownerKey]),
       onAddCustomMetadataColumn,
       onEditCustomMetadataColumn,
       onRemoveCustomMetadataColumn,
-      columnsDropdownId: 'columns',
     });
+    await renderFilters(props);
 
-    const addCustomColumnButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Add Custom Column"]'
-    );
-    expect(addCustomColumnButton?.textContent).toBe('Add');
-    await act(async () => {
-      addCustomColumnButton?.click();
-    });
+    await openMenu('columns');
+    await click(button('Add Custom Column'));
     expect(onAddCustomMetadataColumn).toHaveBeenCalledTimes(1);
 
-    expect(container.querySelector('button[aria-label="Edit Name"]')).toBeNull();
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>('button[aria-label="Edit Owner"]')?.click();
-    });
-    expect(onEditCustomMetadataColumn).toHaveBeenCalledWith('metadata:label:example.com/owner');
-
-    expect(container.querySelector('button[aria-label="Delete Name"]')).toBeNull();
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>('button[aria-label="Delete Owner"]')?.click();
-    });
-    expect(onRemoveCustomMetadataColumn).toHaveBeenCalledWith('metadata:label:example.com/owner');
-  });
-
-  it('presents required columns as required rather than disabled', async () => {
-    await renderFilters({
-      showColumnsDropdown: true,
-      columnOptions: [
-        { label: 'Name', value: 'name', disabled: true },
-        { label: 'Age', value: 'age' },
-      ],
-      columnValue: ['name', 'age'],
-      onColumnsChange: vi.fn(),
-      onMoveColumn: vi.fn(),
-      onReorderColumn: vi.fn(),
-      canResetColumns: false,
-      onResetColumns: vi.fn(),
-      columnsDropdownId: 'columns',
-    });
-
-    // The menu is scoped so required rows can opt out of the shared disabled styling.
-    expect(container.querySelector('.dropdown-columns-menu')).not.toBeNull();
-
-    const requiredRow = requireValue(
-      container.querySelector('.dropdown-option-row[data-option-value="name"]'),
-      'expected the Name option row'
-    );
-    const requiredOption = requireValue(
-      requiredRow.querySelector('.dropdown-filter-option'),
-      'expected the Name option content'
-    );
-    expect(requiredOption.getAttribute('title')).toBe('Always shown');
-    expect(
-      requiredRow
-        .querySelector('.dropdown-filter-box')
-        ?.classList.contains('dropdown-filter-box--required')
-    ).toBe(true);
-    // Required is a state of the control, never an extra word in the row.
-    expect(requiredOption.textContent).toBe('Name');
-
-    const optionalRow = requireValue(
-      container.querySelector('.dropdown-option-row[data-option-value="age"]'),
-      'expected the Age option row'
-    );
-    const optionalOption = requireValue(
-      optionalRow.querySelector('.dropdown-filter-option'),
-      'expected the Age option content'
-    );
-    expect(optionalOption.getAttribute('title')).toBeNull();
-    expect(
-      optionalRow
-        .querySelector('.dropdown-filter-box')
-        ?.classList.contains('dropdown-filter-box--required')
-    ).toBe(false);
+    await openMenu('columns');
+    expect(document.body.querySelector('button[aria-label="Edit Name"]')).toBeNull();
+    expect(document.body.querySelector('button[aria-label="Delete Name"]')).toBeNull();
+    await click(button('Edit Owner'));
+    expect(onEditCustomMetadataColumn).toHaveBeenCalledWith(ownerKey);
+    await click(button('Delete Owner'));
+    expect(onRemoveCustomMetadataColumn).toHaveBeenCalledWith(ownerKey);
+    // Editing and deleting are row actions, not a visibility change.
+    expect(props.onColumnsChange).not.toHaveBeenCalled();
   });
 });

@@ -1,349 +1,173 @@
 /**
  * frontend/src/shared/components/tables/hooks/useGridTableShortcuts.test.tsx
  *
- * Test suite for useGridTableShortcuts.
- * Covers key behaviors and edge cases for useGridTableShortcuts.
+ * The table's own keys while its body has the keyboard: Page Down/Up move a
+ * screenful of rows, Ctrl+Arrow (Command+Arrow on macOS) changes pages only
+ * when there is a page to go to, Shift+F10 opens nothing in a table without a
+ * row menu, and mouse hover is suppressed only while the body is focused.
+ * Enter/Space, arrows, Home/End, and focus gating are in
+ * GridTable.keyboard.test.tsx and GridTable.rowDetail.test.tsx. Runs the real
+ * GridTable inside the production shell (keyboard and zoom owners) with only
+ * the backend boundary faked (test-utils/appState).
  */
 
-import { useGridTableShortcuts } from '@shared/components/tables/hooks/useGridTableShortcuts';
-import type React from 'react';
+import GridTable, { type GridTableProps } from '@shared/components/tables/GridTable';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { installAppStateHarness, type MountedApp } from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
 
-type UseShortcutsContract = typeof import('@ui/shortcuts').useShortcuts;
-type CapturedShortcut = Parameters<UseShortcutsContract>[0][number];
-type CapturedShortcutOptions = NonNullable<Parameters<UseShortcutsContract>[1]>;
+interface Row {
+  id: string;
+  name: string;
+}
 
-// Capture useShortcuts args so we can verify the registered shortcut keys and options.
-const capturedShortcuts: {
-  shortcuts: CapturedShortcut[];
-  options: CapturedShortcutOptions | undefined;
-} = {
-  shortcuts: [],
-  options: undefined,
+const rows: Row[] = Array.from({ length: 10 }, (_, index) => ({
+  id: `cluster-a|row-${index}`,
+  name: `row-${index}`,
+}));
+
+const app = installAppStateHarness();
+// Spies this file installs, restored after each test; the harness keeps its own.
+const spies: Array<{ mockRestore(): void }> = [];
+const track = <S extends { mockRestore(): void }>(spy: S): S => {
+  spies.push(spy);
+  return spy;
 };
+let view: MountedApp;
+let clientHeight: PropertyDescriptor | undefined;
 
-const isMacPlatformMock = vi.hoisted(() => vi.fn(() => false));
-
-vi.mock('@ui/shortcuts', () => ({
-  useShortcuts: (shortcuts: CapturedShortcut[], options: CapturedShortcutOptions) => {
-    capturedShortcuts.shortcuts = shortcuts;
-    capturedShortcuts.options = options;
-  },
-}));
-
-vi.mock('@/utils/platform', () => ({
-  isMacPlatform: () => isMacPlatformMock(),
-}));
-
-describe('useGridTableShortcuts', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
-
-  beforeEach(() => {
-    isMacPlatformMock.mockReturnValue(false);
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
+beforeEach(async () => {
+  // jsdom has no layout: the table body shows three 44px rows.
+  clientHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight');
+  Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+    configurable: true,
+    get(this: HTMLElement) {
+      return this.classList.contains('gridtable-wrapper') ? 132 : 0;
+    },
   });
+  view = await app.render(null);
+});
 
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-    document.body.innerHTML = '';
-    vi.restoreAllMocks();
-  });
+afterEach(() => {
+  if (clientHeight) {
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', clientHeight);
+  } else {
+    Reflect.deleteProperty(HTMLElement.prototype, 'clientHeight');
+  }
+  for (const spy of spies.splice(0)) {
+    spy.mockRestore();
+  }
+});
 
-  const renderHook = async (shortcutsActive: boolean) => {
-    const getPageSizeRef = { current: 10 };
-    const noop = () => false;
-
-    const HookHarness: React.FC<{ active: boolean }> = ({ active }) => {
-      useGridTableShortcuts({
-        shortcutsActive: active,
-        enableContextMenu: false,
-        onOpenFocusedRow: noop,
-        onOpenContextMenu: noop,
-        moveSelectionByDelta: () => false,
-        moveRow: () => false,
-        jumpToStart: () => false,
-        jumpToEnd: () => false,
-        getPageSizeRef,
-        isContextMenuVisible: false,
-      });
-      return null;
-    };
-
-    await act(async () => {
-      root.render(<HookHarness active={shortcutsActive} />);
-      await Promise.resolve();
-    });
-
-    const rerender = async (nextActive: boolean) => {
-      await act(async () => {
-        root.render(<HookHarness active={nextActive} />);
-        await Promise.resolve();
-      });
-    };
-
-    return { rerender };
-  };
-
-  it('updates the shared enabled flag when shortcutsActive changes', async () => {
-    const { rerender } = await renderHook(false);
-    expect(capturedShortcuts.options).toEqual(expect.objectContaining({ enabled: false }));
-    await rerender(true);
-    expect(capturedShortcuts.options).toEqual(expect.objectContaining({ enabled: true }));
-  });
-
-  it('registers all expected shortcut keys with correct options', async () => {
-    await renderHook(true);
-
-    const keys = capturedShortcuts.shortcuts.map((s) => s.key);
-    expect(keys).toContain('ArrowDown');
-    expect(keys).toContain('ArrowUp');
-    expect(keys).toContain('PageDown');
-    expect(keys).toContain('PageUp');
-    expect(keys).toContain('Home');
-    expect(keys).toContain('End');
-    expect(keys).toContain('Enter');
-    expect(keys).toContain(' ');
-    expect(keys).toContain('F10');
-
-    // Verify common options passed to useShortcuts.
-    expect(capturedShortcuts.options).toEqual(
-      expect.objectContaining({
-        enabled: true,
-        priority: 400,
-      })
-    );
-  });
-
-  it.each([true, false])(
-    'gives Space only the row expand toggle while Enter still opens (rows expand: %s)',
-    async (rowsExpand) => {
-      const onOpenFocusedRow = vi.fn(() => true);
-      const onToggleFocusedRow = vi.fn(() => true);
-      const Harness: React.FC = () => {
-        useGridTableShortcuts({
-          shortcutsActive: true,
-          enableContextMenu: false,
-          onOpenFocusedRow,
-          onToggleFocusedRow: rowsExpand ? onToggleFocusedRow : undefined,
-          onOpenContextMenu: () => false,
-          moveSelectionByDelta: () => false,
-          moveRow: () => false,
-          jumpToStart: () => false,
-          jumpToEnd: () => false,
-          getPageSizeRef: { current: 10 },
-          isContextMenuVisible: false,
-        });
-        return null;
-      };
-
-      await act(async () => {
-        root.render(<Harness />);
-        await Promise.resolve();
-      });
-
-      requireValue(
-        capturedShortcuts.shortcuts.find((s) => s.key === 'Enter'),
-        'Enter shortcut'
-      ).handler();
-      const space = requireValue(
-        capturedShortcuts.shortcuts.find((s) => s.key === ' '),
-        'Space shortcut'
-      );
-      space.handler();
-
-      expect(onOpenFocusedRow).toHaveBeenCalledTimes(1);
-      // Without an expand toggle Space is switched off (and so absent from help),
-      // never borrowing Enter's open action.
-      expect(space.enabled).toBe(rowsExpand);
-      expect(onToggleFocusedRow).toHaveBeenCalledTimes(rowsExpand ? 1 : 0);
-    }
+const showTable = (props: Partial<GridTableProps<Row>> = {}) =>
+  view.show(
+    <>
+      <GridTable
+        data={rows}
+        columns={[{ key: 'name', header: 'Name', render: (row: Row) => row.name }]}
+        keyExtractor={(row) => row.id}
+        virtualization={{ enabled: false }}
+        {...props}
+      />
+      <input aria-label="Outside table" />
+    </>
   );
 
-  it('wires row moves, paging, Home/End and the expanded-table skips to their keys', async () => {
-    const moveRow = vi.fn(() => true);
-    const moveSelectionByDelta = vi.fn(() => true);
-    const jumpToStart = vi.fn(() => true);
-    const jumpToEnd = vi.fn(() => true);
-    const moveParentRow = vi.fn(() => true);
-    const getPageSizeRef = { current: 15 };
+const tableBody = () =>
+  requireValue(view.container.querySelector<HTMLElement>('table[tabindex="0"]'), 'table body');
 
-    const Harness: React.FC = () => {
-      useGridTableShortcuts({
-        shortcutsActive: true,
-        enableContextMenu: false,
-        onOpenFocusedRow: () => false,
-        onOpenContextMenu: () => false,
-        moveRow,
-        moveSelectionByDelta,
-        jumpToStart,
-        jumpToEnd,
-        moveParentRow,
-        getPageSizeRef,
-        isContextMenuVisible: false,
-      });
-      return null;
-    };
+const focusedRows = () =>
+  Array.from(view.container.querySelectorAll<HTMLElement>('.gridtable-row--focused')).map((row) =>
+    row.dataset.rowKey?.replace('cluster-a|', '')
+  );
 
-    await act(async () => {
-      root.render(<Harness />);
-      await Promise.resolve();
-    });
+const press = async (target: HTMLElement, init: KeyboardEventInit) => {
+  const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
+  await act(async () => {
+    target.dispatchEvent(event);
+  });
+  return event;
+};
 
-    const run = (key: string, alt = false) =>
-      requireValue(
-        capturedShortcuts.shortcuts.find((s) => s.key === key && Boolean(s.modifiers?.alt) === alt),
-        `${alt ? 'Alt+' : ''}${key} shortcut`
-      ).handler();
+describe('GridTable shortcuts', () => {
+  it('moves a screenful of rows with Page Down and Page Up', async () => {
+    await showTable();
+    await act(async () => tableBody().focus());
+    expect(focusedRows()).toEqual(['row-0']);
 
-    run('ArrowDown');
-    run('ArrowUp');
-    expect(moveRow.mock.calls).toEqual([[1], [-1]]);
-    // Paging stays a page of this table's rows.
-    run('PageDown');
-    expect(moveSelectionByDelta).toHaveBeenCalledWith(15);
-    run('Home');
-    run('End');
-    expect(jumpToStart).toHaveBeenCalledTimes(1);
-    expect(jumpToEnd).toHaveBeenCalledTimes(1);
-    run('ArrowDown', true);
-    run('ArrowUp', true);
-    expect(moveParentRow.mock.calls).toEqual([[1], [-1]]);
+    await press(tableBody(), { key: 'PageDown' });
+    expect(focusedRows()).toEqual(['row-3']);
+    await press(tableBody(), { key: 'PageDown' });
+    expect(focusedRows()).toEqual(['row-6']);
+    await press(tableBody(), { key: 'PageUp' });
+    expect(focusedRows()).toEqual(['row-3']);
   });
 
-  it('disables Shift+F10 context menu shortcut when enableContextMenu is false', async () => {
-    await renderHook(true);
-
-    const f10 = capturedShortcuts.shortcuts.find((s) => s.key === 'F10');
-    expect(f10).toBeDefined();
-    expect(requireValue(f10, 'expected test value in useGridTableShortcuts.test.tsx').enabled).toBe(
-      false
-    );
-  });
-
-  const renderWithPagination = async (pagination: {
-    onPagePrevious?: () => void;
-    onPageNext?: () => void;
-    canPagePrevious?: boolean;
-    canPageNext?: boolean;
-  }) => {
-    const Harness: React.FC = () => {
-      useGridTableShortcuts({
-        shortcutsActive: true,
-        enableContextMenu: false,
-        onOpenFocusedRow: () => false,
-        onOpenContextMenu: () => false,
-        moveSelectionByDelta: () => false,
-        moveRow: () => false,
-        jumpToStart: () => false,
-        jumpToEnd: () => false,
-        getPageSizeRef: { current: 10 },
-        isContextMenuVisible: false,
-        ...pagination,
-      });
-      return null;
-    };
-
-    await act(async () => {
-      root.render(<Harness />);
-      await Promise.resolve();
-    });
-
-    return {
-      findShortcut: (key: string) => capturedShortcuts.shortcuts.find((s) => s.key === key),
-    };
-  };
-
-  it('pages with Ctrl+ArrowLeft/ArrowRight on non-macOS when pagination is possible', async () => {
+  it.each([
+    { platform: 'Win32', modifier: { ctrlKey: true } },
+    { platform: 'MacIntel', modifier: { metaKey: true } },
+  ])('changes pages with $platform page keys when there is a page to go to', async (testCase) => {
+    track(vi.spyOn(navigator, 'platform', 'get')).mockReturnValue(testCase.platform);
     const onPagePrevious = vi.fn();
     const onPageNext = vi.fn();
-    const { findShortcut } = await renderWithPagination({
-      onPagePrevious,
-      onPageNext,
-      canPagePrevious: true,
-      canPageNext: true,
-    });
+    await showTable({ onPagePrevious, onPageNext, canPagePrevious: true, canPageNext: true });
+    await act(async () => tableBody().focus());
 
-    expect(
-      requireValue(
-        findShortcut('ArrowLeft'),
-        'expected test value in useGridTableShortcuts.test.tsx'
-      ).handler()
-    ).toBe(true);
-    expect(findShortcut('ArrowLeft')?.modifiers).toEqual({ ctrl: true });
+    const previous = await press(tableBody(), { key: 'ArrowLeft', ...testCase.modifier });
+    const next = await press(tableBody(), { key: 'ArrowRight', ...testCase.modifier });
+
+    expect(previous.defaultPrevented).toBe(true);
+    expect(next.defaultPrevented).toBe(true);
     expect(onPagePrevious).toHaveBeenCalledTimes(1);
-
-    expect(
-      requireValue(
-        findShortcut('ArrowRight'),
-        'expected test value in useGridTableShortcuts.test.tsx'
-      ).handler()
-    ).toBe(true);
-    expect(findShortcut('ArrowRight')?.modifiers).toEqual({ ctrl: true });
     expect(onPageNext).toHaveBeenCalledTimes(1);
   });
 
-  it('pages with Command+ArrowLeft/ArrowRight on macOS when pagination is possible', async () => {
-    isMacPlatformMock.mockReturnValue(true);
-    const { findShortcut } = await renderWithPagination({
-      onPagePrevious: vi.fn(),
-      onPageNext: vi.fn(),
-      canPagePrevious: true,
-      canPageNext: true,
-    });
-
-    expect(findShortcut('ArrowLeft')?.modifiers).toEqual({ meta: true });
-    expect(findShortcut('ArrowRight')?.modifiers).toEqual({ meta: true });
-  });
-
-  it('leaves modified ArrowLeft/ArrowRight unhandled at page boundaries', async () => {
+  it.each([
+    { name: 'at both page boundaries', pagination: { canPagePrevious: false, canPageNext: false } },
+    { name: 'in a table without pagination', pagination: null },
+  ])('leaves Ctrl+Arrow unclaimed $name', async ({ pagination }) => {
+    track(vi.spyOn(navigator, 'platform', 'get')).mockReturnValue('Win32');
     const onPagePrevious = vi.fn();
     const onPageNext = vi.fn();
-    const { findShortcut } = await renderWithPagination({
-      onPagePrevious,
-      onPageNext,
-      canPagePrevious: false,
-      canPageNext: false,
-    });
+    await showTable(pagination ? { onPagePrevious, onPageNext, ...pagination } : {});
+    await act(async () => tableBody().focus());
 
-    expect(
-      requireValue(
-        findShortcut('ArrowLeft'),
-        'expected test value in useGridTableShortcuts.test.tsx'
-      ).handler()
-    ).toBe(false);
-    expect(
-      requireValue(
-        findShortcut('ArrowRight'),
-        'expected test value in useGridTableShortcuts.test.tsx'
-      ).handler()
-    ).toBe(false);
+    const previous = await press(tableBody(), { key: 'ArrowLeft', ctrlKey: true });
+    const next = await press(tableBody(), { key: 'ArrowRight', ctrlKey: true });
+
+    expect(previous.defaultPrevented).toBe(false);
+    expect(next.defaultPrevented).toBe(false);
     expect(onPagePrevious).not.toHaveBeenCalled();
     expect(onPageNext).not.toHaveBeenCalled();
   });
 
-  it('does not claim modified ArrowLeft/ArrowRight for tables without pagination', async () => {
-    const { findShortcut } = await renderWithPagination({});
+  it('opens no row menu with Shift+F10 in a table without one', async () => {
+    await showTable();
+    await act(async () => tableBody().focus());
 
-    expect(
+    const event = await press(tableBody(), { key: 'F10', shiftKey: true });
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+  });
+
+  // Keyboard navigation owns the row highlight while the body is focused, so
+  // the mouse's hover highlight is switched off until the table loses focus.
+  it('suppresses mouse hover only while the table body is focused', async () => {
+    await showTable();
+    const hoverSuppressed = () => document.body.classList.contains('gridtable-disable-hover');
+    expect(hoverSuppressed()).toBe(false);
+
+    await act(async () => tableBody().focus());
+    expect(hoverSuppressed()).toBe(true);
+
+    await act(async () =>
       requireValue(
-        findShortcut('ArrowLeft'),
-        'expected test value in useGridTableShortcuts.test.tsx'
-      ).enabled
-    ).toBe(false);
-    expect(
-      requireValue(
-        findShortcut('ArrowRight'),
-        'expected test value in useGridTableShortcuts.test.tsx'
-      ).enabled
-    ).toBe(false);
+        view.container.querySelector<HTMLElement>('[aria-label="Outside table"]'),
+        'outside input'
+      ).focus()
+    );
+    expect(hoverSuppressed()).toBe(false);
   });
 });

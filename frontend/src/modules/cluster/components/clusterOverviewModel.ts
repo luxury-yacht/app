@@ -19,23 +19,20 @@ export const getClusterContextLabel = (clusterContext: string): string => {
   return clusterContext.substring(lastColonIndex + 1) || 'default';
 };
 
+// The snapshot's value when it belongs to the selected cluster: by the
+// payload's own cluster id, or else by the cluster it was hydrated for.
 export const selectClusterScopedValue = <T>({
-  byCluster,
-  legacyValue,
+  value,
   payloadClusterId,
   selectedClusterId,
   hydratedClusterId,
 }: {
-  byCluster: Record<string, T> | undefined;
-  legacyValue: T | null | undefined;
+  value: T | null | undefined;
   payloadClusterId: string | undefined;
   selectedClusterId: string | null;
   hydratedClusterId: string | null;
 }): T | null => {
-  if (byCluster) {
-    return selectedClusterId ? (byCluster[selectedClusterId] ?? null) : null;
-  }
-  if (!legacyValue) {
+  if (!value) {
     return null;
   }
 
@@ -50,7 +47,7 @@ export const selectClusterScopedValue = <T>({
   if (!normalizedPayloadClusterId && hydratedClusterId && hydratedClusterId !== selectedClusterId) {
     return null;
   }
-  return legacyValue;
+  return value;
 };
 
 interface OverviewDisplayStateInput {

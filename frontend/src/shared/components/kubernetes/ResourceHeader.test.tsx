@@ -1,161 +1,128 @@
 /**
  * frontend/src/shared/components/kubernetes/ResourceHeader.test.tsx
  *
- * Test suite for ResourceHeader — Age (derived from the object's
- * creationTimestamp in panel context) and the Last Modified row.
+ * The header every object panel's Overview opens with: Age counts up from the
+ * object's creationTimestamp without new panel data, Last Modified shows what
+ * the backend derived, both rows are omitted when the backend reports nothing,
+ * and Alt+click on the Namespace value reveals the panel's own object (not the
+ * Namespace kind) in its view. ResourceHeader reads the open panel's object
+ * and timestamps, so the suite mounts the full app and opens a real panel;
+ * only the backend boundary is faked (test-utils/appState).
  */
 
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { DomainPayloadMap } from '@/core/refresh/types';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { objectDetailOf } from '@/test-utils/objectDetail';
+import { requireValue } from '@/test-utils/requireValue';
 
-const panel: {
-  current: {
-    objectData: unknown;
-    creationTimestamp?: string | null;
-    lastModified?: string | null;
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
+
+const configMap = {
+  group: '',
+  version: 'v1',
+  kind: 'ConfigMap',
+  namespace: 'shop',
+  name: 'web-config',
+};
+
+/** Opens the ConfigMap's panel, whose details carry these backend-derived timestamps. */
+const openPanel = async (
+  timestamps: Pick<DomainPayloadMap['object-details'], 'creationTimestamp' | 'lastModified'>
+) => {
+  const detail: Partial<DomainPayloadMap['object-details']> = {
+    ...objectDetailOf('configmap', {
+      name: configMap.name,
+      namespace: configMap.namespace,
+      usedBy: [],
+    }),
+    ...timestamps,
   };
-} = {
-  current: {
-    objectData: { clusterId: 'c1' },
-    creationTimestamp: undefined,
-    lastModified: undefined,
-  },
+  const object = app.servePanel(dev, configMap, detail);
+  view = await app.mountApp();
+  await act(async () => {
+    view.owners().objectPanel.openWithObject(object.ref);
+  });
+  await app.settle();
 };
 
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ ...panel.current, openWithObject: vi.fn() }),
-}));
-
-const navigateToView = vi.fn();
-vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ available: true, navigateToView }),
-}));
-
-import { ResourceHeader } from './ResourceHeader';
-
-const labelOrder = (c: HTMLElement) =>
-  Array.from(c.querySelectorAll('.overview-label')).map((e) => e.textContent);
-
-const valueForLabel = (c: HTMLElement, label: string) => {
-  const el = Array.from(c.querySelectorAll<HTMLElement>('.overview-label')).find(
-    (e) => e.textContent === label
-  );
-  return el?.parentElement?.querySelector<HTMLElement>('.overview-value')?.textContent ?? null;
+const rowValue = (label: string) => {
+  const labelElement = Array.from(
+    view.container.querySelectorAll<HTMLElement>('.object-panel-body .overview-label')
+  ).find((element) => element.textContent === label);
+  return labelElement?.parentElement?.querySelector<HTMLElement>('.overview-value') ?? null;
 };
+
+beforeEach(() => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['default', 'shop']);
+  app.startScreen(dev);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('ResourceHeader', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
-
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-  });
-
-  afterEach(() => {
-    act(() => root.unmount());
-    container.remove();
-    vi.useRealTimers();
-    panel.current = {
-      objectData: { clusterId: 'c1' },
-      creationTimestamp: undefined,
-      lastModified: undefined,
-    };
-  });
-
-  const render = async () => {
-    await act(async () => {
-      root.render(<ResourceHeader kind="Deployment" name="web" />);
-      await Promise.resolve();
-    });
-  };
-
-  it('updates Age from the object creationTimestamp without receiving new panel data', async () => {
+  it('counts Age up from the object’s creationTimestamp without new panel data', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:10Z'));
-    panel.current = {
-      objectData: { clusterId: 'c1' },
-      creationTimestamp: '2026-01-01T00:00:00Z',
-    };
-    await render();
-
-    expect(valueForLabel(container, 'Age')).toBe('10s');
+    await openPanel({ creationTimestamp: '2026-01-01T00:00:00Z' });
+    const detailReads = app.snapshots.reads('object-details').length;
+    expect(rowValue('Age')?.textContent).toBe('10s');
 
     await act(async () => {
-      vi.advanceTimersByTime(1000);
-      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(1_000);
     });
 
-    expect(valueForLabel(container, 'Age')).toBe('11s');
+    expect(rowValue('Age')?.textContent).toBe('11s');
+    expect(app.snapshots.reads('object-details')).toHaveLength(detailReads);
   });
 
-  it('omits the Age row when no creationTimestamp is available', async () => {
-    panel.current = { objectData: { clusterId: 'c1' }, creationTimestamp: undefined };
-    await render();
+  it('shows the Last Modified time the backend derived', async () => {
+    await openPanel({ creationTimestamp: '2020-01-01T00:00:00Z', lastModified: '2h' });
 
-    expect(labelOrder(container)).not.toContain('Age');
+    expect(rowValue('Last Modified')?.textContent).toBe('2h');
   });
 
-  it('uses the panel context for Last Modified when available', async () => {
-    panel.current = {
-      objectData: { clusterId: 'c1' },
-      creationTimestamp: '2020-01-01T00:00:00Z',
-      lastModified: '2h',
-    };
-    await render();
+  it('omits Age and Last Modified when the backend reports neither', async () => {
+    await openPanel({});
 
-    expect(valueForLabel(container, 'Last Modified')).toBe('2h');
+    expect(rowValue('Name')?.textContent).toBe(configMap.name);
+    expect(rowValue('Age')).toBeNull();
+    expect(rowValue('Last Modified')).toBeNull();
   });
 
-  it('omits the Last Modified row when unavailable', async () => {
-    panel.current = {
-      objectData: { clusterId: 'c1' },
-      creationTimestamp: '2020-01-01T00:00:00Z',
-      lastModified: undefined,
-    };
-    await render();
-
-    expect(labelOrder(container)).toContain('Age');
-    expect(labelOrder(container)).not.toContain('Last Modified');
-  });
-
-  it('alt-clicks the Namespace value to reveal the HOST object, not the Namespace kind', async () => {
-    // The panel is showing a Pod in namespace "shop"; its details render the
-    // namespace as a link.
-    const hostObject = {
-      kind: 'Pod',
-      name: 'web-5',
-      namespace: 'shop',
-      clusterId: 'c1',
-      group: '',
-      version: 'v1',
-    };
-    panel.current = { objectData: hostObject };
-    navigateToView.mockClear();
-
-    await act(async () => {
-      root.render(<ResourceHeader kind="Pod" name="web-5" namespace="shop" />);
-      await Promise.resolve();
-    });
-
-    const nsLabel = Array.from(container.querySelectorAll<HTMLElement>('.overview-label')).find(
-      (el) => el.textContent === 'Namespace'
+  it('reveals the panel’s own object, not the Namespace kind, on Alt+click of its namespace', async () => {
+    // The object's namespace view lists it.
+    app.serveTable(dev, 'namespace-config');
+    await openPanel({});
+    const namespaceLink = requireValue(
+      rowValue('Namespace')?.querySelector<HTMLElement>('.object-panel-link'),
+      'expected the namespace link'
     );
-    const nsLink = nsLabel?.parentElement?.querySelector<HTMLElement>('.object-panel-link');
-    expect(nsLink?.textContent).toBe('shop');
 
-    act(() => {
-      nsLink?.dispatchEvent(new MouseEvent('click', { bubbles: true, altKey: true }));
+    await act(async () => {
+      namespaceLink.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, altKey: true })
+      );
     });
+    await app.settle();
 
-    // Reveals the host object (which selects its namespace in the sidebar),
-    // NOT a { kind: 'Namespace' } ref (which routed to Cluster → Config).
-    expect(navigateToView).toHaveBeenCalledTimes(1);
-    const ref = navigateToView.mock.calls[0][0];
-    expect(ref.kind).toBe('Pod');
-    expect(ref.name).toBe('web-5');
-    expect(ref.namespace).toBe('shop');
+    // Not Cluster → Namespaces, where a { kind: 'Namespace' } ref routes.
+    const { viewState, namespace } = view.owners();
+    expect(viewState?.viewType).toBe('namespace');
+    expect(viewState?.activeNamespaceTab).toBe('config');
+    expect(namespace.selectedNamespace).toBe('shop');
+    expect(view.openPanels()).toEqual([
+      { ...configMap, clusterId: dev.clusterId, clusterName: dev.clusterName },
+    ]);
   });
 });

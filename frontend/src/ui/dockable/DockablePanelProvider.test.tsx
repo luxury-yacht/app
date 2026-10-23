@@ -19,7 +19,11 @@ import {
 import { DockablePanelTestHost } from '@/test-utils/DockablePanelTestHost';
 import { requireValue } from '@/test-utils/requireValue';
 import { resolveObjectPanelMountTarget } from '@/ui/layout/objectPanelMountTarget';
-import { DockablePanelProvider, useDockablePanelContext } from './DockablePanelProvider';
+import {
+  DockablePanelLayer,
+  DockablePanelProvider,
+  useDockablePanelContext,
+} from './DockablePanelProvider';
 
 type DockablePanelContextValue = ReturnType<typeof useDockablePanelContext>;
 
@@ -1116,6 +1120,8 @@ describe('DockablePanelProvider — per-cluster panel state', () => {
         await act(async () => {
           const context = requireDockableContext(captured);
           context.focusPanel('newer');
+          // A docked panel registers as its content mounts.
+          context.registerPanel({ panelId: 'newer', title: 'Newer', position: 'right' });
           context.syncPanelGroup('newer', 'right');
         });
         await act(async () => {
@@ -1130,7 +1136,11 @@ describe('DockablePanelProvider — per-cluster panel state', () => {
           await view.selectCluster(alpha);
         }
       }
-      await act(async () => requireDockableContext(captured).syncPanelGroup('deferred', 'right'));
+      await act(async () => {
+        const context = requireDockableContext(captured);
+        context.registerPanel({ panelId: 'deferred', title: 'Deferred', position: 'right' });
+        context.syncPanelGroup('deferred', 'right');
+      });
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
       });
@@ -1143,6 +1153,40 @@ describe('DockablePanelProvider — per-cluster panel state', () => {
       expect(document.activeElement).toBe(expected);
     }
   );
+
+  it('focuses a docked panel whose tab appears only when it registers', async () => {
+    // The directory can dock a panel before its content mounts and registers,
+    // and the dock shows a tab only for a registered panel.
+    vi.useFakeTimers();
+    try {
+      await view.show(
+        <DockablePanelProvider>
+          <Probe />
+          <DockablePanelLayer />
+        </DockablePanelProvider>
+      );
+      await act(async () => {
+        ctx().syncPanelGroup('late', 'right', undefined);
+        ctx().focusPanel('late');
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10);
+      });
+
+      await act(async () => {
+        ctx().registerPanel({ panelId: 'late', title: 'Late', position: 'right' });
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10);
+      });
+
+      expect(
+        document.activeElement?.closest('[data-panel-id]')?.getAttribute('data-panel-id')
+      ).toBe('late');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it('preserves tabGroups across cluster switch round-trip', async () => {
     await showProvider();

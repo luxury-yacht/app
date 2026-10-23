@@ -1,661 +1,463 @@
 /**
  * frontend/src/ui/command-palette/CommandPaletteCommands.test.tsx
  *
- * Test suite for CommandPaletteCommands.
- * Covers key behaviors and edge cases for CommandPaletteCommands.
+ * The app's commands in the command palette, as AppLayout wires them
+ * (useCommandPaletteCommands into CommandPalette): the views each one opens
+ * in the real navigation state, offered only where they exist (a discovered
+ * API family, a selected namespace, two open clusters for Global views); the
+ * namespace and kubeconfig pickers, which select a namespace, open a closed
+ * context as a cluster tab, switch to an open one, and refuse an invalid one;
+ * closing the active cluster tab, except from the Global workspace; the
+ * application commands; and the settings commands, which persist their new
+ * value and report a failure under their own name. Runs in provider mode
+ * inside the real app shell (kubeconfig, view-state, namespace, zoom,
+ * favorites, and preference owners), with only the backend boundary faked
+ * (test-utils/appState); the app header's and sidebar's palette buttons run
+ * in the full app.
  */
 
-import type { types } from '@core/backend-api/models';
-import { DockablePanelProvider } from '@ui/dockable/DockablePanelProvider';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { backend } from '@/core/backend-api/models';
+import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
+import { buildRefreshScope, CLUSTER_SELECTOR } from '@/core/refresh/scopeSelector';
+import type { CatalogSnapshotPayload } from '@/core/refresh/types';
 import {
-  resetAppPreferencesCacheForTesting,
-  setAppPreferencesForTesting,
-} from '@/core/settings/appPreferences';
-import { changeAppearanceMode } from '@/utils/appearanceMode';
-import { reportOperationalError } from '@/utils/errorHandler';
-import { type Command, useCommandPaletteCommands } from './CommandPaletteCommands';
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { requireValue } from '@/test-utils/requireValue';
+import { CommandPalette } from './CommandPalette';
+import { useCommandPaletteCommands } from './CommandPaletteCommands';
 
-const { mocks } = vi.hoisted(() => ({
-  mocks: {
-    kubeconfig: {
-      kubeconfigs: [] as types.KubeconfigInfo[],
-      selectedKubeconfigs: [] as string[],
-      selectedKubeconfig: '',
-      selectedClusterId: '',
-      setSelectedKubeconfigs: vi.fn(),
-      openKubeconfig: vi.fn(),
-      closeKubeconfig: vi.fn(),
-      setActiveKubeconfig: vi.fn(),
-      getClusterMeta: vi.fn(() => ({ id: '', name: '' })),
-      loadKubeconfigs: vi.fn(),
-    },
-    viewState: {
-      viewType: 'cluster' as 'cluster' | 'global',
-      sidebarSelection: undefined as { type: 'namespace'; value: string } | undefined,
-      setIsAboutOpen: vi.fn(),
-      setIsSettingsOpen: vi.fn(),
-      setIsObjectDiffOpen: vi.fn(),
-      toggleSidebar: vi.fn(),
-      onClusterObjectsClick: vi.fn(),
-      setActiveClusterView: vi.fn(),
-      navigateToGlobal: vi.fn(),
-      navigateToNamespace: vi.fn(),
-      setActiveNamespaceTab: vi.fn(),
-      onNamespaceSelect: vi.fn(),
-    },
-    namespace: {
-      namespaces: [] as Array<{ name: string; scope: string }>,
-      setSelectedNamespace: vi.fn(),
-    },
-    appSettings: {
-      UpdateAppPreferences: vi.fn(),
-    },
-    appUpdates: {
-      CheckForUpdates: vi.fn(),
-    },
-    desktopRuntime: {
-      closeWindow: vi.fn(),
-    },
-    refreshOrchestrator: {},
-  },
-}));
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
 
-const familyState = vi.hoisted(() => ({
-  families: {} as { cluster?: string[]; namespaced?: string[] },
-}));
-vi.mock('@/core/data-access', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/core/data-access')>()),
-  useRefreshDomainHandle: () => ({
-    data: { clusterId: mocks.kubeconfig.selectedClusterId, resourceFamilies: familyState.families },
-  }),
-}));
+/** The palette with the app's commands, as AppLayout renders it. */
+function AppCommandPalette() {
+  return <CommandPalette commands={useCommandPaletteCommands()} />;
+}
 
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => mocks.kubeconfig,
-}));
-
-vi.mock('@core/contexts/ViewStateContext', () => ({
-  useViewState: () => mocks.viewState,
-}));
-
-vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
-  useNamespace: () => mocks.namespace,
-}));
-
-vi.mock('@core/contexts/FavoritesContext', () => ({
-  useFavorites: () => ({
-    favorites: [],
-    addFavorite: vi.fn(),
-    deleteFavorite: vi.fn(),
-    reorderFavorites: vi.fn(),
-    updateFavorite: vi.fn(),
-    setPendingFavorite: vi.fn(),
-  }),
-}));
-
-vi.mock('@ui/favorites/navigateToFavorite', () => ({
-  navigateToFavorite: vi.fn(),
-}));
-
-vi.mock('@core/contexts/AppearanceModeContext', () => ({
-  useAppearanceMode: () => ({
-    mode: 'light',
-    resolvedMode: 'light',
-  }),
-}));
-
-vi.mock('@/core/refresh', () => ({
-  refreshOrchestrator: mocks.refreshOrchestrator,
-}));
-
-vi.mock('@core/backend-api', () => ({
-  UpdateAppPreferences: (...args: unknown[]) => mocks.appSettings.UpdateAppPreferences(...args),
-  CheckForUpdates: (...args: unknown[]) => mocks.appUpdates.CheckForUpdates(...args),
-}));
-
-vi.mock('@core/desktop-runtime', () => ({
-  closeWindow: (...args: unknown[]) => mocks.desktopRuntime.closeWindow(...args),
-  desktopRuntimeAvailable: () => true,
-}));
-
-vi.mock('@/utils/errorHandler', () => ({ reportOperationalError: vi.fn() }));
-
-vi.mock('@/utils/appearanceMode', () => ({
-  changeAppearanceMode: vi.fn(),
-}));
-
-vi.mock('@shared/components/tables/persistence/gridTablePersistenceReset', () => ({
-  clearAllGridTableState: vi.fn(),
-}));
-
-vi.mock('@core/contexts/ZoomContext', () => ({
-  useZoom: () => ({
-    zoomLevel: 100,
-    zoomIn: vi.fn(),
-    zoomOut: vi.fn(),
-    resetZoom: vi.fn(),
-    canZoomIn: true,
-    canZoomOut: true,
-  }),
-}));
-
-const renderHook = () => {
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = ReactDOM.createRoot(container);
-  let commands: Command[] | null = null;
-
-  const HookHost = () => {
-    commands = useCommandPaletteCommands();
-    return null;
-  };
-
-  act(() => {
-    root.render(
-      <DockablePanelProvider>
-        <HookHost />
-      </DockablePanelProvider>
-    );
-  });
-
-  return {
-    getCommands() {
-      if (!commands) {
-        throw new Error('Command list not set');
-      }
-      return commands;
-    },
-    unmount() {
-      act(() => {
-        root.unmount();
-        container.remove();
-      });
-    },
-  };
+/**
+ * Adds an open cluster with its namespaces and the API families its catalog
+ * discovered (core/navigation/useAvailableResourceViews.ts).
+ */
+const openCluster = (
+  name: string,
+  context: string,
+  families: CatalogSnapshotPayload['resourceFamilies'] = {},
+  fixture: { open?: boolean } = {}
+) => {
+  const cluster = app.cluster({ name, context, ...fixture });
+  app.namespaces(cluster, ['default', 'team-a']);
+  app.snapshots.serve(
+    'catalog',
+    buildRefreshScope('catalog', {
+      clusterId: cluster.clusterId,
+      selector: CLUSTER_SELECTOR,
+      query: 'limit=1',
+    }),
+    makeCatalogSnapshotPayload({
+      clusterId: cluster.clusterId,
+      clusterName: cluster.clusterName,
+      resourceFamilies: families,
+    })
+  );
+  return cluster;
 };
 
-describe('CommandPaletteCommands', () => {
-  beforeEach(() => {
-    familyState.families = {};
-    mocks.kubeconfig.kubeconfigs = [];
-    mocks.kubeconfig.selectedKubeconfigs = [];
-    mocks.kubeconfig.selectedKubeconfig = '';
-    mocks.kubeconfig.selectedClusterId = '';
-    mocks.kubeconfig.setActiveKubeconfig.mockReset();
-    mocks.kubeconfig.setSelectedKubeconfigs.mockReset();
-    mocks.kubeconfig.openKubeconfig.mockReset();
-    mocks.kubeconfig.openKubeconfig.mockResolvedValue(undefined);
-    mocks.kubeconfig.closeKubeconfig.mockReset();
-    mocks.kubeconfig.closeKubeconfig.mockResolvedValue(undefined);
-    mocks.namespace.namespaces = [];
-    mocks.namespace.setSelectedNamespace.mockReset();
-    mocks.viewState.viewType = 'cluster';
-    mocks.viewState.sidebarSelection = undefined;
-    mocks.viewState.setIsAboutOpen.mockReset();
-    mocks.viewState.setIsSettingsOpen.mockReset();
-    mocks.viewState.setIsObjectDiffOpen.mockReset();
-    mocks.appUpdates.CheckForUpdates.mockReset();
-    mocks.appUpdates.CheckForUpdates.mockResolvedValue({ status: 'checking' });
-    mocks.viewState.toggleSidebar.mockReset();
-    mocks.viewState.navigateToNamespace.mockReset();
-    mocks.viewState.setActiveNamespaceTab.mockReset();
-    mocks.viewState.onNamespaceSelect.mockReset();
-    mocks.kubeconfig.loadKubeconfigs.mockReset();
-    mocks.kubeconfig.loadKubeconfigs.mockResolvedValue(undefined);
-    mocks.appSettings.UpdateAppPreferences.mockReset();
-    mocks.appSettings.UpdateAppPreferences.mockResolvedValue({ settings: {}, changedKeys: [] });
-    mocks.desktopRuntime.closeWindow.mockReset();
-    mocks.desktopRuntime.closeWindow.mockResolvedValue(undefined);
-    resetAppPreferencesCacheForTesting();
+const showPalette = async () => {
+  view = await app.render(null);
+  await view.show(<AppCommandPalette />);
+};
+
+const viewState = () => requireValue(view.owners().viewState, 'expected the view state');
+const kubeconfig = () => view.owners().kubeconfig;
+
+/** Delivers a native menu event, as the backend does. */
+const menu = async (name: string) => {
+  await act(async () => {
+    app.events.emit(name);
   });
+  await app.settle();
+};
 
-  afterEach(() => {
-    document.body.innerHTML = '';
+const palette = () => document.querySelector('dialog.command-palette');
+
+const type = async (text: string) => {
+  const input = requireValue(
+    document.querySelector<HTMLInputElement>('.command-palette [role="combobox"]'),
+    'expected the command-palette input'
+  );
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, text);
+    input.dispatchEvent(new InputEvent('input', { bubbles: true }));
   });
+};
 
-  it('includes Karpenter navigation only when that cluster discovers its APIs', () => {
-    mocks.kubeconfig.selectedClusterId = 'a';
-    const first = renderHook();
-    expect(first.getCommands().some((entry) => entry.id === 'cluster-karpenter')).toBe(false);
-    first.unmount();
-    familyState.families = { cluster: ['karpenter'] };
-    const second = renderHook();
-    const command = second.getCommands().find((entry) => entry.id === 'cluster-karpenter');
-    expect(command).toBeDefined();
-    act(() => command?.action());
-    expect(mocks.viewState.setActiveClusterView).toHaveBeenCalledWith('karpenter');
-    second.unmount();
-  });
+const options = () =>
+  Array.from(document.querySelectorAll<HTMLElement>('.command-palette [role="option"]'));
 
-  it('offers navigation commands for every registered cluster and namespace view', () => {
-    mocks.viewState.sidebarSelection = { type: 'namespace', value: 'default' };
-    mocks.kubeconfig.selectedKubeconfigs = ['/kube/alpha:dev', '/kube/beta:prod'];
+// A result's label, without its icon or shortcut keycaps.
+const labelOf = (option: HTMLElement) =>
+  option.querySelector('.command-palette-item-label')?.textContent?.trim() ?? '';
 
-    const { getCommands, unmount } = renderHook();
-    const navigationViewIds = getCommands()
-      .filter(
-        (command) =>
-          command.id.startsWith('global-') ||
-          command.id.startsWith('cluster-') ||
-          command.id.startsWith('namespace-')
-      )
-      .map((command) => command.id);
+const optionLabels = () => options().map(labelOf);
 
-    expect(navigationViewIds).toEqual([
-      'global-fleet',
-      'global-global-namespaces',
-      'cluster-attention',
-      'cluster-browse',
-      'cluster-events',
-      'cluster-identities',
-      'cluster-config',
-      'cluster-namespaces',
-      'cluster-nodes',
-      'cluster-rbac',
-      'cluster-storage',
-      'cluster-crds',
-      'cluster-custom',
-      'namespace-browse',
-      'namespace-events',
-      'namespace-map',
-      'namespace-workloads',
-      'namespace-pods',
-      'namespace-autoscaling',
-      'namespace-config',
-      'namespace-network',
-      'namespace-quotas',
-      'namespace-rbac',
-      'namespace-storage',
-      'namespace-custom',
-      'namespace-helm',
-    ]);
+// A kubeconfig result's context name (KubeconfigContextLabel).
+const contextOf = (option: HTMLElement) =>
+  option.querySelector('.kubeconfig-label__context')?.textContent ?? '';
 
-    const globalClusters = getCommands().find((command) => command.id === 'global-fleet');
-    expect(globalClusters?.label).toBe('Global - Clusters');
-    const globalNamespaces = getCommands().find(
-      (command) => command.id === 'global-global-namespaces'
+/** Opens the palette from the View menu and lists what `query` finds. */
+const search = async (query: string) => {
+  if (!palette()) {
+    await menu('open-command-palette');
+  }
+  await type(query);
+  return optionLabels();
+};
+
+const closePalette = async () => {
+  await act(async () => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
     );
-    expect(globalNamespaces?.label).toBe('Global - Namespaces');
+  });
+};
 
-    unmount();
+/** Clicks a result; its command runs once the palette has closed. */
+const click = async (option: HTMLElement) => {
+  await act(async () => option.click());
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(100);
+  });
+  await app.settle();
+};
+
+/** Clicks the result labelled `label`. */
+const choose = (label: string) =>
+  click(
+    requireValue(
+      options().find((option) => labelOf(option) === label),
+      `expected the ${label} result among ${optionLabels().join(', ')}`
+    )
+  );
+
+/** Clicks the kubeconfig picker's result for `context`. */
+const chooseContext = (context: string) =>
+  click(
+    requireValue(
+      options().find((option) => contextOf(option) === context),
+      `expected the ${context} context`
+    )
+  );
+
+/** Searches for `query` and runs the result labelled `label`. */
+const run = async (query: string, label: string) => {
+  await search(query);
+  await choose(label);
+};
+
+const contextLabels = () => options().map(contextOf);
+
+beforeEach(() => {
+  // Typing also searches the selected cluster's catalog; these searches find nothing.
+  app.snapshots.answer(({ domain, scope }) =>
+    domain === 'catalog' && scope.includes('limit=20')
+      ? makeCatalogSnapshotPayload({ clusterId: scope.split('|')[0] })
+      : undefined
+  );
+  app.backend.answer('UpdateAppPreferences', (request) => ({
+    settings: null,
+    changedKeys: (request.changes ?? []).map((change) => change.key),
+  }));
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe('navigation commands', () => {
+  it('offers Karpenter only in a cluster that discovered its APIs, and opens it there', async () => {
+    dev = openCluster('dev', 'alpha');
+    const prod = openCluster('prod', 'beta', { cluster: ['karpenter'] });
+    await showPalette();
+    vi.useFakeTimers();
+
+    expect(await search('karpenter')).not.toContain('Cluster - Karpenter');
+    await closePalette();
+    expect(palette()).toBeNull();
+    await view.selectCluster(prod);
+    await run('karpenter', 'Cluster - Karpenter');
+
+    expect(viewState().viewType).toBe('cluster');
+    expect(viewState().activeClusterTab).toBe('karpenter');
   });
 
-  it('hides Global navigation commands when fewer than two clusters are open', () => {
-    mocks.kubeconfig.selectedKubeconfigs = ['/kube/alpha:dev'];
+  it('finds a cluster view by its vocabulary and opens it', async () => {
+    dev = openCluster('dev', 'alpha');
+    await showPalette();
+    vi.useFakeTimers();
 
-    const { getCommands, unmount } = renderHook();
-    const commandIds = getCommands().map((command) => command.id);
+    expect(await search('inventory')).toContain('Cluster - Browse');
+    await run('capacity', 'Cluster - Nodes');
 
-    expect(commandIds).not.toContain('global-fleet');
-    expect(commandIds).not.toContain('global-global-namespaces');
-    expect(commandIds).toContain('cluster-namespaces');
-
-    unmount();
+    expect(viewState().viewType).toBe('cluster');
+    expect(viewState().activeClusterTab).toBe('nodes');
   });
 
-  it('opens Global commands through the Global workspace action', () => {
-    mocks.kubeconfig.selectedKubeconfigs = ['/kube/alpha:dev', '/kube/beta:prod'];
-    const { getCommands, unmount } = renderHook();
+  it('offers namespace views once a namespace is selected, and opens them in that namespace', async () => {
+    dev = openCluster('dev', 'alpha');
+    await showPalette();
+    vi.useFakeTimers();
+    expect(await search('Namespace - ')).toEqual([]);
 
-    act(() => {
-      getCommands()
-        .find((command) => command.id === 'global-global-namespaces')
-        ?.action();
+    await run('team-a', 'team-a');
+    expect(view.owners().namespace.selectedNamespace).toBe('team-a');
+    expect(viewState().viewType).toBe('namespace');
+    expect(viewState().activeNamespaceTab).toBe('workloads');
+
+    await run('Namespace - Pods', 'Namespace - Pods');
+    expect(view.owners().namespace.selectedNamespace).toBe('team-a');
+    expect(viewState().activeNamespaceTab).toBe('pods');
+  });
+
+  it('opens All Namespaces on its Workloads view', async () => {
+    dev = openCluster('dev', 'alpha');
+    await showPalette();
+    vi.useFakeTimers();
+    await run('team-a', 'team-a');
+    await run('Namespace - Pods', 'Namespace - Pods');
+
+    await run('All Namespaces', 'All Namespaces');
+
+    expect(view.owners().namespace.selectedNamespace).toBe('namespace:all');
+    expect(viewState().activeNamespaceTab).toBe('workloads');
+  });
+
+  it('offers no Global views with one cluster open', async () => {
+    dev = openCluster('dev', 'alpha');
+    await showPalette();
+
+    expect((await search('Global')).filter((label) => label.startsWith('Global - '))).toEqual([]);
+  });
+
+  it('opens Global views with two clusters open, where closing the cluster tab does nothing', async () => {
+    dev = openCluster('dev', 'alpha');
+    const prod = openCluster('prod', 'beta');
+    await showPalette();
+    vi.useFakeTimers();
+
+    await run('Global', 'Global - Namespaces');
+    expect(viewState().viewType).toBe('global');
+    expect(viewState().activeGlobalTab).toBe('global-namespaces');
+
+    await run('close', 'Close active cluster tab');
+
+    expect(app.backend.calls('CloseClusterView')).toEqual([]);
+    expect(kubeconfig().selectedKubeconfigs).toEqual([dev.selection, prod.selection]);
+  });
+
+  it('closes the active cluster tab and keeps the others', async () => {
+    dev = openCluster('dev', 'alpha');
+    const prod = openCluster('prod', 'beta');
+    await showPalette();
+    await view.selectCluster(prod);
+    vi.useFakeTimers();
+
+    await run('close', 'Close active cluster tab');
+
+    expect(app.backend.calls('CloseClusterView')).toEqual([[app.windowName, prod.clusterId]]);
+    expect(kubeconfig().selectedKubeconfigs).toEqual([dev.selection]);
+  });
+});
+
+describe('the kubeconfig picker', () => {
+  it('lists contexts by context name, not file name', async () => {
+    dev = openCluster('zfile', 'charlie');
+    openCluster('afile', 'alpha', {}, { open: false });
+    openCluster('mfile', 'bravo', {}, { open: false });
+    await showPalette();
+
+    await menu('open-cluster');
+
+    expect(contextLabels()).toEqual(['alpha', 'bravo', 'charlie']);
+  });
+
+  it('opens a closed context as a new cluster tab, and switches to an open one without closing any', async () => {
+    dev = openCluster('dev', 'alpha');
+    const prod = openCluster('prod', 'beta', {}, { open: false });
+    await showPalette();
+    vi.useFakeTimers();
+
+    await menu('open-cluster');
+    await chooseContext('beta');
+    expect(kubeconfig().selectedKubeconfigs).toEqual([dev.selection, prod.selection]);
+    expect(kubeconfig().selectedClusterId).toBe(prod.clusterId);
+
+    await menu('open-cluster');
+    await chooseContext('alpha');
+    expect(kubeconfig().selectedKubeconfigs).toEqual([dev.selection, prod.selection]);
+    expect(kubeconfig().selectedClusterId).toBe(dev.clusterId);
+  });
+
+  it('marks a context that cannot be used and does not open it', async () => {
+    dev = openCluster('dev', 'alpha');
+    // The backend lists a context it cannot use (backend/kubeconfigs.go), beside dev's.
+    app.backend.answer('GetKubeconfigs', () => ({
+      kubeconfigs: [
+        {
+          name: 'dev',
+          path: '/kube/dev',
+          context: 'alpha',
+          isDefault: false,
+          isCurrentContext: false,
+          invalid: false,
+          invalidReason: '',
+        },
+        {
+          name: 'broken',
+          path: '/kube/broken',
+          context: 'gone',
+          isDefault: false,
+          isCurrentContext: false,
+          invalid: true,
+          invalidReason: 'cluster "gone" not found',
+        },
+      ],
+      state: backend.KubeconfigDiscoveryState.KubeconfigDiscoveryStateAvailable,
+      searchPaths: ['/kube'],
+    }));
+    await showPalette();
+    vi.useFakeTimers();
+    await menu('open-cluster');
+    const broken = requireValue(
+      options().find((option) => contextOf(option) === 'gone'),
+      'expected the invalid context'
+    );
+    // The row carries the backend's reason the context cannot be used.
+    expect(
+      Array.from(broken.querySelectorAll('[title]')).map((marker) => marker.getAttribute('title'))
+    ).toEqual(['cluster "gone" not found']);
+
+    await chooseContext('gone');
+
+    expect(kubeconfig().selectedKubeconfigs).toEqual([dev.selection]);
+    expect(kubeconfig().selectedClusterId).toBe(dev.clusterId);
+  });
+});
+
+describe('application commands', () => {
+  it('opens About, checks for updates, opens Settings and the object diff, and toggles the sidebar and Application Logs', async () => {
+    app.backend.answer('CheckForUpdates', () => ({ status: 'checking' }) as never);
+    dev = openCluster('dev', 'alpha');
+    await showPalette();
+    vi.useFakeTimers();
+
+    await run('About', 'About');
+    expect(viewState().isAboutOpen).toBe(true);
+    await act(async () => viewState().setIsAboutOpen(false));
+
+    await run('Check for Updates', 'Check for Updates…');
+    expect(app.backend.calls('CheckForUpdates')).toHaveLength(1);
+    expect(viewState().isAboutOpen).toBe(true);
+
+    await run('Settings', 'Settings');
+    expect(viewState().isSettingsOpen).toBe(true);
+
+    await run('Diff objects', 'Diff objects');
+    expect(viewState().isObjectDiffOpen).toBe(true);
+
+    const sidebarVisible = viewState().isSidebarVisible;
+    await run('sidebar', sidebarVisible ? 'Hide Sidebar' : 'Show Sidebar');
+    expect(viewState().isSidebarVisible).toBe(!sidebarVisible);
+
+    await run('Application Logs', 'Application Logs panel');
+    expect(viewState().showAppLogsPanel).toBe(true);
+  });
+});
+
+describe('settings commands', () => {
+  const persisted = () =>
+    app.backend.calls('UpdateAppPreferences').flatMap(([request]) => request.changes ?? []);
+
+  it('persists the chosen appearance mode and the inverse of each toggled preference', async () => {
+    app.preferences({
+      dimInactiveNamespaces: true,
+      exclusiveNamespaces: true,
+      autoRefreshEnabled: true,
+      useShortResourceNames: true,
     });
+    dev = openCluster('dev', 'alpha');
+    await showPalette();
+    vi.useFakeTimers();
 
-    expect(mocks.viewState.navigateToGlobal).toHaveBeenCalledWith('global-namespaces');
-    expect(mocks.viewState.onClusterObjectsClick).not.toHaveBeenCalled();
-    unmount();
-  });
+    await run('Dark mode', 'Dark mode');
+    await run('dimming', 'Disable inactive namespace dimming');
+    await run('exclusive', 'Disable exclusive namespaces');
+    await run('auto-refresh', 'Disable auto-refresh');
+    await run('short names', 'Disable short names');
 
-  it('searches existing navigation commands by the target lens vocabulary', () => {
-    mocks.viewState.sidebarSelection = { type: 'namespace', value: 'default' };
-
-    const { getCommands, unmount } = renderHook();
-    const commandsById = new Map(getCommands().map((command) => [command.id, command]));
-
-    expect(commandsById.get('cluster-browse')?.keywords).toContain('inventory');
-    expect(commandsById.get('namespace-browse')?.keywords).toContain('inventory');
-    expect(commandsById.get('cluster-nodes')?.keywords).toContain('capacity');
-    expect(commandsById.get('cluster-events')?.keywords).toContain('change');
-    expect(commandsById.get('namespace-events')?.keywords).toContain('change');
-
-    unmount();
-  });
-
-  it('opens a cluster tab when the kubeconfig is inactive', () => {
-    mocks.kubeconfig.kubeconfigs = [
-      {
-        name: 'alpha',
-        path: '/kube/alpha',
-        context: 'dev',
-        isDefault: false,
-        isCurrentContext: false,
-        invalid: false,
-        invalidReason: '',
-      },
-    ];
-
-    const { getCommands, unmount } = renderHook();
-    const commands = getCommands();
-    const command = commands.find((entry) => entry.id === 'kubeconfig-/kube/alpha:dev');
-
-    expect(command?.label).toBe('alpha:dev');
-    expect(command?.renderLabel).toBeTruthy();
-    expect(command?.icon).toBeUndefined();
-    command?.action();
-
-    expect(mocks.kubeconfig.setActiveKubeconfig).not.toHaveBeenCalled();
-    expect(mocks.kubeconfig.openKubeconfig).toHaveBeenCalledWith('/kube/alpha:dev');
-    expect(mocks.kubeconfig.setSelectedKubeconfigs).not.toHaveBeenCalled();
-
-    unmount();
-  });
-
-  it('sorts kubeconfig commands by context, not filename', () => {
-    mocks.kubeconfig.kubeconfigs = [
-      {
-        name: 'zfile',
-        path: '/kube/zfile',
-        context: 'charlie',
-        isDefault: false,
-        isCurrentContext: false,
-        invalid: false,
-        invalidReason: '',
-      },
-      {
-        name: 'afile',
-        path: '/kube/afile',
-        context: 'alpha',
-        isDefault: false,
-        isCurrentContext: false,
-        invalid: false,
-        invalidReason: '',
-      },
-      {
-        name: 'mfile',
-        path: '/kube/mfile',
-        context: 'bravo',
-        isDefault: false,
-        isCurrentContext: false,
-        invalid: false,
-        invalidReason: '',
-      },
-    ];
-
-    const { getCommands, unmount } = renderHook();
-    const labels = getCommands()
-      .filter((command) => command.category === 'Kubeconfigs')
-      .map((command) => command.label);
-
-    expect(labels).toEqual(['afile:alpha', 'mfile:bravo', 'zfile:charlie']);
-
-    unmount();
-  });
-
-  it('flags an invalid kubeconfig context and does not open it', () => {
-    mocks.kubeconfig.kubeconfigs = [
-      {
-        name: 'alpha',
-        path: '/kube/alpha',
-        context: 'broken',
-        isDefault: false,
-        isCurrentContext: false,
-        invalid: true,
-        invalidReason: 'no cluster',
-      },
-    ];
-
-    const { getCommands, unmount } = renderHook();
-    const command = getCommands().find((entry) => entry.id === 'kubeconfig-/kube/alpha:broken');
-
-    expect(command?.description).toContain('Invalid');
-    command?.action();
-
-    expect(mocks.kubeconfig.openKubeconfig).not.toHaveBeenCalled();
-    expect(mocks.kubeconfig.setActiveKubeconfig).not.toHaveBeenCalled();
-
-    unmount();
-  });
-
-  it('switches to an active kubeconfig without removing it', () => {
-    mocks.kubeconfig.kubeconfigs = [
-      {
-        name: 'alpha',
-        path: '/kube/alpha',
-        context: 'dev',
-        isDefault: false,
-        isCurrentContext: false,
-        invalid: false,
-        invalidReason: '',
-      },
-    ];
-    mocks.kubeconfig.selectedKubeconfigs = ['/kube/alpha:dev'];
-    mocks.kubeconfig.selectedKubeconfig = '/kube/alpha:dev';
-
-    const { getCommands, unmount } = renderHook();
-    const commands = getCommands();
-    const command = commands.find((entry) => entry.id === 'kubeconfig-/kube/alpha:dev');
-
-    expect(command?.icon).toBe('✓');
-    command?.action();
-
-    expect(mocks.kubeconfig.setActiveKubeconfig).toHaveBeenCalledWith('/kube/alpha:dev');
-    expect(mocks.kubeconfig.setSelectedKubeconfigs).not.toHaveBeenCalled();
-
-    unmount();
-  });
-
-  it('closes the current cluster tab when requested', async () => {
-    mocks.kubeconfig.kubeconfigs = [
-      {
-        name: 'alpha',
-        path: '/kube/alpha',
-        context: 'dev',
-        isDefault: false,
-        isCurrentContext: false,
-        invalid: false,
-        invalidReason: '',
-      },
-      {
-        name: 'beta',
-        path: '/kube/beta',
-        context: 'prod',
-        isDefault: false,
-        isCurrentContext: false,
-        invalid: false,
-        invalidReason: '',
-      },
-    ];
-    mocks.kubeconfig.selectedKubeconfigs = ['/kube/alpha:dev', '/kube/beta:prod'];
-    mocks.kubeconfig.selectedKubeconfig = '/kube/beta:prod';
-
-    const { getCommands, unmount } = renderHook();
-    const commands = getCommands();
-    const command = commands.find((entry) => entry.id === 'close-cluster-tab');
-
-    await act(async () => {
-      command?.action();
-      await Promise.resolve();
-    });
-
-    expect(mocks.kubeconfig.closeKubeconfig).toHaveBeenCalledWith('/kube/beta:prod');
-    expect(mocks.kubeconfig.loadKubeconfigs).not.toHaveBeenCalled();
-    expect(mocks.kubeconfig.setSelectedKubeconfigs).not.toHaveBeenCalled();
-    unmount();
-  });
-
-  it('closes the current window when the close command has no cluster tabs', async () => {
-    const { getCommands, unmount } = renderHook();
-    const command = getCommands().find((entry) => entry.id === 'close-cluster-tab');
-
-    expect(command?.label).toBe('Close window');
-
-    await act(async () => {
-      command?.action();
-      await Promise.resolve();
-    });
-
-    expect(mocks.desktopRuntime.closeWindow).toHaveBeenCalledOnce();
-    expect(mocks.kubeconfig.closeKubeconfig).not.toHaveBeenCalled();
-    unmount();
-  });
-
-  it('does not close the foreground cluster while the Global workspace is active', async () => {
-    mocks.kubeconfig.selectedKubeconfigs = ['/kube/alpha:dev', '/kube/beta:prod'];
-    mocks.kubeconfig.selectedKubeconfig = '/kube/beta:prod';
-    mocks.viewState.viewType = 'global';
-
-    const { getCommands, unmount } = renderHook();
-    const command = getCommands().find((entry) => entry.id === 'close-cluster-tab');
-
-    await act(async () => {
-      command?.action();
-      await Promise.resolve();
-    });
-
-    expect(mocks.kubeconfig.closeKubeconfig).not.toHaveBeenCalled();
-    unmount();
-  });
-
-  it('routes application and appearance commands to their registered actions', async () => {
-    const { getCommands, unmount } = renderHook();
-    const commands = new Map(getCommands().map((command) => [command.id, command]));
-
-    await act(async () => {
-      commands.get('open-about')?.action();
-      commands.get('check-for-updates')?.action();
-      commands.get('open-settings')?.action();
-      commands.get('toggle-sidebar')?.action();
-      commands.get('open-object-diff')?.action();
-      commands.get('toggle-application-logs')?.action();
-      commands.get('toggle-diagnostics')?.action();
-      await commands.get('mode-system')?.action();
-      await commands.get('mode-light')?.action();
-      await commands.get('mode-dark')?.action();
-    });
-
-    expect(mocks.viewState.setIsAboutOpen).toHaveBeenCalledTimes(2);
-    expect(mocks.viewState.setIsAboutOpen).toHaveBeenNthCalledWith(1, true);
-    expect(mocks.viewState.setIsAboutOpen).toHaveBeenNthCalledWith(2, true);
-    expect(mocks.appUpdates.CheckForUpdates).toHaveBeenCalledOnce();
-    expect(mocks.viewState.setIsSettingsOpen).toHaveBeenCalledWith(true);
-    expect(mocks.viewState.toggleSidebar).toHaveBeenCalledTimes(1);
-    expect(mocks.viewState.setIsObjectDiffOpen).toHaveBeenCalledWith(true);
-    expect(changeAppearanceMode).toHaveBeenNthCalledWith(1, 'system');
-    expect(changeAppearanceMode).toHaveBeenNthCalledWith(2, 'light');
-    expect(changeAppearanceMode).toHaveBeenNthCalledWith(3, 'dark');
-
-    unmount();
+    expect(persisted()).toEqual([
+      { key: 'appearanceMode', value: 'dark' },
+      { key: 'dimInactiveNamespaces', value: false },
+      { key: 'exclusiveNamespaces', value: false },
+      { key: 'autoRefreshEnabled', value: false },
+      { key: 'useShortResourceNames', value: false },
+    ]);
   });
 
   it.each([
-    ['mode-system', 'setSystemAppearanceMode'],
-    ['mode-light', 'setLightAppearanceMode'],
-    ['mode-dark', 'setDarkAppearanceMode'],
-    ['toggle-exclusive-namespaces', 'toggleExclusiveNamespaces'],
-    ['toggle-dim-inactive-namespaces', 'toggleDimInactiveNamespaces'],
-    ['toggle-short-names', 'toggleShortResourceNames'],
-  ])(
-    'reports %s failures with the operation identity without rejecting the command',
-    async (id, action) => {
-      const error = new Error('settings unavailable');
-      vi.mocked(changeAppearanceMode).mockRejectedValueOnce(error);
-      mocks.appSettings.UpdateAppPreferences.mockRejectedValueOnce(error);
-      const { getCommands, unmount } = renderHook();
-      const command = getCommands().find((entry) => entry.id === id);
-      expect(command).toBeDefined();
-
-      await act(async () => {
-        await expect(command?.action()).resolves.toBeUndefined();
-      });
-      expect(reportOperationalError).toHaveBeenCalledExactlyOnceWith(error, {
-        source: 'CommandPalette',
-        action,
-      });
-      vi.mocked(changeAppearanceMode).mockReset();
-      unmount();
-    }
-  );
-
-  it('routes namespace view and namespace selection commands through their navigation contracts', () => {
-    mocks.viewState.sidebarSelection = { type: 'namespace', value: 'default' };
-    mocks.namespace.namespaces = [
-      { name: 'Default', scope: 'default' },
-      { name: 'All Namespaces', scope: 'namespace:all' },
-    ];
-
-    const { getCommands, unmount } = renderHook();
-    const commands = new Map(getCommands().map((command) => [command.id, command]));
-
-    act(() => {
-      commands.get('namespace-map')?.action();
-      commands.get('namespace-default')?.action();
-      commands.get('namespace-namespace:all')?.action();
+    ['Dark mode', 'setDarkAppearanceMode'],
+    ['Enable short names', 'toggleShortResourceNames'],
+  ])('reports a failed %s under the command’s name', async (label, action) => {
+    app.backend.answer('UpdateAppPreferences', () => {
+      throw new Error('settings unavailable');
     });
+    dev = openCluster('dev', 'alpha');
+    await showPalette();
+    vi.useFakeTimers();
 
-    expect(mocks.viewState.navigateToNamespace).toHaveBeenCalledTimes(1);
-    expect(mocks.viewState.setActiveNamespaceTab).toHaveBeenNthCalledWith(1, 'map');
-    expect(mocks.namespace.setSelectedNamespace).toHaveBeenNthCalledWith(1, 'default');
-    expect(mocks.namespace.setSelectedNamespace).toHaveBeenNthCalledWith(2, 'namespace:all');
-    expect(mocks.viewState.onNamespaceSelect).toHaveBeenNthCalledWith(1, 'default');
-    expect(mocks.viewState.onNamespaceSelect).toHaveBeenNthCalledWith(2, 'namespace:all');
-    expect(mocks.viewState.setActiveNamespaceTab).toHaveBeenNthCalledWith(2, 'workloads');
+    await run(label, label);
 
-    unmount();
+    expect(
+      app.errors.take(
+        (record) => record.context?.source === 'CommandPalette' && record.context.action === action
+      )
+    ).toEqual([expect.objectContaining({ kinds: ['operational'] })]);
   });
+});
 
-  it('includes Sidebar setting toggles and persists their inverse states', async () => {
-    setAppPreferencesForTesting({
-      dimInactiveNamespaces: true,
-      exclusiveNamespaces: true,
-    });
+describe('in the full app', () => {
+  const clickControl = async (label: string) => {
+    const control = requireValue(
+      view.container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`),
+      `expected the ${label} button`
+    );
+    await act(async () => control.click());
+    await app.settle();
+  };
 
-    const { getCommands, unmount } = renderHook();
-    const commands = getCommands();
-    const dimCommand = commands.find((entry) => entry.id === 'toggle-dim-inactive-namespaces');
-    const exclusiveCommand = commands.find((entry) => entry.id === 'toggle-exclusive-namespaces');
+  it('opens from the header button with the app’s commands, and from the sidebar’s namespace search into the namespace picker', async () => {
+    dev = openCluster('dev', 'alpha');
+    app.startScreen(dev);
+    // The namespace's Workloads view, where choosing a namespace lands.
+    app.serveTable(dev, 'namespace-workloads');
+    view = await app.mountApp();
 
-    await act(async () => {
-      dimCommand?.action();
-      exclusiveCommand?.action();
-      await Promise.resolve();
-    });
+    await clickControl('Command Palette');
+    expect(await search('capacity')).toContain('Cluster - Nodes');
+    await closePalette();
+    expect(palette()).toBeNull();
 
-    expect(mocks.appSettings.UpdateAppPreferences).toHaveBeenCalledWith({
-      changes: [{ key: 'dimInactiveNamespaces', value: false }],
-    });
-    expect(mocks.appSettings.UpdateAppPreferences).toHaveBeenCalledWith({
-      changes: [{ key: 'exclusiveNamespaces', value: false }],
-    });
+    await clickControl('Select namespace');
+    vi.useFakeTimers();
+    expect(optionLabels()).toEqual(['All Namespaces', 'default', 'team-a']);
+    await choose('team-a');
 
-    unmount();
-  });
-
-  it('disables auto-refresh and short names through their commands', async () => {
-    setAppPreferencesForTesting({ autoRefreshEnabled: true, useShortResourceNames: true });
-
-    const { getCommands, unmount } = renderHook();
-    const commands = getCommands();
-    const autoRefreshCommand = commands.find((entry) => entry.id === 'toggle-auto-refresh');
-    const shortNamesCommand = commands.find((entry) => entry.id === 'toggle-short-names');
-
-    await act(async () => {
-      autoRefreshCommand?.action();
-      shortNamesCommand?.action();
-      await Promise.resolve();
-    });
-
-    expect(mocks.appSettings.UpdateAppPreferences).toHaveBeenCalledWith({
-      changes: [{ key: 'autoRefreshEnabled', value: false }],
-    });
-    expect(mocks.appSettings.UpdateAppPreferences).toHaveBeenCalledWith({
-      changes: [{ key: 'useShortResourceNames', value: false }],
-    });
-
-    unmount();
+    expect(view.owners().namespace.selectedNamespace).toBe('team-a');
+    expect(viewState().viewType).toBe('namespace');
   });
 });

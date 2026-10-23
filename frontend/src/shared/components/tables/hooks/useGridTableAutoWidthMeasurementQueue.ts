@@ -324,6 +324,12 @@ export function useDirtyQueue<T>({
   flushDirtyColumnsRef.current = flushDirtyColumns;
 
   useEffect(() => {
+    // A re-run effect (StrictMode in development) re-arms the queue after its cleanup,
+    // including the flush the cleanup cancelled for columns still queued.
+    isMountedRef.current = true;
+    if (dirtyColumnsRef.current.size > 0) {
+      scheduleDirtyFlush();
+    }
     return () => {
       isMountedRef.current = false;
       if (
@@ -334,7 +340,7 @@ export function useDirtyQueue<T>({
         window.clearTimeout(dirtyTimerRef.current);
       }
     };
-  }, []);
+  }, [dirtyColumnsRef, scheduleDirtyFlush]);
 
   return {
     markColumnsDirty,

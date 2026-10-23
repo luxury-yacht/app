@@ -130,7 +130,6 @@ export default function ClusterViewAttention() {
         key: 'severity',
         header: 'Severity',
         sortable: true,
-        sortValue: (row) => row.severity,
         measurementElement: (row) =>
           createStatusChipMeasurementElement(severityChipVariants[row.severity], row.severity),
         render: (row) => (
@@ -141,8 +140,6 @@ export default function ClusterViewAttention() {
         key: 'reason',
         header: 'Finding',
         sortable: true,
-        sortValue: (row) =>
-          compactFindingText((row.causes ?? []).map((cause) => cause.label)).join(', '),
         render: renderFinding,
       },
       cf.createAgeColumn<ClusterAttentionFinding>('age', 'Age', (row) => row.age),

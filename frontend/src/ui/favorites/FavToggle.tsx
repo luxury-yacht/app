@@ -35,6 +35,7 @@ import {
 } from '@/core/navigation/activeViewTitle';
 import { favoriteMatchesCluster, resolveFavoriteRoute } from '@/core/navigation/favoriteRoute';
 import type { Favorite, FavoriteTableSnapshot } from '@/core/persistence/favorites';
+import type { SortConfig } from '@/hooks/useTableSort';
 import FavSaveModal, { type FavoriteModalColumn } from './FavSaveModal';
 import { favoriteTableSnapshotsEqual } from './favoriteTableSnapshot';
 
@@ -78,7 +79,7 @@ export interface FavToggleState {
   hydrated?: boolean;
   /** Setters for restoring state from a pending favorite. */
   setFilters?: (filters: GridTableFilterState) => void;
-  setSortConfig?: (config: { key: string; direction: 'asc' | 'desc' } | null) => void;
+  setSortConfig?: (config: SortConfig) => void;
   setColumnVisibility?: (visibility: Record<string, boolean>) => void;
   setColumnOrder?: (order: string[]) => void;
 }
@@ -138,13 +139,15 @@ const findMatchingFavorite = (
 
 const restoreFavoriteTable = (state: FavToggleState, favorite: Favorite) => {
   state.setFilters?.(favorite.filters);
+  // A favorite saved without a sort column restores the table's own unsorted
+  // state; null would mean "nothing chosen" and bring back the default sort.
   state.setSortConfig?.(
     favorite.tableState.sortColumn
       ? {
           key: favorite.tableState.sortColumn,
           direction: favorite.tableState.sortDirection as 'asc' | 'desc',
         }
-      : null
+      : { key: '', direction: null }
   );
   state.setColumnVisibility?.(favorite.tableState.columnVisibility);
   state.setColumnOrder?.(favorite.tableState.columnOrder ?? []);

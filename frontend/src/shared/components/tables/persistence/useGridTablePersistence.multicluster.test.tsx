@@ -1,255 +1,172 @@
 /**
  * frontend/src/shared/components/tables/persistence/useGridTablePersistence.multicluster.test.tsx
  *
- * Tests that switching clusterIdentity produces independent persisted state.
- * Verifies that sort, visibility, and filters are scoped per cluster.
+ * A table's saved state is per cluster: switching the workspace between
+ * clusters hydrates each cluster's own sort, column visibility, and backend
+ * query facets, a cluster with nothing saved starts from defaults, and a change
+ * saves only into the visible cluster's entry. Runs inside the production
+ * shell with two open clusters, the real kubeconfig owner, and the real
+ * persistence store over a faked backend (test-utils/appState).
  */
 
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
-import type React from 'react';
-import { act, useEffect } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
+import { act } from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useKubeconfig } from '@/modules/kubernetes/config/KubeconfigContext';
 import {
-  resetAppPreferencesCacheForTesting,
-  setGridTablePersistenceMode,
-} from '@/core/settings/appPreferences';
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
+import {
+  buildGridTableStorageKey,
+  computeClusterHash,
+  type GridTablePersistedState,
+} from './gridTablePersistence';
 import { useGridTablePersistence } from './useGridTablePersistence';
 
-const stateMap: Record<string, unknown> = {};
-type PersistenceState = ReturnType<typeof useGridTablePersistence<{ id: string }>>;
-let latestState: PersistenceState | null = null;
-const getLatestState = () => requireValue(latestState, 'expected latest grid persistence state');
+type Row = { id: string };
 
-// Mock persistence layer. computeClusterHash returns a hash derived from input
-// so different clusterIdentity values produce different hashes.
-vi.mock('./gridTablePersistence', () => {
-  const buildGridTableStorageKey = ({
-    clusterHash,
-    viewId,
-    namespace,
-  }: {
-    clusterHash: string;
-    viewId: string;
-    namespace?: string | null;
-  }) => `key:${clusterHash}:${viewId}:${namespace ?? ''}`;
+const columns: GridColumnDefinition<Row>[] = [
+  { key: 'name', header: 'Name', sortable: true, render: (row) => row.id },
+  { key: 'age', header: 'Age', sortable: true, render: (row) => row.id },
+];
 
-  return {
-    buildGridTableStorageKey,
-    computeClusterHash: vi.fn(async (identity: string) => `hash-${identity}`),
-    hydrateGridTablePersistence: vi.fn(async () => undefined),
-    loadPersistedState: vi.fn((key: string | null) => (key ? (stateMap[key] ?? null) : null)),
-    prunePersistedState: vi.fn((state: unknown) => state ?? null),
-    buildPersistedStateForSave: vi.fn(() => null),
-    savePersistedState: vi.fn(),
-    registerPendingGridTableSave: vi.fn(() => () => undefined),
-    clearPersistedState: vi.fn(),
-  };
+const app = installAppStateHarness();
+let alpha: TestCluster;
+let beta: TestCluster;
+let view: MountedApp;
+let latest: ReturnType<typeof useGridTablePersistence<Row>> | undefined;
+const table = () => requireValue(latest, 'expected the table’s persisted state');
+
+/** A namespace table of the visible cluster, as the namespace views mount it. */
+function Table() {
+  const { selectedClusterId } = useKubeconfig();
+  latest = useGridTablePersistence<Row>({
+    viewId: 'namespace-pods',
+    clusterIdentity: selectedClusterId,
+    namespace: 'default',
+    isNamespaceScoped: true,
+    columns,
+  });
+  return null;
+}
+
+// The backend's saved table state: what hydration returns and saves write.
+let savedTables = new Map<string, unknown>();
+
+// The default persistence mode keeps one entry per view for all of a
+// cluster's namespaces (useGridTablePersistence.ts).
+const storageKey = async (cluster: TestCluster) =>
+  requireValue(
+    buildGridTableStorageKey({
+      clusterHash: await computeClusterHash(cluster.clusterId),
+      viewId: 'namespace-pods',
+      namespace: '__shared__',
+    }),
+    'expected a table storage key'
+  );
+
+const saveTable = async (cluster: TestCluster, state: Omit<GridTablePersistedState, 'version'>) => {
+  savedTables.set(await storageKey(cluster), { version: 3, ...state });
+};
+
+const alphaState = {
+  sort: { key: 'name', direction: 'asc' },
+  columnVisibility: { age: false },
+  filters: {
+    ...DEFAULT_GRID_TABLE_FILTER_STATE,
+    queryFacets: { types: { mode: 'some', values: ['Warning'] } },
+  },
+} satisfies Omit<GridTablePersistedState, 'version'>;
+
+const betaState = {
+  sort: { key: 'age', direction: 'desc' },
+  columnVisibility: { name: false },
+  filters: {
+    ...DEFAULT_GRID_TABLE_FILTER_STATE,
+    queryFacets: { statuses: { mode: 'some', values: ['Healthy'] } },
+  },
+} satisfies Omit<GridTablePersistedState, 'version'>;
+
+const shown = () => ({
+  sort: table().sortConfig,
+  columnVisibility: table().columnVisibility,
+  filters: table().filters,
 });
 
-describe('useGridTablePersistence multi-cluster', () => {
-  beforeEach(() => {
-    latestState = null;
-    Object.keys(stateMap).forEach((key) => {
-      delete stateMap[key];
-    });
-    resetAppPreferencesCacheForTesting();
-    setGridTablePersistenceMode('namespaced');
+// Saved table state hydrates once, at startup: save it before starting.
+const start = async () => {
+  view = await app.render(null);
+  await view.show(<Table />);
+};
+
+beforeEach(() => {
+  latest = undefined;
+  savedTables = new Map();
+  alpha = app.cluster({ name: 'dev', context: 'alpha' });
+  beta = app.cluster({ name: 'prod', context: 'beta' });
+  app.namespaces(alpha, ['default']);
+  app.namespaces(beta, ['default']);
+  app.backend.answer('GetGridTablePersistence', () => Object.fromEntries(savedTables));
+  app.backend.answer('SetGridTablePersistence', (key, state) => {
+    savedTables.set(key, state);
+  });
+  app.backend.answer('DeleteGridTablePersistence', (key) => {
+    savedTables.delete(key);
+  });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe('useGridTablePersistence across clusters', () => {
+  it('hydrates each cluster’s own sort, column visibility, and query facets', async () => {
+    await saveTable(alpha, alphaState);
+    await saveTable(beta, betaState);
+    await start();
+    expect(shown()).toEqual(alphaState);
+
+    await view.selectCluster(beta);
+    expect(shown()).toEqual(betaState);
+
+    await view.selectCluster(alpha);
+    expect(shown()).toEqual(alphaState);
   });
 
-  const columns: GridColumnDefinition<{ id: string }>[] = [
-    { key: 'name', header: 'Name', render: (row) => row.id },
-    { key: 'age', header: 'Age', render: (row) => row.id },
-  ];
+  it('starts from defaults in a cluster with nothing saved', async () => {
+    await saveTable(alpha, alphaState);
+    await start();
+    expect(table().sortConfig).toEqual(alphaState.sort);
 
-  const Harness: React.FC<{ clusterIdentity: string; namespace?: string }> = ({
-    clusterIdentity,
-    namespace = 'default',
-  }) => {
-    const result = useGridTablePersistence({
-      viewId: 'namespace-pods',
-      clusterIdentity,
-      namespace,
-      isNamespaceScoped: true,
-      columns,
-    });
+    await view.selectCluster(beta);
 
-    useEffect(() => {
-      latestState = result;
-    }, [result]);
+    expect(table().hydrated).toBe(true);
+    expect(table().sortConfig).toBeNull();
+    expect(table().columnVisibility).toBeNull();
+    expect(table().filters).toEqual(DEFAULT_GRID_TABLE_FILTER_STATE);
+  });
 
-    return null;
-  };
+  it('saves a change into the visible cluster’s entry only', async () => {
+    await saveTable(alpha, alphaState);
+    await start();
+    vi.useFakeTimers();
+    await view.selectCluster(beta);
 
-  const renderHarness = async (
-    root: ReactDOM.Root,
-    clusterIdentity: string,
-    namespace = 'default'
-  ) => {
+    await act(async () => table().setSortConfig({ key: 'name', direction: 'desc' }));
     await act(async () => {
-      root.render(<Harness clusterIdentity={clusterIdentity} namespace={namespace} />);
-      // Allow async computeClusterHash to resolve.
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    // Give effects a second pass to run loadPersistedState.
-    await act(async () => {
-      await Promise.resolve();
-    });
-  };
-
-  it('loads independent sort config when switching between clusters', async () => {
-    // Seed persisted state for two clusters.
-    stateMap['key:hash-cluster-a:namespace-pods:default'] = {
-      version: 1,
-      sort: { key: 'name', direction: 'asc' },
-    };
-    stateMap['key:hash-cluster-b:namespace-pods:default'] = {
-      version: 1,
-      sort: { key: 'age', direction: 'desc' },
-    };
-
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = ReactDOM.createRoot(container);
-
-    // Render cluster A.
-    await renderHarness(root, 'cluster-a');
-    const stateA = getLatestState();
-    expect(stateA.sortConfig?.key).toBe('name');
-    expect(stateA.sortConfig?.direction).toBe('asc');
-
-    // Switch to cluster B.
-    await renderHarness(root, 'cluster-b');
-    const stateB = getLatestState();
-    expect(stateB.sortConfig?.key).toBe('age');
-    expect(stateB.sortConfig?.direction).toBe('desc');
-
-    // Switch back to cluster A — state is independent.
-    await renderHarness(root, 'cluster-a');
-    const stateA2 = getLatestState();
-    expect(stateA2.sortConfig?.key).toBe('name');
-    expect(stateA2.sortConfig?.direction).toBe('asc');
-
-    await act(async () => root.unmount());
-    container.remove();
-  });
-
-  it('loads independent column visibility per cluster', async () => {
-    stateMap['key:hash-cluster-a:namespace-pods:default'] = {
-      version: 1,
-      columnVisibility: { age: false },
-    };
-    stateMap['key:hash-cluster-b:namespace-pods:default'] = {
-      version: 1,
-      columnVisibility: { name: false },
-    };
-
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = ReactDOM.createRoot(container);
-
-    await renderHarness(root, 'cluster-a');
-    expect(getLatestState().columnVisibility).toEqual({ age: false });
-
-    await renderHarness(root, 'cluster-b');
-    expect(getLatestState().columnVisibility).toEqual({ name: false });
-
-    await act(async () => root.unmount());
-    container.remove();
-  });
-
-  it('does not carry provider facet selections across clusters', async () => {
-    stateMap['key:hash-cluster-a:namespace-pods:default'] = {
-      version: 1,
-      filters: {
-        search: '',
-        kinds: [],
-        namespaces: [],
-        queryFacets: { types: ['Warning'], reasons: ['BackOff'] },
-        includeMetadata: false,
-      },
-    };
-    stateMap['key:hash-cluster-b:namespace-pods:default'] = {
-      version: 1,
-      filters: {
-        search: '',
-        kinds: [],
-        namespaces: [],
-        queryFacets: { statuses: ['Healthy'], hasIssues: ['false'] },
-        includeMetadata: false,
-      },
-    };
-
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = ReactDOM.createRoot(container);
-
-    await renderHarness(root, 'cluster-a');
-    expect(getLatestState().filters.queryFacets).toEqual({
-      types: ['Warning'],
-      reasons: ['BackOff'],
+      await vi.advanceTimersByTimeAsync(1_000);
     });
 
-    await renderHarness(root, 'cluster-b');
-    expect(getLatestState().filters.queryFacets).toEqual({
-      statuses: ['Healthy'],
-      hasIssues: ['false'],
+    const betaKey = await storageKey(beta);
+    expect(app.backend.calls('SetGridTablePersistence').map(([key]) => key)).toEqual([betaKey]);
+    expect(savedTables.get(betaKey)).toEqual({
+      version: 3,
+      sort: { key: 'name', direction: 'desc' },
     });
-
-    await renderHarness(root, 'cluster-a');
-    expect(getLatestState().filters.queryFacets).toEqual({
-      types: ['Warning'],
-      reasons: ['BackOff'],
-    });
-
-    await act(async () => root.unmount());
-    container.remove();
-  });
-
-  it('resets state to defaults when switching to a cluster with no persisted data', async () => {
-    stateMap['key:hash-cluster-a:namespace-pods:default'] = {
-      version: 1,
-      sort: { key: 'name', direction: 'asc' },
-      columnVisibility: { age: false },
-    };
-    // No state seeded for cluster-c.
-
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = ReactDOM.createRoot(container);
-
-    await renderHarness(root, 'cluster-a');
-    expect(getLatestState().sortConfig?.key).toBe('name');
-
-    // Switch to cluster with no persisted state.
-    await renderHarness(root, 'cluster-c');
-    const stateC = getLatestState();
-    expect(stateC.sortConfig).toBeNull();
-    expect(stateC.columnVisibility).toBeNull();
-
-    await act(async () => root.unmount());
-    container.remove();
-  });
-
-  it('produces different storage keys for different clusters', async () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = ReactDOM.createRoot(container);
-
-    await renderHarness(root, 'cluster-a');
-    const keyA = getLatestState().storageKey;
-
-    await renderHarness(root, 'cluster-b');
-    const keyB = getLatestState().storageKey;
-
-    expect(keyA).not.toBeNull();
-    expect(keyB).not.toBeNull();
-    expect(keyA).not.toBe(keyB);
-
-    await act(async () => root.unmount());
-    container.remove();
+    expect(savedTables.get(await storageKey(alpha))).toEqual({ version: 3, ...alphaState });
   });
 });

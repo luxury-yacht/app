@@ -78,6 +78,25 @@ const APP_LOGS_MAX_ENTRIES = 10_000;
 const keepNewestLogs = (entries: LogEntry[]) =>
   entries.length > APP_LOGS_MAX_ENTRIES ? entries.slice(-APP_LOGS_MAX_ENTRIES) : entries;
 
+// Appends the read lines newer than every shown line and than `floor`, the
+// latest sequence read before. Pure: React may run a state updater twice.
+const appendLogDeltas = (
+  prevLogs: LogEntry[],
+  deltaEntries: LogEntry[],
+  floor: number,
+  keepNewest: boolean
+) => {
+  const latestShown = findLatestSequence(prevLogs, floor);
+  const newEntries = deltaEntries.filter(
+    (entry) => typeof entry.sequence !== 'number' || entry.sequence > latestShown
+  );
+  if (newEntries.length === 0) {
+    return prevLogs;
+  }
+  const appended = [...prevLogs, ...newEntries];
+  return keepNewest ? keepNewestLogs(appended) : appended;
+};
+
 const getLogScopeValue = (log: LogEntry) => {
   const clusterId = log.clusterId?.trim() ?? '';
   const clusterName = log.clusterName?.trim() ?? '';
@@ -271,21 +290,10 @@ function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
         return;
       }
 
-      setLogs((prevLogs) => {
-        const latestBeforeAppend = findLatestSequence(prevLogs, latestSequenceRef.current);
-        const newEntries = deltaEntries.filter(
-          (entry) => typeof entry.sequence !== 'number' || entry.sequence > latestBeforeAppend
-        );
-        if (newEntries.length === 0) {
-          latestSequenceRef.current = latestBeforeAppend;
-          return prevLogs;
-        }
-
-        const appended = [...prevLogs, ...newEntries];
-        const nextLogs = isTailFollowingRef.current ? keepNewestLogs(appended) : appended;
-        latestSequenceRef.current = findLatestSequence(nextLogs, latestBeforeAppend);
-        return nextLogs;
-      });
+      const floor = latestSequenceRef.current;
+      const keepNewest = isTailFollowingRef.current;
+      setLogs((prevLogs) => appendLogDeltas(prevLogs, deltaEntries, floor, keepNewest));
+      latestSequenceRef.current = findLatestSequence(deltaEntries, floor);
     } catch (error) {
       errorHandler.handle(error, { action: 'loadLogDeltas' });
     }

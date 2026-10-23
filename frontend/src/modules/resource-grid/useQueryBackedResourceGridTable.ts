@@ -370,7 +370,7 @@ const anchorDecisionKeyExtractor = () => '';
 // row, turn it into a backend anchor jump — the landing page then contains
 // the row and the normal buffer match takes over. A missing anchor
 // (filtered/not-found) is reported through the app's notification channel.
-export function useAnchorOnUnmatchedFocusRequest<TRow>({
+function useAnchorOnUnmatchedFocusRequest<TRow>({
   clusterId,
   enabled = true,
   domain,

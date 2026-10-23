@@ -1,140 +1,111 @@
 /**
  * frontend/src/ui/shortcuts/useSearchShortcutTarget.test.tsx
  *
- * Test suite for useSearchShortcutTarget.
- * Covers key behaviors and edge cases for useSearchShortcutTarget.
+ * A search field registered with useSearchShortcutTarget takes the find
+ * shortcut (Cmd/Ctrl+F) according to its current props: whether it is
+ * active, its priority, and its latest focus handler, and it stops taking the
+ * shortcut once it unmounts. Runs in provider mode inside the real app shell,
+ * whose KeyboardProvider dispatches the shortcut through the production
+ * search-target registry; only the backend boundary is faked
+ * (test-utils/appState).
  */
 
-import type React from 'react';
-import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, useRef } from 'react';
+import { describe, expect, it } from 'vitest';
+import { installAppStateHarness, type MountedApp } from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
-
+import { isMacPlatform } from '@/utils/platform';
 import { useSearchShortcutTarget } from './useSearchShortcutTarget';
 
-const registryMocks = vi.hoisted(() => ({
-  register: vi.fn(),
-  unregister: vi.fn(),
-}));
+const app = installAppStateHarness();
+let view: MountedApp;
 
-vi.mock('./searchShortcutRegistry', () => ({
-  registerSearchShortcutTarget: (...args: unknown[]) => registryMocks.register(...args),
-  unregisterSearchShortcutTarget: (...args: unknown[]) => registryMocks.unregister(...args),
-}));
+interface FieldProps {
+  name: string;
+  active: boolean;
+  priority: number;
+  /** The field the target's focus handler moves focus to (default: its own). */
+  focuses?: string;
+}
 
-type HookProps = {
-  isActive: boolean;
-  focus: () => void;
-  priority?: number;
-  label?: string;
+function SearchField({ name, active, priority, focuses = name }: Readonly<FieldProps>) {
+  const ref = useRef<HTMLDivElement>(null);
+  useSearchShortcutTarget({
+    isActive: active,
+    priority,
+    focus: () => ref.current?.querySelector<HTMLInputElement>(`[aria-label="${focuses}"]`)?.focus(),
+  });
+  return (
+    <div ref={ref}>
+      <input aria-label={name} />
+      <input aria-label={`${name} (alternate)`} />
+    </div>
+  );
+}
+
+const showFields = async (fields: FieldProps[]) => {
+  await view.show(fields.map((props) => <SearchField key={props.name} {...props} />));
 };
 
-const renderHookHarness = () => {
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = ReactDOM.createRoot(container);
+const fieldNamed = (label: string) =>
+  requireValue(
+    view.container.querySelector<HTMLInputElement>(`[aria-label="${label}"]`),
+    `expected the ${label} field`
+  );
 
-  const Harness: React.FC<HookProps> = (props) => {
-    useSearchShortcutTarget(props);
-    return null;
-  };
-
-  const render = async (props: HookProps) => {
-    await act(async () => {
-      root.render(<Harness {...props} />);
-      await Promise.resolve();
-    });
-  };
-
-  const cleanup = async () => {
-    await act(async () => {
-      root.unmount();
-    });
-    container.remove();
-  };
-
-  return {
-    render,
-    cleanup,
-    root,
-  };
+/** Presses the platform's find shortcut where focus is, and returns the event. */
+const pressFind = async () => {
+  const event = new KeyboardEvent('keydown', {
+    key: 'f',
+    bubbles: true,
+    cancelable: true,
+    ...(isMacPlatform() ? { metaKey: true } : { ctrlKey: true }),
+  });
+  await act(async () => {
+    (document.activeElement ?? document.body).dispatchEvent(event);
+  });
+  return event;
 };
 
 describe('useSearchShortcutTarget', () => {
-  let harness: ReturnType<typeof renderHookHarness> | null = null;
+  it('routes the find shortcut by each field’s current activity, priority, and focus handler', async () => {
+    view = await app.render(null);
+    await showFields([
+      { name: 'Filters', active: true, priority: 5 },
+      { name: 'Logs', active: true, priority: 0 },
+    ]);
+    await pressFind();
+    expect(document.activeElement).toBe(fieldNamed('Filters'));
 
-  beforeEach(() => {
-    registryMocks.register.mockReset();
-    registryMocks.unregister.mockReset();
+    await showFields([
+      { name: 'Filters', active: true, priority: 0 },
+      { name: 'Logs', active: true, priority: 10 },
+    ]);
+    await pressFind();
+    expect(document.activeElement).toBe(fieldNamed('Logs'));
+
+    await showFields([
+      { name: 'Filters', active: true, priority: 0 },
+      { name: 'Logs', active: false, priority: 10 },
+    ]);
+    await pressFind();
+    expect(document.activeElement).toBe(fieldNamed('Filters'));
+
+    await showFields([
+      { name: 'Filters', active: true, priority: 0, focuses: 'Filters (alternate)' },
+      { name: 'Logs', active: false, priority: 10 },
+    ]);
+    await pressFind();
+    expect(document.activeElement).toBe(fieldNamed('Filters (alternate)'));
   });
 
-  afterEach(async () => {
-    if (harness) {
-      await harness.cleanup();
-      harness = null;
-    }
-  });
+  it('stops taking the find shortcut once its field unmounts', async () => {
+    view = await app.render(null);
+    await showFields([{ name: 'Filters', active: true, priority: 0 }]);
+    expect((await pressFind()).defaultPrevented).toBe(true);
 
-  it('registers search target and updates focus/isActive state', async () => {
-    const focusSpy = vi.fn();
-    harness = renderHookHarness();
+    await showFields([]);
 
-    await requireValue(harness, 'expected test value in useSearchShortcutTarget.test.tsx').render({
-      isActive: true,
-      focus: focusSpy,
-      priority: 5,
-      label: 'Filters search',
-    });
-
-    expect(registryMocks.register).toHaveBeenCalledTimes(1);
-    const config = registryMocks.register.mock.calls[0][0] as {
-      isActive: () => boolean;
-      focus: () => void;
-      getPriority: () => number;
-    };
-    expect(config.isActive()).toBe(true);
-    expect(config.getPriority()).toBe(5);
-
-    await requireValue(harness, 'expected test value in useSearchShortcutTarget.test.tsx').render({
-      isActive: false,
-      focus: focusSpy,
-      priority: 10,
-    });
-    expect(config.isActive()).toBe(false);
-    expect(config.getPriority()).toBe(10);
-
-    act(() => {
-      config.focus();
-    });
-    expect(focusSpy).toHaveBeenCalledTimes(1);
-
-    await requireValue(
-      harness,
-      'expected test value in useSearchShortcutTarget.test.tsx'
-    ).cleanup();
-    harness = null;
-    expect(registryMocks.unregister).toHaveBeenCalled();
-  });
-
-  it('does not throw when focus function changes', async () => {
-    const focusA = vi.fn();
-    const focusB = vi.fn();
-    harness = renderHookHarness();
-
-    await requireValue(harness, 'expected test value in useSearchShortcutTarget.test.tsx').render({
-      isActive: true,
-      focus: focusA,
-    });
-    const config = registryMocks.register.mock.calls[0][0] as { focus: () => void };
-    act(() => config.focus());
-    expect(focusA).toHaveBeenCalledTimes(1);
-
-    await requireValue(harness, 'expected test value in useSearchShortcutTarget.test.tsx').render({
-      isActive: true,
-      focus: focusB,
-    });
-    act(() => config.focus());
-    expect(focusB).toHaveBeenCalledTimes(1);
+    expect((await pressFind()).defaultPrevented).toBe(false);
   });
 });

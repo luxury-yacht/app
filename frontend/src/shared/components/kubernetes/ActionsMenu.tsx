@@ -18,19 +18,9 @@ import './ActionsMenu.css';
 
 const clampReplicas = (value: number): number => Math.max(0, Math.min(9999, value));
 
-const parseDesiredReplicas = (value?: string | null): number | null => {
-  const trimmed = value?.trim();
-  if (!trimmed) {
-    return null;
-  }
-  const segments = trimmed.split('/');
-  const candidate = Number.parseInt(segments[segments.length - 1]?.trim() ?? '', 10);
-  return Number.isFinite(candidate) ? clampReplicas(candidate) : null;
-};
-
 interface ActionsMenuProps {
   object: ObjectActionData | null;
-  currentReplicas?: number;
+  currentReplicas: number;
   actionLoading?: boolean;
   // Whether a HorizontalPodAutoscaler manages this workload. Null means unknown.
   hpaManaged?: boolean | null;
@@ -58,12 +48,7 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
     const [isOpen, setIsOpen] = useState(false);
     const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
 
-    const resolvedCurrentReplicas = useMemo(() => {
-      if (typeof currentReplicas === 'number' && Number.isFinite(currentReplicas)) {
-        return clampReplicas(currentReplicas);
-      }
-      return parseDesiredReplicas(object?.ready) ?? 0;
-    }, [currentReplicas, object?.ready]);
+    const resolvedCurrentReplicas = clampReplicas(currentReplicas);
 
     // Merge the resolved replica count and HPA-ownership flag into the object
     // the controller reasons about. Unknown HPA ownership must stay unknown so

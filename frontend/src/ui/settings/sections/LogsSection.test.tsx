@@ -1,122 +1,72 @@
 /**
  * frontend/src/ui/settings/sections/LogsSection.test.tsx
  *
- * The Logs settings persist through the preference owner and follow it,
- * including when a failed write rolls a value back.
+ * The Logs settings save through the preference owner and follow it: limits
+ * save when each field is left, a failed save shows the saved value again, the
+ * local time zone switch saves, and an invalid timestamp format is rejected
+ * inline while a valid one saves trimmed. Runs inside the production shell with
+ * the real preference owner over the faked backend (test-utils/appState).
  */
 
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  type AppPreferenceKey,
-  type AppPreferences,
-  resetAppPreferencesCacheForTesting,
-  setAppPreferencesForTesting,
-} from '@/core/settings/appPreferences';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { installAppStateHarness, type MountedApp } from '@/test-utils/appState/harness';
 import { controlName } from '@/test-utils/controlName';
 import { requireValue } from '@/test-utils/requireValue';
 import LogsSection from './LogsSection';
 
-const prefs = vi.hoisted(() => ({
-  setBufferSize: vi.fn(),
-  setPerScopeLimit: vi.fn(),
-  setGlobalLimit: vi.fn(),
-  setUseLocalTimeZone: vi.fn(),
-  setTimestampFormat: vi.fn(),
-}));
+const app = installAppStateHarness();
+let view: MountedApp;
 
-// The real preference store; the setters update it as the optimistic setters do,
-// without a backend.
-vi.mock('@/core/settings/appPreferences', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/core/settings/appPreferences')>();
-  const owner =
-    <K extends AppPreferenceKey>(key: K, record: (value: AppPreferences[K]) => void) =>
-    (value: AppPreferences[K]) => {
-      record(value);
-      actual.setAppPreferencesForTesting({ [key]: value });
-    };
-  return {
-    ...actual,
-    commitIntegerPreferenceInput: (_key: string, raw: string, persist: (value: number) => void) => {
-      const value = Number(raw);
-      persist(value);
-      return value;
-    },
-    getIntegerPreferenceMetadata: () => ({ min: 1, max: 10000 }),
-    hydrateAppPreferences: vi.fn().mockResolvedValue({}),
-    setObjPanelLogsBufferMaxSize: owner('objPanelLogsBufferMaxSize', prefs.setBufferSize),
-    setObjPanelLogsTargetPerScopeLimit: owner(
-      'objPanelLogsTargetPerScopeLimit',
-      prefs.setPerScopeLimit
+/** Preference changes the backend saved, in order. */
+const saved = () =>
+  app.backend.calls('UpdateAppPreferences').flatMap(([request]) => request.changes ?? []);
+
+// Inputs are found by the name they are announced with, so every lookup also
+// checks that the row's title labels its input.
+const inputFor = (label: string) =>
+  requireValue(
+    Array.from(view.container.querySelectorAll<HTMLInputElement>('input')).find(
+      (input) => controlName(input) === label
     ),
-    setObjPanelLogsTargetGlobalLimit: owner('objPanelLogsTargetGlobalLimit', prefs.setGlobalLimit),
-    setObjPanelLogsApiTimestampUseLocalTimeZone: owner(
-      'objPanelLogsApiTimestampUseLocalTimeZone',
-      prefs.setUseLocalTimeZone
-    ),
-    setObjPanelLogsApiTimestampFormat: owner(
-      'objPanelLogsApiTimestampFormat',
-      prefs.setTimestampFormat
-    ),
-  };
+    `input labelled ${label}`
+  );
+
+const type = async (input: HTMLInputElement, value: string) => {
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+};
+
+const leave = async (input: HTMLInputElement) => {
+  await act(async () => {
+    input.focus();
+    input.blur();
+  });
+  await app.settle();
+};
+
+beforeEach(async () => {
+  app.preferences({
+    objPanelLogsBufferMaxSize: 1000,
+    objPanelLogsTargetPerScopeLimit: 20,
+    objPanelLogsTargetGlobalLimit: 100,
+    objPanelLogsApiTimestampUseLocalTimeZone: false,
+    objPanelLogsApiTimestampFormat: 'YYYY-MM-DDTHH:mm:ss.SSS[Z]',
+  });
+  // Mirrors backend/preferences_settings.go UpdateAppPreferences.
+  app.backend.answer('UpdateAppPreferences', (request) => ({
+    settings: null,
+    changedKeys: (request.changes ?? []).map(({ key }) => key),
+  }));
+  view = await app.render(null);
+  await view.show(<LogsSection />);
 });
 
-vi.mock('@core/desktop-runtime', () => ({ openURL: vi.fn() }));
-
 describe('LogsSection', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
-
-  beforeEach(async () => {
-    resetAppPreferencesCacheForTesting();
-    setAppPreferencesForTesting({
-      objPanelLogsBufferMaxSize: 1000,
-      objPanelLogsTargetPerScopeLimit: 20,
-      objPanelLogsTargetGlobalLimit: 100,
-      objPanelLogsApiTimestampUseLocalTimeZone: false,
-      objPanelLogsApiTimestampFormat: 'YYYY-MM-DDTHH:mm:ss.SSS[Z]',
-    });
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    await act(async () => {
-      root.render(<LogsSection />);
-    });
-  });
-
-  afterEach(() => {
-    act(() => root.unmount());
-    container.remove();
-    vi.clearAllMocks();
-  });
-
-  // Inputs are found by the name they are announced with, so every lookup also
-  // checks that the row's title labels its input.
-  const inputFor = (label: string) =>
-    requireValue(
-      Array.from(container.querySelectorAll<HTMLInputElement>('input')).find(
-        (input) => controlName(input) === label
-      ),
-      `input labelled ${label}`
-    );
-
-  const type = async (input: HTMLInputElement, value: string) => {
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value);
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-  };
-
-  const leave = async (input: HTMLInputElement) => {
-    await act(async () => {
-      input.focus();
-      input.blur();
-    });
-  };
-
   it('gives every input a name', () => {
-    const unnamed = Array.from(container.querySelectorAll('input')).filter(
+    const unnamed = Array.from(view.container.querySelectorAll('input')).filter(
       (input) => controlName(input) === ''
     );
     expect(unnamed).toEqual([]);
@@ -130,31 +80,39 @@ describe('LogsSection', () => {
     await type(inputFor('Max containers across all tabs'), '150');
     await leave(inputFor('Max containers across all tabs'));
 
-    expect(prefs.setBufferSize).toHaveBeenCalledWith(2500);
-    expect(prefs.setPerScopeLimit).toHaveBeenCalledWith(30);
-    expect(prefs.setGlobalLimit).toHaveBeenCalledWith(150);
+    expect(saved()).toEqual([
+      { key: 'objPanelLogsBufferMaxSize', value: 2500 },
+      { key: 'objPanelLogsTargetPerScopeLimit', value: 30 },
+      { key: 'objPanelLogsTargetGlobalLimit', value: 150 },
+    ]);
     expect(inputFor('Buffer size').value).toBe('2500');
   });
 
-  it('shows the value the preference owner settles on, such as after a failed save', async () => {
+  it('shows the saved value again when a save fails', async () => {
+    const failure = new Error('save failed');
+    app.backend.answer('UpdateAppPreferences', () => {
+      throw failure;
+    });
+
     await type(inputFor('Buffer size'), '2500');
     await leave(inputFor('Buffer size'));
 
-    await act(async () => {
-      setAppPreferencesForTesting({ objPanelLogsBufferMaxSize: 1000 });
-    });
-
+    expect(saved()).toEqual([{ key: 'objPanelLogsBufferMaxSize', value: 2500 }]);
     expect(inputFor('Buffer size').value).toBe('1000');
+    expect(app.errors.take((record) => record.error === failure)).toEqual([
+      expect.objectContaining({ kinds: ['operational'] }),
+    ]);
   });
 
   it('switches API timestamps to the local time zone', async () => {
     const toggle = requireValue(
-      container.querySelector<HTMLButtonElement>('button[role="switch"]'),
+      view.container.querySelector<HTMLButtonElement>('button[aria-label="Use local time zone"]'),
       'local time zone switch'
     );
     await act(async () => toggle.click());
+    await app.settle();
 
-    expect(prefs.setUseLocalTimeZone).toHaveBeenCalledWith(true);
+    expect(saved()).toEqual([{ key: 'objPanelLogsApiTimestampUseLocalTimeZone', value: true }]);
     expect(toggle.getAttribute('aria-checked')).toBe('true');
   });
 
@@ -163,14 +121,14 @@ describe('LogsSection', () => {
 
     await type(format, 'HH:mm [x');
     await leave(format);
-    expect(prefs.setTimestampFormat).not.toHaveBeenCalled();
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain('[brackets]');
+    expect(saved()).toEqual([]);
+    expect(view.container.querySelector('[role="alert"]')?.textContent).toContain('[brackets]');
     expect(format.getAttribute('aria-invalid')).toBe('true');
 
     await type(format, ' HH:mm:ss ');
     await leave(format);
-    expect(prefs.setTimestampFormat).toHaveBeenCalledWith('HH:mm:ss');
-    expect(container.querySelector('[role="alert"]')).toBeNull();
-    expect(container.textContent).toContain('12:34:55');
+    expect(saved()).toEqual([{ key: 'objPanelLogsApiTimestampFormat', value: 'HH:mm:ss' }]);
+    expect(view.container.querySelector('[role="alert"]')).toBeNull();
+    expect(view.container.textContent).toContain('12:34:55');
   });
 });

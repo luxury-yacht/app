@@ -1,154 +1,37 @@
 /**
  * frontend/src/ui/favorites/FavMenuDropdown.test.tsx
  *
- * Tests for the FavMenuDropdown component.
- * Covers: render, dropdown toggle, empty state, navigation on click,
- * and hover action visibility.
+ * The header's Favorites menu: it opens from its trigger by click or keyboard,
+ * lists the backend's saved favorites in order, opens a favorite's view (by
+ * click or Enter) in the active cluster or, for a pinned favorite, in its own
+ * cluster, deletes and reorders favorites through the backend without
+ * navigating, and closes on a second click or Escape with focus returned to
+ * its trigger. Runs in the full app, where the header renders it, with the
+ * real favorites, kubeconfig, view-state, and namespace owners over a faked
+ * backend (test-utils/appState).
  */
 
-import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { Favorite } from '@/core/persistence/favorites';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
 
-// ---------------------------------------------------------------------------
-// Mocks — must be declared before importing the component under test.
-// ---------------------------------------------------------------------------
+const app = installAppStateHarness();
+let view: MountedApp;
+let alpha: TestCluster;
+let beta: TestCluster;
 
-const mockFavorites: Favorite[] = [];
-const mockDeleteFavorite = vi.fn().mockResolvedValue(undefined);
-const mockReorderFavorites = vi.fn().mockResolvedValue(undefined);
-const mockSetPendingFavorite = vi.fn();
-
-vi.mock('@core/contexts/FavoritesContext', () => ({
-  useFavorites: () => ({
-    favorites: mockFavorites,
-    addFavorite: vi.fn().mockResolvedValue(undefined),
-    updateFavorite: vi.fn().mockResolvedValue(undefined),
-    deleteFavorite: mockDeleteFavorite,
-    reorderFavorites: mockReorderFavorites,
-    pendingFavorite: null,
-    setPendingFavorite: mockSetPendingFavorite,
-  }),
-}));
-
-const mockSetSelectedKubeconfigs = vi.fn().mockResolvedValue(undefined);
-const mockOpenKubeconfig = vi.fn().mockResolvedValue(undefined);
-const mockSetActiveKubeconfig = vi.fn();
-
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({
-    selectedKubeconfigs: ['cluster-a:ctx'],
-    selectedKubeconfig: 'cluster-a:ctx',
-    selectedClusterId: 'cluster-a:ctx',
-    selectedClusterName: 'cluster-a',
-    selectedClusterIds: ['cluster-a:ctx'],
-    kubeconfigsLoading: false,
-    setSelectedKubeconfigs: mockSetSelectedKubeconfigs,
-    openKubeconfig: mockOpenKubeconfig,
-    setActiveKubeconfig: mockSetActiveKubeconfig,
-    getClusterMeta: vi.fn(() => ({ id: '', name: '' })),
-    kubeconfigs: [],
-    loadKubeconfigs: vi.fn().mockResolvedValue(undefined),
-  }),
-}));
-
-vi.mock('@core/contexts/ViewStateContext', () => ({
-  useViewState: () => ({
-    viewType: 'namespace',
-    previousView: 'overview',
-    activeNamespaceTab: 'workloads',
-    activeClusterTab: null,
-    setViewType: vi.fn(),
-    setPreviousView: vi.fn(),
-    setActiveNamespaceTab: vi.fn(),
-    setActiveClusterView: vi.fn(),
-    navigateToClusterView: vi.fn(),
-    navigateToNamespace: vi.fn(),
-    onNamespaceSelect: vi.fn(),
-    onClusterObjectsClick: vi.fn(),
-    getClusterNavigationState: vi.fn(),
-    // sidebar state
-    isSidebarVisible: true,
-    sidebarWidth: 250,
-    isResizing: false,
-    sidebarSelection: null,
-    toggleSidebar: vi.fn(),
-    setSidebarWidth: vi.fn(),
-    setIsResizing: vi.fn(),
-    setSidebarSelection: vi.fn(),
-    // object panel state
-    showObjectPanel: false,
-    objectPanelState: null,
-    toggleObjectPanel: vi.fn(),
-    openObjectPanel: vi.fn(),
-    closeObjectPanel: vi.fn(),
-    navigationHistory: [],
-    navigateBack: vi.fn(),
-    navigateForward: vi.fn(),
-    canNavigateBack: false,
-    canNavigateForward: false,
-    // modal state
-    isSettingsOpen: false,
-    setIsSettingsOpen: vi.fn(),
-    isAboutOpen: false,
-    setIsAboutOpen: vi.fn(),
-  }),
-}));
-
-vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
-  useNamespace: () => ({
-    namespaces: [
-      {
-        name: 'default',
-        scope: '',
-        status: 'Active',
-        details: '',
-        age: '',
-        hasWorkloads: true,
-        workloadsUnknown: false,
-        resourceVersion: '1',
-      },
-      {
-        name: 'kube-system',
-        scope: '',
-        status: 'Active',
-        details: '',
-        age: '',
-        hasWorkloads: true,
-        workloadsUnknown: false,
-        resourceVersion: '1',
-      },
-    ],
-    selectedNamespace: 'default',
-    namespaceLoading: false,
-    namespaceRefreshing: false,
-    setSelectedNamespace: vi.fn(),
-    loadNamespaces: vi.fn().mockResolvedValue(undefined),
-    refreshNamespaces: vi.fn().mockResolvedValue(undefined),
-    getClusterNamespace: vi.fn(),
-  }),
-}));
-
-vi.mock('@/core/refresh', () => ({
-  refreshOrchestrator: {},
-}));
-
-// Import the component after all mocks are established.
-import FavMenuDropdown from './FavMenuDropdown';
-
-// ---------------------------------------------------------------------------
-// Test helpers
-// ---------------------------------------------------------------------------
-
-const makeFavorite = (overrides: Partial<Favorite> = {}): Favorite => ({
+const favorite = (overrides: Partial<Favorite> = {}): Favorite => ({
   id: 'fav-1',
-  name: 'My Pods',
+  name: 'Default config',
   clusterSelection: '',
   viewType: 'namespace',
-  view: 'pods',
+  view: 'config',
   namespace: 'default',
   filters: {
     search: '',
@@ -162,374 +45,180 @@ const makeFavorite = (overrides: Partial<Favorite> = {}): Favorite => ({
   ...overrides,
 });
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
+const start = async (saved: Favorite[]) => {
+  app.backend.answer('GetFavorites', () => saved);
+  view = await app.mountApp();
+};
+
+const navigation = () => requireValue(view.owners().viewState, 'workspace navigation');
+const trigger = () =>
+  requireValue(
+    view.container.querySelector<HTMLButtonElement>('button[aria-label="Favorites"]'),
+    'the Favorites trigger'
+  );
+const menu = () => view.container.querySelector<HTMLElement>('.fav-dropdown-anchor [role="menu"]');
+const rows = () => Array.from(menu()?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+const rowNamed = (name: string) =>
+  requireValue(
+    rows().find((row) => row.textContent?.includes(name)),
+    `the ${name} favorite row`
+  );
+const actionIn = (row: HTMLElement, title: string) =>
+  requireValue(row.querySelector<HTMLButtonElement>(`button[title="${title}"]`), title);
+
+const press = async (target: HTMLElement, key: string) => {
+  const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+  await act(async () => {
+    target.focus();
+    target.dispatchEvent(event);
+  });
+  await app.settle();
+  return event;
+};
+
+const click = async (target: HTMLElement) => {
+  await act(async () => target.click());
+  await app.settle();
+};
+
+const openMenu = async () => {
+  await click(trigger());
+  requireValue(menu(), 'the open Favorites menu');
+};
+
+beforeEach(() => {
+  alpha = app.cluster({ name: 'dev', context: 'alpha' });
+  beta = app.cluster({ name: 'dev', context: 'beta' });
+  app.namespaces(alpha, ['default']);
+  app.namespaces(beta, ['default', 'other-team']);
+  for (const cluster of [alpha, beta]) {
+    app.startScreen(cluster);
+    app.serveTable(cluster, 'namespace-config');
+  }
+});
 
 describe('FavMenuDropdown', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  it('opens from keyboard activation on its trigger', async () => {
+    await start([]);
 
-  const renderComponent = async () => {
-    await act(async () => {
-      root.render(<FavMenuDropdown />);
-      await Promise.resolve();
-    });
-  };
+    await press(trigger(), 'Enter');
 
-  // Escape-to-close relies on the keyboard-surface registry, which only exists
-  // inside a KeyboardProvider (the shell always provides one).
-  const renderWithKeyboard = async () => {
-    await act(async () => {
-      root.render(
-        <KeyboardProvider>
-          <FavMenuDropdown />
-        </KeyboardProvider>
-      );
-      await Promise.resolve();
-    });
-  };
-
-  const clickButton = async () => {
-    const btn = container.querySelector<HTMLElement>('[aria-label="Favorites"]');
-    await act(async () => {
-      requireValue(btn, 'expected test value in FavMenuDropdown.test.tsx').click();
-      await Promise.resolve();
-    });
-  };
-
-  beforeEach(() => {
-    // Reset favorites to empty by default; individual tests override via splice.
-    mockFavorites.length = 0;
-    mockDeleteFavorite.mockClear();
-    mockReorderFavorites.mockClear();
-    mockSetPendingFavorite.mockClear();
-    mockSetSelectedKubeconfigs.mockClear();
-    mockSetActiveKubeconfig.mockClear();
-
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
+    expect(menu()).not.toBeNull();
   });
 
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
+  it('lists the saved favorites in their saved order', async () => {
+    await start([
+      favorite({ id: 'fav-1', name: 'Default config' }),
+      favorite({ id: 'fav-2', name: 'Nodes', viewType: 'cluster', view: 'nodes', order: 1 }),
+    ]);
+
+    await openMenu();
+
+    expect(rows().map((row) => row.querySelector('.fav-dropdown-name')?.textContent)).toEqual([
+      'Default config',
+      'Nodes',
+    ]);
   });
 
-  // -----------------------------------------------------------------------
-  // 1. Renders the heart button
-  // -----------------------------------------------------------------------
+  it('opens a favorite’s view in the active cluster and closes the menu', async () => {
+    await start([favorite()]);
+    await openMenu();
 
-  it('opens the dropdown from keyboard activation on the trigger', async () => {
-    await renderComponent();
+    await click(rowNamed('Default config'));
 
-    const trigger = container.querySelector<HTMLElement>('[aria-label="Favorites"]');
-    expect(trigger).toBeTruthy();
-
-    await act(async () => {
-      requireValue(trigger, 'expected test value in FavMenuDropdown.test.tsx').dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
-      );
-      await Promise.resolve();
-    });
-
-    expect(container.querySelector('.fav-dropdown-panel')).toBeTruthy();
+    expect(view.owners().kubeconfig.selectedClusterId).toBe(alpha.clusterId);
+    expect(navigation().viewType).toBe('namespace');
+    expect(navigation().activeNamespaceTab).toBe('config');
+    expect(view.owners().namespace.selectedNamespace).toBe('default');
+    expect(menu()).toBeNull();
   });
 
-  // -----------------------------------------------------------------------
-  // 2. Shows dropdown with favorites on click
-  // -----------------------------------------------------------------------
+  it('opens a favorite from its focused row with Enter', async () => {
+    await start([favorite()]);
+    await openMenu();
 
-  it('shows dropdown with favorites on click', async () => {
-    mockFavorites.push(
-      makeFavorite({ id: 'fav-1', name: 'My Pods' }),
-      makeFavorite({
-        id: 'fav-2',
-        name: 'Kube System Events',
-        view: 'events',
-        namespace: 'kube-system',
-      })
-    );
+    await press(rowNamed('Default config'), 'Enter');
 
-    await renderComponent();
-
-    // Dropdown not visible before click.
-    expect(container.querySelector('.fav-dropdown-panel')).toBeNull();
-
-    await clickButton();
-
-    const panel = container.querySelector('.fav-dropdown-panel');
-    expect(panel).toBeTruthy();
-
-    const rows = container.querySelectorAll('.fav-dropdown-row');
-    expect(rows.length).toBe(2);
-
-    const names = Array.from(container.querySelectorAll('.fav-dropdown-name'));
-    expect(names.map((n) => n.textContent)).toEqual(['My Pods', 'Kube System Events']);
+    expect(navigation().viewType).toBe('namespace');
+    expect(navigation().activeNamespaceTab).toBe('config');
   });
 
-  // -----------------------------------------------------------------------
-  // 3. Shows empty state when no favorites
-  // -----------------------------------------------------------------------
-
-  it('shows empty state when no favorites', async () => {
-    await renderComponent();
-    await clickButton();
-
-    const empty = container.querySelector('.fav-dropdown-empty');
-    expect(empty).toBeTruthy();
-    expect(
-      requireValue(empty, 'expected test value in FavMenuDropdown.test.tsx').textContent
-    ).toContain('No favorites yet');
-  });
-
-  // -----------------------------------------------------------------------
-  // 4. Clicking a favorite triggers navigation
-  // -----------------------------------------------------------------------
-
-  it('allows a clusterId-only favorite even when its namespace is absent from the active cluster', async () => {
-    const favorite = makeFavorite({
-      clusterId: 'cluster-other:ctx',
-      clusterSelection: '',
-      namespace: 'other-team',
-    });
-    mockFavorites.push(favorite);
-    await renderComponent();
-    await clickButton();
-    const row = requireValue(
-      container.querySelector<HTMLElement>('[role="menuitem"]'),
-      'favorite row'
-    );
+  it('opens a pinned favorite in its own cluster even when the active cluster lacks its namespace', async () => {
+    await start([
+      favorite({
+        name: 'Other team config',
+        namespace: 'other-team',
+        clusterId: beta.clusterId,
+        clusterSelection: beta.selection,
+      }),
+    ]);
+    await openMenu();
+    const row = rowNamed('Other team config');
     expect(row.getAttribute('aria-disabled')).toBe('false');
-    await act(async () => row.click());
-    expect(mockSetPendingFavorite).toHaveBeenCalledWith(favorite);
+
+    await click(row);
+
+    expect(view.owners().kubeconfig.selectedClusterId).toBe(beta.clusterId);
+    expect(navigation().viewType).toBe('namespace');
+    expect(view.owners().namespace.selectedNamespace).toBe('other-team');
   });
 
-  it('clicking a favorite triggers navigation', async () => {
-    mockFavorites.push(
-      makeFavorite({
-        id: 'fav-1',
-        name: 'My Pods',
-        viewType: 'namespace',
-        view: 'pods',
-        namespace: 'default',
-      })
-    );
+  it('deletes a favorite through the backend without navigating', async () => {
+    app.backend.answer('DeleteFavorite', () => undefined);
+    await start([favorite({ id: 'fav-1' }), favorite({ id: 'fav-2', name: 'Second', order: 1 })]);
+    await openMenu();
 
-    await renderComponent();
-    await clickButton();
+    await click(actionIn(rowNamed('Default config'), 'Delete favorite'));
 
-    const row = container.querySelector<HTMLDivElement>('.fav-dropdown-row');
-    expect(row).toBeTruthy();
-
-    await act(async () => {
-      requireValue(row, 'expected test value in FavMenuDropdown.test.tsx').click();
-      await Promise.resolve();
-    });
-
-    // navigateToFavorite sets the pending favorite; the FavoritesContext
-    // effect handles the actual view/namespace/sidebar navigation.
-    expect(mockSetPendingFavorite).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: 'fav-1',
-        viewType: 'namespace',
-        view: 'pods',
-        namespace: 'default',
-      })
-    );
-
-    // Dropdown should close after navigation.
-    expect(container.querySelector('.fav-dropdown-panel')).toBeNull();
+    expect(app.backend.calls('DeleteFavorite')).toEqual([['fav-1']]);
+    expect(rows().map((row) => row.querySelector('.fav-dropdown-name')?.textContent)).toEqual([
+      'Second',
+    ]);
+    expect(navigation().viewType).toBe('overview');
   });
 
-  it('navigates from a favorite row with keyboard activation', async () => {
-    mockFavorites.push(
-      makeFavorite({
-        id: 'fav-1',
-        name: 'My Pods',
-        viewType: 'namespace',
-        view: 'pods',
-        namespace: 'default',
-      })
-    );
+  it('reorders favorites from their buttons, by click or keyboard, without navigating', async () => {
+    app.backend.answer('SetFavoriteOrder', () => undefined);
+    await start([
+      favorite({ id: 'first', name: 'First' }),
+      favorite({ id: 'second', name: 'Second', order: 1 }),
+    ]);
+    await openMenu();
 
-    await renderComponent();
-    await clickButton();
-
-    const row = requireValue(
-      container.querySelector<HTMLElement>('.fav-dropdown-row'),
-      'expected keyboard-focusable favorite row'
-    );
-    await act(async () => {
-      row.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
-      );
-      await Promise.resolve();
-    });
-
-    expect(mockSetPendingFavorite).toHaveBeenCalledWith(expect.objectContaining({ id: 'fav-1' }));
-  });
-
-  // -----------------------------------------------------------------------
-  // 5. Hover actions appear on mouse enter
-  // -----------------------------------------------------------------------
-
-  it('hover actions appear on mouse enter', async () => {
-    mockFavorites.push(makeFavorite({ id: 'fav-1', name: 'My Pods' }));
-
-    await renderComponent();
-    await clickButton();
-
-    const row = container.querySelector<HTMLDivElement>('.fav-dropdown-row');
-    expect(row).toBeTruthy();
-
-    // The CSS class fav-dropdown-hover-actions is present in the DOM — visibility
-    // is controlled by the CSS rule `.fav-dropdown-row:hover .fav-dropdown-hover-actions`.
-    // We verify the hover actions element exists and contains the expected buttons.
-    const actions = requireValue(
-      row,
-      'expected test value in FavMenuDropdown.test.tsx'
-    ).querySelector('.fav-dropdown-hover-actions');
-    expect(actions).toBeTruthy();
-
-    const buttons = requireValue(
-      actions,
-      'expected test value in FavMenuDropdown.test.tsx'
-    ).querySelectorAll('button');
-    // 3 action buttons: up, down, delete
-    expect(buttons.length).toBe(3);
-    expect(buttons[0].title).toBe('Move up');
-    expect(buttons[1].title).toBe('Move down');
-    expect(buttons[2].title).toBe('Delete favorite');
-  });
-
-  it('delete button deletes the favorite without navigating', async () => {
-    mockFavorites.push(makeFavorite({ id: 'fav-1', name: 'My Pods' }));
-
-    await renderComponent();
-    await clickButton();
-
-    const deleteButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
-      (button) => button.title === 'Delete favorite'
-    );
-
-    expect(deleteButton).toBeTruthy();
-
-    await act(async () => {
-      requireValue(deleteButton, 'expected test value in FavMenuDropdown.test.tsx').click();
-      await Promise.resolve();
-    });
-
-    expect(mockDeleteFavorite).toHaveBeenCalledWith('fav-1');
-    expect(mockSetPendingFavorite).not.toHaveBeenCalled();
-  });
-
-  // -----------------------------------------------------------------------
-  // 6. Footer legend is rendered
-  // -----------------------------------------------------------------------
-
-  // -----------------------------------------------------------------------
-  // 8. Toggle closes the dropdown on second click
-  // -----------------------------------------------------------------------
-
-  it('closes the dropdown on second button click', async () => {
-    await renderComponent();
-
-    await clickButton();
-    expect(container.querySelector('.fav-dropdown-panel')).toBeTruthy();
-
-    await clickButton();
-    expect(container.querySelector('.fav-dropdown-panel')).toBeNull();
-  });
-
-  // -----------------------------------------------------------------------
-  // 9. Escape closes the dropdown when it is open
-  // -----------------------------------------------------------------------
-
-  it('keeps reorder buttons independent of their favorite row activation', async () => {
-    mockFavorites.push(makeFavorite({ id: 'first' }), makeFavorite({ id: 'second' }));
-    await renderWithKeyboard();
-    await clickButton();
-    const up = requireValue(
-      container.querySelectorAll<HTMLElement>('[title="Move up"]')[1],
-      'move up'
-    );
-    const down = requireValue(
-      container.querySelector<HTMLElement>('[title="Move down"]'),
-      'move down'
-    );
-    for (const [button, key] of [
-      [up, 'Enter'],
-      [down, ' '],
+    // Enter and Space on a reorder button belong to the button, not its row.
+    for (const [name, title, key] of [
+      ['Second', 'Move up', 'Enter'],
+      ['Second', 'Move down', ' '],
     ] as const) {
-      const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
-      await act(async () => {
-        button.focus();
-        button.dispatchEvent(event);
-      });
+      const button = actionIn(rowNamed(name), title);
+      const event = await press(button, key);
       expect(event.defaultPrevented).toBe(false);
-      await act(async () => button.click());
+      await click(button);
     }
-    expect(mockReorderFavorites).toHaveBeenNthCalledWith(1, ['second', 'first']);
-    expect(mockReorderFavorites).toHaveBeenNthCalledWith(2, ['second', 'first']);
-    expect(mockSetPendingFavorite).not.toHaveBeenCalled();
+
+    expect(app.backend.calls('SetFavoriteOrder')).toEqual([
+      [['second', 'first']],
+      [['first', 'second']],
+    ]);
+    expect(navigation().viewType).toBe('overview');
   });
 
-  it('returns focus from a favorite action to its trigger on Escape', async () => {
-    mockFavorites.push(makeFavorite());
-    await renderWithKeyboard();
-    await clickButton();
-    const action = requireValue(
-      container.querySelector<HTMLElement>('.fav-dropdown-action-btn'),
-      'favorite action'
-    );
-    await act(async () => {
-      action.focus();
-      action.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
-      );
-    });
-    expect(container.querySelector('.fav-dropdown-panel')).toBeNull();
-    expect(document.activeElement).toBe(container.querySelector('[aria-label="Favorites"]'));
+  it('closes on a second click of its trigger', async () => {
+    await start([]);
+    await openMenu();
+
+    await click(trigger());
+
+    expect(menu()).toBeNull();
   });
 
-  it('closes the dropdown when Escape is pressed', async () => {
-    await renderWithKeyboard();
+  it('closes on Escape from a favorite action and returns focus to its trigger', async () => {
+    await start([favorite()]);
+    await openMenu();
 
-    await clickButton();
-    expect(container.querySelector('.fav-dropdown-panel')).toBeTruthy();
+    await press(actionIn(rowNamed('Default config'), 'Move up'), 'Escape');
 
-    // Focus stays on the trigger after opening, so Escape targets an element
-    // inside the menu's keyboard surface.
-    const trigger = container.querySelector<HTMLElement>('[aria-label="Favorites"]');
-    expect(trigger).toBeTruthy();
-    requireValue(trigger, 'expected test value in FavMenuDropdown.test.tsx').focus();
-
-    await act(async () => {
-      requireValue(trigger, 'expected test value in FavMenuDropdown.test.tsx').dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
-      );
-      await Promise.resolve();
-    });
-
-    expect(container.querySelector('.fav-dropdown-panel')).toBeNull();
-  });
-
-  it('leaves the dropdown closed unaffected by Escape', async () => {
-    await renderWithKeyboard();
-
-    expect(container.querySelector('.fav-dropdown-panel')).toBeNull();
-
-    await act(async () => {
-      document.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
-      );
-      await Promise.resolve();
-    });
-
-    expect(container.querySelector('.fav-dropdown-panel')).toBeNull();
+    expect(menu()).toBeNull();
+    expect(document.activeElement).toBe(trigger());
   });
 });

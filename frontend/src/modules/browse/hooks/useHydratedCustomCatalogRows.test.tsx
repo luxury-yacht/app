@@ -1,34 +1,58 @@
+/**
+ * frontend/src/modules/browse/hooks/useHydratedCustomCatalogRows.test.tsx
+ *
+ * Verifies custom-resource row hydration: catalog membership always wins, a
+ * row keeps its details only while the same object (cluster, identity, UID)
+ * re-hydrates, late or failed reads never publish stale details, a paused
+ * auto-refresh skips the page read, and the export path joins hydrated rows by
+ * complete identity. The hook runs inside the production shell over a faked
+ * backend (test-utils/appState): the batch read is the HydrateCatalogCustomRows
+ * RPC.
+ */
+
 import { act, useLayoutEffect } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { CatalogItem } from '@/core/refresh/types';
+import { setAutoRefreshEnabled } from '@/core/settings/appPreferences';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import type { CatalogBackedCustomResourceRow } from './customCatalogRowAdapter';
 import {
   hydrateCustomCatalogRows,
   useHydratedCustomCatalogRows,
 } from './useHydratedCustomCatalogRows';
 
-const mocks = vi.hoisted(() => ({ read: vi.fn(), report: vi.fn(), blocked: false }));
-vi.mock('@core/data-access', () => ({
-  readHydratedCustomCatalogRows: mocks.read,
-  requestData: async ({ read }: { read: () => Promise<unknown> }) =>
-    mocks.blocked ? { status: 'blocked' } : { status: 'executed', data: await read() },
-}));
-vi.mock('@/utils/errorHandler', () => ({ reportOperationalError: mocks.report }));
+const app = installAppStateHarness();
+let dev: TestCluster;
+let stg: TestCluster;
+let view: MountedApp;
+let rows: CatalogBackedCustomResourceRow[];
+let commits: CatalogBackedCustomResourceRow[][];
+
+type HydratedRow = { ref: CatalogItem['ref']; argoCD: { project: string } };
 
 const deferredRows = () => {
-  let resolve: (value: unknown[]) => void = () => undefined;
+  let resolve: (value: HydratedRow[]) => void = () => undefined;
   let reject: (error: Error) => void = () => undefined;
-  const promise = new Promise<unknown[]>((resolvePromise, rejectPromise) => {
+  const promise = new Promise<HydratedRow[]>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
     reject = rejectPromise;
   });
   return { promise, resolve, reject };
 };
 
+/** The backend's next answers to the batch read. */
+const answerHydration = (answer: () => HydratedRow[] | Promise<HydratedRow[]>) => {
+  app.backend.answer('HydrateCatalogCustomRows', answer as never);
+};
+const hydrationReads = () => app.backend.calls('HydrateCatalogCustomRows');
+
 const item = (name: string, ref: Partial<CatalogItem['ref']> = {}): CatalogItem => ({
   ref: {
-    clusterId: 'cluster-1',
+    clusterId: dev.clusterId,
     group: 'argoproj.io',
     version: 'v1alpha1',
     kind: 'Application',
@@ -42,13 +66,12 @@ const item = (name: string, ref: Partial<CatalogItem['ref']> = {}): CatalogItem 
   scope: 'Namespace',
   creationTimestamp: '2026-01-01T00:00:00Z',
 });
-const hydrated = (row: CatalogItem, project = 'default') => ({ ref: row.ref, argoCD: { project } });
+const hydrated = (row: CatalogItem, project = 'default'): HydratedRow => ({
+  ref: row.ref,
+  argoCD: { project },
+});
 
-let root: Root;
-let container: HTMLDivElement;
-let rows: CatalogBackedCustomResourceRow[];
-let commits: CatalogBackedCustomResourceRow[][];
-function Harness({ items, clusterId = 'cluster-1' }: { items: CatalogItem[]; clusterId?: string }) {
+function Rows({ items, clusterId }: Readonly<{ items: CatalogItem[]; clusterId: string }>) {
   rows = useHydratedCustomCatalogRows(clusterId, items);
   const committedRows = rows;
   useLayoutEffect(() => {
@@ -58,106 +81,120 @@ function Harness({ items, clusterId = 'cluster-1' }: { items: CatalogItem[]; clu
     <output>{rows.map((row) => `${row.ref.name}:${row.argoCD?.project ?? '-'}`).join(',')}</output>
   );
 }
-const render = async (items: CatalogItem[], clusterId?: string) => {
-  await act(async () => root.render(<Harness items={items} clusterId={clusterId} />));
-};
+const showRows = (items: CatalogItem[], clusterId = dev.clusterId) =>
+  view.show(<Rows items={items} clusterId={clusterId} />);
+const text = () => view.container.querySelector('output')?.textContent;
 
-beforeEach(() => {
-  container = document.createElement('div');
-  document.body.appendChild(container);
-  root = createRoot(container);
+const operationalReports = (action: string) =>
+  app.errors.take(
+    (record) => record.kinds.includes('operational') && record.context?.action === action
+  );
+
+beforeEach(async () => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  stg = app.cluster({ name: 'stg', context: 'beta' });
+  app.namespaces(dev, ['argocd']);
+  app.namespaces(stg, ['argocd']);
+  // Mirrors backend/preferences_settings.go UpdateAppPreferences.
+  app.backend.answer('UpdateAppPreferences', (request) => ({
+    settings: null,
+    changedKeys: (request.changes ?? []).map((change) => change.key),
+  }));
   rows = [];
   commits = [];
-  mocks.blocked = false;
-  mocks.read.mockReset();
-  mocks.report.mockReset();
-});
-afterEach(async () => {
-  await act(async () => root.unmount());
-  container.remove();
+  view = await app.render(null);
 });
 
 describe('custom resource page hydration', () => {
   it('keeps current details through background reads and failures, then applies recovered values and deletions', async () => {
-    const app = item('app');
+    const argoApp = item('app');
     const removed = item('removed');
-    mocks.read.mockResolvedValue([hydrated(app), hydrated(removed)]);
-    await render([app, removed]);
-    expect(container.textContent).toBe('app:default,removed:default');
+    answerHydration(() => [hydrated(argoApp), hydrated(removed)]);
+    await showRows([argoApp, removed]);
+    expect(text()).toBe('app:default,removed:default');
 
     const refresh = deferredRows();
-    mocks.read.mockReturnValue(refresh.promise);
+    answerHydration(() => refresh.promise);
     commits = [];
-    await render([{ ...app, resourceVersion: '2' }]);
-    expect(container.textContent).toBe('app:default');
+    await showRows([{ ...argoApp, resourceVersion: '2' }]);
+    expect(text()).toBe('app:default');
     expect(
-      commits.every((page) => page.length === 1 && page[0].argoCD?.project === 'default')
+      commits.every((page) => page.length === 1 && page[0]?.argoCD?.project === 'default')
     ).toBe(true);
     await act(async () => refresh.reject(new Error('temporarily unavailable')));
-    expect(container.textContent).toBe('app:default');
-    expect(mocks.report).toHaveBeenCalledOnce();
+    await app.settle();
+    expect(text()).toBe('app:default');
+    expect(operationalReports('hydrateCatalogRows')).toHaveLength(1);
 
-    mocks.blocked = true;
-    await render([{ ...app, resourceVersion: '3' }]);
-    expect(container.textContent).toBe('app:default');
+    // Auto-refresh off pauses the passive page read; the details stay up.
+    await act(async () => setAutoRefreshEnabled(false));
+    const readsWhilePaused = hydrationReads().length;
+    await showRows([{ ...argoApp, resourceVersion: '3' }]);
+    expect(hydrationReads()).toHaveLength(readsWhilePaused);
+    expect(text()).toBe('app:default');
 
-    mocks.blocked = false;
-    mocks.read.mockResolvedValue([hydrated(app, 'recovered')]);
-    await render([{ ...app, resourceVersion: '4' }]);
-    expect(container.textContent).toBe('app:recovered');
-    await render([]);
+    await act(async () => setAutoRefreshEnabled(true));
+    answerHydration(() => [hydrated(argoApp, 'recovered')]);
+    await showRows([{ ...argoApp, resourceVersion: '4' }]);
+    expect(text()).toBe('app:recovered');
+
+    await showRows([]);
     expect(rows).toEqual([]);
   });
 
   it('never publishes a previous page or late read after navigation, including same-name recreation and another cluster', async () => {
-    const app = item('same-name');
-    mocks.read.mockResolvedValue([hydrated(app)]);
-    await render([app]);
+    const argoApp = item('same-name');
+    answerHydration(() => [hydrated(argoApp)]);
+    await showRows([argoApp]);
 
     const stale = deferredRows();
-    mocks.read.mockReturnValue(stale.promise);
-    await render([{ ...app, resourceVersion: '2' }]);
+    answerHydration(() => stale.promise);
+    await showRows([{ ...argoApp, resourceVersion: '2' }]);
 
     const recreated = item('same-name', { uid: 'replacement' });
     const fresh = deferredRows();
-    mocks.read.mockReturnValue(fresh.promise);
+    answerHydration(() => fresh.promise);
     commits = [];
-    await render([recreated]);
-    expect(commits.every((page) => page[0].ref.uid === 'replacement' && !page[0].argoCD)).toBe(
+    await showRows([recreated]);
+    expect(commits.every((page) => page[0]?.ref.uid === 'replacement' && !page[0].argoCD)).toBe(
       true
     );
-    await act(async () => stale.resolve([hydrated(app, 'obsolete')]));
-    expect(container.textContent).toBe('same-name:-');
+    await act(async () => stale.resolve([hydrated(argoApp, 'obsolete')]));
+    expect(text()).toBe('same-name:-');
     await act(async () => fresh.resolve([hydrated(recreated, 'new')]));
-    expect(container.textContent).toBe('same-name:new');
+    expect(text()).toBe('same-name:new');
 
-    const otherCluster = item('same-name', { clusterId: 'cluster-2' });
-    mocks.read.mockReturnValue(deferredRows().promise);
+    const otherCluster = item('same-name', { clusterId: stg.clusterId });
+    answerHydration(() => deferredRows().promise);
     commits = [];
-    await render([otherCluster], 'cluster-2');
-    expect(commits.every((page) => page[0].ref.clusterId === 'cluster-2' && !page[0].argoCD)).toBe(
-      true
-    );
-    expect(mocks.read).toHaveBeenLastCalledWith('cluster-2', [
-      expect.objectContaining(otherCluster.ref),
+    await showRows([otherCluster], stg.clusterId);
+    expect(
+      commits.every((page) => page[0]?.ref.clusterId === stg.clusterId && !page[0].argoCD)
+    ).toBe(true);
+    expect(hydrationReads().slice(-1)[0]).toEqual([
+      stg.clusterId,
+      [expect.objectContaining(otherCluster.ref)],
     ]);
-    await render([], 'cluster-2');
+    await showRows([], stg.clusterId);
     expect(rows).toEqual([]);
   });
 });
 
 describe('custom resource export hydration', () => {
   it('joins exported rows by complete object identity and falls back when the batch read fails', async () => {
-    const app = item('app');
-    const otherCluster = item('app', { clusterId: 'cluster-2' });
-    mocks.read.mockResolvedValue([hydrated(otherCluster, 'wrong-cluster'), hydrated(app)]);
-    const exported = await hydrateCustomCatalogRows('cluster-1', [app]);
-    expect(exported[0].argoCD?.project).toBe('default');
-    mocks.read.mockRejectedValue(new Error('unavailable'));
-    expect((await hydrateCustomCatalogRows('cluster-1', [app]))[0].ref).toEqual(app.ref);
-    expect(mocks.report).toHaveBeenCalledOnce();
-    mocks.blocked = true;
-    expect((await hydrateCustomCatalogRows('cluster-1', [app]))[0].argoCD).toBeUndefined();
-    expect(await hydrateCustomCatalogRows('cluster-1', [])).toEqual([]);
+    const argoApp = item('app');
+    const otherCluster = item('app', { clusterId: stg.clusterId });
+    answerHydration(() => [hydrated(otherCluster, 'wrong-cluster'), hydrated(argoApp)]);
+
+    const exported = await hydrateCustomCatalogRows(dev.clusterId, [argoApp]);
+    expect(exported[0]?.argoCD?.project).toBe('default');
+
+    answerHydration(() => {
+      throw new Error('unavailable');
+    });
+    const fallback = await hydrateCustomCatalogRows(dev.clusterId, [argoApp]);
+    expect(fallback[0]?.ref).toEqual(argoApp.ref);
+    expect(fallback[0]?.argoCD).toBeUndefined();
+    expect(operationalReports('hydrateCatalogExportRows')).toHaveLength(1);
   });
 });

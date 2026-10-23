@@ -69,7 +69,7 @@ const NO_ROW_KEYS: readonly string[] = [];
 /**
  * GridTable of namespace workloads; a workload's pods open under its row.
  */
-export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
+const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
   ({
     namespace,
     clusterId,

@@ -1,542 +1,162 @@
 /**
  * frontend/src/shared/components/tables/GridTableKeys.test.tsx
  *
- * Contract tests for GridTable filter-bar keyboard target discovery and order.
+ * Tab order inside a table's filter bar and at the table body's edge: Tab
+ * walks the filter controls in screen order, including a leading query facet,
+ * skips disabled toolbar buttons, and leaves the bar at its ends; Tab from the
+ * body is left to app navigation and drops the focused-row highlight. Runs the
+ * real GridTable inside the production shell (keyboard and zoom owners) with
+ * only the backend boundary faked (test-utils/appState).
  */
 
-import { ZoomProvider } from '@core/contexts/ZoomContext';
-import GridTableFiltersBar from '@shared/components/tables/GridTableFiltersBar';
-import { useGridTableKeyboardScopes } from '@shared/components/tables/GridTableKeys';
-import React, { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import GridTable, {
+  type GridColumnDefinition,
+  type GridTableFilterConfig,
+} from '@shared/components/tables/GridTable';
+import { act } from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { installAppStateHarness, type MountedApp } from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
 
-const registeredSurfaces: Array<{
-  kind: string;
-  onKeyDown?: (event: KeyboardEvent) => boolean | 'handled-no-prevent' | undefined;
-}> = [];
+interface Row {
+  id: string;
+  name: string;
+}
 
-// Mock the keyboard shortcuts hooks — we only need the rendered DOM.
-vi.mock('@ui/shortcuts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@ui/shortcuts')>();
-  return {
-    ...actual,
-    useSearchShortcutTarget: () => undefined,
-    useKeyboardContext: () => ({
-      registerShortcut: () => 'mock-id',
-      unregisterShortcut: () => undefined,
-      getAvailableShortcuts: () => [],
-      isShortcutAvailable: () => false,
-      setEnabled: () => undefined,
-      isEnabled: true,
-      registerSurface: () => 'mock-surface-id',
-      unregisterSurface: () => undefined,
-      dispatchNativeAction: () => false,
-      hasActiveBlockingSurface: () => false,
-    }),
-    useShortcuts: () => undefined,
-    useKeyboardSurface: (surface: {
-      kind: string;
-      onKeyDown?: (event: KeyboardEvent) => boolean | 'handled-no-prevent' | undefined;
-    }) => {
-      registeredSurfaces.push(surface);
-    },
-  };
+const rows: Row[] = ['a', 'b'].map((id) => ({ id: `cluster-a|${id}`, name: id }));
+const columns: GridColumnDefinition<Row>[] = [
+  { key: 'name', header: 'Name', render: (row) => row.name },
+];
+
+const app = installAppStateHarness();
+let view: MountedApp;
+
+beforeEach(async () => {
+  view = await app.render(null);
 });
 
-vi.mock('@core/backend-api', () => ({
-  GetZoomLevel: vi.fn().mockResolvedValue(100),
-  SetZoomLevel: vi.fn().mockResolvedValue(undefined),
-}));
+const showTable = (filters?: GridTableFilterConfig<Row>, data: Row[] = rows) =>
+  view.show(
+    <GridTable
+      data={data}
+      columns={columns}
+      keyExtractor={(row) => row.id}
+      filters={filters}
+      enableColumnVisibilityMenu={Boolean(filters)}
+      virtualization={{ enabled: false }}
+    />
+  );
 
-describe('GridTableKeys filter target selectors', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+const control = (selector: string) =>
+  requireValue(view.container.querySelector<HTMLElement>(selector), `expected ${selector}`);
 
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
+const SEARCH = '[data-gridtable-filter-role="search"] input';
+const KIND = '[data-gridtable-filter-role="kind"] .dropdown-trigger';
+const API_GROUPS = '[data-gridtable-filter-role="query-facet-apiGroups"] .dropdown-trigger';
+
+/** Presses Tab where the keyboard is, as the user would; returns the event. */
+const pressTab = async (shiftKey = false) => {
+  const event = new KeyboardEvent('keydown', {
+    key: 'Tab',
+    shiftKey,
+    bubbles: true,
+    cancelable: true,
   });
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-    registeredSurfaces.length = 0;
-    vi.restoreAllMocks();
+  await act(async () => {
+    document.activeElement?.dispatchEvent(event);
   });
+  return event;
+};
 
-  // These selectors identify the controls whose keyboard order the tests exercise.
-  const SELECTORS = {
-    search: '[data-gridtable-filter-role="search"] input',
-    kind: '[data-gridtable-filter-role="kind"] .dropdown-trigger',
-    namespace: '[data-gridtable-filter-role="namespace"] .dropdown-trigger',
-    cluster: '[data-gridtable-filter-role="cluster"] .dropdown-trigger',
-    apiGroups: '[data-gridtable-filter-role="query-facet-apiGroups"] .dropdown-trigger',
-    columns: '[data-gridtable-filter-role="columns"] button[aria-label="Columns"]',
-  };
+/** Where the keyboard is, named the way the user reads it. */
+const focusedName = () => {
+  const active = document.activeElement as HTMLElement | null;
+  if (active?.closest('[data-gridtable-filter-role="columns"]')) {
+    return 'Columns';
+  }
+  return active?.getAttribute('aria-label') ?? active?.getAttribute('title') ?? '';
+};
 
-  const renderFiltersBar = async (
-    overrides?: Partial<React.ComponentProps<typeof GridTableFiltersBar>>
-  ) => {
-    const defaultProps: React.ComponentProps<typeof GridTableFiltersBar> = {
-      activeFilters: {
-        search: '',
-        kinds: { mode: 'all' },
-        namespaces: { mode: 'all' },
-        clusters: { mode: 'all' },
-        includeMetadata: false,
-      },
-      resolvedFilterOptions: {
-        kinds: [{ label: 'Pod', value: 'Pod' }],
-        namespaces: [{ label: 'default', value: 'default' }],
-        clusters: [{ label: 'alpha', value: 'cluster-a' }],
-      },
-      kindDropdownId: 'test-kind',
-      namespaceDropdownId: 'test-ns',
-      clusterDropdownId: 'test-cluster',
-      searchInputId: 'test-search',
-      onKindsChange: vi.fn(),
-      onNamespacesChange: vi.fn(),
-      onClustersChange: vi.fn(),
-      onFiltersChange: vi.fn(),
-      onSearchChange: vi.fn(),
-      onReset: vi.fn(),
-      renderOption: (opt) => opt.label,
-      showKindDropdown: true,
-      showNamespaceDropdown: true,
-      ...overrides,
-    };
-
-    await act(async () => {
-      root.render(
-        <ZoomProvider>
-          <GridTableFiltersBar {...defaultProps} />
-        </ZoomProvider>
-      );
-    });
-
-    return container;
-  };
-
-  it('search selector matches the search input element', async () => {
-    const el = await renderFiltersBar();
-
-    const searchInput = el.querySelector<HTMLInputElement>(SELECTORS.search);
-    expect(searchInput).not.toBeNull();
-    expect(requireValue(searchInput, 'expected test value in GridTableKeys.test.tsx').tagName).toBe(
-      'INPUT'
-    );
-  });
-
-  it('kind selector matches the kind dropdown trigger', async () => {
-    const el = await renderFiltersBar({ showKindDropdown: true });
-
-    const kindTrigger = el.querySelector<HTMLElement>(SELECTORS.kind);
-    expect(kindTrigger).not.toBeNull();
-  });
-
-  it('namespace selector matches the namespace dropdown trigger', async () => {
-    const el = await renderFiltersBar({ showNamespaceDropdown: true });
-
-    const nsTrigger = el.querySelector<HTMLElement>(SELECTORS.namespace);
-    expect(nsTrigger).not.toBeNull();
-  });
-
-  it('cluster selector matches the cluster dropdown trigger', async () => {
-    const el = await renderFiltersBar({ showClusterDropdown: true });
-
-    const clusterTrigger = el.querySelector<HTMLElement>(SELECTORS.cluster);
-    expect(clusterTrigger).not.toBeNull();
-  });
-
-  it('search input is found when dropdowns are hidden', async () => {
-    const el = await renderFiltersBar({
-      showKindDropdown: false,
-      showNamespaceDropdown: false,
-    });
-
-    // Search must always be reachable regardless of dropdown visibility.
-    const searchInput = el.querySelector<HTMLInputElement>(SELECTORS.search);
-    expect(searchInput).not.toBeNull();
-    expect(requireValue(searchInput, 'expected test value in GridTableKeys.test.tsx').tagName).toBe(
-      'INPUT'
-    );
-  });
-
-  it('columns selector matches the columns dropdown trigger', async () => {
-    const el = await renderFiltersBar({
-      showColumnsDropdown: true,
-      columnOptions: [{ label: 'Name', value: 'name' }],
-      columnValue: ['name'],
-      onColumnsChange: vi.fn(),
-    });
-
-    const columnsTrigger = el.querySelector<HTMLElement>(SELECTORS.columns);
-    expect(columnsTrigger).not.toBeNull();
-  });
-
+describe('GridTable filter bar Tab order', () => {
   it('moves backward into a leading query facet and forward out without trapping focus', async () => {
-    const HookHarness = () => {
-      const filtersContainerRef = React.useRef<HTMLDivElement | null>(null);
-      const wrapperRef = React.useRef<HTMLDivElement | null>(null);
-      const focusRef = React.useRef<HTMLTableElement | null>(null);
-      const filterFocusIndexRef = React.useRef<number | null>(null);
-
-      useGridTableKeyboardScopes({
-        filteringEnabled: true,
-        filtersContainerRef,
-        filterFocusIndexRef,
-        wrapperRef,
-        gridRef: focusRef,
-        hasRowExpandToggle: false,
-        suppressFocusedRowHighlight: vi.fn(),
-      });
-
-      return (
-        <>
-          <GridTableFiltersBar
-            containerRef={filtersContainerRef}
-            activeFilters={{
-              search: '',
-              kinds: { mode: 'all' },
-              namespaces: { mode: 'all' },
-              clusters: { mode: 'all' },
-              queryFacets: { apiGroups: { mode: 'all' } },
-              includeMetadata: false,
-            }}
-            resolvedFilterOptions={{
-              kinds: [{ label: 'Pod', value: 'Pod' }],
-              namespaces: [],
-              queryFacets: [
-                {
-                  key: 'apiGroups',
-                  label: 'API groups',
-                  placeholder: 'All API groups',
-                  options: [{ label: 'core', value: '(core)' }],
-                  placement: 'before-kinds',
-                },
-              ],
-            }}
-            kindDropdownId="kind"
-            namespaceDropdownId="namespace"
-            clusterDropdownId="cluster"
-            queryFacetDropdownIdPrefix="facet"
-            searchInputId="search"
-            onKindsChange={vi.fn()}
-            onNamespacesChange={vi.fn()}
-            onClustersChange={vi.fn()}
-            onQueryFacetChange={vi.fn()}
-            onFiltersChange={vi.fn()}
-            onSearchChange={vi.fn()}
-            onReset={vi.fn()}
-            renderOption={(option) => option.label}
-            showKindDropdown
-          />
-          <div ref={wrapperRef}>
-            <table ref={focusRef} />
-          </div>
-        </>
-      );
-    };
-
-    await act(async () => {
-      root.render(
-        <ZoomProvider>
-          <HookHarness />
-        </ZoomProvider>
-      );
-      await Promise.resolve();
+    await showTable({
+      enabled: true,
+      options: {
+        // Query facets are backend-owned: only query-backed tables (Browse) show them.
+        searchBehavior: 'query',
+        showKindDropdown: true,
+        kinds: ['Pod'],
+        queryFacets: [
+          {
+            key: 'apiGroups',
+            label: 'API groups',
+            placeholder: 'All API groups',
+            options: [{ label: 'core', value: '(core)' }],
+            placement: 'before-kinds',
+          },
+        ],
+      },
     });
 
-    const searchInput = requireValue(
-      container.querySelector<HTMLInputElement>(SELECTORS.search),
-      'expected the GridTable filter input'
-    );
-    const kindTrigger = requireValue(
-      container.querySelector<HTMLElement>(SELECTORS.kind),
-      'expected the Kind dropdown trigger'
-    );
-    const apiGroupsTrigger = requireValue(
-      container.querySelector<HTMLElement>(SELECTORS.apiGroups),
-      'expected the API Groups dropdown trigger'
-    );
-    const [filtersSurface] = registeredSurfaces;
+    await act(async () => control(SEARCH).focus());
+    await pressTab(true);
+    expect(document.activeElement).toBe(control(KIND));
+    await pressTab(true);
+    expect(document.activeElement).toBe(control(API_GROUPS));
+    await pressTab(false);
+    expect(document.activeElement).toBe(control(KIND));
 
-    const dispatchFilterTab = async (shiftKey: boolean) => {
-      const target = document.activeElement as HTMLElement;
-      await act(async () => {
-        filtersSurface?.onKeyDown?.({
-          key: 'Tab',
-          shiftKey,
-          metaKey: false,
-          ctrlKey: false,
-          altKey: false,
-          target,
-          preventDefault: vi.fn(),
-        } as unknown as KeyboardEvent);
-        await Promise.resolve();
-      });
-    };
-
-    searchInput.focus();
-    await dispatchFilterTab(true);
-    expect(document.activeElement).toBe(kindTrigger);
-
-    await dispatchFilterTab(true);
-    expect(document.activeElement).toBe(apiGroupsTrigger);
-
-    await dispatchFilterTab(false);
-    expect(document.activeElement).toBe(kindTrigger);
+    // At the start of the bar, Shift+Tab is left to app navigation.
+    await pressTab(true);
+    expect((await pressTab(true)).defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(control(API_GROUPS));
   });
 
-  it('finds icon-bar buttons in DOM order and skips disabled ones before columns', async () => {
-    const HookHarness = () => {
-      const filtersContainerRef = React.useRef<HTMLDivElement | null>(null);
-      const wrapperRef = React.useRef<HTMLDivElement | null>(null);
-      const focusRef = React.useRef<HTMLTableElement | null>(null);
-      const filterFocusIndexRef = React.useRef<number | null>(null);
-
-      useGridTableKeyboardScopes({
-        filteringEnabled: true,
-        filtersContainerRef,
-        filterFocusIndexRef,
-        wrapperRef,
-        gridRef: focusRef,
-        hasRowExpandToggle: false,
-        suppressFocusedRowHighlight: vi.fn(),
-      });
-
-      return (
-        <>
-          <GridTableFiltersBar
-            containerRef={filtersContainerRef}
-            activeFilters={{
-              search: '',
-              kinds: { mode: 'all' },
-              namespaces: { mode: 'all' },
-              clusters: { mode: 'all' },
-              includeMetadata: false,
-            }}
-            resolvedFilterOptions={{
-              kinds: [],
-              namespaces: [],
-            }}
-            kindDropdownId="kind"
-            namespaceDropdownId="namespace"
-            clusterDropdownId="cluster"
-            columnsDropdownId="columns"
-            searchInputId="search"
-            onKindsChange={vi.fn()}
-            onNamespacesChange={vi.fn()}
-            onClustersChange={vi.fn()}
-            onFiltersChange={vi.fn()}
-            onSearchChange={vi.fn()}
-            onReset={vi.fn()}
-            renderOption={(option) => option.label}
-            showColumnsDropdown
-            columnOptions={[{ label: 'Name', value: 'name' }]}
-            columnValue={['name']}
-            onColumnsChange={vi.fn()}
-            preActions={[
-              {
-                type: 'action',
-                id: 'favorite',
-                icon: <span>Fav</span>,
-                onClick: vi.fn(),
-                title: 'Favorite',
-              },
-            ]}
-            postActions={[
-              {
-                type: 'action',
-                id: 'disabled-extra',
-                icon: <span>Disabled</span>,
-                onClick: vi.fn(),
-                title: 'Disabled extra',
-                disabled: true,
-              },
-              {
-                type: 'action',
-                id: 'load-more',
-                icon: <span>Load</span>,
-                onClick: vi.fn(),
-                title: 'Load more',
-              },
-            ]}
-          />
-          <div ref={wrapperRef}>
-            <table ref={focusRef} />
-          </div>
-        </>
-      );
-    };
-
-    await act(async () => {
-      root.render(
-        <ZoomProvider>
-          <HookHarness />
-        </ZoomProvider>
-      );
-      await Promise.resolve();
+  it('visits toolbar buttons in screen order, skipping disabled ones, before Columns', async () => {
+    await showTable({
+      enabled: true,
+      options: {
+        preActions: [
+          { type: 'action', id: 'favorite', icon: <span />, onClick: vi.fn(), title: 'Favorite' },
+          {
+            type: 'action',
+            id: 'disabled-extra',
+            icon: <span />,
+            onClick: vi.fn(),
+            title: 'Disabled extra',
+            disabled: true,
+          },
+        ],
+      },
     });
 
-    const searchInput = container.querySelector<HTMLInputElement>(SELECTORS.search);
-    expect(searchInput).not.toBeNull();
-    await act(async () => {
-      requireValue(searchInput, 'expected test value in GridTableKeys.test.tsx').focus();
-      await Promise.resolve();
-    });
+    await act(async () => control(SEARCH).focus());
+    const stops: string[] = [];
+    for (let step = 0; step < 3; step += 1) {
+      await pressTab();
+      stops.push(focusedName());
+    }
 
-    const [filtersSurface] = registeredSurfaces;
-    expect(filtersSurface?.onKeyDown).toBeTruthy();
-
-    const dispatchFilterTab = async () => {
-      const target = document.activeElement as HTMLElement;
-      await act(async () => {
-        filtersSurface?.onKeyDown?.({
-          key: 'Tab',
-          shiftKey: false,
-          metaKey: false,
-          ctrlKey: false,
-          altKey: false,
-          target,
-          preventDefault: vi.fn(),
-        } as unknown as KeyboardEvent);
-        await Promise.resolve();
-      });
-    };
-
-    await dispatchFilterTab();
-    expect(document.activeElement?.getAttribute('title')).toBe('Favorite');
-
-    await dispatchFilterTab();
-    expect(document.activeElement?.getAttribute('title')).toBe('Load more');
-
-    await dispatchFilterTab();
-    expect(
-      (document.activeElement as HTMLElement | null)?.closest(
-        '[data-gridtable-filter-role="columns"]'
-      )
-    ).not.toBeNull();
+    expect(stops).toEqual(['Favorite', 'Download all matching rows', 'Columns']);
   });
+});
 
-  it('lets body tab bubble without preventing default at the region boundary', async () => {
-    const HookHarness = () => {
-      const filtersContainerRef = React.useRef<HTMLDivElement | null>(null);
-      const wrapperRef = React.useRef<HTMLDivElement | null>(null);
-      const focusRef = React.useRef<HTMLTableElement | null>(null);
-      const filterFocusIndexRef = React.useRef<number | null>(null);
-
-      useGridTableKeyboardScopes({
-        filteringEnabled: false,
-        filtersContainerRef,
-        filterFocusIndexRef,
-        wrapperRef,
-        gridRef: focusRef,
-        hasRowExpandToggle: false,
-        suppressFocusedRowHighlight: vi.fn(),
-      });
-
-      return (
-        <>
-          <div ref={filtersContainerRef} />
-          <div ref={wrapperRef}>
-            <table ref={focusRef} />
-          </div>
-        </>
+describe('GridTable body Tab', () => {
+  it('leaves Tab to app navigation and drops the focused-row highlight', async () => {
+    await showTable();
+    const table = control('table[tabindex="0"]');
+    const focusedRows = () =>
+      Array.from(view.container.querySelectorAll<HTMLElement>('.gridtable-row--focused')).map(
+        (row) => row.dataset.rowKey
       );
-    };
+    await act(async () => table.focus());
+    expect(focusedRows()).toEqual(['cluster-a|a']);
 
-    await act(async () => {
-      root.render(<HookHarness />);
-      await Promise.resolve();
-    });
-
-    const tableSurface = registeredSurfaces[registeredSurfaces.length - 1];
-    expect(tableSurface?.onKeyDown).toBeTruthy();
-
-    const event = new KeyboardEvent('keydown', {
-      key: 'Tab',
-      bubbles: true,
-      cancelable: true,
-    });
-
-    const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
-    const result = tableSurface?.onKeyDown?.(event);
-
-    expect(result).toBeFalsy();
-    expect(preventDefaultSpy).not.toHaveBeenCalled();
-  });
-
-  it('suppresses the focused row highlight only when tabbing out of the table body', async () => {
-    const suppressFocusedRowHighlight = vi.fn();
-
-    const HookHarness = () => {
-      const filtersContainerRef = React.useRef<HTMLDivElement | null>(null);
-      const wrapperRef = React.useRef<HTMLDivElement | null>(null);
-      const focusRef = React.useRef<HTMLTableElement | null>(null);
-      const filterFocusIndexRef = React.useRef<number | null>(null);
-
-      useGridTableKeyboardScopes({
-        filteringEnabled: true,
-        filtersContainerRef,
-        filterFocusIndexRef,
-        wrapperRef,
-        gridRef: focusRef,
-        hasRowExpandToggle: false,
-        suppressFocusedRowHighlight,
-      });
-
-      return (
-        <>
-          <div ref={filtersContainerRef}>
-            <button type="button">Columns</button>
-          </div>
-          <div ref={wrapperRef}>
-            <table ref={focusRef} />
-          </div>
-        </>
-      );
-    };
-
-    await act(async () => {
-      root.render(<HookHarness />);
-      await Promise.resolve();
-    });
-
-    const tableSurface = registeredSurfaces[registeredSurfaces.length - 1];
-    expect(tableSurface?.onKeyDown).toBeTruthy();
-
-    await act(async () => {
-      tableSurface?.onKeyDown?.({
-        key: 'Tab',
-        shiftKey: false,
-        metaKey: false,
-        ctrlKey: false,
-        altKey: false,
-        target: document.createElement('div'),
-        preventDefault: vi.fn(),
-      } as unknown as KeyboardEvent);
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      tableSurface?.onKeyDown?.({
-        key: 'Tab',
-        shiftKey: true,
-        metaKey: false,
-        ctrlKey: false,
-        altKey: false,
-        target: document.createElement('div'),
-        preventDefault: vi.fn(),
-      } as unknown as KeyboardEvent);
-      await Promise.resolve();
-    });
-
-    expect(suppressFocusedRowHighlight).toHaveBeenCalledTimes(2);
+    for (const shiftKey of [false, true]) {
+      await act(async () => table.focus());
+      const tab = await pressTab(shiftKey);
+      expect(tab.defaultPrevented).toBe(false);
+      expect(focusedRows()).toEqual([]);
+    }
   });
 });

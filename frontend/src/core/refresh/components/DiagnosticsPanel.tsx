@@ -86,9 +86,6 @@ import { EffectivePermissionsTable } from './diagnostics/TableEffectivePermissio
 import { KubernetesAPIClientsTable } from './diagnostics/TableKubernetesAPIClients';
 import { useDiagnosticsPolling } from './diagnostics/useDiagnosticsPolling';
 
-// Re-export for backwards compatibility
-export { resolveDomainNamespace } from './diagnostics';
-
 // 'inactive' is its own state, NOT a degree of failure. A scope with no stream
 // is usually just unleased; folding that into 'degraded' told the user
 // something was wrong with a domain they simply were not using.

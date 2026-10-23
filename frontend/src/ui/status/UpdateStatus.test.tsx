@@ -1,163 +1,96 @@
 /**
  * frontend/src/ui/status/UpdateStatus.test.tsx
  *
- * Covers the header update chip: it appears only for the states that need the
- * user's attention, carries no hover surface of its own, and opens About on
- * click. Release detail (versions, notes, links) belongs to the About modal, so
- * the chip must not render or fetch any of it.
+ * The header update chip appears only for an update that needs the user's
+ * attention and opens About, which owns the update workflow, without opening a
+ * URL itself; a live update event wins over an app-info read that answers
+ * after it. Which states need attention is updatePresentation's contract
+ * (updatePresentation.test.ts). Runs in the full app over the faked backend
+ * (test-utils/appState).
  */
 
+import { appupdates, type backend } from '@core/backend-api/models';
+import { Browser } from '@wailsio/runtime';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { installAppStateHarness, type MountedApp } from '@/test-utils/appState/harness';
+import { partialModelFixture } from '@/test-utils/partialModelFixture';
+import { requireValue } from '@/test-utils/requireValue';
 
-const { readAppInfoMock, browserOpenURLMock, setIsAboutOpenMock } = vi.hoisted(() => ({
-  readAppInfoMock: vi.fn(),
-  browserOpenURLMock: vi.fn(),
-  setIsAboutOpenMock: vi.fn(),
-}));
+const app = installAppStateHarness();
+let view: MountedApp;
 
-vi.mock('@/core/app-state-access', () => ({
-  requestAppState: ({ read }: { read: () => unknown }) => Promise.resolve(read()),
-  readAppInfo: () => readAppInfoMock(),
-}));
+const update = (fields: Partial<backend.UpdateInfo>) =>
+  partialModelFixture<backend.UpdateInfo>({ currentVersion: '1.10.0', ...fields });
 
-vi.mock('@core/desktop-runtime', () => ({
-  desktopRuntimeAvailable: () => false,
-  onEvent: vi.fn(() => () => undefined),
-  openURL: (...args: unknown[]) => browserOpenURLMock(...args),
-}));
+/** The app reports this update in its app info. */
+const reportUpdate = (info: backend.UpdateInfo) => {
+  app.backend.answer('GetAppInfo', () => ({
+    version: '1.10.0',
+    buildTime: '',
+    gitCommit: '',
+    isBeta: false,
+    update: info,
+  }));
+};
 
-vi.mock('@core/contexts/ModalStateContext', () => ({
-  useModalState: () => ({ setIsAboutOpen: setIsAboutOpenMock }),
-}));
+const chip = () =>
+  view.container.querySelector<HTMLButtonElement>('.app-header-controls .update-chip');
 
-import { onEvent } from '@core/desktop-runtime';
-import UpdateStatus from './UpdateStatus';
+const start = async () => {
+  view = await app.mountApp();
+};
+
+beforeEach(() => {
+  vi.mocked(Browser.OpenURL).mockClear();
+  const dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['default']);
+  app.startScreen(dev);
+});
 
 describe('UpdateStatus', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
-
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    readAppInfoMock.mockReset();
-    browserOpenURLMock.mockReset();
-    setIsAboutOpenMock.mockReset();
-  });
-
-  afterEach(() => {
-    act(() => root.unmount());
-    container.remove();
-  });
-
-  const renderAndSettle = async () => {
-    await act(async () => {
-      root.render(<UpdateStatus />);
-    });
-    // Flush the app-info promise + the resulting state update.
-    await act(async () => {
-      await Promise.resolve();
-    });
-  };
-
-  it('renders a bare clickable chip that opens About and carries no hover surface', async () => {
-    readAppInfoMock.mockResolvedValue({
-      update: {
-        status: 'available',
-        currentVersion: '1.10.0',
+  it('shows a chip for an available update that opens About and opens no URL', async () => {
+    reportUpdate(
+      update({
+        status: appupdates.Status.StatusAvailable,
         availableVersion: '1.10.1',
-        publishedAt: '2026-07-05T12:00:00Z',
-        releaseNotes: '- Fixed metrics permission notice\n- Moved the update chip to the header',
+        releaseNotes: '- Fixed metrics permission notice',
         canInstall: true,
-      },
-    });
-
-    await renderAndSettle();
-
-    const chip = container.querySelector(
-      '[data-testid="update-status-chip"]'
-    ) as HTMLButtonElement | null;
-    expect(chip).not.toBeNull();
-    expect(chip?.textContent).toContain('Update available');
-
-    // The chip is the whole surface: no tooltip wrapper, and none of the release
-    // detail that used to hang off it. That detail now lives in the About modal.
-    expect(container.querySelector('.tooltip-wrapper')).toBeNull();
-    expect(container.querySelector('[class*="tooltip"]')).toBeNull();
-    expect(container.textContent).not.toContain('1.10.1');
-    expect(container.textContent).not.toContain('2026-07-05');
-    expect(container.textContent).not.toContain('Fixed metrics permission notice');
-    expect(container.textContent).not.toContain('Full release notes');
-
-    // Clicking opens About; it never starts a download, opens a URL, or
-    // otherwise bypasses the app-owned update workflow.
-    act(() => {
-      chip?.click();
-    });
-    expect(setIsAboutOpenMock).toHaveBeenCalledWith(true);
-    expect(browserOpenURLMock).not.toHaveBeenCalled();
-  });
-
-  it('renders nothing when no update is available', async () => {
-    readAppInfoMock.mockResolvedValue({ update: { status: 'current' } });
-
-    await renderAndSettle();
-
-    expect(container.querySelector('[data-testid="update-status-chip"]')).toBeNull();
-  });
-
-  it.each([
-    ['downloading', 'Downloading update…'],
-    ['verifying', 'Verifying update…'],
-    ['preparing', 'Preparing update…'],
-    ['ready', 'Restart to update'],
-    ['check-error', 'Update needs attention'],
-    ['prepare-error', 'Update needs attention'],
-    ['restart-error', 'Update needs attention'],
-    ['apply-error', 'Update needs attention'],
-  ])('renders compact %s state and opens About', async (status, label) => {
-    readAppInfoMock.mockResolvedValue({ update: { status, availableVersion: '1.10.1' } });
-
-    await renderAndSettle();
-
-    const chip = container.querySelector('[data-testid="update-status-chip"]') as HTMLButtonElement;
-    expect(chip.textContent).toContain(label);
-    act(() => chip.click());
-    expect(setIsAboutOpenMock).toHaveBeenCalledWith(true);
-  });
-
-  it.each(['disabled', 'idle', 'checking', 'skipped'])(
-    'stays out of the header for %s',
-    async (status) => {
-      readAppInfoMock.mockResolvedValue({ update: { status } });
-
-      await renderAndSettle();
-
-      expect(container.querySelector('[data-testid="update-status-chip"]')).toBeNull();
-    }
-  );
-  it('retains a ready update event when the initial app-info snapshot resolves later', async () => {
-    let finish: (info: unknown) => void = () => undefined;
-    readAppInfoMock.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          finish = resolve;
-        })
+      })
     );
-    await renderAndSettle();
-    const listener = vi
-      .mocked(onEvent)
-      .mock.calls.slice()
-      .reverse()
-      .find(([name]) => name === 'app-update')?.[1];
-    expect(listener).toBeDefined();
-    await act(async () => listener?.({ status: 'ready', availableVersion: '2.0.0' } as never));
-    await act(async () => finish({ update: { status: 'available', availableVersion: '2.0.0' } }));
-    expect(container.querySelector('[data-testid="update-status-chip"]')?.textContent).toContain(
-      'Restart to update'
-    );
+    await start();
+    expect(chip()?.textContent).toBe('Update available');
+
+    await act(async () => requireValue(chip(), 'expected the update chip').click());
+    await app.settle();
+
+    expect(view.owners().viewState?.isAboutOpen).toBe(true);
+    expect(document.body.querySelector('[aria-label="Application update"]')).not.toBeNull();
+    expect(vi.mocked(Browser.OpenURL)).not.toHaveBeenCalled();
+  });
+
+  it('shows no chip when the app is up to date', async () => {
+    reportUpdate(update({ status: appupdates.Status.StatusCurrent }));
+    await start();
+
+    expect(chip()).toBeNull();
+  });
+
+  it('keeps a live update event when the app-info read answers after it', async () => {
+    reportUpdate(update({ status: appupdates.Status.StatusAvailable, availableVersion: '2.0.0' }));
+    const release = app.backend.hold('GetAppInfo');
+    await start();
+    expect(chip()).toBeNull();
+
+    await act(async () => {
+      app.events.emit(
+        'app-update',
+        update({ status: appupdates.Status.StatusReady, availableVersion: '2.0.0' })
+      );
+    });
+    await act(async () => release());
+    await app.settle();
+
+    expect(chip()?.textContent).toBe('Restart to update');
   });
 });

@@ -40,8 +40,7 @@ const app = installAppStateHarness();
 
 /**
  * Identity without the display name. When an event's related object is in
- * another cluster, the opened ref can carry the panel's cluster name or none;
- * see docs/plans/real-state-test-harness.md (Phase 1 pilot findings).
+ * another cluster, the opened ref can carry the panel's cluster name or none.
  */
 const withoutClusterName = (target: OpenPanelTarget) => {
   const { clusterName: _clusterName, ...identity } = target as OpenPanelTarget & {
@@ -144,7 +143,6 @@ describe('EventsTab', () => {
     parent = app.cluster({ name: 'dev', context: 'parent' });
     PARENT_CLUSTER_ID = parent.clusterId;
     app.namespaces(parent, ['default', 'team-a']);
-    app.showCluster(parent);
     eventsScope = app.object(parent, parentDeployment).scopes.eventsScope ?? '';
     gridTableState.lastProps = null;
   });

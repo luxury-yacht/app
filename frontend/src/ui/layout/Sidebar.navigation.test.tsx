@@ -1,227 +1,284 @@
-import { ViewStateProvider } from '@core/contexts/ViewStateContext';
+/**
+ * frontend/src/ui/layout/Sidebar.navigation.test.tsx
+ *
+ * Revealing an object's view (Alt+click on an object link) selects the
+ * view's sidebar entry and opens the namespace and group that hold it, even
+ * after the user collapsed them, without opening the other group; an
+ * extension view is revealed once the visible cluster's discovery offers it.
+ * Runs in the full app with an object link beside the layout, over a faked
+ * backend (test-utils/appState) that lists the revealed object in its view.
+ */
+
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
-import { setPendingFocusRequest } from '@shared/components/tables/hooks/useGridTableExternalFocus';
-import { KeyboardProvider } from '@ui/shortcuts';
-import { act, createContext, type ReactNode, StrictMode, useContext, useState } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { peekPendingFocusRequest } from '@shared/components/tables/hooks/useGridTableExternalFocus';
+import { act } from 'react';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  resetAppPreferencesCacheForTesting,
-  setAppPreferencesForTesting,
-} from '@/core/settings/appPreferences';
+  makeCatalogSnapshotPayload,
+  makeClusterNodeSnapshotEntry,
+} from '@/core/refresh/refreshContractTestBuilders';
+import {
+  buildClusterRefreshScope,
+  buildRefreshScope,
+  CLUSTER_SELECTOR,
+} from '@/core/refresh/scopeSelector';
+import type { CatalogSnapshotPayload, NamespaceConfigSummary } from '@/core/refresh/types';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type ObjectIdentity,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { snapshotResponse } from '@/test-utils/appState/transport';
 import { requireValue } from '@/test-utils/requireValue';
-import type { KubernetesObjectReference } from '@/types/view-state';
-import Sidebar from './Sidebar';
 
-const fixtures = vi.hoisted(() => ({
-  clusterId: 'cluster-a',
-  catalogClusterId: 'cluster-a',
-  clusterIds: ['cluster-a', 'cluster-b'],
-  families: { cluster: ['karpenter'], namespaced: ['argocd'] },
-}));
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({
-    selectedClusterId: fixtures.clusterId,
-    selectedClusterIds: fixtures.clusterIds,
-    managedClusterIds: fixtures.clusterIds,
-  }),
-}));
-vi.mock('@core/desktop-runtime', () => ({
-  desktopRuntimeAvailable: () => false,
-  onEvent: () => () => undefined,
-}));
-vi.mock('@/core/refresh', () => ({ refreshOrchestrator: {} }));
-vi.mock('@/core/telemetry/sentry', () => ({ setActiveViewContext: vi.fn() }));
-vi.mock('@modules/object-panel/contexts/ObjectPanelStateContext', () => ({
-  ObjectPanelStateProvider: ({ children }: { children: ReactNode }) => children,
-  useObjectPanelState: () => ({ showObjectPanel: false }),
-}));
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: vi.fn() }),
-}));
-vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
-  useAutoRefreshLoadingState: () => ({ suppressPassiveLoading: false }),
-}));
-vi.mock('@/core/data-access', () => ({
-  useRefreshDomainHandle: ({ domain }: { domain: string }) => ({
-    data:
-      domain === 'catalog'
-        ? { clusterId: fixtures.catalogClusterId, resourceFamilies: fixtures.families }
-        : undefined,
-  }),
-}));
-vi.mock('./namespaceScope', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./namespaceScope')>()),
-  loadNamespaceScope: async () => [],
-}));
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
 
-type NamespaceSelection = { namespace: string; clusterId?: string };
-const NamespaceFixtureContext = createContext({
-  selection: null as NamespaceSelection | null,
-  select: (_selection: NamespaceSelection): void => undefined,
-});
-vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
-  useNamespace: () => {
-    const { selection, select } = useContext(NamespaceFixtureContext);
-    return {
-      namespaces: ['default', 'other'].map((name) => ({ name, scope: name, hasWorkloads: true })),
-      namespaceLoading: false,
-      namespacesPermissionDenied: false,
-      selectedNamespace: selection?.namespace,
-      selectedNamespaceClusterId: selection?.clusterId,
-      setSelectedNamespace: (namespace: string, clusterId?: string) =>
-        select({ namespace, clusterId }),
-    };
+type Target = ObjectIdentity & {
+  resource: string;
+  view: string;
+  sidebarGroup: 'resources' | 'extensions';
+};
+
+const targets: Target[] = [
+  {
+    group: '',
+    version: 'v1',
+    kind: 'ConfigMap',
+    resource: 'configmaps',
+    namespace: 'default',
+    name: 'example',
+    view: 'config',
+    sidebarGroup: 'resources',
   },
-}));
+  {
+    group: 'argoproj.io',
+    version: 'v1alpha1',
+    kind: 'Application',
+    resource: 'applications',
+    namespace: 'other',
+    name: 'example',
+    view: 'argocd',
+    sidebarGroup: 'extensions',
+  },
+  {
+    group: '',
+    version: 'v1',
+    kind: 'Node',
+    resource: 'nodes',
+    namespace: '',
+    name: 'example',
+    view: 'nodes',
+    sidebarGroup: 'resources',
+  },
+  {
+    group: 'karpenter.sh',
+    version: 'v1',
+    kind: 'NodePool',
+    resource: 'nodepools',
+    namespace: '',
+    name: 'example',
+    view: 'karpenter',
+    sidebarGroup: 'extensions',
+  },
+];
 
-function NamespaceFixture({ children }: { children: ReactNode }) {
-  const [selection, select] = useState<NamespaceSelection | null>(null);
-  return (
-    <NamespaceFixtureContext.Provider value={{ selection, select }}>
-      {children}
-    </NamespaceFixtureContext.Provider>
+const refOf = ({ resource, ...identity }: Target) => ({
+  clusterId: dev.clusterId,
+  group: identity.group,
+  version: identity.version,
+  kind: identity.kind,
+  resource,
+  namespace: identity.namespace,
+  name: identity.name,
+  uid: `${identity.name}-uid`,
+});
+
+/** The visible cluster's discovery and catalog pages, listing `target` (backend/objectcatalog). */
+const catalogPage = (target: Target): CatalogSnapshotPayload =>
+  makeCatalogSnapshotPayload({
+    clusterId: dev.clusterId,
+    clusterName: dev.clusterName,
+    resourceFamilies: { cluster: ['karpenter'], namespaced: ['argocd'] },
+    items: [
+      {
+        ref: refOf(target),
+        resourceVersion: '1',
+        creationTimestamp: '2026-10-01T00:00:00Z',
+        scope: target.namespace ? 'Namespace' : 'Cluster',
+      },
+    ],
+    total: 1,
+    unfilteredTotal: 1,
+  });
+
+/** Serves the start screen and the revealed object's view, which lists the object. */
+const serveReveal = (target: Target) => {
+  app.namespaces(dev, ['default', 'other']);
+  app.startScreen(dev);
+  app.snapshots.answer(({ domain }) => (domain === 'catalog' ? catalogPage(target) : undefined));
+  const configMap: NamespaceConfigSummary = { ref: refOf(target), data: 1, age: '1d' };
+  app.serveTable(dev, 'namespace-config', {
+    rows: target.kind === 'ConfigMap' ? [configMap] : [],
+  });
+  app.serveTable(dev, 'nodes', {
+    rows: target.kind === 'Node' ? [makeClusterNodeSnapshotEntry({ ref: refOf(target) })] : [],
+  });
+  app.snapshots.serve(
+    'object-maintenance',
+    buildClusterRefreshScope('object-maintenance', dev.clusterId),
+    { clusterId: dev.clusterId, clusterName: dev.clusterName, drains: [] }
   );
-}
+  // backend/refresh_object_catalog.go HydrateCatalogCustomRows: an extension
+  // view's rows with their CRD and projected status.
+  app.backend.answer(
+    'HydrateCatalogCustomRows',
+    (_clusterId, rows) =>
+      (rows ?? []).map((row) => ({
+        ref: row,
+        crdName: `${row.resource}.${row.group}`,
+        status: 'Ready',
+        statusPresentation: 'ready',
+        age: '1d',
+      })) as never
+  );
+};
 
-describe('resource link sidebar navigation', () => {
-  let host: HTMLDivElement;
-  let root: Root;
-  const nativeScrollIntoView = Element.prototype.scrollIntoView;
-  beforeEach(() => {
-    fixtures.clusterId = 'cluster-a';
-    fixtures.catalogClusterId = 'cluster-a';
-    fixtures.families = { cluster: ['karpenter'], namespaced: ['argocd'] };
-    resetAppPreferencesCacheForTesting();
-    Element.prototype.scrollIntoView = vi.fn();
-    host = document.createElement('div');
-    document.body.append(host);
-    root = createRoot(host);
+const start = async (target: Target) => {
+  const { resource: _resource, view: _view, sidebarGroup: _group, ...identity } = target;
+  view = await app.mountApp(
+    <ObjectPanelLink objectRef={{ ...identity, clusterId: dev.clusterId }}>Reveal</ObjectPanelLink>
+  );
+};
+
+const sidebar = () =>
+  requireValue(view.container.querySelector<HTMLElement>('nav.sidebar'), 'expected the sidebar');
+const sidebarEntry = (kind: string, match: { namespace?: string; view?: string; id?: string }) =>
+  Array.from(
+    sidebar().querySelectorAll<HTMLButtonElement>(`[data-sidebar-target-kind="${kind}"]`)
+  ).find(
+    (item) =>
+      (match.namespace === undefined ||
+        item.dataset.sidebarTargetNamespace === `${dev.clusterId}|${match.namespace}`) &&
+      (match.view === undefined || item.dataset.sidebarTargetView === match.view) &&
+      (match.id === undefined || item.dataset.sidebarTargetId === match.id)
+  ) ?? null;
+const destination = (target: Target) =>
+  target.namespace
+    ? sidebarEntry('namespace-view', { namespace: target.namespace, view: target.view })
+    : sidebarEntry('cluster-view', { view: target.view });
+const groupToggle = (target: Target, id: string) =>
+  requireValue(
+    target.namespace
+      ? sidebarEntry('namespace-group-toggle', { namespace: target.namespace, id })
+      : sidebarEntry('cluster-toggle', { id }),
+    `expected the ${id} group`
+  );
+const namespaceToggle = (namespace: string) =>
+  requireValue(sidebarEntry('namespace-toggle', { namespace }), `expected ${namespace}`);
+
+const click = async (element: HTMLElement) => {
+  await act(async () => element.click());
+  await app.settle();
+};
+
+/** Alt+clicks the object link, as the user reveals the object's view. */
+const reveal = async () => {
+  const link = requireValue(
+    view.container.querySelector<HTMLElement>('.object-panel-link'),
+    'expected the object link'
+  );
+  await act(async () => {
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, altKey: true }));
   });
-  afterEach(() => {
-    act(() => root.unmount());
-    setPendingFocusRequest(null);
-    host.remove();
-    Element.prototype.scrollIntoView = nativeScrollIntoView;
-    vi.clearAllMocks();
+  await app.settle();
+};
+
+beforeEach(() => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  // Start from saved collapsed groups so every destination needs revealing.
+  app.preferences({
+    sidebarClusterResourcesExpanded: false,
+    sidebarNamespaceResourcesExpanded: false,
   });
+  // Mirrors backend/preferences_settings.go UpdateAppPreferences.
+  app.backend.answer('UpdateAppPreferences', (request) => ({
+    settings: null,
+    changedKeys: (request.changes ?? []).map((change) => change.key),
+  }));
+});
 
-  const render = async (objectRef: KubernetesObjectReference) => {
-    await act(async () => {
-      root.render(
-        <StrictMode>
-          <ViewStateProvider>
-            <NamespaceFixture>
-              <KeyboardProvider>
-                <ObjectPanelLink objectRef={objectRef}>Reveal object</ObjectPanelLink>
-                <Sidebar />
-              </KeyboardProvider>
-            </NamespaceFixture>
-          </ViewStateProvider>
-        </StrictMode>
-      );
-    });
-  };
-  const button = (selector: string) =>
-    requireValue(host.querySelector<HTMLButtonElement>(selector), `expected ${selector}`);
-  const altClick = () => {
-    act(() => {
-      button('.object-panel-link').dispatchEvent(
-        new MouseEvent('click', { bubbles: true, altKey: true })
-      );
-    });
-  };
+describe('revealing an object’s view in the sidebar', () => {
+  it.each(targets)(
+    'reveals the $kind view and reveals it again after the user collapses it',
+    async (target) => {
+      serveReveal(target);
+      await start(target);
+      expect(destination(target)).toBeNull();
 
-  it.each([
-    { kind: 'ConfigMap', group: '', namespace: 'default', view: 'config', category: 'resources' },
-    {
-      kind: 'Application',
-      group: 'argoproj.io',
-      namespace: 'other',
-      view: 'argocd',
-      category: 'extensions',
-    },
-    { kind: 'Node', group: '', namespace: '', view: 'nodes', category: 'resources' },
-    {
-      kind: 'NodePool',
-      group: 'karpenter.sh',
-      namespace: '',
-      view: 'karpenter',
-      category: 'extensions',
-    },
-  ])('reveals $kind navigation and can reveal it again after manual collapse', async (target) => {
-    // Start from saved collapsed groups so every destination needs revealing.
-    setAppPreferencesForTesting({
-      sidebarClusterResourcesExpanded: false,
-      sidebarNamespaceResourcesExpanded: false,
-    });
-    const ref = {
-      ...target,
-      clusterId: 'cluster-a',
-      version: target.kind === 'Application' ? 'v1alpha1' : 'v1',
-      name: 'example',
-    };
-    await render(ref);
-    const scope = target.namespace
-      ? `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="cluster-a|${target.namespace}"]`
-      : '[data-sidebar-target-kind="cluster-view"]';
-    const destination = `${scope}[data-sidebar-target-view="${target.view}"]`;
-    expect(host.querySelector(destination)).toBeNull();
-    altClick();
-    expect(button(destination).getAttribute('aria-current')).toBe('page');
-    const groupScope = target.namespace
-      ? `[data-sidebar-target-kind="namespace-group-toggle"][data-sidebar-target-namespace="cluster-a|${target.namespace}"]`
-      : '[data-sidebar-target-kind="cluster-toggle"]';
-    const category = button(`${groupScope}[data-sidebar-target-id="${target.category}"]`);
-    const otherCategory = target.category === 'resources' ? 'extensions' : 'resources';
-    expect(
-      button(`${groupScope}[data-sidebar-target-id="${otherCategory}"]`).getAttribute(
-        'aria-expanded'
-      )
-    ).toBe('false');
-    act(() => category.click());
-    await render(ref);
-    expect(host.querySelector(destination)).toBeNull();
-    altClick();
-    expect(button(destination).getAttribute('aria-current')).toBe('page');
-    if (target.namespace) {
-      act(() =>
-        button(
-          `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="cluster-a|${target.namespace}"]`
-        ).click()
+      await reveal();
+      expect(destination(target)?.getAttribute('aria-current')).toBe('page');
+      expect(view.owners().viewState).toMatchObject(
+        target.namespace
+          ? { viewType: 'namespace', activeNamespaceTab: target.view }
+          : { viewType: 'cluster', activeClusterTab: target.view }
       );
-      expect(host.querySelector(destination)).toBeNull();
-      altClick();
-      expect(button(destination).getAttribute('aria-current')).toBe('page');
-      const otherNamespace = target.namespace === 'default' ? 'other' : 'default';
-      expect(
-        button(
-          `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="cluster-a|${otherNamespace}"]`
-        ).getAttribute('aria-expanded')
-      ).toBe('false');
+      // The destination table lists the object, so the reveal lands on its row.
+      expect(peekPendingFocusRequest()).toBeNull();
+      const otherGroup = target.sidebarGroup === 'resources' ? 'extensions' : 'resources';
+      expect(groupToggle(target, otherGroup).getAttribute('aria-expanded')).toBe('false');
+
+      await click(groupToggle(target, target.sidebarGroup));
+      expect(destination(target)).toBeNull();
+      await reveal();
+      expect(destination(target)?.getAttribute('aria-current')).toBe('page');
+
+      if (target.namespace) {
+        await click(namespaceToggle(target.namespace));
+        expect(destination(target)).toBeNull();
+        await reveal();
+        expect(destination(target)?.getAttribute('aria-current')).toBe('page');
+        const otherNamespace = target.namespace === 'default' ? 'other' : 'default';
+        expect(namespaceToggle(otherNamespace).getAttribute('aria-expanded')).toBe('false');
+        expect(view.owners().namespace.selectedNamespace).toBe(target.namespace);
+      }
     }
-  });
+  );
 
-  it('reveals an extension once its own cluster discovery is available', async () => {
-    fixtures.catalogClusterId = 'cluster-b';
-    const ref = {
-      clusterId: 'cluster-a',
-      group: 'argoproj.io',
-      version: 'v1alpha1',
-      kind: 'Application',
-      namespace: 'other',
-      name: 'example',
-    };
-    await render(ref);
-    altClick();
-    const namespace = '[data-sidebar-target-namespace="cluster-a|other"]';
-    const destination = `${namespace}[data-sidebar-target-view="argocd"]`;
-    expect(host.querySelector(destination)).toBeNull();
-    expect(
-      button(`${namespace}[data-sidebar-target-id="extensions"]`).getAttribute('aria-expanded')
-    ).toBe('false');
-    fixtures.catalogClusterId = 'cluster-a';
-    await render(ref);
-    expect(button(destination).getAttribute('aria-current')).toBe('page');
+  it('reveals an extension view once the cluster’s discovery offers it', async () => {
+    const target = requireValue(
+      targets.find((candidate) => candidate.view === 'argocd'),
+      'expected the Argo CD target'
+    );
+    serveReveal(target);
+    const discoveryScope = buildRefreshScope('catalog', {
+      clusterId: dev.clusterId,
+      selector: CLUSTER_SELECTOR,
+      query: 'limit=1',
+    });
+    let answerDiscovery: (() => void) | undefined;
+    app.snapshots.respond(({ domain, scope }) =>
+      domain === 'catalog' && scope === discoveryScope
+        ? new Promise<Response>((resolve) => {
+            answerDiscovery = () =>
+              resolve(
+                snapshotResponse({ domain, scope, version: 1, payload: catalogPage(target) })
+              );
+          })
+        : undefined
+    );
+    await start(target);
+
+    await reveal();
+    expect(destination(target)).toBeNull();
+    expect(groupToggle(target, 'extensions').getAttribute('aria-expanded')).toBe('false');
+
+    app.snapshots.respond(null);
+    await act(async () => answerDiscovery?.());
+    await app.settle();
+
+    expect(destination(target)?.getAttribute('aria-current')).toBe('page');
   });
 });

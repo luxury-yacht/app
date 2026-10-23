@@ -1,1303 +1,438 @@
-import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import React, { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
+/**
+ * frontend/src/modules/resource-grid/queryBackedLeafFirstLoad.test.tsx
+ *
+ * First load of every query-backed leaf view, opened from the sidebar: the
+ * view reads its own domain's typed page (in the selected namespace and under
+ * All Namespaces, or cluster-wide) in its default sort, shows that page's
+ * rows, and offers sorting only on the columns the page query sorts by. A view
+ * whose domain the backend denies settles on the permission state at once,
+ * with no warm-up retries. Runs in the full app, navigated through the
+ * sidebar, over a faked backend (test-utils/appState).
+ */
+
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SortConfig, SortDirection, UseTableSortOptions } from '@/hooks/useTableSort';
-import { requireValue } from '@/test-utils/requireValue';
-
-interface CapturedGridTableProps {
-  columns?: Array<{ key: string; sortable?: boolean }>;
-  data: Array<Record<string, unknown>>;
-  emptyMessage?: string;
-}
-
-const { gridTablePropsRef, persistedSortRef, requestRefreshDomainStateMock } = vi.hoisted(() => ({
-  gridTablePropsRef: { current: null as CapturedGridTableProps | null },
-  persistedSortRef: { current: null as SortConfig | null },
-  requestRefreshDomainStateMock: vi.fn(),
-}));
-
-vi.mock('@core/contexts/FavoritesContext', () => ({
-  useFavorites: () => ({
-    favorites: [],
-    addFavorite: vi.fn(),
-    updateFavorite: vi.fn(),
-    deleteFavorite: vi.fn(),
-    reorderFavorites: vi.fn(),
-  }),
-  FavoritesProvider: ({ children }: { children: React.ReactNode }) => children,
-}));
-
-vi.mock('@ui/favorites/FavToggle', () => ({
-  useFavToggle: () => ({
-    type: 'toggle',
-    id: 'favorite',
-    icon: null,
-    active: false,
-    onClick: () => undefined,
-    title: 'Save as favorite',
-  }),
-}));
-
-vi.mock('@shared/components/tables/GridTable', async () => {
-  const actual = await vi.importActual<typeof import('@shared/components/tables/GridTable')>(
-    '@shared/components/tables/GridTable'
-  );
-  return {
-    ...actual,
-    default: (props: CapturedGridTableProps) => {
-      gridTablePropsRef.current = props;
-      return <div data-testid="grid-table" />;
-    },
-  };
-});
-
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({
-    selectedKubeconfig: 'path:context',
-    selectedClusterId: 'cluster-a',
-    selectedClusterIds: ['cluster-a'],
-  }),
-}));
-
-vi.mock('@/core/data-access', async (importOriginal) => {
-  const actual = (await importOriginal()) as Record<string, unknown>;
-  return {
-    ...actual,
-    requestRefreshDomain: vi.fn().mockResolvedValue(undefined),
-    requestRefreshDomainState: (request: unknown) => requestRefreshDomainStateMock(request),
-    useScopedRefreshDomainLifecycle: vi.fn(),
-  };
-});
-
-vi.mock('@/core/refresh', () => ({
-  useRefreshScopedDomain: () => ({
-    data: { metrics: null, rows: [] },
-    status: 'idle',
-    isManual: false,
-  }),
-}));
-
-vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (
-    data: unknown[],
-    defaultKey?: string,
-    defaultDir?: SortDirection,
-    opts?: UseTableSortOptions<unknown>
-  ) => ({
-    sortedData: data,
-    sortConfig:
-      opts?.controlledSort ??
-      (defaultKey
-        ? { key: defaultKey, direction: defaultDir ?? 'asc' }
-        : { key: '', direction: null }),
-    handleSort: vi.fn(),
-  }),
-}));
-
-vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
-  useNamespaceGridTablePersistence: () => ({
-    sortConfig: persistedSortRef.current,
-    onSortChange: vi.fn(),
-    columnWidths: null,
-    setColumnWidths: vi.fn(),
-    columnVisibility: null,
-    setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [] },
-    setFilters: vi.fn(),
-    isNamespaceScoped: true,
-    resetState: vi.fn(),
-  }),
-}));
-
-vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
-  useGridTablePersistence: () => ({
-    sortConfig: persistedSortRef.current,
-    setSortConfig: vi.fn(),
-    columnWidths: null,
-    setColumnWidths: vi.fn(),
-    columnVisibility: null,
-    setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [] },
-    setFilters: vi.fn(),
-    resetState: vi.fn(),
-    hydrated: true,
-    storageKey: 'gridtable:v1:test',
-  }),
-}));
-
-vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
-  __esModule: true,
-  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
-
-vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
-  useNamespaceColumnLink: () => ({
-    onClick: vi.fn(),
-    getClassName: () => 'object-panel-link',
-    isInteractive: () => true,
-  }),
-}));
-
-vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
-  NamespaceContext: React.createContext({
-    namespaces: [
-      { name: 'team-a', scope: 'team-a' },
-      { name: 'team-b', scope: 'team-b' },
-    ],
-    selectedNamespaceClusterId: 'cluster-a',
-    setSelectedNamespace: vi.fn(),
-  }),
-  useNamespace: () => ({
-    namespaces: [
-      { name: 'team-a', scope: 'team-a' },
-      { name: 'team-b', scope: 'team-b' },
-    ],
-    selectedNamespaceClusterId: 'cluster-a',
-    setSelectedNamespace: vi.fn(),
-  }),
-}));
-
-vi.mock('@/core/refresh/hooks/useMetricsAvailability', () => ({
-  useClusterMetricsAvailability: () => ({
-    available: true,
-    stale: false,
-    lastError: null,
-    collectedAt: 1,
-  }),
-}));
-
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: vi.fn() }),
-}));
-
-vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: vi.fn() }),
-}));
-
-vi.mock('@shared/hooks/useObjectActionController', () => ({
-  useObjectActionController: () => ({
-    getMenuItems: () => [],
-    modals: null,
-  }),
-}));
-
-vi.mock('@shared/hooks/useNodeMaintenanceActions', () => ({
-  useNodeMaintenanceActions: () => ({
-    activeDrainFor: () => null,
-    openDrainFor: vi.fn(),
-    openCordonFor: vi.fn(),
-    modals: null,
-  }),
-}));
-
-vi.mock('@shared/components/modals/ConfirmationModal', () => ({
-  __esModule: true,
-  default: () => null,
-}));
-
-vi.mock('@core/backend-api', () => ({
-  RunObjectAction: vi.fn(),
-  FindCatalogObjectByUID: vi.fn(),
-}));
-
-vi.mock('@/core/capabilities', () => ({
-  POD_PERMISSIONS: [],
-  getPermissionKey: (kind: string, verb: string, namespace?: string) =>
-    `${kind}:${verb}:${namespace ?? ''}`,
-  queryNamespacesPermissions: vi.fn().mockResolvedValue(new Map()),
-  useUserPermissions: () => new Map(),
-}));
-
-vi.mock('@/utils/ageFormatter', () => ({
-  formatAge: (value: unknown) => String(value ?? ''),
-}));
-
-vi.mock('@utils/errorHandler', () => ({
-  errorHandler: { handle: vi.fn() },
-}));
-
-vi.mock('@shared/components/icons/SharedIcons', () => ({
-  ChevronDownIcon: () => <span>collapse</span>,
-  ChevronUpIcon: () => <span>expand</span>,
-  CloseIcon: () => <span>close</span>,
-  DeleteIcon: () => <span>delete</span>,
-  DiffIcon: () => <span>diff</span>,
-  DrainIcon: () => <span>drain</span>,
-  MetadataIcon: () => <span>metadata</span>,
-  ObjectMapIcon: () => <span>map</span>,
-  OpenIcon: () => <span>open</span>,
-  WarningTriangleIcon: () => <span>warning</span>,
-}));
-
-import ClusterViewConfig from '@modules/cluster/components/ClusterViewConfig';
-import ClusterViewCRDs from '@modules/cluster/components/ClusterViewCRDs';
-import ClusterViewEvents from '@modules/cluster/components/ClusterViewEvents';
-import ClusterViewNodes, { NodesTable } from '@modules/cluster/components/ClusterViewNodes';
-import ClusterViewRBAC from '@modules/cluster/components/ClusterViewRBAC';
-import ClusterViewStorage from '@modules/cluster/components/ClusterViewStorage';
-import NsViewAutoscaling from '@modules/namespace/components/NsViewAutoscaling';
-import NsViewConfig from '@modules/namespace/components/NsViewConfig';
-import NsViewEvents from '@modules/namespace/components/NsViewEvents';
-import NsViewHelm from '@modules/namespace/components/NsViewHelm';
-import NsViewNetwork from '@modules/namespace/components/NsViewNetwork';
-import NsViewPods from '@modules/namespace/components/NsViewPods';
-import NsViewQuotas from '@modules/namespace/components/NsViewQuotas';
-import NsViewRBAC from '@modules/namespace/components/NsViewRBAC';
-import NsViewStorage from '@modules/namespace/components/NsViewStorage';
-import { WorkloadsTable } from '@modules/namespace/components/NsViewWorkloads';
+import {
+  makeClusterNodeSnapshotEntry,
+  makeNamespaceWorkloadSummary,
+  makePodSnapshotEntry,
+} from '@/core/refresh/refreshContractTestBuilders';
+import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
+import type { CanonicalResourceRef, RefreshDomain } from '@/core/refresh/types';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type SidebarTarget,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { statusResponse } from '@/test-utils/appState/transport';
 import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 
-const fixtureIdentity = (kind: string) => {
-  switch (kind) {
-    case 'HorizontalPodAutoscaler':
-      return { group: 'autoscaling', version: 'v2', resource: 'horizontalpodautoscalers' };
-    case 'Ingress':
-      return { group: 'networking.k8s.io', version: 'v1', resource: 'ingresses' };
-    case 'StorageClass':
-      return { group: 'storage.k8s.io', version: 'v1', resource: 'storageclasses' };
-    case 'Role':
-      return { group: 'rbac.authorization.k8s.io', version: 'v1', resource: 'roles' };
-    case 'ClusterRole':
-      return { group: 'rbac.authorization.k8s.io', version: 'v1', resource: 'clusterroles' };
-    case 'CustomResourceDefinition':
-      return {
-        group: 'apiextensions.k8s.io',
-        version: 'v1',
-        resource: 'customresourcedefinitions',
-      };
-    case 'Deployment':
-      return { group: 'apps', version: 'v1', resource: 'deployments' };
-    case 'HelmRelease':
-      return { group: 'helm.sh', version: 'v3', resource: 'releases' };
-    case 'ConfigMap':
-      return { group: '', version: 'v1', resource: 'configmaps' };
-    case 'PersistentVolumeClaim':
-      return { group: '', version: 'v1', resource: 'persistentvolumeclaims' };
-    case 'PersistentVolume':
-      return { group: '', version: 'v1', resource: 'persistentvolumes' };
-    case 'ResourceQuota':
-      return { group: '', version: 'v1', resource: 'resourcequotas' };
-    case 'Event':
-      return { group: '', version: 'v1', resource: 'events' };
-    case 'Pod':
-      return { group: '', version: 'v1', resource: 'pods' };
-    case 'Node':
-      return { group: '', version: 'v1', resource: 'nodes' };
-    default:
-      throw new Error(`Missing canonical identity for query fixture kind ${kind}`);
-  }
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
+
+type Identity = Pick<CanonicalResourceRef, 'group' | 'version' | 'kind' | 'resource'>;
+
+const ref = (identity: Identity, name: string, namespace = ''): CanonicalResourceRef => ({
+  clusterId: dev.clusterId,
+  ...identity,
+  namespace,
+  name,
+  uid: `${name}-uid`,
+});
+
+const CONFIG_MAP = { group: '', version: 'v1', kind: 'ConfigMap', resource: 'configmaps' };
+const INGRESS = {
+  group: 'networking.k8s.io',
+  version: 'v1',
+  kind: 'Ingress',
+  resource: 'ingresses',
+};
+const PVC = {
+  group: '',
+  version: 'v1',
+  kind: 'PersistentVolumeClaim',
+  resource: 'persistentvolumeclaims',
+};
+const QUOTA = { group: '', version: 'v1', kind: 'ResourceQuota', resource: 'resourcequotas' };
+const ROLE = {
+  group: 'rbac.authorization.k8s.io',
+  version: 'v1',
+  kind: 'Role',
+  resource: 'roles',
+};
+const EVENT = { group: '', version: 'v1', kind: 'Event', resource: 'events' };
+const HPA = {
+  group: 'autoscaling',
+  version: 'v2',
+  kind: 'HorizontalPodAutoscaler',
+  resource: 'horizontalpodautoscalers',
+};
+const HELM_RELEASE = { group: 'helm.sh', version: 'v3', kind: 'HelmRelease', resource: 'releases' };
+const STORAGE_CLASS = {
+  group: 'storage.k8s.io',
+  version: 'v1',
+  kind: 'StorageClass',
+  resource: 'storageclasses',
+};
+const PV = { group: '', version: 'v1', kind: 'PersistentVolume', resource: 'persistentvolumes' };
+const CLUSTER_ROLE = {
+  group: 'rbac.authorization.k8s.io',
+  version: 'v1',
+  kind: 'ClusterRole',
+  resource: 'clusterroles',
+};
+const CRD = {
+  group: 'apiextensions.k8s.io',
+  version: 'v1',
+  kind: 'CustomResourceDefinition',
+  resource: 'customresourcedefinitions',
 };
 
-const withCanonicalFixtureRef = (value: unknown): unknown => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return value;
-  }
-  const row = value as Record<string, unknown>;
-  if (row.ref) {
-    return row;
-  }
-  const kind = typeof row.kind === 'string' ? row.kind : 'HelmRelease';
-  const identity = fixtureIdentity(kind);
-  return {
-    ...row,
-    ref: {
-      clusterId: String(row.clusterId ?? 'cluster-a'),
-      ...identity,
-      kind,
-      namespace: String(row.namespace ?? ''),
-      name: String(row.name ?? ''),
-      uid: '',
-    },
-  };
+const eventRow = (name: string, namespace = '') => ({
+  ref: ref(EVENT, name, namespace),
+  resourceVersion: '1',
+  objectKind: 'Pod',
+  objectName: 'query',
+  objectNamespace: namespace,
+  objectUid: 'query-uid',
+  type: 'Warning',
+  source: 'kubelet',
+  reason: 'QueryReason',
+  object: 'Pod/query',
+  message: `${name} message`,
+  age: '2h',
+  ageTimestamp: 2,
+});
+
+interface LeafView {
+  label: string;
+  view: string;
+  domain: RefreshDomain;
+  /** The default sort of the first read, as `<key> <direction>`. */
+  sort: string;
+  /** The page's one row, named `query-<view>`. */
+  row: (name: string) => object;
+  /** The columns the page query sorts by (backend/refresh/snapshot: each domain's sortable fields). */
+  sortable: string[];
+  /** The view's sidebar entry sits in the Extensions group. */
+  extension?: boolean;
+  /** Other reads the view makes. */
+  serveOthers?: () => void;
+}
+
+const NAMESPACE_VIEWS: LeafView[] = [
+  {
+    label: 'config',
+    view: 'config',
+    domain: 'namespace-config',
+    sort: 'name asc',
+    row: (name) => ({ ref: ref(CONFIG_MAP, name, 'team-a'), data: 2, age: '2h' }),
+    sortable: ['age', 'data', 'kind', 'name', 'namespace'],
+  },
+  {
+    label: 'network',
+    view: 'network',
+    domain: 'namespace-network',
+    sort: 'name asc',
+    row: (name) => ({ ref: ref(INGRESS, name, 'team-a'), age: '2h' }),
+    // Context and Network are slot columns backed by server sort fields;
+    // Summary stays unsortable (mixed label and number text).
+    sortable: ['age', 'context', 'kind', 'name', 'namespace', 'network'],
+  },
+  {
+    label: 'storage',
+    view: 'storage',
+    domain: 'namespace-storage',
+    sort: 'name asc',
+    row: (name) => ({
+      ref: ref(PVC, name, 'team-a'),
+      capacity: '2Gi',
+      status: 'Bound',
+      storageClass: 'standard',
+      age: '2h',
+    }),
+    sortable: ['age', 'capacity', 'kind', 'name', 'namespace', 'status', 'storageClass'],
+  },
+  {
+    label: 'quotas',
+    view: 'quotas',
+    domain: 'namespace-quotas',
+    sort: 'name asc',
+    row: (name) => ({ ref: ref(QUOTA, name, 'team-a'), details: 'pods: 1/2', age: '2h' }),
+    sortable: ['age', 'kind', 'name', 'namespace'],
+  },
+  {
+    label: 'RBAC',
+    view: 'rbac',
+    domain: 'namespace-rbac',
+    sort: 'name asc',
+    row: (name) => ({ ref: ref(ROLE, name, 'team-a'), details: '2 rules', age: '2h' }),
+    sortable: ['age', 'kind', 'name', 'namespace'],
+  },
+  {
+    label: 'events',
+    view: 'events',
+    domain: 'namespace-events',
+    sort: 'age asc',
+    row: (name) => eventRow(name, 'team-a'),
+    sortable: [
+      'age',
+      'kind',
+      'message',
+      'namespace',
+      'objectName',
+      'objectType',
+      'reason',
+      'source',
+      'type',
+    ],
+  },
+  {
+    label: 'autoscaling',
+    view: 'autoscaling',
+    domain: 'namespace-autoscaling',
+    sort: 'name asc',
+    row: (name) => ({
+      ref: ref(HPA, name, 'team-a'),
+      target: 'Deployment/query',
+      targetApiVersion: 'apps/v1',
+      min: 1,
+      max: 3,
+      current: 2,
+      age: '2h',
+    }),
+    sortable: ['age', 'current', 'kind', 'name', 'namespace', 'replicas', 'scaleTarget'],
+  },
+  {
+    label: 'Helm',
+    view: 'helm',
+    extension: true,
+    domain: 'namespace-helm',
+    sort: 'name asc',
+    row: (name) => ({
+      ref: ref(HELM_RELEASE, name, 'team-a'),
+      chart: 'query-1.0.0',
+      appVersion: '1.0.0',
+      status: 'deployed',
+      revision: 2,
+      updated: '2026-01-01T00:00:00Z',
+      age: '2h',
+    }),
+    sortable: [
+      'age',
+      'appVersion',
+      'chart',
+      'kind',
+      'name',
+      'namespace',
+      'revision',
+      'status',
+      'updated',
+    ],
+  },
+  {
+    label: 'pods',
+    view: 'pods',
+    domain: 'pods',
+    sort: 'name asc',
+    row: (name) =>
+      makePodSnapshotEntry({ ref: { clusterId: dev.clusterId, namespace: 'team-a', name } }),
+    sortable: [
+      'age',
+      'cpu',
+      'memory',
+      'name',
+      'namespace',
+      'node',
+      'owner',
+      'ready',
+      'restarts',
+      'status',
+    ],
+  },
+  {
+    label: 'workloads',
+    view: 'workloads',
+    domain: 'namespace-workloads',
+    sort: 'name asc',
+    row: (name) =>
+      makeNamespaceWorkloadSummary({ clusterId: dev.clusterId, namespace: 'team-a', name }),
+    sortable: ['age', 'cpu', 'kind', 'memory', 'name', 'namespace', 'ready', 'restarts', 'status'],
+  },
+];
+
+const CLUSTER_VIEWS: LeafView[] = [
+  {
+    label: 'config',
+    view: 'config',
+    domain: 'cluster-config',
+    sort: 'name asc',
+    row: (name) => ({ ref: ref(STORAGE_CLASS, name), details: 'default', age: '2h' }),
+    sortable: ['age', 'kind', 'name'],
+  },
+  {
+    label: 'storage',
+    view: 'storage',
+    domain: 'cluster-storage',
+    sort: 'name asc',
+    row: (name) => ({
+      ref: ref(PV, name),
+      storageClass: 'standard',
+      capacity: '2Gi',
+      accessModes: 'RWO',
+      status: 'Bound',
+      claim: 'team-a/data',
+      age: '2h',
+    }),
+    sortable: ['accessModes', 'age', 'capacity', 'claim', 'kind', 'name', 'status', 'storageClass'],
+  },
+  {
+    label: 'RBAC',
+    view: 'rbac',
+    domain: 'cluster-rbac',
+    sort: 'name asc',
+    row: (name) => ({ ref: ref(CLUSTER_ROLE, name), details: '2 rules', age: '2h' }),
+    sortable: ['age', 'kind', 'name'],
+  },
+  {
+    label: 'CRDs',
+    view: 'crds',
+    extension: true,
+    domain: 'cluster-crds',
+    sort: 'name asc',
+    row: (name) => ({
+      ref: ref(CRD, `${name}.example.com`),
+      group: 'example.com',
+      scope: 'Namespaced',
+      details: 'v1',
+      age: '2h',
+    }),
+    sortable: ['age', 'group', 'kind', 'name', 'scope', 'version'],
+  },
+  {
+    label: 'events',
+    view: 'events',
+    domain: 'cluster-events',
+    sort: 'age asc',
+    row: (name) => eventRow(name),
+    sortable: ['age', 'kind', 'message', 'objectName', 'objectType', 'reason', 'source', 'type'],
+  },
+  {
+    label: 'nodes',
+    view: 'nodes',
+    domain: 'nodes',
+    sort: 'name asc',
+    row: (name) => makeClusterNodeSnapshotEntry({ ref: { clusterId: dev.clusterId, name } }),
+    // The Nodes view also lists drain jobs (backend/refresh/snapshot/node_maintenance.go).
+    serveOthers: () =>
+      app.snapshots.serve(
+        'object-maintenance',
+        buildClusterRefreshScope('object-maintenance', dev.clusterId),
+        { clusterId: dev.clusterId, clusterName: dev.clusterName, drains: [] }
+      ),
+    sortable: ['age', 'cpu', 'kind', 'memory', 'name', 'pods', 'restarts', 'status', 'version'],
+  },
+];
+
+/** The page scope a first read asks for: the default sort at the default page size. */
+const firstPageScope = (selector: string, sort: string) => {
+  const [key, direction] = sort.split(' ');
+  return `${dev.clusterId}|${selector}?limit=50&sort=${key}&sortDirection=${direction}`;
 };
 
-const canonicalFixturePayload = (data: Record<string, unknown>): Record<string, unknown> =>
-  Object.fromEntries(
-    Object.entries(data).map(([key, value]) => [
-      key,
-      Array.isArray(value) ? value.map(withCanonicalFixtureRef) : value,
-    ])
+const readScopes = (domain: RefreshDomain) => app.snapshots.reads(domain).map((read) => read.scope);
+
+const renderedRows = () =>
+  Array.from(view.container.querySelectorAll<HTMLElement>('.gridtable-row')).map(
+    (row) => row.textContent ?? ''
   );
 
-const typedQueryPayload = (data: Record<string, unknown>) => ({
-  status: 'executed',
-  data: {
-    status: 'ready',
-    data: {
-      ...canonicalFixturePayload(data),
-      total: 1,
-      totalIsExact: true,
-      kinds: ['QueryKind'],
-      namespaces: ['team-b'],
-      facetsExact: true,
-    },
-  },
-});
+/** The keys of the visible table's sortable column headers (GridTable marks each one). */
+const sortableColumns = () =>
+  Array.from(
+    view.container.querySelectorAll<HTMLElement>('.gridtable-header [data-sortable="true"]')
+  )
+    .map((header) => header.dataset.column ?? '')
+    .sort((left, right) => left.localeCompare(right));
 
-const nodeRow = (name: string, age: string) => ({
-  kind: 'Node',
-  name,
-  status: 'Ready',
-  roles: 'worker',
-  version: 'v1.29.0',
-  internalIP: '10.0.0.1',
-  externalIP: '',
-  cpuCapacityMilli: 4000,
-  cpuAllocatableMilli: 4000,
-  cpuRequestsMilli: 1000,
-  cpuLimitsMilli: 2000,
-  cpuUsageMilli: 1000,
-  memoryCapacityBytes: 8 * 1024 ** 3,
-  memoryAllocatableBytes: 8 * 1024 ** 3,
-  memoryRequestsBytes: 1024 ** 3,
-  memoryLimitsBytes: 4 * 1024 ** 3,
-  memoryUsageBytes: 2 * 1024 ** 3,
-  pods: '3',
-  podsAllocatable: '50',
-  podsCapacity: '50',
-  taints: [],
-  labels: {},
-  annotations: {},
-  restarts: 0,
-  unschedulable: false,
-  clusterId: 'cluster-a',
-  clusterName: 'alpha',
-  age,
-});
-
-const podRow = (name: string, age: string) => ({
-  kind: 'Pod',
-  name,
-  namespace: 'team-a',
-  clusterId: 'cluster-a',
-  status: 'Running',
-  ready: '1/1',
-  restarts: 0,
-  ownerKind: 'Deployment',
-  ownerName: 'api',
-  node: 'node-a',
-  cpuUsage: '10m',
-  memUsage: '32Mi',
-  age,
-});
-
-const workloadRow = (name: string, age: string) => ({
-  kind: 'Deployment',
-  name,
-  namespace: 'team-a',
-  clusterId: 'cluster-a',
-  status: 'Available',
-  ready: '1/1',
-  restarts: 0,
-  cpuUsage: '10m',
-  memUsage: '32Mi',
-  age,
-});
-
-const flushQueryEffects = async () => {
-  await act(async () => {
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-  });
+const start = async (leaf: LeafView, target: SidebarTarget) => {
+  app.startScreen(dev);
+  app.serveTable(dev, leaf.domain, { rows: [leaf.row(`query-${leaf.view}`)] } as never);
+  leaf.serveOthers?.();
+  if (leaf.extension) {
+    // The user keeps the sidebar's Extensions group (collapsed by default) open.
+    app.preferences({
+      sidebarClusterExtensionsExpanded: true,
+      sidebarNamespaceExtensionsExpanded: true,
+    });
+  }
+  view = await app.mountApp();
+  await view.goTo(target);
 };
 
+beforeEach(() => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['team-a', 'team-b']);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe('query-backed leaf first load', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  it.each(NAMESPACE_VIEWS)(
+    'the namespace $label view reads its typed page in the namespace and under All Namespaces',
+    async (leaf) => {
+      await start(leaf, { namespace: 'team-a', view: leaf.view });
 
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    gridTablePropsRef.current = null;
-    persistedSortRef.current = null;
-    requestRefreshDomainStateMock.mockReset();
-  });
+      expect(readScopes(leaf.domain)).toContain(firstPageScope('namespace:team-a', leaf.sort));
+      expect(renderedRows()).toEqual([expect.stringContaining(`query-${leaf.view}`)]);
 
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-  });
+      await view.goTo({ namespace: 'namespace:all', view: leaf.view });
 
-  const render = async (element: React.ReactElement, payload: Record<string, unknown>) => {
-    requestRefreshDomainStateMock.mockResolvedValue(typedQueryPayload(payload));
-    await act(async () => {
-      root.render(element);
-      await Promise.resolve();
-    });
-    await flushQueryEffects();
-    return requireValue(
-      gridTablePropsRef.current,
-      'Expected GridTable props after rendering the query-backed view'
-    );
-  };
-
-  /**
-   * Renders a query-backed leaf with `scope`'s sort persisted, then reports what
-   * the view produced: the names it rendered and the scopes it requested for
-   * `domain`. Assertions stay in the tests so each states the contract it pins.
-   */
-  const renderQueryFirstLoad = async ({
-    element,
-    payload,
-    domain,
-    scope,
-  }: {
-    element: React.ReactElement;
-    payload: Record<string, unknown>;
-    domain: string;
-    scope: string;
-  }) => {
-    const sort = scope.match(/[?&]sort=([^&]+)&sortDirection=([^&]+)/);
-    if (sort) {
-      const direction = decodeURIComponent(sort[2]);
-      if (direction !== 'asc' && direction !== 'desc') {
-        // Guards the test's own scope literal, not the behaviour under test.
-        throw new Error(`Unexpected query sort direction: ${direction}`);
-      }
-      persistedSortRef.current = {
-        key: decodeURIComponent(sort[1]),
-        direction,
-      };
-    } else {
-      persistedSortRef.current = null;
+      expect(readScopes(leaf.domain)).toContain(firstPageScope('namespace:all', leaf.sort));
+      expect(renderedRows()).toEqual([expect.stringContaining(`query-${leaf.view}`)]);
+      expect(sortableColumns()).toEqual(leaf.sortable);
     }
-    const props = await render(element, payload);
+  );
 
-    return {
-      rowNames: props.data.map((row) => (row.ref as { name?: string } | undefined)?.name),
-      requestedScopes: requestRefreshDomainStateMock.mock.calls
-        .filter(([request]) => request.domain === domain)
-        .map(([request]) => request.scope as string),
-    };
-  };
+  it.each(CLUSTER_VIEWS)('the cluster $label view reads its typed page', async (leaf) => {
+    await start(leaf, { clusterView: leaf.view });
 
-  it.each([
-    {
-      label: 'namespace config',
-      domain: 'namespace-config',
-      expectedScope: 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc',
-      local: {
-        kind: 'ConfigMap',
-        name: 'local-config',
-        namespace: 'team-a',
-        clusterId: 'cluster-a',
-        data: 1,
-        age: '1h',
-      },
-      query: {
-        kind: 'ConfigMap',
-        name: 'query-config',
-        namespace: 'team-b',
-        clusterId: 'cluster-a',
-        data: 2,
-        age: '2h',
-      },
-      payloadField: 'rows',
-      Component: NsViewConfig,
-    },
-    {
-      label: 'namespace network',
-      domain: 'namespace-network',
-      expectedScope: 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc',
-      local: {
-        kind: 'Ingress',
-        name: 'local-network',
-        namespace: 'team-a',
-        clusterId: 'cluster-a',
-        details: 'local',
-        age: '1h',
-      },
-      query: {
-        kind: 'Ingress',
-        name: 'query-network',
-        namespace: 'team-b',
-        clusterId: 'cluster-a',
-        details: 'query',
-        age: '2h',
-      },
-      payloadField: 'rows',
-      Component: NsViewNetwork,
-    },
-    {
-      label: 'namespace storage',
-      domain: 'namespace-storage',
-      expectedScope: 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc',
-      local: {
-        kind: 'PersistentVolumeClaim',
-        name: 'local-storage',
-        namespace: 'team-a',
-        clusterId: 'cluster-a',
-        status: 'Bound',
-        capacity: '1Gi',
-        age: '1h',
-      },
-      query: {
-        kind: 'PersistentVolumeClaim',
-        name: 'query-storage',
-        namespace: 'team-b',
-        clusterId: 'cluster-a',
-        status: 'Bound',
-        capacity: '2Gi',
-        age: '2h',
-      },
-      payloadField: 'rows',
-      Component: NsViewStorage,
-    },
-    {
-      label: 'namespace quotas',
-      domain: 'namespace-quotas',
-      expectedScope: 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc',
-      local: {
-        kind: 'ResourceQuota',
-        name: 'local-quota',
-        namespace: 'team-a',
-        clusterId: 'cluster-a',
-        hard: { pods: '1' },
-        used: { pods: '0' },
-        age: '1h',
-      },
-      query: {
-        kind: 'ResourceQuota',
-        name: 'query-quota',
-        namespace: 'team-b',
-        clusterId: 'cluster-a',
-        hard: { pods: '2' },
-        used: { pods: '1' },
-        age: '2h',
-      },
-      payloadField: 'rows',
-      Component: NsViewQuotas,
-    },
-    {
-      label: 'namespace RBAC',
-      domain: 'namespace-rbac',
-      expectedScope: 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc',
-      local: {
-        kind: 'Role',
-        name: 'local-rbac',
-        namespace: 'team-a',
-        clusterId: 'cluster-a',
-        rulesCount: 1,
-        age: '1h',
-      },
-      query: {
-        kind: 'Role',
-        name: 'query-rbac',
-        namespace: 'team-b',
-        clusterId: 'cluster-a',
-        rulesCount: 2,
-        age: '2h',
-      },
-      payloadField: 'rows',
-      Component: NsViewRBAC,
-    },
-    {
-      label: 'namespace events',
-      domain: 'namespace-events',
-      expectedScope: 'cluster-a|namespace:all?limit=50&sort=age&sortDirection=asc',
-      local: {
-        kind: 'Event',
-        name: 'local-event',
-        reason: 'LocalReason',
-        namespace: 'team-a',
-        clusterId: 'cluster-a',
-        object: 'Pod/local',
-        ageTimestamp: 1,
-      },
-      query: {
-        kind: 'Event',
-        name: 'query-event',
-        reason: 'QueryReason',
-        namespace: 'team-b',
-        clusterId: 'cluster-a',
-        object: 'Pod/query',
-        ageTimestamp: 2,
-      },
-      payloadField: 'rows',
-      Component: NsViewEvents,
-    },
-  ])('uses the typed query result on first load for $label', async (testCase) => {
-    const observed = await renderQueryFirstLoad({
-      element: <testCase.Component namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
-      payload: { [testCase.payloadField]: [testCase.query] },
-      domain: testCase.domain,
-      scope: testCase.expectedScope,
-    });
-
-    expect(observed.rowNames).toEqual([testCase.query.name]);
-    expect(observed.requestedScopes).toContain(testCase.expectedScope);
+    expect(readScopes(leaf.domain)).toContain(firstPageScope('', leaf.sort));
+    expect(renderedRows()).toEqual([expect.stringContaining(`query-${leaf.view}`)]);
+    expect(sortableColumns()).toEqual(leaf.sortable);
   });
 
-  it('settles a permission-denied domain without warm-up retries and shows the permission state', async () => {
-    // The live failure this pins (restricted identity, docs/architecture/namespace-scope.md):
-    // the backend registers namespace-autoscaling permission-denied and every
-    // snapshot fetch 403s with a typed body. The orchestrator stamps
-    // permissionDenied on the query scope's state — the typed query must READ
-    // that stamp and settle (fail fast), never re-arm the 1s warm-up loop that
-    // rendered as an endless first-load spinner.
-    vi.useFakeTimers();
-    try {
-      requestRefreshDomainStateMock.mockResolvedValue({
-        status: 'executed',
-        data: {
-          status: 'error',
-          error: {
-            kind: 'backend',
-            status: makeErrorStatus(
+  // A restricted identity (docs/architecture/namespace-scope.md): every read of
+  // the domain answers a typed 403. The denial settles the table; the warm-up
+  // retry must not re-arm into an endless first-load spinner.
+  it('settles a permission-denied view on the permission state without retrying', async () => {
+    app.startScreen(dev);
+    app.snapshots.respond(({ domain }) =>
+      domain === 'namespace-autoscaling'
+        ? statusResponse(
+            makeErrorStatus(
               'Forbidden',
               'permission denied for domain namespace-autoscaling (autoscaling/horizontalpodautoscalers)'
-            ),
-          },
-          permissionDenied: true,
-          data: undefined,
-        },
-      });
-      await act(async () => {
-        root.render(
-          <NsViewAutoscaling namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />
-        );
-        await Promise.resolve();
-      });
-      await flushQueryEffects();
+            )
+          )
+        : undefined
+    );
+    view = await app.mountApp();
+    vi.useFakeTimers();
+    await view.goTo({ namespace: 'namespace:all', view: 'autoscaling' });
+    const reads = readScopes('namespace-autoscaling').length;
 
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(5000);
-      });
-      await flushQueryEffects();
-
-      expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(1);
-      // GridTable is stubbed in this harness; the rendered message is its
-      // emptyMessage prop (GridTable's own contract displays it when empty).
-      const props = requireValue(
-        gridTablePropsRef.current,
-        'Expected GridTable props after rendering the permission error state'
-      );
-      expect(props.emptyMessage).toBe('Insufficient permissions');
-      expect(props.data).toHaveLength(0);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('uses the typed query result on first load for namespace autoscaling', async () => {
-    const scope = 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc';
-    const observed = await renderQueryFirstLoad({
-      element: <NsViewAutoscaling namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
-      payload: {
-        rows: [
-          {
-            kind: 'HorizontalPodAutoscaler',
-            name: 'query-autoscaling',
-            namespace: 'team-b',
-            clusterId: 'cluster-a',
-            target: 'Deployment/query',
-            targetApiVersion: 'apps/v1',
-            min: 1,
-            max: 3,
-            current: 2,
-            age: '2h',
-          },
-        ],
-      },
-      domain: 'namespace-autoscaling',
-      scope,
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
     });
+    await app.settle();
 
-    expect(observed.rowNames).toEqual(['query-autoscaling']);
-    expect(observed.requestedScopes).toContain(scope);
-  });
-
-  it('uses the typed query result on first load for namespace Helm', async () => {
-    const scope = 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc';
-    const observed = await renderQueryFirstLoad({
-      element: <NsViewHelm namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
-      payload: {
-        rows: [
-          {
-            name: 'query-release',
-            namespace: 'team-b',
-            clusterId: 'cluster-a',
-            chart: 'query-1.0.0',
-            status: 'deployed',
-            revision: 2,
-            age: '2h',
-          },
-        ],
-      },
-      domain: 'namespace-helm',
-      scope,
-    });
-
-    expect(observed.rowNames).toEqual(['query-release']);
-    expect(observed.requestedScopes).toContain(scope);
-  });
-
-  it('uses the typed query result on first load for namespace pods', async () => {
-    const scope = 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc';
-    const observed = await renderQueryFirstLoad({
-      element: <NsViewPods namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
-      payload: {
-        rows: [podRow('query-pod', '2h')],
-      },
-      domain: 'pods',
-      scope,
-    });
-
-    expect(observed.rowNames).toEqual(['query-pod']);
-    expect(observed.requestedScopes).toContain(scope);
-  });
-
-  it('uses the typed query result on first load for namespace workloads', async () => {
-    const scope = 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc';
-    const observed = await renderQueryFirstLoad({
-      element: <WorkloadsTable namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
-      payload: {
-        rows: [workloadRow('query-workload', '2h')],
-      },
-      domain: 'namespace-workloads',
-      scope,
-    });
-
-    expect(observed.rowNames).toEqual(['query-workload']);
-    expect(observed.requestedScopes).toContain(scope);
-  });
-
-  it.each([
-    {
-      label: 'namespace config',
-      domain: 'namespace-config',
-      expectedScope: 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc',
-      local: {
-        kind: 'ConfigMap',
-        name: 'local-config',
-        namespace: 'team-a',
-        clusterId: 'cluster-a',
-        data: 1,
-        age: '1h',
-      },
-      query: {
-        kind: 'ConfigMap',
-        name: 'query-config',
-        namespace: 'team-b',
-        clusterId: 'cluster-a',
-        data: 2,
-        age: '2h',
-      },
-      payloadField: 'rows',
-      Component: NsViewConfig,
-    },
-    {
-      label: 'namespace network',
-      domain: 'namespace-network',
-      expectedScope: 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc',
-      local: {
-        kind: 'Ingress',
-        name: 'local-network',
-        namespace: 'team-a',
-        clusterId: 'cluster-a',
-        details: 'local',
-        age: '1h',
-      },
-      query: {
-        kind: 'Ingress',
-        name: 'query-network',
-        namespace: 'team-b',
-        clusterId: 'cluster-a',
-        details: 'query',
-        age: '2h',
-      },
-      payloadField: 'rows',
-      Component: NsViewNetwork,
-    },
-    {
-      label: 'namespace storage',
-      domain: 'namespace-storage',
-      expectedScope: 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc',
-      local: {
-        kind: 'PersistentVolumeClaim',
-        name: 'local-storage',
-        namespace: 'team-a',
-        clusterId: 'cluster-a',
-        status: 'Bound',
-        capacity: '1Gi',
-        age: '1h',
-      },
-      query: {
-        kind: 'PersistentVolumeClaim',
-        name: 'query-storage',
-        namespace: 'team-b',
-        clusterId: 'cluster-a',
-        status: 'Bound',
-        capacity: '2Gi',
-        age: '2h',
-      },
-      payloadField: 'rows',
-      Component: NsViewStorage,
-    },
-    {
-      label: 'namespace quotas',
-      domain: 'namespace-quotas',
-      expectedScope: 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc',
-      local: {
-        kind: 'ResourceQuota',
-        name: 'local-quota',
-        namespace: 'team-a',
-        clusterId: 'cluster-a',
-        hard: { pods: '1' },
-        used: { pods: '0' },
-        age: '1h',
-      },
-      query: {
-        kind: 'ResourceQuota',
-        name: 'query-quota',
-        namespace: 'team-b',
-        clusterId: 'cluster-a',
-        hard: { pods: '2' },
-        used: { pods: '1' },
-        age: '2h',
-      },
-      payloadField: 'rows',
-      Component: NsViewQuotas,
-    },
-    {
-      label: 'namespace RBAC',
-      domain: 'namespace-rbac',
-      expectedScope: 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc',
-      local: {
-        kind: 'Role',
-        name: 'local-rbac',
-        namespace: 'team-a',
-        clusterId: 'cluster-a',
-        rulesCount: 1,
-        age: '1h',
-      },
-      query: {
-        kind: 'Role',
-        name: 'query-rbac',
-        namespace: 'team-b',
-        clusterId: 'cluster-a',
-        rulesCount: 2,
-        age: '2h',
-      },
-      payloadField: 'rows',
-      Component: NsViewRBAC,
-    },
-    {
-      label: 'namespace events',
-      domain: 'namespace-events',
-      expectedScope: 'cluster-a|namespace:team-a?limit=50&sort=age&sortDirection=asc',
-      local: {
-        kind: 'Event',
-        name: 'local-event',
-        reason: 'LocalReason',
-        namespace: 'team-a',
-        clusterId: 'cluster-a',
-        object: 'Pod/local',
-        ageTimestamp: 1,
-      },
-      query: {
-        kind: 'Event',
-        name: 'query-event',
-        reason: 'QueryReason',
-        namespace: 'team-b',
-        clusterId: 'cluster-a',
-        object: 'Pod/query',
-        ageTimestamp: 2,
-      },
-      payloadField: 'rows',
-      Component: NsViewEvents,
-    },
-  ])('issues a namespace-scoped typed query on first load for $label', async (testCase) => {
-    const observed = await renderQueryFirstLoad({
-      element: <testCase.Component namespace="team-a" showNamespaceColumn={false} />,
-      payload: { [testCase.payloadField]: [testCase.query] },
-      domain: testCase.domain,
-      scope: testCase.expectedScope,
-    });
-
-    expect(observed.rowNames).toEqual([testCase.query.name]);
-    expect(observed.requestedScopes).toContain(testCase.expectedScope);
-  });
-
-  it('issues a namespace-scoped typed query on first load for namespace autoscaling', async () => {
-    const scope = 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc';
-    const observed = await renderQueryFirstLoad({
-      element: <NsViewAutoscaling namespace="team-a" showNamespaceColumn={false} />,
-      payload: {
-        rows: [
-          {
-            kind: 'HorizontalPodAutoscaler',
-            name: 'query-autoscaling',
-            namespace: 'team-b',
-            clusterId: 'cluster-a',
-            target: 'Deployment/query',
-            targetApiVersion: 'apps/v1',
-            min: 1,
-            max: 3,
-            current: 2,
-            age: '2h',
-          },
-        ],
-      },
-      domain: 'namespace-autoscaling',
-      scope,
-    });
-
-    expect(observed.rowNames).toEqual(['query-autoscaling']);
-    expect(observed.requestedScopes).toContain(scope);
-  });
-
-  it('issues a namespace-scoped typed query on first load for namespace Helm', async () => {
-    const scope = 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc';
-    const observed = await renderQueryFirstLoad({
-      element: <NsViewHelm namespace="team-a" showNamespaceColumn={false} />,
-      payload: {
-        rows: [
-          {
-            name: 'query-release',
-            namespace: 'team-b',
-            clusterId: 'cluster-a',
-            chart: 'query-1.0.0',
-            status: 'deployed',
-            revision: 2,
-            age: '2h',
-          },
-        ],
-      },
-      domain: 'namespace-helm',
-      scope,
-    });
-
-    expect(observed.rowNames).toEqual(['query-release']);
-    expect(observed.requestedScopes).toContain(scope);
-  });
-
-  it('issues a namespace-scoped typed query on first load for namespace pods', async () => {
-    const scope = 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc';
-    const observed = await renderQueryFirstLoad({
-      element: <NsViewPods namespace="team-a" showNamespaceColumn={false} />,
-      payload: {
-        rows: [podRow('query-pod', '2h')],
-      },
-      domain: 'pods',
-      scope,
-    });
-
-    expect(observed.rowNames).toEqual(['query-pod']);
-    expect(observed.requestedScopes).toContain(scope);
-  });
-
-  it('issues a namespace-scoped typed query on first load for namespace workloads', async () => {
-    const scope = 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc';
-    const observed = await renderQueryFirstLoad({
-      element: <WorkloadsTable namespace="team-a" showNamespaceColumn={false} />,
-      payload: {
-        rows: [workloadRow('query-workload', '2h')],
-      },
-      domain: 'namespace-workloads',
-      scope,
-    });
-
-    expect(observed.rowNames).toEqual(['query-workload']);
-    expect(observed.requestedScopes).toContain(scope);
-  });
-
-  it.each([
-    {
-      label: 'cluster config',
-      domain: 'cluster-config',
-      expectedScope: 'cluster-a|?limit=50&sort=name&sortDirection=asc',
-      local: { kind: 'StorageClass', name: 'local-config', clusterId: 'cluster-a', age: '1h' },
-      query: { kind: 'StorageClass', name: 'query-config', clusterId: 'cluster-a', age: '2h' },
-      payloadField: 'rows',
-      Component: ClusterViewConfig,
-    },
-    {
-      label: 'cluster storage',
-      domain: 'cluster-storage',
-      expectedScope: 'cluster-a|?limit=50&sort=name&sortDirection=asc',
-      local: {
-        kind: 'PersistentVolume',
-        name: 'local-volume',
-        clusterId: 'cluster-a',
-        capacity: '1Gi',
-        status: 'Bound',
-        age: '1h',
-      },
-      query: {
-        kind: 'PersistentVolume',
-        name: 'query-volume',
-        clusterId: 'cluster-a',
-        capacity: '2Gi',
-        status: 'Bound',
-        age: '2h',
-      },
-      payloadField: 'rows',
-      Component: ClusterViewStorage,
-    },
-    {
-      label: 'cluster RBAC',
-      domain: 'cluster-rbac',
-      expectedScope: 'cluster-a|?limit=50&sort=name&sortDirection=asc',
-      local: {
-        kind: 'ClusterRole',
-        name: 'local-rbac',
-        clusterId: 'cluster-a',
-        rulesCount: 1,
-        age: '1h',
-      },
-      query: {
-        kind: 'ClusterRole',
-        name: 'query-rbac',
-        clusterId: 'cluster-a',
-        rulesCount: 2,
-        age: '2h',
-      },
-      payloadField: 'rows',
-      Component: ClusterViewRBAC,
-    },
-    {
-      label: 'cluster CRDs',
-      domain: 'cluster-crds',
-      expectedScope: 'cluster-a|?limit=50&sort=name&sortDirection=asc',
-      local: {
-        kind: 'CustomResourceDefinition',
-        name: 'locals.example.com',
-        group: 'example.com',
-        scope: 'Namespaced',
-        clusterId: 'cluster-a',
-        age: '1h',
-      },
-      query: {
-        kind: 'CustomResourceDefinition',
-        name: 'queries.example.com',
-        group: 'example.com',
-        scope: 'Namespaced',
-        clusterId: 'cluster-a',
-        age: '2h',
-      },
-      payloadField: 'rows',
-      Component: ClusterViewCRDs,
-    },
-  ])('uses the typed query result on first load for $label', async (testCase) => {
-    const observed = await renderQueryFirstLoad({
-      element: <testCase.Component />,
-      payload: { [testCase.payloadField]: [testCase.query] },
-      domain: testCase.domain,
-      scope: testCase.expectedScope,
-    });
-
-    expect(observed.rowNames).toEqual([testCase.query.name]);
-    expect(observed.requestedScopes).toContain(testCase.expectedScope);
-  });
-
-  it('uses the typed query result on first load for cluster events', async () => {
-    const scope = 'cluster-a|?limit=50&sort=age&sortDirection=asc';
-    const observed = await renderQueryFirstLoad({
-      element: <ClusterViewEvents />,
-      payload: {
-        rows: [
-          {
-            kind: 'Event',
-            name: 'query-event',
-            namespace: 'team-b',
-            type: 'Warning',
-            source: 'kubelet',
-            reason: 'QueryReason',
-            message: 'query message',
-            clusterId: 'cluster-a',
-            object: 'Pod/query',
-            ageTimestamp: 2,
-          },
-        ],
-      },
-      domain: 'cluster-events',
-      scope,
-    });
-
-    expect(observed.rowNames).toEqual(['query-event']);
-    expect(observed.requestedScopes).toContain(scope);
-  });
-
-  it('uses the typed query result on first load for cluster nodes', async () => {
-    const scope = 'cluster-a|?limit=50&sort=name&sortDirection=asc';
-    const observed = await renderQueryFirstLoad({
-      element: <ClusterViewNodes />,
-      payload: {
-        rows: [nodeRow('query-node', '2h')],
-      },
-      domain: 'nodes',
-      scope,
-    });
-
-    expect(observed.rowNames).toEqual(['query-node']);
-    expect(observed.requestedScopes).toContain(scope);
-  });
-
-  const sortableKeys = (props: CapturedGridTableProps): string[] =>
-    (props.columns ?? [])
-      .filter((column) => column.sortable !== false)
-      .map((column) => column.key)
-      .sort((left: string, right: string) => left.localeCompare(right));
-
-  it.each([
-    {
-      label: 'namespace config',
-      element: <NsViewConfig namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
-      payload: { resources: [] },
-      expected: ['age', 'data', 'kind', 'name', 'namespace'],
-    },
-    {
-      label: 'namespace network',
-      element: <NsViewNetwork namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
-      payload: { resources: [] },
-      // Context + Network are slot columns backed by matching server sort
-      // fields; Summary stays non-sortable (mixed label+number text).
-      expected: ['age', 'context', 'kind', 'name', 'namespace', 'network'],
-    },
-    {
-      label: 'namespace storage',
-      element: <NsViewStorage namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
-      payload: { resources: [] },
-      expected: ['age', 'capacity', 'kind', 'name', 'namespace', 'status', 'storageClass'],
-    },
-    {
-      label: 'namespace autoscaling',
-      element: <NsViewAutoscaling namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
-      payload: { resources: [] },
-      expected: ['age', 'current', 'kind', 'name', 'namespace', 'replicas', 'scaleTarget'],
-    },
-    {
-      label: 'namespace quotas',
-      element: <NsViewQuotas namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
-      payload: { resources: [] },
-      expected: ['age', 'kind', 'name', 'namespace'],
-    },
-    {
-      label: 'namespace RBAC',
-      element: <NsViewRBAC namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
-      payload: { resources: [] },
-      expected: ['age', 'kind', 'name', 'namespace'],
-    },
-    {
-      label: 'namespace Helm',
-      element: <NsViewHelm namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
-      payload: { releases: [] },
-      expected: [
-        'age',
-        'appVersion',
-        'chart',
-        'kind',
-        'name',
-        'namespace',
-        'revision',
-        'status',
-        'updated',
-      ],
-    },
-    {
-      label: 'namespace events',
-      element: <NsViewEvents namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
-      payload: { events: [] },
-      expected: [
-        'age',
-        'kind',
-        'message',
-        'namespace',
-        'objectName',
-        'objectType',
-        'reason',
-        'source',
-        'type',
-      ],
-    },
-    {
-      label: 'namespace pods',
-      element: <NsViewPods namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
-      payload: { rows: [] },
-      expected: [
-        'age',
-        'cpu',
-        'memory',
-        'name',
-        'namespace',
-        'node',
-        'owner',
-        'ready',
-        'restarts',
-        'status',
-      ],
-    },
-    {
-      label: 'namespace workloads',
-      element: <WorkloadsTable namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
-      payload: { rows: [] },
-      expected: [
-        'age',
-        'cpu',
-        'kind',
-        'memory',
-        'name',
-        'namespace',
-        'ready',
-        'restarts',
-        'status',
-      ],
-    },
-    {
-      label: 'cluster config',
-      element: <ClusterViewConfig />,
-      payload: { resources: [] },
-      expected: ['age', 'kind', 'name'],
-    },
-    {
-      label: 'cluster storage',
-      element: <ClusterViewStorage />,
-      payload: { rows: [] },
-      expected: [
-        'accessModes',
-        'age',
-        'capacity',
-        'claim',
-        'kind',
-        'name',
-        'status',
-        'storageClass',
-      ],
-    },
-    {
-      label: 'cluster RBAC',
-      element: <ClusterViewRBAC />,
-      payload: { resources: [] },
-      expected: ['age', 'kind', 'name'],
-    },
-    {
-      label: 'cluster CRDs',
-      element: <ClusterViewCRDs />,
-      payload: { definitions: [] },
-      expected: ['age', 'group', 'kind', 'name', 'scope', 'version'],
-    },
-    {
-      label: 'cluster events',
-      element: <ClusterViewEvents />,
-      payload: { events: [] },
-      expected: ['age', 'kind', 'message', 'objectName', 'objectType', 'reason', 'source', 'type'],
-    },
-    {
-      label: 'cluster nodes',
-      element: <NodesTable />,
-      payload: { rows: [] },
-      expected: ['age', 'cpu', 'kind', 'memory', 'name', 'pods', 'restarts', 'status', 'version'],
-    },
-  ])('publishes only query-supported sortable keys for $label', async (testCase) => {
-    const props = await render(testCase.element, testCase.payload);
-
-    expect(sortableKeys(props)).toEqual(testCase.expected);
+    expect(readScopes('namespace-autoscaling')).toHaveLength(reads);
+    expect(view.container.textContent).toContain('Insufficient permissions');
+    expect(renderedRows()).toEqual([]);
   });
 });

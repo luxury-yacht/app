@@ -55,9 +55,5 @@ export const useClusterMetricsAvailability = (): ClusterOverviewMetrics | null =
     }
   }, [overviewDomain.data, overviewDomain.status, overviewScope, shouldEnable, viewType]);
 
-  const metricsByCluster = overviewDomain.data?.metricsByCluster;
-  if (metricsByCluster) {
-    return selectedClusterId ? (metricsByCluster[selectedClusterId] ?? null) : null;
-  }
   return overviewDomain.data?.metrics ?? null;
 };

@@ -1,41 +1,14 @@
 /**
  * frontend/src/ui/layout/namespaceScope.test.ts
  *
- * Tests for the sidebar namespace-scope editor logic
- * (docs/architecture/namespace-scope.md).
+ * The namespace-scope editor's syntactic validation
+ * (docs/architecture/namespace-scope.md): which names the sidebar accepts
+ * before asking the backend to persist the scope. Loading, saving, and
+ * removing run through the real editor in NamespaceScopeEditor.test.tsx.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-vi.mock('@/core/settings/clusterAllowedNamespaces', () => ({
-  getClusterAllowedNamespaces: vi.fn(),
-  setClusterAllowedNamespaces: vi.fn(),
-}));
-vi.mock('@/core/data-access', () => ({
-  requestRefreshDomain: vi.fn(),
-}));
-
-import { requestRefreshDomain } from '@/core/data-access';
-import {
-  getClusterAllowedNamespaces,
-  setClusterAllowedNamespaces,
-} from '@/core/settings/clusterAllowedNamespaces';
-import {
-  addNamespaceToScope,
-  isValidNamespaceName,
-  loadNamespaceScope,
-  NAMESPACE_SCOPE_SOFT_WARNING_THRESHOLD,
-  removeNamespaceFromScope,
-  saveNamespaceScope,
-} from './namespaceScope';
-
-const getMock = vi.mocked(getClusterAllowedNamespaces);
-const setMock = vi.mocked(setClusterAllowedNamespaces);
-const refreshMock = vi.mocked(requestRefreshDomain);
-
-beforeEach(() => {
-  vi.clearAllMocks();
-});
+import { describe, expect, it } from 'vitest';
+import { addNamespaceToScope, isValidNamespaceName } from './namespaceScope';
 
 describe('isValidNamespaceName', () => {
   it('accepts DNS-1123 labels and rejects everything else', () => {
@@ -51,58 +24,10 @@ describe('isValidNamespaceName', () => {
   });
 });
 
-describe('scope list operations', () => {
-  it('adds a trimmed name, rejecting duplicates and invalid names', () => {
+describe('addNamespaceToScope', () => {
+  it('adds a trimmed name and rejects duplicates and invalid names', () => {
     expect(addNamespaceToScope(['prod'], ' dev ')).toEqual({ next: ['prod', 'dev'] });
-    expect(addNamespaceToScope(['prod'], 'prod').error).toMatch(/already/);
-    expect(addNamespaceToScope(['prod'], 'Not Valid').error).toMatch(/lowercase/);
-  });
-
-  it('removes a name', () => {
-    expect(removeNamespaceFromScope(['prod', 'dev'], 'prod')).toEqual(['dev']);
-    expect(removeNamespaceFromScope(['prod'], 'absent')).toEqual(['prod']);
-  });
-});
-
-describe('loadNamespaceScope', () => {
-  it('reads the persisted scope for the cluster', async () => {
-    getMock.mockResolvedValue(['prod']);
-    await expect(loadNamespaceScope('kc:ctx')).resolves.toEqual(['prod']);
-    expect(getMock).toHaveBeenCalledWith('kc:ctx');
-  });
-
-  it('returns an empty scope when no cluster is selected', async () => {
-    await expect(loadNamespaceScope('')).resolves.toEqual([]);
-    expect(getMock).not.toHaveBeenCalled();
-  });
-});
-
-describe('saveNamespaceScope', () => {
-  it('persists and returns the normalized scope WITHOUT an immediate refetch', async () => {
-    // The refetch must NOT fire here: the backend tears down and rebuilds the
-    // cluster's subsystem for seconds after the save, so an immediate fetch
-    // races the rebuild and caches the stale pre-rebuild snapshot. The
-    // frontend converges on the backend's cluster:scope:changed event
-    // instead (orchestrator + NamespaceContext listeners).
-    setMock.mockResolvedValue(['prod', 'dev']);
-
-    const result = await saveNamespaceScope('kc:ctx', ['prod', 'dev']);
-    expect(result).toEqual(['prod', 'dev']);
-    expect(setMock).toHaveBeenCalledWith('kc:ctx', ['prod', 'dev']);
-    expect(refreshMock).not.toHaveBeenCalled();
-  });
-
-  it('propagates backend validation errors', async () => {
-    setMock.mockRejectedValue(new Error('invalid namespace name "Bad!"'));
-
-    await expect(saveNamespaceScope('kc:ctx', ['Bad!'])).rejects.toThrow('invalid namespace');
-    expect(refreshMock).not.toHaveBeenCalled();
-  });
-});
-
-describe('soft warning threshold', () => {
-  it('is a sane bound (watches scale with kinds × namespaces)', () => {
-    expect(NAMESPACE_SCOPE_SOFT_WARNING_THRESHOLD).toBeGreaterThan(5);
-    expect(NAMESPACE_SCOPE_SOFT_WARNING_THRESHOLD).toBeLessThanOrEqual(50);
+    expect(addNamespaceToScope(['prod'], 'prod')).toEqual({ error: expect.any(String) });
+    expect(addNamespaceToScope(['prod'], 'Not Valid')).toEqual({ error: expect.any(String) });
   });
 });

@@ -21,7 +21,7 @@ import {
   computeClusterHash,
 } from '@shared/components/tables/persistence/gridTablePersistence';
 import { act, type ComponentProps, isValidElement } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
 import { objectPanelTabSnapshot } from '@/core/panel-windows/tabTransfer';
 import {
@@ -46,7 +46,7 @@ import {
   type TestCluster,
   type TestObject,
 } from '@/test-utils/appState/harness';
-import { type SnapshotRequest, snapshotResponse } from '@/test-utils/appState/transport';
+import type { SnapshotAnswer } from '@/test-utils/appState/transport';
 import { objectDetailOf } from '@/test-utils/objectDetail';
 import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
@@ -89,9 +89,6 @@ const podIdentity = (name: string, namespace: string): ObjectIdentity => ({
 
 let dev: TestCluster;
 let view: MountedApp;
-let snapshotVersion = 0;
-type SnapshotAnswer = (request: SnapshotRequest) => unknown;
-let answers: SnapshotAnswer[] = [];
 
 /** A pod row as backend/refresh/snapshot/pods.go projects it, in the panel's cluster. */
 const createPod = (overrides: CanonicalRowTestOverrides<PodSnapshotEntry> = {}) => {
@@ -128,19 +125,9 @@ const podsPage = (
     ...overrides,
   });
 
-/** Answers the snapshot reads `answer` handles with the payload it returns. */
+/** Answers the snapshot reads `answer` handles with the payload it returns (test-utils/appState). */
 const answerReads = (answer: SnapshotAnswer) => {
-  answers.push(answer);
-  app.snapshots.respond((request) => {
-    for (const candidate of answers) {
-      const payload = candidate(request);
-      if (payload !== undefined) {
-        snapshotVersion += 1;
-        return snapshotResponse({ ...request, version: snapshotVersion, payload });
-      }
-    }
-    return undefined;
-  });
+  app.snapshots.answer(answer);
 };
 
 const podsReads = () =>
@@ -311,15 +298,7 @@ const offersFavorite = () =>
     (item) => 'id' in item && item.id === 'favorite'
   );
 
-// jsdom has no layout scrolling; the sidebar scrolls the selected namespace into view.
-const nativeScrollIntoView = Element.prototype.scrollIntoView;
-beforeEach(() => {
-  answers = [];
-  Element.prototype.scrollIntoView = () => undefined;
-});
-
 afterEach(() => {
-  Element.prototype.scrollIntoView = nativeScrollIntoView;
   gridTables.clear();
 });
 
@@ -569,7 +548,8 @@ describe('PodsTab', () => {
     expect(cell.props.className).toBe('status-text warning');
   });
 
-  it('shows zero restarts as no value without changing numeric sorting', async () => {
+  // The backend sorts restarts by count; the table shows zero as no value.
+  it('shows zero restarts as no value', async () => {
     startCluster();
     await openPods([createPod(), createPod({ ref: { name: 'restarted' }, restarts: 2 })]);
     const quiet = requireValue(podsTable().data[0], 'expected the quiet pod');
@@ -578,8 +558,6 @@ describe('PodsTab', () => {
     const restarts = column('restarts');
     expect(getTextContent(restarts.render(quiet))).toBe('-');
     expect(getTextContent(restarts.render(restarted))).toBe('2');
-    expect(restarts.sortValue?.(quiet)).toBe(0);
-    expect(restarts.sortValue?.(restarted)).toBe(2);
   });
 
   it("opens the pod's Map from its context menu", async () => {

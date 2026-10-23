@@ -116,7 +116,16 @@ vi.mock('@wailsio/runtime', () => {
     objectNames: { Call: 0, Browser: 9 },
     System: { Environment: vi.fn() },
     Flags: { GetFlag: vi.fn(() => undefined) },
-    Window: { OpenDevTools: vi.fn(), ToggleMaximise: vi.fn() },
+    // The window's own controls resolve at once; the harness installs Name and Get.
+    Window: {
+      Close: vi.fn(() => Promise.resolve()),
+      IsMaximised: vi.fn(() => Promise.resolve(false)),
+      Minimise: vi.fn(() => Promise.resolve()),
+      Maximise: vi.fn(() => Promise.resolve()),
+      Restore: vi.fn(() => Promise.resolve()),
+      OpenDevTools: vi.fn(() => Promise.resolve()),
+      ToggleMaximise: vi.fn(() => Promise.resolve()),
+    },
   };
 });
 

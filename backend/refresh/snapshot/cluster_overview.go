@@ -94,11 +94,8 @@ func (b *ClusterOverviewBuilder) workloadIngestCount(gvr schema.GroupVersionReso
 // ClusterOverviewSnapshot is the payload published for the cluster overview domain.
 type ClusterOverviewSnapshot struct {
 	ClusterMeta
-	Overview         ClusterOverviewPayload            `json:"overview"`
-	Metrics          ClusterOverviewMetrics            `json:"metrics"`
-	MetricsByCluster map[string]ClusterOverviewMetrics `json:"metricsByCluster,omitempty"`
-	// OverviewByCluster keeps per-cluster cards for multi-cluster snapshots.
-	OverviewByCluster map[string]ClusterOverviewPayload `json:"overviewByCluster,omitempty"`
+	Overview ClusterOverviewPayload `json:"overview"`
+	Metrics  ClusterOverviewMetrics `json:"metrics"`
 }
 
 // ClusterOverviewMetrics exposes poller metadata relevant to aggregated usage values.

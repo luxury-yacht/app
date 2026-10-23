@@ -1,76 +1,90 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+/**
+ * frontend/src/utils/appearanceMode.test.ts
+ *
+ * The appearance helpers over the real preference owner: overrides for a mode
+ * use that mode's saved tint, accent, and link colors (an inactive tint clears
+ * the palette), a mode change is saved through the preference owner and
+ * reported back by the page's resolved mode, and an unknown mode is rejected
+ * without saving. Runs inside the production shell, whose appearance owner
+ * applies the saved mode, over the faked backend (test-utils/appState).
+ */
+
+import { act } from 'react';
+import { beforeEach, describe, expect, it } from 'vitest';
+import type { AppearanceMode } from '@/core/settings/appPreferences';
+import { installAppStateHarness } from '@/test-utils/appState/harness';
 import {
   applyAppearanceOverrides,
   changeAppearanceMode,
   resolveAppearanceMode,
 } from './appearanceMode';
 
-const mocks = vi.hoisted(() => ({
-  applyAccentBg: vi.fn(),
-  applyAccentColor: vi.fn(),
-  applyLinkColor: vi.fn(),
-  applyTintedPalette: vi.fn(),
-  getAccentColor: vi.fn((mode: 'light' | 'dark') => (mode === 'light' ? '#112233' : '#445566')),
-  getLinkColor: vi.fn((_mode: 'light' | 'dark') => '#abcdef'),
-  getPaletteTint: vi.fn(),
-  isPaletteActive: vi.fn(),
-  setAppearanceModePreference: vi.fn(),
-}));
+const app = installAppStateHarness();
 
-vi.mock('@utils/accentColor', () => ({
-  applyAccentBg: (...args: unknown[]) => mocks.applyAccentBg(...args),
-  applyAccentColor: (...args: unknown[]) => mocks.applyAccentColor(...args),
-}));
+/** Preference changes the backend saved, in order. */
+const saved = () =>
+  app.backend.calls('UpdateAppPreferences').flatMap(([request]) => request.changes ?? []);
 
-vi.mock('@utils/linkColor', () => ({
-  applyLinkColor: (...args: unknown[]) => mocks.applyLinkColor(...args),
-}));
+const rootStyle = (property: string) => document.documentElement.style.getPropertyValue(property);
 
-vi.mock('@utils/paletteTint', () => ({
-  applyTintedPalette: (...args: unknown[]) => mocks.applyTintedPalette(...args),
-  isPaletteActive: (...args: unknown[]) => mocks.isPaletteActive(...args),
-}));
-
-vi.mock('@/core/settings/appPreferences', () => ({
-  getAccentColor: (mode: 'light' | 'dark') => mocks.getAccentColor(mode),
-  getLinkColor: (mode: 'light' | 'dark') => mocks.getLinkColor(mode),
-  getPaletteTint: (...args: unknown[]) => mocks.getPaletteTint(...args),
-  setAppearanceModePreference: (...args: unknown[]) => mocks.setAppearanceModePreference(...args),
-}));
+beforeEach(async () => {
+  app.preferences({
+    appearanceMode: 'light',
+    paletteHueLight: 20,
+    paletteSaturationLight: 0,
+    paletteBrightnessLight: 0,
+    paletteHueDark: 210,
+    paletteSaturationDark: 40,
+    paletteBrightnessDark: -5,
+    accentColorLight: '#112233',
+    accentColorDark: '#445566',
+    linkColorLight: '#654321',
+    linkColorDark: '#abcdef',
+  });
+  // Mirrors backend/preferences_settings.go UpdateAppPreferences.
+  app.backend.answer('UpdateAppPreferences', (request) => ({
+    settings: null,
+    changedKeys: (request.changes ?? []).map(({ key }) => key),
+  }));
+  await app.render(null);
+});
 
 describe('appearance mode utilities', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mocks.getPaletteTint.mockReturnValue({ hue: 210, saturation: 40, brightness: -5 });
-    mocks.isPaletteActive.mockReturnValue(true);
-    mocks.setAppearanceModePreference.mockResolvedValue(undefined);
-  });
-
-  it('resolves the current document mode', () => {
-    document.documentElement.dataset.appearanceMode = 'dark';
-    expect(resolveAppearanceMode()).toBe('dark');
-    document.documentElement.dataset.appearanceMode = 'light';
-    expect(resolveAppearanceMode()).toBe('light');
-  });
-
-  it('applies the active mode palette, accent, and link overrides', () => {
+  it('applies the given mode’s saved tint, accent, and link colors', () => {
     applyAppearanceOverrides('dark');
 
-    expect(mocks.applyTintedPalette).toHaveBeenCalledWith(210, 40, -5);
-    expect(mocks.applyAccentColor).toHaveBeenCalledWith('#112233', '#445566');
-    expect(mocks.applyAccentBg).toHaveBeenCalledWith('#445566', 'dark');
-    expect(mocks.applyLinkColor).toHaveBeenCalledWith('#abcdef', 'dark');
+    expect(rootStyle('--color-base-500')).toMatch(/^hsl\(210, /);
+    expect(rootStyle('--color-accent-bg')).toBe('rgba(68, 85, 102, 0.15)');
+    expect(rootStyle('--color-object-panel-link')).toBe('#abcdef');
   });
 
-  it('clears an inactive palette and validates preference changes', async () => {
-    mocks.isPaletteActive.mockReturnValue(false);
-    applyAppearanceOverrides('light');
-    expect(mocks.applyTintedPalette).toHaveBeenCalledWith(0, 0, 0);
+  it('clears the tinted palette for a mode whose saved tint is inactive', () => {
+    applyAppearanceOverrides('dark');
+    expect(rootStyle('--color-base-500')).not.toBe('');
 
-    await changeAppearanceMode('system');
-    expect(mocks.setAppearanceModePreference).toHaveBeenCalledWith('system');
-    await expect(changeAppearanceMode('invalid' as 'system')).rejects.toThrow(
+    applyAppearanceOverrides('light');
+
+    expect(rootStyle('--color-base-500')).toBe('');
+    expect(rootStyle('--color-object-panel-link')).toBe('#654321');
+  });
+
+  it('saves a mode change, which the page then resolves to', async () => {
+    expect(resolveAppearanceMode()).toBe('light');
+
+    await act(async () => changeAppearanceMode('dark'));
+    await app.settle();
+
+    expect(saved()).toEqual([{ key: 'appearanceMode', value: 'dark' }]);
+    expect(resolveAppearanceMode()).toBe('dark');
+  });
+
+  it('rejects an unknown mode without saving it', async () => {
+    await expect(changeAppearanceMode('invalid' as AppearanceMode)).rejects.toThrow(
       'Invalid appearance mode: invalid'
     );
+    await app.settle();
+
+    expect(saved()).toEqual([]);
+    expect(resolveAppearanceMode()).toBe('light');
   });
 });

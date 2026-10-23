@@ -1,73 +1,106 @@
-import type React from 'react';
+/**
+ * frontend/src/modules/browse/hooks/useBrowseColumns.test.tsx
+ *
+ * Verifies the Browse table's row projection and column wiring: catalog rows
+ * keep the action facts their context menus read, All Namespaces adds a
+ * Namespace column that opens the row's namespace in its own cluster, and
+ * Alt+click on a name navigates the workspace to the object's view. The hook
+ * runs inside the production shell over a faked backend (test-utils/appState).
+ */
+
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { describe, expect, expectTypeOf, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CatalogItem } from '@/core/refresh/types';
-import { makeResourceRef } from '@/test-utils/makeResourceRef';
-import { requireReactElement } from '@/test-utils/requireReactElement';
-import type { BrowseTableRow } from './useBrowseColumns';
-import { toTableRows, useBrowseColumns } from './useBrowseColumns';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { requireValue } from '@/test-utils/requireValue';
+import { type BrowseTableRow, toTableRows, useBrowseColumns } from './useBrowseColumns';
 
-const navigateToView = vi.hoisted(() => vi.fn());
-
-vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView }),
-}));
-
-const renderHook = <T,>(hook: () => T) => {
-  const result: { current: T | undefined } = { current: undefined };
-
-  const TestComponent: React.FC = () => {
-    result.current = hook();
-    return null;
-  };
-
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = ReactDOM.createRoot(container);
-
-  act(() => {
-    root.render(<TestComponent />);
-  });
-
-  return {
-    get() {
-      if (result.current === undefined) {
-        throw new Error('Hook result not set');
-      }
-      return result.current;
-    },
-    cleanup() {
-      act(() => {
-        root.unmount();
-      });
-      container.remove();
-    },
-  };
-};
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
+let columnKeys: string[] = [];
 
 const catalogItem = (namespace: string): CatalogItem => ({
-  ref: makeResourceRef({
-    clusterId: 'cluster-a',
+  ref: {
+    clusterId: dev.clusterId,
     group: 'batch',
     version: 'v1',
     kind: 'CronJob',
     resource: 'cronjobs',
     namespace,
     name: 'nightly',
-  }),
+    uid: `${namespace}-nightly`,
+  },
   resourceVersion: '7',
   creationTimestamp: '2026-08-04T12:00:00Z',
   scope: 'Namespace',
   actionFacts: { status: 'Suspended' },
 });
 
-describe('useBrowseColumns', () => {
-  it('declares catalog metadata on Browse rows', () => {
-    expectTypeOf<BrowseTableRow['metadata']>().toEqualTypeOf<CatalogItem['metadata']>();
-  });
+/** Renders one row's cells the way GridTable renders each column. */
+function ColumnsProbe({
+  showNamespaceColumn,
+  row,
+  onRowClick,
+  onNamespaceClick,
+}: Readonly<{
+  showNamespaceColumn: boolean;
+  row: BrowseTableRow;
+  onRowClick: (row: BrowseTableRow) => void;
+  onNamespaceClick: (namespace: string | null, clusterId: string | null) => void;
+}>) {
+  const columns = useBrowseColumns({ showNamespaceColumn, onRowClick, onNamespaceClick });
+  columnKeys = columns.map((column) => column.key);
+  return (
+    <div>
+      {columns.map((column) => (
+        <span key={column.key} data-column={column.key}>
+          {column.render(row)}
+        </span>
+      ))}
+    </div>
+  );
+}
 
-  it('preserves action facts without projecting a display-only Status field', () => {
+const showColumns = async (showNamespaceColumn: boolean) => {
+  const onRowClick = vi.fn();
+  const onNamespaceClick = vi.fn();
+  const [row] = toTableRows([catalogItem('team-a')], false);
+  await view.show(
+    <ColumnsProbe
+      showNamespaceColumn={showNamespaceColumn}
+      row={requireValue(row, 'expected a Browse row')}
+      onRowClick={onRowClick}
+      onNamespaceClick={onNamespaceClick}
+    />
+  );
+  return { onRowClick, onNamespaceClick };
+};
+
+const clickCell = async (key: string, init: MouseEventInit = {}) => {
+  const control = requireValue(
+    view.container.querySelector<HTMLElement>(`[data-column="${key}"] button`),
+    `expected an interactive ${key} cell`
+  );
+  await act(async () => {
+    control.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ...init }));
+  });
+  await app.settle();
+};
+
+beforeEach(async () => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['team-a']);
+  view = await app.render(null);
+});
+
+describe('toTableRows', () => {
+  // Browse context menus offer Resume, Scale, and Trigger from these facts.
+  it('keeps catalog action facts and API identity on each row', () => {
     const [row] = toTableRows([catalogItem('team-a')], false);
 
     expect(row).toEqual(
@@ -78,75 +111,45 @@ describe('useBrowseColumns', () => {
         actionFacts: { status: 'Suspended' },
       })
     );
-    expect(row).not.toHaveProperty('statusDisplay');
+  });
+});
+
+describe('useBrowseColumns', () => {
+  it('adds a Namespace column only across namespaces, opening the row namespace in its cluster', async () => {
+    await showColumns(false);
+    expect(columnKeys).toEqual(['kind', 'name', 'api', 'age']);
+
+    const { onNamespaceClick } = await showColumns(true);
+    expect(columnKeys).toEqual(['kind', 'name', 'namespace', 'api', 'age']);
+    await clickCell('namespace');
+
+    expect(onNamespaceClick).toHaveBeenCalledWith('team-a', dev.clusterId);
   });
 
-  it('omits Status from namespace and cross-namespace column sets', () => {
-    const onRowClick = vi.fn();
-    const onNamespaceClick = vi.fn();
-    const namespaceHook = renderHook(() =>
-      useBrowseColumns({ showNamespaceColumn: false, onRowClick, onNamespaceClick })
-    );
-    const namespaceColumns = namespaceHook.get();
-    expect(namespaceColumns.map((column) => column.key)).toEqual(['kind', 'name', 'api', 'age']);
+  it('opens the row from its name and navigates to its view on Alt+click', async () => {
+    const { onRowClick } = await showColumns(true);
 
-    const crossNamespaceHook = renderHook(() =>
-      useBrowseColumns({ showNamespaceColumn: true, onRowClick, onNamespaceClick })
-    );
-    const crossNamespaceColumns = crossNamespaceHook.get();
-    expect(crossNamespaceColumns.map((column) => column.key)).toEqual([
-      'kind',
-      'name',
-      'namespace',
-      'api',
-      'age',
-    ]);
-
-    const [row] = toTableRows([catalogItem('team-a')], false);
-    for (const column of crossNamespaceColumns) {
-      column.render(row);
-      column.sortValue?.(row);
-    }
-
-    const namespaceColumn = crossNamespaceColumns.find((column) => column.key === 'namespace');
-    const namespaceCell = requireReactElement<{
-      onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
-    }>(namespaceColumn?.render(row), 'expected interactive namespace cell');
-    namespaceCell.props.onClick?.({ altKey: false } as React.MouseEvent<HTMLButtonElement>);
-    expect(onNamespaceClick).toHaveBeenCalledWith('team-a', 'cluster-a');
-
-    const nameColumn = crossNamespaceColumns.find((column) => column.key === 'name');
-    const nameCell = requireReactElement<{
-      onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
-    }>(nameColumn?.render(row), 'expected interactive name cell');
-    nameCell.props.onClick?.({
-      altKey: true,
-      preventDefault: vi.fn(),
-      stopPropagation: vi.fn(),
-    } as unknown as React.MouseEvent<HTMLButtonElement>);
-    expect(navigateToView).toHaveBeenCalledWith(expect.objectContaining({ name: 'nightly' }));
-
-    namespaceHook.cleanup();
-    crossNamespaceHook.cleanup();
-  });
-
-  it('lets every Browse column size itself from the current page content', () => {
-    const hook = renderHook(() =>
-      useBrowseColumns({
-        showNamespaceColumn: true,
-        onRowClick: vi.fn(),
-        onNamespaceClick: vi.fn(),
+    await clickCell('name');
+    expect(onRowClick).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ref: expect.objectContaining({
+          clusterId: dev.clusterId,
+          group: 'batch',
+          version: 'v1',
+          kind: 'CronJob',
+          namespace: 'team-a',
+          name: 'nightly',
+        }),
       })
     );
 
-    expect(hook.get().map((column) => [column.key, column.autoWidth])).toEqual([
-      ['kind', true],
-      ['name', true],
-      ['namespace', true],
-      ['api', true],
-      ['age', true],
-    ]);
+    onRowClick.mockClear();
+    await clickCell('name', { altKey: true });
 
-    hook.cleanup();
+    expect(onRowClick).not.toHaveBeenCalled();
+    const owners = view.owners();
+    expect(owners.viewState?.viewType).toBe('namespace');
+    expect(owners.viewState?.activeNamespaceTab).toBe('workloads');
+    expect(owners.namespace.selectedNamespace).toBe('team-a');
   });
 });

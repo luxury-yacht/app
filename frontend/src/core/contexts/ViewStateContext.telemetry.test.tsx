@@ -1,192 +1,152 @@
-import type React from 'react';
+/**
+ * frontend/src/core/contexts/ViewStateContext.telemetry.test.tsx
+ *
+ * The workspace window's navigation owner: it publishes the active view to
+ * error reporting, opens Workloads when a namespace is picked from outside the
+ * namespace view, and keeps Global and per-cluster navigation while a cluster
+ * tab is hidden for closing, dropping a cluster's navigation only once the
+ * close is accepted. Runs the production shell's own view state under the real
+ * kubeconfig owner (test-utils/appState); tabs close through it against the
+ * faked backend. Error reporting is observed with a pass-through spy.
+ */
+
 import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { setActiveViewContext } from '@/core/telemetry/sentry';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 
-const telemetryMocks = vi.hoisted(() => ({
-  setActiveViewContext: vi.fn(),
-}));
+vi.mock('@/core/telemetry/sentry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/core/telemetry/sentry')>();
+  return { ...actual, setActiveViewContext: vi.fn(actual.setActiveViewContext) };
+});
 
-const contextMocks = vi.hoisted(() => ({
-  kubeconfig: {
-    selectedClusterId: 'cluster-a',
-    selectedClusterIds: ['cluster-a'],
-    managedClusterIds: ['cluster-a'],
-  },
-  modal: {},
-  objectPanel: { showObjectPanel: false },
-  sidebar: { setSidebarSelection: vi.fn() },
-}));
+const app = installAppStateHarness();
+let view: MountedApp;
+let alpha: TestCluster;
+let beta: TestCluster;
 
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => contextMocks.kubeconfig,
-}));
-
-vi.mock('@modules/object-panel/contexts/ObjectPanelStateContext', () => ({
-  ObjectPanelStateProvider: ({ children }: { children: React.ReactNode }) => children,
-  useObjectPanelState: () => contextMocks.objectPanel,
-}));
-
-vi.mock('./SidebarStateContext', () => ({
-  SidebarStateProvider: ({ children }: { children: React.ReactNode }) => children,
-  useSidebarState: () => contextMocks.sidebar,
-}));
-
-vi.mock('./ModalStateContext', () => ({
-  ModalStateProvider: ({ children }: { children: React.ReactNode }) => children,
-  useModalState: () => contextMocks.modal,
-}));
-
-vi.mock('@/core/telemetry/sentry', () => telemetryMocks);
-
-import { useViewState, ViewStateProvider } from './ViewStateContext';
-
-const NamespaceLinkHarness = () => {
-  const { onNamespaceSelect } = useViewState();
-  return (
-    <button type="button" onClick={() => onNamespaceSelect('payments')}>
-      Open namespace
-    </button>
-  );
+const navigation = () => {
+  const viewState = view.owners().viewState;
+  if (!viewState) {
+    throw new Error('expected workspace navigation');
+  }
+  return viewState;
 };
 
-describe('ViewStateProvider navigation synchronization', () => {
-  let container: HTMLDivElement;
-  let root: Root;
+const published = () => vi.mocked(setActiveViewContext).mock.calls.map(([context]) => context);
 
-  beforeEach(() => {
-    contextMocks.kubeconfig.selectedClusterIds = ['cluster-a'];
-    contextMocks.kubeconfig.managedClusterIds = ['cluster-a'];
-    contextMocks.kubeconfig.selectedClusterId = 'cluster-a';
-    telemetryMocks.setActiveViewContext.mockReset();
-    contextMocks.sidebar.setSidebarSelection.mockReset();
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = createRoot(container);
+/**
+ * Starts closing `cluster`'s tab and returns the backend's pending decision:
+ * the tab is hidden until `decide` answers `accept`.
+ */
+const beginClose = async (cluster: TestCluster, accept: boolean) => {
+  if (!accept) {
+    app.backend.answer('CloseClusterView', () => false);
+  }
+  const decide = app.backend.hold('CloseClusterView');
+  let closing!: Promise<void>;
+  act(() => {
+    closing = view.owners().kubeconfig.closeKubeconfig(cluster.selection);
   });
-
-  afterEach(() => {
-    act(() => root.unmount());
-    container.remove();
-  });
-
-  it('publishes the active workspace from the navigation owner', () => {
-    act(() => {
-      root.render(
-        <ViewStateProvider>
-          <div>child</div>
-        </ViewStateProvider>
-      );
+  await app.settle();
+  return async () => {
+    await act(async () => decide());
+    await act(async () => {
+      await closing;
     });
+    await app.settle();
+  };
+};
 
-    expect(telemetryMocks.setActiveViewContext).toHaveBeenCalledWith({
-      view: 'overview',
-      clusterId: 'cluster-a',
-      objectPanelOpen: false,
-    });
+const reopen = async (cluster: TestCluster) => {
+  await act(async () => {
+    await view.owners().kubeconfig.openKubeconfig(cluster.selection);
+  });
+  await app.settle();
+};
+
+beforeEach(async () => {
+  vi.mocked(setActiveViewContext).mockClear();
+  alpha = app.cluster({ name: 'dev', context: 'alpha' });
+  beta = app.cluster({ name: 'dev', context: 'beta' });
+  app.namespaces(alpha, ['default', 'payments']);
+  app.namespaces(beta, ['default']);
+  view = await app.render(null);
+});
+
+describe('navigation', () => {
+  it('publishes the active view of the visible cluster to error reporting', () => {
+    expect(published().slice(-1)).toEqual([
+      {
+        view: 'overview',
+        clusterId: alpha.clusterId,
+        objectPanelOpen: false,
+      },
+    ]);
   });
 
-  it.each([false, true])(
-    'retains Global navigation until tab close is accepted (%s)',
-    (accepted) => {
-      let navigation!: ReturnType<typeof useViewState>;
-      const Probe = () => {
-        navigation = useViewState();
-        return null;
-      };
-      const render = () =>
-        act(() =>
-          root.render(
-            <ViewStateProvider>
-              <Probe />
-            </ViewStateProvider>
-          )
-        );
-      contextMocks.kubeconfig.selectedClusterIds = ['cluster-a', 'cluster-b'];
-      contextMocks.kubeconfig.managedClusterIds = ['cluster-a', 'cluster-b'];
-      render();
-      act(() => navigation.navigateToGlobal());
-      expect(navigation.viewType).toBe('global');
-      contextMocks.kubeconfig.selectedClusterIds = ['cluster-b'];
-      render();
-      expect(navigation.viewType).toBe('overview');
-      if (accepted) {
-        contextMocks.kubeconfig.managedClusterIds = ['cluster-b'];
-        render();
-      }
-      contextMocks.kubeconfig.selectedClusterIds = ['cluster-a', 'cluster-b'];
-      contextMocks.kubeconfig.managedClusterIds = ['cluster-a', 'cluster-b'];
-      render();
-      expect(navigation.viewType).toBe(accepted ? 'overview' : 'global');
+  it('opens Workloads when a namespace is selected outside the namespace view', async () => {
+    await act(async () => navigation().onNamespaceSelect('payments'));
+
+    expect(navigation().viewType).toBe('namespace');
+    expect(navigation().activeNamespaceTab).toBe('workloads');
+    expect(navigation().sidebarSelection).toEqual({ type: 'namespace', value: 'payments' });
+    expect(published().slice(-1)).toEqual([
+      {
+        view: 'namespace',
+        tab: 'workloads',
+        clusterId: alpha.clusterId,
+        objectPanelOpen: false,
+      },
+    ]);
+  });
+
+  it.each([
+    ['restores Global navigation when the backend refuses the close', false, 'global'],
+    ['drops Global navigation once the backend accepts the close', true, 'overview'],
+  ] as const)('%s', async (_case, accept, afterReopen) => {
+    await act(async () => navigation().navigateToGlobal());
+    expect(navigation().viewType).toBe('global');
+
+    const decide = await beginClose(alpha, accept);
+    // One visible cluster has no Global workspace.
+    expect(navigation().viewType).toBe('overview');
+    await decide();
+    if (accept) {
+      await reopen(alpha);
     }
-  );
 
-  it('retains cluster navigation during close and disposes it only after acceptance', () => {
-    let navigation!: ReturnType<typeof useViewState>;
-    const Probe = () => {
-      navigation = useViewState();
-      return null;
-    };
-    const render = () =>
-      act(() =>
-        root.render(
-          <ViewStateProvider>
-            <Probe />
-          </ViewStateProvider>
-        )
-      );
-    contextMocks.kubeconfig.selectedClusterIds = ['cluster-a', 'cluster-b'];
-    contextMocks.kubeconfig.managedClusterIds = ['cluster-a', 'cluster-b'];
-    render();
-    act(() =>
-      navigation.restoreClusterNavigationState('cluster-a', {
-        ...navigation.getClusterNavigationState('cluster-a'),
-        viewType: 'cluster',
-        activeClusterView: 'nodes',
-      })
+    expect(view.owners().kubeconfig.selectedClusterIds).toEqual(
+      expect.arrayContaining([alpha.clusterId, beta.clusterId])
     );
-    contextMocks.kubeconfig.selectedClusterId = 'cluster-b';
-    contextMocks.kubeconfig.selectedClusterIds = ['cluster-b'];
-    render();
-    expect(navigation.getClusterNavigationState('cluster-a').activeClusterView).toBe('nodes');
-    contextMocks.kubeconfig.selectedClusterIds = ['cluster-a', 'cluster-b'];
-    contextMocks.kubeconfig.selectedClusterId = 'cluster-a';
-    render();
-    expect(navigation.activeClusterTab).toBe('nodes');
-    contextMocks.kubeconfig.selectedClusterIds = [];
-    contextMocks.kubeconfig.managedClusterIds = [];
-    contextMocks.kubeconfig.selectedClusterId = '';
-    render();
-    contextMocks.kubeconfig.selectedClusterIds = ['cluster-a'];
-    contextMocks.kubeconfig.managedClusterIds = ['cluster-a'];
-    contextMocks.kubeconfig.selectedClusterId = 'cluster-a';
-    render();
-    expect(navigation.viewType).toBe('overview');
-    expect(navigation.activeClusterTab).toBeNull();
+    expect(navigation().viewType).toBe(afterReopen);
   });
 
-  it('opens Workloads when a namespace is selected outside the namespace view', () => {
-    act(() => {
-      root.render(
-        <ViewStateProvider>
-          <NamespaceLinkHarness />
-        </ViewStateProvider>
-      );
+  it.each([
+    ['restores a cluster’s navigation when the backend refuses its tab’s close', false],
+    ['drops a cluster’s navigation once the backend accepts its tab’s close', true],
+  ] as const)('%s', async (_case, accept) => {
+    await act(async () => {
+      navigation().setViewType('cluster');
+      navigation().setActiveClusterView('nodes');
     });
 
-    act(() => {
-      container.querySelector('button')?.click();
-    });
+    const decide = await beginClose(alpha, accept);
+    // The hidden tab's navigation survives until the backend decides.
+    expect(navigation().getClusterNavigationState(alpha.clusterId).activeClusterView).toBe('nodes');
+    await decide();
+    if (accept) {
+      await reopen(alpha);
+    } else {
+      await view.selectCluster(alpha);
+    }
 
-    expect(contextMocks.sidebar.setSidebarSelection).toHaveBeenCalledWith({
-      type: 'namespace',
-      value: 'payments',
-    });
-    expect(telemetryMocks.setActiveViewContext).toHaveBeenLastCalledWith({
-      view: 'namespace',
-      tab: 'workloads',
-      clusterId: 'cluster-a',
-      objectPanelOpen: false,
-    });
+    expect(view.owners().kubeconfig.selectedClusterId).toBe(alpha.clusterId);
+    expect(navigation().viewType).toBe(accept ? 'overview' : 'cluster');
+    expect(navigation().activeClusterTab).toBe(accept ? null : 'nodes');
   });
 });

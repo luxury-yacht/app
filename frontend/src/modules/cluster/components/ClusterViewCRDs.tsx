@@ -62,10 +62,7 @@ const crdsSpec: AggregatedResourceGridViewSpec<CRDsData> = {
       getClassName: () => 'object-panel-link',
     }),
     cf.createTextColumn('group', 'Group', (crd) => crd.group || '-'),
-    // Sort by the storage version, independently of the additional-version count.
-    cf.createTextColumn<CRDsData>('version', 'Version', formatCRDVersionCell, {
-      sortValue: (crd) => crd.storageVersion ?? '',
-    }),
+    cf.createTextColumn<CRDsData>('version', 'Version', formatCRDVersionCell),
     cf.createTextColumn('scope', 'Scope', (crd) => crd.scope || '-'),
     cf.createAgeColumn(),
   ],

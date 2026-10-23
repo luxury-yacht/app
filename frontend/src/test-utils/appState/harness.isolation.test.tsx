@@ -24,6 +24,10 @@ import {
   getRequestedObjectPanelTab,
   requestObjectPanelTab,
 } from '@/modules/object-panel/objectPanelTabRequests';
+import {
+  peekPendingFocusRequest,
+  setPendingFocusRequest,
+} from '@/shared/components/tables/hooks/useGridTableExternalFocus';
 import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { installAppStateHarness, type MountedApp, type TestCluster } from './harness';
 
@@ -319,5 +323,32 @@ describe('a reused node', () => {
 
   it('discovers again when the same node reports no log sources', async () => {
     expect((await discover(false)).supported).toBe(false);
+  });
+});
+
+describe('a reused navigation target', () => {
+  const podRequest = () => {
+    const dev = app.cluster({ name: 'dev', context: 'alpha' });
+    return {
+      clusterId: dev.clusterId,
+      group: '',
+      version: 'v1',
+      kind: 'Pod',
+      namespace: 'team-a',
+      name: 'api',
+      destinationViewId: 'namespace-pods',
+    };
+  };
+
+  it('holds the row a navigation asked to reveal until a table shows it', () => {
+    setPendingFocusRequest(podRequest());
+
+    expect(peekPendingFocusRequest()).toEqual(podRequest());
+  });
+
+  it('holds no reveal for the same row when nothing navigated', () => {
+    podRequest();
+
+    expect(peekPendingFocusRequest()).toBeNull();
   });
 });

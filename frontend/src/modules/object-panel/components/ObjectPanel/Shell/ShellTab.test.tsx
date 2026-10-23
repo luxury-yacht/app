@@ -14,7 +14,7 @@ import { types } from '@core/backend-api/models';
 import { Clipboard } from '@wailsio/runtime';
 import type React from 'react';
 import { act } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   installAppStateHarness,
   type MountedApp,
@@ -283,12 +283,6 @@ describe('ShellTab', () => {
       }
     }
     globalThis.ResizeObserver = TestResizeObserver;
-    // jsdom has no hit testing; the shell's scrollbar hover tracker asks for it
-    // on every pointer move.
-    Object.defineProperty(document, 'elementsFromPoint', {
-      configurable: true,
-      value: () => [],
-    });
     vi.mocked(Clipboard.Text).mockReset().mockResolvedValue('');
     vi.mocked(Clipboard.SetText).mockReset().mockResolvedValue(undefined);
     const clipboardMock = {
@@ -299,10 +293,6 @@ describe('ShellTab', () => {
     } else {
       Object.assign(navigator.clipboard, clipboardMock);
     }
-  });
-
-  afterEach(() => {
-    Reflect.deleteProperty(document, 'elementsFromPoint');
   });
 
   const view = () => requireValue(mounted, 'expected the workspace to be mounted');

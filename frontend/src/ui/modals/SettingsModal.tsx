@@ -50,8 +50,6 @@ import './SettingsModal.css';
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  /** Optional tab to open straight to. Falls back to last-used or default. */
-  initialTab?: SettingsTabId;
 }
 
 interface TabDefinition {
@@ -81,21 +79,19 @@ const SIDEBAR_ITEMS: ReadonlyArray<ModalSidebarNavItem<SettingsTabId>> = TABS.ma
 const resolveTab = (tab: SettingsTabId | null | undefined): SettingsTabId =>
   tab && KNOWN_TAB_IDS.has(tab) ? tab : DEFAULT_SETTINGS_TAB;
 
-const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialTab }) => {
+const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const elementIdPrefix = useId();
   const { isClosing, shouldRender } = useModalPresence(isOpen);
-  const [activeTab, setActiveTab] = useState<SettingsTabId>(() =>
-    resolveTab(initialTab ?? getLastSettingsTab())
-  );
+  const [activeTab, setActiveTab] = useState<SettingsTabId>(() => resolveTab(getLastSettingsTab()));
   const [appInfo, setAppInfo] = useState<backend.AppInfo | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
 
-  // Restore the selected section whenever the modal opens or its override changes.
+  // Restore the last-used section whenever the modal opens.
   useEffect(() => {
     if (isOpen) {
-      setActiveTab(resolveTab(initialTab ?? getLastSettingsTab()));
+      setActiveTab(resolveTab(getLastSettingsTab()));
     }
-  }, [isOpen, initialTab]);
+  }, [isOpen]);
 
   // Lock body scroll while open.
   useEffect(() => {

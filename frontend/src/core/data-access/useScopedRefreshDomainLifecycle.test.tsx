@@ -1,216 +1,162 @@
 /**
  * frontend/src/core/data-access/useScopedRefreshDomainLifecycle.test.tsx
  *
- * Verifies scoped refresh-domain leasing, initial fetch, and release-on-unmount.
+ * A mounted, enabled consumer keeps its scope refreshing: the backend is
+ * polled for that scope (and read at once when the consumer asks to fetch on
+ * enable) until the consumer unmounts, is disabled, or moves to another scope.
+ * Only preserveState keeps a released scope's snapshot for a remount, and a
+ * paused app skips the startup fetch without leaking the lease. Runs the real
+ * orchestrator inside the production shell over a faked backend
+ * (test-utils/appState).
  */
 
-import type React from 'react';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getScopedDomainState } from '@/core/refresh/store';
 import type { RefreshDomain } from '@/core/refresh/types';
-import { setAppPreferencesForTesting } from '@/core/settings/appPreferences';
+import { setAutoRefreshEnabled } from '@/core/settings/appPreferences';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { useScopedRefreshDomainLifecycle } from './useScopedRefreshDomainLifecycle';
 
-const mocks = vi.hoisted(() => ({
-  acquireScopedDomainLease: vi.fn(),
-  releaseScopedDomainLease: vi.fn(),
-  fetchScopedDomain: vi.fn((..._args: unknown[]) => Promise.resolve()),
-}));
+const app = installAppStateHarness();
 
-vi.mock('@/core/refresh', () => ({
-  refreshOrchestrator: {
-    acquireScopedDomainLease: (...args: unknown[]) => mocks.acquireScopedDomainLease(...args),
-    releaseScopedDomainLease: (...args: unknown[]) => mocks.releaseScopedDomainLease(...args),
-    fetchScopedDomain: (...args: unknown[]) => mocks.fetchScopedDomain(...args),
-  },
-}));
+// object-yaml is a polled snapshot domain (every 5 s): a lease alone reads
+// nothing until its first poll, so an immediate read is the enable fetch.
+const DOMAIN: RefreshDomain = 'object-yaml';
+const POLL_INTERVAL_MS = 5_000;
 
-interface HookProps {
-  domain: RefreshDomain | null;
-  scope: string | null;
+interface ProbeProps {
+  scope: string;
   enabled: boolean;
   preserveState?: boolean;
-  fetchOnEnable?: 'background' | 'startup' | 'user' | false;
-  onFetchError?: (error: unknown) => void;
+  fetchOnEnable?: 'startup' | false;
 }
 
-const renderHook = (initialProps: HookProps) => {
-  const propsRef = { current: initialProps };
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = ReactDOM.createRoot(container);
+function Probe(props: ProbeProps) {
+  useScopedRefreshDomainLifecycle({ domain: DOMAIN, ...props });
+  return null;
+}
 
-  const Harness: React.FC = () => {
-    useScopedRefreshDomainLifecycle(propsRef.current);
-    return null;
-  };
+let dev: TestCluster;
+let view: MountedApp;
+let apiScope: string;
+let webScope: string;
 
-  act(() => {
-    root.render(<Harness />);
+const deploymentScope = (name: string) =>
+  app.object(dev, { group: 'apps', version: 'v1', kind: 'Deployment', namespace: 'team-a', name })
+    .scopes.detailScope ?? '';
+
+const serveYaml = (scope: string, name: string) => {
+  app.snapshots.serve(DOMAIN, scope, {
+    clusterId: dev.clusterId,
+    clusterName: dev.clusterName,
+    yaml: `apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: ${name}\n`,
   });
-
-  return {
-    rerender(next: HookProps) {
-      propsRef.current = next;
-      act(() => {
-        root.render(<Harness />);
-      });
-    },
-    unmount() {
-      act(() => {
-        root.unmount();
-      });
-      container.remove();
-    },
-  };
 };
 
+const show = (props: ProbeProps) => view.show(<Probe {...props} />);
+
+const reads = () => app.snapshots.reads(DOMAIN).map((read) => read.scope);
+
+const advance = async (ms: number) => {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+};
+
+beforeEach(async () => {
+  vi.useFakeTimers();
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['team-a']);
+  apiScope = deploymentScope('api');
+  webScope = deploymentScope('web');
+  serveYaml(apiScope, 'api');
+  serveYaml(webScope, 'web');
+  view = await app.render(null);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe('useScopedRefreshDomainLifecycle', () => {
-  beforeEach(() => {
-    mocks.acquireScopedDomainLease.mockClear();
-    mocks.releaseScopedDomainLease.mockClear();
-    mocks.fetchScopedDomain.mockClear();
-    mocks.fetchScopedDomain.mockResolvedValue(undefined);
-    setAppPreferencesForTesting({ autoRefreshEnabled: true });
+  it('polls the scope while mounted and enabled, and stops when the consumer unmounts', async () => {
+    await show({ scope: apiScope, enabled: true });
+    await advance(POLL_INTERVAL_MS);
+    expect(reads()).toEqual([apiScope]);
+
+    view.clear();
+    app.snapshots.clearReads();
+    await advance(POLL_INTERVAL_MS * 4);
+
+    expect(reads()).toEqual([]);
   });
 
-  it('acquires a lease for the current scope and releases it on unmount', () => {
-    const hook = renderHook({
-      domain: 'catalog',
-      scope: 'cluster:test|catalog',
-      enabled: true,
-    });
+  it('reads nothing while disabled, and starts polling once enabled', async () => {
+    await show({ scope: apiScope, enabled: false });
+    await advance(POLL_INTERVAL_MS * 2);
+    expect(reads()).toEqual([]);
 
-    expect(mocks.acquireScopedDomainLease).toHaveBeenCalledWith(
-      'catalog',
-      'cluster:test|catalog',
-      undefined
-    );
-    expect(mocks.releaseScopedDomainLease).not.toHaveBeenCalled();
+    await show({ scope: apiScope, enabled: true });
+    await advance(POLL_INTERVAL_MS);
 
-    hook.unmount();
-
-    expect(mocks.releaseScopedDomainLease).toHaveBeenCalledWith(
-      'catalog',
-      'cluster:test|catalog',
-      undefined
-    );
+    expect(reads()).toEqual([apiScope]);
   });
 
-  it('does not acquire a lease while disabled', () => {
-    const hook = renderHook({
-      domain: 'catalog',
-      scope: 'cluster:test|catalog',
-      enabled: false,
-    });
+  it('moves polling to the new scope when the scope changes', async () => {
+    await show({ scope: apiScope, enabled: true });
+    await show({ scope: webScope, enabled: true });
+    await advance(POLL_INTERVAL_MS * 2);
 
-    expect(mocks.acquireScopedDomainLease).not.toHaveBeenCalled();
-
-    hook.unmount();
-
-    expect(mocks.releaseScopedDomainLease).not.toHaveBeenCalled();
+    expect(new Set(reads())).toEqual(new Set([webScope]));
   });
 
-  it('releases the replaced scope lease and acquires the new one on scope change', () => {
-    const hook = renderHook({
-      domain: 'namespace-workloads',
-      scope: 'cluster:test|namespace:team-a',
-      enabled: true,
-      preserveState: true,
-    });
+  it.each([
+    { preserveState: true, outcome: 'keeps' },
+    { preserveState: false, outcome: 'drops' },
+  ])(
+    'with preserveState $preserveState, $outcome the released scope’s snapshot',
+    async ({ preserveState }) => {
+      await show({ scope: apiScope, enabled: true, preserveState, fetchOnEnable: 'startup' });
+      expect(getScopedDomainState(DOMAIN, apiScope).data?.yaml).toContain('name: api');
 
-    hook.rerender({
-      domain: 'namespace-workloads',
-      scope: 'cluster:test|namespace:team-b',
-      enabled: true,
-      preserveState: true,
-    });
+      await show({ scope: webScope, enabled: true, preserveState, fetchOnEnable: 'startup' });
 
-    expect(mocks.releaseScopedDomainLease).toHaveBeenCalledWith(
-      'namespace-workloads',
-      'cluster:test|namespace:team-a',
-      { preserveState: true }
-    );
-    expect(mocks.acquireScopedDomainLease).toHaveBeenLastCalledWith(
-      'namespace-workloads',
-      'cluster:test|namespace:team-b',
-      { preserveState: true }
-    );
+      expect(getScopedDomainState(DOMAIN, webScope).data?.yaml).toContain('name: web');
+      expect(Boolean(getScopedDomainState(DOMAIN, apiScope).data)).toBe(preserveState);
+    }
+  );
 
-    hook.unmount();
+  it('reads the scope at once when the consumer asks to fetch on enable', async () => {
+    await show({ scope: apiScope, enabled: true, fetchOnEnable: 'startup' });
+
+    expect(reads()).toEqual([apiScope]);
   });
 
-  it('passes preserveState so streaming domains keep cached snapshots', () => {
-    const hook = renderHook({
-      domain: 'object-details',
-      scope: 'cluster:test|namespace:team-a|deployment:api',
-      enabled: true,
-      preserveState: true,
-    });
-
-    expect(mocks.acquireScopedDomainLease).toHaveBeenCalledWith(
-      'object-details',
-      'cluster:test|namespace:team-a|deployment:api',
-      { preserveState: true }
-    );
-
-    hook.unmount();
-  });
-
-  it('fetches after acquiring when the caller requests a startup fetch', async () => {
-    const hook = renderHook({
-      domain: 'object-map',
-      scope: 'cluster:test|namespace:team-a|deployment:api',
-      enabled: true,
-      preserveState: true,
-      fetchOnEnable: 'startup',
-    });
-
+  it('skips the startup fetch while auto-refresh is paused and still releases on unmount', async () => {
+    // Mirrors backend/preferences_settings.go UpdateAppPreferences.
+    app.backend.answer('UpdateAppPreferences', (request) => ({
+      settings: null,
+      changedKeys: (request.changes ?? []).map(({ key }) => key),
+    }));
     await act(async () => {
-      await Promise.resolve();
+      setAutoRefreshEnabled(false);
     });
+    await show({ scope: apiScope, enabled: true, fetchOnEnable: 'startup' });
+    await advance(POLL_INTERVAL_MS * 2);
+    expect(reads()).toEqual([]);
 
-    expect(mocks.acquireScopedDomainLease).toHaveBeenCalledWith(
-      'object-map',
-      'cluster:test|namespace:team-a|deployment:api',
-      { preserveState: true }
-    );
-    expect(mocks.fetchScopedDomain).toHaveBeenCalledWith(
-      'object-map',
-      'cluster:test|namespace:team-a|deployment:api',
-      expect.objectContaining({
-        intent: 'startup',
-        correlationId: expect.any(String),
-      })
-    );
-
-    hook.unmount();
-  });
-
-  it('blocks startup fetches while auto-refresh is paused but still releases on unmount', async () => {
-    setAppPreferencesForTesting({ autoRefreshEnabled: false });
-
-    const hook = renderHook({
-      domain: 'object-helm-values',
-      scope: 'cluster:test|namespace:team-a|helm:api',
-      enabled: true,
-      preserveState: true,
-      fetchOnEnable: 'startup',
-    });
-
+    view.clear();
+    // Resuming re-arms polls only for scopes still leased.
     await act(async () => {
-      await Promise.resolve();
+      setAutoRefreshEnabled(true);
     });
+    await advance(POLL_INTERVAL_MS * 2);
 
-    expect(mocks.fetchScopedDomain).not.toHaveBeenCalled();
-
-    hook.unmount();
-
-    expect(mocks.releaseScopedDomainLease).toHaveBeenLastCalledWith(
-      'object-helm-values',
-      'cluster:test|namespace:team-a|helm:api',
-      { preserveState: true }
-    );
+    expect(reads()).toEqual([]);
   });
 });

@@ -2,15 +2,7 @@ import { panelTargetFromSnapshot } from '@modules/object-panel/panelTarget';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { backend } from '@/core/backend-api/models';
 import { useZoom } from '@/core/contexts/ZoomContext';
-import {
-  focusWindow,
-  maximiseWindow,
-  minimiseWindow,
-  onEvent,
-  openDevTools,
-  restoreWindow,
-  toggleMaximise,
-} from '@/core/desktop-runtime';
+import { focusWindow, minimiseWindow, onEvent, openDevTools } from '@/core/desktop-runtime';
 import type { PanelWindowDescriptor } from '@/core/panel-windows';
 import {
   acceptPanelTabTransfer,
@@ -251,9 +243,6 @@ export function PanelWindowShortcuts({
         zoomOut,
         zoomReset: resetZoom,
         minimise: () => runWindowOperation('minimise-window', minimiseWindow),
-        maximise: () => runWindowOperation('maximise-window', maximiseWindow),
-        restore: () => runWindowOperation('restore-window', restoreWindow),
-        toggleMaximise: () => runWindowOperation('toggle-maximise-window', toggleMaximise),
         openInspector: requestInspector,
       };
       if (!dispatchPanelApplicationMenuCommand(menuCommand, actions)) {

@@ -78,28 +78,6 @@ const POD_ATTACHED_EXCLUDED_QUERY_FACET_KEYS = [
   ...POD_SELECTION_QUERY_FACET_KEYS,
 ];
 
-const parseReadyCounts = (value?: string | null): { ready: number; total: number } | null => {
-  if (!value) {
-    return null;
-  }
-  const match = /^(\d+)\s*\/\s*(\d+)$/.exec(value);
-  if (!match) {
-    return null;
-  }
-  return {
-    ready: Number(match[1]),
-    total: Number(match[2]),
-  };
-};
-
-const getReadySortValue = (value?: string | null): number => {
-  const counts = parseReadyCounts(value);
-  if (!counts) {
-    return -1;
-  }
-  return counts.ready * 1000000 + counts.total;
-};
-
 const podMetricsState = (info: PodMetricsInfo | null | undefined) => ({
   stale: Boolean(info?.stale),
   lastError: info?.lastError || undefined,
@@ -205,15 +183,12 @@ export const PodsTable: React.FC<PodsTableProps> = React.memo(
           onClick: handlePodOpen,
           onAltClick: handlePodNavigate,
           getTitle: (pod) => pod.ref.name,
-          sortValue: (pod) => (pod.ref.name || '').toLowerCase(),
           getClassName: () => 'object-panel-link',
         }),
         cf.createTextColumn<PodSnapshotEntry>('status', 'Status', (pod) => pod.status || '—', {
           getClassName: (pod) => backendStatusTextClass(pod.statusPresentation),
-          sortValue: (pod) => (pod.status || '').toLowerCase(),
         }),
         cf.createTextColumn<PodSnapshotEntry>('ready', 'Ready', (pod) => pod.ready || '—', {
-          sortValue: (pod) => getReadySortValue(pod.ready),
           alignHeader: 'center',
           alignData: 'center',
         }),
@@ -224,7 +199,6 @@ export const PodsTable: React.FC<PodsTableProps> = React.memo(
           {
             alignHeader: 'center',
             alignData: 'center',
-            sortValue: (pod) => pod.restarts ?? 0,
             getTitle: (pod) => `${pod.restarts ?? 0} restarts`,
             getClassName: getRestartsClassName,
           }
@@ -235,7 +209,6 @@ export const PodsTable: React.FC<PodsTableProps> = React.memo(
           (pod) => (pod.ownerName ? pod.ownerName : '—'),
           {
             onClick: handleOwnerOpen,
-            sortValue: (pod) => (pod.ownerName || '').toLowerCase(),
             onAltClick: (pod) => {
               const ref = podOwnerReference(pod);
               if (ref) {
@@ -250,7 +223,6 @@ export const PodsTable: React.FC<PodsTableProps> = React.memo(
         ),
         cf.createTextColumn<PodSnapshotEntry>('node', 'Node', (pod) => pod.node || '—', {
           onClick: handleNodeOpen,
-          sortValue: (pod) => (pod.node || '').toLowerCase(),
           onAltClick: (pod) => {
             if (pod.node) {
               navigateToView(
@@ -280,7 +252,6 @@ export const PodsTable: React.FC<PodsTableProps> = React.memo(
           getMetricsError: () => metricsStateRef.current.lastError,
           getAnimationKey: (pod) => `pod:${pod.ref.namespace}/${pod.ref.name}:cpu`,
           sortable: true,
-          sortValue: (pod) => pod.cpuUsageMilli ?? 0,
         }),
         cf.createResourceBarColumn<PodSnapshotEntry>({
           header: 'Memory',
@@ -293,7 +264,6 @@ export const PodsTable: React.FC<PodsTableProps> = React.memo(
           getMetricsError: () => metricsStateRef.current.lastError,
           getAnimationKey: (pod) => `pod:${pod.ref.namespace}/${pod.ref.name}:memory`,
           sortable: true,
-          sortValue: (pod) => pod.memoryUsageBytes ?? 0,
         }),
         cf.createAgeColumn(),
       ];
@@ -318,7 +288,6 @@ export const PodsTable: React.FC<PodsTableProps> = React.memo(
         ? cf.withNamespaceColumn(shownColumns, {
             afterColumnKey: 'name',
             accessor: (pod) => pod.ref.namespace || '—',
-            sortValue: (pod) => (pod.ref.namespace || '').toLowerCase(),
             ...namespaceColumnLink,
           })
         : shownColumns;

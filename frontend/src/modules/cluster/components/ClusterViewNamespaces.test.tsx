@@ -1,634 +1,471 @@
+/**
+ * frontend/src/modules/cluster/components/ClusterViewNamespaces.test.tsx
+ *
+ * The cluster Namespaces view lists the visible cluster's namespaces from the
+ * namespaces domain (joined with the namespace-metrics usage) with their
+ * workload, warning, utilization, and quota signals, telling zero from
+ * missing, and sorts them by usage as numbers. A row click opens nothing;
+ * Enter and the Kind/Name links (which stay out of the row's Tab order) open
+ * the namespace's panel; the row menu opens, goes to, diffs, and deletes the
+ * namespace with complete identity. A configured namespace that is missing or
+ * inaccessible offers nothing to open or act on. The view shows its loading
+ * state before the first list, keeps its rows while the list refreshes, and
+ * keeps the permission message when the list is denied. Runs in the full app,
+ * navigated through the sidebar, over a faked backend (test-utils/appState).
+ */
+
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
-import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import type ConfirmationModal from '@shared/components/modals/ConfirmationModal';
-import { act, type ComponentProps, isValidElement, type ReactNode } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getPermissionKey } from '@/core/capabilities';
+import { act } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
+import type { DomainPayloadMap, NamespaceMetric, NamespaceSummary } from '@/core/refresh/types';
 import {
-  deriveResourceInventoryRenderState,
-  type ResourceInventorySourceState,
-} from '@/modules/resource-grid/useResourceInventoryTable';
-import { resolveEmptyStateMessage } from '@/utils/emptyState';
+  installAppStateHarness,
+  type MountedApp,
+  type ObjectIdentity,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { snapshotResponse } from '@/test-utils/appState/transport';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
+import { requireValue } from '@/test-utils/requireValue';
 
-const mocks = vi.hoisted(() => ({
-  onNamespaceSelect: vi.fn(),
-  setSelectedNamespace: vi.fn(),
-  setPageSize: vi.fn(),
-  tableProps: null as null | Record<string, unknown>,
-  resourceGridParams: null as null | Record<string, unknown>,
-  persistenceParams: null as null | Record<string, unknown>,
-  namespaceLoading: false,
-  namespaceRefreshing: false,
-  namespacesPermissionDenied: false,
-  hasNamespaces: true,
-  openWithObject: vi.fn(),
-  permissionMap: new Map<string, { allowed: boolean; pending: boolean }>(),
-  runObjectAction: vi.fn(),
-  confirmation: null as null | ComponentProps<typeof ConfirmationModal>,
-}));
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
 
-const namespacePayload = {
-  clusterId: 'cluster-a',
-  clusterName: 'alpha',
-  metrics: { successCount: 1, failureCount: 0 },
-  metricsState: 'available',
-  namespaces: [
-    {
-      clusterId: 'cluster-a',
-      clusterName: 'alpha',
-      ref: {
-        clusterId: 'cluster-a',
-        group: '',
-        version: 'v1',
-        kind: 'Namespace',
-        resource: 'namespaces',
-        name: 'payments',
-      },
-      name: 'payments',
-      phase: 'Active',
-      status: 'Active',
-      statusState: 'active',
-      statusPresentation: 'success',
-      resourceVersion: '12',
-      creationTimestamp: 1_700_000_000,
-      hasWorkloads: true,
-      workloadsUnknown: false,
-      unhealthyWorkloads: 3,
-      warningEvents: 5,
-      warningEventsState: 'available',
-      cpuUsageMilli: 450,
-      cpuRequestsMilli: 300,
-      cpuLimitsMilli: 600,
-      memoryUsageBytes: 256 * 1024 * 1024,
-      memoryRequestsBytes: 512 * 1024 * 1024,
-      memoryLimitsBytes: 1024 * 1024 * 1024,
-      quotaCount: 2,
-      quotaHighestUsedPercentage: 92,
-      quotaPressure: 'warning',
-      quotaPressureState: 'available',
-    },
-  ],
-};
+const MiB = 1024 * 1024;
 
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedClusterId: 'cluster-a' }),
-}));
+const namespaceIdentity = (name: string): ObjectIdentity => ({
+  group: '',
+  version: 'v1',
+  kind: 'Namespace',
+  namespace: '',
+  name,
+});
 
-vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
-  useNamespace: () => ({
-    namespaceSummaries: mocks.hasNamespaces ? namespacePayload.namespaces : [],
-    namespaceMetricsState: namespacePayload.metricsState,
-    namespaceError: null,
-    namespaceLoading: mocks.namespaceLoading,
-    namespaceRefreshing: mocks.namespaceRefreshing,
-    namespacesPermissionDenied: mocks.namespacesPermissionDenied,
-    setSelectedNamespace: mocks.setSelectedNamespace,
-  }),
-}));
+const namespaceRef = (name: string) => ({
+  ...namespaceIdentity(name),
+  clusterId: dev.clusterId,
+  resource: 'namespaces',
+  uid: `${name}-uid`,
+});
 
-vi.mock('@/core/cluster-workspace/useClusterWorkspace', () => ({
-  useClusterNameResolver: () => (clusterId: string) =>
-    ({ 'cluster-a': 'alpha', 'cluster-b': 'beta' })[clusterId] ?? clusterId,
-}));
+/** A namespace row as backend/refresh/snapshot/namespaces.go projects it. */
+const namespaceRow = (
+  name: string,
+  overrides: Partial<NamespaceSummary> = {}
+): NamespaceSummary => ({
+  ref: namespaceRef(name),
+  phase: 'Active',
+  status: 'Active',
+  statusPresentation: 'ready',
+  resourceVersion: '1',
+  creationTimestamp: 1_700_000_000,
+  hasWorkloads: true,
+  warningEventsState: 'available',
+  quotaPressureState: 'available',
+  ...overrides,
+});
 
-vi.mock('@core/contexts/ViewStateContext', () => ({
-  useViewState: () => ({ onNamespaceSelect: mocks.onNamespaceSelect }),
-}));
+const usage = (name: string, cpuUsageMilli: number, memoryUsageBytes: number): NamespaceMetric => ({
+  ref: namespaceRef(name),
+  cpuUsageMilli,
+  memoryUsageBytes,
+});
 
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: mocks.openWithObject }),
-}));
+const namespacesScope = () => buildClusterRefreshScope('namespaces', dev.clusterId);
 
-vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ available: false, navigateToView: vi.fn() }),
-}));
+const clusterIdentity = () => ({ clusterId: dev.clusterId, clusterName: dev.clusterName });
 
-vi.mock('@/core/capabilities', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/core/capabilities')>()),
-  useUserPermissions: () => mocks.permissionMap,
-}));
+const namespaceList = (rows: NamespaceSummary[]): DomainPayloadMap['namespaces'] => ({
+  ...clusterIdentity(),
+  namespaces: rows,
+});
 
-vi.mock('@core/backend-api', () => ({
-  RunObjectAction: (...args: unknown[]) => mocks.runObjectAction(...args),
-}));
-
-vi.mock('@shared/components/modals/ConfirmationModal', () => ({
-  default: (props: ComponentProps<typeof ConfirmationModal>) => {
-    mocks.confirmation = props;
-    return null;
-  },
-}));
-
-vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
-  useGridTablePersistence: (params: Record<string, unknown>) => {
-    mocks.persistenceParams = params;
-    return {
-      sortConfig: { key: 'name', direction: 'asc' },
-      setSortConfig: vi.fn(),
-      columnWidths: null,
-      setColumnWidths: vi.fn(),
-      columnVisibility: null,
-      setColumnVisibility: vi.fn(),
-      filters: {
-        search: '',
-        kinds: [],
-        namespaces: [],
-        includeMetadata: false,
-      },
-      setFilters: vi.fn(),
-      pageSize: null,
-      setPageSize: mocks.setPageSize,
-      resetState: vi.fn(),
-      hydrated: true,
-    };
-  },
-}));
-
-vi.mock('@modules/resource-grid/useResourceGridTable', () => ({
-  useClusterResourceGridTable: (params: Record<string, unknown>) => {
-    mocks.resourceGridParams = params;
-    return {
-      gridTableProps: { data: params.data, keyExtractor: params.keyExtractor },
-      favModal: null,
-    };
-  },
-}));
-
-vi.mock('@modules/resource-grid/ResourceInventoryTable', () => ({
-  default: (props: Record<string, unknown>) => {
-    mocks.tableProps = props;
-    const source = props.source as { rows: Array<Record<string, unknown>> };
-    const onRowPointerClick = props.onRowPointerClick as
-      | ((row: Record<string, unknown>) => void)
-      | undefined;
-    const onRowClick = props.onRowClick as ((row: Record<string, unknown>) => void) | undefined;
-    const columns = props.columns as Array<{
-      key: string;
-      render: (row: Record<string, unknown>) => ReactNode;
-    }>;
-    const kindColumn = columns.find(({ key }) => key === 'kind');
-    const nameColumn = columns.find(({ key }) => key === 'name');
-    return (
-      <div data-testid="namespace-table">
-        {source.rows.map((row) => (
-          <div key={String(row.name)}>
-            <span data-testid={`kind-${String(row.name)}`}>{kindColumn?.render(row)}</span>
-            <span data-testid={`name-${String(row.name)}`}>{nameColumn?.render(row)}</span>
-            <button
-              type="button"
-              data-testid={`row-${String(row.name)}`}
-              onClick={() => onRowPointerClick?.(row)}
-            />
-            <button
-              type="button"
-              data-testid={`row-enter-${String(row.name)}`}
-              onClick={() => onRowClick?.(row)}
-            />
-          </div>
-        ))}
-      </div>
-    );
-  },
-}));
-
-const renderView = async () => {
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = ReactDOM.createRoot(container);
-  await act(async () => {
-    const { default: ClusterViewNamespaces } = await import('./ClusterViewNamespaces');
-    root.render(<ClusterViewNamespaces />);
-    await Promise.resolve();
-  });
-  return {
-    container,
-    unmount: async () => {
-      await act(async () => root.unmount());
-      container.remove();
-    },
+/** Serves the namespace list and its usage (the namespaces and namespace-metrics domains). */
+const serveNamespaces = (rows: NamespaceSummary[], metrics: NamespaceMetric[] = []) => {
+  app.snapshots.serve('namespaces', namespacesScope(), namespaceList(rows), rows.length);
+  const usagePayload: DomainPayloadMap['namespace-metrics'] = {
+    ...clusterIdentity(),
+    namespaces: metrics,
+    metrics: { stale: false, successCount: 1, failureCount: 0 },
+    metricsState: 'available',
   };
+  app.snapshots.serve('namespace-metrics', namespacesScope(), usagePayload, metrics.length);
 };
 
-beforeEach(() => {
-  vi.clearAllMocks();
-  mocks.tableProps = null;
-  mocks.resourceGridParams = null;
-  mocks.persistenceParams = null;
-  mocks.namespaceLoading = false;
-  mocks.namespaceRefreshing = false;
-  mocks.namespacesPermissionDenied = false;
-  mocks.hasNamespaces = true;
-  mocks.permissionMap = new Map();
-  mocks.confirmation = null;
+const startCluster = () => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.startScreen(dev);
+};
+
+const openView = async () => {
+  view = await app.mountApp();
+  await view.goTo({ clusterView: 'namespaces' });
+};
+
+/** Opens the view over the namespaces `listed` builds once the cluster exists. */
+const start = async (listed: () => NamespaceSummary[] = () => [namespaceRow('payments')]) => {
+  startCluster();
+  serveNamespaces(listed());
+  await openView();
+};
+
+const tableRows = () => Array.from(view.container.querySelectorAll<HTMLElement>('.gridtable-row'));
+
+const rowNames = () =>
+  tableRows().map((row) => row.querySelector('[data-column="name"]')?.textContent?.trim());
+
+/** Parks every later namespace-list read until `releaseReads` answers it with `list()`. */
+const holdNamespaceReads = (list: () => NamespaceSummary[]) => {
+  const parked: Array<() => void> = [];
+  app.snapshots.respond(({ domain, scope }) =>
+    domain === 'namespaces'
+      ? new Promise((resolve) => {
+          parked.push(() =>
+            resolve(
+              snapshotResponse({ domain, scope, version: 100, payload: namespaceList(list()) })
+            )
+          );
+        })
+      : undefined
+  );
+  return parked;
+};
+
+const releaseReads = async (parked: Array<() => void>) => {
+  app.snapshots.respond(null);
+  await act(async () => {
+    parked.splice(0).forEach((answer) => {
+      answer();
+    });
+  });
+  await app.settle();
+};
+
+const rowOf = (name: string) =>
+  requireValue(
+    tableRows().find(
+      (row) => row.querySelector('[data-column="name"]')?.textContent?.trim() === name
+    ),
+    `expected the ${name} row`
+  );
+
+const cell = (row: HTMLElement, column: string) =>
+  requireValue(
+    row.querySelector<HTMLElement>(`[data-column="${column}"]`),
+    `expected the ${column} cell`
+  );
+
+const cellText = (name: string, column: string) => cell(rowOf(name), column).textContent?.trim();
+
+/** The exported value of a utilization cell (GridTable export), absent when the cell has no bar. */
+const exportedUsage = (name: string, column: string) =>
+  cell(rowOf(name), column)
+    .querySelector('[data-gridtable-export-text]')
+    ?.getAttribute('data-gridtable-export-text');
+
+const menuItems = () =>
+  Array.from(document.body.querySelectorAll<HTMLElement>('[role="menu"] .context-menu-item'));
+const menuLabel = (item: HTMLElement) =>
+  item.querySelector('.context-menu-label')?.textContent?.trim();
+
+/** Right-clicks the row, as the user opens its menu, and returns the object actions it offers. */
+const openRowMenu = async (name: string) => {
+  await act(async () => {
+    cell(rowOf(name), 'name').dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 })
+    );
+  });
+  await app.settle();
+  // The column's sort items carry no object action.
+  return menuItems().flatMap((item) => item.dataset.contextActionId ?? []);
+};
+
+const click = async (element: HTMLElement) => {
+  await act(async () => element.click());
+  await app.settle();
+};
+
+const clickMenuItem = (label: string) =>
+  click(
+    requireValue(
+      menuItems().find((candidate) => menuLabel(candidate) === label),
+      `expected the ${label} menu item`
+    )
+  );
+
+const table = () =>
+  requireValue(
+    view.container.querySelector<HTMLElement>('table[tabindex="0"]'),
+    'expected the namespaces table'
+  );
+
+const pressEnter = async () => {
+  await act(async () => table().focus());
+  await act(async () => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    );
+  });
+  await app.settle();
+};
+
+/** Opens the header's connectivity status and chooses one of its actions. */
+const chooseConnectivityAction = async (label: string) => {
+  if (!document.body.querySelector('.status-popover-actions')) {
+    const status = requireValue(
+      document.body.querySelector<HTMLElement>('[role="button"][aria-label^="Connectivity:"]'),
+      'expected the connectivity status'
+    );
+    await act(async () => {
+      status.focus();
+      status.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+      );
+    });
+    await app.settle();
+  }
+  await click(
+    requireValue(
+      Array.from(
+        document.body.querySelectorAll<HTMLButtonElement>('.status-popover-actions button')
+      ).find((button) => button.textContent?.trim() === label),
+      `expected the ${label} action`
+    )
+  );
+};
+
+const inCluster = (identity: ObjectIdentity) => ({
+  clusterId: dev.clusterId,
+  clusterName: dev.clusterName,
+  ...identity,
 });
 
 afterEach(() => {
-  document.body.innerHTML = '';
+  vi.useRealTimers();
 });
 
-const renderedText = (node: ReactNode): string => {
-  if (typeof node === 'string' || typeof node === 'number') {
-    return String(node);
-  }
-  if (isValidElement<{ children?: ReactNode }>(node)) {
-    return renderedText(node.props.children);
-  }
-  return '';
-};
-
 describe('ClusterViewNamespaces', () => {
-  it('projects namespace health, workload, event, utilization, quota, and age columns', async () => {
-    const { unmount } = await renderView();
-    const tableProps = mocks.tableProps;
-    if (!tableProps) {
-      throw new Error('expected namespace table props');
-    }
-
-    const columns = tableProps.columns as Array<{
-      key: string;
-      header?: ReactNode;
-      sortValue?: (row: Record<string, unknown>) => unknown;
-      render?: (row: Record<string, unknown>) => ReactNode;
-    }>;
-    expect(columns.map(({ key }) => key)).toEqual([
-      'kind',
-      'name',
-      'status',
-      'workloads',
-      'unhealthyWorkloads',
-      'warningEvents',
-      'cpu',
-      'memory',
-      'quotaPressure',
-      'age',
-    ]);
-    expect(mocks.resourceGridParams).toMatchObject({ filterOptionOverrides: undefined });
-    expect(mocks.persistenceParams).toMatchObject({
-      pageSizeOptions: [25, 50, 100, 250, 500, 1000],
-    });
-    expect(tableProps.localPagination).toMatchObject({
-      idPrefix: 'cluster-namespaces-cluster-a',
-      pageSize: 50,
-      pageSizeOptions: [25, 50, 100, 250, 500, 1000],
-    });
-    const localPagination = tableProps.localPagination as {
-      onPageSizeChange: (value: number) => void;
-    };
-    localPagination.onPageSizeChange(100);
-    expect(mocks.setPageSize).toHaveBeenCalledWith(100);
-    expect(columns.find(({ key }) => key === 'unhealthyWorkloads')?.header).toBe('Unhealthy');
-    expect(columns.find(({ key }) => key === 'warningEvents')?.header).toBe('Warnings');
-
-    const rows = (tableProps.source as { rows: Array<Record<string, unknown>> }).rows;
-    expect(rows[0]).toMatchObject({
-      ref: {
-        clusterId: 'cluster-a',
-        group: '',
-        version: 'v1',
-        kind: 'Namespace',
-        resource: 'namespaces',
-        name: 'payments',
-      },
-      ageTimestamp: 1_700_000_000_000,
-    });
-    const keyExtractor = (
-      tableProps.gridTableProps as {
-        keyExtractor: (row: Record<string, unknown>) => string;
-      }
-    ).keyExtractor;
-    expect(keyExtractor(rows[0])).toBe('cluster-a|/v1/Namespace//payments');
-    expect(columns.find(({ key }) => key === 'cpu')?.sortValue?.(rows[0])).toBe(450);
-    expect(columns.find(({ key }) => key === 'memory')?.sortValue?.(rows[0])).toBe(
-      256 * 1024 * 1024
-    );
-    const cpuCell = columns.find(({ key }) => key === 'cpu')?.render?.(rows[0]);
-    expect(isValidElement<Record<string, unknown>>(cpuCell)).toBe(true);
-    if (!isValidElement<Record<string, unknown>>(cpuCell)) {
-      throw new Error('expected CPU ResourceBar');
-    }
-    expect(cpuCell.props).toMatchObject({
-      usage: 450,
-      request: 300,
-      limit: 600,
-      'data-gridtable-export-text': '450',
-      type: 'cpu',
-      variant: 'compact',
-      animationScopeKey: 'cluster-a|/v1/Namespace//payments:cpu',
-    });
-    const memoryCell = columns.find(({ key }) => key === 'memory')?.render?.(rows[0]);
-    expect(isValidElement<Record<string, unknown>>(memoryCell)).toBe(true);
-    if (!isValidElement<Record<string, unknown>>(memoryCell)) {
-      throw new Error('expected Memory ResourceBar');
-    }
-    expect(memoryCell.props).toMatchObject({
-      usage: 256 * 1024 * 1024,
-      request: 512 * 1024 * 1024,
-      limit: 1024 * 1024 * 1024,
-      'data-gridtable-export-text': '262144',
-      type: 'memory',
-      variant: 'compact',
-      animationScopeKey: 'cluster-a|/v1/Namespace//payments:memory',
-    });
-    const workloadsColumn = columns.find(({ key }) => key === 'workloads');
-    expect(renderedText(workloadsColumn?.render?.(rows[0]))).toBe('✓');
-    expect(renderedText(workloadsColumn?.render?.({ ...rows[0], hasWorkloads: false }))).toBe('-');
-    expect(renderedText(workloadsColumn?.render?.({ ...rows[0], workloadsUnknown: true }))).toBe(
-      'Unknown'
-    );
-    const warningCell = columns.find(({ key }) => key === 'warningEvents')?.render?.(rows[0]);
-    expect(isValidElement<{ className?: string }>(warningCell)).toBe(true);
-    if (!isValidElement<{ className?: string }>(warningCell)) {
-      throw new Error('expected warning events cell element');
-    }
-    expect(warningCell.props.className).toBe('status-text warning');
-    const quotaCell = columns.find(({ key }) => key === 'quotaPressure')?.render?.(rows[0]);
-    if (!isValidElement<{ className?: string }>(quotaCell)) {
-      throw new Error('expected quota pressure cell element');
-    }
-    expect(renderedText(quotaCell)).toBe('92%');
-    expect(quotaCell.props.className).toBe('status-text warning');
-
-    const zeroSignalRow = {
-      ...rows[0],
-      unhealthyWorkloads: 0,
-      warningEvents: 0,
-      cpuUsageMilli: 0,
-      cpuRequestsMilli: 0,
-      cpuLimitsMilli: 0,
-      memoryUsageBytes: 0,
-      memoryRequestsBytes: 0,
-      memoryLimitsBytes: 0,
-    };
-    expect(
-      renderedText(columns.find(({ key }) => key === 'unhealthyWorkloads')?.render?.(zeroSignalRow))
-    ).toBe('-');
-    expect(
-      renderedText(columns.find(({ key }) => key === 'warningEvents')?.render?.(zeroSignalRow))
-    ).toBe('-');
-    expect(renderedText(columns.find(({ key }) => key === 'cpu')?.render?.(zeroSignalRow))).toBe(
-      '-'
-    );
-    expect(renderedText(columns.find(({ key }) => key === 'memory')?.render?.(zeroSignalRow))).toBe(
-      '-'
-    );
-    expect(columns.find(({ key }) => key === 'cpu')?.sortValue?.(zeroSignalRow)).toBe(0);
-    expect(columns.find(({ key }) => key === 'memory')?.sortValue?.(zeroSignalRow)).toBe(0);
-
-    const reservationOnlyRow = {
-      ...rows[0],
-      cpuUsageMilli: 0,
-      memoryUsageBytes: 0,
-    };
-    expect(
-      isValidElement(columns.find(({ key }) => key === 'cpu')?.render?.(reservationOnlyRow))
-    ).toBe(true);
-    expect(
-      isValidElement(columns.find(({ key }) => key === 'memory')?.render?.(reservationOnlyRow))
-    ).toBe(true);
-
-    await unmount();
-  });
-
-  it('opens the namespace Object Panel from its Kind badge and Name link', async () => {
-    const { container, unmount } = await renderView();
-    const namespaceRef = expect.objectContaining({
-      clusterId: 'cluster-a',
-      group: '',
-      version: 'v1',
-      kind: 'Namespace',
-      name: 'payments',
-    });
-
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>('[data-testid="kind-payments"] button')?.click();
-    });
-    expect(mocks.openWithObject).toHaveBeenLastCalledWith(namespaceRef);
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>('[data-testid="name-payments"] button')?.click();
-    });
-    expect(mocks.openWithObject).toHaveBeenCalledTimes(2);
-    expect(mocks.openWithObject).toHaveBeenLastCalledWith(namespaceRef);
-    expect(mocks.setSelectedNamespace).not.toHaveBeenCalled();
-    expect(mocks.onNamespaceSelect).not.toHaveBeenCalled();
-
-    // Both links repeat the row's Enter action, so they leave the Tab order.
-    const columns = mocks.tableProps?.columns as Array<{ key: string; rowAction?: boolean }>;
-    expect(columns.find((column) => column.key === 'kind')?.rowAction).toBe(true);
-    expect(columns.find((column) => column.key === 'name')?.rowAction).toBe(true);
-
-    await unmount();
-  });
-
-  // Like every other resource table, a row click only highlights and Enter
-  // opens the row's object.
-  it('highlights on row click and opens the namespace Object Panel on Enter', async () => {
-    const { container, unmount } = await renderView();
-
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>('[data-testid="row-payments"]')?.click();
-    });
-    expect(mocks.openWithObject).not.toHaveBeenCalled();
-    expect(mocks.setSelectedNamespace).not.toHaveBeenCalled();
-    expect(mocks.onNamespaceSelect).not.toHaveBeenCalled();
-
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>('[data-testid="row-enter-payments"]')?.click();
-    });
-    expect(mocks.openWithObject).toHaveBeenCalledWith(
-      expect.objectContaining({
-        clusterId: 'cluster-a',
-        group: '',
-        version: 'v1',
-        kind: 'Namespace',
-        name: 'payments',
-      })
-    );
-    expect(mocks.setSelectedNamespace).not.toHaveBeenCalled();
-    expect(mocks.onNamespaceSelect).not.toHaveBeenCalled();
-
-    await unmount();
-  });
-
-  it('opens nothing on Enter for a configured namespace that is missing or inaccessible', async () => {
-    const { unmount } = await renderView();
-    const tableProps = mocks.tableProps;
-    const onRowClick = tableProps?.onRowClick as
-      | ((row: Record<string, unknown>) => void)
-      | undefined;
-    if (!tableProps || !onRowClick) {
-      throw new Error('expected a namespace row Enter handler');
-    }
-    const row = (tableProps.source as { rows: Array<Record<string, unknown>> }).rows[0];
-
-    act(() => {
-      onRowClick({ ...row, scopeStatus: 'no-access' });
-    });
-    expect(mocks.openWithObject).not.toHaveBeenCalled();
-    expect(mocks.setSelectedNamespace).not.toHaveBeenCalled();
-
-    await unmount();
-  });
-
-  it('keeps resident namespace rows quiet while their domain refreshes', async () => {
-    mocks.namespaceRefreshing = true;
-    const { unmount } = await renderView();
-
-    if (!mocks.tableProps) {
-      throw new Error('expected namespace table props');
-    }
-    expect((mocks.tableProps.source as { loading: boolean }).loading).toBe(false);
-
-    await unmount();
-  });
-
-  // A stream reset after the denial clears the stored failure (no error, still
-  // loading) but not the denial: the view must settle on the permission
-  // message instead of loading forever.
-  it('shows insufficient permissions for a denied scope whose stored failure was cleared', async () => {
-    mocks.hasNamespaces = false;
-    mocks.namespaceLoading = true;
-    mocks.namespacesPermissionDenied = true;
-    const { unmount } = await renderView();
-
-    if (!mocks.tableProps) {
-      throw new Error('expected namespace table props');
-    }
-    const render = deriveResourceInventoryRenderState(
-      mocks.tableProps.source as ResourceInventorySourceState<unknown>
-    );
-    expect(render.showLoadingBoundary).toBe(false);
-    expect(resolveEmptyStateMessage(render.error, 'Unable to load data')).toBe(
-      'Insufficient permissions'
-    );
-
-    await unmount();
-  });
-
-  it('keeps the loading state for the initial namespace request', async () => {
-    mocks.namespaceLoading = true;
-    const { unmount } = await renderView();
-
-    if (!mocks.tableProps) {
-      throw new Error('expected namespace table props');
-    }
-    expect((mocks.tableProps.source as { loading: boolean }).loading).toBe(true);
-
-    await unmount();
-  });
-
-  it('offers Open, Go to Namespace, Diff, and permitted Delete for the full namespace identity on right-click', async () => {
-    mocks.permissionMap = new Map([
+  it('shows each namespace’s workload, warning, utilization, and quota signals, telling zero from missing', async () => {
+    startCluster();
+    serveNamespaces(
       [
-        getPermissionKey('Namespace', 'delete', null, null, 'cluster-a', '', 'v1'),
-        { allowed: true, pending: false },
+        namespaceRow('payments', {
+          unhealthyWorkloads: 3,
+          warningEvents: 5,
+          cpuRequestsMilli: 300,
+          cpuLimitsMilli: 600,
+          memoryRequestsBytes: 512 * MiB,
+          memoryLimitsBytes: 1024 * MiB,
+          quotaCount: 2,
+          quotaHighestUsedPercentage: 92,
+          quotaPressure: 'warning',
+        }),
+        namespaceRow('idle', { hasWorkloads: false, unhealthyWorkloads: 0, warningEvents: 0 }),
+        // Reserves capacity without using any: the bar still shows the reservation.
+        namespaceRow('reserved', {
+          hasWorkloads: false,
+          workloadsUnknown: true,
+          cpuRequestsMilli: 100,
+          memoryRequestsBytes: 64 * MiB,
+        }),
       ],
+      [usage('payments', 450, 256 * MiB), usage('idle', 0, 0), usage('reserved', 0, 0)]
+    );
+    await openView();
+
+    const signals = (name: string) =>
+      ['workloads', 'unhealthyWorkloads', 'warningEvents', 'quotaPressure'].map((column) =>
+        cellText(name, column)
+      );
+    expect(signals('payments')).toEqual(['✓', '3', '5', '92%']);
+    expect(signals('idle')).toEqual(['-', '-', '-', 'No quotas']);
+    expect(signals('reserved')[0]).toBe('Unknown');
+    // Usage exports in millicores and KiB.
+    expect([exportedUsage('payments', 'cpu'), exportedUsage('payments', 'memory')]).toEqual([
+      '450',
+      '262144',
     ]);
-    mocks.runObjectAction.mockResolvedValue(undefined);
-    const { unmount } = await renderView();
-    const tableProps = mocks.tableProps;
-    if (!tableProps) {
-      throw new Error('expected namespace table props');
-    }
-    expect(tableProps.enableContextMenu).toBe(true);
-    const getItems = tableProps.getCustomContextMenuItems as
-      | ((row: Record<string, unknown>, columnKey: string) => ContextMenuItem[])
-      | undefined;
-    if (!getItems) {
-      throw new Error('expected namespace context menu items');
-    }
-    const row = (tableProps.source as { rows: Array<Record<string, unknown>> }).rows[0];
-    const items = getItems(row, 'name');
-    expect(items.flatMap((item) => (item.actionId ? [item.actionId] : []))).toEqual([
+    expect([cellText('idle', 'cpu'), cellText('idle', 'memory')]).toEqual(['-', '-']);
+    expect([exportedUsage('reserved', 'cpu'), exportedUsage('reserved', 'memory')]).toEqual([
+      '0',
+      '0',
+    ]);
+  });
+
+  it('sorts namespaces by their CPU usage as numbers', async () => {
+    startCluster();
+    serveNamespaces(
+      [namespaceRow('alpha'), namespaceRow('beta'), namespaceRow('gamma')],
+      [usage('alpha', 1200, MiB), usage('beta', 450, MiB), usage('gamma', 90, MiB)]
+    );
+    await openView();
+    const header = requireValue(
+      view.container.querySelector<HTMLElement>('th[data-column="cpu"]'),
+      'expected the CPU header'
+    );
+
+    await click(requireValue(header.querySelector<HTMLButtonElement>('button'), 'expected sort'));
+
+    expect(header.getAttribute('aria-sort')).toBe('ascending');
+    expect(rowNames()).toEqual(['gamma', 'beta', 'alpha']);
+  });
+
+  it('opens the namespace’s panel from its Kind badge and name, which stay out of the focused row’s Tab order', async () => {
+    await start();
+    app.servePanel(dev, namespaceIdentity('payments'));
+    const badge = requireValue(
+      cell(rowOf('payments'), 'kind').querySelector<HTMLButtonElement>('button'),
+      'expected the Kind badge'
+    );
+    const name = requireValue(
+      cell(rowOf('payments'), 'name').querySelector<HTMLButtonElement>('button'),
+      'expected the name link'
+    );
+
+    // Both links repeat the row's Enter action.
+    await act(async () => table().focus());
+    expect([badge.tabIndex, name.tabIndex]).toEqual([-1, -1]);
+
+    await click(badge);
+    expect(view.openPanels()).toEqual([inCluster(namespaceIdentity('payments'))]);
+    await click(name);
+    expect(view.openPanels()).toEqual([inCluster(namespaceIdentity('payments'))]);
+    expect(view.owners().namespace.selectedNamespace).not.toBe('payments');
+  });
+
+  it('opens nothing on a row click and opens the focused namespace’s panel on Enter', async () => {
+    await start();
+    app.servePanel(dev, namespaceIdentity('payments'));
+
+    await click(cell(rowOf('payments'), 'status'));
+    expect(view.openPanels()).toEqual([]);
+
+    await pressEnter();
+    expect(view.openPanels()).toEqual([inCluster(namespaceIdentity('payments'))]);
+    expect(view.owners().namespace.selectedNamespace).not.toBe('payments');
+  });
+
+  it('offers the namespace’s actions on right-click, opening and deleting it with complete identity', async () => {
+    app.backend.answer('RunObjectAction', () => ({}) as never);
+    await start();
+    app.servePanel(dev, namespaceIdentity('payments'));
+
+    expect(await openRowMenu('payments')).toEqual([
       OBJECT_ACTION_IDS.viewDetails,
       OBJECT_ACTION_IDS.goToNamespace,
       OBJECT_ACTION_IDS.diff,
       OBJECT_ACTION_IDS.delete,
     ]);
+    await clickMenuItem('Open Details');
+    expect(view.openPanels()).toEqual([inCluster(namespaceIdentity('payments'))]);
 
-    act(() => {
-      items.find((item) => item.actionId === OBJECT_ACTION_IDS.viewDetails)?.onClick?.();
-    });
-    expect(mocks.openWithObject).toHaveBeenCalledWith(
-      expect.objectContaining({
-        clusterId: 'cluster-a',
-        group: '',
-        version: 'v1',
-        kind: 'Namespace',
-        name: 'payments',
-      })
+    await openRowMenu('payments');
+    await clickMenuItem('Delete');
+    await click(
+      requireValue(
+        Array.from(
+          document.body.querySelectorAll<HTMLButtonElement>('.confirmation-modal-footer button')
+        ).find((button) => button.textContent?.trim() === 'Delete'),
+        'expected the delete confirmation'
+      )
     );
-    expect(mocks.setSelectedNamespace).not.toHaveBeenCalled();
 
-    await act(async () => {
-      items.find((item) => item.actionId === OBJECT_ACTION_IDS.delete)?.onClick?.();
-    });
-    expect(mocks.confirmation?.isOpen).toBe(true);
-    await act(async () => {
-      await mocks.confirmation?.onConfirm();
-    });
-    expect(mocks.runObjectAction).toHaveBeenCalledWith({
-      action: 'delete',
-      target: {
-        clusterId: 'cluster-a',
-        group: '',
-        version: 'v1',
-        kind: 'Namespace',
-        namespace: '',
-        name: 'payments',
-      },
-    });
-
-    await unmount();
-  });
-
-  it('goes to the namespace from the context menu, selecting it before opening its default view', async () => {
-    const { unmount } = await renderView();
-    const tableProps = mocks.tableProps;
-    const getItems = tableProps?.getCustomContextMenuItems as
-      | ((row: Record<string, unknown>, columnKey: string) => ContextMenuItem[])
-      | undefined;
-    if (!tableProps || !getItems) {
-      throw new Error('expected namespace context menu items');
-    }
-    const row = (tableProps.source as { rows: Array<Record<string, unknown>> }).rows[0];
-
-    act(() => {
-      getItems(row, 'name')
-        .find((item) => item.actionId === OBJECT_ACTION_IDS.goToNamespace)
-        ?.onClick?.();
-    });
-
-    expect(mocks.setSelectedNamespace).toHaveBeenCalledWith('payments', 'cluster-a');
-    expect(mocks.onNamespaceSelect).toHaveBeenCalledWith('payments');
-    expect(mocks.setSelectedNamespace.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.onNamespaceSelect.mock.invocationCallOrder[0]
-    );
-    expect(mocks.openWithObject).not.toHaveBeenCalled();
-
-    await unmount();
-  });
-
-  it('offers no object actions for a configured namespace that is missing or inaccessible', async () => {
-    mocks.permissionMap = new Map([
+    expect(app.backend.calls('RunObjectAction')).toEqual([
       [
-        getPermissionKey('Namespace', 'delete', null, null, 'cluster-a', '', 'v1'),
-        { allowed: true, pending: false },
+        {
+          action: 'delete',
+          target: { clusterId: dev.clusterId, ...namespaceIdentity('payments') },
+        },
       ],
     ]);
-    const { unmount } = await renderView();
-    const tableProps = mocks.tableProps;
-    const getItems = tableProps?.getCustomContextMenuItems as
-      | ((row: Record<string, unknown>, columnKey: string) => ContextMenuItem[])
-      | undefined;
-    if (!tableProps || !getItems) {
-      throw new Error('expected namespace context menu items');
-    }
-    const row = (tableProps.source as { rows: Array<Record<string, unknown>> }).rows[0];
+  });
 
-    expect(getItems({ ...row, scopeStatus: 'no-access' }, 'name')).toEqual([]);
-    expect(getItems({ ...row, scopeStatus: 'not-found' }, 'name')).toEqual([]);
+  it('goes to the namespace from its row menu, showing the namespace’s view', async () => {
+    startCluster();
+    serveNamespaces([namespaceRow('payments')]);
+    // The namespace view's default tab lists its workloads.
+    app.serveTable(dev, 'namespace-workloads');
+    await openView();
 
-    await unmount();
+    await openRowMenu('payments');
+    await clickMenuItem('Go to Namespace');
+
+    expect(view.owners().namespace.selectedNamespace).toBe('payments');
+    expect(view.owners().viewState?.viewType).toBe('namespace');
+    expect(view.openPanels()).toEqual([]);
+  });
+
+  it('offers nothing to open or act on for a configured namespace that is missing or inaccessible', async () => {
+    await start(() => [
+      namespaceRow('locked', { scopeStatus: 'no-access' }),
+      namespaceRow('gone', { scopeStatus: 'not-found' }),
+    ]);
+
+    expect(
+      ['kind', 'name'].map((column) => cell(rowOf('locked'), column).querySelector('button'))
+    ).toEqual([null, null]);
+    expect(await openRowMenu('locked')).toEqual([]);
+    expect(await openRowMenu('gone')).toEqual([]);
+    await pressEnter();
+    expect(view.openPanels()).toEqual([]);
+  });
+
+  it('shows the loading state, not an empty list, until the first namespace list arrives', async () => {
+    startCluster();
+    serveNamespaces([]);
+    const parked = holdNamespaceReads(() => [namespaceRow('payments')]);
+    await openView();
+
+    expect(tableRows()).toEqual([]);
+    expect(view.container.textContent).toContain('Loading namespaces');
+    expect(view.container.textContent).not.toContain('No namespaces found');
+
+    await releaseReads(parked);
+    expect(rowNames()).toEqual(['payments']);
+  });
+
+  it('keeps the listed namespaces, without a loading state, while the list refreshes', async () => {
+    vi.useFakeTimers();
+    await start();
+    const parked = holdNamespaceReads(() => [namespaceRow('billing'), namespaceRow('payments')]);
+
+    // A namespace is added; the domain rings its object clock.
+    await act(async () => {
+      app.streams.ring('namespaces', namespacesScope(), 'object', 'v2');
+      // Signals apply after the stream's coalescing window (resourceStreamManager.ts).
+      await vi.advanceTimersByTimeAsync(200);
+    });
+    await app.settle();
+    expect(parked).toHaveLength(1);
+    expect(rowNames()).toEqual(['payments']);
+    expect(view.container.textContent).not.toMatch(/Loading namespaces|Updating namespaces/);
+
+    await releaseReads(parked);
+    expect(rowNames()).toEqual(['billing', 'payments']);
+  });
+
+  // Re-enabling auto-refresh restarts the scope's stream, which clears the
+  // stored failure (no error, initialising) but not the denial: the view must
+  // settle on the permission message instead of loading forever.
+  it('keeps the permission message, not a loading state, after a denied list’s stream restarts', async () => {
+    startCluster();
+    serveNamespaces([]);
+    app.snapshots.fail('namespaces', namespacesScope(), makeErrorStatus('Forbidden'));
+    // Mirrors backend/preferences_settings.go UpdateAppPreferences.
+    app.backend.answer('UpdateAppPreferences', (request) => ({
+      settings: null,
+      changedKeys: (request.changes ?? []).map((change) => change.key),
+    }));
+    await openView();
+    expect(view.container.textContent).toContain('Insufficient permissions');
+
+    await chooseConnectivityAction('Disable Auto-Refresh');
+    await chooseConnectivityAction('Enable Auto-Refresh');
+
+    expect(tableRows()).toEqual([]);
+    expect(view.container.textContent).toContain('Insufficient permissions');
+    expect(view.container.textContent).not.toContain('Loading namespaces');
   });
 });

@@ -71,7 +71,7 @@ export const NODE_SHELL_PERMISSIONS: PermissionSpecList = {
   ],
 };
 
-export const CONFIG_PERMISSIONS: PermissionSpecList = {
+const CONFIG_PERMISSIONS: PermissionSpecList = {
   feature: PERMISSION_FEATURES.namespaceConfig,
   specs: [
     { kind: 'ConfigMap', verb: 'list' },
@@ -81,7 +81,7 @@ export const CONFIG_PERMISSIONS: PermissionSpecList = {
   ],
 };
 
-export const NETWORK_PERMISSIONS: PermissionSpecList = {
+const NETWORK_PERMISSIONS: PermissionSpecList = {
   feature: PERMISSION_FEATURES.namespaceNetwork,
   specs: [
     { kind: 'Service', verb: 'list' },
@@ -109,7 +109,7 @@ export const NETWORK_PERMISSIONS: PermissionSpecList = {
   ],
 };
 
-export const RBAC_PERMISSIONS: PermissionSpecList = {
+const RBAC_PERMISSIONS: PermissionSpecList = {
   feature: PERMISSION_FEATURES.namespaceRBAC,
   specs: [
     { kind: 'Role', verb: 'list' },
@@ -121,7 +121,7 @@ export const RBAC_PERMISSIONS: PermissionSpecList = {
   ],
 };
 
-export const STORAGE_PERMISSIONS: PermissionSpecList = {
+const STORAGE_PERMISSIONS: PermissionSpecList = {
   feature: PERMISSION_FEATURES.namespaceStorage,
   specs: [
     { kind: 'PersistentVolumeClaim', verb: 'list' },
@@ -129,7 +129,7 @@ export const STORAGE_PERMISSIONS: PermissionSpecList = {
   ],
 };
 
-export const AUTOSCALING_PERMISSIONS: PermissionSpecList = {
+const AUTOSCALING_PERMISSIONS: PermissionSpecList = {
   feature: PERMISSION_FEATURES.namespaceAutoscaling,
   specs: [
     { kind: 'HorizontalPodAutoscaler', verb: 'list' },
@@ -137,7 +137,7 @@ export const AUTOSCALING_PERMISSIONS: PermissionSpecList = {
   ],
 };
 
-export const QUOTA_PERMISSIONS: PermissionSpecList = {
+const QUOTA_PERMISSIONS: PermissionSpecList = {
   feature: PERMISSION_FEATURES.namespaceQuotas,
   specs: [
     { kind: 'ResourceQuota', verb: 'list' },
@@ -149,7 +149,7 @@ export const QUOTA_PERMISSIONS: PermissionSpecList = {
   ],
 };
 
-export const EVENT_PERMISSIONS: PermissionSpecList = {
+const EVENT_PERMISSIONS: PermissionSpecList = {
   feature: PERMISSION_FEATURES.namespaceEvents,
   specs: [{ kind: 'Event', verb: 'list' }],
 };

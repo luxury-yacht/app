@@ -1,111 +1,72 @@
 /**
  * frontend/src/modules/namespace/contexts/NsResourcesContext.test.tsx
  *
- * Test suite for NsResourcesContext: the namespace-view effects wrapper.
- * It publishes the selected namespace to the refresh orchestrator and primes
- * single-namespace permission checks. It deliberately holds NO domain
- * leases, fetches NO data, and exposes NO context value — the query-backed
- * tables own their rows, and the active tab lives in ViewStateContext.
+ * NamespaceResourcesProvider, the effects wrapper around the namespace views:
+ * it asks the backend for the permissions of the namespace the view shows, in
+ * the visible cluster, so the views' actions are decided before the user opens
+ * them; it reads no namespace resources of its own (the query-backed tables
+ * own their rows). Runs inside the production shell with the real kubeconfig,
+ * namespace, and permission owners over a faked backend (test-utils/appState).
  */
-import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { describe, expect, it } from 'vitest';
+import { installAppStateHarness, type TestCluster } from '@/test-utils/appState/harness';
 import { NamespaceResourcesProvider } from './NsResourcesContext';
 
-const { orchestrator, capabilityMocks } = vi.hoisted(() => ({
-  orchestrator: {
-    acquireScopedDomainLease: vi.fn(),
-    releaseScopedDomainLease: vi.fn(),
-    fetchScopedDomain: vi.fn().mockResolvedValue(undefined),
-  },
-  capabilityMocks: { queryNamespacePermissions: vi.fn() },
-}));
+const app = installAppStateHarness();
 
-vi.mock('@/core/refresh', () => ({
-  refreshOrchestrator: orchestrator,
-}));
+/** The namespaces the backend was asked permissions for, per cluster. */
+const queriedNamespaces = (cluster: TestCluster) =>
+  new Set(
+    app.backend
+      .calls('QueryPermissions')
+      .flatMap(([queries]) => queries ?? [])
+      .filter((query) => query.clusterId === cluster.clusterId && query.namespace)
+      .map((query) => query.namespace)
+  );
 
-vi.mock('@/core/capabilities', async () => {
-  const actual = await vi.importActual<typeof import('@/core/capabilities')>('@/core/capabilities');
-  return {
-    ...actual,
-    queryNamespacePermissions: capabilityMocks.queryNamespacePermissions,
-  };
-});
-
-const testClusterId = 'test-cluster';
-
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedClusterId: testClusterId }),
-}));
-
-vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
-  useNamespace: () => ({ selectedNamespaceClusterId: testClusterId }),
-}));
+const start = async () => {
+  const dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['team-a', 'team-b']);
+  const view = await app.render(null);
+  const show = (namespace: string) =>
+    view.show(
+      <NamespaceResourcesProvider namespace={namespace}>
+        <div />
+      </NamespaceResourcesProvider>
+    );
+  return { dev, show };
+};
 
 describe('NamespaceResourcesProvider', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  it('asks for the shown namespace’s permissions in the visible cluster and reads nothing itself', async () => {
+    const { dev, show } = await start();
+    app.snapshots.clearReads();
+    const streamsBefore = app.streams.active();
 
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
+    await show('team-a');
 
-    Object.values(orchestrator).forEach((value) => {
-      if (typeof value === 'function') {
-        value.mockClear();
-      }
-    });
-    capabilityMocks.queryNamespacePermissions.mockClear();
+    expect(queriedNamespaces(dev)).toEqual(new Set(['team-a']));
+    // Field evidence for the cut: this wrapper once fetched a namespace-workloads
+    // copy per metric tick that no view rendered.
+    expect(app.snapshots.reads()).toEqual([]);
+    expect(app.streams.active()).toEqual(streamsBefore);
   });
 
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
+  it('asks for no single namespace’s permissions under All Namespaces', async () => {
+    const { dev, show } = await start();
+
+    await show('namespace:all');
+
+    expect(queriedNamespaces(dev)).toEqual(new Set());
   });
 
-  const render = async (namespace?: string | null) => {
-    await act(async () => {
-      root.render(
-        <NamespaceResourcesProvider namespace={namespace}>
-          <div data-testid="child" />
-        </NamespaceResourcesProvider>
-      );
-      await Promise.resolve();
-    });
-  };
+  it('asks for the next namespace’s permissions when the user switches namespace', async () => {
+    const { dev, show } = await start();
 
-  it('holds NO base-scope lease and issues NO fetch — the query-backed tables own their data', async () => {
-    // Field evidence for the cut: two namespace-workloads fetches per metric
-    // tick — the table's typed-query page PLUS this wrapper's base-scope
-    // copy, whose rows were rendered NOWHERE.
-    await render('team-a');
+    await show('team-a');
+    await show('team-b');
 
-    expect(container.querySelector('[data-testid="child"]')).toBeTruthy();
-    expect(orchestrator.acquireScopedDomainLease).not.toHaveBeenCalled();
-    expect(orchestrator.fetchScopedDomain).not.toHaveBeenCalled();
-
-    // The load-bearing responsibility stays: single-namespace permissions are primed.
-    expect(capabilityMocks.queryNamespacePermissions).toHaveBeenCalledWith('team-a', testClusterId);
-  });
-
-  it('does not prime permissions for the all-namespaces sentinel', async () => {
-    await render('namespace:all');
-
-    expect(capabilityMocks.queryNamespacePermissions).not.toHaveBeenCalled();
-  });
-
-  it('follows namespace prop changes', async () => {
-    await render('team-a');
-    await render('team-b');
-
-    expect(capabilityMocks.queryNamespacePermissions).toHaveBeenLastCalledWith(
-      'team-b',
-      testClusterId
-    );
+    expect(queriedNamespaces(dev)).toEqual(new Set(['team-a', 'team-b']));
   });
 });

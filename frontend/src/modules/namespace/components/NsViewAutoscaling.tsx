@@ -29,7 +29,6 @@ export type AutoscalingData = NamespaceAutoscalingSummary & {
   minReplicas?: number;
   maxReplicas?: number;
   currentReplicas?: number;
-  status?: string;
 };
 
 interface AutoscalingViewProps {
@@ -174,24 +173,13 @@ const autoscalingSpec: AggregatedResourceGridViewSpec<AutoscalingData> = {
             const current = resource.currentReplicas ?? resource.current;
             return `${current ?? 0}`;
           }
-          if (resource.ref.kind === 'VerticalPodAutoscaler') {
-            return resource.status || 'Unknown';
-          }
           return '-';
         },
         {
           alignHeader: 'center',
           alignData: 'center',
-          getClassName: (resource) => {
-            if (resource.ref.kind === 'HorizontalPodAutoscaler') {
-              return 'current-replicas';
-            }
-            if (resource.ref.kind === 'VerticalPodAutoscaler') {
-              const status = resource.status || 'Unknown';
-              return `vpa-status ${status.toLowerCase()}`;
-            }
-            return undefined;
-          },
+          getClassName: (resource) =>
+            resource.ref.kind === 'HorizontalPodAutoscaler' ? 'current-replicas' : undefined,
         }
       ),
       cf.createAgeColumn(),
@@ -201,7 +189,7 @@ const autoscalingSpec: AggregatedResourceGridViewSpec<AutoscalingData> = {
 
 /**
  * GridTable component for namespace autoscaling resources
- * Aggregates HorizontalPodAutoscalers and VerticalPodAutoscalers
+ * (the backend serves HorizontalPodAutoscalers)
  */
 const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
   ({ namespace, showNamespaceColumn = false }) => (

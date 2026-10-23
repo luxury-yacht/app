@@ -54,10 +54,6 @@ export const isWindowMaximised = (): Promise<boolean> => WailsWindow.IsMaximised
 
 export const minimiseWindow = (): Promise<void> => WailsWindow.Minimise();
 
-export const maximiseWindow = (): Promise<void> => WailsWindow.Maximise();
-
-export const restoreWindow = (): Promise<void> => WailsWindow.Restore();
-
 export const focusWindow = (windowName: string): Promise<void> =>
   WailsWindow.Get(windowName).Focus();
 

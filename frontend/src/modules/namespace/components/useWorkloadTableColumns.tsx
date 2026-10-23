@@ -48,18 +48,6 @@ const parseReadyCounts = (value?: string | null): { ready: number; total: number
   };
 };
 
-const getReadySortValue = (value?: string | null): number | string => {
-  const counts = parseReadyCounts(value);
-  if (counts) {
-    return counts.ready * 1000000 + counts.total;
-  }
-  if (!value) {
-    return -1;
-  }
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : value.toLowerCase();
-};
-
 const useWorkloadTableColumns = ({
   handleWorkloadClick,
   onAltClick,
@@ -90,7 +78,6 @@ const useWorkloadTableColumns = ({
         alignHeader: 'center',
         alignData: 'center',
         getClassName: getReadyClassName,
-        sortValue: (row) => getReadySortValue(row.ready),
       }
     );
     const readyColumn = podsToggle
@@ -107,7 +94,6 @@ const useWorkloadTableColumns = ({
         onClick: (row) => handleWorkloadClick(row),
         onAltClick,
         isInteractive: () => true,
-        sortValue: (row) => row.ref.kind.toLowerCase(),
       }),
       cf.createResourceNameColumn<WorkloadData>((row) => row.ref.name, {
         onClick: (row) => handleWorkloadClick(row),
@@ -118,7 +104,6 @@ const useWorkloadTableColumns = ({
       }),
       cf.createTextColumn<WorkloadData>('status', 'Status', (row) => row.status, {
         getClassName: (row) => backendStatusTextClass(row.statusPresentation),
-        sortValue: (row) => row.status.toLowerCase(),
       }),
       readyColumn,
       cf.createTextColumn<WorkloadData>(
@@ -129,7 +114,6 @@ const useWorkloadTableColumns = ({
           alignHeader: 'center',
           alignData: 'center',
           getClassName: getRestartsClassName,
-          sortValue: (row) => row.restarts ?? 0,
         }
       ),
       cf.createResourceBarColumn<WorkloadData>({
@@ -144,7 +128,6 @@ const useWorkloadTableColumns = ({
         getAnimationKey: (row) => `${buildRequiredCanonicalObjectRowKey(row.ref)}:cpu`,
         getShowEmptyState: () => true,
         sortable: true,
-        sortValue: (row) => row.cpuUsageMilli ?? 0,
       }),
       cf.createResourceBarColumn<WorkloadData>({
         key: 'memory',
@@ -158,7 +141,6 @@ const useWorkloadTableColumns = ({
         getAnimationKey: (row) => `${buildRequiredCanonicalObjectRowKey(row.ref)}:memory`,
         getShowEmptyState: () => true,
         sortable: true,
-        sortValue: (row) => row.memoryUsageBytes ?? 0,
       }),
       cf.createAgeColumn<WorkloadData & { age?: string }>('age', 'Age', (row) => {
         return row.age ?? '—';

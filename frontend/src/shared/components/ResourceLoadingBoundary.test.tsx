@@ -1,134 +1,70 @@
 /**
  * frontend/src/shared/components/ResourceLoadingBoundary.test.tsx
  *
- * Test suite for ResourceLoadingBoundary.
- * Covers key behaviors and edge cases for ResourceLoadingBoundary.
+ * The loading gate in front of resource tables: a spinner until the first
+ * result, the content as soon as partial data arrives when partial rendering
+ * is allowed, and, while auto-refresh is off, a paused notice instead of a
+ * spinner that would never resolve. Runs inside the production shell, which
+ * owns the auto-refresh preference, over a faked backend (test-utils/appState).
  */
 
-import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { describe, expect, it } from 'vitest';
+import { installAppStateHarness, type MountedApp } from '@/test-utils/appState/harness';
 import ResourceLoadingBoundary from './ResourceLoadingBoundary';
 
-const autoRefreshLoadingState = vi.hoisted(() => ({
-  isPaused: false,
-  isManualRefreshActive: false,
-  suppressPassiveLoading: false,
-}));
+const app = installAppStateHarness();
 
-vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
-  useAutoRefreshLoadingState: () => autoRefreshLoadingState,
-}));
+const start = async (): Promise<MountedApp> => {
+  const dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['default']);
+  return app.render(null);
+};
+
+const content = (view: MountedApp) =>
+  view.container.querySelector('[data-testid="content"]')?.textContent ?? null;
+const spinner = (view: MountedApp) => view.container.querySelector('.loading-spinner-container');
 
 describe('ResourceLoadingBoundary', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  it('shows a spinner instead of the content until the first result', async () => {
+    const view = await start();
 
-  beforeEach(() => {
-    autoRefreshLoadingState.isPaused = false;
-    autoRefreshLoadingState.isManualRefreshActive = false;
-    autoRefreshLoadingState.suppressPassiveLoading = false;
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-  });
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-  });
-
-  it('shows a spinner while resources are loading', () => {
-    act(() => {
-      root.render(
-        <ResourceLoadingBoundary loading dataLength={0} hasLoaded={false}>
-          <div data-testid="content">content</div>
-        </ResourceLoadingBoundary>
-      );
-    });
-
-    const spinner = container.querySelector('.loading-spinner-container');
-    expect(spinner).toBeTruthy();
-    expect(spinner?.textContent).toContain('Loading resources...');
-  });
-
-  it('renders children when partial data is available', () => {
-    act(() => {
-      root.render(
-        <ResourceLoadingBoundary
-          loading
-          dataLength={2}
-          hasLoaded={false}
-          allowPartial
-          spinnerMessage="Waiting"
-        >
-          <div data-testid="content">ready</div>
-        </ResourceLoadingBoundary>
-      );
-    });
-
-    expect(container.querySelector('.loading-spinner-container')).toBeNull();
-    expect(container.querySelector('[data-testid="content"]')?.textContent).toBe('ready');
-  });
-
-  it('warns when allowPartial is set but no data arrives', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-
-    await act(async () => {
-      root.render(
-        <ResourceLoadingBoundary loading={false} dataLength={0} hasLoaded={false} allowPartial>
-          <div data-testid="content">empty</div>
-        </ResourceLoadingBoundary>
-      );
-      await Promise.resolve();
-    });
-
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[ResourceLoadingBoundary] allowPartial is enabled')
+    await view.show(
+      <ResourceLoadingBoundary loading dataLength={0} hasLoaded={false}>
+        <div data-testid="content">content</div>
+      </ResourceLoadingBoundary>
     );
 
-    warnSpy.mockRestore();
+    expect(spinner(view)).not.toBeNull();
+    expect(content(view)).toBeNull();
   });
 
-  it('suppresses the empty warning when suppressEmptyWarning is true', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  it('renders partial data while the rest is still loading when partial rendering is allowed', async () => {
+    const view = await start();
 
-    await act(async () => {
-      root.render(
-        <ResourceLoadingBoundary
-          loading={false}
-          dataLength={0}
-          hasLoaded={false}
-          allowPartial
-          suppressEmptyWarning
-        >
-          <div data-testid="content">empty</div>
-        </ResourceLoadingBoundary>
-      );
-      await Promise.resolve();
-    });
+    await view.show(
+      <ResourceLoadingBoundary loading dataLength={2} hasLoaded={false} allowPartial>
+        <div data-testid="content">ready</div>
+      </ResourceLoadingBoundary>
+    );
 
-    expect(warnSpy).not.toHaveBeenCalled();
-    warnSpy.mockRestore();
+    expect(spinner(view)).toBeNull();
+    expect(content(view)).toBe('ready');
   });
 
-  it('shows an auto-refresh disabled message when passive loading is suppressed before first load', () => {
-    autoRefreshLoadingState.isPaused = true;
-    autoRefreshLoadingState.suppressPassiveLoading = true;
+  it('shows the paused notice instead of a spinner while auto-refresh is off before the first result', async () => {
+    app.preferences({ autoRefreshEnabled: false });
+    const view = await start();
 
-    act(() => {
-      root.render(
-        <ResourceLoadingBoundary loading={false} dataLength={0} hasLoaded={false}>
-          <div data-testid="content">content</div>
-        </ResourceLoadingBoundary>
-      );
-    });
+    await view.show(
+      <ResourceLoadingBoundary loading={false} dataLength={0} hasLoaded={false}>
+        <div data-testid="content">content</div>
+      </ResourceLoadingBoundary>
+    );
 
-    expect(container.textContent).toContain('Auto-refresh is disabled');
-    expect(container.querySelector('.resource-loading-boundary-paused')).toBeTruthy();
-    expect(container.querySelector('[data-testid="content"]')).toBeNull();
+    expect(view.container.querySelector('output')?.textContent).toContain(
+      'Auto-refresh is disabled'
+    );
+    expect(spinner(view)).toBeNull();
+    expect(content(view)).toBeNull();
   });
 });

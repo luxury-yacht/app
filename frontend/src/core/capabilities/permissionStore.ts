@@ -167,7 +167,7 @@ let unsubClusterLifecycle: UnsubscribeFn | null = null;
  * source "error" maps to entry.status 'error' with error populated;
  * all other sources map to 'ready'.
  */
-export const makePermissionStatus = (key: string, entry: PermissionEntry): PermissionStatus => {
+const makePermissionStatus = (key: string, entry: PermissionEntry): PermissionStatus => {
   const isError = entry.source === 'error';
   return {
     id: key,

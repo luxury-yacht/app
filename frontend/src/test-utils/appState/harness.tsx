@@ -17,12 +17,14 @@ import { useObjectPanelState } from '@modules/object-panel/contexts/ObjectPanelS
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { getObjectPanelScopes, type ObjectPanelScopes } from '@modules/object-panel/objectPanelRef';
 import { isIdentityPanelRef, panelTargetFromSnapshot } from '@modules/object-panel/panelTarget';
-import { act, type ReactElement, type ReactNode, useSyncExternalStore } from 'react';
+import { act, type ReactElement, type ReactNode, useEffect, useSyncExternalStore } from 'react';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, vi } from 'vitest';
 import { AppShell } from '@/App';
 import { backend, panelwindow } from '@/core/backend-api/models';
 import { useOptionalViewState } from '@/core/contexts/ViewStateContext';
+import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
+import type { DataRequestReason } from '@/core/data-access/types';
 import { eventBus } from '@/core/events';
 import type { PanelWindowDescriptor } from '@/core/panel-windows';
 import {
@@ -32,12 +34,13 @@ import {
   makeNamespaceWorkloadSnapshotPayload,
   makePodSnapshotPayload,
 } from '@/core/refresh/refreshContractTestBuilders';
+import type { RefreshDemand } from '@/core/refresh/refreshRuntime';
 import {
   buildClusterRefreshScope,
   buildRefreshScope,
   CLUSTER_SELECTOR,
 } from '@/core/refresh/scopeSelector';
-import type { DomainPayloadMap, NamespaceSummary } from '@/core/refresh/types';
+import type { DomainPayloadMap, NamespaceSummary, RefreshDomain } from '@/core/refresh/types';
 import { setAppPreferencesForTesting } from '@/core/settings/appPreferences';
 import { useKubeconfig } from '@/modules/kubernetes/config/KubeconfigContext';
 import { PanelWindowShell } from '@/PanelWindowApp';
@@ -86,8 +89,36 @@ export interface ClusterFixture {
   name: string;
   context: string;
   lifecycle?: backend.ClusterLifecycleState;
+  /** The cluster's auth state the backend reports (default: none reported). */
+  auth?: Partial<WorkspaceClusterState['auth']>;
+  /** The cluster's health the backend reports (default: healthy). */
+  health?: backend.ClusterHealthState;
   /** Whether the workspace has this cluster open at startup (default true). */
   open?: boolean;
+}
+
+/**
+ * A change the backend makes to an open cluster while the window runs. Its
+ * credential state is what backend/internal/authstate reports: `valid`
+ * (recovered, which clears the diagnostic), `recovering` (retrying), or
+ * `invalid` (failed), with the diagnostic the backend attaches.
+ */
+export interface ClusterStateChange {
+  lifecycle?: backend.ClusterLifecycleState;
+  auth?: Partial<WorkspaceClusterState['auth']> & { state: 'valid' | 'recovering' | 'invalid' };
+  health?:
+    | backend.ClusterHealthState.ClusterHealthHealthy
+    | backend.ClusterHealthState.ClusterHealthDegraded;
+}
+
+/** A refresh lease a test holds the way a mounted view does. */
+export interface HarnessLease {
+  domain: RefreshDomain;
+  scope: string;
+  preserveState?: boolean;
+  demand?: RefreshDemand;
+  /** A tab that reads its scope when it enables it passes a read reason. */
+  fetchOnEnable?: DataRequestReason | false;
 }
 
 /** Complete object identity; the cluster comes from a `TestCluster`. */
@@ -123,9 +154,13 @@ export type PermissionQuery = NonNullable<BackendArgs<'QueryPermissions'>[0]>[nu
  * cluster-wide query). `{ reason }` is an access review's answer with the API
  * server's reason, denied unless `allowed: true`: what the backend returns
  * when a namespace's rules are incomplete (EKS access policies, webhook
- * authorizers).
+ * authorizers). `{ error }` is a check the cluster could not evaluate.
  */
-export type PermissionDecision = boolean | { allowed?: boolean; reason: string };
+export type PermissionDecision =
+  | boolean
+  | { allowed?: boolean; reason: string }
+  /** The cluster could not evaluate the check (an inactive cluster, a failed review). */
+  | { error: string };
 
 /** Public hooks of the real owners, read from inside the mounted shell. */
 export interface AppOwners {
@@ -144,6 +179,15 @@ export interface AppOwners {
 export type OpenPanelTarget =
   | (ObjectIdentity & { clusterId: string; clusterName?: string })
   | { targetType: 'identity'; clusterId: string; kind: string; name: string };
+
+/**
+ * A sidebar entry: a cluster view (`'overview'` is the cluster Overview), a
+ * namespace's view, or a view across clusters.
+ */
+export type SidebarTarget =
+  | { clusterView: string }
+  | { namespace: string; view: string }
+  | { globalView: string };
 
 export interface MountedApp {
   container: HTMLElement;
@@ -165,6 +209,17 @@ export interface MountedApp {
    * kubeconfig owner, as clicking the tab would. Throws if it did not switch.
    */
   selectCluster(cluster: TestCluster): Promise<void>;
+  /**
+   * Full-app mode: clicks the sidebar entry of a view in the visible cluster,
+   * as the user would. A namespace view's namespace is expanded first. Throws
+   * when the sidebar does not offer the entry.
+   */
+  goTo(target: SidebarTarget): Promise<void>;
+  /**
+   * Holds refresh leases the way a mounted view does, after startup (a lease
+   * taken before its cluster connects is pruned). Resolves to their release.
+   */
+  lease(...leases: HarnessLease[]): Promise<() => Promise<void>>;
   unmount(): void;
 }
 
@@ -180,6 +235,12 @@ export interface AppStateHarness {
   /** Adds a kubeconfig context; open clusters are part of the startup workspace. */
   cluster(fixture: ClusterFixture): TestCluster;
   /**
+   * The backend changes an open cluster's state: later workspace answers
+   * report it, and the window receives the events the backend sends for it
+   * (backend/events.go).
+   */
+  setClusterState(cluster: TestCluster, change: ClusterStateChange): Promise<void>;
+  /**
    * Makes the next mount a native panel window for `cluster`: bootstrap
    * resolves a panel descriptor, so `render` uses the panel-window shell.
    * `transferId` is the move that opened it (default: none); `tabs` is the
@@ -189,8 +250,6 @@ export interface AppStateHarness {
     cluster: TestCluster,
     options?: { name?: string; transferId?: string; tabs?: panelwindow.TabSnapshot[] }
   ): PanelWindowDescriptor;
-  /** Sets the visible cluster at startup (default: the first open cluster). */
-  showCluster(cluster: TestCluster): void;
   /** An object of `cluster`, with the panel scopes production derives for it. */
   object(cluster: TestCluster, identity: ObjectIdentity): TestObject;
   /**
@@ -213,6 +272,17 @@ export interface AppStateHarness {
   startScreen(cluster: TestCluster): void;
   /** Serves the cluster's namespace list (and its empty metrics). */
   namespaces(cluster: TestCluster, names: string[]): void;
+  /**
+   * Answers every read of a query table domain in `cluster` (any selector,
+   * page, sort, or filter) with the typed-resource envelope and `payload`
+   * (rows default to none; totals count the rows). Returns a function that
+   * stops answering.
+   */
+  serveTable<D extends keyof DomainPayloadMap>(
+    cluster: TestCluster,
+    domain: D,
+    payload?: Partial<DomainPayloadMap[D]>
+  ): () => void;
   /** Persisted preferences the bootstrap hydrates. */
   preferences(settings: Partial<AppSettings>): void;
   /** Permission queries are allowed unless a denial matches. */
@@ -249,26 +319,72 @@ interface Session {
   inFlight: Set<Promise<unknown>>;
 }
 
+const NO_AUTH: WorkspaceClusterState['auth'] = {
+  state: '',
+  reason: '',
+  errorClass: '',
+  secondsUntilRetry: 0,
+  class: '',
+  kind: '',
+  summary: '',
+  execCommand: '',
+};
+
 const workspaceClusterState = (
   cluster: TestCluster,
-  lifecycle: backend.ClusterLifecycleState
+  lifecycle: backend.ClusterLifecycleState,
+  auth: Partial<WorkspaceClusterState['auth']> = {},
+  health = backend.ClusterHealthState.ClusterHealthHealthy
 ): WorkspaceClusterState => ({
   clusterId: cluster.clusterId,
   clusterName: cluster.clusterName,
   lifecycle,
-  auth: {
-    state: '',
-    reason: '',
-    errorClass: '',
-    secondsUntilRetry: 0,
-    class: '',
-    kind: '',
-    summary: '',
-    execCommand: '',
-  },
-  health: backend.ClusterHealthState.ClusterHealthHealthy,
+  auth: { ...NO_AUTH, ...auth },
+  health,
   scopeRevision: 1,
 });
+
+// backend/cluster_auth_contract.go newClusterAuthStateCommand.
+const AUTH_EVENTS = {
+  valid: 'cluster:auth:recovered',
+  recovering: 'cluster:auth:recovering',
+  invalid: 'cluster:auth:failed',
+} as const;
+
+/** The backend's state after `change`, and the events it sends for it. */
+const applyClusterChange = (
+  state: WorkspaceClusterState,
+  change: ClusterStateChange
+): { next: WorkspaceClusterState; events: Array<[string, Record<string, unknown>]> } => {
+  const identity = { clusterId: state.clusterId, clusterName: state.clusterName };
+  const events: Array<[string, Record<string, unknown>]> = [];
+  let next = state;
+  if (change.lifecycle) {
+    events.push([
+      'cluster:lifecycle',
+      { clusterId: state.clusterId, state: change.lifecycle, previousState: state.lifecycle },
+    ]);
+    next = { ...next, lifecycle: change.lifecycle };
+  }
+  if (change.auth) {
+    const auth =
+      change.auth.state === 'valid'
+        ? { ...NO_AUTH, state: 'valid' }
+        : { ...NO_AUTH, ...change.auth };
+    // ClusterAuthEvent carries every diagnostic field (authEventPayload).
+    const { reason, class: diagnosticClass, kind, summary, execCommand } = auth;
+    events.push([
+      AUTH_EVENTS[change.auth.state],
+      { ...identity, reason, class: diagnosticClass, kind, summary, execCommand },
+    ]);
+    next = { ...next, auth };
+  }
+  if (change.health) {
+    events.push([`cluster:health:${change.health}`, identity]);
+    next = { ...next, health: change.health };
+  }
+  return { next, events };
+};
 
 const namespaceSummary = (clusterId: string, name: string): NamespaceSummary => ({
   ref: {
@@ -309,6 +425,11 @@ const deniedBy = (query: PermissionQuery, denials: PermissionDenial[]): boolean 
  * review (SSAR, with the API server's reason, capabilities/service.go:221).
  */
 const permissionResult = (query: PermissionQuery, decision: PermissionDecision) => {
+  if (typeof decision === 'object' && 'error' in decision) {
+    // The backend reports a check it could not evaluate per query, never as a
+    // failed call (resource_gateway_permissions.go).
+    return { ...query, allowed: false, source: 'error', error: decision.error };
+  }
   if (typeof decision === 'object') {
     return {
       ...query,
@@ -564,6 +685,8 @@ const answerBootRpcs = (session: Session): void => {
   rpc.answer('GetFavorites', () => []);
   rpc.answer('GetClusterTabOrder', () => []);
   rpc.answer('GetGridTablePersistence', () => ({}));
+  // Tables save their layout 250 ms after a change (useGridTablePersistence.ts).
+  rpc.answer('SetGridTablePersistence', () => undefined);
   rpc.answer('SetClusterTabOrder', () => undefined);
   rpc.answer('MatchThemeForCluster', () => null);
   rpc.answer('GetClusterAllowedNamespaces', () => []);
@@ -617,6 +740,57 @@ const surface = {
     return () => surface.listeners.delete(listener);
   },
 };
+
+// The leases a test holds; the host renders a holder for each.
+const leaseStore = {
+  leases: [] as Array<HarnessLease & { key: number }>,
+  nextKey: 0,
+  hostMounted: false,
+  listeners: new Set<() => void>(),
+  set(leases: Array<HarnessLease & { key: number }>) {
+    leaseStore.leases = leases;
+    leaseStore.listeners.forEach((listener) => {
+      listener();
+    });
+  },
+  subscribe(listener: () => void) {
+    leaseStore.listeners.add(listener);
+    return () => leaseStore.listeners.delete(listener);
+  },
+};
+
+function HarnessLeaseHolder({
+  domain,
+  scope,
+  preserveState,
+  demand,
+  fetchOnEnable,
+}: Readonly<HarnessLease>) {
+  useScopedRefreshDomainLifecycle({
+    domain,
+    scope,
+    enabled: true,
+    preserveState,
+    demand,
+    fetchOnEnable,
+  });
+  return null;
+}
+
+function HarnessLeases() {
+  const leases = useSyncExternalStore(
+    leaseStore.subscribe,
+    () => leaseStore.leases,
+    () => leaseStore.leases
+  );
+  useEffect(() => {
+    leaseStore.hostMounted = true;
+    return () => {
+      leaseStore.hostMounted = false;
+    };
+  }, []);
+  return leases.map(({ key, ...lease }) => <HarnessLeaseHolder key={key} {...lease} />);
+}
 
 function HarnessSurface() {
   return useSyncExternalStore(
@@ -705,6 +879,7 @@ export const installAppStateHarness = (
     session = null;
     ownersRef = null;
     surface.ui = null;
+    leaseStore.leases = [];
     try {
       ending.mounted.forEach(({ root, container, preparation }) => {
         act(() => root.unmount());
@@ -719,10 +894,31 @@ export const installAppStateHarness = (
       }
     } finally {
       ending.errors.restore();
-      ending.transport.uninstall();
+      // Reset while the fakes are installed: stopping streams, polls, and
+      // demand sends requests, which must not reach the real fetch.
       resetAppModuleState();
+      ending.transport.uninstall();
     }
   });
+
+  // The sidebar marks each entry with what it targets (ui/layout/Sidebar.tsx).
+  const sidebarSelector = (kind: string, view?: string, namespace?: string) =>
+    [
+      `[data-sidebar-target-kind="${kind}"]`,
+      view ? `[data-sidebar-target-view="${view}"]` : '',
+      namespace ? `[data-sidebar-target-namespace="${namespace}"]` : '',
+    ].join('');
+
+  const clickSidebar = async (container: HTMLElement, selector: string) => {
+    const entry = container.querySelector<HTMLElement>(selector);
+    if (!entry) {
+      throw new Error(`The sidebar has no entry ${selector}`);
+    }
+    await act(async () => {
+      entry.click();
+    });
+    await settleWork();
+  };
 
   const mount = async (
     element: (prepared: Awaited<ReturnType<typeof prepareWindow>>) => Promise<ReactElement>
@@ -795,6 +991,55 @@ export const installAppStateHarness = (
             }
           })()
         ),
+      goTo: (target) =>
+        track(
+          (async () => {
+            const clusterId = owners().kubeconfig.selectedClusterId;
+            if ('namespace' in target) {
+              const key = `${clusterId}|${target.namespace}`;
+              const viewSelector = sidebarSelector('namespace-view', target.view, key);
+              if (!container.querySelector(viewSelector)) {
+                await clickSidebar(container, sidebarSelector('namespace-toggle', undefined, key));
+              }
+              await clickSidebar(container, viewSelector);
+            } else if ('clusterView' in target) {
+              await clickSidebar(
+                container,
+                target.clusterView === 'overview'
+                  ? sidebarSelector('overview')
+                  : sidebarSelector('cluster-view', target.clusterView)
+              );
+            } else {
+              await clickSidebar(container, sidebarSelector('global-view', target.globalView));
+            }
+          })()
+        ),
+      lease: (...leases) =>
+        track(
+          (async () => {
+            if (!leaseStore.hostMounted) {
+              throw new Error(
+                'This mount holds no leases: lease from provider mode or the full workspace'
+              );
+            }
+            const held = leases.map((lease, index) => ({
+              ...lease,
+              key: leaseStore.nextKey + index,
+            }));
+            leaseStore.nextKey += leases.length;
+            await act(async () => {
+              leaseStore.set([...leaseStore.leases, ...held]);
+            });
+            await settleWork();
+            return async () => {
+              const keys = new Set(held.map(({ key }) => key));
+              await act(async () => {
+                leaseStore.set(leaseStore.leases.filter(({ key }) => !keys.has(key)));
+              });
+              await settleWork();
+            };
+          })()
+        ),
       unmount() {
         act(() => mountedRoot.unmount());
       },
@@ -824,7 +1069,7 @@ export const installAppStateHarness = (
     },
     windowName,
     focusedWindows: () => current().transport.focusedWindows(),
-    cluster({ name, context, lifecycle, open = true }) {
+    cluster({ name, context, lifecycle, auth, health, open = true }) {
       const active = current();
       const info: KubeconfigInfo = {
         name,
@@ -845,13 +1090,38 @@ export const installAppStateHarness = (
           cluster.clusterId,
           workspaceClusterState(
             cluster,
-            lifecycle ?? backend.ClusterLifecycleState.ClusterStateReady
+            lifecycle ?? backend.ClusterLifecycleState.ClusterStateReady,
+            auth,
+            health
           )
         );
         active.workspace.visibleClusterId ||= cluster.clusterId;
       }
       return cluster;
     },
+    setClusterState: (cluster, change) =>
+      track(
+        (async () => {
+          const active = current();
+          // A cluster the window opened mid-test is connecting until its
+          // lifecycle moves (backend workspace_state.go reports it at once).
+          const opened = active.workspace.selectedKubeconfigs.includes(cluster.selection)
+            ? workspaceClusterState(cluster, backend.ClusterLifecycleState.ClusterStateConnecting)
+            : undefined;
+          const state = active.clusters.get(cluster.clusterId) ?? opened;
+          if (!state) {
+            throw new Error(`The workspace does not have ${cluster.clusterId} open`);
+          }
+          const { next, events } = applyClusterChange(state, change);
+          active.clusters.set(cluster.clusterId, next);
+          await act(async () => {
+            for (const [name, payload] of events) {
+              active.transport.events.emit(name, payload);
+            }
+          });
+          await settleWork();
+        })()
+      ),
     object: objectOf,
     servePanel(cluster, identity, detail = {}) {
       const { snapshots } = current().transport;
@@ -898,9 +1168,6 @@ export const installAppStateHarness = (
       }
       return object;
     },
-    showCluster(cluster) {
-      current().workspace.visibleClusterId = cluster.clusterId;
-    },
     namespaces(cluster, names) {
       const { snapshots } = current().transport;
       const scope = buildClusterRefreshScope('namespaces', cluster.clusterId);
@@ -918,6 +1185,32 @@ export const installAppStateHarness = (
       };
       snapshots.serve('namespaces', scope, namespaces, names.length);
       snapshots.serve('namespace-metrics', scope, metrics, 0);
+    },
+    serveTable(cluster, domain, payload = {}) {
+      return current().transport.snapshots.answer((request) => {
+        if (request.domain !== domain || !request.scope.startsWith(`${cluster.clusterId}|`)) {
+          return undefined;
+        }
+        const rows = (payload as { rows?: unknown[] }).rows ?? [];
+        return {
+          clusterId: cluster.clusterId,
+          clusterName: cluster.clusterName,
+          provider: 'typed-resource',
+          table: domain,
+          total: rows.length,
+          unfilteredTotal: rows.length,
+          totalIsExact: true,
+          facetsExact: true,
+          capabilities: {
+            sortableFields: [],
+            filterableFields: [],
+            searchableFields: [],
+            kindVocabulary: [],
+          },
+          rows,
+          ...payload,
+        };
+      });
     },
     startScreen(cluster) {
       const { snapshots } = current().transport;
@@ -980,6 +1273,7 @@ export const installAppStateHarness = (
           return (
             <PanelWindowShell descriptor={panel}>
               <HarnessBridge />
+              <HarnessLeases />
               <HarnessSurface />
             </PanelWindowShell>
           );
@@ -987,6 +1281,7 @@ export const installAppStateHarness = (
         return (
           <AppShell>
             <HarnessBridge />
+            <HarnessLeases />
             <HarnessSurface />
           </AppShell>
         );
@@ -1002,6 +1297,7 @@ export const installAppStateHarness = (
           <AppShell>
             <AppLayout />
             <HarnessBridge />
+            <HarnessLeases />
             {probes}
           </AppShell>
         );

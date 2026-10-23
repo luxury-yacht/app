@@ -1,1907 +1,716 @@
-import { PanelLayoutTestProvider } from '@/test-utils/PanelLayoutTestProvider';
 /**
  * frontend/src/ui/layout/Sidebar.test.tsx
  *
- * Test suite for Sidebar.
- * Covers key behaviors and edge cases for Sidebar.
+ * The workspace sidebar: which views it offers directly and under its
+ * Resources and Extensions groups (including extension views the visible
+ * cluster discovered), navigation through the real view state, namespace
+ * expansion, the namespace list's loading, paused, dimmed, and unavailable
+ * states, the visible cluster's Attention counts, persisted group
+ * disclosure, the Global section, keyboard traversal, and hiding the
+ * sidebar. Runs in the full app, acting through the sidebar's DOM as the user
+ * does, over a faked backend (test-utils/appState). Scope editing is covered
+ * by NamespaceScopeEditor.test.tsx; revealing an object's view by
+ * Sidebar.navigation.test.tsx.
  */
 
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { AppRegionNavigation } from '@ui/layout/AppRegionNavigation';
-import { KeyboardProvider } from '@ui/shortcuts';
-import { act, useSyncExternalStore } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { eventBus } from '@/core/events';
+import { act } from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  resetAppPreferencesCacheForTesting,
-  setAppPreferencesForTesting,
-} from '@/core/settings/appPreferences';
+  makeCatalogSnapshotPayload,
+  makeClusterAttentionSnapshot,
+} from '@/core/refresh/refreshContractTestBuilders';
+import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
+import type { NamespaceSummary } from '@/core/refresh/types';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { snapshotResponse } from '@/test-utils/appState/transport';
 import { requireValue } from '@/test-utils/requireValue';
-import Sidebar from './Sidebar';
 
-const sidebarStyles = readFileSync(resolve(process.cwd(), 'src/ui/layout/Sidebar.css'), 'utf8');
-const manualScope = vi.hoisted(() => ({
-  names: [] as string[],
-  save: vi.fn(async (_clusterId: string, names: string[]) => names),
-}));
-vi.mock('./namespaceScope', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./namespaceScope')>()),
-  loadNamespaceScope: async () => manualScope.names,
-  saveNamespaceScope: (...args: [string, string[]]) => manualScope.save(...args),
-}));
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
 
-// The mocked hooks return mutable fixtures. Real contexts and stores re-render their
-// consumers when data changes, so each mocked hook subscribes to this version and
-// renderSidebar publishes a change before rendering.
-const fixtureVersion = vi.hoisted(() => {
-  let version = 0;
-  const listeners = new Set<() => void>();
-  return {
-    subscribe: (listener: () => void) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-    read: () => version,
-    publish: () => {
-      version += 1;
-      listeners.forEach((listener) => {
-        listener();
-      });
-    },
-  };
-});
-const useFixture = <T,>(fixture: T): T => {
-  useSyncExternalStore(fixtureVersion.subscribe, fixtureVersion.read);
-  return fixture;
+type Families = { cluster?: string[]; namespaced?: string[] };
+type SeverityCounts = { info: number; warning: number; error: number };
+
+/**
+ * Serves what the sidebar and the views these tests open read for `cluster`:
+ * its namespaces, start screen, discovered extension families (every catalog
+ * read), Attention counts, and the Config and namespace RBAC tables.
+ */
+const serveCluster = (
+  cluster: TestCluster,
+  {
+    namespaces = ['default'],
+    families = {},
+    attention,
+  }: { namespaces?: string[]; families?: Families; attention?: SeverityCounts } = {}
+) => {
+  const identity = { clusterId: cluster.clusterId, clusterName: cluster.clusterName };
+  app.namespaces(cluster, namespaces);
+  app.startScreen(cluster);
+  app.snapshots.answer(({ domain, scope }) =>
+    domain === 'catalog' && scope.startsWith(`${cluster.clusterId}|`)
+      ? makeCatalogSnapshotPayload({ ...identity, resourceFamilies: families })
+      : undefined
+  );
+  if (attention) {
+    app.snapshots.serve(
+      'cluster-attention',
+      buildClusterRefreshScope('cluster-attention', cluster.clusterId),
+      makeClusterAttentionSnapshot({ ...identity, severityCounts: attention })
+    );
+  }
+  app.serveTable(cluster, 'cluster-config');
+  app.serveTable(cluster, 'namespace-config');
+  app.serveTable(cluster, 'namespace-rbac');
 };
 
-const runtimeMocks = vi.hoisted(() => ({
-  eventsOn: vi.fn(() => () => undefined),
-}));
-
-const autoRefreshLoadingState = vi.hoisted(() => ({
-  suppressPassiveLoading: false,
-}));
-
-const discoveredFamilies = vi.hoisted(() => ({
-  byCluster: {} as Record<string, { cluster?: string[]; namespaced?: string[] }>,
-}));
-
-const attentionState = vi.hoisted(() => ({
-  byScope: {
-    'cluster-a|': {
-      severityCounts: { info: 2, warning: 3, error: 1 },
-    },
-  } as Record<string, { severityCounts: { info: number; warning: number; error: number } }>,
-  recordRefreshHandle: vi.fn(),
-}));
-
-const kubeconfigState = vi.hoisted(() => ({
-  selectedClusterId: 'cluster-a',
-  selectedClusterIds: ['cluster-a', 'cluster-b'],
-}));
-
-const testClusterId = 'cluster-a';
-const namespaceKey = (scope: string) => `${testClusterId}|${scope}`;
-
-vi.mock('@core/desktop-runtime', () => ({
-  desktopRuntimeAvailable: () => false,
-  onEvent: runtimeMocks.eventsOn,
-}));
-
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => useFixture(kubeconfigState),
-}));
-
-vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
-  useAutoRefreshLoadingState: () => useFixture(autoRefreshLoadingState),
-}));
-
-vi.mock('@/core/data-access', () => ({
-  useRefreshDomainHandle: (options: { domain?: string; scope?: string }) => {
-    useFixture(null);
-    if (options.domain === 'catalog') {
-      const clusterId = options.scope?.split('|')[0] ?? '';
-      return {
-        data: { clusterId, resourceFamilies: discoveredFamilies.byCluster[clusterId] ?? {} },
-      };
-    }
-    attentionState.recordRefreshHandle(options);
-    return { data: options.scope ? attentionState.byScope[options.scope] : null };
+/** A namespaces row as backend/refresh/snapshot/namespaces.go projects it. */
+const namespaceRow = (
+  cluster: TestCluster,
+  name: string,
+  row: Partial<NamespaceSummary> = {}
+): NamespaceSummary => ({
+  ref: {
+    clusterId: cluster.clusterId,
+    group: '',
+    version: 'v1',
+    kind: 'Namespace',
+    resource: 'namespaces',
+    namespace: '',
+    name,
+    uid: `${name}-uid`,
   },
-}));
-
-type NamespaceEntry = {
-  name: string;
-  scope: string;
-  resourceVersion: string;
-  hasWorkloads: boolean;
-  workloadsUnknown: boolean;
-  details: string;
-  unhealthyWorkloads?: number;
-  warningEvents?: number;
-  warningEventsState?: 'available' | 'loading' | 'unavailable';
-  cpuUsageMilli?: number;
-  memoryUsageBytes?: number;
-  utilizationState?: 'available' | 'loading' | 'unavailable';
-  quotaHighestUsedPercentage?: number;
-  quotaPressure?: '' | 'warning' | 'critical';
-  quotaPressureState?: 'available' | 'loading' | 'unavailable';
-};
-
-type NamespaceState = {
-  namespacesPermissionDenied: boolean;
-  namespaces: NamespaceEntry[];
-  namespaceLoading: boolean;
-  selectedNamespace?: string;
-  selectedNamespaceClusterId?: string;
-  setSelectedNamespace: (namespace: string, clusterId?: string) => void;
-};
-
-const createNamespaceState = (): NamespaceState => ({
-  namespacesPermissionDenied: false,
-  namespaces: [
-    {
-      name: 'default',
-      scope: 'default',
-      resourceVersion: '1',
-      hasWorkloads: true,
-      workloadsUnknown: false,
-      details: '',
-    },
-  ] as NamespaceEntry[],
-  namespaceLoading: false,
-  selectedNamespace: undefined,
-  selectedNamespaceClusterId: undefined,
-  setSelectedNamespace: vi.fn<(ns: string, clusterId?: string) => void>(),
+  phase: 'Active',
+  resourceVersion: '1',
+  creationTimestamp: 0,
+  hasWorkloads: true,
+  warningEventsState: 'available',
+  quotaPressureState: 'available',
+  ...row,
 });
 
-const createViewState = () => ({
-  isSidebarVisible: true,
-  sidebarWidth: 260,
-  sidebarSelection: { type: 'overview', value: 'overview' } as
-    | { type: 'overview'; value: string }
-    | { type: 'namespace'; value: string }
-    | { type: 'cluster'; value: string },
-  viewType: 'overview' as 'overview' | 'cluster' | 'namespace',
-  activeClusterTab: 'nodes' as string | null,
-  activeGlobalTab: 'fleet' as const,
-  activeNamespaceTab: 'workloads' as string | null,
-  toggleSidebar: vi.fn(),
-  setViewType: vi.fn(),
-  setActiveClusterView: vi.fn(),
-  navigateToGlobal: vi.fn(),
-  setSidebarSelection: vi.fn(),
-  onNamespaceSelect: vi.fn(),
-  setActiveNamespaceTab: vi.fn(),
+const serveNamespaceRows = (cluster: TestCluster, rows: NamespaceSummary[]) => {
+  app.snapshots.serve(
+    'namespaces',
+    buildClusterRefreshScope('namespaces', cluster.clusterId),
+    { clusterId: cluster.clusterId, clusterName: cluster.clusterName, namespaces: rows },
+    rows.length
+  );
+};
+
+const viewState = () => requireValue(view.owners().viewState, 'expected workspace view state');
+const sidebar = () =>
+  requireValue(view.container.querySelector<HTMLElement>('nav.sidebar'), 'expected the sidebar');
+
+const entry = (selector: string) => sidebar().querySelector<HTMLButtonElement>(selector);
+const requireEntry = (selector: string) => requireValue(entry(selector), `expected ${selector}`);
+const clusterView = (id: string) =>
+  entry(`[data-sidebar-target-kind="cluster-view"][data-sidebar-target-view="${id}"]`);
+const clusterGroup = (id: string) =>
+  requireEntry(`[data-sidebar-target-kind="cluster-toggle"][data-sidebar-target-id="${id}"]`);
+/**
+ * A namespace's sidebar entry of `kind`, matched on its data attributes (a
+ * cluster id may hold characters a selector would need escaped).
+ */
+const namespaceEntry = (
+  kind: string,
+  namespace: string,
+  cluster: TestCluster,
+  match: { view?: string; id?: string } = {}
+) =>
+  Array.from(
+    sidebar().querySelectorAll<HTMLButtonElement>(`[data-sidebar-target-kind="${kind}"]`)
+  ).find(
+    (item) =>
+      item.dataset.sidebarTargetNamespace === `${cluster.clusterId}|${namespace}` &&
+      (match.view === undefined || item.dataset.sidebarTargetView === match.view) &&
+      (match.id === undefined || item.dataset.sidebarTargetId === match.id)
+  ) ?? null;
+const namespaceToggle = (namespace: string, cluster = dev) =>
+  requireValue(
+    namespaceEntry('namespace-toggle', namespace, cluster),
+    `expected the ${namespace} namespace`
+  );
+const namespaceView = (namespace: string, id: string, cluster = dev) =>
+  namespaceEntry('namespace-view', namespace, cluster, { view: id });
+const namespaceGroup = (namespace: string, id: string, cluster = dev) =>
+  requireValue(
+    namespaceEntry('namespace-group-toggle', namespace, cluster, { id }),
+    `expected the ${namespace} namespace's ${id} group`
+  );
+const expanded = (element: HTMLElement) => element.getAttribute('aria-expanded') === 'true';
+const buttonNamed = (label: string) =>
+  requireValue(
+    Array.from(view.container.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.getAttribute('aria-label') === label
+    ),
+    `expected the ${label} button`
+  );
+
+/** The view a sidebar entry targets, or its group toggle's id. */
+const describeTarget = (element: HTMLElement) =>
+  element.dataset.sidebarTargetView ??
+  `${element.dataset.sidebarTargetKind}:${element.dataset.sidebarTargetId ?? ''}`;
+
+const click = async (element: HTMLElement) => {
+  await act(async () => element.click());
+  await app.settle();
+};
+
+const press = async (key: string, init: KeyboardEventInit = {}) => {
+  const target = requireValue(document.activeElement, 'expected a focused control');
+  const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init });
+  await act(async () => {
+    target.dispatchEvent(event);
+  });
+  await app.settle();
+  return event;
+};
+
+const focus = async (element: HTMLElement) => {
+  await act(async () => element.focus());
+};
+
+/** Group expansions the sidebar persisted, as UpdateAppPreferences received them. */
+const persistedDisclosures = () =>
+  app.backend.calls('UpdateAppPreferences').flatMap(([request]) => request.changes ?? []);
+
+beforeEach(() => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  // Mirrors backend/preferences_settings.go UpdateAppPreferences.
+  app.backend.answer('UpdateAppPreferences', (request) => ({
+    settings: null,
+    changedKeys: (request.changes ?? []).map((change) => change.key),
+  }));
 });
 
-let namespaceState = createNamespaceState();
-let viewStateMock = createViewState();
-const nativeScrollIntoView = Element.prototype.scrollIntoView;
-
-vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
-  useNamespace: () => useFixture(namespaceState),
-}));
-
-vi.mock('@core/contexts/ViewStateContext', () => ({
-  useViewState: () => useFixture(viewStateMock),
-}));
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('Sidebar', () => {
-  beforeAll(() => {
-    if (!Element.prototype.scrollIntoView) {
-      Element.prototype.scrollIntoView = () => undefined;
-    }
-  });
+  it('offers only the primary views directly, with Resources open and Extensions closed', async () => {
+    serveCluster(dev);
+    view = await app.mountApp();
 
-  afterAll(() => {
-    if (nativeScrollIntoView) {
-      Element.prototype.scrollIntoView = nativeScrollIntoView;
-    } else {
-      // @ts-expect-error cleanup
-      Element.prototype.scrollIntoView = undefined;
-    }
-  });
-  let container: HTMLDivElement | null;
-  let root: ReactDOM.Root | null;
-
-  const renderSidebar = ({
-    namespaces,
-    viewState,
-    regionNavigation = false,
-  }: {
-    namespaces?: NamespaceEntry[];
-    viewState?: Partial<ReturnType<typeof createViewState>>;
-    regionNavigation?: boolean;
-  } = {}) => {
-    if (namespaces) {
-      namespaceState.namespaces = namespaces;
-    }
-    if (viewState) {
-      Object.assign(viewStateMock, viewState);
-    }
-    act(() => {
-      fixtureVersion.publish();
-      requireValue(root, 'expected test value in Sidebar.test.tsx').render(
-        <PanelLayoutTestProvider>
-          <KeyboardProvider>
-            {regionNavigation ? <AppRegionNavigation /> : null}
-            <Sidebar />
-          </KeyboardProvider>
-        </PanelLayoutTestProvider>
-      );
-    });
-  };
-
-  it('shows only Browse, Events, and Map (plus Attention and Identities for clusters) directly, with the rest under an initially open Resources', () => {
-    renderSidebar();
-    const host = requireValue(container, 'expected Sidebar container');
-    const describeTarget = (element: HTMLElement) =>
-      element.dataset.sidebarTargetView ??
-      `${element.dataset.sidebarTargetKind}:${element.dataset.sidebarTargetId ?? ''}`;
-    const clusterSection = requireValue(
-      Array.from(host.querySelectorAll<HTMLElement>('.sidebar-section')).find(
-        (section) => section.querySelector('h3')?.textContent === 'Cluster'
-      ),
-      'expected Cluster section'
+    const clusterItems = requireValue(
+      sidebar().querySelector<HTMLElement>('.cluster-items'),
+      'expected the cluster entries'
     );
     expect(
-      Array.from(
-        clusterSection.querySelectorAll<HTMLElement>('[data-sidebar-focusable="true"]'),
-        describeTarget
-      )
-    ).toEqual([
-      'overview:',
-      'attention',
-      'browse',
-      'events',
-      'identities',
-      'cluster-toggle:resources',
-      'config',
-      'namespaces',
-      'nodes',
-      'rbac',
-      'storage',
-      'cluster-toggle:extensions',
-    ]);
-
-    act(() =>
-      requireValue(
-        host.querySelector<HTMLButtonElement>('[data-sidebar-target-kind="namespace-toggle"]'),
-        'expected namespace toggle'
-      ).click()
+      Array.from(clusterItems.querySelectorAll<HTMLElement>(':scope > button'), describeTarget)
+    ).toEqual(['overview:', 'attention', 'browse', 'events', 'identities']);
+    expect(requireEntry('[data-sidebar-target-kind="overview"]').getAttribute('aria-current')).toBe(
+      'page'
     );
+    const resources = clusterGroup('resources');
+    expect(expanded(resources)).toBe(true);
     expect(
-      Array.from(
-        host.querySelectorAll<HTMLElement>(
-          `[data-sidebar-target-namespace="${namespaceKey('default')}"]:not([data-sidebar-target-kind="namespace-toggle"])`
-        ),
-        describeTarget
-      )
-    ).toEqual([
-      'browse',
-      'events',
-      'map',
-      'namespace-group-toggle:resources',
-      'workloads',
-      'pods',
-      'autoscaling',
-      'config',
-      'network',
-      'quotas',
-      'rbac',
-      'storage',
-      'namespace-group-toggle:extensions',
-    ]);
-    act(() =>
-      requireValue(
-        host.querySelector<HTMLButtonElement>(
-          `[data-sidebar-target-namespace="${namespaceKey('default')}"][data-sidebar-target-view="workloads"]`
-        ),
-        'expected Workloads item'
-      ).click()
-    );
-    expect(viewStateMock.setActiveNamespaceTab).toHaveBeenLastCalledWith('workloads');
-    expect(namespaceState.setSelectedNamespace).toHaveBeenLastCalledWith('default', 'cluster-a');
-  });
-
-  it('exposes navigation items and disclosure state with native buttons', () => {
-    renderSidebar();
-
-    const host = requireValue(container, 'expected Sidebar test container');
-    const overview = host.querySelector<HTMLElement>('[data-sidebar-target-kind="overview"]');
-    const resources = host.querySelector<HTMLElement>(
-      '[data-sidebar-target-kind="cluster-toggle"]'
-    );
-    const namespace = host.querySelector<HTMLElement>(
-      '[data-sidebar-target-kind="namespace-toggle"]'
-    );
-
-    expect(overview?.tagName).toBe('BUTTON');
-    expect(overview?.getAttribute('aria-current')).toBe('page');
-    expect(resources?.tagName).toBe('BUTTON');
-    expect(resources?.getAttribute('aria-expanded')).toBe('true');
-    expect(resources?.getAttribute('aria-controls')).toBeTruthy();
-    expect(namespace?.tagName).toBe('BUTTON');
-    expect(namespace?.getAttribute('aria-expanded')).toBe('false');
-    expect(namespace?.getAttribute('aria-controls')).toBeTruthy();
-
-    act(() => resources?.click());
-    expect(resources?.getAttribute('aria-expanded')).toBe('false');
-  });
-
-  const pressKey = (key: string, shiftKey = false) => {
-    const event = new KeyboardEvent('keydown', { key, shiftKey, bubbles: true, cancelable: true });
-    act(() => document.activeElement?.dispatchEvent(event));
-    return event;
-  };
-
-  const toggleClusterGroup = (id: 'resources' | 'extensions') => {
-    const toggle = requireValue(
-      container?.querySelector<HTMLButtonElement>(
-        `[data-sidebar-target-kind="cluster-toggle"][data-sidebar-target-id="${id}"]`
-      ),
-      `expected ${id} disclosure`
-    );
-    act(() => toggle.click());
-  };
-
-  const clickNodes = () => {
-    const nodes = requireValue(
-      container?.querySelector<HTMLButtonElement>('[data-sidebar-target-view="nodes"]'),
-      'expected Nodes item'
-    );
-    act(() => {
-      nodes.focus();
-      nodes.click();
-    });
-    viewStateMock.setActiveClusterView.mockClear();
-    return nodes;
-  };
-
-  it('visibly tabs from a clicked list item through the other sidebar controls and back', () => {
-    renderSidebar({ regionNavigation: true });
-    clickNodes();
-    const hide = requireValue(
-      container?.querySelector('.sidebar-toggle'),
-      'expected sidebar toggle'
-    );
-    const selectNamespace = requireValue(
-      container?.querySelector('.sidebar-header-action'),
-      'expected namespace selector'
-    );
-
-    pressKey('Tab');
-    expect(document.activeElement).toBe(hide);
-    expect(hide.classList.contains('keyboard-programmatic-focus')).toBe(true);
-    pressKey('Tab');
-    expect(document.activeElement).toBe(selectNamespace);
-    expect(selectNamespace.classList.contains('keyboard-programmatic-focus')).toBe(true);
-    expect(hide.classList.contains('keyboard-programmatic-focus')).toBe(false);
-    pressKey('Tab', true);
-    expect(document.activeElement).toBe(hide);
-    pressKey('Tab', true);
-    expect(document.activeElement?.getAttribute('data-sidebar-focusable')).toBe('true');
-    expect(document.activeElement?.classList.contains('keyboard-programmatic-focus')).toBe(true);
-    expect(viewStateMock.setActiveClusterView).not.toHaveBeenCalled();
-  });
-
-  it.each([false, true])(
-    'lands in the list when entering the sidebar, including after auxiliary controls (reverse=%s)',
-    (backwards) => {
-      renderSidebar({ regionNavigation: true });
-      const host = requireValue(container, 'expected Sidebar test container');
-      const outsideRegion = document.createElement(backwards ? 'main' : 'header');
-      outsideRegion.dataset.appRegion = backwards ? 'content' : 'header';
-      const outsideControl = document.createElement('button');
-      outsideRegion.append(outsideControl);
-      host.append(outsideRegion);
-      const overview = requireValue(
-        host.querySelector<HTMLElement>('[data-sidebar-target-kind="overview"]'),
-        'expected Overview item'
-      );
-      const enterSidebar = (expected = overview) => {
-        act(() => outsideControl.focus());
-        act(() => {
-          outsideControl.dispatchEvent(
-            new KeyboardEvent('keydown', {
-              key: 'Tab',
-              ctrlKey: true,
-              shiftKey: backwards,
-              bubbles: true,
-              cancelable: true,
-            })
-          );
-        });
-        expect(document.activeElement).toBe(expected);
-      };
-
-      enterSidebar();
-      for (const selector of ['.sidebar-toggle', '.sidebar-header-action']) {
-        const control = requireValue(host.querySelector<HTMLElement>(selector), selector);
-        act(() => control.focus());
-        enterSidebar();
-      }
-      pressKey('ArrowDown');
-      expect(document.activeElement?.getAttribute('data-sidebar-target-view')).toBe('attention');
-      enterSidebar(
-        requireValue(
-          host.querySelector<HTMLElement>('[data-sidebar-target-view="attention"]'),
-          'expected Attention item'
-        )
-      );
-      expect(viewStateMock.setActiveClusterView).not.toHaveBeenCalled();
-      pressKey('Tab');
-      expect(document.activeElement).toBe(host.querySelector('.sidebar-toggle'));
-    }
-  );
-
-  it.each([
-    ['Hide Sidebar', 1, 'Enter'],
-    ['Hide Sidebar', 1, ' '],
-    ['Select namespace', 2, 'Enter'],
-    ['Select namespace', 2, ' '],
-  ])('leaves %s activation with %s tabs and %s to the focused button', (_, tabCount, key) => {
-    renderSidebar({ regionNavigation: true });
-    clickNodes();
-    for (let i = 0; i < Number(tabCount); i++) {
-      pressKey('Tab');
-    }
-    const control = document.activeElement;
-    expect(pressKey(String(key)).defaultPrevented).toBe(false);
-    expect(document.activeElement).toBe(control);
-    expect(viewStateMock.setActiveClusterView).not.toHaveBeenCalled();
-  });
-
-  it('shows Karpenter only for the selected cluster discovery, including empty installations', () => {
-    renderSidebar();
-    toggleClusterGroup('extensions');
-    const button = () => container?.querySelector('[data-sidebar-target-view="karpenter"]');
-    expect(button()).toBeNull();
-    discoveredFamilies.byCluster['cluster-a'] = { cluster: ['karpenter'] };
-    renderSidebar();
-    expect(button()?.textContent).toBe('Karpenter');
-    act(() => (button() as HTMLButtonElement).click());
-    expect(viewStateMock.setActiveClusterView).toHaveBeenCalledWith('karpenter');
-    kubeconfigState.selectedClusterId = 'cluster-b';
-    renderSidebar();
-    expect(button()).toBeNull();
-    kubeconfigState.selectedClusterId = 'cluster-a';
-    discoveredFamilies.byCluster['cluster-a'] = {};
-    renderSidebar();
-    expect(button()).toBeNull();
-  });
-
-  it('gates Argo CD namespace navigation on active-cluster discovery', () => {
-    renderSidebar();
-    act(() =>
-      container
-        ?.querySelector<HTMLButtonElement>(
-          '[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="cluster-a|default"]'
-        )
-        ?.click()
-    );
-    const button = () =>
-      container?.querySelector<HTMLButtonElement>('[data-sidebar-target-view="argocd"]');
-    act(() =>
-      requireValue(
-        container?.querySelector<HTMLButtonElement>(
-          '[data-sidebar-target-kind="namespace-group-toggle"][data-sidebar-target-namespace="cluster-a|default"][data-sidebar-target-id="extensions"]'
-        ),
-        'expected namespace Extensions disclosure'
-      ).click()
-    );
-    expect(button()).toBeNull();
-    discoveredFamilies.byCluster['cluster-a'] = { namespaced: ['argocd'] };
-    renderSidebar();
-    expect(button()?.textContent).toBe('Argo CD');
-    act(() => button()?.click());
-    expect(viewStateMock.setActiveNamespaceTab).toHaveBeenCalledWith('argocd');
-    expect(
-      container?.querySelector(
-        '[data-sidebar-target-kind="cluster-view"][data-sidebar-target-view="argocd"]'
-      )
-    ).toBeNull();
-    discoveredFamilies.byCluster['cluster-a'] = {};
-    renderSidebar();
-    expect(button()).toBeNull();
-  });
-
-  it('shows active-cluster Attention severity counts beside the label', () => {
-    renderSidebar();
-
-    const getAttention = () =>
-      requireValue(container, 'expected Sidebar test container').querySelector<HTMLElement>(
-        '[data-sidebar-target-view="attention"]'
-      );
-    const attention = getAttention();
-    expect(attention?.querySelector('.sidebar-attention-badge--info')?.textContent).toBe('2');
-    expect(attention?.querySelector('.sidebar-attention-badge--warning')?.textContent).toBe('3');
-    expect(attention?.querySelector('.sidebar-attention-badge--error')?.textContent).toBe('1');
-    expect(attention?.getAttribute('aria-label')).toBe('Attention: 2 info, 3 warnings, 1 error');
-    expect(attentionState.recordRefreshHandle).toHaveBeenCalledWith(
-      expect.objectContaining({
-        domain: 'cluster-attention',
-        scope: 'cluster-a|',
-        enabled: true,
-        preserveState: true,
-      })
-    );
-
-    attentionState.byScope['cluster-b|'] = {
-      severityCounts: { info: 0, warning: 4, error: 2 },
-    };
-    kubeconfigState.selectedClusterId = 'cluster-b';
-    renderSidebar();
-
-    expect(getAttention()?.querySelector('.sidebar-attention-badge--info')).toBeNull();
-    expect(getAttention()?.querySelector('.sidebar-attention-badge--warning')?.textContent).toBe(
-      '4'
-    );
-    expect(getAttention()?.querySelector('.sidebar-attention-badge--error')?.textContent).toBe('2');
-    expect(attentionState.recordRefreshHandle).toHaveBeenLastCalledWith(
-      expect.objectContaining({ scope: 'cluster-b|' })
-    );
-  });
-
-  it('keeps primary views reachable while Resources and Extensions collapse independently', () => {
-    setAppPreferencesForTesting({ sidebarClusterResourcesExpanded: false });
-    discoveredFamilies.byCluster['cluster-a'] = { cluster: ['karpenter'] };
-    renderSidebar();
-    const host = requireValue(container, 'expected Sidebar test container');
-    const toggle = (id: string) =>
-      requireValue(
-        host.querySelector<HTMLButtonElement>(
-          `[data-sidebar-target-kind="cluster-toggle"][data-sidebar-target-id="${id}"]`
-        ),
-        `expected ${id} disclosure`
-      );
-    const view = (id: string) =>
-      host.querySelector<HTMLButtonElement>(
-        `[data-sidebar-target-kind="cluster-view"][data-sidebar-target-view="${id}"]`
-      );
-    const resources = toggle('resources');
-    const extensions = toggle('extensions');
-    expect(resources.getAttribute('aria-expanded')).toBe('false');
-    expect(extensions.getAttribute('aria-expanded')).toBe('false');
-    expect(view('nodes')).toBeNull();
-    expect(view('karpenter')).toBeNull();
-    expect(view('custom')).toBeNull();
-    for (const id of ['browse', 'events']) {
-      act(() => view(id)?.click());
-      expect(viewStateMock.setActiveClusterView).toHaveBeenLastCalledWith(id);
-    }
-    act(() => resources.focus());
-    pressKey('ArrowDown');
-    expect(document.activeElement).toBe(extensions);
-    pressKey('Enter');
-    expect(extensions.getAttribute('aria-expanded')).toBe('true');
-    expect(view('karpenter')).not.toBeNull();
-    expect(view('custom')).not.toBeNull();
-    expect(view('nodes')).toBeNull();
-    pressKey('ArrowUp');
-    expect(document.activeElement).toBe(resources);
-    pressKey(' ');
-    expect(resources.getAttribute('aria-expanded')).toBe('true');
-    expect(view('karpenter')).not.toBeNull();
-    pressKey('ArrowDown');
-    expect(document.activeElement).toBe(view('config'));
-    pressKey('Enter');
-    expect(viewStateMock.setActiveClusterView).toHaveBeenLastCalledWith('config');
-    act(() => {
-      extensions.focus();
-      extensions.click();
-    });
-    expect(view('karpenter')).toBeNull();
-    expect(view('nodes')).not.toBeNull();
-    act(() => extensions.click());
-    pressKey('ArrowDown');
-    expect(document.activeElement).toBe(view('crds'));
-    pressKey('Enter');
-    expect(viewStateMock.setActiveClusterView).toHaveBeenLastCalledWith('crds');
-  });
-
-  it('navigates to Helm between External Secrets and Prometheus Operator inside Extensions', () => {
-    discoveredFamilies.byCluster['cluster-a'] = {
-      namespaced: ['cert-manager', 'external-secrets', 'prometheus'],
-    };
-    renderSidebar();
-    const find = (kind: string, attribute = '') =>
-      requireValue(
-        container?.querySelector<HTMLButtonElement>(
-          `[data-sidebar-target-namespace="${namespaceKey('default')}"]` +
-            `[data-sidebar-target-kind="${kind}"]${attribute}`
-        ),
-        `expected ${kind} ${attribute}`
-      );
-    const group = (id: string) =>
-      find('namespace-group-toggle', `[data-sidebar-target-id="${id}"]`);
-    const view = (id: string) => find('namespace-view', `[data-sidebar-target-view="${id}"]`);
-    act(() => find('namespace-toggle').click());
-    act(() => group('resources').click());
-    expect(container?.querySelector('[data-sidebar-target-view="helm"]')).toBeNull();
-    act(() => group('extensions').click());
-    act(() => view('external-secrets').focus());
-    pressKey('ArrowDown');
-    expect(document.activeElement).toBe(view('helm'));
-    pressKey('Enter');
-    expect(viewStateMock.setActiveNamespaceTab).toHaveBeenLastCalledWith('helm');
-    expect(namespaceState.setSelectedNamespace).toHaveBeenLastCalledWith('default', 'cluster-a');
-    pressKey('ArrowDown');
-    expect(document.activeElement).toBe(view('prometheus'));
-    act(() => group('extensions').click());
-    expect(container?.querySelector('[data-sidebar-target-view="helm"]')).toBeNull();
-  });
-
-  it('shares namespace group state across namespaces and clusters and routes keyboard selection', () => {
-    setAppPreferencesForTesting({
-      exclusiveNamespaces: false,
-      sidebarNamespaceResourcesExpanded: false,
-    });
-    discoveredFamilies.byCluster['cluster-a'] = { namespaced: ['argocd'] };
-    const defaultNamespace = requireValue(
-      namespaceState.namespaces[0],
-      'expected default namespace'
-    );
-    namespaceState.namespaces.push({ ...defaultNamespace, name: 'other', scope: 'other' });
-    renderSidebar();
-    const host = requireValue(container, 'expected Sidebar test container');
-    const find = (scope: string, kind: string, attribute = '') =>
-      host.querySelector<HTMLButtonElement>(
-        `[data-sidebar-target-namespace="${kubeconfigState.selectedClusterId}|${scope}"]` +
-          `[data-sidebar-target-kind="${kind}"]${attribute}`
-      );
-    const namespace = (scope: string) =>
-      requireValue(find(scope, 'namespace-toggle'), `expected namespace ${scope}`);
-    const group = (scope: string, id: string) =>
-      requireValue(
-        find(scope, 'namespace-group-toggle', `[data-sidebar-target-id="${id}"]`),
-        `expected ${scope} ${id} group`
-      );
-    const view = (scope: string, id: string) =>
-      find(scope, 'namespace-view', `[data-sidebar-target-view="${id}"]`);
-    act(() => {
-      namespace('default').click();
-      namespace('other').click();
-    });
-    const resources = group('default', 'resources');
-    const extensions = group('default', 'extensions');
-    expect(resources.getAttribute('aria-expanded')).toBe('false');
-    expect(extensions.getAttribute('aria-expanded')).toBe('false');
-    expect(view('default', 'autoscaling')).toBeNull();
-    expect(view('default', 'custom')).toBeNull();
-    act(() => namespace('default').focus());
-    pressKey('ArrowDown');
-    expect(document.activeElement).toBe(view('default', 'browse'));
-    pressKey('Enter');
-    expect(viewStateMock.setActiveNamespaceTab).toHaveBeenLastCalledWith('browse');
-    expect(namespaceState.setSelectedNamespace).toHaveBeenLastCalledWith('default', 'cluster-a');
-    act(() => resources.focus());
-    pressKey(' ');
-    expect(view('default', 'autoscaling')).not.toBeNull();
-    expect(view('other', 'autoscaling')).not.toBeNull();
-    expect(view('default', 'argocd')).toBeNull();
-    pressKey('ArrowDown');
-    expect(document.activeElement).toBe(view('default', 'workloads'));
-    pressKey('Enter');
-    expect(viewStateMock.setActiveNamespaceTab).toHaveBeenLastCalledWith('workloads');
-    expect(namespaceState.setSelectedNamespace).toHaveBeenLastCalledWith('default', 'cluster-a');
-    act(() => resources.focus());
-    pressKey(' ');
-    pressKey('ArrowDown');
-    expect(document.activeElement).toBe(extensions);
-    pressKey('Enter');
-    expect(view('default', 'custom')).not.toBeNull();
-    expect(view('default', 'argocd')).not.toBeNull();
-    expect(view('other', 'custom')).not.toBeNull();
-    for (const id of ['events', 'map']) {
-      act(() => requireValue(view('default', id), `expected direct view ${id}`).click());
-      expect(viewStateMock.setActiveNamespaceTab).toHaveBeenLastCalledWith(id);
-      expect(namespaceState.setSelectedNamespace).toHaveBeenLastCalledWith('default', 'cluster-a');
-    }
-    act(() => namespace('default').click());
-    act(() => namespace('default').click());
-    expect(group('default', 'resources').getAttribute('aria-expanded')).toBe('false');
-    expect(group('default', 'extensions').getAttribute('aria-expanded')).toBe('true');
-    act(() => group('default', 'resources').click());
-    kubeconfigState.selectedClusterId = 'cluster-b';
-    renderSidebar();
-    act(() => namespace('default').click());
-    expect(group('default', 'resources').getAttribute('aria-expanded')).toBe('true');
-    expect(group('default', 'extensions').getAttribute('aria-expanded')).toBe('true');
-    expect(view('default', 'workloads')).not.toBeNull();
-    expect(view('default', 'autoscaling')).not.toBeNull();
-    expect(view('default', 'custom')).not.toBeNull();
-    expect(view('default', 'argocd')).toBeNull();
-  });
-
-  it('restores separate cluster and namespace group states when the sidebar remounts', () => {
-    renderSidebar();
-    const find = (kind: string, id?: string) =>
-      requireValue(
-        container?.querySelector<HTMLButtonElement>(
-          `[data-sidebar-target-kind="${kind}"]${id ? `[data-sidebar-target-id="${id}"]` : ''}`
-        ),
-        `expected ${kind} ${id ?? ''}`
-      );
-    act(() => find('namespace-toggle').click());
-    act(() => find('cluster-toggle', 'resources').click());
-    act(() => find('cluster-toggle', 'extensions').click());
-    act(() => find('cluster-toggle', 'extensions').click());
-    act(() => find('namespace-group-toggle', 'extensions').click());
-
-    act(() => root?.unmount());
-    root = ReactDOM.createRoot(requireValue(container, 'expected container'));
-    kubeconfigState.selectedClusterId = 'cluster-b';
-    renderSidebar();
-    act(() => find('namespace-toggle').click());
-    expect(find('cluster-toggle', 'resources').getAttribute('aria-expanded')).toBe('false');
-    expect(find('cluster-toggle', 'extensions').getAttribute('aria-expanded')).toBe('false');
-    expect(find('namespace-group-toggle', 'resources').getAttribute('aria-expanded')).toBe('true');
-    expect(find('namespace-group-toggle', 'extensions').getAttribute('aria-expanded')).toBe('true');
-  });
-
-  it('preserves a persisted collapse on mount with a grouped view selected, then reveals fresh navigation', () => {
-    setAppPreferencesForTesting({ sidebarClusterResourcesExpanded: false });
-    viewStateMock.viewType = 'cluster';
-    viewStateMock.sidebarSelection = { type: 'cluster', value: 'nodes' };
-    renderSidebar();
-    const resources = () =>
-      requireValue(
-        container?.querySelector<HTMLButtonElement>(
-          '[data-sidebar-target-kind="cluster-toggle"][data-sidebar-target-id="resources"]'
-        ),
-        'expected Resources toggle'
-      );
-    expect(resources().getAttribute('aria-expanded')).toBe('false');
-    viewStateMock.sidebarSelection = { type: 'cluster', value: 'nodes' };
-    renderSidebar();
-    expect(resources().getAttribute('aria-expanded')).toBe('true');
-    act(() => resources().click());
-    renderSidebar();
-    expect(resources().getAttribute('aria-expanded')).toBe('false');
-    act(() => root?.unmount());
-    root = ReactDOM.createRoot(requireValue(container, 'expected container'));
-    renderSidebar();
-    expect(resources().getAttribute('aria-expanded')).toBe('false');
-  });
-
-  it('presents cross-cluster views under the Global scope instead of Cluster resources', () => {
-    viewStateMock.viewType = 'global' as never;
-    renderSidebar();
-
-    const host = requireValue(container, 'expected Sidebar test container');
-    expect(
-      Array.from(host.querySelectorAll('.sidebar-section > h3'), (heading) =>
-        heading.textContent?.trim()
-      )
-    ).toEqual(['Global', 'Cluster', 'Namespaces']);
-
-    const globalClusters = requireValue(
-      host.querySelector<HTMLElement>(
-        '[data-sidebar-scope="global"][data-sidebar-target-view="fleet"]'
-      ),
-      'expected global Clusters entry'
-    );
-    expect(globalClusters.textContent?.trim()).toBe('Clusters');
-    const globalNamespaces = requireValue(
-      host.querySelector<HTMLElement>(
-        '[data-sidebar-scope="global"][data-sidebar-target-view="global-namespaces"]'
-      ),
-      'expected global Namespaces entry'
-    );
-    expect(globalNamespaces.textContent?.trim()).toBe('Namespaces');
-
-    const clusterViews = requireValue(
-      host.querySelector('[data-sidebar-target-kind="overview"]')?.closest('.cluster-items'),
-      'expected cluster navigation'
-    );
-    expect(clusterViews.querySelector('[data-sidebar-target-view="fleet"]')).toBeNull();
-    expect(clusterViews.querySelector('[data-sidebar-target-view="global-namespaces"]')).toBeNull();
-  });
-
-  it.each(['overview', 'cluster', 'namespace'] as const)(
-    'does not show Global navigation while the %s workspace is active',
-    (viewType) => {
-      viewStateMock.viewType = viewType;
-      renderSidebar();
-
-      const host = requireValue(container, 'expected Sidebar test container');
-      expect(host.querySelector('[data-sidebar-scope="global"]')).toBeNull();
-      expect(
-        Array.from(host.querySelectorAll('.sidebar-section > h3'), (heading) =>
-          heading.textContent?.trim()
-        )
-      ).toEqual(['Cluster', 'Namespaces']);
-    }
-  );
-
-  it('enters Global through a Global sidebar target', () => {
-    viewStateMock.viewType = 'global' as never;
-    renderSidebar();
-    const globalNamespaces = requireValue(
-      container,
-      'expected Sidebar test container'
-    ).querySelector<HTMLElement>(
-      '[data-sidebar-target-kind="global-view"][data-sidebar-target-view="global-namespaces"]'
-    );
-
-    act(() => {
-      requireValue(globalNamespaces, 'expected Global Namespaces entry').click();
-    });
-
-    expect(viewStateMock.navigateToGlobal).toHaveBeenCalledWith('global-namespaces');
-    expect(viewStateMock.setActiveClusterView).not.toHaveBeenCalled();
-  });
-
-  it('does not show active-cluster navigation while Global is active', () => {
-    viewStateMock.viewType = 'global' as never;
-    renderSidebar();
-
-    const host = requireValue(container, 'expected Sidebar test container');
-    expect(
-      host.querySelector('[data-sidebar-target-kind="overview"]')?.closest('[hidden]')
-    ).not.toBeNull();
-    const namespacesSection = requireValue(
-      host.querySelector<HTMLElement>('.namespaces-section'),
-      'expected namespace section'
-    );
-    expect(namespacesSection.hasAttribute('hidden')).toBe(true);
-    expect(sidebarStyles).toMatch(/\.sidebar-section\[hidden\]\s*\{[^}]*display:\s*none;/s);
-  });
-
-  it('hides the Global section when fewer than two clusters are open', () => {
-    kubeconfigState.selectedClusterIds = ['cluster-a'];
-    renderSidebar();
-
-    const host = requireValue(container, 'expected Sidebar test container');
-    expect(
-      Array.from(host.querySelectorAll('.sidebar-section > h3'), (heading) =>
-        heading.textContent?.trim()
-      )
-    ).toEqual(['Cluster', 'Namespaces']);
-    expect(host.querySelector('[data-sidebar-scope="global"]')).toBeNull();
-  });
-
-  it('keeps namespace rows free of operational telemetry badges', () => {
-    renderSidebar({
-      namespaces: [
-        {
-          name: 'alpha',
-          scope: 'alpha',
-          resourceVersion: '1',
-          hasWorkloads: true,
-          workloadsUnknown: false,
-          unhealthyWorkloads: 3,
-          warningEvents: 2,
-          warningEventsState: 'available',
-          cpuUsageMilli: 200,
-          memoryUsageBytes: 96 * 1024 * 1024,
-          utilizationState: 'available',
-          quotaHighestUsedPercentage: 92,
-          quotaPressure: 'warning',
-          quotaPressureState: 'available',
-          details: '',
-        },
-        {
-          name: 'beta',
-          scope: 'beta',
-          resourceVersion: '2',
-          hasWorkloads: true,
-          workloadsUnknown: false,
-          unhealthyWorkloads: 0,
-          warningEvents: 0,
-          warningEventsState: 'available',
-          details: '',
-        },
-      ],
-    });
-
-    const alpha = document.querySelector(
-      `[data-sidebar-target-namespace="${namespaceKey('alpha')}"]`
-    );
-    const beta = document.querySelector(
-      `[data-sidebar-target-namespace="${namespaceKey('beta')}"]`
-    );
-    expect(alpha?.querySelector('.namespace-signal-badges')).toBeNull();
-    expect(alpha?.querySelector('.namespace-attention-badge')).toBeNull();
-    expect(alpha?.querySelector('.namespace-warning-events-badge')).toBeNull();
-    expect(alpha?.querySelector('.namespace-utilization-badge')).toBeNull();
-    expect(alpha?.querySelector('.namespace-quota-pressure-badge')).toBeNull();
-    expect(beta?.querySelector('.namespace-attention-badge')).toBeNull();
-    expect(beta?.querySelector('.namespace-warning-events-badge')).toBeNull();
-  });
-
-  beforeEach(() => {
-    discoveredFamilies.byCluster = {};
-    manualScope.names = [];
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    namespaceState = createNamespaceState();
-    viewStateMock = createViewState();
-    autoRefreshLoadingState.suppressPassiveLoading = false;
-    kubeconfigState.selectedClusterIds = ['cluster-a', 'cluster-b'];
-    kubeconfigState.selectedClusterId = 'cluster-a';
-    attentionState.byScope = {
-      'cluster-a|': {
-        severityCounts: { info: 2, warning: 3, error: 1 },
-      },
-    };
-    resetAppPreferencesCacheForTesting();
-  });
-
-  it('returns focus to namespace selection before removing a manually added scope entry', async () => {
-    manualScope.names = ['default'];
-    renderSidebar({ regionNavigation: true });
-    await act(async () => {
-      await Promise.resolve();
-    });
-    const remove = requireValue(
-      container?.querySelector<HTMLButtonElement>('.namespace-scope-remove'),
-      'remove namespace'
-    );
-    const select = requireValue(
-      container?.querySelector<HTMLElement>('.namespaces-section h3 .sidebar-header-action'),
-      'namespace selector'
-    );
-    await act(async () => {
-      remove.focus();
-      remove.click();
-    });
-    expect(manualScope.save).toHaveBeenLastCalledWith('cluster-a', []);
-    expect(document.activeElement).toBe(select);
-  });
-
-  afterEach(() => {
-    act(() => {
-      root?.unmount();
-    });
-    if (container?.parentNode) {
-      container.parentNode.removeChild(container);
-    }
-    container = null;
-    root = null;
-    vi.clearAllMocks();
-  });
-
-  it('opens the command palette in namespace mode from the Namespaces header button', () => {
-    renderSidebar();
-
-    const button = document.querySelector<HTMLButtonElement>(
-      '.namespaces-section h3 .sidebar-header-action'
-    );
-    expect(button).not.toBeNull();
-
-    const openNamespaces = vi.fn();
-    const unsubscribe = eventBus.on('command-palette:open-namespaces', openNamespaces);
-    act(() => {
-      requireValue(button, 'expected test value in Sidebar.test.tsx').click();
-    });
-    unsubscribe();
-
-    expect(openNamespaces).toHaveBeenCalledTimes(1);
-  });
-
-  it('keeps the Namespaces header button when namespace listing is denied', () => {
-    namespaceState.namespacesPermissionDenied = true;
-    renderSidebar();
-
-    expect(document.querySelector('.namespaces-section h3 .sidebar-header-action')).not.toBeNull();
-  });
-
-  it('shows the permission message and the scope editor when listing is denied', () => {
-    // Fail-fast design: no catalog inference, no empty list — the user is told
-    // exactly why the sidebar has no namespaces, and the inline scope editor
-    // (docs/architecture/namespace-scope.md) is the way in for a restricted identity.
-    namespaceState.namespacesPermissionDenied = true;
-    namespaceState.namespaces = [];
-    renderSidebar();
-
-    expect(
-      requireValue(container, 'expected test value in Sidebar.test.tsx').textContent
-    ).toContain('Insufficient permission to list namespaces.');
-    expect(
-      requireValue(container, 'expected test value in Sidebar.test.tsx').textContent
-    ).toContain('Add namespace');
-    expect(
-      requireValue(container, 'expected test value in Sidebar.test.tsx').querySelector(
-        '[data-sidebar-target-kind="namespace-toggle"]'
-      )
-    ).toBeNull();
-  });
-
-  it('does not expand inaccessible scope namespaces', () => {
-    // A scope entry flagged not-found/no-access has no views to offer: the
-    // row must not expand on click, must be excluded from keyboard
-    // navigation, and must carry the warning flag.
-    namespaceState.namespaces = [
-      {
-        name: 'ghost',
-        scope: 'ghost',
-        resourceVersion: '',
-        hasWorkloads: false,
-        workloadsUnknown: true,
-        scopeStatus: 'not-found',
-        details: '',
-      },
-      {
-        name: 'default',
-        scope: 'default',
-        resourceVersion: '1',
-        hasWorkloads: true,
-        workloadsUnknown: false,
-        details: '',
-      },
-    ] as NamespaceEntry[];
-    renderSidebar();
-
-    const rows = Array.from(
-      requireValue(
-        container,
-        'expected test value in Sidebar.test.tsx'
-      ).querySelectorAll<HTMLElement>('[data-sidebar-target-kind="namespace-toggle"]')
-    );
-    const ghostRow = rows.find((row) => row.textContent?.includes('ghost'));
-    const defaultRow = rows.find((row) => row.textContent?.includes('default'));
-    expect(ghostRow).toBeDefined();
-    expect(defaultRow).toBeDefined();
-
-    expect(
-      requireValue(ghostRow, 'expected test value in Sidebar.test.tsx').getAttribute(
-        'data-sidebar-focusable'
-      )
-    ).toBeNull();
-    expect(
-      requireValue(ghostRow, 'expected test value in Sidebar.test.tsx').querySelector(
-        '.namespace-scope-flag'
-      )
-    ).not.toBeNull();
-    expect(
-      requireValue(defaultRow, 'expected test value in Sidebar.test.tsx').getAttribute(
-        'data-sidebar-focusable'
-      )
-    ).toBe('true');
-
-    act(() => {
-      requireValue(ghostRow, 'expected test value in Sidebar.test.tsx').click();
-    });
-    expect(
-      requireValue(container, 'expected test value in Sidebar.test.tsx').querySelector(
-        '.namespaces-section .sidebar-views'
-      )
-    ).toBeNull();
-
-    act(() => {
-      requireValue(defaultRow, 'expected test value in Sidebar.test.tsx').click();
-    });
-    expect(
-      requireValue(container, 'expected test value in Sidebar.test.tsx').querySelector(
-        '.namespaces-section .sidebar-views'
-      )
-    ).not.toBeNull();
-  });
-
-  it('toggles the sidebar when the toolbar button is pressed', () => {
-    renderSidebar();
-    const toggleButton = requireValue(
-      container,
-      'expected test value in Sidebar.test.tsx'
-    ).querySelector<HTMLButtonElement>('.sidebar-toggle');
-    expect(toggleButton).not.toBeNull();
-    act(() => {
-      requireValue(toggleButton, 'expected test value in Sidebar.test.tsx').click();
-    });
-    expect(viewStateMock.toggleSidebar).toHaveBeenCalledTimes(1);
-  });
-
-  it('activates the browse cluster view when clicked', () => {
-    renderSidebar();
-    const browseItem = Array.from(
-      requireValue(
-        container,
-        'expected test value in Sidebar.test.tsx'
-      ).querySelectorAll<HTMLDivElement>('[data-sidebar-target-kind="cluster-view"]')
-    ).find((item) => item.dataset.sidebarTargetView === 'browse');
-    expect(browseItem).not.toBeNull();
-    act(() => {
-      requireValue(browseItem, 'expected test value in Sidebar.test.tsx').click();
-    });
-    expect(viewStateMock.setViewType).toHaveBeenCalledWith('cluster');
-    expect(viewStateMock.setActiveClusterView).toHaveBeenCalledWith('browse');
-    expect(viewStateMock.setSidebarSelection).toHaveBeenCalledWith({
-      type: 'cluster',
-      value: 'cluster',
-    });
-  });
-
-  it('selects the overview entry when clicked', () => {
-    renderSidebar();
-    const overviewItem = requireValue(
-      container,
-      'expected test value in Sidebar.test.tsx'
-    ).querySelector<HTMLDivElement>('[data-sidebar-target-kind="overview"]');
-    expect(overviewItem).not.toBeNull();
-    act(() => {
-      requireValue(overviewItem, 'expected test value in Sidebar.test.tsx').click();
-    });
-    expect(viewStateMock.setViewType).toHaveBeenCalledWith('overview');
-    expect(viewStateMock.setSidebarSelection).toHaveBeenCalledWith({
-      type: 'overview',
-      value: 'overview',
-    });
-  });
-
-  it('collapses cluster resources when toggled', () => {
-    renderSidebar();
-    const nodesItemBefore = requireValue(
-      container,
-      'expected test value in Sidebar.test.tsx'
-    ).querySelector<HTMLElement>(
-      '[data-sidebar-target-kind="cluster-view"][data-sidebar-target-view="nodes"]'
-    );
-    expect(nodesItemBefore).not.toBeNull();
-
-    const toggle = requireValue(
-      container,
-      'expected test value in Sidebar.test.tsx'
-    ).querySelector<HTMLDivElement>(
-      '[data-sidebar-target-kind="cluster-toggle"][data-sidebar-target-id="resources"]'
-    );
-    expect(toggle).not.toBeNull();
-    act(() => {
-      requireValue(toggle, 'expected test value in Sidebar.test.tsx').click();
-    });
-
-    const nodesItemAfter = requireValue(
-      container,
-      'expected test value in Sidebar.test.tsx'
-    ).querySelector('[data-sidebar-target-kind="cluster-view"][data-sidebar-target-view="nodes"]');
-    expect(nodesItemAfter).toBeNull();
-  });
-
-  it('activates a specific cluster resource view when clicked', () => {
-    renderSidebar();
-    const nodesItem = requireValue(
-      container,
-      'expected test value in Sidebar.test.tsx'
-    ).querySelector<HTMLDivElement>(
-      '[data-sidebar-target-kind="cluster-view"][data-sidebar-target-view="nodes"]'
-    );
-    expect(nodesItem).not.toBeNull();
-    act(() => {
-      requireValue(nodesItem, 'expected test value in Sidebar.test.tsx').click();
-    });
-    expect(viewStateMock.setViewType).toHaveBeenCalledWith('cluster');
-    expect(viewStateMock.setActiveClusterView).toHaveBeenCalledWith('nodes');
-  });
-
-  it('scrolls the complete expanded namespace group into view after toggling', () => {
-    namespaceState.selectedNamespace = undefined;
-    namespaceState.selectedNamespaceClusterId = undefined;
-    renderSidebar();
-    vi.useFakeTimers();
-
-    const namespaceToggle = requireValue(
-      requireValue(
-        container,
-        'expected test value in Sidebar.test.tsx'
-      ).querySelector<HTMLButtonElement>(
-        `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
-          'default'
-        )}"]`
-      ),
-      'expected namespace toggle'
-    );
-    act(() => {
-      namespaceToggle.click();
-    });
-
-    const namespaceItems = requireValue(
-      namespaceToggle.closest('.namespace-items'),
-      'expected namespace scroll container'
-    );
-    const namespaceGroup = requireValue(
-      namespaceToggle.parentElement?.parentElement,
-      'expected complete namespace group'
-    );
-    requireValue(
-      namespaceGroup.querySelector('.sidebar-views'),
-      'expected expanded namespace views'
-    );
-    namespaceItems.getBoundingClientRect = () => ({ top: 200, bottom: 800 }) as DOMRect;
-    namespaceGroup.getBoundingClientRect = () => ({ top: 450, bottom: 900 }) as DOMRect;
-    const namespaceGroupScroll = vi.fn();
-    const namespaceNameScroll = vi.fn();
-    namespaceGroup.scrollIntoView = namespaceGroupScroll;
-    namespaceToggle.scrollIntoView = namespaceNameScroll;
-
-    act(() => vi.runAllTimers());
-
-    expect(namespaceGroupScroll).toHaveBeenCalledWith({ block: 'nearest', behavior: 'smooth' });
-    expect(namespaceNameScroll).not.toHaveBeenCalled();
-    vi.useRealTimers();
-  });
-
-  it('rechecks the complete namespace group after its expansion animation settles', () => {
-    namespaceState.selectedNamespace = undefined;
-    namespaceState.selectedNamespaceClusterId = undefined;
-    renderSidebar();
-    vi.useFakeTimers();
-
-    const namespaceToggle = requireValue(
-      requireValue(
-        container,
-        'expected test value in Sidebar.test.tsx'
-      ).querySelector<HTMLButtonElement>(
-        `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
-          'default'
-        )}"]`
-      ),
-      'expected namespace toggle'
-    );
-    act(() => namespaceToggle.click());
-
-    const namespaceItems = requireValue(
-      namespaceToggle.closest('.namespace-items'),
-      'expected namespace scroll container'
-    );
-    const namespaceGroup = requireValue(
-      namespaceToggle.closest('.sidebar-namespace-group'),
-      'expected complete namespace group'
-    );
-    const expandedViews = requireValue(
-      namespaceGroup.querySelector('.sidebar-views'),
-      'expected expanded namespace views'
-    );
-    let namespaceGroupBottom = 700;
-    namespaceItems.getBoundingClientRect = () => ({ top: 200, bottom: 800 }) as DOMRect;
-    namespaceGroup.getBoundingClientRect = () =>
-      ({ top: 450, bottom: namespaceGroupBottom }) as DOMRect;
-    const namespaceGroupScroll = vi.fn();
-    namespaceGroup.scrollIntoView = namespaceGroupScroll;
-
-    act(() => vi.runAllTimers());
-    expect(namespaceGroupScroll).not.toHaveBeenCalled();
-
-    namespaceGroupBottom = 900;
-    act(() => {
-      expandedViews.dispatchEvent(new Event('animationend', { bubbles: true }));
-    });
-
-    expect(namespaceGroupScroll).toHaveBeenCalledWith({ block: 'nearest', behavior: 'smooth' });
-    namespaceGroupScroll.mockClear();
-    const extensionsToggle = requireValue(
-      namespaceGroup.querySelector<HTMLButtonElement>(
-        '[data-sidebar-target-kind="namespace-group-toggle"][data-sidebar-target-id="extensions"]'
-      ),
-      'expected namespace Extensions disclosure'
-    );
-    act(() => extensionsToggle.click());
-    const extensionViews = requireValue(
-      document.getElementById(extensionsToggle.getAttribute('aria-controls') ?? ''),
-      'expected expanded extension views'
-    );
-    act(() => extensionViews.dispatchEvent(new Event('animationend', { bubbles: true })));
-    expect(namespaceGroupScroll).toHaveBeenCalledWith({ block: 'nearest', behavior: 'smooth' });
-    vi.useRealTimers();
-  });
-
-  it('escapes namespace keys before building the expansion scroll selector', () => {
-    namespaceState.namespaces = [
-      {
-        name: 'quoted',
-        scope: 'default"bad',
-        resourceVersion: '1',
-        hasWorkloads: true,
-        workloadsUnknown: false,
-        details: '',
-      },
-    ];
-    renderSidebar();
-
-    const originalQuerySelector = document.querySelector;
-    const querySelectorSpy = vi.fn(() => null);
-    document.querySelector = querySelectorSpy as unknown as typeof document.querySelector;
-    vi.useFakeTimers();
-
-    const namespaceToggle = Array.from(
-      requireValue(
-        container,
-        'expected test value in Sidebar.test.tsx'
-      ).querySelectorAll<HTMLDivElement>('[data-sidebar-target-kind="namespace-toggle"]')
-    ).find((element) => element.dataset.sidebarTargetNamespace === `${testClusterId}|default"bad`);
-    expect(namespaceToggle).not.toBeUndefined();
-
-    act(() => {
-      requireValue(namespaceToggle, 'expected test value in Sidebar.test.tsx').click();
-    });
-
-    vi.runAllTimers();
-
-    expect(querySelectorSpy).toHaveBeenCalledWith(
-      '.sidebar-item[data-namespace="cluster-a|default\\"bad"]'
-    );
-
-    vi.useRealTimers();
-    document.querySelector = originalQuerySelector;
-  });
-
-  it('toggles namespace expansion without selecting a view', () => {
-    renderSidebar();
-    const namespaceToggle = requireValue(
-      container,
-      'expected test value in Sidebar.test.tsx'
-    ).querySelector<HTMLDivElement>(
-      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
-        'default'
-      )}"]`
-    );
-    expect(namespaceToggle).not.toBeNull();
-
-    act(() => {
-      requireValue(namespaceToggle, 'expected test value in Sidebar.test.tsx').click();
-    });
-
+      document
+        .getElementById(resources.getAttribute('aria-controls') ?? '')
+        ?.contains(clusterView('nodes'))
+    ).toBe(true);
+    expect(expanded(clusterGroup('extensions'))).toBe(false);
+    expect(clusterView('crds')).toBeNull();
+
+    const defaultNamespace = namespaceToggle('default');
+    expect(expanded(defaultNamespace)).toBe(false);
+    await click(defaultNamespace);
+    expect(expanded(defaultNamespace)).toBe(true);
     const namespaceViews = requireValue(
-      container,
-      'expected test value in Sidebar.test.tsx'
-    ).querySelector(
-      `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
-        'default'
-      )}"]`
+      document.getElementById(defaultNamespace.getAttribute('aria-controls') ?? ''),
+      'expected the namespace’s views'
     );
-    expect(namespaceViews).not.toBeNull();
-    expect(namespaceState.setSelectedNamespace).not.toHaveBeenCalled();
-    expect(viewStateMock.onNamespaceSelect).not.toHaveBeenCalled();
-    expect(viewStateMock.setActiveNamespaceTab).not.toHaveBeenCalled();
-  });
-
-  it('collapses a namespace when clicked repeatedly', () => {
-    renderSidebar();
-    const namespaceToggle = requireValue(
-      container,
-      'expected test value in Sidebar.test.tsx'
-    ).querySelector<HTMLDivElement>(
-      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
-        'default'
-      )}"]`
-    );
-    expect(namespaceToggle).not.toBeNull();
-
-    act(() => {
-      requireValue(namespaceToggle, 'expected test value in Sidebar.test.tsx').click();
-    });
-
-    const namespaceViews = () =>
-      requireValue(container, 'expected test value in Sidebar.test.tsx').querySelector(
-        `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
-          'default'
-        )}"]`
-      );
-    expect(namespaceViews()).not.toBeNull();
-
-    act(() => {
-      requireValue(namespaceToggle, 'expected test value in Sidebar.test.tsx').click();
-    });
-
-    expect(namespaceViews()).toBeNull();
-  });
-
-  it('collapses the previous namespace by default when another namespace expands', () => {
-    namespaceState.namespaces = [
-      {
-        name: 'default',
-        scope: 'default',
-        resourceVersion: '1',
-        hasWorkloads: true,
-        workloadsUnknown: false,
-        details: '',
-      },
-      {
-        name: 'kube-system',
-        scope: 'kube-system',
-        resourceVersion: '2',
-        hasWorkloads: true,
-        workloadsUnknown: false,
-        details: '',
-      },
-    ];
-    renderSidebar();
-
-    const defaultToggle = requireValue(
-      container,
-      'expected test value in Sidebar.test.tsx'
-    ).querySelector<HTMLDivElement>(
-      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
-        'default'
-      )}"]`
-    );
-    const kubeSystemToggle = requireValue(
-      container,
-      'expected test value in Sidebar.test.tsx'
-    ).querySelector<HTMLDivElement>(
-      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
-        'kube-system'
-      )}"]`
-    );
-    expect(defaultToggle).not.toBeNull();
-    expect(kubeSystemToggle).not.toBeNull();
-
-    act(() => {
-      requireValue(defaultToggle, 'expected test value in Sidebar.test.tsx').click();
-    });
     expect(
-      requireValue(container, 'expected test value in Sidebar.test.tsx').querySelector(
-        `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
-          'default'
-        )}"]`
-      )
-    ).not.toBeNull();
-
-    act(() => {
-      requireValue(kubeSystemToggle, 'expected test value in Sidebar.test.tsx').click();
-    });
-
+      Array.from(namespaceViews.querySelectorAll<HTMLElement>(':scope > button'), describeTarget)
+    ).toEqual(['browse', 'events', 'map']);
+    expect(expanded(namespaceGroup('default', 'resources'))).toBe(true);
+    expect(namespaceView('default', 'workloads')).not.toBeNull();
+    expect(expanded(namespaceGroup('default', 'extensions'))).toBe(false);
     expect(
-      requireValue(container, 'expected test value in Sidebar.test.tsx').querySelector(
-        `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
-          'default'
-        )}"]`
-      )
-    ).toBeNull();
-    expect(
-      requireValue(container, 'expected test value in Sidebar.test.tsx').querySelector(
-        `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
-          'kube-system'
-        )}"]`
-      )
-    ).not.toBeNull();
-  });
-
-  it('allows multiple expanded namespaces when exclusive namespaces is disabled', () => {
-    setAppPreferencesForTesting({ exclusiveNamespaces: false });
-    namespaceState.namespaces = [
-      {
-        name: 'default',
-        scope: 'default',
-        resourceVersion: '1',
-        hasWorkloads: true,
-        workloadsUnknown: false,
-        details: '',
-      },
-      {
-        name: 'kube-system',
-        scope: 'kube-system',
-        resourceVersion: '2',
-        hasWorkloads: true,
-        workloadsUnknown: false,
-        details: '',
-      },
-    ];
-    renderSidebar();
-
-    const defaultToggle = requireValue(
-      container,
-      'expected test value in Sidebar.test.tsx'
-    ).querySelector<HTMLDivElement>(
-      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
-        'default'
-      )}"]`
-    );
-    const kubeSystemToggle = requireValue(
-      container,
-      'expected test value in Sidebar.test.tsx'
-    ).querySelector<HTMLDivElement>(
-      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
-        'kube-system'
-      )}"]`
-    );
-    expect(defaultToggle).not.toBeNull();
-    expect(kubeSystemToggle).not.toBeNull();
-
-    act(() => {
-      requireValue(defaultToggle, 'expected test value in Sidebar.test.tsx').click();
-      requireValue(kubeSystemToggle, 'expected test value in Sidebar.test.tsx').click();
-    });
-
-    expect(
-      requireValue(container, 'expected test value in Sidebar.test.tsx').querySelector(
-        `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
-          'default'
-        )}"]`
-      )
-    ).not.toBeNull();
-    expect(
-      requireValue(container, 'expected test value in Sidebar.test.tsx').querySelector(
-        `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
-          'kube-system'
-        )}"]`
-      )
-    ).not.toBeNull();
-  });
-
-  it('keeps All Namespaces clicks to expand/collapse only', () => {
-    namespaceState.namespaces = [
-      {
-        name: 'All Namespaces',
-        scope: ALL_NAMESPACES_SCOPE,
-        resourceVersion: 'synthetic',
-        hasWorkloads: true,
-        workloadsUnknown: false,
-        details: '',
-      },
-    ];
-    renderSidebar();
-    const namespaceToggle = requireValue(
-      container,
-      'expected test value in Sidebar.test.tsx'
-    ).querySelector<HTMLDivElement>(
-      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
-        ALL_NAMESPACES_SCOPE
-      )}"]`
-    );
-    expect(namespaceToggle).not.toBeNull();
-
-    act(() => {
-      requireValue(namespaceToggle, 'expected test value in Sidebar.test.tsx').click();
-    });
-
-    expect(namespaceState.setSelectedNamespace).not.toHaveBeenCalled();
-    expect(viewStateMock.onNamespaceSelect).not.toHaveBeenCalled();
-  });
-
-  it('hides the map view for All Namespaces only', () => {
-    namespaceState.namespaces = [
-      {
-        name: 'All Namespaces',
-        scope: ALL_NAMESPACES_SCOPE,
-        resourceVersion: 'synthetic',
-        hasWorkloads: true,
-        workloadsUnknown: false,
-        details: '',
-      },
-      {
-        name: 'default',
-        scope: 'default',
-        resourceVersion: '1',
-        hasWorkloads: true,
-        workloadsUnknown: false,
-        details: '',
-      },
-    ];
-    renderSidebar();
-
-    const allNamespacesToggle = requireValue(
-      container,
-      'expected test value in Sidebar.test.tsx'
-    ).querySelector<HTMLDivElement>(
-      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
-        ALL_NAMESPACES_SCOPE
-      )}"]`
-    );
-    expect(allNamespacesToggle).not.toBeNull();
-    act(() => {
-      requireValue(allNamespacesToggle, 'expected test value in Sidebar.test.tsx').click();
-    });
-    expect(
-      requireValue(container, 'expected test value in Sidebar.test.tsx').querySelector(
-        `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
-          ALL_NAMESPACES_SCOPE
-        )}"][data-sidebar-target-view="map"]`
-      )
-    ).toBeNull();
-
-    const defaultToggle = requireValue(
-      container,
-      'expected test value in Sidebar.test.tsx'
-    ).querySelector<HTMLDivElement>(
-      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
-        'default'
-      )}"]`
-    );
-    expect(defaultToggle).not.toBeNull();
-    act(() => {
-      requireValue(defaultToggle, 'expected test value in Sidebar.test.tsx').click();
-    });
-    expect(
-      requireValue(container, 'expected test value in Sidebar.test.tsx').querySelector(
-        `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
-          'default'
-        )}"][data-sidebar-target-view="map"]`
-      )
-    ).not.toBeNull();
-  });
-
-  it('updates view state when selecting a namespace that is already focused', async () => {
-    namespaceState.selectedNamespace = 'default';
-    namespaceState.selectedNamespaceClusterId = testClusterId;
-    renderSidebar({
-      viewState: {
-        sidebarSelection: { type: 'namespace', value: 'default' },
-        viewType: 'namespace',
-        activeNamespaceTab: 'pods',
-      },
-    });
-
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    const workloadsView = requireValue(
-      container,
-      'expected test value in Sidebar.test.tsx'
-    ).querySelector<HTMLDivElement>(
-      `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
-        'default'
-      )}"][data-sidebar-target-view="workloads"]`
-    );
-    expect(workloadsView).not.toBeNull();
-
-    act(() => {
-      requireValue(workloadsView, 'expected test value in Sidebar.test.tsx').click();
-    });
-
-    expect(viewStateMock.onNamespaceSelect).not.toHaveBeenCalled();
-    expect(viewStateMock.setViewType).toHaveBeenCalledWith('namespace');
-    expect(viewStateMock.setSidebarSelection).toHaveBeenCalledWith({
-      type: 'namespace',
-      value: 'default',
-    });
-  });
-
-  it('selects a namespace view and notifies the namespace context', () => {
-    renderSidebar();
-    const namespaceToggle = requireValue(
-      container,
-      'expected test value in Sidebar.test.tsx'
-    ).querySelector<HTMLDivElement>(
-      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
-        'default'
-      )}"]`
-    );
-    expect(namespaceToggle).not.toBeNull();
-    act(() => {
-      requireValue(namespaceToggle, 'expected test value in Sidebar.test.tsx').click();
-    });
-
-    const workloadsView = requireValue(
-      container,
-      'expected test value in Sidebar.test.tsx'
-    ).querySelector<HTMLDivElement>(
-      `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
-        'default'
-      )}"][data-sidebar-target-view="workloads"]`
-    );
-    expect(workloadsView).not.toBeNull();
-
-    act(() => {
-      requireValue(workloadsView, 'expected test value in Sidebar.test.tsx').click();
-    });
-
-    expect(namespaceState.setSelectedNamespace).toHaveBeenCalledWith('default', testClusterId);
-    expect(viewStateMock.onNamespaceSelect).toHaveBeenCalledWith('default');
-    expect(viewStateMock.setActiveNamespaceTab).toHaveBeenCalledWith('workloads');
-  });
-
-  it('allows modified navigation keys to bubble to global handlers', () => {
-    renderSidebar();
-    const focusable = requireValue(
-      container,
-      'expected test value in Sidebar.test.tsx'
-    ).querySelector<HTMLElement>('[data-sidebar-focusable="true"]');
-    expect(focusable).not.toBeNull();
-
-    act(() => {
-      requireValue(focusable, 'expected test value in Sidebar.test.tsx').focus();
-    });
-
-    const plainArrowEvent = new KeyboardEvent('keydown', {
-      key: 'ArrowDown',
-      bubbles: true,
-      cancelable: true,
-    });
-    act(() => {
-      requireValue(focusable, 'expected test value in Sidebar.test.tsx').dispatchEvent(
-        plainArrowEvent
-      );
-    });
-    expect(plainArrowEvent.defaultPrevented).toBe(true);
-
-    const metaArrowEvent = new KeyboardEvent('keydown', {
-      key: 'ArrowDown',
-      bubbles: true,
-      cancelable: true,
-      metaKey: true,
-    });
-    act(() => {
-      requireValue(focusable, 'expected test value in Sidebar.test.tsx').dispatchEvent(
-        metaArrowEvent
-      );
-    });
-    expect(metaArrowEvent.defaultPrevented).toBe(false);
-
-    const shiftSpaceEvent = new KeyboardEvent('keydown', {
-      key: ' ',
-      code: 'Space',
-      bubbles: true,
-      cancelable: true,
-      shiftKey: true,
-    });
-    act(() => {
-      requireValue(focusable, 'expected test value in Sidebar.test.tsx').dispatchEvent(
-        shiftSpaceEvent
-      );
-    });
-    expect(shiftSpaceEvent.defaultPrevented).toBe(false);
-  });
-
-  it('renders a loading spinner when namespaces are loading', () => {
-    namespaceState.namespaceLoading = true;
-    namespaceState.namespaces = [];
-    renderSidebar();
-    const spinnerText = requireValue(
-      container,
-      'expected test value in Sidebar.test.tsx'
-    ).querySelector('.loading-spinner p')?.textContent;
-    expect(spinnerText).toBe('Loading namespaces...');
-  });
-
-  it('shows an auto-refresh disabled message when namespaces have not loaded and refresh is paused', () => {
-    autoRefreshLoadingState.suppressPassiveLoading = true;
-    namespaceState.namespaceLoading = false;
-    namespaceState.namespaces = [];
-
-    renderSidebar();
-
-    expect(
-      requireValue(container, 'expected test value in Sidebar.test.tsx').textContent
-    ).toContain('Auto-refresh is disabled');
-  });
-
-  it('renders unknown-workload namespaces exactly like normal ones and dims only confirmed-empty', () => {
-    namespaceState.namespaces = [
-      {
-        name: 'empty',
-        scope: 'empty',
-        resourceVersion: '1',
-        hasWorkloads: false,
-        workloadsUnknown: false,
-        details: '',
-      },
-      {
-        name: 'pending',
-        scope: 'pending',
-        resourceVersion: '2',
-        hasWorkloads: false,
-        workloadsUnknown: true,
-        details: '',
-      },
-      {
-        name: 'active',
-        scope: 'active',
-        resourceVersion: '3',
-        hasWorkloads: true,
-        workloadsUnknown: false,
-        details: '',
-      },
-    ];
-    renderSidebar();
-    const itemFor = (name: string) =>
-      requireValue(container, 'expected test value in Sidebar.test.tsx').querySelector(
-        `[data-sidebar-target-namespace="${namespaceKey(name)}"]`
-      );
-
-    // Confirmed absence of workloads is the ONLY state that changes presentation.
-    expect(
-      requireValue(itemFor('empty'), 'expected test value in Sidebar.test.tsx').className
-    ).toContain('dimmed');
-
-    // Not-yet-known must be indistinguishable from a normal namespace: the transient
-    // startup state (ingest stores not settled) must not draw the eye.
-    expect(
-      requireValue(itemFor('pending'), 'expected test value in Sidebar.test.tsx').className
-    ).toBe(requireValue(itemFor('active'), 'expected test value in Sidebar.test.tsx').className);
-    expect(
-      requireValue(itemFor('pending'), 'expected test value in Sidebar.test.tsx').className
-    ).not.toContain('dimmed');
-    expect(
-      requireValue(itemFor('pending'), 'expected test value in Sidebar.test.tsx').className
-    ).not.toContain('workloads-unknown');
-    expect(
-      requireValue(container, 'expected test value in Sidebar.test.tsx').querySelector(
-        '.status-text.warning'
-      )
-    ).toBeNull();
-    expect(
-      requireValue(itemFor('pending'), 'expected test value in Sidebar.test.tsx').getAttribute(
-        'title'
-      ) ?? ''
-    ).not.toContain('Unable to determine');
-  });
-
-  it('does not dim inactive namespaces when the display setting is disabled', () => {
-    setAppPreferencesForTesting({ dimInactiveNamespaces: false });
-    namespaceState.namespaces = [
-      {
-        name: 'inactive',
-        scope: 'inactive',
-        resourceVersion: '1',
-        hasWorkloads: false,
-        workloadsUnknown: false,
-        details: '',
-      },
-    ];
-
-    renderSidebar();
-
-    const inactiveItem = requireValue(
-      container,
-      'expected test value in Sidebar.test.tsx'
-    ).querySelector(`[data-sidebar-target-namespace="${namespaceKey('inactive')}"]`);
-    expect(inactiveItem).not.toBeNull();
-    expect(
-      requireValue(inactiveItem, 'expected test value in Sidebar.test.tsx').className
-    ).not.toContain('dimmed');
-  });
-
-  it('renders in collapsed state when the sidebar is hidden', () => {
-    renderSidebar({
-      viewState: {
-        isSidebarVisible: false,
-      },
-    });
-    const sidebar = requireValue(
-      container,
-      'expected test value in Sidebar.test.tsx'
-    ).querySelector('.sidebar');
-    expect(sidebar).not.toBeNull();
-    expect(
-      requireValue(sidebar, 'expected test value in Sidebar.test.tsx').classList.contains(
-        'collapsed'
+      Array.from(sidebar().querySelectorAll('[data-sidebar-target-kind]')).every(
+        (item) => item.tagName === 'BUTTON'
       )
     ).toBe(true);
-    expect(
-      requireValue(sidebar, 'expected test value in Sidebar.test.tsx').getAttribute('tabindex')
-    ).toBe('-1');
-    expect(
-      requireValue(sidebar, 'expected test value in Sidebar.test.tsx').getAttribute('style')
-    ).toContain('width: 50px');
-    const toggleButton = requireValue(
-      container,
-      'expected test value in Sidebar.test.tsx'
-    ).querySelector<HTMLButtonElement>('.sidebar-toggle');
-    expect(toggleButton?.getAttribute('aria-label')).toBe('Show Sidebar');
   });
 
-  it('expands the active namespace based on view state selection on mount', async () => {
-    namespaceState.selectedNamespace = 'default';
-    namespaceState.selectedNamespaceClusterId = testClusterId;
-    renderSidebar({
-      viewState: {
-        sidebarSelection: { type: 'namespace', value: 'default' },
-        viewType: 'namespace',
-        activeNamespaceTab: 'workloads',
-      },
+  it('navigates through the real view state from cluster, namespace, and Overview entries', async () => {
+    serveCluster(dev);
+    view = await app.mountApp();
+
+    // Expanding a namespace only reveals its views.
+    await click(namespaceToggle('default'));
+    expect(viewState().viewType).toBe('overview');
+    expect(view.owners().namespace.selectedNamespace).toBeUndefined();
+
+    await view.goTo({ clusterView: 'config' });
+    expect(viewState()).toMatchObject({
+      viewType: 'cluster',
+      activeClusterTab: 'config',
+      sidebarSelection: { type: 'cluster', value: 'cluster' },
     });
-    await act(async () => {
-      await Promise.resolve();
+    expect(clusterView('config')?.getAttribute('aria-current')).toBe('page');
+
+    await view.goTo({ namespace: 'default', view: 'config' });
+    expect(viewState()).toMatchObject({
+      viewType: 'namespace',
+      activeNamespaceTab: 'config',
+      sidebarSelection: { type: 'namespace', value: 'default' },
     });
-    const workloadsView = requireValue(
-      container,
-      'expected test value in Sidebar.test.tsx'
-    ).querySelector<HTMLDivElement>(
-      `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
-        'default'
-      )}"][data-sidebar-target-view="workloads"]`
+    expect(view.owners().namespace).toMatchObject({
+      selectedNamespace: 'default',
+      selectedNamespaceClusterId: dev.clusterId,
+    });
+
+    // Another view of the namespace already selected keeps the selection.
+    await view.goTo({ namespace: 'default', view: 'rbac' });
+    expect(viewState()).toMatchObject({
+      viewType: 'namespace',
+      activeNamespaceTab: 'rbac',
+      sidebarSelection: { type: 'namespace', value: 'default' },
+    });
+    expect(namespaceView('default', 'rbac')?.getAttribute('aria-current')).toBe('page');
+
+    await view.goTo({ clusterView: 'overview' });
+    expect(viewState()).toMatchObject({
+      viewType: 'overview',
+      sidebarSelection: { type: 'overview', value: 'overview' },
+    });
+  });
+
+  it.each([true, false])(
+    'expands one namespace at a time only while exclusive namespaces is on (%s)',
+    async (exclusive) => {
+      app.preferences({ exclusiveNamespaces: exclusive });
+      serveCluster(dev, { namespaces: ['default', 'kube-system'] });
+      view = await app.mountApp();
+
+      await click(namespaceToggle('default'));
+      await click(namespaceToggle('kube-system'));
+      expect(expanded(namespaceToggle('kube-system'))).toBe(true);
+      expect(expanded(namespaceToggle('default'))).toBe(!exclusive);
+
+      await click(namespaceToggle('kube-system'));
+      expect(expanded(namespaceToggle('kube-system'))).toBe(false);
+      expect(namespaceView('kube-system', 'browse')).toBeNull();
+    }
+  );
+
+  it('expands All Namespaces without selecting a namespace and offers only views that span namespaces', async () => {
+    app.preferences({ exclusiveNamespaces: false });
+    serveCluster(dev);
+    view = await app.mountApp();
+
+    await click(namespaceToggle('namespace:all'));
+    await click(namespaceToggle('default'));
+
+    expect(view.owners().namespace.selectedNamespace).toBeUndefined();
+    expect(viewState().viewType).toBe('overview');
+    expect(namespaceView('namespace:all', 'config')).not.toBeNull();
+    expect(namespaceView('namespace:all', 'map')).toBeNull();
+    expect(namespaceView('default', 'map')).not.toBeNull();
+  });
+
+  it.each([true, false])(
+    'dims only namespaces confirmed to have no workloads (dimming on: %s)',
+    async (dim) => {
+      app.preferences({ dimInactiveNamespaces: dim });
+      serveCluster(dev);
+      serveNamespaceRows(dev, [
+        namespaceRow(dev, 'active'),
+        namespaceRow(dev, 'empty', { hasWorkloads: false }),
+        namespaceRow(dev, 'pending', { hasWorkloads: false, workloadsUnknown: true }),
+      ]);
+      view = await app.mountApp();
+
+      expect(namespaceToggle('empty').classList.contains('dimmed')).toBe(dim);
+      // Not-yet-known workloads (ingest still settling) look like any namespace.
+      expect(namespaceToggle('pending').className).toBe(namespaceToggle('active').className);
+    }
+  );
+
+  it('keeps a scope namespace the backend cannot find from expanding or taking keyboard focus', async () => {
+    serveCluster(dev);
+    serveNamespaceRows(dev, [
+      namespaceRow(dev, 'default'),
+      namespaceRow(dev, 'ghost', { scopeStatus: 'not-found', workloadsUnknown: true }),
+      namespaceRow(dev, 'team-a'),
+    ]);
+    view = await app.mountApp();
+
+    const ghost = namespaceToggle('ghost');
+    expect(ghost.disabled).toBe(true);
+    await click(ghost);
+    expect(namespaceView('ghost', 'browse')).toBeNull();
+
+    await focus(namespaceToggle('default'));
+    await press('ArrowDown');
+    expect(document.activeElement).toBe(namespaceToggle('team-a'));
+  });
+
+  it('shows the namespace list as loading until the backend answers', async () => {
+    serveCluster(dev);
+    let answerNamespaces: (() => void) | undefined;
+    app.snapshots.respond(({ domain, scope }) =>
+      domain === 'namespaces'
+        ? new Promise<Response>((resolve) => {
+            answerNamespaces = () =>
+              resolve(
+                snapshotResponse({
+                  domain,
+                  scope,
+                  version: 1,
+                  payload: {
+                    clusterId: dev.clusterId,
+                    clusterName: dev.clusterName,
+                    namespaces: [namespaceRow(dev, 'default')],
+                  },
+                })
+              );
+          })
+        : undefined
     );
-    expect(workloadsView).not.toBeNull();
+    view = await app.mountApp();
+    const namespacesSection = () =>
+      requireValue(
+        sidebar().querySelector<HTMLElement>('.namespaces-section'),
+        'expected the namespaces section'
+      );
+    expect(namespacesSection().textContent).toContain('Loading namespaces');
+
+    await act(async () => answerNamespaces?.());
+    await app.settle();
+
+    expect(namespacesSection().textContent).not.toContain('Loading namespaces');
+    expect(namespaceToggle('default')).toBeDefined();
+  });
+
+  it('shows the paused state instead of loading namespaces while auto-refresh is off', async () => {
+    app.preferences({ autoRefreshEnabled: false });
+    serveCluster(dev);
+    view = await app.mountApp();
+
+    expect(app.snapshots.reads('namespaces')).toEqual([]);
+    expect(sidebar().querySelector('.namespaces-section')?.textContent).toContain(
+      'Auto-refresh is disabled'
+    );
+    expect(sidebar().querySelector('[data-sidebar-target-kind="namespace-toggle"]')).toBeNull();
+  });
+
+  it('shows the visible cluster’s Attention counts and follows a cluster switch', async () => {
+    const staging = app.cluster({ name: 'dev', context: 'staging' });
+    serveCluster(dev, { attention: { info: 2, warning: 3, error: 1 } });
+    serveCluster(staging, { attention: { info: 0, warning: 4, error: 2 } });
+    view = await app.mountApp();
+    const attention = () => requireValue(clusterView('attention'), 'expected Attention');
+    const visibleCounts = () =>
+      Array.from(attention().querySelectorAll('.sidebar-attention-badge'), (badge) =>
+        badge.textContent?.trim()
+      );
+
+    expect(attention().getAttribute('aria-label')).toBe('Attention: 2 info, 3 warnings, 1 error');
+    expect(visibleCounts()).toEqual(['2', '3', '1']);
+
+    await view.selectCluster(staging);
+
+    expect(attention().getAttribute('aria-label')).toBe('Attention: 0 info, 4 warnings, 2 errors');
+    expect(visibleCounts()).toEqual(['4', '2']);
+  });
+
+  it('offers discovered extension views only in the cluster that discovered them', async () => {
+    app.preferences({
+      sidebarClusterExtensionsExpanded: true,
+      sidebarNamespaceExtensionsExpanded: true,
+    });
+    const staging = app.cluster({ name: 'dev', context: 'staging' });
+    serveCluster(dev, { families: { cluster: ['karpenter'], namespaced: ['argocd'] } });
+    serveCluster(staging);
+    view = await app.mountApp();
+
+    await click(namespaceToggle('default'));
+    expect(clusterView('karpenter')).not.toBeNull();
+    expect(namespaceView('default', 'argocd')).not.toBeNull();
+    // A namespaced family is never offered as a cluster view.
+    expect(clusterView('argocd')).toBeNull();
+
+    await view.selectCluster(staging);
+    await click(namespaceToggle('default', staging));
+    expect(clusterView('karpenter')).toBeNull();
+    expect(namespaceView('default', 'argocd', staging)).toBeNull();
+    expect(namespaceView('default', 'events', staging)).not.toBeNull();
+  });
+
+  it('keeps primary views reachable while the groups collapse, and persists each disclosure', async () => {
+    app.preferences({ sidebarClusterResourcesExpanded: false });
+    serveCluster(dev, { families: { cluster: ['karpenter'] } });
+    view = await app.mountApp();
+    const resources = clusterGroup('resources');
+    const extensions = clusterGroup('extensions');
+    expect(expanded(resources)).toBe(false);
+    expect(expanded(extensions)).toBe(false);
+    expect(clusterView('nodes')).toBeNull();
+    expect(clusterView('karpenter')).toBeNull();
+    expect(clusterView('browse')).not.toBeNull();
+    expect(clusterView('events')).not.toBeNull();
+
+    await focus(resources);
+    await press('ArrowDown');
+    expect(document.activeElement).toBe(extensions);
+    await press('Enter');
+    expect(expanded(extensions)).toBe(true);
+    expect(clusterView('karpenter')).not.toBeNull();
+    expect(clusterView('nodes')).toBeNull();
+
+    await press('ArrowUp');
+    expect(document.activeElement).toBe(resources);
+    await press(' ');
+    expect(expanded(resources)).toBe(true);
+    await press('ArrowDown');
+    expect(document.activeElement).toBe(clusterView('config'));
+    await press('Enter');
+    expect(viewState()).toMatchObject({ viewType: 'cluster', activeClusterTab: 'config' });
+
+    expect(persistedDisclosures()).toEqual([
+      { key: 'sidebarClusterExtensionsExpanded', value: true },
+      { key: 'sidebarClusterResourcesExpanded', value: true },
+    ]);
+  });
+
+  it('shares namespace group disclosure across namespaces and clusters, apart from the cluster groups', async () => {
+    app.preferences({ exclusiveNamespaces: false });
+    const staging = app.cluster({ name: 'dev', context: 'staging' });
+    serveCluster(dev, { namespaces: ['default', 'other'] });
+    serveCluster(staging);
+    view = await app.mountApp();
+    await click(namespaceToggle('default'));
+    await click(namespaceToggle('other'));
+
+    await click(namespaceGroup('default', 'resources'));
+
+    expect(expanded(namespaceGroup('default', 'resources'))).toBe(false);
+    expect(expanded(namespaceGroup('other', 'resources'))).toBe(false);
+    expect(namespaceView('other', 'workloads')).toBeNull();
+    expect(expanded(clusterGroup('resources'))).toBe(true);
+    expect(persistedDisclosures()).toEqual([
+      { key: 'sidebarNamespaceResourcesExpanded', value: false },
+    ]);
+
+    await view.selectCluster(staging);
+    await click(namespaceToggle('default', staging));
+    expect(expanded(namespaceGroup('default', 'resources', staging))).toBe(false);
+    expect(expanded(clusterGroup('resources'))).toBe(true);
+  });
+
+  it('keeps a manual collapse when the sidebar is hidden and shown while a grouped view is open', async () => {
+    serveCluster(dev);
+    view = await app.mountApp();
+    await view.goTo({ clusterView: 'config' });
+
+    await click(clusterGroup('resources'));
+    expect(clusterView('config')).toBeNull();
+    await click(buttonNamed('Hide Sidebar'));
+    await click(buttonNamed('Show Sidebar'));
+
+    expect(expanded(clusterGroup('resources'))).toBe(false);
+    expect(clusterView('config')).toBeNull();
+    expect(viewState().activeClusterTab).toBe('config');
+  });
+
+  it('scrolls the whole expanded namespace group into view, after toggling and after its animation', async () => {
+    // A kubeconfig context name may contain quotes; the group is still found.
+    const quoted = app.cluster({ name: 'dev', context: 'team"b' });
+    serveCluster(dev);
+    serveCluster(quoted);
+    view = await app.mountApp();
+    await view.selectCluster(quoted);
+    const toggle = namespaceToggle('default', quoted);
+    vi.useFakeTimers();
+
+    await act(async () => toggle.click());
+    const list = requireValue(toggle.closest<HTMLElement>('.namespace-items'), 'expected the list');
+    const group = requireValue(
+      toggle.closest<HTMLElement>('.sidebar-namespace-group'),
+      'expected the namespace group'
+    );
+    let groupBottom = 900;
+    list.getBoundingClientRect = () => DOMRect.fromRect({ y: 200, height: 600 });
+    group.getBoundingClientRect = () => DOMRect.fromRect({ y: 450, height: groupBottom - 450 });
+    const scrollGroup = vi.fn();
+    const scrollName = vi.fn();
+    group.scrollIntoView = scrollGroup;
+    toggle.scrollIntoView = scrollName;
+
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(scrollGroup).toHaveBeenCalledWith({ block: 'nearest', behavior: 'smooth' });
+    expect(scrollName).not.toHaveBeenCalled();
+
+    // The group grows as its views animate open; the end of the animation checks again.
+    scrollGroup.mockClear();
+    groupBottom = 700;
+    const views = requireValue(group.querySelector('.sidebar-views'), 'expected the views');
+    await act(async () => views.dispatchEvent(new Event('animationend', { bubbles: true })));
+    expect(scrollGroup).not.toHaveBeenCalled();
+    groupBottom = 900;
+    await act(async () => views.dispatchEvent(new Event('animationend', { bubbles: true })));
+    expect(scrollGroup).toHaveBeenCalledWith({ block: 'nearest', behavior: 'smooth' });
+  });
+
+  it('enters Global from the cluster tabs and offers only cross-cluster views there', async () => {
+    const staging = app.cluster({ name: 'dev', context: 'staging' });
+    serveCluster(dev);
+    serveCluster(staging);
+    view = await app.mountApp();
+    const globalEntries = () =>
+      Array.from(
+        sidebar().querySelectorAll<HTMLElement>('[data-sidebar-target-kind="global-view"]'),
+        describeTarget
+      );
+    expect(globalEntries()).toEqual([]);
+    await view.goTo({ clusterView: 'config' });
+    expect(globalEntries()).toEqual([]);
+    await view.goTo({ namespace: 'default', view: 'config' });
+    expect(globalEntries()).toEqual([]);
+
+    const globalTab = requireValue(
+      Array.from(view.container.querySelectorAll<HTMLElement>('[role="tab"]')).find(
+        (tab) => tab.textContent?.trim() === 'Global'
+      ),
+      'expected the Global tab'
+    );
+    await click(globalTab);
+
+    expect(globalEntries()).toEqual(['fleet', 'global-namespaces']);
+    expect(
+      requireEntry('[data-sidebar-target-kind="overview"]').closest('[hidden]')
+    ).not.toBeNull();
+    expect(sidebar().querySelector('.namespaces-section')?.hasAttribute('hidden')).toBe(true);
+
+    await view.goTo({ globalView: 'global-namespaces' });
+    expect(viewState()).toMatchObject({
+      viewType: 'global',
+      activeGlobalTab: 'global-namespaces',
+    });
+  });
+
+  it('opens the namespace command palette from the Namespaces header', async () => {
+    serveCluster(dev);
+    view = await app.mountApp();
+
+    await click(buttonNamed('Select namespace'));
+
+    expect(document.querySelector('dialog.command-palette[open]')).not.toBeNull();
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Select a namespace');
+  });
+
+  it('hides and shows the sidebar from its toggle and persists the choice', async () => {
+    const lastVisibility = () => {
+      const calls = app.backend.calls('SetSidebarVisible');
+      return calls[calls.length - 1]?.[0];
+    };
+    serveCluster(dev);
+    view = await app.mountApp();
+
+    await click(buttonNamed('Hide Sidebar'));
+
+    expect(viewState().isSidebarVisible).toBe(false);
+    expect(sidebar().tabIndex).toBe(-1);
+    expect(sidebar().querySelector('[data-sidebar-target-kind]')).toBeNull();
+    expect(lastVisibility()).toBe(false);
+
+    await click(buttonNamed('Show Sidebar'));
+
+    expect(viewState().isSidebarVisible).toBe(true);
+    expect(sidebar().querySelector('[data-sidebar-target-kind="overview"]')).not.toBeNull();
+    expect(lastVisibility()).toBe(true);
+  });
+});
+
+describe('Sidebar keyboard traversal', () => {
+  it('Tabs from a clicked entry through the sidebar’s other controls and back without navigating', async () => {
+    serveCluster(dev);
+    view = await app.mountApp();
+    const config = requireValue(clusterView('config'), 'expected Config');
+    await focus(config);
+    await click(config);
+    const hide = buttonNamed('Hide Sidebar');
+    const selectNamespace = buttonNamed('Select namespace');
+
+    await press('Tab');
+    expect(document.activeElement).toBe(hide);
+    expect(hide.classList.contains('keyboard-programmatic-focus')).toBe(true);
+    await press('Tab');
+    expect(document.activeElement).toBe(selectNamespace);
+    await press('Tab', { shiftKey: true });
+    expect(document.activeElement).toBe(hide);
+    await press('Tab', { shiftKey: true });
+    expect(document.activeElement).toBe(config);
+    expect(viewState().activeClusterTab).toBe('config');
+  });
+
+  it.each([
+    ['forward from the header', false],
+    ['backward from the content', true],
+  ])(
+    'Control+Tab %s lands on the current list entry, even after other sidebar controls',
+    async (_, backwards) => {
+      serveCluster(dev);
+      view = await app.mountApp();
+      const outside = requireValue(
+        view.container.querySelector<HTMLElement>(
+          backwards ? '[data-app-region="content"]' : '[data-app-region="header"] button'
+        ),
+        'expected a control outside the sidebar'
+      );
+      const overview = requireEntry('[data-sidebar-target-kind="overview"]');
+      const enterSidebar = async () => {
+        await focus(outside);
+        await press('Tab', { ctrlKey: true, shiftKey: backwards });
+      };
+
+      await enterSidebar();
+      expect(document.activeElement).toBe(overview);
+      for (const control of [buttonNamed('Hide Sidebar'), buttonNamed('Select namespace')]) {
+        await focus(control);
+        await enterSidebar();
+        expect(document.activeElement).toBe(overview);
+      }
+      await press('ArrowDown');
+      expect(document.activeElement).toBe(clusterView('attention'));
+      await enterSidebar();
+      expect(document.activeElement).toBe(clusterView('attention'));
+      expect(viewState().viewType).toBe('overview');
+
+      await press('Tab');
+      expect(document.activeElement).toBe(buttonNamed('Hide Sidebar'));
+    }
+  );
+
+  it.each(['Enter', ' '])('leaves %j on the Select namespace button to the button', async (key) => {
+    serveCluster(dev);
+    view = await app.mountApp();
+    const selectNamespace = buttonNamed('Select namespace');
+    await focus(selectNamespace);
+
+    expect((await press(key)).defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(selectNamespace);
+    expect(viewState().viewType).toBe('overview');
+  });
+
+  it('lets modified arrow and Space keys through to global shortcuts', async () => {
+    serveCluster(dev);
+    view = await app.mountApp();
+    await focus(requireEntry('[data-sidebar-target-kind="overview"]'));
+
+    expect((await press('ArrowDown', { metaKey: true })).defaultPrevented).toBe(false);
+    expect((await press(' ', { code: 'Space', shiftKey: true })).defaultPrevented).toBe(false);
+    expect((await press('ArrowDown')).defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(clusterView('attention'));
   });
 });

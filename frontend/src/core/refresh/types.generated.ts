@@ -808,8 +808,6 @@ export interface ClusterOverviewSnapshotPayload {
   clusterName: string;
   overview: ClusterOverviewPayload;
   metrics: ClusterOverviewMetrics;
-  metricsByCluster?: Record<string, ClusterOverviewMetrics>;
-  overviewByCluster?: Record<string, ClusterOverviewPayload>;
 }
 
 export interface ClusterRBACEntry {

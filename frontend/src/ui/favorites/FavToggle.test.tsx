@@ -1,612 +1,335 @@
 /**
  * frontend/src/ui/favorites/FavToggle.test.tsx
  *
- * Tests for the useFavToggle hook.
- * Covers: outline/filled heart states, popover choices for add/update/remove.
+ * A view's favorite heart (useFavToggle): it is filled only when a saved
+ * favorite matches the visible cluster, view, namespace, and table settings;
+ * it opens the save modal, which saves the current view and table settings as
+ * a new favorite, cancels without saving, refuses another favorite's name, and
+ * deletes the matching favorite after confirmation. When a favorite is opened,
+ * the view's own table restores its saved filter text, sort, and columns and
+ * consumes it; a table that offers no favorites leaves it alone. Runs in the
+ * full app on the namespace Config view, with the real favorites, kubeconfig,
+ * view-state, namespace, and grid-table owners over a faked backend
+ * (test-utils/appState). Favorites are opened from the header's menu.
  */
 
-import type React from 'react';
-import { act, useState } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, type ReactNode } from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Favorite } from '@/core/persistence/favorites';
-import type { GridTableFilterState } from '@/shared/components/tables/GridTable.types';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
-import type { FavSaveModalProps } from './FavSaveModal';
-
-// ---------------------------------------------------------------------------
-// Mocks — declared before importing the hook under test.
-// ---------------------------------------------------------------------------
-
-let mockFavorites: Favorite[] = [];
-let mockPendingFavorite: Favorite | null = null;
-const mockSetPendingFavorite = vi.fn();
-const mockAddFavorite = vi.fn().mockResolvedValue({ id: 'new-fav' });
-const mockUpdateFavorite = vi.fn().mockResolvedValue(undefined);
-const mockDeleteFavorite = vi.fn().mockResolvedValue(undefined);
-const favSaveModalPropsRef: { current: FavSaveModalProps | null } = { current: null };
-
-vi.mock('@core/contexts/FavoritesContext', () => {
-  const useFavorites = () => ({
-    favorites: mockFavorites,
-    addFavorite: mockAddFavorite,
-    updateFavorite: mockUpdateFavorite,
-    deleteFavorite: mockDeleteFavorite,
-    reorderFavorites: vi.fn().mockResolvedValue(undefined),
-    pendingFavorite: mockPendingFavorite,
-    favoriteToRestore: mockPendingFavorite,
-    setPendingFavorite: mockSetPendingFavorite,
-  });
-  return { useFavorites, useOptionalFavorites: useFavorites };
-});
-
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({
-    selectedKubeconfigs: ['/home/user/.kube/config:production'],
-    selectedKubeconfig: '/home/user/.kube/config:production',
-    selectedClusterId: '/home/user/.kube/config:production',
-    selectedClusterName: 'production',
-    selectedClusterIds: ['/home/user/.kube/config:production'],
-    kubeconfigsLoading: false,
-    setSelectedKubeconfigs: vi.fn().mockResolvedValue(undefined),
-    setActiveKubeconfig: vi.fn(),
-    getClusterMeta: vi.fn(() => ({ id: '', name: '' })),
-    kubeconfigs: [],
-    loadKubeconfigs: vi.fn().mockResolvedValue(undefined),
-  }),
-}));
-
-vi.mock('@core/contexts/ViewStateContext', () => {
-  const useViewState = () => ({
-    viewType: 'namespace',
-    previousView: 'overview',
-    activeNamespaceTab: 'pods',
-    activeClusterTab: null,
-    setViewType: vi.fn(),
-    setPreviousView: vi.fn(),
-    setActiveNamespaceTab: vi.fn(),
-    setActiveClusterView: vi.fn(),
-    navigateToClusterView: vi.fn(),
-    navigateToNamespace: vi.fn(),
-    onNamespaceSelect: vi.fn(),
-    onClusterObjectsClick: vi.fn(),
-    getClusterNavigationState: vi.fn(),
-    isSidebarVisible: true,
-    sidebarWidth: 250,
-    isResizing: false,
-    sidebarSelection: null,
-    toggleSidebar: vi.fn(),
-    setSidebarWidth: vi.fn(),
-    setIsResizing: vi.fn(),
-    setSidebarSelection: vi.fn(),
-    showObjectPanel: false,
-    objectPanelState: null,
-    toggleObjectPanel: vi.fn(),
-    openObjectPanel: vi.fn(),
-    closeObjectPanel: vi.fn(),
-    navigationHistory: [],
-    navigateBack: vi.fn(),
-    navigateForward: vi.fn(),
-    canNavigateBack: false,
-    canNavigateForward: false,
-    isSettingsOpen: false,
-    setIsSettingsOpen: vi.fn(),
-    isAboutOpen: false,
-    setIsAboutOpen: vi.fn(),
-  });
-  return { useViewState, useOptionalViewState: useViewState };
-});
-
-vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
-  useNamespace: () => ({
-    namespaces: { mode: 'all' },
-    selectedNamespace: 'default',
-    namespaceLoading: false,
-    namespaceRefreshing: false,
-    setSelectedNamespace: vi.fn(),
-    loadNamespaces: vi.fn().mockResolvedValue(undefined),
-    refreshNamespaces: vi.fn().mockResolvedValue(undefined),
-    getClusterNamespace: vi.fn(),
-  }),
-}));
-
-vi.mock('./FavSaveModal', () => ({
-  default: (props: FavSaveModalProps) => {
-    favSaveModalPropsRef.current = props;
-    const { isOpen, onClose, onSave, onDelete, existingFavorite } = props;
-    if (!isOpen) {
-      return null;
-    }
-    return (
-      <div data-testid="fav-save-modal">
-        <button
-          type="button"
-          data-testid="modal-save"
-          onClick={() => {
-            onSave({
-              id: existingFavorite?.id ?? '',
-              name: 'Test',
-              clusterSelection: '',
-              viewType: 'namespace',
-              view: 'pods',
-              namespace: 'default',
-              filters: {
-                search: '',
-                kinds: { mode: 'all' },
-                namespaces: { mode: 'all' },
-                clusters: { mode: 'all' },
-                includeMetadata: false,
-              },
-              tableState: { sortColumn: '', sortDirection: 'asc', columnVisibility: {} },
-              order: 0,
-            });
-            onClose();
-          }}
-        >
-          Save
-        </button>
-        <button type="button" data-testid="modal-cancel" onClick={onClose}>
-          Cancel
-        </button>
-        {!!existingFavorite && (
-          <button
-            type="button"
-            data-testid="modal-delete"
-            onClick={() => {
-              onDelete(existingFavorite.id);
-              onClose();
-            }}
-          >
-            Delete
-          </button>
-        )}
-      </div>
-    );
-  },
-}));
-
-// Import after mocks
 import { useFavToggle } from './FavToggle';
 
-// ---------------------------------------------------------------------------
-// Helpers — wrapper component that renders the hook result into the DOM.
-// ---------------------------------------------------------------------------
+const app = installAppStateHarness();
+let view: MountedApp;
+let alpha: TestCluster;
+let beta: TestCluster;
 
-const makeFavorite = (overrides: Partial<Favorite> = {}): Favorite => ({
+const NO_FILTERS: Favorite['filters'] = {
+  search: '',
+  kinds: { mode: 'all' },
+  namespaces: { mode: 'all' },
+  clusters: { mode: 'all' },
+  includeMetadata: false,
+};
+
+/** A favorite of team-a's Config view in alpha, saved with the view's default table. */
+const configFavorite = (overrides: Partial<Favorite> = {}): Favorite => ({
   id: 'fav-1',
-  name: 'default / Pods',
-  clusterSelection: '',
+  name: 'Team A config',
+  clusterSelection: alpha.selection,
+  clusterId: alpha.clusterId,
+  clusterName: alpha.clusterName,
   viewType: 'namespace',
-  view: 'pods',
-  namespace: 'default',
-  filters: {
-    search: '',
-    kinds: { mode: 'all' },
-    namespaces: { mode: 'all' },
-    clusters: { mode: 'all' },
-    includeMetadata: false,
-  },
-  tableState: { sortColumn: '', sortDirection: 'asc', columnVisibility: {} },
+  view: 'config',
+  namespace: 'team-a',
+  filters: NO_FILTERS,
+  tableState: { sortColumn: 'name', sortDirection: 'asc', columnVisibility: {}, columnOrder: [] },
   order: 0,
   ...overrides,
 });
 
-/**
- * Wrapper component that calls useFavToggle() and renders the returned
- * IconBarItem as a button with the icon inside — mirroring how IconBar renders it.
- */
-const HookWrapper: React.FC<{
-  clusters?: { mode: 'all' } | { mode: 'some'; values: string[] };
-}> = ({ clusters = { mode: 'all' } }) => {
-  const { item, modal } = useFavToggle({
-    filters: {
-      search: '',
-      kinds: { mode: 'all' },
-      namespaces: { mode: 'all' },
-      clusters,
-      includeMetadata: false,
-    },
-    sortColumn: null,
-    sortDirection: 'asc',
-    columnVisibility: {},
-    columns: [
-      { key: 'name', label: 'Name', hideable: false, sortable: true },
-      { key: 'age', label: 'Age', hideable: true, sortable: true },
-    ],
-  });
+const mount = async (saved: Favorite[], probes?: ReactNode) => {
+  app.backend.answer('GetFavorites', () => saved);
+  view = await app.mountApp(probes);
+};
 
-  if (item?.type === 'toggle') {
-    return (
-      <div data-testid="fav-toggle-wrapper">
-        <button
-          type="button"
-          data-testid="fav-toggle-button"
-          data-active={String(item.active)}
-          title={item.title}
-          onClick={item.onClick}
-        >
-          {item.icon}
-        </button>
-        {modal}
-      </div>
+/** Mounts the app on team-a's Config view in alpha. */
+const openConfigView = async (saved: Favorite[]) => {
+  await mount(saved);
+  await view.goTo({ namespace: 'team-a', view: 'config' });
+};
+
+const heart = () =>
+  requireValue(
+    view.container.querySelector<HTMLButtonElement>(
+      '.icon-bar-button[aria-label="Save as favorite"], .icon-bar-button[aria-label="Edit favorite"]'
+    ),
+    'the view’s favorite heart'
+  );
+const favorited = () => heart().getAttribute('aria-pressed') === 'true';
+
+const dialog = () =>
+  document.querySelector<HTMLElement>('[aria-labelledby="fav-save-modal-title"]');
+const buttonIn = (root: ParentNode | null, label: string) =>
+  requireValue(
+    Array.from(root?.querySelectorAll<HTMLButtonElement>('button') ?? []).find(
+      (button) => button.textContent?.trim() === label
+    ),
+    `the ${label} button`
+  );
+const nameInput = () =>
+  requireValue(dialog()?.querySelector<HTMLInputElement>('input[id$="-fav-name"]'), 'name field');
+
+const click = async (target: HTMLElement) => {
+  await act(async () => target.click());
+  await app.settle();
+};
+
+const typeName = async (value: string) => {
+  const input = nameInput();
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+};
+
+/** Opens a saved favorite from the header's Favorites menu, as the user does. */
+const openFavorite = async (name: string) => {
+  await click(
+    requireValue(
+      view.container.querySelector<HTMLElement>('button[aria-label="Favorites"]'),
+      'the Favorites menu'
+    )
+  );
+  await click(
+    requireValue(
+      Array.from(view.container.querySelectorAll<HTMLElement>('[role="menuitem"]')).find((row) =>
+        row.textContent?.includes(name)
+      ),
+      `the ${name} favorite`
+    )
+  );
+};
+
+const searchText = () =>
+  view.container.querySelector<HTMLInputElement>('input[name="gridtable-filter-search"]')?.value;
+const metadataSearch = () =>
+  view.container
+    .querySelector('.icon-bar-button[aria-label="Include metadata"]')
+    ?.getAttribute('aria-pressed');
+// The table's visible columns, in order.
+const visibleColumns = () =>
+  view.container.querySelector<HTMLInputElement>('input[name="gridtable-filter-columns"]')?.value;
+const sortedHeaders = () =>
+  Array.from(view.container.querySelectorAll<HTMLElement>('[aria-sort]'))
+    .filter((header) => header.getAttribute('aria-sort') !== 'none')
+    .map(
+      (header) =>
+        `${header.textContent?.replace(/[^\w ]/g, '').trim()} ${header.getAttribute('aria-sort')}`
     );
+
+beforeEach(() => {
+  alpha = app.cluster({ name: 'dev', context: 'alpha' });
+  beta = app.cluster({ name: 'dev', context: 'beta' });
+  for (const cluster of [alpha, beta]) {
+    app.namespaces(cluster, ['default', 'team-a']);
+    app.startScreen(cluster);
+    app.serveTable(cluster, 'namespace-config');
   }
+});
 
-  return null;
-};
+describe('the favorite heart', () => {
+  it.each([
+    ['no favorite is saved', () => [], false],
+    ['a favorite matches the view', () => [configFavorite()], true],
+    [
+      'a favorite pinned to the cluster by id matches, whatever kubeconfig path it was saved with',
+      () => [configFavorite({ clusterSelection: '/elsewhere/dev:alpha' })],
+      true,
+    ],
+    [
+      'the matching view’s favorite is pinned to another cluster',
+      () => [configFavorite({ clusterId: beta.clusterId, clusterSelection: '' })],
+      false,
+    ],
+    [
+      'the view’s favorite was saved with other filters',
+      () => [configFavorite({ filters: { ...NO_FILTERS, search: 'other' } })],
+      false,
+    ],
+  ] as const)('is filled only when it should be: %s', async (_case, saved, expected) => {
+    await openConfigView([...saved()]);
 
-const tableSetters = { filters: vi.fn(), sort: vi.fn(), visibility: vi.fn(), order: vi.fn() };
-
-// One hydrated table whose settings a pending favorite restores.
-const RestorableTable: React.FC<{ enabled?: boolean }> = ({ enabled }) => {
-  const { modal } = useFavToggle({
-    enabled,
-    filters: {
-      search: 'current',
-      kinds: { mode: 'all' },
-      namespaces: { mode: 'all' },
-      clusters: { mode: 'all' },
-      includeMetadata: false,
-    },
-    sortColumn: 'name',
-    sortDirection: 'asc',
-    columnVisibility: {},
-    columnOrder: ['kind', 'name', 'age'],
-    hydrated: true,
-    setFilters: tableSetters.filters,
-    setSortConfig: tableSetters.sort,
-    setColumnVisibility: tableSetters.visibility,
-    setColumnOrder: tableSetters.order,
-    filterOptions: {},
-  });
-  return modal;
-};
-
-const MetadataFavoriteRestoreWrapper: React.FC = () => {
-  const [filters, setFilters] = useState<GridTableFilterState>({
-    search: 'current filter',
-    kinds: { mode: 'all' as const },
-    namespaces: { mode: 'all' as const },
-    clusters: { mode: 'all' as const },
-    includeMetadata: false,
-  });
-  useFavToggle({
-    filters,
-    sortColumn: null,
-    sortDirection: 'asc',
-    columnVisibility: {},
-    hydrated: true,
-    setFilters,
+    expect(favorited()).toBe(expected);
   });
 
-  return <input aria-label="Rendered filter text" readOnly value={filters.search} />;
-};
+  it('saves the current view and its table settings as a new favorite, then fills', async () => {
+    app.backend.answer('AddFavorite', (saved) => ({ ...saved, id: 'saved-1' }));
+    await openConfigView([]);
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
+    await click(heart());
+    expect(dialog()).not.toBeNull();
+    await click(buttonIn(dialog(), 'Save'));
 
-describe('useFavToggle', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
-
-  const renderHook = async () => {
-    await act(async () => {
-      root.render(<HookWrapper />);
-      await Promise.resolve();
-    });
-  };
-
-  const clickToggle = async () => {
-    const btn = container.querySelector<HTMLButtonElement>('[data-testid="fav-toggle-button"]');
-    await act(async () => {
-      requireValue(btn, 'expected test value in FavToggle.test.tsx').click();
-      await Promise.resolve();
-    });
-  };
-
-  beforeEach(() => {
-    mockFavorites = [];
-    mockPendingFavorite = null;
-    mockSetPendingFavorite.mockReset();
-    mockAddFavorite.mockClear();
-    mockUpdateFavorite.mockClear();
-    mockDeleteFavorite.mockClear();
-    favSaveModalPropsRef.current = null;
-    for (const setter of Object.values(tableSetters)) {
-      setter.mockClear();
-    }
-
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-  });
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-  });
-
-  // -------------------------------------------------------------------------
-  // 1. Returns outline heart when not favorited
-  // -------------------------------------------------------------------------
-
-  it('preserves case-distinct cluster IDs in a favorite snapshot', async () => {
-    await act(async () => {
-      root.render(<HookWrapper clusters={{ mode: 'some', values: ['Cluster-A', 'cluster-a'] }} />);
-      await Promise.resolve();
-    });
-    await clickToggle();
-
-    expect(favSaveModalPropsRef.current?.table.filters.clusters).toEqual({
-      mode: 'some',
-      values: ['Cluster-A', 'cluster-a'],
-    });
-  });
-
-  it('returns outline heart when not favorited', async () => {
-    mockFavorites = [];
-
-    await renderHook();
-
-    const btn = container.querySelector<HTMLButtonElement>('[data-testid="fav-toggle-button"]');
-    expect(btn).toBeTruthy();
-    expect(
-      requireValue(btn, 'expected test value in FavToggle.test.tsx').getAttribute('data-active')
-    ).toBe('false');
-    expect(requireValue(btn, 'expected test value in FavToggle.test.tsx').title).toBe(
-      'Save as favorite'
-    );
-  });
-
-  // -------------------------------------------------------------------------
-  // 2. Returns filled heart when favorited
-  // -------------------------------------------------------------------------
-
-  it('returns filled heart when favorited', async () => {
-    mockFavorites = [makeFavorite()];
-
-    await renderHook();
-
-    const btn = container.querySelector<HTMLButtonElement>('[data-testid="fav-toggle-button"]');
-    expect(btn).toBeTruthy();
-    expect(
-      requireValue(btn, 'expected test value in FavToggle.test.tsx').getAttribute('data-active')
-    ).toBe('true');
-    expect(requireValue(btn, 'expected test value in FavToggle.test.tsx').title).toBe(
-      'Edit favorite'
-    );
-  });
-
-  it('does not match a clusterId-only favorite on another cluster', async () => {
-    mockFavorites = [makeFavorite({ clusterSelection: '', clusterId: 'other-cluster' })];
-    await renderHook();
-    expect(
-      container.querySelector('[data-testid="fav-toggle-button"]')?.getAttribute('data-active')
-    ).toBe('false');
-  });
-
-  it('matches cluster-specific favorites by clusterId when present', async () => {
-    mockFavorites = [
-      makeFavorite({
-        clusterSelection: '/different/path:production',
-        clusterId: '/home/user/.kube/config:production',
-      }),
-    ];
-
-    await renderHook();
-
-    const btn = container.querySelector<HTMLButtonElement>('[data-testid="fav-toggle-button"]');
-    expect(btn).toBeTruthy();
-    expect(
-      requireValue(btn, 'expected test value in FavToggle.test.tsx').getAttribute('data-active')
-    ).toBe('true');
-  });
-
-  // -------------------------------------------------------------------------
-  // 3. Click opens modal
-  // -------------------------------------------------------------------------
-
-  it('click opens the save modal', async () => {
-    mockFavorites = [];
-
-    await renderHook();
-    await clickToggle();
-
-    const modal = document.querySelector('[data-testid="fav-save-modal"]');
-    expect(modal).toBeTruthy();
-    expect(favSaveModalPropsRef.current?.table.columns).toEqual([
-      { key: 'name', label: 'Name', hideable: false, sortable: true },
-      { key: 'age', label: 'Age', hideable: true, sortable: true },
+    expect(app.backend.calls('AddFavorite')).toEqual([
+      [
+        expect.objectContaining({
+          id: '',
+          clusterSelection: alpha.selection,
+          clusterId: alpha.clusterId,
+          viewType: 'namespace',
+          view: 'config',
+          namespace: 'team-a',
+          filters: NO_FILTERS,
+          tableState: {
+            sortColumn: 'name',
+            sortDirection: 'asc',
+            columnVisibility: {},
+            columnOrder: [],
+          },
+        }),
+      ],
     ]);
+    expect(dialog()).toBeNull();
+    expect(favorited()).toBe(true);
   });
 
-  it('reserves names owned by other Favorites while allowing the edited Favorite name', async () => {
-    mockFavorites = [makeFavorite(), makeFavorite({ id: 'fav-2', name: 'Other Favorite' })];
+  it('closes the save modal without saving when cancelled', async () => {
+    app.backend.answer('AddFavorite', (saved) => saved);
+    await openConfigView([]);
+    await click(heart());
 
-    await renderHook();
-    await clickToggle();
+    await click(buttonIn(dialog(), 'Cancel'));
 
-    expect(favSaveModalPropsRef.current?.unavailableNames).toEqual(['Other Favorite']);
+    expect(dialog()).toBeNull();
+    expect(app.backend.calls('AddFavorite')).toEqual([]);
+    expect(favorited()).toBe(false);
   });
 
-  // -------------------------------------------------------------------------
-  // 4. Click when favorited opens modal with delete button
-  // -------------------------------------------------------------------------
+  it('refuses another favorite’s name but keeps the edited favorite’s own', async () => {
+    await openConfigView([
+      configFavorite(),
+      configFavorite({ id: 'fav-2', name: 'Other Favorite', view: 'pods' }),
+    ]);
+    await click(heart());
+    expect(nameInput().value).toBe('Team A config');
+    expect(nameInput().getAttribute('aria-invalid')).toBeNull();
 
-  it('click when favorited shows modal with delete option', async () => {
-    mockFavorites = [makeFavorite()];
+    await typeName('Other Favorite');
 
-    await renderHook();
-    await clickToggle();
-
-    const modal = document.querySelector('[data-testid="fav-save-modal"]');
-    expect(modal).toBeTruthy();
-
-    const deleteBtn = document.querySelector('[data-testid="modal-delete"]');
-    expect(deleteBtn).toBeTruthy();
+    expect(nameInput().getAttribute('aria-invalid')).toBe('true');
+    expect(buttonIn(dialog(), 'Save').disabled).toBe(true);
   });
 
-  // -------------------------------------------------------------------------
-  // 5. Save via modal calls addFavorite
-  // -------------------------------------------------------------------------
+  it('deletes the matching favorite after confirmation', async () => {
+    app.backend.answer('DeleteFavorite', () => undefined);
+    await openConfigView([configFavorite({ id: 'fav-42' })]);
+    await click(heart());
 
-  it('save via modal calls addFavorite', async () => {
-    mockFavorites = [];
+    await click(buttonIn(dialog(), 'Delete'));
+    expect(app.backend.calls('DeleteFavorite')).toEqual([]);
+    await click(buttonIn(document.querySelector('.confirmation-modal-footer'), 'Delete'));
 
-    await renderHook();
-    await clickToggle();
-
-    const saveBtn = document.querySelector<HTMLElement>('[data-testid="modal-save"]');
-    await act(async () => {
-      requireValue(saveBtn, 'expected test value in FavToggle.test.tsx').click();
-      await Promise.resolve();
-    });
-
-    expect(mockAddFavorite).toHaveBeenCalledTimes(1);
+    expect(app.backend.calls('DeleteFavorite')).toEqual([['fav-42']]);
+    expect(favorited()).toBe(false);
   });
 
-  // -------------------------------------------------------------------------
-  // 6. Delete via modal calls deleteFavorite
-  // -------------------------------------------------------------------------
-
-  it('delete via modal calls deleteFavorite', async () => {
-    mockFavorites = [makeFavorite({ id: 'fav-42' })];
-
-    await renderHook();
-    await clickToggle();
-
-    const deleteBtn = document.querySelector<HTMLElement>('[data-testid="modal-delete"]');
-    await act(async () => {
-      requireValue(deleteBtn, 'expected test value in FavToggle.test.tsx').click();
-      await Promise.resolve();
-    });
-
-    expect(mockDeleteFavorite).toHaveBeenCalledWith('fav-42');
-  });
-
-  // -------------------------------------------------------------------------
-  // 7. Modal closes after save
-  // -------------------------------------------------------------------------
-
-  it('modal closes after save', async () => {
-    mockFavorites = [];
-
-    await renderHook();
-    await clickToggle();
-
-    expect(document.querySelector('[data-testid="fav-save-modal"]')).toBeTruthy();
-
-    const saveBtn = document.querySelector<HTMLElement>('[data-testid="modal-save"]');
-    await act(async () => {
-      requireValue(saveBtn, 'expected test value in FavToggle.test.tsx').click();
-      await new Promise((r) => setTimeout(r, 0));
-    });
-
-    expect(document.querySelector('[data-testid="fav-save-modal"]')).toBeNull();
-  });
-
-  // -------------------------------------------------------------------------
-  // 8. Cancel closes modal without saving
-  // -------------------------------------------------------------------------
-
-  it('cancel closes modal without saving', async () => {
-    mockFavorites = [];
-
-    await renderHook();
-    await clickToggle();
-
-    const cancelBtn = document.querySelector<HTMLElement>('[data-testid="modal-cancel"]');
-    await act(async () => {
-      requireValue(cancelBtn, 'expected test value in FavToggle.test.tsx').click();
-      await new Promise((r) => setTimeout(r, 0));
-    });
-
-    expect(document.querySelector('[data-testid="fav-save-modal"]')).toBeNull();
-    expect(mockAddFavorite).not.toHaveBeenCalled();
-  });
-
-  it('applies saved filter text atomically when metadata search is available', async () => {
-    mockPendingFavorite = makeFavorite({
-      filters: {
-        search: 'saved filter',
-        kinds: { mode: 'all' },
-        namespaces: { mode: 'all' },
-        clusters: { mode: 'all' },
-        includeMetadata: true,
-      },
-    });
-    mockSetPendingFavorite.mockImplementationOnce((favorite) => {
-      mockPendingFavorite = favorite;
-    });
-
-    await act(async () => {
-      root.render(<MetadataFavoriteRestoreWrapper />);
-      await Promise.resolve();
-    });
-
-    expect(
-      container.querySelector<HTMLInputElement>('[aria-label="Rendered filter text"]')?.value
-    ).toBe('saved filter');
-  });
-
-  it('restores the saved table settings before consuming the favorite', async () => {
-    const pending = makeFavorite({
-      filters: {
-        search: 'saved pods',
-        kinds: { mode: 'all' },
-        namespaces: { mode: 'all' },
-        clusters: { mode: 'all' },
-        queryFacets: { owners: { mode: 'none' } },
-        includeMetadata: false,
-      },
-      tableState: {
-        sortColumn: 'node',
+  it('keeps case-distinct cluster ids in a saved snapshot', async () => {
+    app.backend.answer('AddFavorite', (saved) => saved);
+    const clusters = { mode: 'some' as const, values: ['Cluster-A', 'cluster-a'] };
+    function GlobalTable() {
+      const { item, modal } = useFavToggle({
+        filters: { ...NO_FILTERS, clusters },
+        sortColumn: null,
         sortDirection: 'asc',
-        columnVisibility: { cpu: false },
-        columnOrder: ['name', 'node', 'cpu'],
+        columnVisibility: {},
+      });
+      return (
+        <div data-probe-table>
+          <button type="button" onClick={item?.type === 'toggle' ? item.onClick : undefined}>
+            Probe heart
+          </button>
+          {modal}
+        </div>
+      );
+    }
+    await mount([], <GlobalTable />);
+
+    await click(buttonIn(view.container.querySelector('[data-probe-table]'), 'Probe heart'));
+    await click(buttonIn(dialog(), 'Save'));
+
+    expect(app.backend.calls('AddFavorite')[0]?.[0].filters.clusters).toEqual(clusters);
+  });
+});
+
+describe('opening a favorite', () => {
+  it('restores the saved filter text, sort, and columns into the view’s table, then matches', async () => {
+    const saved = configFavorite({
+      name: 'Team A recent config',
+      filters: { ...NO_FILTERS, search: 'saved filter', includeMetadata: true },
+      tableState: {
+        sortColumn: 'age',
+        sortDirection: 'desc',
+        columnVisibility: { data: false },
+        columnOrder: ['name', 'kind', 'data', 'age'],
       },
     });
-    mockPendingFavorite = pending;
+    await mount([saved]);
 
-    await act(async () => {
-      root.render(<RestorableTable />);
-      await Promise.resolve();
-    });
+    await openFavorite('Team A recent config');
 
-    expect(tableSetters.filters).toHaveBeenCalledWith(pending.filters);
-    expect(tableSetters.sort).toHaveBeenCalledWith({ key: 'node', direction: 'asc' });
-    expect(tableSetters.visibility).toHaveBeenCalledWith({ cpu: false });
-    expect(tableSetters.order).toHaveBeenCalledWith(['name', 'node', 'cpu']);
-    expect(mockSetPendingFavorite).toHaveBeenCalledWith(null);
+    expect(view.owners().viewState?.activeNamespaceTab).toBe('config');
+    expect(searchText()).toBe('saved filter');
+    expect(metadataSearch()).toBe('true');
+    expect(sortedHeaders()).toEqual(['Age descending']);
+    expect(visibleColumns()).toBe('name,kind,age');
+    expect(favorited()).toBe(true);
   });
 
-  it('leaves a pending favorite to the table that offers favorites', async () => {
-    // An attached table offers no favorites but sits on the same view as the
-    // table the favorite belongs to.
-    mockPendingFavorite = makeFavorite();
+  it('restores a favorite saved unsorted as an unsorted table, then matches', async () => {
+    // The save modal's "None" sort, or hiding the sorted column, saves no sort column.
+    await mount([
+      configFavorite({
+        name: 'Team A unsorted config',
+        tableState: { sortColumn: '', sortDirection: 'asc', columnVisibility: {}, columnOrder: [] },
+      }),
+    ]);
 
-    await act(async () => {
-      root.render(<RestorableTable enabled={false} />);
-      await Promise.resolve();
-    });
+    await openFavorite('Team A unsorted config');
 
-    expect(tableSetters.filters).not.toHaveBeenCalled();
-    expect(tableSetters.sort).not.toHaveBeenCalled();
-    expect(mockSetPendingFavorite).not.toHaveBeenCalled();
+    expect(sortedHeaders()).toEqual([]);
+    expect(favorited()).toBe(true);
   });
 
-  it('restores an explicitly unsorted table', async () => {
-    mockPendingFavorite = makeFavorite();
+  it('leaves an opened favorite to the view’s table when another table offers no favorites', async () => {
+    // An attached table on the same view offers no favorites.
+    const restore = vi.fn();
+    function AttachedTable() {
+      useFavToggle({
+        enabled: false,
+        filters: NO_FILTERS,
+        sortColumn: null,
+        sortDirection: 'asc',
+        columnVisibility: {},
+        hydrated: true,
+        setFilters: restore,
+        setSortConfig: restore,
+      });
+      return null;
+    }
+    app.backend.answer('GetFavorites', () => [
+      configFavorite({ filters: { ...NO_FILTERS, search: 'saved filter' } }),
+    ]);
+    view = await app.mountApp(<AttachedTable />);
 
-    await act(async () => {
-      root.render(<RestorableTable />);
-      await Promise.resolve();
-    });
+    await openFavorite('Team A config');
 
-    expect(tableSetters.sort).toHaveBeenCalledWith(null);
-    expect(tableSetters.order).toHaveBeenCalledWith([]);
+    expect(restore).not.toHaveBeenCalled();
+    expect(searchText()).toBe('saved filter');
   });
 });

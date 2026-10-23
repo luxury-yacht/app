@@ -4,9 +4,11 @@
  * Module state survives from test to test inside one Vitest file. This ledger
  * resets every owner a harness mount can reach that keeps state keyed by
  * cluster, object, transfer, or window identity, through the owner's public API
- * or its existing test hook. docs/plans/real-state-test-harness.md lists what
- * is deliberately left alone (immutable tables, subscriber registries cleared
- * on unmount, warn-once log sets) and which phase adds the remaining hooks.
+ * or its existing test hook (docs/workflows/testing.md). Left alone on purpose:
+ * immutable tables, subscriber registries cleared on unmount, and warn-once
+ * log sets. Known gap: the refresh orchestrator's error-notification dedupe
+ * (refreshErrorNotifier.ts) survives, so a test that asserts a report uses a
+ * message no earlier test in its file used.
  */
 
 import { __clearSearchShortcutTargetsForTest } from '@ui/shortcuts/searchShortcutRegistry';
@@ -27,12 +29,18 @@ import { resetLogViewerPrefsCacheForTesting } from '@/modules/object-panel/compo
 import { resetNodeLogDiscoveryCacheForTesting } from '@/modules/object-panel/components/ObjectPanel/NodeLogs/nodeLogsApi';
 import { resetObjectPanelTabRequestsForTesting } from '@/modules/object-panel/objectPanelTabRequests';
 import { resetAcknowledgedPanelTransfersForTesting } from '@/PanelWindowApp';
+import { setPendingFocusRequest } from '@/shared/components/tables/hooks/useGridTableExternalFocus';
 import { resetGridTablePersistenceCacheForTesting } from '@/shared/components/tables/persistence/gridTablePersistence';
-import { resetGridTableViewRegistryForTests } from '@/shared/components/tables/persistence/gridTableViewRegistry';
+import {
+  listRegisteredGridTableViews,
+  resetGridTableViewRegistryForTests,
+} from '@/shared/components/tables/persistence/gridTableViewRegistry';
 import { __resetScrollbarActivityTrackingForTest } from '@/shared/scrollbars/scrollbarActivity';
 import { errorHandler } from '@/utils/errorHandler';
 
 const DEFAULT_WINDOW_IDENTITY = 'browser-workspace';
+// The app's table views, captured before any test runs.
+const PRODUCTION_GRID_TABLE_VIEWS = listRegisteredGridTableViews();
 
 /** Resets module state after the test's React tree has unmounted. */
 export const resetAppModuleState = (): void => {
@@ -48,7 +56,9 @@ export const resetAppModuleState = (): void => {
   resetFavoritesCacheForTesting();
   resetClusterTabOrderCacheForTesting();
   resetGridTablePersistenceCacheForTesting();
-  resetGridTableViewRegistryForTests();
+  resetGridTableViewRegistryForTests(PRODUCTION_GRID_TABLE_VIEWS);
+  // A navigation's focus request that no table consumed.
+  setPendingFocusRequest(null);
   resetBrokerReadDiagnosticsForTesting();
   resetContainerLogsStreamScopeParamsCacheForTesting();
   resetLogViewerPrefsCacheForTesting();

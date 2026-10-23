@@ -15,10 +15,6 @@ export {
   resetRefreshDomain,
 } from './dataAccess';
 export * from './readers';
-export type {
-  DataAccessAdapter,
-  DataReadRequest,
-  DataRequestReason,
-} from './types';
+export type { DataAccessAdapter, DataRequestReason } from './types';
 export { useRefreshDomainHandle } from './useRefreshDomainHandle';
 export { useScopedRefreshDomainLifecycle } from './useScopedRefreshDomainLifecycle';

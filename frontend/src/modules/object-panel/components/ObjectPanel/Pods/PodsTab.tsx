@@ -157,7 +157,6 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
         (pod) => formatRestartCount(pod.restarts),
         {
           alignData: 'right',
-          sortValue: (pod) => pod.restarts ?? 0,
           getTitle: (pod) => `${pod.restarts ?? 0} restarts`,
           getClassName: getRestartsClassName,
         }

@@ -1,1095 +1,441 @@
 /**
  * frontend/src/modules/browse/components/BrowseView.test.tsx
  *
- * Test suite for the BrowseView component.
- * Covers cluster scope, namespace scope, and all-namespaces scope scenarios.
+ * Browse lists the backend catalog query's page in each scope: cluster-scoped
+ * objects for the cluster, one namespace's objects pinned to it, and every
+ * namespace's objects with a Namespace column under All Namespaces. A row opens
+ * its object with full identity, its menu offers the actions its catalog facts
+ * allow, header sorts and page navigation go to the backend query, and
+ * Download writes every matching row. Each scope keeps its own persisted
+ * table state; only All Namespaces shares the namespace selection, and a
+ * persisted Kind the selected API groups no longer offer is dropped. Query
+ * paging, doorbells, and filter options are covered by useBrowseCatalog.test.tsx.
+ * Runs in the full app, navigated through the sidebar, over a faked backend
+ * (test-utils/appState).
  */
 
-import type { BrowseTableRow } from '@modules/browse/hooks/useBrowseColumns';
-import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import type { NamespaceGridTablePersistenceParams } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
-import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
-import { ALL_MULTISELECT_FILTER } from '@shared/components/dropdowns/multiSelectFilterSelection';
-import type { GridTableFilterState, GridTableProps } from '@shared/components/tables/GridTable';
-import type { UseGridTablePersistenceParams } from '@shared/components/tables/persistence/useGridTablePersistence';
+import { OBJECT_ACTION_IDS, objectActionLabel } from '@shared/actions/objectActionContract';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
-import type {
-  CanonicalRowTestOverrides,
-  CatalogItem,
-  CatalogSnapshotPayload,
-} from '@/core/refresh/types';
-import BrowseView from '@/modules/browse/components/BrowseView';
+import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
+import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@/shared/components/tables/gridTableFilterState';
+import {
+  buildGridTableStorageKey,
+  computeClusterHash,
+  type GridTablePersistedState,
+} from '@/shared/components/tables/persistence/gridTablePersistence';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
 
-type BaseGridTableProps = GridTableProps<BrowseTableRow>;
-type CapturedGridTableProps = BaseGridTableProps & {
-  getCustomContextMenuItems: NonNullable<BaseGridTableProps['getCustomContextMenuItems']>;
-  filters: NonNullable<BaseGridTableProps['filters']> & {
-    options: NonNullable<NonNullable<BaseGridTableProps['filters']>['options']>;
-  };
-  paginationControls?: React.ReactElement<{
-    pagination: {
-      pageIndex: number;
-      pageLimit: number;
-      totalCount: number;
-      totalIsExact: boolean;
-      hasPrevious: boolean;
-      hasMore: boolean;
-    };
-  }>;
-};
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
 
-vi.mock('@core/contexts/FavoritesContext', () => ({
-  useFavorites: () => ({
-    favorites: [],
+const TWO_DAYS_AGO = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
 
-    addFavorite: vi.fn(),
-    updateFavorite: vi.fn(),
-    deleteFavorite: vi.fn(),
-    reorderFavorites: vi.fn(),
-  }),
-  FavoritesProvider: ({ children }: { children: React.ReactNode }) => children,
-}));
-
-vi.mock('@ui/favorites/FavToggle', () => ({
-  useFavToggle: () => ({
-    type: 'toggle',
-    id: 'favorite',
-    icon: null,
-    active: false,
-    onClick: () => undefined,
-    title: 'Save as favorite',
-  }),
-}));
-
-const gridTablePropsRef: { current: CapturedGridTableProps } = {
-  current: null as unknown as CapturedGridTableProps,
-};
-const persistenceArgsRef: {
-  cluster: UseGridTablePersistenceParams<BrowseTableRow> | null;
-  namespace: NamespaceGridTablePersistenceParams<BrowseTableRow> | null;
-} = {
-  cluster: null,
-  namespace: null,
-};
-const makePersistenceFilters = (
-  overrides: Partial<GridTableFilterState> = {}
-): GridTableFilterState => ({
-  search: '',
-  kinds: ALL_MULTISELECT_FILTER,
-  namespaces: ALL_MULTISELECT_FILTER,
-  clusters: ALL_MULTISELECT_FILTER,
-  includeMetadata: false,
-  ...overrides,
+const catalogItem = ({
+  kind,
+  name,
+  namespace,
+  group = '',
+  resource = `${kind.toLowerCase()}s`,
+  actionFacts,
+}: {
+  kind: string;
+  name: string;
+  namespace?: string;
+  group?: string;
+  resource?: string;
+  actionFacts?: CatalogItem['actionFacts'];
+}): CatalogItem => ({
+  ref: {
+    clusterId: dev.clusterId,
+    group,
+    version: 'v1',
+    kind,
+    resource,
+    namespace,
+    name,
+    uid: `${namespace ?? 'cluster'}-${name}`,
+  },
+  resourceVersion: '1',
+  creationTimestamp: TWO_DAYS_AGO,
+  scope: namespace ? 'Namespace' : 'Cluster',
+  actionFacts,
 });
 
-const persistenceFiltersRef: { current: GridTableFilterState } = {
-  current: makePersistenceFilters(),
-};
+const unique = <T,>(values: T[]) => Array.from(new Set(values));
 
-vi.mock('@shared/components/tables/GridTable', async () => {
-  const actual = await vi.importActual<typeof import('@shared/components/tables/GridTable')>(
-    '@shared/components/tables/GridTable'
+/**
+ * The backend's catalog query: the page of `items` the scope's resource scope,
+ * pins, filters, sort, and cursor select. Facets describe the scope before
+ * filtering, except that Kinds follow the selected API groups. Cursors are row
+ * offsets.
+ */
+const catalogPage = (
+  items: CatalogItem[],
+  scope: string,
+  extra: Partial<CatalogSnapshotPayload>
+): CatalogSnapshotPayload => {
+  const query = new URLSearchParams(scope.slice(scope.indexOf('|') + 1));
+  const resourceScope = query.get('resourceScope');
+  const pinned = query.getAll('scopeNamespace');
+  const inScope = items.filter(
+    (item) =>
+      (resourceScope !== 'cluster' || item.scope === 'Cluster') &&
+      (resourceScope !== 'namespace' || item.scope === 'Namespace') &&
+      (pinned.length === 0 || pinned.includes(item.ref.namespace ?? ''))
   );
-  return {
-    ...actual,
-    default: (props: CapturedGridTableProps) => {
-      gridTablePropsRef.current = props;
-      return <div data-testid="grid-table" />;
-    },
-  };
+  const kinds = query.getAll('kind');
+  const namespaces = query.getAll('namespace').filter((value) => value !== 'cluster');
+  const groups = query.getAll('apiGroup');
+  const search = query.get('search') ?? '';
+  const inGroups = inScope.filter(
+    (item) => groups.length === 0 || groups.includes(item.ref.group || '(core)')
+  );
+  const sortKey = query.get('sort') === 'name' ? 'name' : 'kind';
+  const direction = query.get('sortDirection') === 'desc' ? -1 : 1;
+  const matching = inGroups
+    .filter(
+      (item) =>
+        (kinds.length === 0 || kinds.includes(item.ref.kind)) &&
+        (namespaces.length === 0 || namespaces.includes(item.ref.namespace ?? '')) &&
+        item.ref.name.includes(search)
+    )
+    .sort(
+      (left, right) =>
+        direction *
+        `${left.ref[sortKey]}/${left.ref.name}`.localeCompare(
+          `${right.ref[sortKey]}/${right.ref.name}`
+        )
+    );
+  const limit = Number(query.get('limit') ?? 50);
+  const start = Number(query.get('continue') ?? 0);
+  const page = matching.slice(start, start + limit);
+  return makeCatalogSnapshotPayload({
+    clusterId: dev.clusterId,
+    clusterName: dev.clusterName,
+    items: page,
+    total: matching.length,
+    unfilteredTotal: inScope.length,
+    continue: start + limit < matching.length ? String(start + limit) : '',
+    previous: start > 0 ? String(Math.max(0, start - limit)) : '',
+    hasNext: start + limit < matching.length,
+    hasPrevious: start > 0,
+    resourceCount: inScope.length,
+    batchSize: page.length,
+    kinds: unique(inGroups.map((item) => item.ref.kind)).map((kind) => ({
+      kind,
+      namespaced: inGroups.some((item) => item.ref.kind === kind && item.scope === 'Namespace'),
+    })),
+    namespaces: unique(inScope.flatMap((item) => (item.ref.namespace ? [item.ref.namespace] : []))),
+    groups: unique(inScope.map((item) => item.ref.group || '(core)')),
+    ...extra,
+  });
+};
+
+/** Answers every Browse catalog query in dev; the start screen serves its own read. */
+const serveCatalog = (items: CatalogItem[], extra: Partial<CatalogSnapshotPayload> = {}) => {
+  app.snapshots.answer(({ domain, scope }) =>
+    domain === 'catalog' &&
+    scope.startsWith(`${dev.clusterId}|`) &&
+    scope !== `${dev.clusterId}|limit=1`
+      ? catalogPage(items, scope, extra)
+      : undefined
+  );
+};
+
+/** The Browse page queries (not the facet reads), as their query strings. */
+const pageQueries = () =>
+  app.snapshots
+    .reads('catalog')
+    .map((read) => new URLSearchParams(read.scope.slice(read.scope.indexOf('|') + 1)))
+    .filter((query) => query.get('limit') !== '1');
+const lastPageQuery = () =>
+  requireValue(pageQueries().slice(-1)[0], 'expected a Browse catalog query');
+
+/** Seeds the table state the app hydrates from GetGridTablePersistence. */
+const persistTables = async (entries: Record<string, Omit<GridTablePersistedState, 'version'>>) => {
+  const clusterHash = await computeClusterHash(dev.clusterId);
+  const persisted = Object.fromEntries(
+    Object.entries(entries).map(([viewId, state]) => [
+      requireValue(buildGridTableStorageKey({ clusterHash, viewId }), 'expected a storage key'),
+      { version: 3, ...state },
+    ])
+  );
+  app.backend.answer('GetGridTablePersistence', () => persisted as never);
+};
+
+const rows = () => Array.from(view.container.querySelectorAll<HTMLElement>('.gridtable-row'));
+const rowOf = (name: string) =>
+  requireValue(
+    rows().find((row) => row.querySelector('[data-column="name"]')?.textContent?.trim() === name),
+    `expected the ${name} row`
+  );
+const rowNames = () =>
+  rows().map((row) => row.querySelector('[data-column="name"]')?.textContent?.trim());
+const columnKeys = () =>
+  Array.from(view.container.querySelectorAll<HTMLElement>('th[data-column]')).map(
+    (header) => header.dataset.column
+  );
+
+const click = async (element: HTMLElement) => {
+  await act(async () => element.click());
+  await app.settle();
+};
+const clickLabelled = (label: string) =>
+  click(
+    requireValue(
+      view.container.querySelector<HTMLElement>(`[aria-label="${label}"]`),
+      `expected the ${label} control`
+    )
+  );
+
+const menuItems = () =>
+  Array.from(document.body.querySelectorAll<HTMLElement>('[role="menu"] .context-menu-item'));
+const menuLabel = (item: HTMLElement) =>
+  item.querySelector('.context-menu-label')?.textContent?.trim();
+const openRowMenu = async (name: string) => {
+  const cell = requireValue(
+    rowOf(name).querySelector<HTMLElement>('.grid-cell'),
+    'expected a cell'
+  );
+  await act(async () => {
+    cell.dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 })
+    );
+  });
+  await app.settle();
+  return menuItems();
+};
+
+const node = () => catalogItem({ kind: 'Node', name: 'worker-a' });
+const pod = (name: string, namespace: string) => catalogItem({ kind: 'Pod', name, namespace });
+
+beforeEach(() => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['team-a', 'team-b']);
+  app.startScreen(dev);
 });
 
-vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
-  __esModule: true,
-  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
+afterEach(() => {
+  vi.useRealTimers();
+});
 
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({
-    selectedKubeconfig: 'path:context',
-    selectedClusterId: 'cluster-1',
-    selectedClusterIds: ['cluster-1'],
-  }),
-}));
+describe('BrowseView', () => {
+  it('lists the cluster’s cluster-scoped objects from the catalog query, without a Namespace column', async () => {
+    serveCatalog([node(), pod('api', 'team-a')]);
+    view = await app.mountApp();
 
-vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
-  useNamespace: () => ({ setSelectedNamespace: vi.fn() }),
-}));
+    await view.goTo({ clusterView: 'browse' });
 
-vi.mock('@core/contexts/ViewStateContext', () => ({
-  useViewState: () => ({ onNamespaceSelect: vi.fn(), setActiveNamespaceTab: vi.fn() }),
-}));
+    expect(rowNames()).toEqual(['worker-a']);
+    expect(rowOf('worker-a').querySelector('[data-column="age"]')?.textContent?.trim()).toBe('2d');
+    expect(lastPageQuery().get('resourceScope')).toBe('cluster');
+    expect(columnKeys()).toEqual(['kind', 'name', 'api', 'age']);
+  });
 
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: vi.fn() }),
-}));
+  it('pins Namespace Browse to its namespace', async () => {
+    serveCatalog([node(), pod('api', 'team-a'), pod('db', 'team-b')]);
+    view = await app.mountApp();
 
-vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: vi.fn() }),
-}));
+    await view.goTo({ namespace: 'team-a', view: 'browse' });
 
-vi.mock('@/core/capabilities', () => ({
-  getPermissionKey: (
-    kind: string,
-    verb: string,
-    namespace?: string | null,
-    subresource?: string | null,
-    clusterId?: string | null,
-    group?: string | null,
-    version?: string | null
-  ) =>
-    [
-      clusterId ?? '',
-      group ?? '',
-      version ?? '',
-      kind,
-      namespace ?? '',
-      verb,
-      subresource ?? '',
-    ].join('|'),
-  queryKindPermissions: vi.fn(),
-  useUserPermissions: () => {
-    const permissions = new Map();
-    permissions.get = () => ({ allowed: true, pending: false });
-    return permissions;
-  },
-}));
+    expect(rowNames()).toEqual(['api']);
+    expect(lastPageQuery().getAll('scopeNamespace')).toEqual(['team-a']);
+    expect(columnKeys()).not.toContain('namespace');
+  });
 
-const refreshMocks = vi.hoisted(() => ({
-  orchestrator: {
-    acquireScopedDomainLease: vi.fn(),
-    releaseScopedDomainLease: vi.fn(),
-    fetchScopedDomain: vi.fn().mockResolvedValue(undefined),
-  },
-  useRefreshScopedDomain: vi.fn(),
-  catalogDomain: {
-    status: 'idle' as unknown,
-    data: null as unknown,
-    scope: undefined as string | undefined,
-  },
-  scopedDomains: new Map<string, unknown>(),
-}));
+  it('lists every namespace’s objects under All Namespaces, with a Namespace column that opens the namespace', async () => {
+    app.serveTable(dev, 'namespace-workloads');
+    serveCatalog([node(), pod('api', 'team-a'), pod('db', 'team-b')]);
+    view = await app.mountApp();
 
-const persistenceMocks = vi.hoisted(() => ({
-  clusterSortConfig: {
-    current: { key: 'kind', direction: 'asc' } as {
-      key: string;
-      direction: 'asc' | 'desc' | null;
-    } | null,
-  },
-  clusterSetSortConfig: vi.fn(),
-  clusterSetFilters: vi.fn(),
-  namespaceOnSortChange: vi.fn(),
-  namespaceSetFilters: vi.fn(),
-}));
+    await view.goTo({ namespace: 'namespace:all', view: 'browse' });
 
-vi.mock('@/core/refresh', () => ({
-  refreshOrchestrator: refreshMocks.orchestrator,
-  useRefreshScopedDomain: (...args: unknown[]) => refreshMocks.useRefreshScopedDomain(...args),
-}));
+    expect(rowNames()).toEqual(['api', 'db']);
+    expect(columnKeys()).toContain('namespace');
+    await click(
+      requireValue(
+        rowOf('db').querySelector<HTMLElement>('[data-column="namespace"] button'),
+        'expected the namespace link'
+      )
+    );
+    const owners = view.owners();
+    expect(owners.viewState?.viewType).toBe('namespace');
+    expect(owners.viewState?.activeNamespaceTab).toBe('workloads');
+    expect(owners.namespace.selectedNamespace).toBe('team-b');
+  });
 
-vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
-  useGridTablePersistence: (params: UseGridTablePersistenceParams<BrowseTableRow>) => {
-    persistenceArgsRef.cluster = params;
-    return {
-      sortConfig: persistenceMocks.clusterSortConfig.current,
-      setSortConfig: persistenceMocks.clusterSetSortConfig,
-      columnWidths: null,
-      setColumnWidths: vi.fn(),
-      columnVisibility: null,
-      setColumnVisibility: vi.fn(),
-      filters: persistenceFiltersRef.current,
-      setFilters: persistenceMocks.clusterSetFilters,
-      pageSize: null,
-      setPageSize: vi.fn(),
-      resetState: vi.fn(),
-      hydrated: true,
-      storageKey: 'gridtable:v1:test',
-    };
-  },
-}));
-
-vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
-  useNamespaceGridTablePersistence: (
-    params: NamespaceGridTablePersistenceParams<BrowseTableRow>
-  ) => {
-    persistenceArgsRef.namespace = params;
-    const persistence = {
-      sortConfig: { key: 'kind', direction: 'asc' },
-      setSortConfig: persistenceMocks.namespaceOnSortChange,
-      columnWidths: null,
-      setColumnWidths: vi.fn(),
-      columnVisibility: null,
-      setColumnVisibility: vi.fn(),
-      filters: persistenceFiltersRef.current,
-      setFilters: persistenceMocks.namespaceSetFilters,
-      pageSize: null,
-      setPageSize: vi.fn(),
-      resetState: vi.fn(),
-      hydrated: true,
-    };
-    return {
-      ...persistence,
-      onSortChange: persistenceMocks.namespaceOnSortChange,
-      isNamespaceScoped: true,
-      persistence,
-    };
-  },
-}));
-
-const catalogItem = (overrides: CanonicalRowTestOverrides<CatalogItem>): CatalogItem => {
-  const { ref, ...row } = overrides;
-  return {
-    ref: {
-      clusterId: 'cluster-1',
+  it('opens the focused row’s object in its panel with full identity on Enter', async () => {
+    const api = pod('api', 'team-a');
+    app.servePanel(dev, {
       group: '',
       version: 'v1',
       kind: 'Pod',
-      resource: 'pods',
-      namespace: 'default',
-      name: 'pod-a',
-      uid: 'pod-a',
-      ...ref,
-    },
-    resourceVersion: '1',
-    creationTimestamp: '2026-01-01T00:00:00Z',
-    scope: 'Namespace',
-    ...row,
-  };
-};
+      namespace: 'team-a',
+      name: 'api',
+    });
+    serveCatalog([api]);
+    view = await app.mountApp();
+    await view.goTo({ namespace: 'team-a', view: 'browse' });
+    const table = requireValue(
+      view.container.querySelector<HTMLElement>('table[tabindex="0"]'),
+      'expected the Browse table'
+    );
 
-const sortableKeys = (): string[] =>
-  (gridTablePropsRef.current?.columns ?? [])
-    .filter((column) => column.sortable !== false)
-    .map((column) => column.key)
-    .sort((left: string, right: string) => left.localeCompare(right));
+    await act(async () => table.focus());
+    await act(async () => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+      );
+    });
+    await app.settle();
 
-const catalogPayload = (
-  items: CatalogItem[],
-  overrides: Partial<CatalogSnapshotPayload> = {}
-): CatalogSnapshotPayload =>
-  makeCatalogSnapshotPayload({
-    clusterId: 'cluster-1',
-    clusterName: 'Cluster 1',
-    items,
-    continue: '',
-    total: items.length,
-    unfilteredTotal: items.length,
-    totalIsExact: true,
-    resourceCount: items.length,
-    kinds: [
-      { kind: 'Node', namespaced: false },
-      { kind: 'Pod', namespaced: true },
-    ],
-    namespaces: Array.from(
-      new Set(
-        items
-          .map((item) => item.ref.namespace)
-          .filter((namespace): namespace is string => Boolean(namespace))
+    expect(view.openPanels()).toEqual([
+      {
+        clusterId: dev.clusterId,
+        clusterName: dev.clusterName,
+        group: '',
+        version: 'v1',
+        kind: 'Pod',
+        namespace: 'team-a',
+        name: 'api',
+      },
+    ]);
+  });
+
+  it('offers the actions each row’s catalog facts allow', async () => {
+    serveCatalog([
+      catalogItem({
+        kind: 'Deployment',
+        name: 'web',
+        namespace: 'team-a',
+        group: 'apps',
+        actionFacts: { hpaManaged: true, desiredReplicas: 3 },
+      }),
+      catalogItem({
+        kind: 'CronJob',
+        name: 'nightly',
+        namespace: 'team-a',
+        group: 'batch',
+        actionFacts: { status: 'Suspended' },
+      }),
+    ]);
+    view = await app.mountApp();
+    await view.goTo({ namespace: 'team-a', view: 'browse' });
+
+    // An autoscaler owns the replica count, so only Scale to zero is offered.
+    const deploymentMenu = (await openRowMenu('web')).map(menuLabel);
+    expect(deploymentMenu).toContain(objectActionLabel(OBJECT_ACTION_IDS.scaleToZero));
+    expect(deploymentMenu).not.toContain(objectActionLabel(OBJECT_ACTION_IDS.scale));
+
+    const cronMenu = await openRowMenu('nightly');
+    expect(cronMenu.map(menuLabel)).toContain(objectActionLabel(OBJECT_ACTION_IDS.resume));
+    const trigger = requireValue(
+      cronMenu.find((item) => menuLabel(item) === objectActionLabel(OBJECT_ACTION_IDS.triggerNow)),
+      'expected Trigger Now'
+    );
+    expect(trigger.getAttribute('aria-disabled')).toBe('true');
+  });
+
+  it('sorts and pages through the backend query', async () => {
+    app.preferences({ defaultTablePageSize: 25 });
+    serveCatalog(
+      Array.from({ length: 30 }, (_, index) =>
+        pod(`pod-${String(index).padStart(2, '0')}`, 'team-a')
       )
-    ),
-    facetsExact: true,
-    batchIndex: 0,
-    batchSize: items.length,
-    totalBatches: 1,
-    isFinal: true,
-    ...overrides,
+    );
+    view = await app.mountApp();
+    await view.goTo({ namespace: 'team-a', view: 'browse' });
+    expect(rows()).toHaveLength(25);
+
+    await clickLabelled('Sort by Name');
+    expect(lastPageQuery().get('sort')).toBe('name');
+    expect(rowNames()[0]).toBe('pod-00');
+
+    await clickLabelled('Next page');
+    expect(lastPageQuery().get('continue')).toBe('25');
+    expect(rowNames()).toEqual(['pod-25', 'pod-26', 'pod-27', 'pod-28', 'pod-29']);
   });
 
-describe('BrowseView', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  it('downloads every matching row, not just the shown page', async () => {
+    app.preferences({ defaultTablePageSize: 25 });
+    app.backend.answer('SaveCsvFile', (filename) => ({ path: `/tmp/${filename}`, bytes: 1 }));
+    serveCatalog(Array.from({ length: 30 }, (_, index) => pod(`pod-${index}`, 'team-a')));
+    view = await app.mountApp();
+    await view.goTo({ namespace: 'team-a', view: 'browse' });
 
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    gridTablePropsRef.current = null as unknown as CapturedGridTableProps;
-    refreshMocks.orchestrator.acquireScopedDomainLease.mockReset();
-    refreshMocks.orchestrator.releaseScopedDomainLease.mockReset();
-    refreshMocks.orchestrator.fetchScopedDomain.mockReset().mockResolvedValue(undefined);
-    refreshMocks.useRefreshScopedDomain.mockReset();
-    refreshMocks.catalogDomain.status = 'idle';
-    refreshMocks.catalogDomain.data = null;
-    refreshMocks.catalogDomain.scope = undefined;
-    refreshMocks.scopedDomains.clear();
-    refreshMocks.useRefreshScopedDomain.mockImplementation((domain: string, scope: string) => {
-      void domain;
-      return refreshMocks.scopedDomains.get(scope) ?? refreshMocks.catalogDomain;
-    });
-    persistenceArgsRef.cluster = null;
-    persistenceArgsRef.namespace = null;
-    persistenceMocks.clusterSortConfig.current = { key: 'kind', direction: 'asc' };
-    persistenceMocks.clusterSetSortConfig.mockReset();
-    persistenceMocks.clusterSetFilters.mockReset();
-    persistenceMocks.namespaceOnSortChange.mockReset();
-    persistenceMocks.namespaceSetFilters.mockReset();
-    persistenceFiltersRef.current = makePersistenceFilters();
+    await clickLabelled('Download all matching rows');
+    await click(
+      requireValue(
+        Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
+          (item) => item.textContent?.trim() === 'Save to File'
+        ),
+        'expected Save to File'
+      )
+    );
+
+    const [[, csv]] = app.backend.calls('SaveCsvFile');
+    expect(csv.trim().split('\n')).toHaveLength(31);
   });
 
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-    vi.useRealTimers();
-  });
-
-  describe('Cluster scope (namespace=undefined)', () => {
-    it('renders the first cluster-scoped page directly from the catalog query payload', async () => {
-      const node = catalogItem({
-        ref: {
-          kind: 'Node',
-          resource: 'nodes',
-          namespace: undefined,
-          name: 'query-node',
-          uid: 'node-1',
+  it('keeps each scope’s own table state, sharing only the All Namespaces namespace selection', async () => {
+    await persistTables({
+      browse: {
+        filters: { ...DEFAULT_GRID_TABLE_FILTER_STATE, kinds: { mode: 'some', values: ['Node'] } },
+      },
+      // The namespace selection every All Namespaces view shares (useGridTablePersistence.ts).
+      'shared-namespace-filter': {
+        filters: {
+          ...DEFAULT_GRID_TABLE_FILTER_STATE,
+          namespaces: { mode: 'some', values: ['team-b'] },
         },
-
-        scope: 'Cluster',
-      });
-      refreshMocks.catalogDomain.status = 'ready';
-      refreshMocks.catalogDomain.scope =
-        'cluster-1|limit=50&resourceScope=cluster&namespace=cluster';
-      refreshMocks.catalogDomain.data = catalogPayload([node], {
-        kinds: [
-          { kind: 'Node', namespaced: false },
-          { kind: 'Pod', namespaced: true },
-        ],
-      });
-
-      await act(async () => {
-        root.render(<BrowseView namespace={undefined} />);
-        await Promise.resolve();
-      });
-
-      expect(gridTablePropsRef.current?.data).toEqual([
-        expect.objectContaining({
-          scope: 'Cluster',
-          ref: expect.objectContaining({
-            clusterId: 'cluster-1',
-            group: '',
-            version: 'v1',
-            kind: 'Node',
-            name: 'query-node',
-          }),
-        }),
-      ]);
+      },
     });
+    serveCatalog([node(), pod('api', 'team-a'), pod('db', 'team-b')]);
+    view = await app.mountApp();
 
-    it('sets the catalog scope and triggers a manual refresh on mount', async () => {
-      await act(async () => {
-        root.render(<BrowseView />);
-        await Promise.resolve();
-      });
+    await view.goTo({ clusterView: 'browse' });
+    expect(lastPageQuery().getAll('kind')).toEqual(['Node']);
+    expect(lastPageQuery().getAll('namespace')).toEqual(['cluster']);
 
-      expect(refreshMocks.orchestrator.acquireScopedDomainLease).toHaveBeenCalledWith(
-        'catalog',
-        'cluster-1|limit=50&resourceScope=cluster&namespace=cluster',
-        { demand: 'query', preserveState: false }
-      );
-      expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenCalledWith(
-        'catalog',
-        'cluster-1|limit=50&resourceScope=cluster&namespace=cluster',
-        expect.objectContaining({ intent: 'startup' })
-      );
-    });
-
-    it('hides namespace column for cluster scope (cluster-scoped objects only)', async () => {
-      await act(async () => {
-        root.render(<BrowseView namespace={undefined} />);
-        await Promise.resolve();
-      });
-
-      // Cluster scope only shows cluster-scoped objects, so namespace column is hidden
-      const columns = gridTablePropsRef.current?.columns ?? [];
-      const hasNamespaceColumn = columns.some((column) => column.key === 'namespace');
-      expect(hasNamespaceColumn).toBe(false);
-    });
-
-    it('publishes only catalog-backed sortable keys for cluster scope', async () => {
-      await act(async () => {
-        root.render(<BrowseView namespace={undefined} />);
-        await Promise.resolve();
-      });
-
-      expect(sortableKeys()).toEqual(['age', 'api', 'kind', 'name']);
-    });
-
-    it('shows API identity without presenting action state as a Status column', async () => {
-      const deployment = catalogItem({
-        ref: {
-          kind: 'Deployment',
-          group: 'apps',
-          version: 'v1',
-          resource: 'deployments',
-          namespace: undefined,
-          name: 'api',
-        },
-
-        scope: 'Cluster',
-        actionFacts: { status: 'Available' },
-      });
-      refreshMocks.catalogDomain.status = 'ready';
-      refreshMocks.catalogDomain.scope =
-        'cluster-1|limit=50&resourceScope=cluster&namespace=cluster';
-      refreshMocks.catalogDomain.data = catalogPayload([deployment]);
-
-      await act(async () => {
-        root.render(<BrowseView />);
-        await Promise.resolve();
-      });
-
-      expect(gridTablePropsRef.current.data[0]).toEqual(
-        expect.objectContaining({ apiDisplay: 'apps/v1', actionFacts: { status: 'Available' } })
-      );
-      expect(gridTablePropsRef.current.columns.map((column) => column.key)).toEqual([
-        'kind',
-        'name',
-        'api',
-        'age',
-      ]);
-      expect(gridTablePropsRef.current.columns.find((column) => column.key === 'api')).toEqual(
-        expect.objectContaining({ sortable: true })
-      );
-      expect(
-        gridTablePropsRef.current.columns.find((column) => column.key === 'status')
-      ).toBeUndefined();
-      expect(sortableKeys()).toEqual(['age', 'api', 'kind', 'name']);
-    });
-
-    it('renders Age from creationTimestamp and updates without catalog row replacement', async () => {
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date('2026-01-01T00:00:10Z'));
-      const node = catalogItem({
-        ref: {
-          kind: 'Node',
-          resource: 'nodes',
-          namespace: undefined,
-          name: 'query-node',
-          uid: 'node-1',
-        },
-
-        scope: 'Cluster',
-        creationTimestamp: '2026-01-01T00:00:00Z',
-      });
-      refreshMocks.catalogDomain.status = 'ready';
-      refreshMocks.catalogDomain.scope =
-        'cluster-1|limit=50&resourceScope=cluster&namespace=cluster';
-      refreshMocks.catalogDomain.data = catalogPayload([node]);
-
-      await act(async () => {
-        root.render(<BrowseView namespace={undefined} />);
-        await Promise.resolve();
-      });
-
-      const row = gridTablePropsRef.current.data[0];
-      const ageColumn = requireValue(
-        gridTablePropsRef.current.columns.find((column) => column.key === 'age'),
-        'expected the browse age column'
-      );
-      const ageContainer = document.createElement('div');
-      document.body.appendChild(ageContainer);
-      const ageRoot = ReactDOM.createRoot(ageContainer);
-
-      try {
-        await act(async () => {
-          ageRoot.render(ageColumn.render(row));
-          await Promise.resolve();
-        });
-
-        expect(ageContainer.textContent).toBe('10s');
-
-        await act(async () => {
-          vi.advanceTimersByTime(1000);
-          await Promise.resolve();
-        });
-
-        expect(ageContainer.textContent).toBe('11s');
-      } finally {
-        act(() => ageRoot.unmount());
-        ageContainer.remove();
-      }
-    });
-
-    it('publishes header sort changes to cluster browse persistence when no sort is hydrated', async () => {
-      persistenceMocks.clusterSortConfig.current = null;
-
-      await act(async () => {
-        root.render(<BrowseView namespace={undefined} />);
-        await Promise.resolve();
-      });
-
-      act(() => {
-        gridTablePropsRef.current?.onSort?.('name');
-      });
-
-      expect(persistenceMocks.clusterSetSortConfig).toHaveBeenCalledWith({
-        key: 'name',
-        direction: 'asc',
-      });
-    });
-
-    it('hides namespace filtering for cluster scope (cluster-scoped objects only)', async () => {
-      await act(async () => {
-        root.render(<BrowseView namespace={undefined} />);
-        await Promise.resolve();
-      });
-
-      // Cluster scope only shows cluster-scoped objects, so namespace dropdown is hidden
-      expect(gridTablePropsRef.current?.filters?.options?.showNamespaceDropdown).toBe(false);
-    });
-
-    it('uses the cluster browse persistence id', async () => {
-      await act(async () => {
-        root.render(<BrowseView namespace={undefined} />);
-        await Promise.resolve();
-      });
-
-      expect(persistenceArgsRef.cluster?.viewId).toBe('browse');
-    });
-
-    it('enables only cluster persistence for cluster browse', async () => {
-      await act(async () => {
-        root.render(<BrowseView namespace={undefined} />);
-        await Promise.resolve();
-      });
-
-      expect(persistenceArgsRef.cluster?.enabled).toBe(true);
-      expect(persistenceArgsRef.namespace?.enabled).toBe(false);
-    });
-
-    it('does not apply the All Namespaces selection to cluster-scoped objects', async () => {
-      await act(async () => {
-        root.render(<BrowseView namespace={undefined} />);
-        await Promise.resolve();
-      });
-
-      expect(persistenceArgsRef.cluster?.shareNamespaceFilter ?? false).toBe(false);
-    });
+    await view.goTo({ namespace: 'namespace:all', view: 'browse' });
+    expect(lastPageQuery().getAll('kind')).toEqual([]);
+    expect(lastPageQuery().getAll('namespace')).toEqual(['team-b']);
+    expect(rowNames()).toEqual(['db']);
   });
 
-  describe('Namespace scope (namespace=specific)', () => {
-    it('renders the first namespace page directly from the catalog query payload', async () => {
-      refreshMocks.catalogDomain.status = 'ready';
-      refreshMocks.catalogDomain.scope =
-        'cluster-1|limit=50&resourceScope=namespace&namespace=team-a&scopeNamespace=team-a';
-      refreshMocks.catalogDomain.data = catalogPayload([
-        catalogItem({ ref: { namespace: 'team-a', name: 'query-pod', uid: 'pod-1' } }),
-      ]);
-
-      await act(async () => {
-        root.render(<BrowseView namespace="team-a" />);
-        await Promise.resolve();
-      });
-
-      expect(gridTablePropsRef.current?.data).toEqual([
-        expect.objectContaining({
-          namespaceDisplay: 'team-a',
-          ref: expect.objectContaining({
-            clusterId: 'cluster-1',
-            group: '',
-            version: 'v1',
-            kind: 'Pod',
-            namespace: 'team-a',
-            name: 'query-pod',
-          }),
-        }),
-      ]);
-    });
-
-    it('hides namespace column for namespace scope', async () => {
-      await act(async () => {
-        root.render(<BrowseView namespace="default" />);
-        await Promise.resolve();
-      });
-
-      // Check that columns do not include namespace column
-      const columns = gridTablePropsRef.current?.columns ?? [];
-      const hasNamespaceColumn = columns.some((column) => column.key === 'namespace');
-      expect(hasNamespaceColumn).toBe(false);
-    });
-
-    it('omits the Status column for namespace scope', async () => {
-      await act(async () => {
-        root.render(<BrowseView namespace="default" />);
-        await Promise.resolve();
-      });
-
-      expect(gridTablePropsRef.current.columns.some((column) => column.key === 'status')).toBe(
-        false
-      );
-    });
-
-    it('disables namespace filtering for namespace scope', async () => {
-      await act(async () => {
-        root.render(<BrowseView namespace="default" />);
-        await Promise.resolve();
-      });
-
-      expect(gridTablePropsRef.current?.filters?.options?.showNamespaceDropdown).toBe(false);
-    });
-
-    it('pins to the specified namespace', async () => {
-      await act(async () => {
-        root.render(<BrowseView namespace="kube-system" />);
-        await Promise.resolve();
-      });
-
-      // The scope should include the pinned namespace
-      expect(refreshMocks.orchestrator.acquireScopedDomainLease).toHaveBeenCalledWith(
-        'catalog',
-        'cluster-1|limit=50&resourceScope=namespace&namespace=kube-system&scopeNamespace=kube-system',
-        { demand: 'query', preserveState: false }
-      );
-    });
-
-    it('enables only namespace persistence for namespace browse', async () => {
-      await act(async () => {
-        root.render(<BrowseView namespace="default" />);
-        await Promise.resolve();
-      });
-
-      expect(persistenceArgsRef.cluster?.enabled).toBe(false);
-      expect(persistenceArgsRef.namespace?.enabled).toBe(true);
-    });
-  });
-
-  describe('All Namespaces scope', () => {
-    it('renders the first all-namespaces page directly from the catalog query payload', async () => {
-      refreshMocks.catalogDomain.status = 'ready';
-      refreshMocks.catalogDomain.scope = 'cluster-1|limit=50';
-      refreshMocks.catalogDomain.data = catalogPayload([
-        catalogItem({ ref: { namespace: 'team-b', name: 'query-all-pod', uid: 'pod-all-1' } }),
-      ]);
-
-      await act(async () => {
-        root.render(<BrowseView namespace={ALL_NAMESPACES_SCOPE} />);
-        await Promise.resolve();
-      });
-
-      expect(gridTablePropsRef.current?.data).toEqual([
-        expect.objectContaining({
-          namespaceDisplay: 'team-b',
-          ref: expect.objectContaining({
-            clusterId: 'cluster-1',
-            group: '',
-            version: 'v1',
-            kind: 'Pod',
-            namespace: 'team-b',
-            name: 'query-all-pod',
-          }),
-        }),
-      ]);
-    });
-
-    it('uses a distinct persistence id from cluster browse', async () => {
-      await act(async () => {
-        root.render(<BrowseView namespace={ALL_NAMESPACES_SCOPE} />);
-        await Promise.resolve();
-      });
-
-      expect(persistenceArgsRef.cluster?.viewId).toBe('all-namespaces-browse');
-    });
-
-    it('shares the Namespaces selection with the other All Namespaces views', async () => {
-      await act(async () => {
-        root.render(<BrowseView namespace={ALL_NAMESPACES_SCOPE} />);
-        await Promise.resolve();
-      });
-
-      expect(persistenceArgsRef.cluster?.shareNamespaceFilter).toBe(true);
-    });
-
-    it('enables only cluster persistence for all-namespaces browse', async () => {
-      await act(async () => {
-        root.render(<BrowseView namespace={ALL_NAMESPACES_SCOPE} />);
-        await Promise.resolve();
-      });
-
-      expect(persistenceArgsRef.cluster?.enabled).toBe(true);
-      expect(persistenceArgsRef.namespace?.enabled).toBe(false);
-    });
-
-    it('shows namespace column for all-namespaces scope', async () => {
-      await act(async () => {
-        root.render(<BrowseView namespace={ALL_NAMESPACES_SCOPE} />);
-        await Promise.resolve();
-      });
-
-      // Check that columns include namespace column
-      const columns = gridTablePropsRef.current?.columns ?? [];
-      const hasNamespaceColumn = columns.some((column) => column.key === 'namespace');
-      expect(hasNamespaceColumn).toBe(true);
-      expect(columns.some((column) => column.key === 'status')).toBe(false);
-    });
-
-    it('publishes only catalog-backed sortable keys for all-namespaces scope', async () => {
-      await act(async () => {
-        root.render(<BrowseView namespace={ALL_NAMESPACES_SCOPE} />);
-        await Promise.resolve();
-      });
-
-      expect(sortableKeys()).toEqual(['age', 'api', 'kind', 'name', 'namespace']);
-    });
-
-    it('enables namespace filtering for all-namespaces scope', async () => {
-      await act(async () => {
-        root.render(<BrowseView namespace={ALL_NAMESPACES_SCOPE} />);
-        await Promise.resolve();
-      });
-
-      expect(gridTablePropsRef.current?.filters?.options?.showNamespaceDropdown).toBe(true);
-    });
-
-    it('publishes API groups without a redundant resource-scope control or hidden filter', async () => {
-      persistenceFiltersRef.current = makePersistenceFilters({
-        queryFacets: { resourceScopes: { mode: 'some', values: ['Cluster'] } },
-      });
-      refreshMocks.catalogDomain.status = 'ready';
-      refreshMocks.catalogDomain.data = catalogPayload([], {
-        groups: ['(core)', 'apps'],
-        resourceScopes: ['Namespace'],
-      });
-
-      await act(async () => {
-        root.render(<BrowseView namespace={ALL_NAMESPACES_SCOPE} />);
-        await Promise.resolve();
-      });
-
-      expect(gridTablePropsRef.current?.filters?.options?.queryFacets).toEqual([
-        {
-          key: 'apiGroups',
-          label: 'API groups',
-          placeholder: 'All API groups',
-          options: [
-            { value: '(core)', label: 'core' },
-            { value: 'apps', label: 'apps' },
-          ],
-          searchable: true,
-          bulkActions: true,
-          placement: 'before-kinds',
-          invalidates: ['kinds'],
-        },
-      ]);
-      expect(persistenceArgsRef.cluster?.filterOptions?.queryFacets).toEqual({ apiGroups: [] });
-      expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenCalled();
-      for (const [, scope] of refreshMocks.orchestrator.fetchScopedDomain.mock.calls) {
-        expect(scope).not.toContain('resourceScopeFilter');
-      }
-    });
-
-    it('prunes a persisted Kind that is unavailable in the selected API groups', async () => {
-      persistenceFiltersRef.current = makePersistenceFilters({
-        kinds: { mode: 'some', values: ['Pod'] },
-        queryFacets: { apiGroups: { mode: 'some', values: ['apps'] } },
-      });
-      refreshMocks.catalogDomain.status = 'ready';
-      refreshMocks.catalogDomain.data = catalogPayload([], {
-        kinds: [{ kind: 'Deployment', namespaced: true }],
-        groups: ['(core)', 'apps'],
-      });
-
-      await act(async () => {
-        root.render(<BrowseView namespace={ALL_NAMESPACES_SCOPE} />);
-        await Promise.resolve();
-      });
-
-      expect(persistenceMocks.clusterSetFilters).toHaveBeenCalledWith(
-        expect.objectContaining({
-          kinds: ALL_MULTISELECT_FILTER,
-          queryFacets: { apiGroups: { mode: 'some', values: ['apps'] } },
-        })
-      );
-    });
-
-    it('retains a persisted Kind that is available in the selected API groups', async () => {
-      persistenceFiltersRef.current = makePersistenceFilters({
-        kinds: { mode: 'some', values: ['Deployment'] },
-        queryFacets: { apiGroups: { mode: 'some', values: ['apps'] } },
-      });
-      refreshMocks.catalogDomain.status = 'ready';
-      refreshMocks.catalogDomain.data = catalogPayload([], {
-        kinds: [{ kind: 'Deployment', namespaced: true }],
-        groups: ['(core)', 'apps'],
-      });
-
-      await act(async () => {
-        root.render(<BrowseView namespace={ALL_NAMESPACES_SCOPE} />);
-        await Promise.resolve();
-      });
-
-      expect(persistenceMocks.clusterSetFilters).not.toHaveBeenCalled();
-    });
-
-    it('keeps kind and namespace filter options stable while active browse filters change', async () => {
-      persistenceFiltersRef.current = makePersistenceFilters({
-        search: 'api',
-        kinds: { mode: 'some', values: ['Pod'] },
-        namespaces: { mode: 'some', values: ['default'] },
-      });
-      refreshMocks.scopedDomains.set(
-        'cluster-1|limit=50&resourceScope=namespace&search=api&kind=Pod&namespace=default',
-        {
-          status: 'ready',
-          data: {
-            items: [],
-            kinds: [{ kind: 'Pod', namespaced: true }],
-            namespaces: ['default'],
+  it.each([
+    { persistedKind: 'Pod', queriedKinds: [] },
+    { persistedKind: 'Deployment', queriedKinds: ['Deployment'] },
+  ])(
+    'queries a persisted $persistedKind only while the selected API groups offer it',
+    async ({ persistedKind, queriedKinds }) => {
+      await persistTables({
+        'all-namespaces-browse': {
+          filters: {
+            ...DEFAULT_GRID_TABLE_FILTER_STATE,
+            kinds: { mode: 'some', values: [persistedKind] },
+            queryFacets: { apiGroups: { mode: 'some', values: ['apps'] } },
           },
-          scope: 'cluster-1|limit=50&resourceScope=namespace&search=api&kind=Pod&namespace=default',
-        }
-      );
-      refreshMocks.scopedDomains.set('cluster-1|limit=1&resourceScope=namespace', {
-        status: 'ready',
-        data: {
-          items: [],
-          kinds: [
-            { kind: 'Deployment', namespaced: true },
-            { kind: 'Pod', namespaced: true },
-          ],
-          namespaces: ['default', 'kube-system'],
         },
-        scope: 'cluster-1|limit=1&resourceScope=namespace',
       });
-
-      await act(async () => {
-        root.render(<BrowseView namespace={ALL_NAMESPACES_SCOPE} />);
-        await Promise.resolve();
-      });
-
-      expect(gridTablePropsRef.current?.filters?.options?.kinds).toEqual(['Deployment', 'Pod']);
-      expect(gridTablePropsRef.current?.filters?.options?.namespaces).toEqual([
-        'default',
-        'kube-system',
+      serveCatalog([
+        catalogItem({ kind: 'Deployment', name: 'web', namespace: 'team-a', group: 'apps' }),
+        pod('api', 'team-a'),
       ]);
-    });
-  });
+      view = await app.mountApp();
 
-  describe('Row cap UI', () => {
-    it('omits the pagination footer when the exact result has 25 items', async () => {
-      refreshMocks.catalogDomain.scope =
-        'cluster-1|limit=50&resourceScope=cluster&namespace=cluster';
-      refreshMocks.catalogDomain.data = {
-        items: [
-          catalogItem({
-            ref: {
-              uid: '1',
-              kind: 'Node',
-              resource: 'nodes',
-              name: 'node-a',
-              namespace: undefined,
-            },
-            scope: 'Cluster',
-            resourceVersion: '1',
-            creationTimestamp: new Date().toISOString(),
-          }),
-        ],
-        continue: '',
-        batchSize: 25,
-        total: 25,
-      };
-      refreshMocks.catalogDomain.status = 'ready';
+      await view.goTo({ namespace: 'namespace:all', view: 'browse' });
 
-      await act(async () => {
-        root.render(<BrowseView namespace={undefined} />);
-        await Promise.resolve();
-      });
-
-      expect(gridTablePropsRef.current.paginationControls).toBeNull();
-    });
-
-    it('renders query pagination in the table footer with the filter-feedback banner enabled', async () => {
-      refreshMocks.catalogDomain.scope =
-        'cluster-1|limit=50&resourceScope=cluster&namespace=cluster';
-      refreshMocks.catalogDomain.data = {
-        items: [
-          catalogItem({
-            ref: {
-              uid: '1',
-              kind: 'Node',
-              resource: 'nodes',
-              name: 'node-a',
-              namespace: undefined,
-            },
-            scope: 'Cluster',
-            resourceVersion: '1',
-            creationTimestamp: new Date().toISOString(),
-          }),
-        ],
-        continue: '200',
-        batchSize: 200,
-        total: 1200,
-      };
-      refreshMocks.catalogDomain.status = 'ready';
-
-      await act(async () => {
-        root.render(<BrowseView namespace={undefined} />);
-        await Promise.resolve();
-      });
-
-      expect(gridTablePropsRef.current.data).toHaveLength(1);
-      // Pagination totals live in the footer; the filter chip's "Showing N of M items"
-      // banner renders only while a narrowing filter is active (complementary, not
-      // a duplicate top count) — consistent with every other view.
-      expect(gridTablePropsRef.current.paginationControls?.props).toMatchObject({
-        pagination: {
-          pageIndex: 1,
-          pageLimit: 50,
-          totalCount: 1200,
-          totalIsExact: true,
-          hasPrevious: false,
-          hasMore: true,
-        },
-      });
-      // Modified-arrow page navigation mirrors the footer's gating.
-      expect(typeof gridTablePropsRef.current.onPagePrevious).toBe('function');
-      expect(typeof gridTablePropsRef.current.onPageNext).toBe('function');
-      expect(gridTablePropsRef.current.canPagePrevious).toBe(false);
-      expect(gridTablePropsRef.current.canPageNext).toBe(true);
-      expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenCalledTimes(2);
-      expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenNthCalledWith(
-        1,
-        'catalog',
-        'cluster-1|limit=50&resourceScope=cluster&namespace=cluster',
-        expect.objectContaining({ intent: 'startup' })
-      );
-      expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenNthCalledWith(
-        2,
-        'catalog',
-        'cluster-1|limit=1&resourceScope=cluster&namespace=cluster',
-        expect.objectContaining({ intent: 'startup' })
-      );
-    });
-
-    it('surfaces catalog degraded reasons in table filter state', async () => {
-      refreshMocks.catalogDomain.scope =
-        'cluster-1|limit=50&resourceScope=cluster&namespace=cluster';
-      refreshMocks.catalogDomain.data = {
-        items: [],
-        batchSize: 0,
-        total: 150000,
-        totalIsExact: false,
-        facetsExact: false,
-        issues: [
-          {
-            kind: 'Catalog health',
-            message: 'Catalog data may be stale because one resource sync failed.',
-          },
-        ],
-      };
-      refreshMocks.catalogDomain.status = 'ready';
-
-      await act(async () => {
-        root.render(<BrowseView namespace={undefined} />);
-        await Promise.resolve();
-      });
-
-      const label = gridTablePropsRef.current.filters.options.partialDataLabel;
-      expect(label).toContain('Catalog health');
-      expect(label).toContain('Facet options are approximate');
-      expect(label).toContain('total result count is approximate');
-    });
-  });
-
-  describe('Action facts', () => {
-    it('threads catalog action facts into shared context-menu actions', async () => {
-      refreshMocks.scopedDomains.set(
-        'cluster-1|limit=50&resourceScope=namespace&namespace=default&scopeNamespace=default',
-        {
-          status: 'ready',
-          data: {
-            items: [
-              catalogItem({
-                ref: {
-                  uid: 'deploy-1',
-                  kind: 'Deployment',
-                  name: 'web',
-                  namespace: 'default',
-                  resource: 'deployments',
-                  group: 'apps',
-                },
-                actionFacts: { hpaManaged: true, desiredReplicas: 3 },
-              }),
-              catalogItem({
-                ref: {
-                  uid: 'cron-1',
-                  kind: 'CronJob',
-                  name: 'nightly',
-                  namespace: 'default',
-                  resource: 'cronjobs',
-                  group: 'batch',
-                },
-                actionFacts: { status: 'Suspended' },
-              }),
-            ],
-            kinds: [
-              { kind: 'Deployment', namespaced: true },
-              { kind: 'CronJob', namespaced: true },
-            ],
-            namespaces: ['default'],
-          },
-          scope:
-            'cluster-1|limit=50&resourceScope=namespace&namespace=default&scopeNamespace=default',
-        }
-      );
-
-      await act(async () => {
-        root.render(<BrowseView namespace="default" />);
-        await Promise.resolve();
-      });
-
-      const rows = gridTablePropsRef.current?.data ?? [];
-      const byKind = new Map(rows.map((row) => [row.ref.kind, row]));
-
-      const deploymentMenu = gridTablePropsRef.current.getCustomContextMenuItems(
-        requireValue(byKind.get('Deployment'), 'expected the Deployment browse row'),
-        'name'
-      );
-      expect(deploymentMenu.some((item) => item.actionId === OBJECT_ACTION_IDS.scaleToZero)).toBe(
-        true
-      );
-      expect(deploymentMenu.some((item) => item.actionId === OBJECT_ACTION_IDS.scale)).toBe(false);
-
-      const cronMenu = gridTablePropsRef.current.getCustomContextMenuItems(
-        requireValue(byKind.get('CronJob'), 'expected the CronJob browse row'),
-        'name'
-      );
-      expect(cronMenu.some((item) => item.actionId === OBJECT_ACTION_IDS.resume)).toBe(true);
-      const trigger = cronMenu.find((item) => item.actionId === OBJECT_ACTION_IDS.triggerNow);
-      expect(trigger?.disabled).toBe(true);
-    });
-  });
-
-  describe('All-matching export', () => {
-    it('threads fetchAllRows so the table offers the all-matching-rows scope', async () => {
-      refreshMocks.scopedDomains.set(
-        'cluster-1|limit=50&resourceScope=namespace&namespace=default&scopeNamespace=default',
-        {
-          status: 'ready',
-          data: {
-            items: [],
-            kinds: [{ kind: 'Pod', namespaced: true }],
-            namespaces: ['default'],
-            total: 1,
-          },
-          scope:
-            'cluster-1|limit=50&resourceScope=namespace&namespace=default&scopeNamespace=default',
-        }
-      );
-
-      await act(async () => {
-        root.render(<BrowseView namespace="default" />);
-        await Promise.resolve();
-      });
-
-      // Download (wired by the GridTable filter bar from this fetcher) writes every matching
-      // row; there is no server-side per-action catalog export.
-      expect(typeof gridTablePropsRef.current?.fetchAllRows).toBe('function');
-    });
-  });
+      expect(lastPageQuery().getAll('kind')).toEqual(queriedKinds);
+      expect(lastPageQuery().getAll('apiGroup')).toEqual(['apps']);
+    }
+  );
 });

@@ -2,259 +2,199 @@
  * frontend/src/modules/resource-grid/useTypedResourceQuery.anchor.test.tsx
  *
  * Anchor jump intent lifecycle (docs/architecture/large-data-query.md "Page
- * Addressing Contract"): anchorTo
- * fires an anchored request; a found landing seeds pageIndex from the
- * serve-time rank and adopts the self cursor so live refetches stay
- * page-stable; the intent survives soft resets (re-anchors) and is cleared by
- * manual pagination or a missing anchor.
+ * Addressing Contract"): anchorTo reads the anchored page with the object's
+ * full identity; a found landing seeds the page position from the serve-time
+ * rank and adopts the self cursor so live refetches stay page-stable; the
+ * intent survives sort changes (re-anchors) and is dropped by manual
+ * pagination or a missing anchor. The hook runs inside the app shell through
+ * the real data-access broker and orchestrator; only the backend boundary is
+ * faked (test-utils/appState).
  */
 
 import type { SortConfig } from '@hooks/useTableSort';
 import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
-import React, { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ALL_NAMESPACES_SELECTOR } from '@/core/refresh/scopeSelector';
-import type { TypedQueryPayload } from './typedResourceQueryScope';
+import { act } from 'react';
+import { beforeEach, describe, expect, it } from 'vitest';
+import {
+  makePodSnapshotEntry,
+  makePodSnapshotPayload,
+} from '@/core/refresh/refreshContractTestBuilders';
+import { ALL_NAMESPACES_SELECTOR, parseRefreshScope } from '@/core/refresh/scopeSelector';
+import type { PodSnapshotEntry, PodSnapshotPayload } from '@/core/refresh/types';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { requireValue } from '@/test-utils/requireValue';
+import { selectPayloadRows } from './typedResourceQueryScope';
 import { type UseTypedResourceQueryResult, useTypedResourceQuery } from './useTypedResourceQuery';
 
-const { requestRefreshDomainStateMock } = vi.hoisted(() => ({
-  requestRefreshDomainStateMock: vi.fn(),
-}));
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
+let query: UseTypedResourceQueryResult<PodSnapshotEntry, PodSnapshotPayload> | undefined;
 
-vi.mock('@/core/data-access', () => ({
-  requestRefreshDomainState: (...args: unknown[]) => requestRefreshDomainStateMock(...(args as [])),
-}));
-
-interface TestRow {
-  name: string;
+function QueryProbe({ sortConfig }: Readonly<{ sortConfig: SortConfig | null }>) {
+  query = useTypedResourceQuery<PodSnapshotPayload, PodSnapshotEntry>({
+    enabled: true,
+    clusterId: dev.clusterId,
+    domain: 'pods',
+    baseSelector: ALL_NAMESPACES_SELECTOR,
+    label: 'Pods',
+    filters: DEFAULT_GRID_TABLE_FILTER_STATE,
+    sortConfig,
+    pageLimit: 20,
+    selectRows: selectPayloadRows,
+  });
+  return null;
 }
 
-interface TestPayload extends TypedQueryPayload {
-  rows?: TestRow[];
-}
+const current = () => requireValue(query, 'expected the typed query result');
 
-const selectRows = (payload: TestPayload) => payload.rows ?? [];
+const page = (names: string[], overrides: Partial<PodSnapshotPayload> = {}) =>
+  makePodSnapshotPayload({
+    clusterId: dev.clusterId,
+    clusterName: dev.clusterName,
+    rows: names.map((name) =>
+      makePodSnapshotEntry({ ref: { clusterId: dev.clusterId, namespace: 'default', name } })
+    ),
+    total: 300,
+    unfilteredTotal: 300,
+    ...overrides,
+  });
 
-const executed = (data: TestPayload) => ({
-  status: 'executed',
-  data: { status: 'ready', data },
+/** The page the backend lands an anchor on: rank 47 at 20 rows a page is page 3. */
+const landing = (overrides: Partial<PodSnapshotPayload> = {}) =>
+  page(['row-40', 'web-47'], {
+    continue: 'c-next',
+    previous: 'c-prev',
+    self: 'c-self',
+    anchor: { found: true, rank: 47 },
+    pageStartRank: 40,
+    ...overrides,
+  });
+
+const params = (scope: string) => new URLSearchParams(parseRefreshScope('pods', scope).query ?? '');
+const reads = () => app.snapshots.reads('pods').map((read) => params(read.scope));
+const anchored = (read: URLSearchParams) => read.has('anchor.name');
+
+// What the backend answers for each pods read; tests replace it.
+let answer: (read: URLSearchParams) => PodSnapshotPayload = () => page(['pod-1']);
+
+const NAME_ASC: SortConfig = { key: 'name', direction: 'asc' };
+
+const show = (sortConfig: SortConfig | null = NAME_ASC) =>
+  view.show(<QueryProbe sortConfig={sortConfig} />);
+
+const run = async (action: () => void) => {
+  await act(async () => {
+    action();
+  });
+  await app.settle();
+};
+
+const anchorToWeb47 = () =>
+  run(() =>
+    current().anchorTo({
+      clusterId: dev.clusterId,
+      group: '',
+      version: 'v1',
+      kind: 'Pod',
+      namespace: 'default',
+      name: 'web-47',
+    })
+  );
+
+beforeEach(async () => {
+  query = undefined;
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['default']);
+  app.snapshots.answer(({ domain, scope }) =>
+    domain === 'pods' ? answer(params(scope)) : undefined
+  );
+  view = await app.render(null);
 });
 
-const anchorRef = {
-  clusterId: 'cluster-a',
-  group: '',
-  version: 'v1',
-  kind: 'Pod',
-  namespace: 'default',
-  name: 'web-47',
-};
-
-const scopeOfCallFromEnd = (offset: number): string => {
-  const calls = requestRefreshDomainStateMock.mock.calls;
-  const call = calls[calls.length - offset]?.[0] as { scope: string } | undefined;
-  if (!call) {
-    throw new Error(`Expected refresh-domain call at offset ${offset}`);
-  }
-  return call.scope;
-};
-const lastScope = (): string => scopeOfCallFromEnd(1);
-
 describe('useTypedResourceQuery anchor lifecycle', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
-  let result: UseTypedResourceQueryResult<TestRow, TestPayload> | undefined;
-  let setSort: ((sort: SortConfig | null) => void) | undefined;
-
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    result = undefined;
-    requestRefreshDomainStateMock.mockReset();
-  });
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-  });
-
-  const renderQuery = async () => {
-    const Probe: React.FC = () => {
-      const [sort, updateSort] = React.useState<SortConfig | null>({
-        key: 'name',
-        direction: 'asc',
-      });
-      setSort = updateSort;
-      result = useTypedResourceQuery<TestPayload, TestRow>({
-        enabled: true,
-        clusterId: 'cluster-a',
-        domain: 'pods',
-        baseSelector: ALL_NAMESPACES_SELECTOR,
-        label: 'Pods',
-        filters: DEFAULT_GRID_TABLE_FILTER_STATE,
-        sortConfig: sort,
-        pageLimit: 20,
-        selectRows,
-      });
-      return null;
+  it('lands on the anchored page, seeds the page position from its rank, and stays page-stable', async () => {
+    answer = (read) => {
+      if (anchored(read)) {
+        return landing();
+      }
+      // The adopted self cursor reproduces the landing page without re-anchoring.
+      return read.get('continue') === 'c-self'
+        ? page(['row-40', 'web-47'], { continue: 'c-next', previous: 'c-prev' })
+        : page(['pod-1'], { continue: 'c1' });
     };
-    await act(async () => {
-      root.render(<Probe />);
-      await Promise.resolve();
-      await Promise.resolve();
+    await show();
+
+    await anchorToWeb47();
+
+    const anchoredRead = requireValue(reads().find(anchored), 'expected an anchored read');
+    expect(Object.fromEntries(anchoredRead)).toMatchObject({
+      'anchor.clusterId': dev.clusterId,
+      'anchor.version': 'v1',
+      'anchor.kind': 'Pod',
+      'anchor.namespace': 'default',
+      'anchor.name': 'web-47',
     });
-  };
-
-  const settle = async (action?: () => void) => {
-    await act(async () => {
-      action?.();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-  };
-
-  it('lands on the anchored page, seeds pageIndex from rank, and stays page-stable', async () => {
-    // Initial page 1.
-    requestRefreshDomainStateMock.mockResolvedValueOnce(
-      executed({ rows: [{ name: 'pod-1' }], total: 300, totalIsExact: true, continue: 'c1' })
-    );
-    await renderQuery();
-
-    // Anchored landing: rank 47 at limit 20 → page 3 (ranks 40-59).
-    requestRefreshDomainStateMock.mockResolvedValueOnce(
-      executed({
-        rows: [{ name: 'row-40' }, { name: 'web-47' }],
-        total: 300,
-        totalIsExact: true,
-        continue: 'c-next',
-        previous: 'c-prev',
-        self: 'c-self',
-        anchor: { found: true, rank: 47 },
-        pageStartRank: 40,
-      })
-    );
-    // The adopted self cursor triggers one quiet refetch of the same page.
-    requestRefreshDomainStateMock.mockResolvedValueOnce(
-      executed({
-        rows: [{ name: 'row-40' }, { name: 'web-47' }],
-        total: 300,
-        totalIsExact: true,
-        continue: 'c-next',
-        previous: 'c-prev',
-      })
-    );
-
-    await settle(() => result?.anchorTo(anchorRef));
-    expect(lastScope()).toContain('continue=c-self');
-
-    expect(result?.pageIndex).toBe(3);
-    expect(result?.anchorResult).toEqual({ found: true, rank: 47 });
-    expect(result?.hasPrevious).toBe(true);
-    expect(result?.rows?.[1]?.name).toBe('web-47');
-
-    // The anchored fetch itself carried anchor params and no continue token.
-    const anchoredScope = scopeOfCallFromEnd(2);
-    expect(anchoredScope).toContain('anchor.name=web-47');
-    expect(anchoredScope).toContain('anchor.clusterId=cluster-a');
-    expect(anchoredScope).not.toContain('continue=');
+    expect(anchoredRead.has('continue')).toBe(false);
+    expect(reads().slice(-1)[0]?.get('continue')).toBe('c-self');
+    expect(current().pageIndex).toBe(3);
+    expect(current().anchorResult).toEqual({ found: true, rank: 47 });
+    expect(current().hasPrevious).toBe(true);
+    expect(current().rows.map((row) => row.ref.name)).toEqual(['row-40', 'web-47']);
   });
 
   it('re-anchors on a sort change (the intent survives soft resets)', async () => {
-    requestRefreshDomainStateMock.mockResolvedValue(
-      executed({
-        rows: [{ name: 'web-47' }],
-        total: 300,
-        totalIsExact: true,
-        self: 'c-self',
-        previous: 'c-prev',
-        anchor: { found: true, rank: 47 },
-        pageStartRank: 40,
-      })
-    );
-    await renderQuery();
-    await settle(() => result?.anchorTo(anchorRef));
+    answer = () => landing();
+    await show();
+    await anchorToWeb47();
+    app.snapshots.clearReads();
 
-    requestRefreshDomainStateMock.mockClear();
-    await settle(() => setSort?.({ key: 'name', direction: 'desc' }));
+    await show({ key: 'name', direction: 'desc' });
 
-    const scopes = requestRefreshDomainStateMock.mock.calls.map(
-      (call) => (call[0] as { scope: string }).scope
+    expect(reads().some((read) => anchored(read) && read.get('sortDirection') === 'desc')).toBe(
+      true
     );
-    expect(scopes.some((scope) => scope.includes('anchor.name=web-47'))).toBe(true);
   });
 
-  it('clears the intent on manual pagination', async () => {
-    // Realistic serve: only anchored scopes return an anchor result; cursor
-    // and first-page scopes return plain pages.
-    requestRefreshDomainStateMock.mockImplementation((args: { scope: string }) =>
-      Promise.resolve(
-        args.scope.includes('anchor.')
-          ? executed({
-              rows: [{ name: 'web-47' }],
-              total: 300,
-              totalIsExact: true,
-              continue: 'c-next',
-              previous: 'c-prev',
-              self: 'c-self',
-              anchor: { found: true, rank: 47 },
-              pageStartRank: 40,
-            })
-          : executed({
-              rows: [{ name: 'plain' }],
-              total: 300,
-              totalIsExact: true,
-              continue: 'c-next-2',
-              previous: 'c-prev-2',
-            })
-      )
-    );
-    await renderQuery();
-    await settle(() => result?.anchorTo(anchorRef));
+  it('drops the intent on manual pagination', async () => {
+    answer = (read) =>
+      anchored(read) ? landing() : page(['plain'], { continue: 'c-next-2', previous: 'c-prev-2' });
+    await show();
+    await anchorToWeb47();
 
-    await settle(() => result?.loadMore());
-    expect(result?.anchorResult).toBeNull();
+    await run(() => current().loadMore());
+    expect(current().anchorResult).toBeNull();
 
-    // A later sort change must NOT re-anchor (intent gone).
-    requestRefreshDomainStateMock.mockClear();
-    await settle(() => setSort?.(null));
-    const scopes = requestRefreshDomainStateMock.mock.calls.map(
-      (call) => (call[0] as { scope: string }).scope
-    );
-    expect(scopes.every((scope) => !scope.includes('anchor.'))).toBe(true);
+    // A later sort change must not re-anchor.
+    app.snapshots.clearReads();
+    await show(null);
+    expect(reads()).not.toEqual([]);
+    expect(reads().some(anchored)).toBe(false);
   });
 
   it('reports a missing anchor, serves the first page, and drops the intent', async () => {
-    requestRefreshDomainStateMock.mockResolvedValueOnce(
-      executed({ rows: [{ name: 'pod-1' }], total: 3, totalIsExact: true })
-    );
-    await renderQuery();
+    answer = (read) =>
+      anchored(read)
+        ? page(['pod-1'], {
+            total: 3,
+            anchor: { found: false, rank: -1, reason: 'filtered' },
+            pageStartRank: 0,
+          })
+        : page(['pod-1'], { total: 3 });
+    await show();
 
-    requestRefreshDomainStateMock.mockResolvedValueOnce(
-      executed({
-        rows: [{ name: 'pod-1' }],
-        total: 3,
-        totalIsExact: true,
-        anchor: { found: false, rank: -1, reason: 'filtered' },
-        pageStartRank: 0,
-      })
-    );
-    await settle(() => result?.anchorTo(anchorRef));
+    await anchorToWeb47();
 
-    expect(result?.anchorResult).toEqual({ found: false, rank: -1, reason: 'filtered' });
-    expect(result?.pageIndex).toBe(1);
+    expect(current().anchorResult).toEqual({ found: false, rank: -1, reason: 'filtered' });
+    expect(current().pageIndex).toBe(1);
 
-    // No re-anchor on the next soft reset — the intent is gone.
-    requestRefreshDomainStateMock.mockClear();
-    requestRefreshDomainStateMock.mockResolvedValue(
-      executed({ rows: [{ name: 'pod-1' }], total: 3, totalIsExact: true })
-    );
-    await settle(() => setSort?.({ key: 'name', direction: 'desc' }));
-    const scopes = requestRefreshDomainStateMock.mock.calls.map(
-      (call) => (call[0] as { scope: string }).scope
-    );
-    expect(scopes.every((scope) => !scope.includes('anchor.'))).toBe(true);
+    app.snapshots.clearReads();
+    await show({ key: 'name', direction: 'desc' });
+    expect(reads()).not.toEqual([]);
+    expect(reads().some(anchored)).toBe(false);
   });
 });

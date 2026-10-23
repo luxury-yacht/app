@@ -1,762 +1,397 @@
-import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
-import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import type * as React from 'react';
-import { act, isValidElement, type ReactNode, StrictMode } from 'react';
-import * as ReactDOM from 'react-dom/client';
+/**
+ * frontend/src/modules/global/components/GlobalViewNamespaces.test.tsx
+ *
+ * The Global Namespaces view joins every open cluster's namespace list with
+ * that cluster's namespace metrics into one table with a Cluster column, still
+ * lists the other clusters when one cluster's list is denied, keeps metrics
+ * live only while shown, and keeps its table state when clusters close. Its links act in the row's
+ * own cluster: the namespace opens in its Object Panel without leaving the
+ * Global view; the cluster link, Go to Namespace, and the attention links
+ * switch to that cluster's Overview, workloads, or filtered attention; and a
+ * row's menu reflects its own cluster's permissions. The namespace table's
+ * shared columns are covered by ClusterViewNamespaces.test.tsx. Runs in the
+ * full app, entered through the Global tab, over a faked backend
+ * (test-utils/appState).
+ */
+
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  makeClusterAttentionSnapshot,
+  makeClusterOverviewSnapshotPayload,
+} from '@/core/refresh/refreshContractTestBuilders';
+import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
+import type { NamespaceSummary } from '@/core/refresh/types';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
+import { requireValue } from '@/test-utils/requireValue';
 
-const mocks = vi.hoisted(() => ({
-  setActiveKubeconfig: vi.fn(),
-  setClusterNavigationTarget: vi.fn(),
-  activateClusterWorkspace: vi.fn(),
-  setSidebarSelectionForCluster: vi.fn(),
-  setSelectedNamespace: vi.fn(),
-  tableProps: null as null | Record<string, unknown>,
-  resourceGridParams: null as null | Record<string, unknown>,
-  persistenceParams: null as null | Record<string, unknown>,
-  openWithObject: vi.fn(),
-  queryKindPermissions: vi.fn(),
-  requestRefreshDomain: vi.fn(() => Promise.resolve()),
-  setRefreshDomainEnabled: vi.fn(),
-  enabledScopes: new Set<string>(),
-  leases: new Map<string, number>(),
-  requestGridTableFilters: vi.fn(),
-  selectedKubeconfigs: [
-    '/kube/config:alpha',
-    '/kube/config:beta',
-    '/kube/config:gamma',
-  ] as string[],
-}));
+const app = installAppStateHarness();
+let alpha: TestCluster;
+let beta: TestCluster;
+let gamma: TestCluster;
+let view: MountedApp;
 
-vi.mock('@/core/data-access/dataAccess', () => ({
-  requestRefreshDomain: mocks.requestRefreshDomain,
-  acquireRefreshDomainLease: ({
-    domain,
-    scope,
-    preserveState,
-  }: {
-    domain: string;
-    scope: string;
-    preserveState: boolean;
-  }) => {
-    const count = mocks.leases.get(scope) ?? 0;
-    mocks.leases.set(scope, count + 1);
-    if (!count) {
-      mocks.setRefreshDomainEnabled({ domain, scope, enabled: true, preserveState });
-    }
-  },
-  releaseRefreshDomainLease: ({
-    domain,
-    scope,
-    preserveState,
-  }: {
-    domain: string;
-    scope: string;
-    preserveState: boolean;
-  }) => {
-    const count = Math.max(0, (mocks.leases.get(scope) ?? 0) - 1);
-    mocks.leases.set(scope, count);
-    if (!count) {
-      mocks.setRefreshDomainEnabled({ domain, scope, enabled: false, preserveState });
-    }
-  },
-}));
-
-vi.mock('@/core/cluster-workspace/useClusterWorkspace', () => ({
-  useClusterNameResolver: () => (clusterId: string) =>
-    ({ 'cluster-a': 'alpha', 'cluster-b': 'beta', 'cluster-c': 'gamma' })[clusterId] ?? clusterId,
-}));
-
-vi.mock('@shared/components/tables/hooks/useGridTableExternalFilters', () => ({
-  requestGridTableFilters: mocks.requestGridTableFilters,
-}));
-
-const namespace = (clusterId: string, clusterName: string, name: string) => ({
-  clusterId,
-  clusterName,
+const namespace = (
+  cluster: TestCluster,
+  name: string,
+  overrides: Partial<NamespaceSummary> = {}
+): NamespaceSummary => ({
   ref: {
-    clusterId,
+    clusterId: cluster.clusterId,
     group: '',
     version: 'v1',
     kind: 'Namespace',
     resource: 'namespaces',
+    namespace: '',
     name,
+    uid: `${cluster.clusterId}-${name}`,
   },
-  name,
   phase: 'Active',
   status: 'Active',
-  statusState: 'active',
-  statusPresentation: 'success',
   resourceVersion: '12',
   creationTimestamp: 1_700_000_000,
   hasWorkloads: true,
   unhealthyWorkloads: 2,
   warningEvents: 3,
   warningEventsState: 'available',
-  cpuUsageMilli: 100,
   cpuRequestsMilli: 250,
   cpuLimitsMilli: 500,
-  memoryUsageBytes: 128 * 1024 * 1024,
-  memoryRequestsBytes: 256 * 1024 * 1024,
-  memoryLimitsBytes: 512 * 1024 * 1024,
-  quotaCount: 0,
-  quotaHighestUsedPercentage: 0,
-  quotaPressure: '',
   quotaPressureState: 'available',
+  ...overrides,
 });
 
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({
-    selectedKubeconfigs: [...mocks.selectedKubeconfigs],
-    selectedClusterIds: mocks.selectedKubeconfigs.map((selection) => {
-      const parts = selection.split(':');
-      const name = parts[parts.length - 1];
-      return `cluster-${name === 'alpha' ? 'a' : name === 'beta' ? 'b' : 'c'}`;
-    }),
-    getClusterMeta: (selection: string) => {
-      const parts = selection.split(':');
-      const name = parts[parts.length - 1] ?? '';
-      const suffix = name === 'alpha' ? 'a' : name === 'beta' ? 'b' : 'c';
-      return { id: `cluster-${suffix}`, name };
-    },
-    setActiveKubeconfig: mocks.setActiveKubeconfig,
-  }),
-}));
-
-vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
-  isNamespaceRefreshAvailable: () => true,
-  useNamespace: () => ({ setSelectedNamespace: mocks.setSelectedNamespace }),
-  useNamespaceStatesByScope: () => ({
-    'cluster-a|': {
-      status: 'ready',
-      data: {
-        clusterId: 'cluster-a',
-        clusterName: 'alpha',
-        namespaces: [namespace('cluster-a', 'alpha', 'payments')],
-        metrics: { successCount: 1, failureCount: 0 },
-        metricsState: 'loading',
+const serveNamespaces = (
+  cluster: TestCluster,
+  namespaces: NamespaceSummary[],
+  metricsState: 'available' | 'unavailable'
+) => {
+  const identity = { clusterId: cluster.clusterId, clusterName: cluster.clusterName };
+  app.snapshots.serve(
+    'namespaces',
+    buildClusterRefreshScope('namespaces', cluster.clusterId),
+    { ...identity, namespaces },
+    namespaces.length
+  );
+  app.snapshots.serve(
+    'namespace-metrics',
+    buildClusterRefreshScope('namespace-metrics', cluster.clusterId),
+    {
+      ...identity,
+      namespaces:
+        metricsState === 'available'
+          ? namespaces.map(({ ref }) => ({ ref, cpuUsageMilli: 100, memoryUsageBytes: 128 }))
+          : [],
+      metrics: {
+        stale: false,
+        successCount: metricsState === 'available' ? 1 : 0,
+        failureCount: 0,
       },
-      error: null,
-      permissionDenied: false,
+      metricsState,
     },
-    'cluster-b|': {
-      status: 'ready',
-      data: {
-        clusterId: 'cluster-b',
-        clusterName: 'beta',
-        namespaces: [namespace('cluster-b', 'beta', 'payments')],
-        metrics: { successCount: 0, failureCount: 1 },
-        metricsState: 'loading',
-      },
-      error: null,
-      permissionDenied: false,
-    },
-    'cluster-c|': {
-      status: 'error',
-      data: null,
-      error: 'forbidden',
-      permissionDenied: true,
-    },
-  }),
-  useNamespaceMetricStatesByScope: () => ({
-    'cluster-a|': {
-      status: 'ready',
-      data: {
-        clusterId: 'cluster-a',
-        clusterName: 'alpha',
-        namespaces: [
-          {
-            ref: namespace('cluster-a', 'alpha', 'payments').ref,
-            cpuUsageMilli: 100,
-            memoryUsageBytes: 128 * 1024 * 1024,
-          },
-        ],
-        metrics: { successCount: 1, failureCount: 0 },
-        metricsState: 'available',
-      },
-    },
-    'cluster-b|': {
-      status: 'ready',
-      data: {
-        clusterId: 'cluster-b',
-        clusterName: 'beta',
-        namespaces: [],
-        metrics: { successCount: 0, failureCount: 1 },
-        metricsState: 'unavailable',
-      },
-    },
-  }),
-}));
-
-vi.mock('@core/contexts/ClusterLifecycleContext', () => ({
-  useClusterLifecycle: () => ({ getClusterState: () => 'ready' }),
-}));
-
-vi.mock('@core/contexts/ViewStateContext', () => ({
-  useViewState: () => ({
-    setClusterNavigationTarget: mocks.setClusterNavigationTarget,
-    activateClusterWorkspace: mocks.activateClusterWorkspace,
-  }),
-}));
-
-vi.mock('@core/contexts/SidebarStateContext', () => ({
-  useSidebarState: () => ({
-    setSidebarSelectionForCluster: mocks.setSidebarSelectionForCluster,
-  }),
-}));
-
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: mocks.openWithObject }),
-}));
-
-vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ available: false, navigateToView: vi.fn() }),
-}));
-
-vi.mock('@/core/capabilities', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/core/capabilities')>()),
-  useUserPermissions: () => new Map(),
-  queryKindPermissions: mocks.queryKindPermissions,
-}));
-
-vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
-  useGridTablePersistence: (params: Record<string, unknown>) => {
-    mocks.persistenceParams = params;
-    return {
-      sortConfig: { key: 'name', direction: 'asc' },
-      setSortConfig: vi.fn(),
-      columnWidths: null,
-      setColumnWidths: vi.fn(),
-      columnVisibility: null,
-      setColumnVisibility: vi.fn(),
-      filters: {
-        search: '',
-        kinds: [],
-        namespaces: [],
-        includeMetadata: false,
-      },
-      setFilters: vi.fn(),
-      pageSize: null,
-      setPageSize: vi.fn(),
-      resetState: vi.fn(),
-      hydrated: true,
-    };
-  },
-}));
-
-vi.mock('@modules/resource-grid/useResourceGridTable', () => ({
-  useClusterResourceGridTable: (params: Record<string, unknown>) => {
-    mocks.resourceGridParams = params;
-    return {
-      gridTableProps: { data: params.data, keyExtractor: params.keyExtractor },
-      favModal: null,
-    };
-  },
-}));
-
-vi.mock('@modules/resource-grid/ResourceInventoryTable', () => ({
-  default: (props: Record<string, unknown>) => {
-    mocks.tableProps = props;
-    const source = props.source as { rows: Array<Record<string, unknown>> };
-    const columns = props.columns as Array<{
-      key: string;
-      render: (row: Record<string, unknown>) => ReactNode;
-    }>;
-    const namespaceColumn = columns.find(({ key }) => key === 'name');
-    const clusterColumn = columns.find(({ key }) => key === 'cluster');
-    const kindColumn = columns.find(({ key }) => key === 'kind');
-    const unhealthyColumn = columns.find(({ key }) => key === 'unhealthyWorkloads');
-    const warningsColumn = columns.find(({ key }) => key === 'warningEvents');
-    return (
-      <div data-testid="global-namespace-table">
-        {source.rows.map((row) => (
-          <div
-            key={`${String(row.clusterId)}:${String(row.name)}`}
-            data-testid={`namespace-row-${String(row.clusterId)}-${String(row.name)}`}
-          >
-            <span data-testid={`kind-${String(row.clusterId)}-${String(row.name)}`}>
-              {kindColumn?.render(row)}
-            </span>
-            <span data-testid={`namespace-link-${String(row.clusterId)}-${String(row.name)}`}>
-              {namespaceColumn?.render(row)}
-            </span>
-            <span data-testid={`cluster-link-${String(row.clusterId)}-${String(row.name)}`}>
-              {clusterColumn?.render(row)}
-            </span>
-            <span data-testid={`unhealthy-link-${String(row.clusterId)}-${String(row.name)}`}>
-              {unhealthyColumn?.render(row)}
-            </span>
-            <span data-testid={`warnings-link-${String(row.clusterId)}-${String(row.name)}`}>
-              {warningsColumn?.render(row)}
-            </span>
-          </div>
-        ))}
-      </div>
-    );
-  },
-}));
-
-const renderView = async (strict = false) => {
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = ReactDOM.createRoot(container);
-  let renderVersion = 0;
-  const render = async () => {
-    const { default: GlobalViewNamespaces } = await import('./GlobalViewNamespaces');
-    const TestableGlobalViewNamespaces = GlobalViewNamespaces as React.ComponentType<{
-      renderVersion: number;
-    }>;
-    const view = <TestableGlobalViewNamespaces renderVersion={renderVersion} />;
-    root.render(strict ? <StrictMode>{view}</StrictMode> : view);
-  };
-  await act(async () => {
-    await render();
-    await Promise.resolve();
-  });
-  return {
-    container,
-    rerender: async () => {
-      await act(async () => {
-        renderVersion += 1;
-        await render();
-        await Promise.resolve();
-      });
-    },
-    unmount: async () => {
-      await act(async () => root.unmount());
-      container.remove();
-    },
-  };
+    namespaces.length
+  );
 };
 
-beforeEach(() => {
-  vi.clearAllMocks();
-  mocks.enabledScopes.clear();
-  mocks.leases.clear();
-  mocks.setRefreshDomainEnabled.mockImplementation(({ scope, enabled }) => {
-    if (enabled) {
-      mocks.enabledScopes.add(scope);
-    } else if (!(mocks.leases.get(scope) ?? 0)) {
-      mocks.enabledScopes.delete(scope);
-    }
+const rows = () => Array.from(view.container.querySelectorAll<HTMLElement>('.gridtable-row'));
+const rowKey = (row: HTMLElement) =>
+  `${row.querySelector('[data-column="cluster"]')?.textContent?.trim()}/${row
+    .querySelector('[data-column="name"]')
+    ?.textContent?.trim()}`;
+const rowOf = (cluster: TestCluster, name: string) =>
+  requireValue(
+    rows().find((row) => rowKey(row) === `${cluster.clusterName}/${name}`),
+    `expected the ${cluster.clusterName}/${name} row`
+  );
+const control = (row: HTMLElement, column: string) =>
+  requireValue(
+    row.querySelector<HTMLElement>(`[data-column="${column}"] button`),
+    `expected an interactive ${column} cell`
+  );
+
+const click = async (element: HTMLElement) => {
+  await act(async () => element.click());
+  await app.settle();
+};
+
+const openGlobalNamespaces = async () => {
+  view = await app.mountApp();
+  const globalTab = requireValue(
+    Array.from(view.container.querySelectorAll<HTMLElement>('[role="tab"]')).find(
+      (tab) => tab.textContent?.trim() === 'Global'
+    ),
+    'expected the Global tab'
+  );
+  await click(globalTab);
+  await view.goTo({ globalView: 'global-namespaces' });
+};
+
+const menuItems = () =>
+  Array.from(document.body.querySelectorAll<HTMLElement>('[role="menu"] .context-menu-item'));
+const menuLabel = (item: HTMLElement) =>
+  item.querySelector('.context-menu-label')?.textContent?.trim();
+const openRowMenu = async (row: HTMLElement) => {
+  const cell = requireValue(row.querySelector<HTMLElement>('.grid-cell'), 'expected a cell');
+  await act(async () => {
+    cell.dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 })
+    );
   });
-  mocks.selectedKubeconfigs = ['/kube/config:alpha', '/kube/config:beta', '/kube/config:gamma'];
-  mocks.tableProps = null;
-  mocks.resourceGridParams = null;
-  mocks.persistenceParams = null;
+  await app.settle();
+  return menuItems().map(menuLabel);
+};
+const clickMenuItem = async (label: string) => {
+  await click(
+    requireValue(
+      menuItems().find((item) => menuLabel(item) === label),
+      `expected the ${label} menu item`
+    )
+  );
+};
+
+const namespaceTarget = (cluster: TestCluster, name: string) => ({
+  clusterId: cluster.clusterId,
+  clusterName: cluster.clusterName,
+  group: '',
+  version: 'v1',
+  kind: 'Namespace',
+  namespace: '',
+  name,
+});
+
+beforeEach(() => {
+  alpha = app.cluster({ name: 'alpha', context: 'alpha' });
+  beta = app.cluster({ name: 'beta', context: 'beta' });
+  gamma = app.cluster({ name: 'gamma', context: 'gamma' });
+  app.startScreen(alpha);
+  // The Global tab opens on the Clusters view, which reads each cluster's overview.
+  for (const cluster of [beta, gamma]) {
+    app.snapshots.serve(
+      'cluster-overview',
+      buildClusterRefreshScope('cluster-overview', cluster.clusterId),
+      makeClusterOverviewSnapshotPayload({
+        clusterId: cluster.clusterId,
+        clusterName: cluster.clusterName,
+      })
+    );
+  }
+  serveNamespaces(alpha, [namespace(alpha, 'orders'), namespace(alpha, 'payments')], 'available');
+  serveNamespaces(
+    beta,
+    [
+      namespace(beta, 'default', { unhealthyWorkloads: 0, warningEvents: 0 }),
+      namespace(beta, 'payments'),
+    ],
+    'unavailable'
+  );
+  // gamma's user may not list namespaces.
+  app.snapshots.fail(
+    'namespaces',
+    buildClusterRefreshScope('namespaces', gamma.clusterId),
+    makeErrorStatus('Forbidden')
+  );
 });
 
 afterEach(() => {
-  document.body.innerHTML = '';
+  vi.useRealTimers();
 });
 
-const renderedText = (node: ReactNode): string => {
-  if (typeof node === 'string' || typeof node === 'number') {
-    return String(node);
-  }
-  if (isValidElement<{ children?: ReactNode }>(node)) {
-    return renderedText(node.props.children);
-  }
-  return '';
-};
-
-const getTableProps = (): Record<string, unknown> => {
-  if (!mocks.tableProps) {
-    throw new Error('expected global namespace table props');
-  }
-  return mocks.tableProps;
-};
-
-const getPersistenceParams = (): Record<string, unknown> => {
-  if (!mocks.persistenceParams) {
-    throw new Error('expected global namespace persistence params');
-  }
-  return mocks.persistenceParams;
-};
-
 describe('GlobalViewNamespaces', () => {
-  it('keeps metrics enabled through Strict Mode effect replay', async () => {
-    const { unmount } = await renderView(true);
-    const remaining = [...mocks.enabledScopes].sort();
-    await unmount();
-    expect(remaining).toEqual(['cluster-a|', 'cluster-b|']);
-    expect(mocks.enabledScopes.size).toBe(0);
-  });
+  it('joins each cluster’s namespaces with its own metrics, listing the rest when one cluster is denied', async () => {
+    await openGlobalNamespaces();
 
-  it('keeps metrics live when an overlapping view owner unmounts', async () => {
-    const first = await renderView();
-    const second = await renderView();
-    await first.unmount();
-    const remaining = [...mocks.enabledScopes].sort();
-    await second.unmount();
-    expect(remaining).toEqual(['cluster-a|', 'cluster-b|']);
-    expect(mocks.enabledScopes.size).toBe(0);
-  });
-
-  it('retains its Global table owner when cluster membership changes', async () => {
-    const { rerender, unmount } = await renderView();
-    const initialPersistenceIdentity = getPersistenceParams().clusterIdentity;
-    const initialCacheKey = (getTableProps().source as { cacheKey?: string }).cacheKey;
-    const initialPaginationId = (getTableProps().localPagination as { idPrefix?: string }).idPrefix;
-
-    mocks.selectedKubeconfigs = ['/kube/config:alpha', '/kube/config:gamma'];
-    await rerender();
-
-    expect(getPersistenceParams().clusterIdentity).toBe(initialPersistenceIdentity);
-    expect((getTableProps().source as { cacheKey?: string }).cacheKey).toBe(initialCacheKey);
-    expect((getTableProps().localPagination as { idPrefix?: string }).idPrefix).toBe(
-      initialPaginationId
-    );
-
-    await unmount();
-  });
-
-  it('combines namespace snapshots with complete cluster identity and a Cluster column', async () => {
-    const { container, unmount } = await renderView();
-    if (!mocks.tableProps) {
-      throw new Error('expected global namespace table props');
-    }
-
-    const columns = mocks.tableProps.columns as Array<{
-      key: string;
-      render?: (row: Record<string, unknown>) => ReactNode;
-    }>;
-    expect(columns.map(({ key }) => key)).toEqual([
-      'kind',
-      'name',
-      'cluster',
-      'status',
-      'workloads',
-      'unhealthyWorkloads',
-      'warningEvents',
-      'cpu',
-      'memory',
-      'quotaPressure',
-      'age',
-    ]);
-
-    const source = mocks.tableProps.source as {
-      rows: Array<Record<string, unknown>>;
-      completeness: string;
-      partialLabel: string | null;
-    };
-    expect(source.rows).toHaveLength(2);
-    expect(mocks.setRefreshDomainEnabled).toHaveBeenCalledWith({
-      domain: 'namespace-metrics',
-      scope: 'cluster-a|',
-      enabled: true,
-      preserveState: true,
-    });
-    expect(mocks.setRefreshDomainEnabled).toHaveBeenCalledWith({
-      domain: 'namespace-metrics',
-      scope: 'cluster-b|',
-      enabled: true,
-      preserveState: true,
-    });
-    expect(mocks.setRefreshDomainEnabled).not.toHaveBeenCalledWith(
-      expect.objectContaining({ domain: 'namespace-metrics', scope: 'cluster-c|', enabled: true })
-    );
-    expect(
-      source.rows.map(({ clusterId, clusterName, name, metricsState }) => ({
-        clusterId,
-        clusterName,
-        name,
-        metricsState,
-      }))
-    ).toEqual([
-      { clusterId: 'cluster-a', clusterName: 'alpha', name: 'payments', metricsState: 'available' },
-      {
-        clusterId: 'cluster-b',
-        clusterName: 'beta',
-        name: 'payments',
-        metricsState: 'unavailable',
-      },
-    ]);
-    const keyExtractor = (
-      mocks.tableProps.gridTableProps as {
-        keyExtractor: (row: Record<string, unknown>) => string;
-      }
-    ).keyExtractor;
-    expect(source.rows.map(keyExtractor)).toEqual([
-      'cluster-a|/v1/Namespace//payments',
-      'cluster-b|/v1/Namespace//payments',
+    expect(rows().map(rowKey)).toEqual([
+      'beta/default',
+      'alpha/orders',
+      'alpha/payments',
+      'beta/payments',
     ]);
     expect(
-      renderedText(columns.find(({ key }) => key === 'cluster')?.render?.(source.rows[1]))
-    ).toBe('beta');
-    const cpuCell = columns.find(({ key }) => key === 'cpu')?.render?.(source.rows[0]);
-    expect(isValidElement<Record<string, unknown>>(cpuCell)).toBe(true);
-    if (!isValidElement<Record<string, unknown>>(cpuCell)) {
-      throw new Error('expected global namespace CPU ResourceBar');
-    }
-    expect(cpuCell.props).toMatchObject({
-      usage: 100,
-      request: 250,
-      limit: 500,
-    });
-    expect(source.completeness).toBe('partial');
-    expect(source.partialLabel).toBe('Showing namespace data from 2 of 3 clusters');
-
-    const resourceGridParams = mocks.resourceGridParams as {
-      filterAccessors: { getCluster: (row: Record<string, unknown>) => string };
-      filterOptionOverrides: {
-        clusters: Array<{ value: string; label: string }>;
-        showClusterDropdown: boolean;
-      };
-    };
-    expect(resourceGridParams.filterAccessors.getCluster(source.rows[1])).toBe('cluster-b');
-    expect(resourceGridParams.filterOptionOverrides).toMatchObject({
-      clusters: [
-        { value: 'cluster-a', label: 'alpha' },
-        { value: 'cluster-b', label: 'beta' },
-        { value: 'cluster-c', label: 'gamma' },
-      ],
-      showClusterDropdown: true,
-    });
-    expect(mocks.persistenceParams).toMatchObject({
-      filterOptions: { clusters: ['cluster-a', 'cluster-b', 'cluster-c'] },
-      pageSizeOptions: [25, 50, 100, 250, 500, 1000],
-    });
-    expect(mocks.tableProps.localPagination).toMatchObject({
-      idPrefix: 'global-namespaces-global:namespaces',
-      pageSize: 50,
-      pageSizeOptions: [25, 50, 100, 250, 500, 1000],
-    });
-    expect(mocks.tableProps).not.toHaveProperty('onRowPointerClick');
-    const namespaceLink = container.querySelector<HTMLButtonElement>(
-      '[data-testid="namespace-link-cluster-b-payments"] button'
+      rowOf(alpha, 'payments')
+        .querySelector('[data-column="cpu"] [data-gridtable-export-text]')
+        ?.getAttribute('data-gridtable-export-text')
+    ).toBe('100');
+    expect(rowOf(beta, 'payments').querySelector('[data-column="cpu"]')?.textContent?.trim()).toBe(
+      'Unavailable'
     );
-    const clusterLink = container.querySelector<HTMLButtonElement>(
-      '[data-testid="cluster-link-cluster-b-payments"] button'
+    // Metrics are read only for clusters whose namespace list loaded.
+    expect(new Set(app.snapshots.reads('namespace-metrics').map((read) => read.scope))).toEqual(
+      new Set([
+        buildClusterRefreshScope('namespace-metrics', alpha.clusterId),
+        buildClusterRefreshScope('namespace-metrics', beta.clusterId),
+      ])
     );
-    expect(namespaceLink?.className.split(' ')).toEqual(
-      expect.arrayContaining(['gridtable-link', 'object-panel-link'])
-    );
-    expect(clusterLink?.className.split(' ')).toEqual(
-      expect.arrayContaining(['gridtable-link', 'object-panel-link'])
-    );
-
-    await unmount();
-    expect(mocks.setRefreshDomainEnabled).toHaveBeenCalledWith({
-      domain: 'namespace-metrics',
-      scope: 'cluster-a|',
-      enabled: false,
-      preserveState: true,
-    });
   });
 
-  it('stages Go to Namespace navigation before activating the target cluster', async () => {
-    const { unmount } = await renderView();
-    const tableProps = getTableProps();
-    const getItems = tableProps.getCustomContextMenuItems as
-      | ((row: Record<string, unknown>, columnKey: string) => ContextMenuItem[])
-      | undefined;
-    const betaRow = (tableProps.source as { rows: Array<Record<string, unknown>> }).rows.find(
-      (row) => (row.ref as { clusterId: string }).clusterId === 'cluster-b'
-    );
-    if (!getItems || !betaRow) {
-      throw new Error('expected a cluster-b namespace row with context menu items');
-    }
+  it('keeps namespace metrics live only while the view is shown', async () => {
+    vi.useFakeTimers();
+    await openGlobalNamespaces();
+    const metricsStreams = () =>
+      app.streams.active().filter((stream) => stream.startsWith('namespace-metrics '));
+    expect(metricsStreams()).toEqual([
+      `namespace-metrics ${buildClusterRefreshScope('namespace-metrics', alpha.clusterId)}`,
+      `namespace-metrics ${buildClusterRefreshScope('namespace-metrics', beta.clusterId)}`,
+    ]);
 
-    act(() => {
-      getItems(betaRow, 'name')
-        .find((item) => item.actionId === OBJECT_ACTION_IDS.goToNamespace)
-        ?.onClick?.();
+    await view.goTo({ globalView: 'fleet' });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
     });
 
-    expect(mocks.setSelectedNamespace).toHaveBeenCalledWith('payments', 'cluster-b');
-    expect(mocks.setClusterNavigationTarget).toHaveBeenCalledWith('cluster-b', {
-      viewType: 'namespace',
-      activeNamespaceView: 'workloads',
-    });
-    expect(mocks.setSidebarSelectionForCluster).toHaveBeenCalledWith('cluster-b', {
-      type: 'namespace',
-      value: 'payments',
-    });
-    expect(mocks.setActiveKubeconfig).toHaveBeenCalledWith('/kube/config:beta');
-    expect(mocks.activateClusterWorkspace).toHaveBeenCalledWith();
-    expect(mocks.setSelectedNamespace.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.setActiveKubeconfig.mock.invocationCallOrder[0]
+    // The sidebar still lists the visible cluster's namespaces with their metrics.
+    expect(metricsStreams()).toEqual([
+      `namespace-metrics ${buildClusterRefreshScope('namespace-metrics', alpha.clusterId)}`,
+    ]);
+  });
+
+  it('keeps its own sort when a cluster closes', async () => {
+    app.backend.answer('DeleteGridTablePersistenceEntries', () => undefined);
+    await openGlobalNamespaces();
+    await click(
+      requireValue(
+        view.container.querySelector<HTMLElement>('[aria-label="Sort by Namespace"]'),
+        'expected the Namespace sort control'
+      )
     );
-    expect(mocks.setClusterNavigationTarget.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.setActiveKubeconfig.mock.invocationCallOrder[0]
-    );
-    expect(mocks.setSidebarSelectionForCluster.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.activateClusterWorkspace.mock.invocationCallOrder[0]
-    );
-    expect(mocks.activateClusterWorkspace.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.setActiveKubeconfig.mock.invocationCallOrder[0]
+    expect(rows().map(rowKey)).toEqual([
+      'alpha/payments',
+      'beta/payments',
+      'alpha/orders',
+      'beta/default',
+    ]);
+
+    await click(
+      requireValue(
+        view.container.querySelector<HTMLElement>('[aria-label="Close beta"]'),
+        'expected the beta tab close button'
+      )
     );
 
-    await unmount();
+    expect(rows().map(rowKey)).toEqual(['alpha/payments', 'alpha/orders']);
+  });
+
+  // Opening another cluster's object shows that cluster's panels; the user
+  // stays in the Global view and no namespace is selected.
+  it('opens the focused row’s namespace in its own cluster’s Object Panel on Enter, staying in the Global view', async () => {
+    app.startScreen(beta);
+    app.servePanel(beta, namespaceTarget(beta, 'default'));
+    await openGlobalNamespaces();
+    const table = requireValue(
+      view.container.querySelector<HTMLElement>('table[tabindex="0"]'),
+      'expected the namespaces table'
+    );
+
+    await act(async () => table.focus());
+    await act(async () => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+      );
+    });
+    await app.settle();
+
+    const owners = view.owners();
+    expect(owners.kubeconfig.selectedClusterId).toBe(beta.clusterId);
+    expect(view.openPanels()).toEqual([namespaceTarget(beta, 'default')]);
+    expect(owners.viewState?.viewType).toBe('global');
+    expect(owners.namespace.selectedNamespace).not.toBe('default');
+  });
+
+  it('opens a namespace in its Object Panel from its name or Kind badge, without navigating', async () => {
+    app.servePanel(alpha, namespaceTarget(alpha, 'orders'));
+    app.servePanel(alpha, namespaceTarget(alpha, 'payments'));
+    await openGlobalNamespaces();
+
+    await click(control(rowOf(alpha, 'orders'), 'name'));
+    await click(control(rowOf(alpha, 'payments'), 'kind'));
+
+    expect(view.openPanels()).toEqual([
+      namespaceTarget(alpha, 'orders'),
+      namespaceTarget(alpha, 'payments'),
+    ]);
+    const owners = view.owners();
+    expect(owners.viewState?.viewType).toBe('global');
+    expect(owners.namespace.selectedNamespace).not.toBe('payments');
+  });
+
+  it('opens the row’s cluster Overview from its cluster link without selecting the namespace', async () => {
+    app.startScreen(beta);
+    await openGlobalNamespaces();
+
+    await click(control(rowOf(beta, 'payments'), 'cluster'));
+
+    const owners = view.owners();
+    expect(owners.kubeconfig.selectedClusterId).toBe(beta.clusterId);
+    expect(owners.viewState?.viewType).toBe('overview');
+    expect(owners.namespace.selectedNamespace).not.toBe('payments');
+  });
+
+  it('goes to the namespace’s workloads in the row’s cluster', async () => {
+    app.startScreen(beta);
+    app.serveTable(beta, 'namespace-workloads');
+    await openGlobalNamespaces();
+
+    await openRowMenu(rowOf(beta, 'payments'));
+    await clickMenuItem('Go to Namespace');
+
+    const owners = view.owners();
+    expect(owners.kubeconfig.selectedClusterId).toBe(beta.clusterId);
+    expect(owners.viewState?.viewType).toBe('namespace');
+    expect(owners.viewState?.activeNamespaceTab).toBe('workloads');
+    expect(owners.namespace.selectedNamespace).toBe('payments');
   });
 
   it.each([
     [
       'unhealthy',
-      'unhealthy-link-cluster-b-payments',
+      'unhealthyWorkloads',
       ['Pod', 'Deployment', 'StatefulSet', 'DaemonSet', 'Job', 'CronJob'],
     ],
-    ['warnings', 'warnings-link-cluster-b-payments', ['Event']],
-  ])('opens %s findings for the namespace in the target cluster', async (_label, testId, kinds) => {
-    const { container, unmount } = await renderView();
+    ['warnings', 'warningEvents', ['Event']],
+  ])('opens %s findings for the namespace in the row’s cluster', async (_signal, column, kinds) => {
+    app.startScreen(beta);
+    app.snapshots.answer(({ domain, scope }) =>
+      domain === 'cluster-attention' && scope.startsWith(`${beta.clusterId}|`)
+        ? makeClusterAttentionSnapshot({
+            clusterId: beta.clusterId,
+            clusterName: beta.clusterName,
+            kinds: ['Deployment', 'Event', 'Pod'],
+            namespaces: ['default', 'payments'],
+          })
+        : undefined
+    );
+    await openGlobalNamespaces();
 
+    await click(control(rowOf(beta, 'payments'), column));
+
+    const owners = view.owners();
+    expect(owners.kubeconfig.selectedClusterId).toBe(beta.clusterId);
+    expect(owners.viewState?.activeClusterTab).toBe('attention');
+    const read = requireValue(
+      app.snapshots
+        .reads('cluster-attention')
+        .filter((r) => r.scope.startsWith(beta.clusterId))
+        .slice(-1)[0],
+      'expected an attention read in beta'
+    );
+    const query = new URLSearchParams(read.scope.split('|')[1]);
+    expect(query.get('namespaces')).toBe('payments');
+    expect(query.get('kinds')?.split(',').sort()).toEqual([...kinds].sort());
+  });
+
+  // Cluster-scoped permissions are batch-queried only for the visible
+  // cluster, so another cluster's row resolves its own on right-click.
+  it('offers each row the actions its own cluster permits', async () => {
+    app.permissions((query) => !(query.verb === 'delete' && query.clusterId === beta.clusterId));
+    await openGlobalNamespaces();
+
+    expect(await openRowMenu(rowOf(beta, 'payments'))).not.toContain('Delete');
     await act(async () => {
-      container.querySelector<HTMLButtonElement>(`[data-testid="${testId}"] button`)?.click();
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     });
-
-    expect(mocks.requestGridTableFilters).toHaveBeenCalledWith({
-      clusterId: 'cluster-b',
-      destinationViewId: 'cluster-attention',
-      filters: {
-        search: '',
-        kinds: { mode: 'some', values: kinds },
-        namespaces: { mode: 'some', values: ['payments'] },
-        clusters: { mode: 'all' },
-        includeMetadata: false,
-      },
-    });
-    expect(mocks.setClusterNavigationTarget).toHaveBeenCalledWith('cluster-b', {
-      viewType: 'cluster',
-      activeClusterView: 'attention',
-    });
-    expect(mocks.setSidebarSelectionForCluster).toHaveBeenCalledWith('cluster-b', {
-      type: 'cluster',
-      value: 'cluster',
-    });
-    expect(mocks.activateClusterWorkspace).toHaveBeenCalledWith();
-    expect(mocks.setActiveKubeconfig).toHaveBeenCalledWith('/kube/config:beta');
-    expect(mocks.requestGridTableFilters.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.setClusterNavigationTarget.mock.invocationCallOrder[0]
-    );
-
-    await unmount();
-  });
-
-  it.each([
-    ['Kind badge', 'kind-cluster-b-payments'],
-    ['Name link', 'namespace-link-cluster-b-payments'],
-  ])(
-    'opens the namespace Object Panel from its %s without staging navigation',
-    async (_label, testId) => {
-      const { container, unmount } = await renderView();
-
-      await act(async () => {
-        container.querySelector<HTMLButtonElement>(`[data-testid="${testId}"] button`)?.click();
-      });
-
-      expect(mocks.openWithObject).toHaveBeenCalledWith(
-        expect.objectContaining({
-          clusterId: 'cluster-b',
-          group: '',
-          version: 'v1',
-          kind: 'Namespace',
-          resource: 'namespaces',
-          name: 'payments',
-        })
-      );
-      expect(mocks.setSelectedNamespace).not.toHaveBeenCalled();
-      expect(mocks.setClusterNavigationTarget).not.toHaveBeenCalled();
-      expect(mocks.setSidebarSelectionForCluster).not.toHaveBeenCalled();
-      expect(mocks.setActiveKubeconfig).not.toHaveBeenCalled();
-
-      await unmount();
-    }
-  );
-
-  it('opens the namespace Object Panel on Enter without switching clusters', async () => {
-    const { unmount } = await renderView();
-    const tableProps = getTableProps();
-    const onRowClick = tableProps.onRowClick as
-      | ((row: Record<string, unknown>) => void)
-      | undefined;
-    const betaRow = (tableProps.source as { rows: Array<Record<string, unknown>> }).rows.find(
-      (row) => (row.ref as { clusterId: string }).clusterId === 'cluster-b'
-    );
-    if (!onRowClick || !betaRow) {
-      throw new Error('expected a cluster-b namespace row Enter handler');
-    }
-
-    act(() => {
-      onRowClick(betaRow);
-    });
-
-    expect(mocks.openWithObject).toHaveBeenCalledWith(
-      expect.objectContaining({ clusterId: 'cluster-b', kind: 'Namespace', name: 'payments' })
-    );
-    expect(mocks.setSelectedNamespace).not.toHaveBeenCalled();
-    expect(mocks.setClusterNavigationTarget).not.toHaveBeenCalled();
-    expect(mocks.setActiveKubeconfig).not.toHaveBeenCalled();
-
-    await unmount();
-  });
-
-  it('opens a cluster from its explicit link without selecting the namespace', async () => {
-    const { container, unmount } = await renderView();
-
-    await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>('[data-testid="cluster-link-cluster-b-payments"] button')
-        ?.click();
-    });
-
-    expect(mocks.setSelectedNamespace).not.toHaveBeenCalled();
-    expect(mocks.setClusterNavigationTarget).toHaveBeenCalledWith('cluster-b', {
-      viewType: 'overview',
-      activeClusterView: null,
-    });
-    expect(mocks.setSidebarSelectionForCluster).toHaveBeenCalledWith('cluster-b', {
-      type: 'overview',
-      value: 'overview',
-    });
-    expect(mocks.setActiveKubeconfig).toHaveBeenCalledWith('/kube/config:beta');
-    expect(mocks.activateClusterWorkspace).toHaveBeenCalledWith();
-    expect(mocks.setClusterNavigationTarget.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.setActiveKubeconfig.mock.invocationCallOrder[0]
-    );
-    expect(mocks.setSidebarSelectionForCluster.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.activateClusterWorkspace.mock.invocationCallOrder[0]
-    );
-    expect(mocks.activateClusterWorkspace.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.setActiveKubeconfig.mock.invocationCallOrder[0]
-    );
-
-    await unmount();
-  });
-
-  // Cluster-scoped permissions are batch-queried only for the active cluster,
-  // so a row from another open cluster must resolve its own on right-click.
-  it('targets the row cluster from the namespace context menu', async () => {
-    const { unmount } = await renderView();
-    const tableProps = getTableProps();
-    expect(tableProps.enableContextMenu).toBe(true);
-    const getItems = tableProps.getCustomContextMenuItems as
-      | ((row: Record<string, unknown>, columnKey: string) => ContextMenuItem[])
-      | undefined;
-    const rows = (tableProps.source as { rows: Array<Record<string, unknown>> }).rows;
-    const betaRow = rows.find(
-      (row) => (row.ref as { clusterId: string }).clusterId === 'cluster-b'
-    );
-    if (!getItems || !betaRow) {
-      throw new Error('expected a cluster-b namespace row with context menu items');
-    }
-
-    const items = getItems(betaRow, 'name');
-    expect(mocks.queryKindPermissions).toHaveBeenCalledWith(
-      'Namespace',
-      null,
-      'cluster-b',
-      '',
-      'v1'
-    );
-    act(() => {
-      items.find((item) => item.actionId === OBJECT_ACTION_IDS.viewDetails)?.onClick?.();
-    });
-    expect(mocks.openWithObject).toHaveBeenCalledWith(
-      expect.objectContaining({ clusterId: 'cluster-b', kind: 'Namespace', name: 'payments' })
-    );
-    expect(mocks.setActiveKubeconfig).not.toHaveBeenCalled();
-
-    await unmount();
+    expect(await openRowMenu(rowOf(alpha, 'payments'))).toContain('Delete');
   });
 });

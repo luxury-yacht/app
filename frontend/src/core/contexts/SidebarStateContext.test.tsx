@@ -1,132 +1,96 @@
 /**
  * frontend/src/core/contexts/SidebarStateContext.test.tsx
  *
- * Test suite for SidebarStateContext.
- * Ensures sidebar selection is scoped per cluster tab.
+ * The workspace window's sidebar state: each committed visibility change
+ * reaches the native menu once, and the sidebar selection is kept per cluster
+ * tab, can be prepared for another tab, and is dropped with a closed tab. Runs
+ * the production shell's own sidebar owner under the real kubeconfig owner
+ * (test-utils/appState); cluster tabs switch, close, and reopen through it.
  */
 
-import { act, StrictMode } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SetSidebarVisible } from '@/core/backend-api';
+import { act } from 'react';
+import { beforeEach, describe, expect, it } from 'vitest';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { requireValue } from '@/test-utils/requireValue';
+import { useSidebarState } from './SidebarStateContext';
 
-import { SidebarStateProvider, useSidebarState } from './SidebarStateContext';
+const app = installAppStateHarness();
+let view: MountedApp;
+let alpha: TestCluster;
+let beta: TestCluster;
+let sidebar: ReturnType<typeof useSidebarState> | null = null;
 
-let mockClusterId = 'cluster-a';
-let mockClusterIds = ['cluster-a', 'cluster-b'];
+function Probe() {
+  sidebar = useSidebarState();
+  return null;
+}
 
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({
-    selectedClusterId: mockClusterId,
-    managedClusterIds: mockClusterIds,
-  }),
-}));
+const current = () => requireValue(sidebar, 'sidebar state');
+const OVERVIEW = { type: 'overview', value: 'overview' };
 
-vi.mock('@core/backend-api', () => ({
-  SetSidebarVisible: vi.fn(),
-}));
+beforeEach(async () => {
+  sidebar = null;
+  alpha = app.cluster({ name: 'dev', context: 'alpha' });
+  beta = app.cluster({ name: 'dev', context: 'beta' });
+  app.namespaces(alpha, ['default']);
+  app.namespaces(beta, ['default']);
+  view = await app.render(null);
+  await view.show(<Probe />);
+});
 
-vi.mock('@/core/desktop-runtime', () => ({ desktopRuntimeAvailable: () => true }));
-
-describe('SidebarStateContext', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
-  const stateRef: { current: ReturnType<typeof useSidebarState> | null } = { current: null };
-
-  const Harness = () => {
-    stateRef.current = useSidebarState();
-    return null;
-  };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    mockClusterId = 'cluster-a';
-    mockClusterIds = ['cluster-a', 'cluster-b'];
-    stateRef.current = null;
-  });
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-  });
-
-  const renderProvider = async () => {
-    await act(async () => {
-      root.render(
-        <StrictMode>
-          <SidebarStateProvider>
-            <Harness />
-          </SidebarStateProvider>
-        </StrictMode>
-      );
-      await Promise.resolve();
-    });
-  };
-
+describe('sidebar state', () => {
   it('publishes each committed visibility change to the native menu once', async () => {
-    await renderProvider();
-    vi.mocked(SetSidebarVisible).mockClear();
     for (const visible of [false, true]) {
-      act(() => stateRef.current?.toggleSidebar());
-      expect(stateRef.current?.isSidebarVisible).toBe(visible);
-      expect(SetSidebarVisible).toHaveBeenCalledExactlyOnceWith(visible);
-      vi.mocked(SetSidebarVisible).mockClear();
+      const before = app.backend.calls('SetSidebarVisible').length;
+
+      await act(async () => current().toggleSidebar());
+
+      expect(current().isSidebarVisible).toBe(visible);
+      expect(app.backend.calls('SetSidebarVisible').slice(before)).toEqual([[visible]]);
     }
   });
 
-  it('keeps sidebar selection isolated per cluster tab', async () => {
-    await renderProvider();
-    act(() => {
-      stateRef.current?.setSidebarSelection({ type: 'namespace', value: 'default' });
-    });
-    expect(stateRef.current?.sidebarSelection).toEqual({ type: 'namespace', value: 'default' });
+  it('keeps the sidebar selection isolated per cluster tab', async () => {
+    act(() => current().setSidebarSelection({ type: 'namespace', value: 'default' }));
+    expect(current().sidebarSelection).toEqual({ type: 'namespace', value: 'default' });
 
-    mockClusterId = 'cluster-b';
-    await renderProvider();
-    expect(stateRef.current?.sidebarSelection).toEqual({ type: 'overview', value: 'overview' });
+    await view.selectCluster(beta);
+    expect(current().sidebarSelection).toEqual(OVERVIEW);
+    act(() => current().setSidebarSelection({ type: 'cluster', value: 'cluster' }));
 
-    act(() => {
-      stateRef.current?.setSidebarSelection({ type: 'cluster', value: 'cluster' });
-    });
-
-    mockClusterId = 'cluster-a';
-    await renderProvider();
-    expect(stateRef.current?.sidebarSelection).toEqual({ type: 'namespace', value: 'default' });
+    await view.selectCluster(alpha);
+    expect(current().sidebarSelection).toEqual({ type: 'namespace', value: 'default' });
   });
 
-  it('can prepare another cluster selection without mutating the active cluster', async () => {
-    await renderProvider();
+  it('prepares another cluster tab’s selection without changing the active one', async () => {
+    act(() =>
+      current().setSidebarSelectionForCluster(beta.clusterId, { type: 'cluster', value: 'cluster' })
+    );
+    expect(current().sidebarSelection).toEqual(OVERVIEW);
 
-    act(() => {
-      stateRef.current?.setSidebarSelectionForCluster('cluster-b', {
-        type: 'cluster',
-        value: 'cluster',
-      });
-    });
-    expect(stateRef.current?.sidebarSelection).toEqual({ type: 'overview', value: 'overview' });
+    await view.selectCluster(beta);
 
-    mockClusterId = 'cluster-b';
-    await renderProvider();
-    expect(stateRef.current?.sidebarSelection).toEqual({ type: 'cluster', value: 'cluster' });
+    expect(current().sidebarSelection).toEqual({ type: 'cluster', value: 'cluster' });
   });
 
-  it('clears sidebar selection when a tab is closed', async () => {
-    mockClusterId = 'cluster-b';
-    await renderProvider();
-    act(() => {
-      stateRef.current?.setSidebarSelection({ type: 'cluster', value: 'cluster' });
-    });
+  it('drops a closed cluster tab’s selection, so reopening it starts at the overview', async () => {
+    await view.selectCluster(beta);
+    act(() => current().setSidebarSelection({ type: 'cluster', value: 'cluster' }));
 
-    mockClusterIds = ['cluster-a'];
-    await renderProvider();
     await act(async () => {
-      await Promise.resolve();
+      await view.owners().kubeconfig.closeKubeconfig(beta.selection);
     });
-    expect(stateRef.current?.sidebarSelection).toEqual({ type: 'overview', value: 'overview' });
+    await app.settle();
+    await act(async () => {
+      await view.owners().kubeconfig.openKubeconfig(beta.selection);
+    });
+    await app.settle();
+
+    expect(view.owners().kubeconfig.selectedClusterId).toBe(beta.clusterId);
+    expect(current().sidebarSelection).toEqual(OVERVIEW);
   });
 });

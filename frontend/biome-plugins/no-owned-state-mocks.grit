@@ -5,9 +5,10 @@ language js(typescript, jsx)
 // (frontend/src/test-utils/appState/harness.tsx) instead of replacing them with
 // stubs; a stub hides the wiring it replaces. Only the external boundary
 // (@wailsio/runtime, @core/backend-api, @core/desktop-runtime, the refresh HTTP
-// client) may be mocked. The owner list is docs/plans/real-state-test-harness.md
-// "Owner set" (tiers 1-2 plus thin backend clients). Relative specifiers match by
-// a distinctive file name; generic names (./index, ../store) are not covered.
+// client) may be mocked. The pattern below is the owner list: state owners and the
+// thin clients that read through them (docs/workflows/testing.md). Relative
+// specifiers match by a distinctive file name; generic names (./index, ../store)
+// are not covered.
 or {
   `vi.mock($spec, $...)`,
   `vi.doMock($spec, $...)`

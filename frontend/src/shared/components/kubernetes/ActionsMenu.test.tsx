@@ -1,912 +1,483 @@
 /**
  * frontend/src/shared/components/kubernetes/ActionsMenu.test.tsx
  *
- * Test suite for ActionsMenu. After F1 the menu delegates execution + modals to
- * the shared object action controller, so these tests drive the real controller
- * (mocking only the backend objectActionClient) and assert the run* calls plus
- * the panel lifecycle callbacks (onAfterDelete / onAfterAction).
+ * An object panel's Actions menu, where the app shows it: in the Overview of
+ * a real panel opened in the full app. The menu offers what the object's
+ * kind, state, and permissions allow; restarts, deletes, scales, triggers,
+ * suspends, resumes, and cordons go to the backend's RunObjectAction with the
+ * object's complete identity (restart, delete, scale, scale to zero, trigger,
+ * and cordon only once confirmed; nothing runs on Cancel); the panel re-reads
+ * its object after a change and closes after a delete. Scale
+ * choices follow the backend's HPA ownership answer and offer nothing while
+ * it is unknown. Open Map switches the panel to its Map tab. Finalizer
+ * removal, run by the same action controller from the Details tab, warns when
+ * the delete is recent and reports a refused removal. Only the backend
+ * boundary is faked (test-utils/appState).
  */
 
-import { OBJECT_ACTION_IDS, objectActionLabel } from '@shared/actions/objectActionContract';
-import { useObjectActionController } from '@shared/hooks/useObjectActionController';
-import type { ObjectActionData } from '@shared/hooks/useObjectActions';
-import type React from 'react';
+import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
+import { buildNodeMaintenanceAggregateScope } from '@shared/hooks/useNodeMaintenanceActions';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { eventBus } from '@/core/events';
+import { queryKindPermissions } from '@/core/capabilities';
+import { makeClusterNodeSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
+import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
+import type { DomainPayloadMap, ObjectDetail } from '@/core/refresh/types';
+import { objectPanelId } from '@/modules/object-panel/objectPanelRef';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type ObjectIdentity,
+  type TestCluster,
+  type TestObject,
+} from '@/test-utils/appState/harness';
+import { objectDetailOf } from '@/test-utils/objectDetail';
 import { requireValue } from '@/test-utils/requireValue';
-import { ActionsMenu } from './ActionsMenu';
 
-const openWithObjectMock = vi.hoisted(() => vi.fn());
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
 
-// Backend action client spies. The controller calls these to execute actions;
-// asserting them proves the menu now runs actions through the shared path.
-const runObjectRestartMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
-const runObjectDeleteMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
-const runObjectScaleMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
-const runCronJobTriggerMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
-const runCronJobSuspendMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
-const runObjectFinalizerRemovalMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
-const errorHandlerMock = vi.hoisted(() => vi.fn());
-
-vi.mock('@shared/actions/objectActionClient', () => ({
-  buildObjectActionTarget: (object: ObjectActionData, action: string) => ({
-    clusterId: object.clusterId,
-    group: object.group ?? '',
-    version: object.version ?? 'v1',
-    kind: object.kind,
-    namespace: object.namespace,
-    name: object.name,
-    action,
-  }),
-  runObjectRestart: (...args: unknown[]) => runObjectRestartMock(...args),
-  runObjectDelete: (...args: unknown[]) => runObjectDeleteMock(...args),
-  runObjectScale: (...args: unknown[]) => runObjectScaleMock(...args),
-  runCronJobTrigger: (...args: unknown[]) => runCronJobTriggerMock(...args),
-  runCronJobSuspend: (...args: unknown[]) => runCronJobSuspendMock(...args),
-  runObjectFinalizerRemoval: (...args: unknown[]) => runObjectFinalizerRemovalMock(...args),
-}));
-
-vi.mock('@/utils/errorHandler', () => ({
-  errorHandler: { handle: (...args: unknown[]) => errorHandlerMock(...args) },
-}));
-
-// Spy-backed permission mock so tests can assert that getPermissionKey is
-// called with the full GVK (regression: PR #139 made the backend reject
-// queries without apiVersion, and CRD lookups in the shared action path
-// silently missed the permission map when group/version weren't threaded through).
-const getPermissionKeySpy = vi.fn(
-  (
-    kind: string,
-    verb: string,
-    namespace?: string | null,
-    subresource?: string | null,
-    _clusterId?: string | null,
-    group?: string | null,
-    version?: string | null
-  ) => `${group ?? ''}/${version ?? ''}|${kind}:${verb}:${namespace ?? ''}:${subresource ?? ''}`
-);
-
-vi.mock('@/core/capabilities', () => ({
-  useUserPermissions: () => {
-    // Return a map that grants all permissions by default
-    const map = new Map();
-    map.get = () => ({ allowed: true, pending: false });
-    return map;
-  },
-  getPermissionKey: (...args: Parameters<typeof getPermissionKeySpy>) =>
-    getPermissionKeySpy(...args),
-  queryKindPermissions: vi.fn(),
-}));
-
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({
-    openWithObject: openWithObjectMock,
-  }),
-}));
-
-vi.mock('@core/contexts/ZoomContext', () => ({
-  useZoom: () => ({ zoomLevel: 100 }),
-}));
-
-vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: vi.fn() }),
-}));
-
-// Mock keyboard shortcuts for ConfirmationModal
-vi.mock('@ui/shortcuts', () => ({
-  useShortcut: vi.fn(),
-  useKeyboardSurface: vi.fn(),
-  useKeyboardContext: () => ({
-    registerShortcut: vi.fn(),
-    unregisterShortcut: vi.fn(),
-    getAvailableShortcuts: vi.fn(() => []),
-    isShortcutAvailable: vi.fn(() => false),
-    setEnabled: vi.fn(),
-    isEnabled: true,
-    registerSurface: vi.fn(),
-    unregisterSurface: vi.fn(),
-    dispatchNativeAction: vi.fn(() => false),
-    hasActiveBlockingSurface: vi.fn(() => false),
-  }),
-}));
-
-const openMenu = (container: HTMLElement) => {
-  const trigger = container.querySelector<HTMLButtonElement>('.actions-menu-button');
-  act(() => {
-    requireValue(trigger, 'expected actions menu trigger').dispatchEvent(
-      new MouseEvent('click', { bubbles: true })
-    );
-  });
-};
-
-const clickMenuItem = (_container: HTMLElement, text: string) => {
-  const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
-  const item = items.find((entry) => entry.textContent?.includes(text));
-  act(() => {
-    requireValue(item, `expected menu item "${text}"`).dispatchEvent(
-      new MouseEvent('click', { bubbles: true })
-    );
-  });
-};
-
-// Confirm a portaled ConfirmationModal by its exact button text.
-const confirmModal = async (buttonText: string) => {
-  const modal = document.querySelector<HTMLElement>('.confirmation-modal');
-  const confirmationModal = requireValue(modal, `expected confirmation modal for "${buttonText}"`);
-  const button = Array.from(confirmationModal.querySelectorAll<HTMLButtonElement>('button')).find(
-    (entry) => entry.textContent === buttonText
-  );
-  await act(async () => {
-    requireValue(button, `expected confirm button "${buttonText}"`).dispatchEvent(
-      new MouseEvent('click', { bubbles: true })
-    );
-    await Promise.resolve();
-  });
-};
-
-const makeObject = (kind: string, overrides?: Partial<ObjectActionData>): ObjectActionData => ({
-  kind,
-  name: 'test-resource',
+const deployment: ObjectIdentity = {
+  group: 'apps',
+  version: 'v1',
+  kind: 'Deployment',
   namespace: 'default',
-  clusterId: 'cluster-1',
-  ...overrides,
-  group: overrides?.group ?? '',
-  version: overrides?.version ?? 'v1',
+  name: 'web',
+};
+const cronJob: ObjectIdentity = {
+  group: 'batch',
+  version: 'v1',
+  kind: 'CronJob',
+  namespace: 'default',
+  name: 'nightly',
+};
+
+/** The panel's object-details payload: a typed detail, and deletion metadata when terminating. */
+type Detail = ObjectDetail & Pick<Partial<DomainPayloadMap['object-details']>, 'deletion'>;
+
+/** Opens the object's panel in the full app; its details are `detail`. */
+const openPanel = async (identity: ObjectIdentity, detail: Detail): Promise<TestObject> => {
+  const object = app.servePanel(
+    dev,
+    identity,
+    detail as Partial<DomainPayloadMap['object-details']>
+  );
+  view = await app.mountApp();
+  await act(async () => {
+    view.owners().objectPanel.openWithObject(object.ref);
+  });
+  await app.settle();
+  return object;
+};
+
+const deploymentDetail = (
+  replicas: { ready: string; desiredReplicas: number } = {
+    ready: '3/3',
+    desiredReplicas: 3,
+  }
+): Detail => objectDetailOf('deployment', { name: 'web', namespace: 'default', ...replicas });
+
+const cronJobDetail = (suspend: boolean): Detail =>
+  objectDetailOf('cronjob', {
+    name: 'nightly',
+    namespace: 'default',
+    schedule: '0 0 * * *',
+    suspend,
+  });
+
+const click = async (element: HTMLElement) => {
+  await act(async () => element.click());
+  await app.settle();
+};
+
+const openActions = () =>
+  click(
+    requireValue(
+      view.container.querySelector<HTMLButtonElement>('.object-panel-body .actions-menu-button'),
+      'expected the panel’s Actions menu'
+    )
+  );
+
+const menuItems = () =>
+  Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menu"] .context-menu-item'));
+const menuLabels = () =>
+  menuItems().map((item) => item.querySelector('.context-menu-label')?.textContent?.trim());
+const menuItem = (label: string) =>
+  requireValue(
+    menuItems().find(
+      (item) => item.querySelector('.context-menu-label')?.textContent?.trim() === label
+    ),
+    `expected the ${label} menu item`
+  );
+
+const dialogButton = (label: string) =>
+  requireValue(
+    Array.from(document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')).find(
+      (button) => button.textContent?.trim() === label
+    ),
+    `expected the dialog’s ${label} button`
+  );
+
+const actionCalls = () => app.backend.calls('RunObjectAction').map(([request]) => request);
+const target = (identity: ObjectIdentity) => ({ clusterId: dev.clusterId, ...identity });
+const detailReads = (object: TestObject) =>
+  app.snapshots.reads('object-details').filter((read) => read.scope === object.scopes.detailScope)
+    .length;
+
+beforeEach(() => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['default']);
+  app.startScreen(dev);
+  app.backend.answer('IsWorkloadHPAManaged', () => false);
+  app.backend.answer('RunObjectAction', () => ({}));
 });
 
-const makeDeployment = (overrides?: Partial<ObjectActionData>): ObjectActionData =>
-  makeObject('Deployment', { group: 'apps', version: 'v1', ...overrides });
+afterEach(() => {
+  vi.useRealTimers();
+});
 
-const makePod = (overrides?: Partial<ObjectActionData>): ObjectActionData =>
-  makeObject('Pod', { group: '', version: 'v1', ...overrides });
+describe('an object panel’s Actions menu', () => {
+  it('opens as a menu of buttons outside the panel’s scrolling body', async () => {
+    await openPanel(deployment, deploymentDetail());
 
-const makeCronJob = (overrides?: Partial<ObjectActionData>): ObjectActionData =>
-  makeObject('CronJob', { group: 'batch', version: 'v1', ...overrides });
+    await openActions();
 
-const makeNode = (overrides?: Partial<ObjectActionData>): ObjectActionData =>
-  makeObject('Node', { group: '', version: 'v1', ...overrides });
-
-const FinalizerControllerHarness = ({
-  object,
-  onAfterAction,
-  deletionTimestamp,
-}: {
-  object: ObjectActionData;
-  onAfterAction: (object: ObjectActionData, action: string) => void;
-  deletionTimestamp?: string;
-}) => {
-  const controller = useObjectActionController({ context: 'object-panel', onAfterAction });
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() =>
-          controller.requestFinalizerRemoval(
-            object,
-            'example.com/cleanup',
-            'metadata.finalizers',
-            deletionTimestamp
-          )
-        }
-      >
-        Request finalizer removal
-      </button>
-      {controller.modals}
-    </>
-  );
-};
-
-describe('ActionsMenu', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
-
-  const renderMenu = async (props: React.ComponentProps<typeof ActionsMenu>) => {
-    await act(async () => {
-      root.render(<ActionsMenu {...props} />);
-      await Promise.resolve();
-    });
-  };
-
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    getPermissionKeySpy.mockClear();
-    openWithObjectMock.mockClear();
-    runObjectRestartMock.mockClear();
-    runObjectDeleteMock.mockClear();
-    runObjectScaleMock.mockClear();
-    runCronJobTriggerMock.mockClear();
-    runCronJobSuspendMock.mockClear();
-    runObjectFinalizerRemovalMock.mockClear();
-    runObjectFinalizerRemovalMock.mockResolvedValue(undefined);
-    errorHandlerMock.mockClear();
-  });
-
-  afterEach(() => {
-    eventBus.clear();
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-    vi.useRealTimers();
-  });
-
-  it('renders available actions as native menu buttons', async () => {
-    await renderMenu({ object: makeDeployment() });
-
-    openMenu(container);
-
-    const menu = document.body.querySelector('[role="menu"]');
-    const items = document.body.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]');
-    expect(menu).toBeTruthy();
-    expect(items.length).toBeGreaterThan(0);
-    expect(Array.from(items).every((item) => item.type === 'button')).toBe(true);
-  });
-
-  it('renders the open menu outside the panel scroll container', async () => {
-    await renderMenu({ object: makeNode() });
-
-    openMenu(container);
-
-    const menu = document.body.querySelector<HTMLElement>('.context-menu');
-    expect(menu).toBeTruthy();
-    expect(container.contains(menu)).toBe(false);
-  });
-
-  it('offers Open Map for built-in map kinds but not for same-named custom resources', async () => {
-    const openMapLabel = objectActionLabel(OBJECT_ACTION_IDS.viewMap);
-    const menuLabels = () =>
-      Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item')).map(
-        (item) => item.textContent ?? ''
-      );
-
-    await renderMenu({
-      object: makeObject('Gateway', { group: 'networking.istio.io', version: 'v1beta1' }),
-    });
-    openMenu(container);
-    expect(menuLabels().length).toBeGreaterThan(0);
-    expect(menuLabels().some((label) => label.includes(openMapLabel))).toBe(false);
-    openMenu(container); // the trigger toggles; close before the next object
-
-    await renderMenu({
-      object: makeObject('Gateway', { group: 'gateway.networking.k8s.io', version: 'v1' }),
-    });
-    openMenu(container);
-    expect(menuLabels().some((label) => label.includes(openMapLabel))).toBe(true);
-  });
-
-  it('does not render when object is null', async () => {
-    await renderMenu({ object: null });
-    expect(container.innerHTML).toBe('');
-  });
-
-  it('threads group/version into the delete permission lookup for CRDs', async () => {
-    // Regression: PR #139 made permission keys include group/version. CRD
-    // kinds aren't in the auto-resolve table, so the hook MUST forward
-    // group/version on the descriptor or the lookup key won't match the
-    // spec-emit key from queryKindPermissions and the Delete menu item
-    // silently disappears for CRDs.
-    await renderMenu({
-      object: makeObject('DBInstance', {
-        group: 'rds.services.k8s.aws',
-        version: 'v1alpha1',
-      }),
-    });
-
-    const deleteCalls = getPermissionKeySpy.mock.calls.filter(
-      (call) => call[0] === 'DBInstance' && call[1] === 'delete'
+    const menu = requireValue(document.body.querySelector('[role="menu"]'), 'expected the menu');
+    expect(view.container.querySelector('.object-panel-body')?.contains(menu)).toBe(false);
+    expect(menuItems().length).toBeGreaterThan(0);
+    expect(menuItems().every((item) => item.tagName === 'BUTTON' && item.type === 'button')).toBe(
+      true
     );
-    expect(deleteCalls.length).toBeGreaterThan(0);
-    for (const call of deleteCalls) {
-      // 6th and 7th positional args are group and version.
-      expect(call[5]).toBe('rds.services.k8s.aws');
-      expect(call[6]).toBe('v1alpha1');
+  });
+
+  it('restarts the workload after confirmation, then re-reads it', async () => {
+    const object = await openPanel(deployment, deploymentDetail());
+    const reads = detailReads(object);
+    await openActions();
+
+    await click(menuItem('Restart'));
+    expect(actionCalls()).toEqual([]);
+    await click(dialogButton('Restart'));
+
+    expect(actionCalls()).toEqual([{ action: 'restart', target: target(deployment) }]);
+    expect(detailReads(object)).toBeGreaterThan(reads);
+  });
+
+  it('deletes the object after confirmation and closes its panel', async () => {
+    await openPanel(deployment, deploymentDetail());
+    await openActions();
+
+    await click(menuItem('Delete'));
+    await click(dialogButton('Delete'));
+
+    expect(actionCalls()).toEqual([{ action: 'delete', target: target(deployment) }]);
+    expect(view.openPanels()).toEqual([]);
+  });
+
+  it('runs nothing when the user cancels a restart or delete', async () => {
+    await openPanel(deployment, deploymentDetail());
+
+    for (const label of ['Restart', 'Delete']) {
+      await openActions();
+      await click(menuItem(label));
+      await click(dialogButton('Cancel'));
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
     }
 
-    // Sanity check: the Pod portforward lookup is hardcoded to core/v1
-    // regardless of the surrounding object's GVK.
-    const portForwardCalls = getPermissionKeySpy.mock.calls.filter(
-      (call) => call[0] === 'Pod' && call[3] === 'portforward'
-    );
-    for (const call of portForwardCalls) {
-      expect(call[5]).toBe('');
-      expect(call[6]).toBe('v1');
+    expect(actionCalls()).toEqual([]);
+    expect(view.openPanels()).toHaveLength(1);
+  });
+
+  // A custom resource's delete permission is outside the namespace permissions
+  // the panel queries on open; a table row's menu queries it (the gridtable
+  // controller's queryMissingPermissions, useObjectActionController.tsx). The
+  // panel's menu must look it up under the same group/version key.
+  it.each([
+    ['offers Delete for a custom resource where its permission allows it', true],
+    ['offers no Delete for a custom resource where its permission denies it', false],
+  ])('%s', async (_case, allowed) => {
+    const dbInstance: ObjectIdentity = {
+      group: 'rds.services.k8s.aws',
+      version: 'v1alpha1',
+      kind: 'DBInstance',
+      namespace: 'default',
+      name: 'orders',
+    };
+    if (!allowed) {
+      app.denyPermissions([{ verb: 'delete', resourceKind: 'DBInstance', namespace: 'default' }]);
     }
-  });
-
-  it('confirms restart through the controller and runs the backend restart', async () => {
-    const onAfterAction = vi.fn();
-
-    await renderMenu({
-      object: makeDeployment(),
-      onAfterAction,
-    });
-
-    openMenu(container);
-    clickMenuItem(container, 'Restart');
-    await confirmModal('Restart');
-
-    expect(runObjectRestartMock).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'Deployment', name: 'test-resource', action: 'restart' })
+    const object = app.servePanel(
+      dev,
+      dbInstance,
+      objectDetailOf('customresource', { kind: 'DBInstance', name: 'orders' })
     );
-    expect(onAfterAction).toHaveBeenCalled();
-  });
-
-  it('confirms delete through the controller, runs the backend delete, and signals close', async () => {
-    const onAfterDelete = vi.fn();
-
-    await renderMenu({ object: makeDeployment(), onAfterDelete });
-
-    openMenu(container);
-    const deleteItem = document.body.querySelector<HTMLElement>('.context-menu-item.danger');
-    expect(deleteItem).toBeTruthy();
-    act(() => {
-      deleteItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    await confirmModal('Delete');
-
-    expect(runObjectDeleteMock).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'Deployment', name: 'test-resource', action: 'delete' })
-    );
-    expect(onAfterDelete).toHaveBeenCalled();
-  });
-
-  it('confirms finalizer removal through the controller with full target identity', async () => {
-    const onAfterAction = vi.fn();
-    const object = makeDeployment();
-
+    view = await app.mountApp();
     await act(async () => {
-      root.render(<FinalizerControllerHarness object={object} onAfterAction={onAfterAction} />);
-      await Promise.resolve();
-    });
-    act(() => {
-      container
-        .querySelector<HTMLButtonElement>('button')
-        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    await confirmModal('Remove');
-
-    expect(runObjectFinalizerRemovalMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        clusterId: 'cluster-1',
-        group: 'apps',
-        version: 'v1',
-        kind: 'Deployment',
-        namespace: 'default',
-        name: 'test-resource',
-        action: 'remove finalizer',
-      }),
-      'example.com/cleanup',
-      'metadata.finalizers'
-    );
-    expect(onAfterAction).toHaveBeenCalledWith(object, 'removeFinalizer');
-  });
-
-  it('warns when finalizer removal is requested less than five minutes after deletion', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-08-10T12:04:59Z'));
-    const onAfterAction = vi.fn();
-
-    await act(async () => {
-      root.render(
-        <FinalizerControllerHarness
-          object={makeDeployment()}
-          onAfterAction={onAfterAction}
-          deletionTimestamp="2026-08-10T12:00:00Z"
-        />
+      queryKindPermissions(
+        'DBInstance',
+        'default',
+        dev.clusterId,
+        dbInstance.group,
+        dbInstance.version
       );
-      await Promise.resolve();
+      view.owners().objectPanel.openWithObject(object.ref);
     });
-    act(() => {
-      container
-        .querySelector<HTMLButtonElement>('button')
-        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
+    await app.settle();
 
-    const paragraphs = Array.from(
-      document.querySelectorAll<HTMLElement>('.confirmation-modal-body > p')
-    );
-    expect(paragraphs.map((paragraph) => paragraph.textContent)).toEqual([
-      'Remove finalizer "example.com/cleanup" from deployment "test-resource"?',
-      'Less than 5 minutes has elapsed since the delete was requested. Are you sure you want to delete the finalizer now, without giving the controller more time to clean up?',
-      'This may leave objects in an unknown or bad state. Only continue if the responsible controller cannot complete cleanup.',
-    ]);
-    expect(paragraphs[1]?.classList.contains('confirmation-modal-notice')).toBe(true);
-    expect(paragraphs[2]?.classList.contains('confirmation-modal-warning')).toBe(true);
+    await openActions();
+
+    expect(menuLabels().includes('Delete')).toBe(allowed);
   });
 
-  it('omits the cleanup-time notice once five minutes has elapsed', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-08-10T12:05:00Z'));
-    const onAfterAction = vi.fn();
+  it('scales the workload to the replicas the user enters, then re-reads it', async () => {
+    const object = await openPanel(deployment, deploymentDetail());
+    const reads = detailReads(object);
+    await openActions();
+    await click(menuItem('Scale'));
+    const replicas = requireValue(
+      document.querySelector<HTMLInputElement>('[role="dialog"] input'),
+      'expected the replicas input'
+    );
+    expect(replicas.value).toBe('3');
 
     await act(async () => {
-      root.render(
-        <FinalizerControllerHarness
-          object={makeDeployment()}
-          onAfterAction={onAfterAction}
-          deletionTimestamp="2026-08-10T12:00:00Z"
-        />
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+        replicas,
+        '7'
       );
-      await Promise.resolve();
+      replicas.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    act(() => {
-      container
-        .querySelector<HTMLButtonElement>('button')
-        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
+    await click(dialogButton('Scale'));
 
-    expect(document.querySelector('.confirmation-modal-notice')).toBeNull();
-    expect(document.querySelector('.confirmation-modal-warning')?.textContent).toContain(
-      'This may leave objects in an unknown or bad state.'
-    );
+    expect(actionCalls()).toEqual([{ action: 'scale', target: target(deployment), replicas: 7 }]);
+    expect(detailReads(object)).toBeGreaterThan(reads);
   });
 
-  it('can cancel finalizer removal and reports backend failures without signaling refresh', async () => {
-    const onAfterAction = vi.fn();
-    const object = makeDeployment();
+  it('confirms before scaling a workload to zero from the scale dialog', async () => {
+    await openPanel(deployment, deploymentDetail({ ready: '2/4', desiredReplicas: 4 }));
+    await openActions();
+    await click(menuItem('Scale'));
 
-    await act(async () => {
-      root.render(<FinalizerControllerHarness object={object} onAfterAction={onAfterAction} />);
-      await Promise.resolve();
-    });
-    const requestButton = requireValue(
-      container.querySelector<HTMLButtonElement>('button'),
-      'expected finalizer removal request button'
-    );
-    act(() => requestButton.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    await act(async () => {
-      document
-        .querySelector<HTMLButtonElement>('.confirmation-modal .button.generic')
-        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-    });
-    expect(runObjectFinalizerRemovalMock).not.toHaveBeenCalled();
+    await click(dialogButton('Scale to 0'));
+    expect(actionCalls()).toEqual([]);
+    await click(dialogButton('Scale to 0'));
 
-    runObjectFinalizerRemovalMock.mockRejectedValueOnce(new Error('conflict'));
-    act(() => requestButton.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    await confirmModal('Remove');
-
-    expect(errorHandlerMock).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'conflict' }),
-      expect.objectContaining({ action: 'removeFinalizer', name: 'test-resource' })
-    );
-    expect(onAfterAction).not.toHaveBeenCalled();
+    expect(actionCalls()).toEqual([{ action: 'scale', target: target(deployment), replicas: 0 }]);
   });
 
-  it('closes restart, delete, and trigger confirmations when canceled', async () => {
-    await renderMenu({ object: makeDeployment() });
+  it('offers only Scale to 0, confirmed first, for an HPA-managed workload that is running', async () => {
+    app.backend.answer('IsWorkloadHPAManaged', () => true);
+    await openPanel(deployment, deploymentDetail({ ready: '2/4', desiredReplicas: 4 }));
+    await openActions();
 
-    openMenu(container);
-    clickMenuItem(container, 'Restart');
-    await confirmModal('Cancel');
+    expect(menuLabels()).toContain('Scale to 0');
+    expect(menuLabels()).not.toContain('Scale');
+    expect(menuLabels()).not.toContain('Resume from 0');
+    await click(menuItem('Scale to 0'));
+    expect(actionCalls()).toEqual([]);
+    await click(dialogButton('Scale to 0'));
 
-    openMenu(container);
-    clickMenuItem(container, 'Delete');
-    await confirmModal('Cancel');
-
-    await renderMenu({ object: makeCronJob({ status: 'Active' }) });
-    openMenu(container);
-    clickMenuItem(container, 'Trigger Now');
-    await confirmModal('Cancel');
-
-    expect(runObjectRestartMock).not.toHaveBeenCalled();
-    expect(runObjectDeleteMock).not.toHaveBeenCalled();
-    expect(runCronJobTriggerMock).not.toHaveBeenCalled();
+    expect(actionCalls()).toEqual([{ action: 'scale', target: target(deployment), replicas: 0 }]);
   });
 
-  it('opens the scale modal, updates replicas, and applies the change', async () => {
-    const onAfterAction = vi.fn();
+  it('offers only Resume from 0 for an HPA-managed workload at zero, and resumes it to one', async () => {
+    app.backend.answer('IsWorkloadHPAManaged', () => true);
+    await openPanel(deployment, deploymentDetail({ ready: '0/0', desiredReplicas: 0 }));
+    await openActions();
 
-    await renderMenu({
-      object: makeDeployment({ hpaManaged: false }),
-      currentReplicas: 3,
-      onAfterAction,
-    });
+    expect(menuLabels()).toContain('Resume from 0');
+    expect(menuLabels()).not.toContain('Scale to 0');
+    await click(menuItem('Resume from 0'));
 
-    openMenu(container);
-    clickMenuItem(container, 'Scale');
-
-    const modal = document.querySelector('.scale-modal');
-    expect(modal).toBeTruthy();
-    const input = modal?.querySelector<HTMLInputElement>('[id$="-scale-replicas"]');
-    expect(input?.value).toBe('3');
-
-    const onChange = (() => {
-      if (!input) {
-        return undefined;
-      }
-      const fiberKey = Object.keys(input).find((key) => key.startsWith('__reactFiber$'));
-      const fiber = fiberKey
-        ? (input as HTMLInputElement & Record<string, unknown>)[fiberKey]
-        : undefined;
-      return (fiber as { memoizedProps?: { onChange?: (event: unknown) => void } } | undefined)
-        ?.memoizedProps?.onChange;
-    })();
-    expect(typeof onChange).toBe('function');
-
-    await act(async () => {
-      requireValue(input, 'expected test value in ActionsMenu.test.tsx').value = '7';
-      onChange?.({ target: { value: '7' } });
-      await Promise.resolve();
-    });
-
-    const scaleButton = modal?.querySelector<HTMLButtonElement>('.button.warning');
-    await act(async () => {
-      scaleButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    expect(runObjectScaleMock).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'Deployment', action: 'scale' }),
-      7
-    );
-    expect(onAfterAction).toHaveBeenCalled();
+    expect(actionCalls()).toEqual([{ action: 'scale', target: target(deployment), replicas: 1 }]);
   });
 
-  it('opens the scale modal with the row desired replica count when no explicit count is passed', async () => {
-    await renderMenu({
-      object: makeDeployment({ ready: '2/6', hpaManaged: false }),
-    });
+  it('offers no scale action while the workload’s HPA ownership is unknown', async () => {
+    const release = app.backend.hold('IsWorkloadHPAManaged');
+    await openPanel(deployment, deploymentDetail({ ready: '2/4', desiredReplicas: 4 }));
+    await openActions();
 
-    openMenu(container);
-    clickMenuItem(container, 'Scale');
-
-    const input = document.querySelector<HTMLInputElement>('[id$="-scale-replicas"]');
-    expect(input?.value).toBe('6');
+    expect(menuLabels()).toContain('Restart');
+    expect(menuLabels()).not.toContain('Scale');
+    expect(menuLabels()).not.toContain('Scale to 0');
+    expect(menuLabels()).not.toContain('Resume from 0');
+    release();
+    await app.settle();
   });
 
-  it('confirms before scaling HPA-managed workloads to zero from the menu', async () => {
-    await renderMenu({
-      object: makeDeployment({ ready: '2/4', hpaManaged: true }),
-    });
-
-    openMenu(container);
-    const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
-    const scaleToZeroItem = items.find((item) => item.textContent?.includes('Scale to 0'));
-    expect(scaleToZeroItem).toBeTruthy();
-    expect(items.some((item) => item.textContent?.includes('Resume from 0'))).toBe(false);
-
-    act(() => {
-      scaleToZeroItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(runObjectScaleMock).not.toHaveBeenCalled();
-    expect(document.querySelector('.scale-modal')).toBeNull();
-    const confirmation = document.querySelector<HTMLElement>('.confirmation-modal');
-    expect(confirmation?.textContent).toContain('Scale to 0');
-
-    await confirmModal('Scale to 0');
-
-    expect(runObjectScaleMock).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'Deployment', action: 'scale' }),
-      0
-    );
-  });
-
-  it('shows only Scale to 0 for HPA-managed workloads above zero', async () => {
-    await renderMenu({
-      object: makeDeployment({ ready: '2/4', hpaManaged: true }),
-    });
-
-    openMenu(container);
-    const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
-
-    expect(items.some((item) => item.textContent?.includes('Scale to 0'))).toBe(true);
-    expect(items.some((item) => item.textContent?.includes('Resume from 0'))).toBe(false);
-  });
-
-  it('confirms before scaling a regular workload to zero from the scale modal', async () => {
-    await renderMenu({
-      object: makeDeployment({ ready: '2/4', hpaManaged: false }),
-    });
-
-    openMenu(container);
-    clickMenuItem(container, 'Scale');
-
-    const scaleToZeroButton = Array.from(
-      document.querySelectorAll<HTMLButtonElement>('button')
-    ).find((button) => button.textContent === 'Scale to 0');
-
-    act(() => {
-      scaleToZeroButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(runObjectScaleMock).not.toHaveBeenCalled();
-    const confirmation = document.querySelector<HTMLElement>('.confirmation-modal');
-    expect(confirmation?.textContent).toContain('Scale to 0');
-
-    await confirmModal('Scale to 0');
-
-    expect(runObjectScaleMock).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'Deployment', action: 'scale' }),
-      0
-    );
-  });
-
-  it('resumes HPA-managed workloads from zero from the menu', async () => {
-    await renderMenu({
-      object: makeDeployment({ ready: '0/0', hpaManaged: true }),
-    });
-
-    openMenu(container);
-    const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
-    const resumeItem = items.find((item) => item.textContent?.includes('Resume from 0'));
-    expect(resumeItem).toBeTruthy();
-    expect(items.some((item) => item.textContent?.includes('Scale to 0'))).toBe(false);
-
-    await act(async () => {
-      resumeItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    expect(runObjectScaleMock).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'Deployment', action: 'scale' }),
-      1
-    );
-  });
-
-  it('uses currentReplicas when choosing the HPA-managed menu action', async () => {
-    await renderMenu({
-      object: makeDeployment({ hpaManaged: true }),
-      currentReplicas: 4,
-    });
-
-    openMenu(container);
-    const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
-
-    expect(items.some((item) => item.textContent?.includes('Scale to 0'))).toBe(true);
-    expect(items.some((item) => item.textContent?.includes('Resume from 0'))).toBe(false);
-  });
-
-  it('shows Resume from 0 when currentReplicas is zero', async () => {
-    await renderMenu({
-      object: makeDeployment({ ready: '0/4', hpaManaged: true }),
-      currentReplicas: 0,
-    });
-
-    openMenu(container);
-    const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
-
-    expect(items.some((item) => item.textContent?.includes('Resume from 0'))).toBe(true);
-    expect(items.some((item) => item.textContent?.includes('Scale to 0'))).toBe(false);
-  });
-
-  it('closes the menu when clicking outside', async () => {
-    await renderMenu({
-      object: makeDeployment(),
-    });
-
-    openMenu(container);
-    expect(document.body.querySelector('.context-menu')).toBeTruthy();
-
-    act(() => {
-      document.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-    });
-
-    expect(document.body.querySelector('.context-menu')).toBeNull();
-  });
-
-  it('does not show Scale while HPA ownership is unknown', async () => {
-    await renderMenu({
-      object: makeDeployment({ ready: '2/4' }),
-    });
-
-    openMenu(container);
-    const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
-
-    expect(items.some((item) => item.textContent === 'Scale')).toBe(false);
-    expect(items.some((item) => item.textContent?.includes('Scale to 0'))).toBe(false);
-    expect(items.some((item) => item.textContent?.includes('Resume from 0'))).toBe(false);
-  });
-
-  it('shows port forward action for Pod', async () => {
-    await renderMenu({
-      object: makePod(),
-    });
-
-    openMenu(container);
-    const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
-    const portForwardItem = items.find((item) => item.textContent?.includes('Port Forward'));
-    expect(portForwardItem).toBeTruthy();
-  });
-
-  it('renders port forward as disabled when the target is unavailable', async () => {
-    await renderMenu({
-      object: makePod({
-        clusterId: '',
-      }),
-    });
-
-    openMenu(container);
-    const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
-    const portForwardItem = items.find((item) => item.textContent?.includes('Port Forward'));
-    expect(portForwardItem).toBeTruthy();
-    expect(portForwardItem?.className).toContain('disabled');
-    expect(portForwardItem?.textContent).toContain('Port Forward');
-  });
-
-  it('renders port forward as disabled when the target has no forwardable ports', async () => {
-    await renderMenu({
-      object: makePod({
-        portForwardAvailable: false,
-      }),
-    });
-
-    openMenu(container);
-    const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
-    const portForwardItem = items.find((item) => item.textContent?.includes('Port Forward'));
-    expect(portForwardItem).toBeTruthy();
-    expect(portForwardItem?.className).toContain('disabled');
-    expect(portForwardItem?.textContent).toContain('Port Forward');
-  });
-
-  it('shows Diff in the actions menu and emits an object-diff request', async () => {
-    await renderMenu({
-      object: makeDeployment(),
-    });
-
-    let payload: unknown;
-    const unsubscribe = eventBus.on('view:open-object-diff', (next) => {
-      payload = next;
-    });
-
-    openMenu(container);
-    const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
-    const diffItem = items.find((item) => item.textContent?.includes('Diff'));
-    expect(diffItem).toBeTruthy();
-
-    act(() => {
-      diffItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    unsubscribe();
-
-    expect(payload).toMatchObject({
-      left: {
-        clusterId: 'cluster-1',
+  it('disables Port Forward for a pod with no forwardable ports', async () => {
+    await openPanel(
+      { group: '', version: 'v1', kind: 'Pod', namespace: 'default', name: 'batch-1' },
+      objectDetailOf('pod', {
+        name: 'batch-1',
         namespace: 'default',
-        group: 'apps',
-        version: 'v1',
-        kind: 'Deployment',
-        name: 'test-resource',
+        containers: [{ name: 'batch', image: 'batch:1', ports: [] }],
+      })
+    );
+    await openActions();
+
+    expect(menuItem('Port Forward').disabled).toBe(true);
+  });
+
+  it('switches the panel to its Map tab from Open Map and closes the menu', async () => {
+    const configMap: ObjectIdentity = {
+      group: '',
+      version: 'v1',
+      kind: 'ConfigMap',
+      namespace: 'default',
+      name: 'settings',
+    };
+    const object = app.object(dev, configMap);
+    // backend/refresh/snapshot/object_map.go: the map seeded at the panel's object.
+    app.snapshots.serve('object-map', requireValue(object.scopes.mapScope, 'map scope'), {
+      clusterId: dev.clusterId,
+      clusterName: dev.clusterName,
+      seed: target(configMap),
+      nodes: [],
+      edges: [],
+      maxNodes: 250,
+      truncated: false,
+    });
+    await openPanel(
+      configMap,
+      objectDetailOf('configmap', { name: 'settings', namespace: 'default', usedBy: [] })
+    );
+    await openActions();
+
+    await click(
+      requireValue(
+        menuItems().find((item) => item.dataset.contextActionId === OBJECT_ACTION_IDS.viewMap),
+        'expected Open Map'
+      )
+    );
+
+    expect(
+      view.owners().objectPanels.getOwnedPanel(dev.clusterId, objectPanelId(object.ref))?.activeView
+    ).toBe('map');
+    expect(document.body.querySelector('[role="menu"]')).toBeNull();
+  });
+
+  it('cordons a node after confirmation', async () => {
+    const node: ObjectIdentity = {
+      group: '',
+      version: 'v1',
+      kind: 'Node',
+      namespace: '',
+      name: 'node-1',
+    };
+    // A Node panel watches its cluster's drains (useNodeMaintenanceActions.tsx)
+    // and collects the node's metrics from the cluster's nodes (core/resource-metrics/scope.ts).
+    app.snapshots.serve('object-maintenance', buildNodeMaintenanceAggregateScope(dev.clusterId), {
+      clusterId: dev.clusterId,
+      drains: [],
+    });
+    app.snapshots.serve(
+      'nodes',
+      buildClusterRefreshScope('nodes', dev.clusterId),
+      makeClusterNodeSnapshotPayload({ clusterId: dev.clusterId, clusterName: dev.clusterName })
+    );
+    // A Node panel asks which node logs it can offer.
+    app.backend.answer('DiscoverNodeLogs', () => ({ supported: false, reason: 'unavailable' }));
+    await openPanel(node, objectDetailOf('node', { name: 'node-1', unschedulable: false }));
+    await openActions();
+
+    await click(menuItem('Cordon'));
+    await click(dialogButton('Cordon'));
+
+    expect(actionCalls()).toEqual([{ action: 'cordon', target: target(node) }]);
+  });
+
+  describe('for a CronJob', () => {
+    it('suspends an active CronJob, and triggers it only once the user confirms', async () => {
+      await openPanel(cronJob, cronJobDetail(false));
+      await openActions();
+      expect(menuItem('Trigger Now').disabled).toBe(false);
+
+      await click(menuItem('Suspend'));
+      expect(actionCalls()).toEqual([
+        { action: 'suspend', target: target(cronJob), suspend: true },
+      ]);
+
+      await openActions();
+      await click(menuItem('Trigger Now'));
+      await click(dialogButton('Cancel'));
+      await openActions();
+      await click(menuItem('Trigger Now'));
+      await click(dialogButton('Trigger'));
+
+      expect(actionCalls().slice(1)).toEqual([{ action: 'trigger', target: target(cronJob) }]);
+    });
+
+    it('offers Resume, and no Trigger Now, for a suspended CronJob, and resumes it', async () => {
+      await openPanel(cronJob, cronJobDetail(true));
+      await openActions();
+
+      expect(menuLabels()).not.toContain('Suspend');
+      expect(menuItem('Trigger Now').disabled).toBe(true);
+      await click(menuItem('Resume'));
+
+      expect(actionCalls()).toEqual([
+        { action: 'suspend', target: target(cronJob), suspend: false },
+      ]);
+    });
+  });
+});
+
+describe('finalizer removal from a terminating object’s Details', () => {
+  const openTerminating = async () =>
+    openPanel(deployment, {
+      ...deploymentDetail(),
+      deletion: { deletionTimestamp: '2026-08-10T12:00:00Z', finalizers: ['example.com/cleanup'] },
+    });
+  const requestRemoval = () =>
+    click(
+      requireValue(
+        view.container.querySelector<HTMLButtonElement>(
+          'button[aria-label="Remove finalizer example.com/cleanup"]'
+        ),
+        'expected the finalizer’s Remove button'
+      )
+    );
+
+  it.each([
+    ['warns that the controller may still be cleaning up', '2026-08-10T12:04:59Z', true],
+    ['does not warn once five minutes have passed', '2026-08-10T12:05:00Z', false],
+  ])('%s since the delete was requested', async (_case, now, warns) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(now));
+    await openTerminating();
+
+    await requestRemoval();
+
+    const dialog = requireValue(document.querySelector('[role="dialog"]'), 'expected the dialog');
+    expect(dialog.textContent?.includes('Less than 5 minutes has elapsed')).toBe(warns);
+  });
+
+  it('runs nothing on Cancel, and reports a refused removal without re-reading the object', async () => {
+    const object = await openTerminating();
+    await requestRemoval();
+    await click(dialogButton('Cancel'));
+    expect(actionCalls()).toEqual([]);
+
+    app.backend.answer('RunObjectAction', () => {
+      throw new Error('conflict');
+    });
+    const reads = detailReads(object);
+    await requestRemoval();
+    await click(dialogButton('Remove'));
+
+    expect(actionCalls()).toEqual([
+      {
+        action: 'removeFinalizer',
+        target: target(deployment),
+        finalizer: 'example.com/cleanup',
+        finalizerPath: 'metadata.finalizers',
       },
-    });
-  });
-
-  it('shows the map panel action for supported objects and opens the map tab', async () => {
-    await renderMenu({
-      object: makeObject('ConfigMap', {
-        group: '',
-        version: 'v1',
-      }),
-    });
-
-    openMenu(container);
-    const objectMapItem = document.body.querySelector<HTMLElement>(
-      `[data-context-action-id="${OBJECT_ACTION_IDS.viewMap}"]`
-    );
-    expect(objectMapItem).toBeTruthy();
-
-    act(() => {
-      objectMapItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'ConfigMap',
-        name: 'test-resource',
-        namespace: 'default',
-        clusterId: 'cluster-1',
-        group: '',
-        version: 'v1',
-      }),
-      { initialTab: 'map' }
-    );
-    expect(document.body.querySelector('.context-menu')).toBeNull();
-  });
-
-  it('dispatches the resolved Node object through the supplied cordon handler', async () => {
-    const onCordon = vi.fn();
-    await renderMenu({ object: makeNode(), onCordon });
-
-    openMenu(container);
-    clickMenuItem(container, 'Cordon');
-
-    expect(onCordon).toHaveBeenCalledTimes(1);
-  });
-
-  describe('CronJob actions', () => {
-    it('shows trigger and suspend actions for CronJob', async () => {
-      await renderMenu({
-        object: makeCronJob(),
-      });
-
-      openMenu(container);
-      const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
-
-      const triggerItem = items.find((item) => item.textContent?.includes('Trigger Now'));
-      const suspendItem = items.find((item) => item.textContent?.includes('Suspend'));
-
-      expect(triggerItem).toBeTruthy();
-      expect(suspendItem).toBeTruthy();
-    });
-
-    it('shows Resume instead of Suspend when status is Suspended', async () => {
-      await renderMenu({
-        object: makeCronJob({ status: 'Suspended' }),
-      });
-
-      openMenu(container);
-      const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
-
-      const resumeItem = items.find((item) => item.textContent?.includes('Resume'));
-      const suspendItem = items.find((item) => item.textContent?.includes('Suspend'));
-
-      expect(resumeItem).toBeTruthy();
-      expect(suspendItem).toBeFalsy();
-    });
-
-    it('disables trigger when CronJob is suspended', async () => {
-      await renderMenu({
-        object: makeCronJob({ status: 'Suspended' }),
-      });
-
-      openMenu(container);
-      const items = Array.from(document.body.querySelectorAll<HTMLElement>('.context-menu-item'));
-      const triggerItem = items.find((item) => item.textContent?.includes('Trigger Now'));
-      expect(triggerItem?.classList.contains('disabled')).toBe(true);
-    });
-
-    it('runs the backend suspend when suspend is clicked', async () => {
-      const onAfterAction = vi.fn();
-
-      await renderMenu({
-        object: makeCronJob(),
-        onAfterAction,
-      });
-
-      openMenu(container);
-      clickMenuItem(container, 'Suspend');
-
-      await act(async () => {
-        await Promise.resolve();
-      });
-
-      expect(runCronJobSuspendMock).toHaveBeenCalledWith(
-        expect.objectContaining({ kind: 'CronJob', action: 'suspend' }),
-        true
-      );
-      expect(onAfterAction).toHaveBeenCalled();
-    });
-
-    it('shows trigger confirmation modal and runs the backend trigger when confirmed', async () => {
-      const onAfterAction = vi.fn();
-
-      await renderMenu({
-        object: makeCronJob(),
-        onAfterAction,
-      });
-
-      openMenu(container);
-      clickMenuItem(container, 'Trigger Now');
-
-      // Modal is portaled to document.body, not the container
-      const modal = document.querySelector('.modal-container');
-      expect(modal).toBeTruthy();
-
-      const confirmBtn = modal?.querySelector<HTMLButtonElement>('.button:not(.cancel)');
-      await act(async () => {
-        confirmBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-        await Promise.resolve();
-      });
-
-      expect(runCronJobTriggerMock).toHaveBeenCalledWith(
-        expect.objectContaining({ kind: 'CronJob', action: 'trigger' })
-      );
-      expect(onAfterAction).toHaveBeenCalled();
-    });
+    ]);
+    expect(app.errors.take((record) => record.context?.action === 'removeFinalizer')).toEqual([
+      expect.objectContaining({ context: expect.objectContaining({ name: 'web' }) }),
+    ]);
+    expect(detailReads(object)).toBe(reads);
   });
 });

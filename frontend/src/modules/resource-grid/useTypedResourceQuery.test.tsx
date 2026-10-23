@@ -1,248 +1,309 @@
+/**
+ * frontend/src/modules/resource-grid/useTypedResourceQuery.test.tsx
+ *
+ * The typed resource query every query-backed table pages through: which
+ * snapshot reads it issues (cluster, selector, page size, filters, sort,
+ * cursor), the page it delivers, warm-up versus failure, quiet refetches that
+ * keep rows visible, cursor navigation and its rollback, cluster isolation,
+ * and the export walk. The hook runs inside the app shell through the real
+ * data-access broker, orchestrator, and refresh store; only the backend
+ * boundary is faked (test-utils/appState).
+ */
+
 import type { SortConfig } from '@hooks/useTableSort';
+import type { GridTableFilterState } from '@shared/components/tables/GridTable';
 import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
-import React, { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { isPermissionDenied, localFailure } from '@/core/refresh/refreshFailure';
-import { ALL_NAMESPACES_SELECTOR } from '@/core/refresh/scopeSelector';
-import { makeResourceRef } from '@/test-utils/makeResourceRef';
+import { act, useLayoutEffect } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { backend } from '@/core/backend-api/models';
+import {
+  makeNamespaceConfigSnapshotPayload,
+  makePodSnapshotEntry,
+  makePodSnapshotPayload,
+} from '@/core/refresh/refreshContractTestBuilders';
+import { ALL_NAMESPACES_SELECTOR, parseRefreshScope } from '@/core/refresh/scopeSelector';
+import { getScopedDomainState } from '@/core/refresh/store';
+import type { CanonicalResourceRef, PodSnapshotPayload, RefreshDomain } from '@/core/refresh/types';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { snapshotResponse, statusResponse } from '@/test-utils/appState/transport';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { requireValue } from '@/test-utils/requireValue';
-import type { TypedQueryPayload } from './typedResourceQueryScope';
+import { selectPayloadRows, type TypedQueryPayload } from './typedResourceQueryScope';
 import { type UseTypedResourceQueryResult, useTypedResourceQuery } from './useTypedResourceQuery';
 
-const { requestRefreshDomainStateMock } = vi.hoisted(() => ({
-  requestRefreshDomainStateMock: vi.fn(),
-}));
+type Row = { ref: CanonicalResourceRef } & Record<string, unknown>;
+type Payload = TypedQueryPayload & { rows?: Row[] };
 
-vi.mock('@/core/data-access', () => ({
-  requestRefreshDomainState: (...args: unknown[]) => requestRefreshDomainStateMock(...(args as [])),
-}));
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
+let query: UseTypedResourceQueryResult<Row, Payload> | undefined;
+// Every committed render: which cluster it showed and the rows it painted.
+let committed: Array<{ clusterId: string; names: string[] }> = [];
 
-interface TestRow {
-  name: string;
+const NAME_ASC: SortConfig = { key: 'name', direction: 'asc' };
+
+interface ProbeProps {
+  clusterId?: string;
+  domain?: RefreshDomain;
+  filters?: GridTableFilterState;
+  sortConfig?: SortConfig | null;
+  pageLimit?: number;
+  liveDataVersion?: string;
 }
 
-interface TestPayload extends TypedQueryPayload {
-  rows?: TestRow[];
+function QueryProbe({
+  clusterId,
+  domain = 'pods',
+  filters = DEFAULT_GRID_TABLE_FILTER_STATE,
+  sortConfig = NAME_ASC,
+  pageLimit,
+  liveDataVersion,
+}: Readonly<ProbeProps>) {
+  const cluster = clusterId ?? dev.clusterId;
+  const result = useTypedResourceQuery<Payload, Row>({
+    enabled: true,
+    clusterId: cluster,
+    domain,
+    label: 'All Namespaces Pods',
+    baseSelector: ALL_NAMESPACES_SELECTOR,
+    filters,
+    sortConfig,
+    pageLimit,
+    liveDataVersion,
+    selectRows: selectPayloadRows,
+  });
+  query = result;
+  useLayoutEffect(() => {
+    committed.push({ clusterId: cluster, names: result.rows.map((row) => row.ref.name) });
+  });
+  return null;
 }
 
-const sortConfig = { key: 'name', direction: 'asc' } as const;
-const selectRows = (payload: TestPayload) => payload.rows ?? [];
+const current = () => requireValue(query, 'expected the typed query result');
+const rowNames = () => current().rows.map((row) => row.ref.name);
+
+/** A pods page as backend/refresh/snapshot/pods.go serves it, in `cluster`. */
+const page = (
+  names: string[],
+  overrides: Partial<PodSnapshotPayload> = {},
+  cluster: TestCluster = dev
+): PodSnapshotPayload =>
+  makePodSnapshotPayload({
+    clusterId: cluster.clusterId,
+    clusterName: cluster.clusterName,
+    rows: names.map((name) =>
+      makePodSnapshotEntry({ ref: { clusterId: cluster.clusterId, namespace: 'team-a', name } })
+    ),
+    total: names.length,
+    unfilteredTotal: names.length,
+    ...overrides,
+  });
+
+interface PageRequest {
+  domain: string;
+  clusterId: string;
+  params: URLSearchParams;
+}
+
+// What the backend answers for each typed read; tests replace it.
+let answerPage: (request: PageRequest) => unknown = () => undefined;
+
+const paramsOf = (domain: string, scope: string) =>
+  new URLSearchParams(parseRefreshScope(domain as RefreshDomain, scope).query ?? '');
+
+const readsOf = (domain: RefreshDomain = 'pods') =>
+  app.snapshots.reads(domain).map((read) => read.scope);
+const lastRead = (domain: RefreshDomain = 'pods') =>
+  requireValue(readsOf(domain).slice(-1)[0], `expected a ${domain} read`);
+
+const start = async (lifecycle?: backend.ClusterLifecycleState) => {
+  query = undefined;
+  committed = [];
+  answerPage = () => undefined;
+  dev = app.cluster({ name: 'dev', context: 'alpha', lifecycle });
+  app.namespaces(dev, ['team-a']);
+  app.snapshots.answer(({ domain, scope }) => {
+    if (domain !== 'pods' && domain !== 'namespace-config') {
+      return undefined;
+    }
+    const { clusterId } = parseRefreshScope(domain, scope);
+    return answerPage({ domain, clusterId, params: paramsOf(domain, scope) });
+  });
+  view = await app.render(null);
+};
+
+let heldVersion = 1_000_000;
+
+/** Parks the typed reads `matches` accepts until the returned release runs. */
+const holdReads = (
+  matches: (params: URLSearchParams, clusterId: string) => boolean = () => true
+) => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  app.snapshots.respond(({ domain, scope }) => {
+    if (domain !== 'pods') {
+      return undefined;
+    }
+    const { clusterId } = parseRefreshScope(domain, scope);
+    const params = paramsOf(domain, scope);
+    if (!matches(params, clusterId)) {
+      return undefined;
+    }
+    // The backend answers once released, with what it serves by then.
+    return gate.then(() =>
+      snapshotResponse({
+        domain,
+        scope,
+        version: ++heldVersion,
+        payload: answerPage({ domain, clusterId, params }),
+      })
+    );
+  });
+  return async () => {
+    app.snapshots.respond(null);
+    release();
+    await app.settle();
+  };
+};
+
+/** The backend fails the typed reads `matches` accepts. */
+const failReads = (matches: (params: URLSearchParams) => boolean) => {
+  app.snapshots.respond(({ domain, scope }) =>
+    domain === 'pods' && matches(paramsOf(domain, scope))
+      ? statusResponse(makeErrorStatus('InternalError', 'pods list failed'))
+      : undefined
+  );
+};
+
+/** Takes the failed-read report the orchestrator raises for the pods table. */
+const takeReadFailures = () => app.errors.take((record) => record.context?.domain === 'pods');
+
+const run = async (action: () => void) => {
+  await act(async () => {
+    action();
+  });
+  await app.settle();
+};
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('useTypedResourceQuery', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
-  let result: UseTypedResourceQueryResult<TestRow> | undefined;
-  const requireResult = (): UseTypedResourceQueryResult<TestRow> =>
-    requireValue(result, 'Expected the typed resource query result after rendering the probe');
+  it('refetches the current page on a live-data change, keeping its rows until the new page lands', async () => {
+    await start();
+    let names = ['pod-a'];
+    answerPage = () => page(names);
+    await view.show(<QueryProbe liveDataVersion="version-1" />);
+    expect(rowNames()).toEqual(['pod-a']);
+    expect(current().loading).toBe(false);
 
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    result = undefined;
-    requestRefreshDomainStateMock.mockReset();
+    const release = holdReads();
+    names = ['pod-b'];
+    await view.show(<QueryProbe liveDataVersion="version-2" />);
+    expect(rowNames()).toEqual(['pod-a']);
+    expect(current().loading).toBe(true);
+
+    await release();
+    expect(rowNames()).toEqual(['pod-b']);
+    expect(current().loading).toBe(false);
+    // Every read, the refetch included, is the visible page of the cluster's query.
+    expect(new Set(readsOf())).toEqual(
+      new Set([`${dev.clusterId}|namespace:all?limit=50&sort=name&sortDirection=asc`])
+    );
   });
 
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
+  it('reuses unchanged rows and refs across live refetches', async () => {
+    await start();
+    let data = 2;
+    answerPage = ({ domain }) =>
+      domain === 'namespace-config'
+        ? makeNamespaceConfigSnapshotPayload({
+            clusterId: dev.clusterId,
+            clusterName: dev.clusterName,
+            total: 1,
+            unfilteredTotal: 1,
+            rows: [
+              {
+                ref: {
+                  clusterId: dev.clusterId,
+                  group: '',
+                  version: 'v1',
+                  kind: 'ConfigMap',
+                  resource: 'configmaps',
+                  namespace: 'team-a',
+                  name: 'api',
+                  uid: 'api-uid',
+                },
+                data,
+                age: '1d',
+              },
+            ],
+          })
+        : undefined;
+    await view.show(<QueryProbe domain="namespace-config" liveDataVersion="v1" />);
+    const first = requireValue(current().rows[0], 'first config row');
+
+    await view.show(<QueryProbe domain="namespace-config" liveDataVersion="v2" />);
+    const unchanged = requireValue(current().rows[0], 'unchanged config row');
+    expect(unchanged).toBe(first);
+    expect(unchanged.ref).toBe(first.ref);
+
+    data = 3;
+    await view.show(<QueryProbe domain="namespace-config" liveDataVersion="v3" />);
+    const changed = requireValue(current().rows[0], 'changed config row');
+    expect(changed).not.toBe(first);
+    expect(changed.ref).toBe(first.ref);
+    expect(changed.data).toBe(3);
   });
 
-  const renderQuery = async () => {
-    const Probe: React.FC = () => {
-      result = useTypedResourceQuery<TestPayload, TestRow>({
-        enabled: true,
-        clusterId: 'cluster-a',
-        domain: 'pods',
-        baseSelector: ALL_NAMESPACES_SELECTOR,
-        label: 'All Namespaces Pods',
-        filters: DEFAULT_GRID_TABLE_FILTER_STATE,
-        sortConfig,
-        selectRows,
-      });
-      return null;
+  it('walks every page of the current query for export at the export page size', async () => {
+    await start();
+    answerPage = ({ params }) => {
+      if (params.get('limit') !== '1000') {
+        return page([]);
+      }
+      return params.get('continue') === 'cursor-1'
+        ? page(['c'], { total: 3 })
+        : page(['a', 'b'], { total: 3, continue: 'cursor-1' });
     };
+    await view.show(<QueryProbe />);
 
+    let all: Row[] = [];
     await act(async () => {
-      root.render(<Probe />);
-      await Promise.resolve();
-      await Promise.resolve();
+      all = await current().fetchAllRows();
     });
-  };
 
-  const renderPagedQuery = async (pageLimit = 2) => {
-    const Probe: React.FC = () => {
-      result = useTypedResourceQuery<TestPayload, TestRow>({
-        enabled: true,
-        clusterId: 'cluster-a',
-        domain: 'pods',
-        baseSelector: ALL_NAMESPACES_SELECTOR,
-        label: 'All Namespaces Pods',
-        filters: DEFAULT_GRID_TABLE_FILTER_STATE,
-        sortConfig,
-        pageLimit,
-        selectRows,
-      });
-      return null;
+    expect(all.map((row) => row.ref.name)).toEqual(['a', 'b', 'c']);
+    const exportReads = readsOf()
+      .map((scope) => paramsOf('pods', scope))
+      .filter((params) => params.get('limit') === '1000');
+    expect(exportReads.map((params) => params.get('continue'))).toEqual([null, 'cursor-1']);
+    expect(exportReads.every((params) => params.get('sort') === 'name')).toBe(true);
+  });
+
+  it('walks an export override query with its own filters, sort, page size, and predicates', async () => {
+    await start();
+    answerPage = ({ params }) => {
+      if (params.get('limit') !== '25') {
+        return page([]);
+      }
+      return params.get('continue') === 'cursor-1'
+        ? page(['worker'])
+        : page(['api'], { continue: 'cursor-1' });
     };
+    await view.show(<QueryProbe />);
 
+    let all: Row[] = [];
     await act(async () => {
-      root.render(<Probe />);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-  };
-
-  it('keeps a missing query payload in the warm-up (not-loaded) state', async () => {
-    // An executed refresh whose scoped state carries no payload yet means the
-    // backend is still warming up. The hook stays not-loaded (the table keeps
-    // its loading presentation) and the next live-data identity change retries
-    // — no fabricated error.
-    requestRefreshDomainStateMock.mockResolvedValue({
-      status: 'executed',
-      data: { status: 'ready' },
-    });
-
-    await renderQuery();
-
-    expect(result?.loaded).toBe(false);
-    expect(result?.error).toBeNull();
-  });
-
-  it('reuses unchanged static rows and refs across live refetches', async () => {
-    interface CanonicalTestRow {
-      ref: ReturnType<typeof makeResourceRef>;
-      status: string;
-    }
-    interface CanonicalTestPayload extends TypedQueryPayload {
-      rows?: CanonicalTestRow[];
-    }
-    let canonicalResult: UseTypedResourceQueryResult<CanonicalTestRow> | undefined;
-    const makeRow = (status = 'Ready'): CanonicalTestRow => ({
-      ref: makeResourceRef({
-        clusterId: 'cluster-a',
-        kind: 'ConfigMap',
-        resource: 'configmaps',
-        namespace: 'default',
-        name: 'api',
-      }),
-      status,
-    });
-    const Probe: React.FC<{ liveDataVersion: string }> = ({ liveDataVersion }) => {
-      canonicalResult = useTypedResourceQuery<CanonicalTestPayload, CanonicalTestRow>({
-        enabled: true,
-        clusterId: 'cluster-a',
-        domain: 'namespace-config',
-        baseSelector: ALL_NAMESPACES_SELECTOR,
-        label: 'Config',
-        filters: DEFAULT_GRID_TABLE_FILTER_STATE,
-        sortConfig,
-        liveDataVersion,
-        selectRows: (payload) => payload.rows ?? [],
-      });
-      return null;
-    };
-
-    requestRefreshDomainStateMock
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: { status: 'ready', data: { rows: [makeRow()] } },
-      })
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: { status: 'ready', data: { rows: [makeRow()] } },
-      })
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: { status: 'ready', data: { rows: [makeRow('Updating')] } },
-      });
-
-    await act(async () => {
-      root.render(<Probe liveDataVersion="v1" />);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    const firstRow = requireValue(canonicalResult?.rows[0], 'first static row');
-
-    await act(async () => {
-      root.render(<Probe liveDataVersion="v2" />);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    const unchangedRow = requireValue(canonicalResult?.rows[0], 'unchanged static row');
-    expect(unchangedRow).toBe(firstRow);
-    expect(unchangedRow.ref).toBe(firstRow.ref);
-
-    await act(async () => {
-      root.render(<Probe liveDataVersion="v3" />);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    const changedRow = requireValue(canonicalResult?.rows[0], 'changed static row');
-    expect(changedRow).not.toBe(firstRow);
-    expect(changedRow.ref).toBe(firstRow.ref);
-    expect(changedRow.status).toBe('Updating');
-  });
-
-  it('fetchAllRows pages through the full result set following the cursor', async () => {
-    requestRefreshDomainStateMock.mockResolvedValue({
-      status: 'executed',
-      data: { status: 'ready', data: { rows: [] } },
-    });
-    await renderQuery();
-    expect(result).toBeDefined();
-
-    requestRefreshDomainStateMock.mockReset();
-    requestRefreshDomainStateMock
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: {
-          status: 'ready',
-          data: { rows: [{ name: 'a' }, { name: 'b' }], continue: 'cursor-1' },
-        },
-      })
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: { status: 'ready', data: { rows: [{ name: 'c' }] } },
-      });
-
-    let all: TestRow[] = [];
-    await act(async () => {
-      all = await requireResult().fetchAllRows();
-    });
-
-    expect(all.map((row) => row.name)).toEqual(['a', 'b', 'c']);
-    expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(2);
-  });
-
-  it('fetchAllRows can walk an override query scope with custom filters and predicates', async () => {
-    requestRefreshDomainStateMock.mockResolvedValue({
-      status: 'executed',
-      data: { status: 'ready', data: { rows: [] } },
-    });
-    await renderQuery();
-    expect(result).toBeDefined();
-
-    requestRefreshDomainStateMock.mockReset();
-    requestRefreshDomainStateMock
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: {
-          status: 'ready',
-          data: { rows: [{ name: 'api' }], continue: 'cursor-1' },
-        },
-      })
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: { status: 'ready', data: { rows: [{ name: 'worker' }] } },
-      });
-
-    let all: TestRow[] = [];
-    await act(async () => {
-      all = await requireResult().fetchAllRows({
+      all = await current().fetchAllRows({
         filters: {
           ...DEFAULT_GRID_TABLE_FILTER_STATE,
           search: 'api',
@@ -257,1036 +318,334 @@ describe('useTypedResourceQuery', () => {
       });
     });
 
-    expect(all.map((row) => row.name)).toEqual(['api', 'worker']);
-    expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(2);
-    expect(requestRefreshDomainStateMock).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        label: 'Pod Export',
-        scope: expect.stringContaining('limit=25'),
-      })
-    );
-    const firstScope = requestRefreshDomainStateMock.mock.calls[0][0].scope as string;
-    expect(firstScope).toContain('search=api');
-    expect(firstScope).toContain('includeMetadata=true');
-    expect(firstScope).toContain('namespaces=team-a%2Cteam-b');
-    expect(firstScope).toContain('kinds=Pod');
-    expect(firstScope).toContain('sort=cpu');
-    expect(firstScope).toContain('sortDirection=desc');
-    expect(firstScope).toContain('predicate.owner=team-a%2Fapi%7Cteam-a%2Fworker');
-    const secondScope = requestRefreshDomainStateMock.mock.calls[1][0].scope as string;
-    expect(secondScope).toContain('continue=cursor-1');
+    expect(all.map((row) => row.ref.name)).toEqual(['api', 'worker']);
+    const [first, second] = readsOf()
+      .map((scope) => paramsOf('pods', scope))
+      .filter((params) => params.get('limit') === '25');
+    expect(Object.fromEntries(requireValue(first, 'first export page'))).toEqual({
+      limit: '25',
+      search: 'api',
+      includeMetadata: 'true',
+      namespaces: 'team-a,team-b',
+      kinds: 'Pod',
+      sort: 'cpu',
+      sortDirection: 'desc',
+      'predicate.owner': 'team-a/api|team-a/worker',
+    });
+    expect(second?.get('continue')).toBe('cursor-1');
+  });
+
+  it('rejects an export whose later page fails instead of returning a partial result', async () => {
+    await start();
+    answerPage = ({ params }) =>
+      params.get('limit') === '1000' ? page(['a'], { continue: 'cursor-1' }) : page([]);
+    failReads((params) => params.get('continue') === 'cursor-1');
+    await view.show(<QueryProbe />);
+
+    await expect(current().fetchAllRows()).rejects.toThrow(/page 2/);
+    expect(takeReadFailures()).toHaveLength(1);
   });
 
   it('rolls back a failed page navigation so the cursor, buttons, and retry stay usable', async () => {
-    // Page 1 with a next cursor.
-    requestRefreshDomainStateMock.mockResolvedValue({
-      status: 'executed',
-      data: {
-        status: 'ready',
-        data: { rows: [{ name: 'a' }, { name: 'b' }], continue: 'cursor-2', total: 3 },
-      },
-    });
-    await renderPagedQuery();
-    expect(result?.rows).toEqual([{ name: 'a' }, { name: 'b' }]);
-    expect(result?.continueToken).toBe('cursor-2');
-    const pageOneScope = requestRefreshDomainStateMock.mock.calls[0][0].scope as string;
+    await start();
+    answerPage = ({ params }) =>
+      params.get('continue') === 'cursor-2'
+        ? page(['c'], { total: 3 })
+        : page(['a', 'b'], { total: 3, continue: 'cursor-2' });
+    await view.show(<QueryProbe pageLimit={2} />);
+    expect(current().continueToken).toBe('cursor-2');
+    const pageOne = lastRead();
 
-    // The page-2 fetch fails; the rollback refetch of page 1 succeeds.
-    requestRefreshDomainStateMock.mockReset();
-    requestRefreshDomainStateMock
-      .mockRejectedValueOnce(new Error('page fetch failed'))
-      .mockResolvedValue({
-        status: 'executed',
-        data: {
-          status: 'ready',
-          data: { rows: [{ name: 'a' }, { name: 'b' }], continue: 'cursor-2', total: 3 },
-        },
-      });
+    failReads((params) => params.get('continue') === 'cursor-2');
+    await run(() => current().loadMore());
 
-    await act(async () => {
-      requireResult().loadMore();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    // Let the rollback-triggered refetch settle.
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    // The failure neither advances the page nor latches the pagination buttons,
+    // and the failed cursor does not leak into the refetch that follows.
+    expect(takeReadFailures()).toHaveLength(1);
+    expect(current().pageIndex).toBe(1);
+    expect(current().isRequestingMore).toBe(false);
+    expect(lastRead()).toBe(pageOne);
 
-    // The failure must not advance the page or latch the pagination buttons.
-    expect(result?.pageIndex).toBe(1);
-    expect(result?.isRequestingMore).toBe(false);
-
-    // The failed cursor must not leak into later refetches: the rollback
-    // refetch reuses the page-1 scope, not the failed page-2 cursor.
-    const calls = requestRefreshDomainStateMock.mock.calls;
-    const lastScope = calls[calls.length - 1][0].scope as string;
-    expect(lastScope).toBe(pageOneScope);
-
-    // Retry issues a REAL page-2 fetch (the latch bug made this a no-op with
-    // isRequestingMore stuck true).
-    requestRefreshDomainStateMock.mockClear();
-    requestRefreshDomainStateMock.mockResolvedValue({
-      status: 'executed',
-      data: { status: 'ready', data: { rows: [{ name: 'c' }], total: 3 } },
-    });
-    await act(async () => {
-      requireResult().loadMore();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(requestRefreshDomainStateMock).toHaveBeenCalled();
-    const retryCalls = requestRefreshDomainStateMock.mock.calls;
-    expect((retryCalls[retryCalls.length - 1][0].scope as string).includes('cursor-2')).toBe(true);
-    expect(result?.rows).toEqual([{ name: 'c' }]);
-    expect(result?.pageIndex).toBe(2);
-    expect(result?.isRequestingMore).toBe(false);
+    // A retry issues a real page-2 read.
+    app.snapshots.respond(null);
+    await run(() => current().loadMore());
+    expect(paramsOf('pods', lastRead()).get('continue')).toBe('cursor-2');
+    expect(rowNames()).toEqual(['c']);
+    expect(current().pageIndex).toBe(2);
+    expect(current().isRequestingMore).toBe(false);
   });
 
-  it('exposes the backend-published kind vocabulary and keeps it across filter refetches', async () => {
-    let resolveFetch: ((value: unknown) => void) | undefined;
-    requestRefreshDomainStateMock.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveFetch = resolve;
-        })
+  it('keeps the backend-published kind vocabulary across filter refetches', async () => {
+    await start();
+    const capabilities = {
+      sortableFields: [],
+      filterableFields: [],
+      searchableFields: [],
+      kindVocabulary: ['Pod', 'Deployment', 'StatefulSet'],
+    };
+    answerPage = ({ params }) =>
+      page(['pod-a'], {
+        kinds: params.get('kinds') ? ['Pod'] : ['Pod', 'Deployment'],
+        capabilities,
+      });
+    const release = holdReads();
+    await view.show(<QueryProbe />);
+    expect(current().kindVocabulary).toBeNull();
+
+    await release();
+    expect(current().kindVocabulary).toEqual(['Pod', 'Deployment', 'StatefulSet']);
+
+    // A kind filter collapses the facets; the vocabulary rides the capabilities.
+    await view.show(
+      <QueryProbe
+        filters={{ ...DEFAULT_GRID_TABLE_FILTER_STATE, kinds: { mode: 'some', values: ['Pod'] } }}
+      />
     );
-
-    const Probe: React.FC<{ kinds: string[] }> = ({ kinds }) => {
-      result = useTypedResourceQuery<TestPayload, TestRow>({
-        enabled: true,
-        clusterId: 'cluster-a',
-        domain: 'pods',
-        baseSelector: ALL_NAMESPACES_SELECTOR,
-        label: 'All Namespaces Pods',
-        filters: {
-          ...DEFAULT_GRID_TABLE_FILTER_STATE,
-          kinds: kinds.length > 0 ? { mode: 'some', values: kinds } : { mode: 'all' },
-        },
-        sortConfig,
-        selectRows,
-      });
-      return null;
-    };
-    const settle = async (payload: TestPayload) => {
-      await act(async () => {
-        resolveFetch?.({ status: 'executed', data: { status: 'ready', data: payload } });
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-    };
-
-    await act(async () => {
-      root.render(<Probe kinds={[]} />);
-      await Promise.resolve();
-    });
-    // No payload applied yet — no vocabulary.
-    expect(result?.kindVocabulary).toBeNull();
-
-    await settle({
-      rows: [{ name: 'pod-a' }],
-      kinds: ['Pod', 'Deployment'],
-      capabilities: { kindVocabulary: ['Pod', 'Deployment', 'StatefulSet'] },
-    });
-    expect(result?.kindVocabulary).toEqual(['Pod', 'Deployment', 'StatefulSet']);
-
-    // A kind filter collapses the FACETS but the vocabulary rides the payload
-    // capabilities and stays complete.
-    await act(async () => {
-      root.render(<Probe kinds={['Pod']} />);
-      await Promise.resolve();
-    });
-    await settle({
-      rows: [{ name: 'pod-a' }],
-      kinds: ['Pod'],
-      capabilities: { kindVocabulary: ['Pod', 'Deployment', 'StatefulSet'] },
-    });
-    expect(result?.kindVocabulary).toEqual(['Pod', 'Deployment', 'StatefulSet']);
+    expect(paramsOf('pods', lastRead()).get('kinds')).toBe('Pod');
+    expect(current().filterOptions.kinds).toEqual(['Pod']);
+    expect(current().kindVocabulary).toEqual(['Pod', 'Deployment', 'StatefulSet']);
   });
 
-  it('treats blocked and payload-less results as warm-up, not failures', async () => {
-    // First request: blocked (e.g., cluster still connecting). The hook must
-    // stay in the not-loaded (loading) state — no fabricated error — so the
-    // table keeps its spinner instead of flashing "Unable to load data".
-    requestRefreshDomainStateMock.mockResolvedValueOnce({ status: 'blocked' });
-
-    const Probe: React.FC<{ liveDataVersion: string }> = ({ liveDataVersion }) => {
-      result = useTypedResourceQuery<TestPayload, TestRow>({
-        enabled: true,
-        clusterId: 'cluster-a',
-        domain: 'pods',
-        baseSelector: ALL_NAMESPACES_SELECTOR,
-        label: 'Cluster Events',
-        filters: DEFAULT_GRID_TABLE_FILTER_STATE,
-        sortConfig,
-        liveDataVersion,
-        selectRows,
-      });
-      return null;
-    };
-
-    await act(async () => {
-      root.render(<Probe liveDataVersion="v1" />);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(result?.error).toBeNull();
-    expect(result?.loaded).toBe(false);
-
-    // Second request: executed but the scoped state carries no payload yet
-    // (backend caches still syncing). Same treatment.
-    requestRefreshDomainStateMock.mockResolvedValueOnce({
-      status: 'executed',
-      data: { status: 'ready', data: null },
-    });
-    await act(async () => {
-      root.render(<Probe liveDataVersion="v2" />);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(result?.error).toBeNull();
-    expect(result?.loaded).toBe(false);
-
-    // The live domain delivers → identity change → the retry succeeds.
-    requestRefreshDomainStateMock.mockResolvedValueOnce({
-      status: 'executed',
-      data: { status: 'ready', data: { rows: [{ name: 'event-a' }] } },
-    });
-    await act(async () => {
-      root.render(<Probe liveDataVersion="v3" />);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(result?.rows).toEqual([{ name: 'event-a' }]);
-    expect(result?.loaded).toBe(true);
-    expect(result?.error).toBeNull();
-  });
-
-  it('self-heals a warm-up result without waiting for a live-data identity change', async () => {
-    // The first request warms up (executed but no payload yet — backend caches
-    // still syncing on the very first view). For an EMPTY domain the live-data
-    // identity is a constant (no rows ⇒ version 0, checksum stable), so the
-    // identity-driven retry can never fire. The hook must retry the warm-up on
-    // its own and settle once the backend is ready, instead of spinning forever.
-    requestRefreshDomainStateMock
-      .mockResolvedValueOnce({ status: 'executed', data: { status: 'ready', data: null } })
-      .mockResolvedValue({ status: 'executed', data: { status: 'ready', data: { rows: [] } } });
-
-    const Probe: React.FC = () => {
-      result = useTypedResourceQuery<TestPayload, TestRow>({
-        enabled: true,
-        clusterId: 'cluster-a',
-        domain: 'namespace-storage',
-        baseSelector: ALL_NAMESPACES_SELECTOR,
-        label: 'Namespace Storage',
-        filters: DEFAULT_GRID_TABLE_FILTER_STATE,
-        sortConfig,
-        // Constant across the whole test — the empty-domain identity never moves.
-        liveDataVersion: '0::',
-        selectRows,
-      });
-      return null;
-    };
-
+  // An empty domain's live-data identity never changes, so only the hook's own
+  // retry can settle a first read made while its cluster was still starting.
+  it('stays loading through a cluster warm-up and settles on its own once the cluster serves', async () => {
+    await start(backend.ClusterLifecycleState.ClusterStateConnecting);
     vi.useFakeTimers();
-    try {
-      await act(async () => {
-        root.render(<Probe />);
-        await Promise.resolve();
-        await Promise.resolve();
-      });
+    answerPage = () => page([]);
+    await view.show(<QueryProbe liveDataVersion="0::" />);
 
-      // Warm-up: not loaded yet, no fabricated error, still showing the spinner.
-      expect(result?.loaded).toBe(false);
-      expect(result?.error).toBeNull();
-      expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(1);
+    expect(current().loaded).toBe(false);
+    expect(current().error).toBeNull();
+    expect(readsOf()).toEqual([]);
 
-      // Without any live-data identity change, the warm-up retry fires and the
-      // now-ready (empty) payload settles the table — no infinite spinner.
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(5000);
-      });
+    await act(async () => {
+      app.events.emit('cluster:lifecycle', { clusterId: dev.clusterId, state: 'ready' });
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+    await app.settle();
 
-      expect(requestRefreshDomainStateMock.mock.calls.length).toBeGreaterThan(1);
-      expect(result?.loaded).toBe(true);
-      expect(result?.rows).toEqual([]);
-      expect(result?.error).toBeNull();
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(readsOf()).not.toEqual([]);
+    expect(current().loaded).toBe(true);
+    expect(current().rows).toEqual([]);
+    expect(current().error).toBeNull();
   });
 
-  it('stops the warm-up retry once the query has loaded (no refetch storm)', async () => {
-    // Once a payload applies, the self-healing retry must go quiet: a loaded
-    // table must not keep re-issuing the query on a timer.
-    requestRefreshDomainStateMock.mockResolvedValue({
-      status: 'executed',
-      data: { status: 'ready', data: { rows: [{ name: 'pvc-a' }] } },
-    });
-
-    const Probe: React.FC = () => {
-      result = useTypedResourceQuery<TestPayload, TestRow>({
-        enabled: true,
-        clusterId: 'cluster-a',
-        domain: 'namespace-storage',
-        baseSelector: ALL_NAMESPACES_SELECTOR,
-        label: 'Namespace Storage',
-        filters: DEFAULT_GRID_TABLE_FILTER_STATE,
-        sortConfig,
-        liveDataVersion: 'v1',
-        selectRows,
-      });
-      return null;
-    };
-
+  it('stops retrying once the query has loaded', async () => {
+    await start();
     vi.useFakeTimers();
-    try {
-      await act(async () => {
-        root.render(<Probe />);
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-      expect(result?.loaded).toBe(true);
-      const callsAfterLoad = requestRefreshDomainStateMock.mock.calls.length;
-
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(10000);
-      });
-      // No additional requests fired after the load settled.
-      expect(requestRefreshDomainStateMock.mock.calls.length).toBe(callsAfterLoad);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('keeps a thrown fetch failure as a real error', async () => {
-    requestRefreshDomainStateMock.mockRejectedValueOnce(new Error('cluster gone'));
-
-    const Probe: React.FC = () => {
-      result = useTypedResourceQuery<TestPayload, TestRow>({
-        enabled: true,
-        clusterId: 'cluster-a',
-        domain: 'pods',
-        baseSelector: ALL_NAMESPACES_SELECTOR,
-        label: 'Cluster Events',
-        filters: DEFAULT_GRID_TABLE_FILTER_STATE,
-        sortConfig,
-        selectRows,
-      });
-      return null;
-    };
+    answerPage = () => page(['pvc-a']);
+    await view.show(<QueryProbe liveDataVersion="v1" />);
+    expect(current().loaded).toBe(true);
+    const readsAfterLoad = readsOf().length;
 
     await act(async () => {
-      root.render(<Probe />);
-      await Promise.resolve();
-      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(10_000);
     });
-    expect(result?.error).toEqual(localFailure('cluster gone'));
-    expect(result?.loaded).toBe(true);
+
+    expect(readsOf()).toHaveLength(readsAfterLoad);
   });
 
-  it('keeps the applied rows and loaded state during provider facet refetches (focus-safe quiet refresh)', async () => {
-    let resolveFetch: ((value: unknown) => void) | undefined;
-    requestRefreshDomainStateMock.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveFetch = resolve;
-        })
+  it('settles a failed read as the query error instead of a warm-up', async () => {
+    await start();
+    failReads(() => true);
+    await view.show(<QueryProbe />);
+
+    expect(current().loading).toBe(false);
+    expect(current().loaded).toBe(true);
+    expect(current().error).toMatchObject({
+      kind: 'backend',
+      status: { reason: 'InternalError', message: 'pods list failed' },
+    });
+    expect(takeReadFailures()).not.toEqual([]);
+  });
+
+  it('keeps the applied rows and loaded state through filter refetches (quiet filtering)', async () => {
+    await start();
+    let names = ['pod-a'];
+    answerPage = () => page(names);
+    const withReasons = (reasons: string[]): GridTableFilterState => ({
+      ...DEFAULT_GRID_TABLE_FILTER_STATE,
+      queryFacets: { reasons: { mode: 'some', values: reasons } },
+    });
+    await view.show(<QueryProbe liveDataVersion="v1" />);
+    expect(rowNames()).toEqual(['pod-a']);
+
+    // The new page is in flight: the table neither dims nor swaps to a spinner.
+    let release = holdReads();
+    names = [];
+    await view.show(<QueryProbe liveDataVersion="v1" filters={withReasons(['BackOff'])} />);
+    expect(rowNames()).toEqual(['pod-a']);
+    expect(current().loaded).toBe(true);
+
+    // A no-match page stays loaded, so the next keystroke cannot re-enter the
+    // first-load state that unmounts the filter input.
+    await release();
+    expect(rowNames()).toEqual([]);
+    expect(current().loaded).toBe(true);
+
+    release = holdReads();
+    await view.show(
+      <QueryProbe liveDataVersion="v1" filters={withReasons(['BackOff', 'FailedScheduling'])} />
     );
-
-    const Probe: React.FC<{ reasons: string[] }> = ({ reasons }) => {
-      result = useTypedResourceQuery<TestPayload, TestRow>({
-        enabled: true,
-        clusterId: 'cluster-a',
-        domain: 'pods',
-        baseSelector: ALL_NAMESPACES_SELECTOR,
-        label: 'All Namespaces Pods',
-        filters: {
-          ...DEFAULT_GRID_TABLE_FILTER_STATE,
-          queryFacets:
-            reasons.length > 0 ? { reasons: { mode: 'some', values: reasons } } : undefined,
-        },
-        sortConfig,
-        liveDataVersion: 'v1',
-        selectRows,
-      });
-      return null;
-    };
-    const settle = async (rows: TestRow[]) => {
-      await act(async () => {
-        resolveFetch?.({ status: 'executed', data: { status: 'ready', data: { rows } } });
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-    };
-
-    await act(async () => {
-      root.render(<Probe reasons={[]} />);
-      await Promise.resolve();
-    });
-    await settle([{ name: 'pod-a' }]);
-    expect(result?.rows).toEqual([{ name: 'pod-a' }]);
-    expect(result?.loaded).toBe(true);
-
-    // A filter change refetches QUIETLY: the applied rows and loaded state
-    // survive until the new page lands, so the table never dims or swaps to a
-    // spinner mid-filtering.
-    await act(async () => {
-      root.render(<Probe reasons={['BackOff']} />);
-      await Promise.resolve();
-    });
-    expect(result?.rows).toEqual([{ name: 'pod-a' }]);
-    expect(result?.loaded).toBe(true);
-
-    // A no-match result settles to empty rows but STAYS loaded — the next
-    // keystroke's refetch must not re-enter the initial-loading state (that
-    // unmounts the filter input and steals focus).
-    await settle([]);
-    expect(result?.rows).toEqual([]);
-    expect(result?.loaded).toBe(true);
-
-    await act(async () => {
-      root.render(<Probe reasons={['BackOff', 'FailedScheduling']} />);
-      await Promise.resolve();
-    });
-    expect(result?.loaded).toBe(true);
-    await settle([]);
+    expect(current().loaded).toBe(true);
+    await release();
+    expect(paramsOf('pods', lastRead()).getAll('facet.reasons')).toEqual([
+      'BackOff',
+      'FailedScheduling',
+    ]);
   });
 
-  it('debounces search changes instead of querying on every keystroke', async () => {
-    requestRefreshDomainStateMock.mockResolvedValue({
-      status: 'executed',
-      data: { status: 'ready', data: { rows: [], total: 0 } },
-    });
-
-    const Probe: React.FC<{ search: string }> = ({ search }) => {
-      result = useTypedResourceQuery<TestPayload, TestRow>({
-        enabled: true,
-        clusterId: 'cluster-a',
-        domain: 'pods',
-        baseSelector: ALL_NAMESPACES_SELECTOR,
-        label: 'All Namespaces Pods',
-        filters: { ...DEFAULT_GRID_TABLE_FILTER_STATE, search },
-        sortConfig,
-        selectRows,
-      });
-      return null;
-    };
-
-    await act(async () => {
-      root.render(<Probe search="" />);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(1);
-
+  it('waits for typing to pause before reading a new search', async () => {
+    await start();
+    answerPage = () => page([]);
+    await view.show(<QueryProbe />);
     vi.useFakeTimers();
-    try {
-      // Two quick keystrokes: no new backend build until the debounce elapses.
-      await act(async () => {
-        root.render(<Probe search="a" />);
-      });
-      await act(async () => {
-        root.render(<Probe search="ap" />);
-      });
-      expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(1);
-
-      await act(async () => {
-        vi.advanceTimersByTime(250);
-      });
-      expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(2);
-      const calls = requestRefreshDomainStateMock.mock.calls;
-      expect(calls[calls.length - 1][0].scope as string).toContain('search=ap');
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('fetchAllRows rejects when a page fails instead of returning a partial result', async () => {
-    requestRefreshDomainStateMock.mockResolvedValue({
-      status: 'executed',
-      data: { status: 'ready', data: { rows: [] } },
-    });
-    await renderQuery();
-
-    requestRefreshDomainStateMock.mockReset();
-    requestRefreshDomainStateMock
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: { status: 'ready', data: { rows: [{ name: 'a' }], continue: 'cursor-1' } },
-      })
-      .mockResolvedValueOnce({ status: 'blocked', blockedReason: 'auto-refresh-disabled' });
-
-    // A partial export saved with a success toast is worse than an error: the
-    // walk must reject so the action surfaces the failure.
-    await expect(requireResult().fetchAllRows()).rejects.toThrow(/page 2/);
-  });
-
-  it('treats a payload with rows but no total as approximate instead of an exact 0', async () => {
-    requestRefreshDomainStateMock.mockResolvedValue({
-      status: 'executed',
-      data: { status: 'ready', data: { rows: [{ name: 'a' }, { name: 'b' }] } },
-    });
-
-    await renderQuery();
-
-    // total is absent on the payload: it must not render as a false exact 0
-    // while two rows are visible. Fall back to the visible count, marked
-    // approximate so the UI does not claim "Page N of M".
-    expect(result?.totalCount).toBe(2);
-    expect(result?.totalIsExact).toBe(false);
-  });
-
-  // A denied scope is not re-asked in the background, and a stream reset can
-  // clear its stored failure: the denial alone must settle the table, or it
-  // keeps showing a spinner.
-  it('settles a denied scope whose stored failure a stream reset cleared', async () => {
-    requestRefreshDomainStateMock.mockResolvedValue({
-      status: 'executed',
-      data: { status: 'initialising', error: null, permissionDenied: true },
-    });
-
-    await renderQuery();
-
-    expect(result?.loading).toBe(false);
-    expect(result?.loaded).toBe(true);
-    expect(isPermissionDenied(result?.error)).toBe(true);
-  });
-
-  it('marks failed query requests as loaded so the error can render instead of a spinner', async () => {
-    requestRefreshDomainStateMock.mockRejectedValue(new Error('query failed'));
-
-    await renderQuery();
-
-    expect(result?.loading).toBe(false);
-    expect(result?.loaded).toBe(true);
-    expect(result?.error).toEqual(localFailure('query failed'));
-  });
-
-  it('uses one-shot refresh reads for table queries so query scopes are cleaned up', async () => {
-    requestRefreshDomainStateMock.mockResolvedValue({
-      status: 'executed',
-      data: { status: 'ready', data: { rows: [] } },
-    });
-
-    await renderQuery();
-
-    expect(requestRefreshDomainStateMock).toHaveBeenCalledWith(
-      expect.objectContaining({ reason: 'user', preserveState: false })
+    const before = readsOf().length;
+    const searching = (search: string) => (
+      <QueryProbe filters={{ ...DEFAULT_GRID_TABLE_FILTER_STATE, search }} />
     );
-  });
 
-  it('reloads the current query when live refresh data changes', async () => {
-    const Probe: React.FC<{ liveDataVersion: string }> = ({ liveDataVersion }) => {
-      result = useTypedResourceQuery<TestPayload, TestRow>({
-        enabled: true,
-        clusterId: 'cluster-a',
-        domain: 'pods',
-        baseSelector: ALL_NAMESPACES_SELECTOR,
-        label: 'All Namespaces Pods',
-        filters: DEFAULT_GRID_TABLE_FILTER_STATE,
-        sortConfig,
-        liveDataVersion,
-        selectRows,
-      });
-      return null;
-    };
-    const renderInvalidatedQuery = async (liveDataVersion: string) => {
-      await act(async () => {
-        root.render(<Probe liveDataVersion={liveDataVersion} />);
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-    };
-
-    requestRefreshDomainStateMock
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: {
-          status: 'ready',
-          data: {
-            rows: [{ name: 'pod-a' }],
-            total: 1,
-            totalIsExact: true,
-          },
-        },
-      })
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: {
-          status: 'ready',
-          data: {
-            rows: [{ name: 'pod-b' }],
-            total: 1,
-            totalIsExact: true,
-          },
-        },
-      });
-
-    await renderInvalidatedQuery('version-1');
-    expect(result?.rows).toEqual([{ name: 'pod-a' }]);
-
-    await renderInvalidatedQuery('version-2');
-
-    expect(requestRefreshDomainStateMock).toHaveBeenCalledTimes(2);
-    expect(requestRefreshDomainStateMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        scope: 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc',
-      })
-    );
-    expect(result?.rows).toEqual([{ name: 'pod-b' }]);
-  });
-
-  it('keeps the current rows visible while live refresh invalidation refetches', async () => {
-    let resolveSecondRequest:
-      | ((value: {
-          status: 'executed';
-          data: { status: 'ready'; data: { rows: TestRow[]; total: number } };
-        }) => void)
-      | undefined;
-    const secondRequest = new Promise<{
-      status: 'executed';
-      data: { status: 'ready'; data: { rows: TestRow[]; total: number } };
-    }>((resolve) => {
-      resolveSecondRequest = resolve;
-    });
-    const Probe: React.FC<{ liveDataVersion: string }> = ({ liveDataVersion }) => {
-      result = useTypedResourceQuery<TestPayload, TestRow>({
-        enabled: true,
-        clusterId: 'cluster-a',
-        domain: 'pods',
-        baseSelector: ALL_NAMESPACES_SELECTOR,
-        label: 'All Namespaces Pods',
-        filters: DEFAULT_GRID_TABLE_FILTER_STATE,
-        sortConfig,
-        liveDataVersion,
-        selectRows,
-      });
-      return null;
-    };
-
-    requestRefreshDomainStateMock
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: {
-          status: 'ready',
-          data: {
-            rows: [{ name: 'pod-a' }],
-            total: 1,
-          },
-        },
-      })
-      .mockReturnValueOnce(secondRequest);
+    await view.show(searching('a'));
+    await view.show(searching('ap'));
+    expect(readsOf()).toHaveLength(before);
 
     await act(async () => {
-      root.render(<Probe liveDataVersion="version-1" />);
-      await Promise.resolve();
-      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(250);
     });
+    await app.settle();
 
-    expect(result?.rows).toEqual([{ name: 'pod-a' }]);
-    expect(result?.loading).toBe(false);
-
-    await act(async () => {
-      root.render(<Probe liveDataVersion="version-2" />);
-      await Promise.resolve();
-    });
-
-    expect(result?.rows).toEqual([{ name: 'pod-a' }]);
-    expect(result?.loading).toBe(true);
-
-    await act(async () => {
-      resolveSecondRequest?.({
-        status: 'executed',
-        data: {
-          status: 'ready',
-          data: {
-            rows: [{ name: 'pod-b' }],
-            total: 1,
-          },
-        },
-      });
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(result?.loading).toBe(false);
-    expect(result?.rows).toEqual([{ name: 'pod-b' }]);
+    const searched = readsOf()
+      .slice(before)
+      .map((scope) => paramsOf('pods', scope).get('search'));
+    expect(new Set(searched)).toEqual(new Set(['ap']));
   });
 
-  it('never commits the previous cluster rows after a cluster switch (no cross-cluster flash)', async () => {
-    // Multi-cluster correctness: switching the active cluster must NOT paint the
-    // prior cluster's rows under the new cluster, even for one frame. Cluster A
-    // settles with rows; cluster B is held in flight so the ONLY way pod-a could
-    // appear under cluster-b is the stale in-flight `rows` state surviving the
-    // switch. We record every COMMITTED frame via a layout effect (which never
-    // fires for a render React discards) and assert no committed cluster-b frame
-    // carries cluster-a's rows.
-    requestRefreshDomainStateMock.mockImplementation((request: { scope?: string }) => {
-      if (typeof request?.scope === 'string' && request.scope.startsWith('cluster-a')) {
-        return Promise.resolve({
-          status: 'executed',
-          data: { status: 'ready', data: { rows: [{ name: 'pod-a' }] } },
+  it('leaves no retained state or stream behind for the query scope', async () => {
+    await start();
+    answerPage = () => page(['pod-a']);
+    await view.show(<QueryProbe />);
+    expect(rowNames()).toEqual(['pod-a']);
+
+    expect(getScopedDomainState('pods', lastRead()).data).toBeFalsy();
+    expect(app.streams.active().filter((stream) => stream.startsWith('pods '))).toEqual([]);
+  });
+
+  it('never paints the previous cluster’s rows under a newly selected cluster', async () => {
+    const stg = app.cluster({ name: 'stg', context: 'beta' });
+    app.namespaces(stg, ['team-a']);
+    await start();
+    answerPage = ({ clusterId }) => (clusterId === dev.clusterId ? page(['pod-a']) : undefined);
+    await view.show(<QueryProbe />);
+    expect(rowNames()).toEqual(['pod-a']);
+
+    // The new cluster's page never arrives: only a stale page could paint.
+    const release = holdReads((_params, clusterId) => clusterId === stg.clusterId);
+    committed = [];
+    await view.show(<QueryProbe clusterId={stg.clusterId} />);
+
+    expect(committed.filter((frame) => frame.clusterId === stg.clusterId)).not.toEqual([]);
+    expect(
+      committed.filter((frame) => frame.clusterId === stg.clusterId && frame.names.length > 0)
+    ).toEqual([]);
+    answerPage = () => page([], {}, stg);
+    await release();
+  });
+
+  it('pages forward and back on the backend’s cursors', async () => {
+    await start();
+    answerPage = ({ params }) => {
+      switch (params.get('continue')) {
+        case 'cursor-page-2':
+          return page(['pod-c'], { total: 3, previous: 'cursor-page-1-prev' });
+        default:
+          return page(['pod-a', 'pod-b'], { total: 3, continue: 'cursor-page-2' });
+      }
+    };
+    await view.show(<QueryProbe pageLimit={2} />);
+    expect(current()).toMatchObject({
+      pageIndex: 1,
+      pageSize: 2,
+      totalCount: 3,
+      totalIsExact: true,
+      continueToken: 'cursor-page-2',
+      hasPrevious: false,
+    });
+
+    await run(() => current().loadMore());
+    expect(paramsOf('pods', lastRead()).get('continue')).toBe('cursor-page-2');
+    expect(rowNames()).toEqual(['pod-c']);
+    expect(current().pageIndex).toBe(2);
+    expect(current().hasPrevious).toBe(true);
+
+    // Backward paging rides the backend's previous cursor, not a client stack.
+    await run(() => current().loadPrevious());
+    expect(paramsOf('pods', lastRead()).get('continue')).toBe('cursor-page-1-prev');
+    expect(rowNames()).toEqual(['pod-a', 'pod-b']);
+    expect(current().pageIndex).toBe(1);
+    expect(current().hasPrevious).toBe(false);
+  });
+
+  it('refetches the current cursor page when live data changes', async () => {
+    await start();
+    let fresh = false;
+    answerPage = ({ params }) => {
+      if (params.get('continue') === 'cursor-page-2') {
+        return page(fresh ? ['pod-c-fresh', 'pod-d-fresh'] : ['pod-c', 'pod-d'], { total: 4 });
+      }
+      return page(['pod-a', 'pod-b'], { total: 4, continue: 'cursor-page-2' });
+    };
+    await view.show(<QueryProbe pageLimit={2} liveDataVersion="version-1" />);
+    await run(() => current().loadMore());
+    expect(rowNames()).toEqual(['pod-c', 'pod-d']);
+
+    fresh = true;
+    await view.show(<QueryProbe pageLimit={2} liveDataVersion="version-2" />);
+
+    expect(paramsOf('pods', lastRead()).get('continue')).toBe('cursor-page-2');
+    expect(current().pageIndex).toBe(2);
+    expect(rowNames()).toEqual(['pod-c-fresh', 'pod-d-fresh']);
+  });
+
+  it('drops the current cursor before reading a changed sort', async () => {
+    await start();
+    answerPage = ({ params }) => {
+      if (params.get('sort') === 'status') {
+        return page(['pod-status-a', 'pod-status-b'], {
+          total: 3,
+          continue: 'status-cursor-page-2',
         });
       }
-      // cluster-b: keep the fetch in flight so no cluster-b rows ever arrive.
-      return new Promise(() => undefined);
-    });
-
-    const committed: Array<{ clusterId: string; rows: TestRow[] }> = [];
-    const Probe: React.FC<{ clusterId: string }> = ({ clusterId }) => {
-      const query = useTypedResourceQuery<TestPayload, TestRow>({
-        enabled: true,
-        clusterId,
-        domain: 'pods',
-        baseSelector: ALL_NAMESPACES_SELECTOR,
-        label: 'All Namespaces Pods',
-        filters: DEFAULT_GRID_TABLE_FILTER_STATE,
-        sortConfig,
-        liveDataVersion: 'v1',
-        selectRows,
-      });
-      result = query;
-      React.useLayoutEffect(() => {
-        committed.push({ clusterId, rows: query.rows });
-      });
-      return null;
+      return params.get('continue') === 'cursor-page-2'
+        ? page(['pod-c'], { total: 3 })
+        : page(['pod-a', 'pod-b'], { total: 3, continue: 'cursor-page-2' });
     };
+    await view.show(<QueryProbe pageLimit={2} />);
+    await run(() => current().loadMore());
+    expect(paramsOf('pods', lastRead()).get('continue')).toBe('cursor-page-2');
 
-    await act(async () => {
-      root.render(<Probe clusterId="cluster-a" />);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(result?.rows).toEqual([{ name: 'pod-a' }]);
+    await view.show(<QueryProbe pageLimit={2} sortConfig={{ key: 'status', direction: 'asc' }} />);
 
-    // Ignore cluster-a's own committed frames; only what commits under cluster-b matters.
-    committed.length = 0;
-
-    await act(async () => {
-      root.render(<Probe clusterId="cluster-b" />);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    const leakedFrames = committed.filter(
-      (frame) => frame.clusterId === 'cluster-b' && frame.rows.some((row) => row.name === 'pod-a')
-    );
-    expect(leakedFrames).toEqual([]);
+    expect(lastRead()).toBe(`${dev.clusterId}|namespace:all?limit=2&sort=status&sortDirection=asc`);
+    expect(current().pageIndex).toBe(1);
+    expect(rowNames()).toEqual(['pod-status-a', 'pod-status-b']);
   });
 
-  it('keeps a blocked query request in the warm-up (not-loaded) state', async () => {
-    // Blocked refreshes (auto-refresh paused, cluster still connecting) are
-    // warm-up conditions, not failures. With auto-refresh paused the table's
-    // boundary renders the paused empty state; otherwise the loading state
-    // holds until the live domain delivers and the query retries.
-    requestRefreshDomainStateMock.mockResolvedValue({
-      status: 'blocked',
-      blockedReason: 'auto-refresh-disabled',
-    });
+  it('returns to the first page when the backend reports an invalid cursor', async () => {
+    await start();
+    let cursor = 'stale-cursor';
+    answerPage = ({ params }) =>
+      params.get('continue') === 'stale-cursor'
+        ? page([], { cursorInvalid: true })
+        : page(['pod-a'], { total: 2, continue: cursor });
+    await view.show(<QueryProbe pageLimit={2} />);
 
-    await renderQuery();
+    cursor = 'fresh-cursor';
+    await run(() => current().loadMore());
 
-    expect(result?.loaded).toBe(false);
-    expect(result?.error).toBeNull();
-  });
-
-  it('tracks cursor-backed next and previous pages without exposing random page jumps', async () => {
-    requestRefreshDomainStateMock
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: {
-          status: 'ready',
-          data: {
-            rows: [{ name: 'pod-a' }, { name: 'pod-b' }],
-            total: 3,
-            totalIsExact: true,
-            continue: 'cursor-page-2',
-          },
-        },
-      })
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: {
-          status: 'ready',
-          data: {
-            rows: [{ name: 'pod-c' }],
-            total: 3,
-            totalIsExact: true,
-            // Backend-minted prev cursor (F5): populated on every response —
-            // the hook keeps no client token stack.
-            previous: 'cursor-page-1-prev',
-          },
-        },
-      })
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: {
-          status: 'ready',
-          data: {
-            rows: [{ name: 'pod-a' }, { name: 'pod-b' }],
-            total: 3,
-            totalIsExact: true,
-            continue: 'cursor-page-2',
-          },
-        },
-      });
-
-    await renderPagedQuery();
-
-    expect(result?.pageIndex).toBe(1);
-    expect(result?.pageSize).toBe(2);
-    expect(result?.totalCount).toBe(3);
-    expect(result?.totalIsExact).toBe(true);
-    expect(result?.continueToken).toBe('cursor-page-2');
-    expect(result?.hasPrevious).toBe(false);
-
-    await act(async () => {
-      result?.loadMore();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(requestRefreshDomainStateMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        scope: expect.stringContaining('continue=cursor-page-2'),
-      })
-    );
-    expect(result?.rows).toEqual([{ name: 'pod-c' }]);
-    expect(result?.pageIndex).toBe(2);
-    expect(result?.hasPrevious).toBe(true);
-
-    await act(async () => {
-      result?.loadPrevious();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    // Backward paging rides the BACKEND prev cursor, not a client stack.
-    expect(requestRefreshDomainStateMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        scope: expect.stringContaining('continue=cursor-page-1-prev'),
-      })
-    );
-    expect(result?.rows).toEqual([{ name: 'pod-a' }, { name: 'pod-b' }]);
-    expect(result?.pageIndex).toBe(1);
-    expect(result?.hasPrevious).toBe(false);
-  });
-
-  it('refetches the current cursor page when live refresh data changes', async () => {
-    const Probe: React.FC<{ liveDataVersion: string }> = ({ liveDataVersion }) => {
-      result = useTypedResourceQuery<TestPayload, TestRow>({
-        enabled: true,
-        clusterId: 'cluster-a',
-        domain: 'pods',
-        baseSelector: ALL_NAMESPACES_SELECTOR,
-        label: 'All Namespaces Pods',
-        filters: DEFAULT_GRID_TABLE_FILTER_STATE,
-        sortConfig,
-        pageLimit: 2,
-        liveDataVersion,
-        selectRows,
-      });
-      return null;
-    };
-
-    requestRefreshDomainStateMock
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: {
-          status: 'ready',
-          data: {
-            rows: [{ name: 'pod-a' }, { name: 'pod-b' }],
-            total: 4,
-            continue: 'cursor-page-2',
-          },
-        },
-      })
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: {
-          status: 'ready',
-          data: {
-            rows: [{ name: 'pod-c' }, { name: 'pod-d' }],
-            total: 4,
-          },
-        },
-      })
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: {
-          status: 'ready',
-          data: {
-            rows: [{ name: 'pod-c-fresh' }, { name: 'pod-d-fresh' }],
-            total: 4,
-          },
-        },
-      });
-
-    await act(async () => {
-      root.render(<Probe liveDataVersion="version-1" />);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      result?.loadMore();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(result?.pageIndex).toBe(2);
-    expect(result?.rows).toEqual([{ name: 'pod-c' }, { name: 'pod-d' }]);
-
-    await act(async () => {
-      root.render(<Probe liveDataVersion="version-2" />);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(requestRefreshDomainStateMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        scope: expect.stringContaining('continue=cursor-page-2'),
-      })
-    );
-    expect(result?.pageIndex).toBe(2);
-    expect(result?.rows).toEqual([{ name: 'pod-c-fresh' }, { name: 'pod-d-fresh' }]);
-  });
-
-  it('drops the current cursor before requesting a changed sort query', async () => {
-    const Probe: React.FC<{ activeSort: SortConfig }> = ({ activeSort }) => {
-      result = useTypedResourceQuery<TestPayload, TestRow>({
-        enabled: true,
-        clusterId: 'cluster-a',
-        domain: 'pods',
-        baseSelector: ALL_NAMESPACES_SELECTOR,
-        label: 'All Namespaces Pods',
-        filters: DEFAULT_GRID_TABLE_FILTER_STATE,
-        sortConfig: activeSort,
-        pageLimit: 2,
-        selectRows,
-      });
-      return null;
-    };
-
-    requestRefreshDomainStateMock
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: {
-          status: 'ready',
-          data: {
-            rows: [{ name: 'pod-a' }, { name: 'pod-b' }],
-            total: 3,
-            continue: 'cursor-page-2',
-          },
-        },
-      })
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: {
-          status: 'ready',
-          data: {
-            rows: [{ name: 'pod-c' }],
-            total: 3,
-          },
-        },
-      })
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: {
-          status: 'ready',
-          data: {
-            rows: [{ name: 'pod-status-a' }, { name: 'pod-status-b' }],
-            total: 3,
-            continue: 'status-cursor-page-2',
-          },
-        },
-      });
-
-    await act(async () => {
-      root.render(<Probe activeSort={sortConfig} />);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      result?.loadMore();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(requestRefreshDomainStateMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        scope: expect.stringContaining('continue=cursor-page-2'),
-      })
-    );
-
-    await act(async () => {
-      root.render(<Probe activeSort={{ key: 'status', direction: 'asc' }} />);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(requestRefreshDomainStateMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        scope: expect.stringMatching(
-          /^cluster-a\|namespace:all\?limit=2&sort=status&sortDirection=asc$/
-        ),
-      })
-    );
-    expect(result?.pageIndex).toBe(1);
-    expect(result?.rows).toEqual([{ name: 'pod-status-a' }, { name: 'pod-status-b' }]);
-  });
-
-  it('resets cursor pagination when the backend reports an invalid cursor', async () => {
-    requestRefreshDomainStateMock
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: {
-          status: 'ready',
-          data: {
-            rows: [{ name: 'pod-a' }],
-            total: 2,
-            continue: 'stale-cursor',
-          },
-        },
-      })
-      .mockResolvedValueOnce({
-        status: 'executed',
-        data: {
-          status: 'ready',
-          data: {
-            cursorInvalid: true,
-          },
-        },
-      });
-
-    await renderPagedQuery();
-
-    await act(async () => {
-      result?.loadMore();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(result?.continueToken).toBe(null);
-    expect(result?.pageIndex).toBe(1);
-    expect(result?.hasPrevious).toBe(false);
-  });
-  it('surfaces a failed snapshot instead of treating it as warmup', async () => {
-    requestRefreshDomainStateMock.mockResolvedValue({
-      status: 'executed',
-      data: {
-        status: 'error',
-        data: null,
-        error: 'Snapshot request failed: 500 Internal Server Error',
-      },
-    });
-    await renderQuery();
-    expect(result?.error).toBe('Snapshot request failed: 500 Internal Server Error');
-    expect(result?.loaded).toBe(true);
+    expect(paramsOf('pods', lastRead()).get('continue')).toBeNull();
+    expect(rowNames()).toEqual(['pod-a']);
+    expect(current().continueToken).toBe('fresh-cursor');
+    expect(current().pageIndex).toBe(1);
+    expect(current().hasPrevious).toBe(false);
   });
 });

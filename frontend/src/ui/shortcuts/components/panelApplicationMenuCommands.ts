@@ -6,9 +6,6 @@ export interface PanelApplicationMenuActions {
   zoomOut: () => void;
   zoomReset: () => void;
   minimise: () => void;
-  maximise: () => void;
-  restore: () => void;
-  toggleMaximise: () => void;
   openInspector: () => void;
 }
 
@@ -22,9 +19,6 @@ const localActionByCommand: Partial<
   [command.ApplicationMenuCommandZoomOut]: 'zoomOut',
   [command.ApplicationMenuCommandZoomReset]: 'zoomReset',
   [command.ApplicationMenuCommandMinimise]: 'minimise',
-  [command.ApplicationMenuCommandMaximise]: 'maximise',
-  [command.ApplicationMenuCommandRestore]: 'restore',
-  [command.ApplicationMenuCommandToggleMaximise]: 'toggleMaximise',
   [command.ApplicationMenuCommandOpenInspector]: 'openInspector',
 };
 

@@ -1,7 +1,12 @@
 /**
  * frontend/src/core/refresh/streaming/resourceStreamManager.test.ts
  *
- * Test suite for resource stream helpers.
+ * The resource stream manager, driven only through its public surface: scopes
+ * start and stop as the orchestrator starts them, the server's frames arrive
+ * through `handleMessage` or the fake socket, and app-wide changes (a
+ * kubeconfig switch, the window hiding or showing) arrive as the app's events.
+ * The snapshot client, logging, and error reporting are stubbed at the
+ * boundary.
  */
 
 import { afterEach, beforeEach, describe, expect, it, test, vi } from 'vitest';
@@ -44,6 +49,7 @@ import {
   makePodSnapshotPayload,
 } from '../refreshContractTestBuilders';
 import { getScopedDomainState, resetAllScopedDomainStates, setScopedDomainState } from '../store';
+import type { DoorbellDomain } from './resourceStreamDomains';
 import { ResourceStreamManager } from './resourceStreamManager';
 
 class FakeJSONSocket {
@@ -82,6 +88,35 @@ const installFakeJSONSocket = (): void => {
 const flushPromises = async () => {
   await Promise.resolve();
   await Promise.resolve();
+};
+
+/**
+ * The server answers a subscribe without a resume token, as every fresh or
+ * resynced subscription sends: an ACK, then the baseline RESET (backend
+ * streammux handler.go).
+ */
+const answerSubscribe = (manager: ResourceStreamManager, domain: DoorbellDomain, scope: string) => {
+  const separator = scope.indexOf('|');
+  const frame = { domain, scope: scope.slice(separator + 1), clusterId: scope.slice(0, separator) };
+  manager.handleMessage(JSON.stringify({ type: 'ACK', ...frame }));
+  manager.handleMessage(JSON.stringify({ type: 'RESET', ...frame }));
+};
+
+// A manager's stream connection opens once, with its first subscription.
+const openConnections = new WeakSet<ResourceStreamManager>();
+
+/**
+ * Subscribes a scope the way the orchestrator does (`start`) on an open
+ * connection, and the server answers it. Every stream message the tests
+ * deliver arrives in this steady state.
+ */
+const subscribe = (manager: ResourceStreamManager, domain: DoorbellDomain, scope: string) => {
+  manager.start(domain, scope);
+  if (!openConnections.has(manager)) {
+    openConnections.add(manager);
+    manager.handleConnectionOpen();
+  }
+  answerSubscribe(manager, domain, scope);
 };
 
 const resourceRef = ({
@@ -147,6 +182,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // A switch of kubeconfig stops every manager's streams (its public stopAll),
+  // so a later test's app-wide events reach no stream this test left open.
+  eventBus.emit('kubeconfig:changing', '');
   resetAllScopedDomainStates('nodes');
   resetAllScopedDomainStates('namespace-workloads');
   resetAllScopedDomainStates('namespace-config');
@@ -174,10 +212,7 @@ describe('ResourceStreamManager', () => {
     installWindowTimers();
     const manager = new ResourceStreamManager();
     const storeScope = testScope('cluster-a', 'namespace:default');
-    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
-      'pods',
-      storeScope
-    );
+    subscribe(manager, 'pods', storeScope);
 
     const existing = makePodSnapshotEntry({
       cpuUsageMilli: 50,
@@ -450,10 +485,7 @@ describe('ResourceStreamManager', () => {
     installWindowTimers();
     const manager = new ResourceStreamManager();
     const storeScope = testScope('cluster-a', '');
-    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
-      'namespaces',
-      storeScope
-    );
+    subscribe(manager, 'namespaces', storeScope);
 
     // The server's ACK carries the cluster DISPLAY NAME; the subscription
     // captures it so subscription-labeled logging matches the backend half
@@ -509,14 +541,8 @@ describe('ResourceStreamManager', () => {
     const manager = new ResourceStreamManager();
     const podsScope = testScope('cluster-a', 'namespace:default');
     const configScope = testScope('cluster-a', 'namespace:default');
-    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
-      'pods',
-      podsScope
-    );
-    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
-      'namespace-config',
-      configScope
-    );
+    subscribe(manager, 'pods', podsScope);
+    subscribe(manager, 'namespace-config', configScope);
 
     const doorbell = (domain: string) =>
       JSON.stringify({
@@ -549,10 +575,7 @@ describe('ResourceStreamManager', () => {
     installWindowTimers();
     const manager = new ResourceStreamManager();
     const storeScope = testScope('cluster-a', 'namespace:default');
-    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
-      'namespace-workloads',
-      storeScope
-    );
+    subscribe(manager, 'namespace-workloads', storeScope);
 
     // namespace-workloads is signal-only: the backend ships the change signal
     // (Ref/ResourceVersion) without a row. The frontend advances sourceVersion
@@ -592,14 +615,8 @@ describe('ResourceStreamManager', () => {
     );
     const metadataScope = testScope('cluster-a', 'limit=1&customOnly=true&namespace=team-a');
 
-    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
-      'catalog',
-      pageScope
-    );
-    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
-      'catalog',
-      metadataScope
-    );
+    subscribe(manager, 'catalog', pageScope);
+    subscribe(manager, 'catalog', metadataScope);
 
     manager.handleMessage(
       JSON.stringify({
@@ -658,10 +675,7 @@ describe('ResourceStreamManager', () => {
     installWindowTimers();
     const manager = new ResourceStreamManager();
     const storeScope = testScope('cluster-a', 'namespace:default');
-    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
-      'pods',
-      storeScope
-    );
+    subscribe(manager, 'pods', storeScope);
 
     setScopedDomainState('pods', storeScope, () => ({
       status: 'ready',
@@ -694,10 +708,7 @@ describe('ResourceStreamManager', () => {
     installWindowTimers();
     const manager = new ResourceStreamManager();
     const storeScope = testScope('cluster-a', 'namespace:default');
-    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
-      'namespace-config',
-      storeScope
-    );
+    subscribe(manager, 'namespace-config', storeScope);
 
     manager.handleMessage(
       JSON.stringify({
@@ -722,10 +733,7 @@ describe('ResourceStreamManager', () => {
     installWindowTimers();
     const manager = new ResourceStreamManager();
     const storeScope = testScope('cluster-a', 'namespace:default');
-    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
-      'pods',
-      storeScope
-    );
+    subscribe(manager, 'pods', storeScope);
 
     manager.handleMessage(
       JSON.stringify({
@@ -750,10 +758,7 @@ describe('ResourceStreamManager', () => {
     installWindowTimers();
     const manager = new ResourceStreamManager();
     const storeScope = testScope('cluster-a', 'namespace:default');
-    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
-      'namespace-config',
-      storeScope
-    );
+    subscribe(manager, 'namespace-config', storeScope);
 
     setScopedDomainState('namespace-config', storeScope, () => ({
       status: 'ready',
@@ -815,10 +820,7 @@ describe('ResourceStreamManager', () => {
     installWindowTimers();
     const manager = new ResourceStreamManager();
     const storeScope = testScope('cluster-a', 'namespace:default');
-    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
-      'namespace-config',
-      storeScope
-    );
+    subscribe(manager, 'namespace-config', storeScope);
 
     setScopedDomainState('namespace-config', storeScope, () => ({
       status: 'ready',
@@ -867,10 +869,7 @@ describe('ResourceStreamManager', () => {
     installWindowTimers();
     const manager = new ResourceStreamManager();
     const storeScope = testScope('cluster-a', 'namespace:default');
-    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
-      'namespace-config',
-      storeScope
-    );
+    subscribe(manager, 'namespace-config', storeScope);
 
     setScopedDomainState('namespace-config', storeScope, () => ({
       status: 'ready',
@@ -918,10 +917,7 @@ describe('ResourceStreamManager', () => {
     installWindowTimers();
     const manager = new ResourceStreamManager();
     const storeScope = testScope('cluster-a', 'namespace:default');
-    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
-      'namespace-autoscaling',
-      storeScope
-    );
+    subscribe(manager, 'namespace-autoscaling', storeScope);
 
     const sharedRow = {
       ref: {
@@ -992,10 +988,9 @@ describe('ResourceStreamManager', () => {
     installWindowTimers();
     const manager = new ResourceStreamManager();
     const storeScope = testScope('cluster-a', '');
-    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
-      'cluster-rbac',
-      storeScope
-    );
+    subscribe(manager, 'cluster-rbac', storeScope);
+    // Subscribing (its initial resync and ACK) bumps the revision too.
+    const revisionBefore = getScopedDomainState('cluster-rbac', storeScope).streamRevision ?? 0;
 
     manager.handleMessage(
       JSON.stringify({
@@ -1014,7 +1009,7 @@ describe('ResourceStreamManager', () => {
     const state = getScopedDomainState('cluster-rbac', storeScope);
     expect(state.status).toBe('ready');
     expect(state.data).toBeNull();
-    expect(state.streamRevision).toBe(1);
+    expect(state.streamRevision).toBe(revisionBefore + 1);
   });
 
   test('accepts updates even when resource versions regress if sequences advance', async () => {
@@ -1022,10 +1017,9 @@ describe('ResourceStreamManager', () => {
     installWindowTimers();
     const manager = new ResourceStreamManager();
     const storeScope = testScope('cluster-a', 'namespace:default');
-    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
-      'pods',
-      storeScope
-    );
+    subscribe(manager, 'pods', storeScope);
+    // Subscribing (its initial resync and ACK) bumps the revision too.
+    const revisionBefore = getScopedDomainState('pods', storeScope).streamRevision ?? 0;
 
     manager.handleMessage(
       JSON.stringify({
@@ -1065,7 +1059,7 @@ describe('ResourceStreamManager', () => {
     // signal while streamRevision remains diagnostic/backward-compatible state.
     expect(fetchSnapshotMock).not.toHaveBeenCalled();
     const state = getScopedDomainState('pods', storeScope);
-    expect(state.streamRevision).toBe(2);
+    expect(state.streamRevision).toBe(revisionBefore + 2);
   });
 
   test('accepts updates whose resourceVersion exceeds safe integer limits', () => {
@@ -1073,10 +1067,9 @@ describe('ResourceStreamManager', () => {
     installWindowTimers();
     const manager = new ResourceStreamManager();
     const storeScope = testScope('cluster-a', '');
-    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
-      'cluster-rbac',
-      storeScope
-    );
+    subscribe(manager, 'cluster-rbac', storeScope);
+    // Subscribing (its initial resync and ACK) bumps the revision too.
+    const revisionBefore = getScopedDomainState('cluster-rbac', storeScope).streamRevision ?? 0;
 
     // A resourceVersion past the safe-integer limit is parsed via BigInt, so the
     // signal-only delta is still accepted and bumps the refetch signal.
@@ -1095,17 +1088,14 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     const state = getScopedDomainState('cluster-rbac', storeScope);
-    expect(state.streamRevision).toBe(1);
+    expect(state.streamRevision).toBe(revisionBefore + 1);
     expect(fetchSnapshotMock).not.toHaveBeenCalled();
   });
 
   test('resyncs on reset messages', async () => {
     const manager = new ResourceStreamManager();
     const storeScope = testScope('cluster-a', 'namespace:default');
-    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
-      'namespace-config',
-      storeScope
-    );
+    subscribe(manager, 'namespace-config', storeScope);
 
     fetchSnapshotMock.mockResolvedValueOnce({
       snapshot: {
@@ -1141,10 +1131,7 @@ describe('ResourceStreamManager', () => {
   test('resyncs after connection errors', async () => {
     const manager = new ResourceStreamManager();
     const storeScope = testScope('cluster-a', 'namespace:default');
-    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
-      'namespace-config',
-      storeScope
-    );
+    subscribe(manager, 'namespace-config', storeScope);
 
     fetchSnapshotMock.mockResolvedValueOnce({
       snapshot: {
@@ -1172,10 +1159,7 @@ describe('ResourceStreamManager', () => {
   test('does not resync on connection error when resume sequence exists', async () => {
     const manager = new ResourceStreamManager();
     const storeScope = testScope('cluster-a', 'namespace:default');
-    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
-      'namespace-config',
-      storeScope
-    );
+    subscribe(manager, 'namespace-config', storeScope);
 
     manager.handleMessage(
       JSON.stringify({
@@ -1286,12 +1270,12 @@ describe('ResourceStreamManager', () => {
     const firstSocket = createdSockets[0];
     expect(firstSocket).toBeDefined();
 
-    (manager as unknown as { suspendForVisibility: () => void }).suspendForVisibility();
+    eventBus.emit('app:visibility-hidden');
     expect(firstSocket.close).toHaveBeenCalled();
     expect(manager.getHealthStatus('namespace-config', storeScope)).toBe('unhealthy');
 
     vi.advanceTimersByTime(1100);
-    (manager as unknown as { resumeFromVisibility: () => void }).resumeFromVisibility();
+    eventBus.emit('app:visibility-visible');
     await flushPromises();
 
     // With no retained snapshot, resume only re-opens and re-subscribes the stream.
@@ -1330,9 +1314,9 @@ describe('ResourceStreamManager', () => {
     );
     const versionBeforeGap = getScopedDomainState('namespaces', storeScope).signalVersions?.object;
 
-    (manager as unknown as { suspendForVisibility: () => void }).suspendForVisibility();
+    eventBus.emit('app:visibility-hidden');
     vi.advanceTimersByTime(1100);
-    (manager as unknown as { resumeFromVisibility: () => void }).resumeFromVisibility();
+    eventBus.emit('app:visibility-visible');
     await flushPromises();
 
     const secondSocket = createdSockets[1];
@@ -1587,7 +1571,7 @@ describe('ResourceStreamManager', () => {
     const socket = createdSockets[0];
     expect(socket).toBeDefined();
 
-    (manager as unknown as { stopAll: (reset: boolean) => void }).stopAll(true);
+    eventBus.emit('kubeconfig:changing', '');
 
     expect(socket.close).toHaveBeenCalled();
     expect(manager.getHealthStatus('nodes', storeScope)).toBe('unhealthy');
@@ -1615,26 +1599,44 @@ describe('ResourceStreamManager', () => {
   });
 
   test('groups resync/fallback telemetry by cluster AND domain for per-domain rows', () => {
+    vi.useFakeTimers();
+    installWindowTimers();
     const manager = new ResourceStreamManager();
-    const internal = manager as unknown as {
-      streamTelemetry: Map<string, Record<string, unknown>>;
+    const nodesScope = testScope('c1', '');
+    const podsScope = testScope('c1', 'namespace:default');
+    subscribe(manager, 'nodes', nodesScope);
+    subscribe(manager, 'pods', podsScope);
+    // Opening the connection resyncs the scopes started before it; count from here.
+    const resyncsOf = (key: string) =>
+      manager.getTelemetrySummaryByClusterDomain()[key]?.resyncCount ?? 0;
+    const nodesBefore = resyncsOf('c1::nodes');
+    const podsBefore = resyncsOf('c1::pods');
+    // The server resets a scope (resyncs closer together than the cooldown
+    // merge); the client resubscribes, and the server answers it.
+    const reset = (domain: DoorbellDomain, scope: string) => {
+      vi.advanceTimersByTime(1_100);
+      manager.handleMessage(
+        JSON.stringify({ type: 'RESET', domain, scope: scope.slice(3), clusterId: 'c1' })
+      );
+      answerSubscribe(manager, domain, scope);
     };
-    internal.streamTelemetry.set('c1::nodes::path:c1|', {
-      clusterId: 'c1',
-      domain: 'nodes',
-      resyncCount: 2,
-      fallbackCount: 1,
-    });
-    internal.streamTelemetry.set('c1::pods::path:c1|', {
-      clusterId: 'c1',
-      domain: 'pods',
-      resyncCount: 4,
-      fallbackCount: 0,
-    });
+
+    reset('nodes', nodesScope);
+    reset('nodes', nodesScope);
+    for (let count = 0; count < 4; count += 1) {
+      reset('pods', podsScope);
+    }
+    manager.recordStreamFallback('nodes', nodesScope, 'stream not delivering');
 
     const byClusterDomain = manager.getTelemetrySummaryByClusterDomain();
-    expect(byClusterDomain['c1::nodes']).toMatchObject({ resyncCount: 2, fallbackCount: 1 });
-    expect(byClusterDomain['c1::pods']).toMatchObject({ resyncCount: 4, fallbackCount: 0 });
+    expect(byClusterDomain['c1::nodes']).toMatchObject({
+      resyncCount: nodesBefore + 2,
+      fallbackCount: 1,
+    });
+    expect(byClusterDomain['c1::pods']).toMatchObject({
+      resyncCount: podsBefore + 4,
+      fallbackCount: 0,
+    });
   });
 
   test('accepts newer updates after stale resource versions when sequences advance', async () => {

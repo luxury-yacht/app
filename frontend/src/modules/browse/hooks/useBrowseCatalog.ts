@@ -289,7 +289,7 @@ export function useBrowseCatalog({
     () => normalizeInitialPageLimit(pageLimitProp ?? defaultTablePageSize, defaultTablePageSize),
     [defaultTablePageSize, pageLimitProp]
   );
-  const [debouncedSearch, setDebouncedSearch] = useQuerySearch(search);
+  const [debouncedSearch, setDebouncedSearch] = useQuerySearch(search, enabled);
   const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
 
   const itemsRef = useRef<CatalogItem[]>([]);

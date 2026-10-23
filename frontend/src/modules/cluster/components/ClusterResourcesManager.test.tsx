@@ -1,109 +1,70 @@
 /**
  * frontend/src/modules/cluster/components/ClusterResourcesManager.test.tsx
  *
- * Test suite for ClusterResourcesManager.
- * Covers key behaviors and edge cases for ClusterResourcesManager.
+ * The cluster view route's permission messages: when the cluster definitively
+ * denies listing a view's kinds, the view's empty table names the permission
+ * denial instead of reporting that the cluster has no such objects. Config
+ * reports a denial of any of the kinds it aggregates. Permission answers are
+ * scoped to the visible cluster. Runs in the full app, navigated through the
+ * sidebar, over a faked backend whose permission answers the test decides
+ * (test-utils/appState).
  */
 
-import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { deniedFailure } from '@/core/refresh/refreshFailure';
-import { requireValue } from '@/test-utils/requireValue';
-import { ClusterResourcesManager } from './ClusterResourcesManager';
+import { beforeEach, describe, expect, it } from 'vitest';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 
-type ClusterKey = 'nodes' | 'rbac' | 'storage' | 'config' | 'crds' | 'custom' | 'events';
-interface CapturedViewProps {
-  activeTab: ClusterKey;
-  nodesError?: string | null;
-  eventsError?: string | null;
-}
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
 
-const { viewPropsRef, permissionState } = vi.hoisted(() => ({
-  viewPropsRef: { current: null as CapturedViewProps | null },
-  permissionState: new Map<
-    string,
-    { allowed: boolean; pending: boolean; reason?: string; entry?: { status: string } }
-  >(),
-}));
+const open = async (clusterView: 'events' | 'config') => {
+  view = await app.mountApp();
+  await view.goTo({ clusterView });
+  return view.container.textContent ?? '';
+};
 
-vi.mock('@modules/cluster/components/ClusterResourcesViews', () => ({
-  __esModule: true,
-  default: (props: CapturedViewProps) => {
-    viewPropsRef.current = props;
-    return <div data-testid="cluster-resources-view" />;
-  },
-}));
-
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedClusterId: 'cluster-a' }),
-}));
-
-const orchestratorMocks = vi.hoisted(() => ({}));
-
-vi.mock('@/core/refresh', () => ({
-  refreshOrchestrator: orchestratorMocks,
-}));
-
-vi.mock('@/core/capabilities', () => ({
-  useUserPermission: (kind: string, action: string) => {
-    const key = `${kind}:${action}`;
-    return permissionState.get(key) ?? { allowed: true, pending: false };
-  },
-}));
+beforeEach(() => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['team-a']);
+  app.startScreen(dev);
+  app.serveTable(dev, 'cluster-events');
+  app.serveTable(dev, 'cluster-config');
+});
 
 describe('ClusterResourcesManager', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  it('shows a permission denial, not an empty cluster, where events may not be listed', async () => {
+    app.denyPermissions([{ verb: 'list', resourceKind: 'Event' }]);
 
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
+    const text = await open('events');
 
-    viewPropsRef.current = null;
-    permissionState.clear();
+    expect(text).toContain('Insufficient permissions');
+    expect(text).not.toContain('No cluster-scoped events found');
+    expect(
+      app.backend
+        .calls('QueryPermissions')
+        .flatMap(([queries]) => queries ?? [])
+        .filter((query) => query.resourceKind === 'Event' && query.verb === 'list')
+        .map((query) => query.clusterId)
+    ).toEqual(expect.arrayContaining([dev.clusterId]));
   });
 
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
+  it('reports an empty cluster where events may be listed', async () => {
+    const text = await open('events');
+
+    expect(text).toContain('No cluster-scoped events found');
+    expect(text).not.toContain('Insufficient permissions');
   });
 
-  const renderManager = async (activeTab: ClusterKey) => {
-    await act(async () => {
-      root.render(<ClusterResourcesManager activeTab={activeTab} />);
-      await Promise.resolve();
-    });
-  };
+  it('shows a permission denial in Config when any of its kinds may not be listed', async () => {
+    app.denyPermissions([{ verb: 'list', resourceKind: 'IngressClass' }]);
 
-  it('forwards per-view permission-derived errors downstream', async () => {
-    permissionState.set('Node:list', {
-      allowed: false,
-      pending: false,
-      reason: 'nodes denied',
-      entry: { status: 'ready' },
-    });
+    const text = await open('config');
 
-    await renderManager('nodes');
-
-    const props = requireValue(viewPropsRef.current, 'expected captured cluster view props');
-    expect(props).toBeTruthy();
-    expect(props.activeTab).toBe('nodes');
-    expect(props.nodesError).toEqual(deniedFailure('nodes denied'));
-  });
-  it('respects permission denials and avoids loading', async () => {
-    permissionState.set('Event:list', {
-      allowed: false,
-      pending: false,
-      reason: 'forbidden',
-      entry: { status: 'ready' },
-    });
-    await renderManager('events');
-
-    const props = requireValue(viewPropsRef.current, 'expected captured cluster view props');
-    expect(props.eventsError).toEqual(deniedFailure('forbidden'));
+    expect(text).toContain('Insufficient permissions');
+    expect(text).not.toContain('No cluster-scoped config objects found');
   });
 });

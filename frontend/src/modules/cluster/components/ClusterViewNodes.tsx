@@ -47,7 +47,6 @@ import type {
 } from '@/core/refresh/types';
 import { nodeRowCpuValue, nodeRowMemoryValue } from '@/core/resource-metrics';
 import { usePreference } from '@/core/settings/usePreference';
-import { parseCompactAgeToSeconds } from '@/utils/ageFormatter';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 
@@ -72,24 +71,11 @@ interface NodesTableProps extends NodesViewProps {
 
 const NO_ROW_KEYS: readonly string[] = [];
 
-const parseNodePodsUsed = (pods?: string | number | null): number => {
-  if (typeof pods === 'number') {
-    return Number.isFinite(pods) ? pods : 0;
-  }
-  const raw = pods?.trim() ?? '';
-  if (!raw || raw === '—' || raw === '-') {
-    return 0;
-  }
-  const [used] = raw.split('/');
-  const parsed = Number.parseFloat(used.trim());
-  return Number.isFinite(parsed) ? parsed : 0;
-};
-
 /*
  * GridTable component for cluster nodes
  * Displays nodes with their status, resource usage, and other details
  */
-export const NodesTable: React.FC<NodesTableProps> = React.memo(
+const NodesTable: React.FC<NodesTableProps> = React.memo(
   ({
     error,
     selectedNodeKey = null,
@@ -152,8 +138,6 @@ export const NodesTable: React.FC<NodesTableProps> = React.memo(
     );
 
     const tableColumns = useMemo<GridColumnDefinition<ClusterNodeRow>[]>(() => {
-      const ageSortNow = Date.now();
-
       const resolveNodeStatus = (node: ClusterNodeRow) => {
         const text = node.status ?? 'Unknown';
         return {
@@ -178,7 +162,6 @@ export const NodesTable: React.FC<NodesTableProps> = React.memo(
         {
           alignHeader: 'center',
           alignData: 'center',
-          sortValue: (row) => parseNodePodsUsed(row.pods),
         }
       );
 
@@ -190,7 +173,6 @@ export const NodesTable: React.FC<NodesTableProps> = React.memo(
           onClick: (row) => handleNodeClick(row),
           onAltClick: handleNodeAltClick,
           isInteractive: () => true,
-          sortValue: () => 'node',
         }),
         cf.createResourceNameColumn<ClusterNodeRow>((row) => row.ref.name || '', {
           onClick: (row) => handleNodeClick(row),
@@ -203,7 +185,6 @@ export const NodesTable: React.FC<NodesTableProps> = React.memo(
           key: 'status',
           header: 'Status',
           sortable: true,
-          sortValue: (row: ClusterNodeRow) => resolveNodeStatus(row).text.toLowerCase(),
           render: (row: ClusterNodeRow) => {
             const status = resolveNodeStatus(row);
             const activeDrain = nodeMaintenance.activeDrainFor(row.ref.clusterId, row.ref.name);
@@ -233,9 +214,7 @@ export const NodesTable: React.FC<NodesTableProps> = React.memo(
             );
           },
         },
-        cf.createTextColumn<ClusterNodeRow>('version', 'Version', (row) => row.version || '—', {
-          sortValue: (row) => (row.version || '').toLowerCase(),
-        }),
+        cf.createTextColumn<ClusterNodeRow>('version', 'Version', (row) => row.version || '—'),
         podsToggle ? withRowDetailToggle(podsColumn, podsToggle) : podsColumn,
         cf.createTextColumn<ClusterNodeRow>(
           'restarts',
@@ -245,7 +224,6 @@ export const NodesTable: React.FC<NodesTableProps> = React.memo(
             alignHeader: 'center',
             alignData: 'center',
             getClassName: (row) => resolveNodeRestarts(row).className,
-            sortValue: (row) => row.restarts ?? 0,
           }
         ),
         cf.createResourceBarColumn<ClusterNodeRow>({
@@ -267,7 +245,6 @@ export const NodesTable: React.FC<NodesTableProps> = React.memo(
           getMetricsError: () => metricsInfo?.lastError ?? undefined,
           getAnimationKey: (row) => `${buildRequiredCanonicalObjectRowKey(row.ref)}:cpu`,
           sortable: true,
-          sortValue: (row) => row.cpuUsageMilli ?? 0,
         }),
         cf.createResourceBarColumn<ClusterNodeRow>({
           key: 'memory',
@@ -288,17 +265,10 @@ export const NodesTable: React.FC<NodesTableProps> = React.memo(
           getMetricsError: () => metricsInfo?.lastError ?? undefined,
           getAnimationKey: (row) => `${buildRequiredCanonicalObjectRowKey(row.ref)}:memory`,
           sortable: true,
-          sortValue: (row) => row.memoryUsageBytes ?? 0,
         }),
-        {
-          ...(cf.createAgeColumn<ClusterNodeRow & { age?: string }>('age', 'Age', (row) => {
-            return row.age ?? '—';
-          }) as GridColumnDefinition<ClusterNodeRow>),
-          sortValue: (row: ClusterNodeRow) =>
-            typeof row.ageTimestamp === 'number' && Number.isFinite(row.ageTimestamp)
-              ? Math.max(0, Math.floor((ageSortNow - row.ageTimestamp) / 1000))
-              : parseCompactAgeToSeconds(row.age),
-        },
+        cf.createAgeColumn<ClusterNodeRow & { age?: string }>('age', 'Age', (row) => {
+          return row.age ?? '—';
+        }) as GridColumnDefinition<ClusterNodeRow>,
       ];
 
       const sizing: cf.ColumnSizingMap = {

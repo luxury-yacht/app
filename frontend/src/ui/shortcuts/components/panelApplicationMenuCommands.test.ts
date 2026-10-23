@@ -15,9 +15,6 @@ describe('dispatchPanelApplicationMenuCommand', () => {
       zoomOut: vi.fn(),
       zoomReset: vi.fn(),
       minimise: vi.fn(),
-      maximise: vi.fn(),
-      restore: vi.fn(),
-      toggleMaximise: vi.fn(),
       openInspector: vi.fn(),
     };
     const mappings: Array<[backend.ApplicationMenuCommand, keyof PanelApplicationMenuActions]> = [
@@ -26,9 +23,6 @@ describe('dispatchPanelApplicationMenuCommand', () => {
       [command.ApplicationMenuCommandZoomOut, 'zoomOut'],
       [command.ApplicationMenuCommandZoomReset, 'zoomReset'],
       [command.ApplicationMenuCommandMinimise, 'minimise'],
-      [command.ApplicationMenuCommandMaximise, 'maximise'],
-      [command.ApplicationMenuCommandRestore, 'restore'],
-      [command.ApplicationMenuCommandToggleMaximise, 'toggleMaximise'],
       [command.ApplicationMenuCommandOpenInspector, 'openInspector'],
     ];
 

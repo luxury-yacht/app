@@ -1,5 +1,4 @@
 import type { useObjectPanelState } from '@modules/object-panel/contexts/ObjectPanelStateContext';
-import { objectPanelId } from '@modules/object-panel/contexts/ObjectPanelStateContext';
 import type { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { buildObjectPanelRef } from '@modules/object-panel/objectPanelRef';
 import {
@@ -14,7 +13,6 @@ interface UseRecentClusterOverviewEventsInput {
   selectedClusterName: string | null;
   openWithObject: ReturnType<typeof useObjectPanel>['openWithObject'];
   hydrateClusterMeta: ReturnType<typeof useObjectPanelState>['hydrateClusterMeta'];
-  setObjectPanelActiveTab: ReturnType<typeof useObjectPanelState>['setObjectPanelActiveTab'];
 }
 
 export const useRecentClusterOverviewEvents = ({
@@ -22,7 +20,6 @@ export const useRecentClusterOverviewEvents = ({
   selectedClusterName,
   openWithObject,
   hydrateClusterMeta,
-  setObjectPanelActiveTab,
 }: UseRecentClusterOverviewEventsInput) => {
   const getObjectRefInput = useCallback(
     (event: RecentEventEntry) => ({
@@ -45,14 +42,12 @@ export const useRecentClusterOverviewEvents = ({
       if (!ref) {
         return;
       }
-      const panelRef = buildObjectPanelRef(hydrateClusterMeta(ref));
-      openWithObject(panelRef);
-      // The panel id comes from the fully hydrated ref so events never cross
-      // cluster or object identity boundaries.
-      const panelId = objectPanelId(panelRef);
-      setObjectPanelActiveTab(panelRef.clusterId, panelId, 'events');
+      // The fully hydrated ref keeps the panel within its cluster and object
+      // identity. The open itself lands on Events: the shared open sets the
+      // panel's tab when it resolves, so a tab set afterwards would be lost.
+      openWithObject(buildObjectPanelRef(hydrateClusterMeta(ref)), { initialTab: 'events' });
     },
-    [getObjectRefInput, hydrateClusterMeta, openWithObject, setObjectPanelActiveTab]
+    [getObjectRefInput, hydrateClusterMeta, openWithObject]
   );
 
   return { canOpen, onOpen };

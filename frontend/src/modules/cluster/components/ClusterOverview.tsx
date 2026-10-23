@@ -96,7 +96,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
 
   const { selectedClusterId, selectedClusterName } = useKubeconfig();
   const { openWithObject } = useObjectPanel();
-  const { setObjectPanelActiveTab, hydrateClusterMeta } = useObjectPanelState();
+  const { hydrateClusterMeta } = useObjectPanelState();
   const { getClusterState } = useClusterLifecycle();
   const { getActiveClusterHealth } = useClusterHealthListener(selectedClusterId);
   const authState = useActiveClusterAuthState(selectedClusterId);
@@ -150,8 +150,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   const metricsInfo = useMemo(
     () =>
       selectClusterScopedValue({
-        byCluster: overviewDomain.data?.metricsByCluster,
-        legacyValue: overviewDomain.data?.metrics,
+        value: overviewDomain.data?.metrics,
         payloadClusterId: overviewDomain.data?.clusterId,
         selectedClusterId,
         hydratedClusterId,
@@ -160,7 +159,6 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       hydratedClusterId,
       overviewDomain.data?.clusterId,
       overviewDomain.data?.metrics,
-      overviewDomain.data?.metricsByCluster,
       selectedClusterId,
     ]
   );
@@ -170,8 +168,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   const selectedOverview = useMemo(
     () =>
       selectClusterScopedValue({
-        byCluster: overviewDomain.data?.overviewByCluster,
-        legacyValue: overviewDomain.data?.overview,
+        value: overviewDomain.data?.overview,
         payloadClusterId: overviewDomain.data?.clusterId,
         selectedClusterId,
         hydratedClusterId,
@@ -180,7 +177,6 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       hydratedClusterId,
       overviewDomain.data?.clusterId,
       overviewDomain.data?.overview,
-      overviewDomain.data?.overviewByCluster,
       selectedClusterId,
     ]
   );
@@ -407,7 +403,6 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       selectedClusterName,
       openWithObject,
       hydrateClusterMeta,
-      setObjectPanelActiveTab,
     });
 
   return (

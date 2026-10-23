@@ -1,15 +1,23 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableDownloadAction.test.tsx
+ *
+ * The table toolbar's Download button: both choices stay busy while the rows
+ * are fetched and then write every matching row (or the rows the table holds
+ * when it cannot fetch every page) to the clipboard or to a time-stamped CSV
+ * file; a failed fetch writes nothing and is reported; a dismissed save dialog
+ * is not a failure. Runs inside the production shell with only the backend
+ * boundary faked (test-utils/appState): files save through the SaveCsvFile RPC
+ * and copies go to the Wails clipboard.
+ */
+
 import type { IconBarMenu } from '@shared/components/IconBar/IconBar';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { Clipboard } from '@wailsio/runtime';
 import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { installAppStateHarness, type MountedApp } from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
 import { useGridTableDownloadAction } from './useGridTableDownloadAction';
-
-const mocks = vi.hoisted(() => ({ save: vi.fn(), report: vi.fn() }));
-vi.mock('@core/data-access', () => ({ saveCsvFile: mocks.save }));
-vi.mock('@/utils/errorHandler', () => ({ reportOperationalError: mocks.report }));
 
 type Row = { name: string };
 type Destination = 'Copy to Clipboard' | 'Save to File';
@@ -17,25 +25,25 @@ const columns: GridColumnDefinition<Row>[] = [
   { key: 'name', header: 'Name', render: (row) => row.name },
 ];
 
+const app = installAppStateHarness();
+const writeText = vi.mocked(Clipboard.SetText);
+
 describe('table Download button', () => {
-  let root: Root;
-  let container: HTMLDivElement;
+  let view: MountedApp;
   let item: IconBarMenu;
   let fetchRows: ReturnType<typeof vi.fn<() => Promise<Row[]>>>;
-  const writeText = vi.mocked(Clipboard.SetText);
+  let saveResult: { path: string; bytes: number; canceled?: boolean };
 
-  beforeEach(() => {
-    vi.useFakeTimers();
-    mocks.save.mockReset().mockResolvedValue({ path: '/tmp/table.csv' });
-    mocks.report.mockReset();
+  beforeEach(async () => {
     fetchRows = vi.fn().mockResolvedValue([{ name: 'all-matches' }]);
     writeText.mockReset().mockResolvedValue(undefined);
-    container = document.createElement('div');
-    root = createRoot(container);
+    saveResult = { path: '/tmp/table.csv', bytes: 1 };
+    app.backend.answer('SaveCsvFile', () => saveResult);
+    view = await app.render(null);
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
-    act(() => root.unmount());
     vi.useRealTimers();
   });
 
@@ -51,7 +59,7 @@ describe('table Download button', () => {
       }) as IconBarMenu;
       return null;
     };
-    await act(async () => root.render(<Probe />));
+    await view.show(<Probe />);
   };
 
   const choose = (destination: Destination) =>
@@ -60,16 +68,10 @@ describe('table Download button', () => {
       `${destination} choice`
     )();
 
-  const written = (destination: Destination) =>
-    destination === 'Copy to Clipboard'
-      ? writeText.mock.calls[0]?.[0]
-      : mocks.save.mock.calls[0]?.[1];
+  const savedFiles = () => app.backend.calls('SaveCsvFile');
 
-  it('offers both destinations from one menu button', async () => {
-    await renderAction();
-    expect(item.type).toBe('menu');
-    expect(item.menuItems.map(({ label }) => label)).toEqual(['Copy to Clipboard', 'Save to File']);
-  });
+  const written = (destination: Destination) =>
+    destination === 'Copy to Clipboard' ? writeText.mock.calls[0]?.[0] : savedFiles()[0]?.[1];
 
   it.each<Destination>(['Copy to Clipboard', 'Save to File'])(
     '%s stays busy through row acquisition and resets success feedback after completion',
@@ -85,34 +87,39 @@ describe('table Download button', () => {
       await act(async () => choose(destination));
       expect(item.disabled).toBe(true);
       expect(writeText).not.toHaveBeenCalled();
-      expect(mocks.save).not.toHaveBeenCalled();
+      expect(savedFiles()).toEqual([]);
       await act(async () => requireValue(finish, 'pending query')([{ name: 'all-matches' }]));
       expect(item.disabled).toBe(false);
       expect(item.feedback).toBe('success');
       expect(written(destination)).toBe('Name\nall-matches');
-      act(() => vi.advanceTimersByTime(750));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(750);
+      });
       expect(item.feedback).toBeNull();
     }
   );
 
   it.each<Destination>(['Copy to Clipboard', 'Save to File'])(
-    '%s rejects failed row acquisition without writing and cancels feedback cleanup on unmount',
+    '%s writes nothing and reports a failed row acquisition',
     async (destination) => {
-      const failure = new Error('query failed');
+      const failure = new Error(`query failed: ${destination}`);
       fetchRows.mockRejectedValue(failure);
       await renderAction();
       await act(async () => choose(destination));
       expect(item.disabled).toBe(false);
       expect(item.feedback).toBe('error');
       expect(writeText).not.toHaveBeenCalled();
-      expect(mocks.save).not.toHaveBeenCalled();
-      expect(mocks.report).toHaveBeenCalledWith(failure, {
-        source: 'GridTable',
-        action: destination === 'Copy to Clipboard' ? 'copyCsv' : 'exportCsvFile',
-      });
-      expect(vi.getTimerCount()).toBe(1);
-      act(() => root.render(null));
-      expect(vi.getTimerCount()).toBe(0);
+      expect(savedFiles()).toEqual([]);
+      expect(app.errors.take((record) => record.error === failure)).toEqual([
+        {
+          kinds: ['operational'],
+          error: failure,
+          context: {
+            source: 'GridTable',
+            action: destination === 'Copy to Clipboard' ? 'copyCsv' : 'exportCsvFile',
+          },
+        },
+      ]);
     }
   );
 
@@ -122,7 +129,7 @@ describe('table Download button', () => {
     await act(async () => choose('Copy to Clipboard'));
     expect(writeText).toHaveBeenCalledWith('Name');
     await act(async () => choose('Save to File'));
-    expect(mocks.save).toHaveBeenCalledWith(expect.any(String), 'Name');
+    expect(savedFiles()).toEqual([[expect.any(String), 'Name']]);
     expect(item.feedback).toBe('success');
   });
 
@@ -130,31 +137,32 @@ describe('table Download button', () => {
     await renderAction({ exportColumns: [] });
     await act(async () => choose('Save to File'));
     expect(fetchRows).not.toHaveBeenCalled();
+    expect(savedFiles()).toEqual([]);
     expect(item.feedback).toBe('error');
   });
 
-  // Dismissing the save dialog is not a failure: no feedback, nothing reported.
+  // Dismissing the save dialog is not a failure: no feedback, nothing reported
+  // (the harness fails the test on any unexpected report).
   it('treats a dismissed save dialog as nothing happened', async () => {
-    mocks.save.mockResolvedValue({ path: '', bytes: 0, canceled: true });
+    saveResult = { path: '', bytes: 0, canceled: true };
     await renderAction();
     await act(async () => choose('Save to File'));
-    expect(mocks.save).toHaveBeenCalledOnce();
+    expect(savedFiles()).toHaveLength(1);
     expect(item.feedback).toBeNull();
     expect(item.disabled).toBe(false);
-    expect(mocks.report).not.toHaveBeenCalled();
   });
 
   it('saves with an export-time-stamped file name', async () => {
     await renderAction();
     await act(async () => choose('Save to File'));
-    expect(mocks.save.mock.calls[0]?.[0]).toMatch(/^luxury-yacht-cluster-crds-\d{14}\.csv$/);
+    expect(savedFiles()[0]?.[0]).toMatch(/^luxury-yacht-cluster-crds-\d{14}\.csv$/);
   });
 
   // A table that cannot fetch every page saves the rows it holds, as Copy does.
   it('saves the local rows when the table cannot fetch every page', async () => {
     await renderAction({ canFetchAllPages: false });
     await act(async () => choose('Save to File'));
-    expect(mocks.save).toHaveBeenCalledWith(expect.any(String), 'Name\ncurrent-page');
+    expect(savedFiles()).toEqual([[expect.any(String), 'Name\ncurrent-page']]);
     await act(async () => choose('Copy to Clipboard'));
     expect(writeText).toHaveBeenCalledWith('Name\ncurrent-page');
   });

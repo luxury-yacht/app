@@ -89,7 +89,6 @@ export function useBrowseColumns({
         key: 'kind',
         getKind: (row) => row.ref.kind,
         getDisplayText: (row) => row.kindDisplay,
-        sortValue: (row) => row.ref.kind.toLowerCase(),
         onClick: onRowClick,
         onAltClick: (row) => navigateToView(buildRequiredObjectReference(row.ref)),
       }),

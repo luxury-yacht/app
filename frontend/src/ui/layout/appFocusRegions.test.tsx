@@ -1,22 +1,43 @@
-import { KeyboardProvider, useKeyboardContext } from '@ui/shortcuts/context';
+/**
+ * frontend/src/ui/layout/appFocusRegions.test.tsx
+ *
+ * App region navigation (AppRegionNavigation): Control+Tab cycles the
+ * header, sidebar, content, panel, and notification regions in both
+ * directions, restoring each region's last focus; plain Tab wraps inside a
+ * region; editors keep their own Tab; a blocking surface keeps navigation;
+ * entering a panel region raises its panel; a brief outline marks the region
+ * a keyboard entry lands in; the shortcut help lists the commands. The
+ * regions are minimal stand-ins, rendered inside the production shell (real
+ * keyboard provider, surfaces, and panel layout store) over a faked backend
+ * (test-utils/appState).
+ */
+
+import { useDockablePanelContext } from '@ui/dockable';
+import { usePanelLayoutStoreContext } from '@ui/dockable/panelLayoutStoreContext';
+import { useKeyboardContext } from '@ui/shortcuts/context';
 import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
-import { act, useRef } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, useEffect, useRef } from 'react';
+import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
+import { installAppStateHarness, type MountedApp } from '@/test-utils/appState/harness';
+import { requireValue } from '@/test-utils/requireValue';
 import { AppRegionNavigation } from './AppRegionNavigation';
 
-vi.mock('@core/desktop-runtime', () => ({
-  onEvent: () => () => undefined,
-  desktopRuntimeAvailable: () => false,
-}));
-
-const focusPanel = vi.hoisted(() => vi.fn());
-vi.mock('@ui/dockable/panelLayoutStoreContext', () => ({
-  usePanelLayoutStoreContext: () => ({ focusPanelById: focusPanel }),
-}));
+const app = installAppStateHarness();
+let view: MountedApp;
 let shortcuts: ReturnType<ReturnType<typeof useKeyboardContext>['getAvailableShortcuts']>;
+let panelStore: ReturnType<typeof usePanelLayoutStoreContext> | null = null;
 
-function Harness({ blocking = false, hiddenSidebar = false, panel = true } = {}) {
+/** Docks `panel-a` in the right group of the visible cluster's panel layout. */
+function DockedPanel() {
+  const { syncPanelGroup } = useDockablePanelContext();
+  panelStore = usePanelLayoutStoreContext();
+  useEffect(() => {
+    syncPanelGroup('panel-a', 'right', undefined);
+  }, [syncPanelGroup]);
+  return null;
+}
+
+function Regions({ blocking = false, hiddenSidebar = false, panel = true } = {}) {
   const editor = useRef<HTMLDivElement>(null);
   const modal = useRef<HTMLDivElement>(null);
   useKeyboardSurface({
@@ -30,6 +51,7 @@ function Harness({ blocking = false, hiddenSidebar = false, panel = true } = {})
   return (
     <>
       <AppRegionNavigation />
+      <DockedPanel />
       <header data-app-region="header">
         <button type="button" data-testid="header-first">
           About
@@ -83,61 +105,43 @@ function Harness({ blocking = false, hiddenSidebar = false, panel = true } = {})
   );
 }
 
-describe('app region navigation through KeyboardProvider', () => {
-  let container: HTMLDivElement;
-  let root: Root;
-  const element = (id: string) => {
-    const result = document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
-    if (!result) {
-      throw new Error(`Missing ${id}`);
-    }
-    return result;
-  };
-  const render = async (props = {}) => {
-    await act(async () => {
-      root.render(
-        <KeyboardProvider>
-          <Harness {...props} />
-        </KeyboardProvider>
-      );
-    });
-  };
-  const focus = (id: string) =>
-    act(() => {
-      element(id).focus();
-    });
-  const tab = async (init: KeyboardEventInit = {}) => {
-    const event = new KeyboardEvent('keydown', {
-      key: 'Tab',
-      bubbles: true,
-      cancelable: true,
-      ...init,
-    });
-    await act(async () => {
-      document.activeElement?.dispatchEvent(event);
-    });
-    return event;
-  };
-  beforeEach(() => {
-    vi.clearAllMocks();
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = createRoot(container);
-  });
-  afterEach(() => {
-    act(() => root.unmount());
-    container.remove();
-    vi.useRealTimers();
-    vi.restoreAllMocks();
+const element = (id: string) =>
+  requireValue(document.querySelector<HTMLElement>(`[data-testid="${id}"]`), `Missing ${id}`);
+
+const render = async (props: Parameters<typeof Regions>[0] = {}) => {
+  await view.show(<Regions {...props} />);
+};
+
+const focus = (id: string) =>
+  act(() => {
+    element(id).focus();
   });
 
-  const outline = () => document.querySelector<HTMLElement>('.keyboard-region-outline');
-  const flushOutline = () => act(() => vi.advanceTimersByTime(20));
-  const prepareOutline = () => {
-    vi.useFakeTimers();
-    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
-      this: HTMLElement
-    ) {
+const tab = async (init: KeyboardEventInit = {}) => {
+  const event = new KeyboardEvent('keydown', {
+    key: 'Tab',
+    bubbles: true,
+    cancelable: true,
+    ...init,
+  });
+  await act(async () => {
+    document.activeElement?.dispatchEvent(event);
+  });
+  return event;
+};
+
+/** The panel's stacking order; entering its region raises it. */
+const panelZIndex = () => requireValue(panelStore, 'panel store').getGroupLayout('right').zIndex;
+
+const outline = () => document.querySelector<HTMLElement>('.keyboard-region-outline');
+const flushOutline = () => act(() => vi.advanceTimersByTime(20));
+let regionGeometry: MockInstance | null = null;
+/** Lays the regions out (jsdom has no layout) and lets the outline's delay run on demand. */
+const prepareOutline = () => {
+  vi.useFakeTimers();
+  regionGeometry = vi
+    .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+    .mockImplementation(function (this: HTMLElement) {
       const region = this.getAttribute('data-app-region');
       if (region === 'header') {
         return new DOMRect(0, this.tagName === 'HEADER' ? 0 : 30, 800, 30);
@@ -147,8 +151,22 @@ describe('app region navigation through KeyboardProvider', () => {
       }
       return new DOMRect(200, 60, 600, 500);
     });
-  };
+};
 
+beforeEach(async () => {
+  const dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['default']);
+  view = await app.render(null);
+});
+
+afterEach(() => {
+  regionGeometry?.mockRestore();
+  regionGeometry = null;
+  panelStore = null;
+  vi.useRealTimers();
+});
+
+describe('app region navigation', () => {
   it('briefly outlines the whole region on keyboard entry without replaying for local Tab', async () => {
     prepareOutline();
     await render();
@@ -204,13 +222,14 @@ describe('app region navigation through KeyboardProvider', () => {
     popup.dataset.focusPortalOwner = 'outline-popup';
     const input = document.createElement('input');
     popup.append(input);
-    container.append(popup);
+    view.container.append(popup);
     act(() => input.focus());
     flushOutline();
     expect(outline()).toBe(cue);
     input.dispatchEvent(new Event('beforeinput', { bubbles: true }));
     expect(outline()).toBeNull();
     expect(input.classList.contains('keyboard-programmatic-focus')).toBe(false);
+    popup.remove();
   });
 
   it('does not outline an underlying region when a modal blocks navigation', async () => {
@@ -230,7 +249,7 @@ describe('app region navigation through KeyboardProvider', () => {
     if (reason === 'pointer') {
       element('header-last').dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
     } else {
-      act(() => root.render(null));
+      view.clear();
     }
     flushOutline();
     expect(outline()).toBeNull();
@@ -252,14 +271,15 @@ describe('app region navigation through KeyboardProvider', () => {
     expect(document.activeElement).toBe(element('last'));
   });
 
-  it('cycles all regions in both directions without changing selections, including with no panels', async () => {
+  it('cycles all regions in both directions, raising the entered panel, including with no panels', async () => {
     await render();
     focus('header-first');
+    const before = panelZIndex();
     for (const id of ['sidebar', 'search', 'panel-tab', 'header-first']) {
       expect((await tab({ ctrlKey: true })).defaultPrevented).toBe(true);
       expect(document.activeElement).toBe(element(id));
     }
-    expect(focusPanel).toHaveBeenCalledWith('panel-a');
+    expect(panelZIndex()).toBeGreaterThan(before);
     await tab({ ctrlKey: true, shiftKey: true });
     expect(document.activeElement).toBe(element('panel-tab'));
     await render({ panel: false });
@@ -312,10 +332,7 @@ describe('app region navigation through KeyboardProvider', () => {
     focus('header-first');
     await tab({ ctrlKey: true });
     expect(document.activeElement).toBe(element('search'));
-    const main = element('search').closest('main');
-    if (!main) {
-      throw new Error('Missing main');
-    }
+    const main = requireValue(element('search').closest('main'), 'Missing main');
     main.replaceChildren();
     focus('header-first');
     await tab({ ctrlKey: true });
@@ -339,21 +356,19 @@ describe('app region navigation through KeyboardProvider', () => {
 
   it('keeps region commands behind a blocking surface, even if focus has leaked outside', async () => {
     await render({ blocking: true });
+    const before = panelZIndex();
     focus('modal');
     await tab({ ctrlKey: true });
     expect(document.activeElement).toBe(element('modal'));
     focus('header-first');
     await tab({ ctrlKey: true });
-    expect(focusPanel).not.toHaveBeenCalled();
+    expect(panelZIndex()).toBe(before);
     expect(document.activeElement).not.toBe(element('sidebar'));
   });
 
   it('includes a sidebar root and separate resize handle in local traversal', async () => {
     await render();
-    const sidebar = element('sidebar').parentElement;
-    if (!sidebar) {
-      throw new Error('Missing sidebar');
-    }
+    const sidebar = requireValue(element('sidebar').parentElement, 'Missing sidebar');
     sidebar.tabIndex = 0;
     element('sidebar').tabIndex = -1;
     const resize = document.createElement('hr');
@@ -375,7 +390,7 @@ describe('app region navigation through KeyboardProvider', () => {
     const dismiss = document.createElement('button');
     dismiss.textContent = 'Dismiss';
     notifications.append(dismiss);
-    container.append(notifications);
+    view.container.append(notifications);
     focus('header-first');
     await tab({ ctrlKey: true, shiftKey: true });
     expect(document.activeElement).toBe(dismiss);

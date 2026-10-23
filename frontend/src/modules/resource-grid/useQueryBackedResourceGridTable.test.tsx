@@ -1,1678 +1,564 @@
+/**
+ * frontend/src/modules/resource-grid/useQueryBackedResourceGridTable.test.tsx
+ *
+ * The query-backed table wrappers every cluster and namespace view renders
+ * through ResourceInventoryTable: which page they read (default sort, saved
+ * page size and filters, the cluster's shared Namespaces selection, facets the
+ * view owns or hides), that the first read waits for saved table state, the
+ * loading states they show (first load versus quiet refetch versus a page
+ * request), what they save back, and the degraded-result label. Live-scope
+ * doorbells and gating are in useQueryBackedResourceGridTable.liveScope.test.tsx.
+ * The wrappers run inside the app shell with the real query, persistence, and
+ * GridTable; only the backend boundary is faked (test-utils/appState).
+ */
+
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { createAgeColumn } from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
-import type { UseGridTablePersistenceParams } from '@shared/components/tables/persistence/useGridTablePersistence';
-import type React from 'react';
-import { act, isValidElement } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { requireValue } from '@/test-utils/requireValue';
-import type {
-  ClusterResourceGridTableParams,
-  NamespaceResourceGridTableParams,
-} from './resourceGridTableTypes';
-import type { TypedQueryPayload } from './typedResourceQueryScope';
 import {
-  isLiveDomainInitialLoadPending,
+  buildGridTableStorageKey,
+  computeClusterHash,
+  type GridTablePersistedState,
+} from '@shared/components/tables/persistence/gridTablePersistence';
+import { act } from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  makePodSnapshotEntry,
+  makePodSnapshotPayload,
+} from '@/core/refresh/refreshContractTestBuilders';
+import { parseRefreshScope } from '@/core/refresh/scopeSelector';
+import type {
+  CanonicalResourceRef,
+  PodSnapshotEntry,
+  PodSnapshotPayload,
+} from '@/core/refresh/types';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { snapshotResponse } from '@/test-utils/appState/transport';
+import { requireValue } from '@/test-utils/requireValue';
+import ResourceInventoryTable from './ResourceInventoryTable';
+import { selectPayloadRows, type TypedQueryPayload } from './typedResourceQueryScope';
+import {
+  type QueryBackedClusterGridParams,
+  type QueryBackedNamespaceGridParams,
+  type QueryBackedNamespaceGridResult,
   useQueryBackedClusterResourceGridTable,
   useQueryBackedNamespaceResourceGridTable,
 } from './useQueryBackedResourceGridTable';
-import type { UseTypedResourceQueryParams } from './useTypedResourceQuery';
 
-interface TestRow {
-  kind: string;
-  name: string;
-  namespace?: string;
-  clusterId: string;
-  cpuUsage?: string;
+interface Row {
+  ref: CanonicalResourceRef;
   age?: string;
   ageTimestamp?: number;
+  cpuUsageMilli?: number;
 }
+type Payload = TypedQueryPayload & { rows?: Row[] };
+type PageDomain = 'pods' | 'cluster-events';
 
-interface TestPayload extends TypedQueryPayload {
-  rows?: TestRow[];
-}
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
+let grid: QueryBackedNamespaceGridResult<Row, Payload> | undefined;
 
-const {
-  liveDomainStateRef,
-  liveDomainStatesRef,
-  lifecycleCallsRef,
-  scopedDomainCallsRef,
-  useTypedResourceQueryMock,
-  useClusterResourceGridTableMock,
-  useNamespaceResourceGridTableMock,
-  persistedPageSizeRef,
-  persistenceHydratedRef,
-  persistedFiltersRef,
-  setFiltersMock,
-  setPageSizeMock,
-  gridPersistenceParamsRef,
-} = vi.hoisted(() => ({
-  liveDomainStateRef: {
-    current: {
-      status: 'ready' as string,
-      data: {},
-      version: 1,
-      sourceVersion: 'source:1',
-      checksum: '',
-      lastUpdated: 11,
-    } as {
-      status?: string;
-      data?: unknown;
-      version?: number;
-      sourceVersion?: string;
-      sourceVersions?: Record<string, string>;
-      signalVersions?: Record<string, string>;
-      streamRevision?: number;
-      streamAcknowledgedVersion?: number;
-      queryReconcileVersion?: number;
-      checksum?: string;
-      lastUpdated?: number;
-    },
-  },
-  liveDomainStatesRef: {
-    current: {} as Record<
-      string,
-      {
-        status?: string;
-        data?: unknown;
-        version?: number;
-        sourceVersion?: string;
-        checksum?: string;
-        lastUpdated?: number;
-      }
-    >,
-  },
-  lifecycleCallsRef: { current: [] as unknown[] },
-  scopedDomainCallsRef: { current: [] as Array<[string, string]> },
-  useTypedResourceQueryMock:
-    vi.fn<(params: UseTypedResourceQueryParams<TestPayload, TestRow>) => unknown>(),
-  useClusterResourceGridTableMock:
-    vi.fn<(params: ClusterResourceGridTableParams<TestRow>) => unknown>(),
-  useNamespaceResourceGridTableMock:
-    vi.fn<(params: NamespaceResourceGridTableParams<TestRow>) => unknown>(),
-  persistedPageSizeRef: { current: null as number | null },
-  persistenceHydratedRef: { current: true },
-  persistedFiltersRef: { current: null as Record<string, unknown> | null },
-  setFiltersMock: vi.fn(),
-  setPageSizeMock: vi.fn(),
-  gridPersistenceParamsRef: { current: null as UseGridTablePersistenceParams<TestRow> | null },
-}));
-
-vi.mock('@/core/refresh', () => ({
-  useRefreshScopedDomain: (domain: string, scope: string) => {
-    scopedDomainCallsRef.current.push([domain, scope]);
-    return (
-      liveDomainStatesRef.current[`${domain}|${scope}`] ??
-      liveDomainStatesRef.current[domain] ??
-      liveDomainStateRef.current
-    );
-  },
-}));
-
-vi.mock('@/core/data-access', () => ({
-  useScopedRefreshDomainLifecycle: (params: unknown) => {
-    lifecycleCallsRef.current.push(params);
-  },
-}));
-
-vi.mock('./useTypedResourceQuery', () => ({
-  useTypedResourceQuery: (params: UseTypedResourceQueryParams<TestPayload, TestRow>) =>
-    useTypedResourceQueryMock(params),
-}));
-
-vi.mock('./useResourceGridTable', () => ({
-  useClusterResourceGridTable: (params: ClusterResourceGridTableParams<TestRow>) =>
-    useClusterResourceGridTableMock(params),
-  useNamespaceResourceGridTable: (params: NamespaceResourceGridTableParams<TestRow>) =>
-    useNamespaceResourceGridTableMock(params),
-}));
-
-vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
-  useGridTablePersistence: (params: UseGridTablePersistenceParams<TestRow>) => {
-    gridPersistenceParamsRef.current = params;
-    return {
-      storageKey: 'gridtable:v1:cluster-a:cluster-nodes',
-      sortConfig: null,
-      setSortConfig: vi.fn(),
-      columnVisibility: null,
-      setColumnVisibility: vi.fn(),
-      columnWidths: null,
-      setColumnWidths: vi.fn(),
-      filters: persistedFiltersRef.current ?? DEFAULT_GRID_TABLE_FILTER_STATE,
-      setFilters: setFiltersMock,
-      pageSize: persistedPageSizeRef.current,
-      setPageSize: setPageSizeMock,
-      hydrated: persistenceHydratedRef.current,
-      resetState: vi.fn(),
-    };
-  },
-}));
-
-const columns: GridColumnDefinition<TestRow>[] = [
-  {
-    key: 'name',
-    header: 'Name',
-    render: (resourceRow) => resourceRow.name,
-  },
+const columns: GridColumnDefinition<Row>[] = [
+  { key: 'name', header: 'Name', sortable: true, render: (row) => row.ref.name },
+  { key: 'cpu', header: 'CPU', sortable: true, render: (row) => String(row.cpuUsageMilli ?? '') },
+  createAgeColumn<Row>(),
 ];
+const rowKey = (row: Row) => `${row.ref.clusterId}|${row.ref.namespace}/${row.ref.name}`;
 
-const row: TestRow = {
-  kind: 'Pod',
-  name: 'api',
-  namespace: 'team-a',
-  clusterId: 'cluster-a',
-};
-
-const selectRows = (payload: TestPayload) => payload.rows ?? [];
-const publishedTableState = {
-  filters: DEFAULT_GRID_TABLE_FILTER_STATE,
-  sortConfig: { key: 'name', direction: 'asc' } as const,
-};
-
-const requireTableStatePublisher = (
-  params:
-    | Pick<ClusterResourceGridTableParams<TestRow>, 'onTableStateChange'>
-    | Pick<NamespaceResourceGridTableParams<TestRow>, 'onTableStateChange'>
-    | undefined
-) => requireValue(params?.onTableStateChange, 'expected the resource table state publisher');
-
-interface TestPaginationControlProps {
-  loading?: boolean;
-  onPageSizeChange?: (value: number) => void;
+/** What a view renders: the wrapper's source and binding through ResourceInventoryTable. */
+function Table({ result }: Readonly<{ result: QueryBackedNamespaceGridResult<Row, Payload> }>) {
+  grid = result;
+  return (
+    <ResourceInventoryTable
+      source={result.source}
+      gridTableProps={result.gridTableProps}
+      favModal={result.favModal}
+      columns={columns}
+      spinnerMessage="Loading..."
+    />
+  );
 }
 
-const paginationControlProps = (
-  result:
-    | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
-    | undefined
-): TestPaginationControlProps | undefined => {
-  const tableProps = result?.gridTableProps as { paginationControls?: unknown } | undefined;
-  const paginationControls = tableProps?.paginationControls;
-  return isValidElement<TestPaginationControlProps>(paginationControls)
-    ? paginationControls.props
-    : undefined;
+function NamespaceTable(props: Readonly<Partial<QueryBackedNamespaceGridParams<Payload, Row>>>) {
+  const result = useQueryBackedNamespaceResourceGridTable<Payload, Row>({
+    clusterId: dev.clusterId,
+    domain: 'pods',
+    label: 'Namespace Pods',
+    selectRows: selectPayloadRows,
+    viewId: 'namespace-pods',
+    namespace: 'team-a',
+    columns,
+    keyExtractor: rowKey,
+    supportsCustomMetadataColumns: true,
+    ...props,
+  });
+  return <Table result={result} />;
+}
+
+function ClusterTable(props: Readonly<Partial<QueryBackedClusterGridParams<Payload, Row>>>) {
+  const result = useQueryBackedClusterResourceGridTable<Payload, Row>({
+    clusterId: dev.clusterId,
+    domain: 'cluster-events',
+    label: 'Cluster Events',
+    selectRows: selectPayloadRows,
+    viewId: 'cluster-events',
+    columns,
+    keyExtractor: rowKey,
+    supportsCustomMetadataColumns: true,
+    ...props,
+  });
+  return <Table result={result} />;
+}
+
+const current = () => requireValue(grid, 'expected the query-backed table');
+
+const pod = (name: string, overrides: Partial<PodSnapshotEntry> = {}) =>
+  makePodSnapshotEntry({
+    ref: { clusterId: dev.clusterId, namespace: 'team-a', name },
+    ...overrides,
+  });
+
+/** A pods page as backend/refresh/snapshot/pods.go serves it. */
+const podsPage = (rows: PodSnapshotEntry[], overrides: Partial<PodSnapshotPayload> = {}) =>
+  makePodSnapshotPayload({
+    clusterId: dev.clusterId,
+    clusterName: dev.clusterName,
+    rows,
+    total: rows.length,
+    unfilteredTotal: rows.length,
+    ...overrides,
+  });
+
+// What the backend answers for each pods read; tests replace it.
+let answerPods: (params: URLSearchParams) => PodSnapshotPayload = () => podsPage([]);
+
+const paramsOf = (domain: PageDomain, scope: string) =>
+  new URLSearchParams(parseRefreshScope(domain, scope).query ?? '');
+/** The typed page reads (scopes with a query) of `domain`. */
+const pageReads = (domain: PageDomain = 'pods') =>
+  app.snapshots
+    .reads(domain)
+    .map((read) => read.scope)
+    .filter((scope) => parseRefreshScope(domain, scope).query);
+const lastPageRead = (domain: PageDomain = 'pods') =>
+  paramsOf(domain, requireValue(pageReads(domain).slice(-1)[0], `expected a ${domain} page read`));
+
+const renderedRows = () =>
+  Array.from(view.container.querySelectorAll<HTMLElement>('.gridtable-row')).map(
+    (row) => row.textContent ?? ''
+  );
+
+// The backend's saved table state: what hydration returns and saves write.
+let savedTables = new Map<string, unknown>();
+
+const storageKey = async (viewId: string, namespace: string | null) =>
+  requireValue(
+    buildGridTableStorageKey({
+      clusterHash: await computeClusterHash(dev.clusterId),
+      viewId,
+      namespace,
+    }),
+    'expected a table storage key'
+  );
+
+// Namespace tables share one saved entry across namespaces in the default
+// (shared) persistence mode.
+const SHARED_NAMESPACES = '__shared__';
+
+const saveTable = async (
+  viewId: string,
+  namespace: string | null,
+  state: Omit<GridTablePersistedState, 'version'>
+) => {
+  savedTables.set(await storageKey(viewId, namespace), { version: 3, ...state });
 };
 
-const paginationLoading = (
-  result:
-    | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
-    | undefined
-): boolean | undefined => paginationControlProps(result)?.loading;
+const savedTable = async (viewId: string, namespace: string | null) =>
+  savedTables.get(await storageKey(viewId, namespace)) as GridTablePersistedState | undefined;
 
-describe('useQueryBackedResourceGridTable live invalidation', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+let heldVersion = 1_000_000;
 
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    liveDomainStateRef.current = {
-      status: 'ready',
-      data: {},
-      version: 1,
-      sourceVersion: 'source:1',
-      checksum: '',
-      lastUpdated: 11,
-    };
-    liveDomainStatesRef.current = {};
-    scopedDomainCallsRef.current = [];
-    lifecycleCallsRef.current = [];
-    useTypedResourceQueryMock.mockReset();
-    persistedPageSizeRef.current = null;
-    persistenceHydratedRef.current = true;
-    persistedFiltersRef.current = null;
-    gridPersistenceParamsRef.current = null;
-    setFiltersMock.mockReset();
-    setPageSizeMock.mockReset();
-    useTypedResourceQueryMock.mockReturnValue({
-      rows: [row],
-      loading: false,
-      loaded: true,
-      error: null,
-      continueToken: null,
-      hasPrevious: false,
-      isRequestingMore: false,
-      loadMore: vi.fn(),
-      loadPrevious: vi.fn(),
-      pageIndex: 1,
-      pageSize: 50,
-      totalCount: 1,
-      totalIsExact: true,
-      filterOptions: {},
-      dynamic: null,
-    });
-    const tableResult = {
-      gridTableProps: {
-        data: [row],
-      },
-      favModal: null,
-    };
-    useClusterResourceGridTableMock.mockReset();
-    useClusterResourceGridTableMock.mockReturnValue(tableResult);
-    useNamespaceResourceGridTableMock.mockReset();
-    useNamespaceResourceGridTableMock.mockReturnValue(tableResult);
+/** Parks every pods page read `matches` accepts until the returned release runs. */
+const holdPageReads = (matches: (params: URLSearchParams) => boolean = () => true) => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
   });
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-    vi.useRealTimers();
-  });
-
-  it('forwards an explicit custom metadata capability to namespace tables', () => {
-    const Probe: React.FC = () => {
-      useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
-        clusterId: 'cluster-a',
-        domain: 'pods',
-        label: 'Namespace Pods',
-        selectRows,
-        viewId: 'namespace-pods',
-        namespace: 'team-a',
-        columns,
-        supportsCustomMetadataColumns: false,
-      });
-      return null;
-    };
-
-    act(() => {
-      root.render(<Probe />);
-    });
-
-    expect(useNamespaceResourceGridTableMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({ supportsCustomMetadataColumns: false })
+  app.snapshots.respond(({ domain, scope }) => {
+    if (domain !== 'pods' || !parseRefreshScope(domain, scope).query) {
+      return undefined;
+    }
+    const params = paramsOf(domain, scope);
+    if (!matches(params)) {
+      return undefined;
+    }
+    // The backend answers once released, with what it serves by then.
+    return gate.then(() =>
+      snapshotResponse({ domain, scope, version: ++heldVersion, payload: answerPods(params) })
     );
+  });
+  return async () => {
+    app.snapshots.respond(null);
+    release();
+    await app.settle();
+  };
+};
+
+const run = async (action: () => void) => {
+  await act(async () => {
+    action();
+  });
+  await app.settle();
+};
+
+/** Lets the search debounce and the debounced table-state save run. */
+const letDebouncesRun = async () => {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1_000);
+  });
+  await app.settle();
+};
+
+// Saved table state hydrates once, at startup: save it before starting.
+const start = async () => {
+  view = await app.render(null);
+};
+
+beforeEach(() => {
+  grid = undefined;
+  savedTables = new Map();
+  answerPods = () => podsPage([]);
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['team-a', 'team-b']);
+  app.backend.answer('GetGridTablePersistence', () => Object.fromEntries(savedTables));
+  app.backend.answer('SetGridTablePersistence', (key, state) => {
+    savedTables.set(key, state);
+  });
+  app.backend.answer('DeleteGridTablePersistence', (key) => {
+    savedTables.delete(key);
+  });
+  app.snapshots.answer(({ domain, scope }) =>
+    domain === 'pods' ? answerPods(paramsOf('pods', scope)) : undefined
+  );
+  app.serveTable(dev, 'cluster-events');
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe('useQueryBackedResourceGridTable', () => {
+  it('offers no metadata controls when a view’s rows carry no labels or annotations', async () => {
+    await start();
+    const offersMetadata = () =>
+      (current().gridTableProps.filters?.options?.preActions ?? []).some(
+        (item) => 'id' in item && item.id === 'include-metadata'
+      ) || current().gridTableProps.customMetadataColumns !== undefined;
+
+    await view.show(<NamespaceTable supportsCustomMetadataColumns={false} />);
+    expect(offersMetadata()).toBe(false);
+    await view.show(<ClusterTable supportsCustomMetadataColumns={false} />);
+    expect(offersMetadata()).toBe(false);
   });
 
   it.each([
     {
-      name: 'an All Namespaces table showing the Namespaces filter shares it',
+      name: 'an All Namespaces table showing the Namespaces filter reads it',
       namespace: ALL_NAMESPACES_SCOPE,
       showNamespaceFilters: true,
-      shared: true,
+      expected: 'team-a',
     },
     {
-      name: 'an All Namespaces table without the Namespaces filter keeps no hidden selection',
+      name: 'an All Namespaces table without the Namespaces filter ignores it',
       namespace: ALL_NAMESPACES_SCOPE,
       showNamespaceFilters: false,
-      shared: false,
+      expected: null,
     },
     {
-      name: 'a single-namespace table never reads the All Namespaces selection',
+      name: 'a single-namespace table ignores it',
       namespace: 'team-a',
       showNamespaceFilters: true,
-      shared: false,
+      expected: null,
     },
-  ])('$name', ({ namespace, showNamespaceFilters, shared }) => {
-    const Probe: React.FC = () => {
-      useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
-        queryTableMode: 'Query Backed Dynamic',
-        clusterId: 'cluster-a',
-        domain: 'namespace-workloads',
-        label: 'Workloads',
-        selectRows,
-        viewId: 'namespace-workloads',
-        namespace,
-        columns,
-        supportsCustomMetadataColumns: true,
-        showNamespaceFilters,
-      });
-      return null;
-    };
-
-    act(() => {
-      root.render(<Probe />);
+  ])('shares the cluster’s Namespaces selection: $name', async (testCase) => {
+    await saveTable('shared-namespace-filter', null, {
+      filters: {
+        ...DEFAULT_GRID_TABLE_FILTER_STATE,
+        namespaces: { mode: 'some', values: ['team-a'] },
+      },
     });
+    await start();
 
-    expect(gridPersistenceParamsRef.current?.shareNamespaceFilter ?? false).toBe(shared);
-  });
-
-  it('forwards an explicit custom metadata capability to cluster tables', () => {
-    const Probe: React.FC = () => {
-      useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
-        clusterId: 'cluster-a',
-        domain: 'nodes',
-        label: 'Cluster Nodes',
-        selectRows,
-        viewId: 'cluster-nodes',
-        columns,
-        supportsCustomMetadataColumns: false,
-      });
-      return null;
-    };
-
-    act(() => {
-      root.render(<Probe />);
-    });
-
-    expect(useClusterResourceGridTableMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({ supportsCustomMetadataColumns: false })
+    await view.show(
+      <NamespaceTable
+        viewId="namespace-workloads"
+        namespace={testCase.namespace}
+        showNamespaceFilters={testCase.showNamespaceFilters}
+      />
     );
+
+    expect(lastPageRead().get('namespaces')).toBe(testCase.expected);
   });
 
-  it('carries a degraded typed-query envelope into the inventory source', async () => {
-    let result:
-      | ReturnType<typeof useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>>
-      | undefined;
-    const Probe: React.FC = () => {
-      result = useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
-        clusterId: 'cluster-a',
-        domain: 'pods',
-        label: 'Namespace Pods',
-        selectRows,
-        viewId: 'namespace-pods',
-        namespace: 'team-a',
-        columns,
-        keyExtractor: (item) => item.name,
-        supportsCustomMetadataColumns: false,
-      });
-      return null;
-    };
-    useTypedResourceQueryMock.mockReturnValue({
-      rows: [],
-      payload: {
-        rows: [],
+  it('labels a degraded page with the backend’s issues', async () => {
+    answerPods = () =>
+      podsPage([], {
         completeness: 'partial',
         issues: [{ kind: 'Pod', message: 'Pod data is still syncing' }],
-      },
-      loading: false,
-      loaded: true,
-      error: null,
-      continueToken: null,
-      hasPrevious: false,
-      isRequestingMore: false,
-      loadMore: vi.fn(),
-      loadPrevious: vi.fn(),
-      pageIndex: 1,
-      pageSize: 50,
-      totalCount: 0,
-      totalIsExact: false,
-      filterOptions: { partialDataLabel: 'Pod: Pod data is still syncing' },
-      dynamic: null,
-    });
-    useNamespaceResourceGridTableMock.mockReturnValue({
-      gridTableProps: { data: [] },
-      favModal: null,
-    });
+        totalIsExact: false,
+      });
+    await start();
 
-    act(() => {
-      root.render(<Probe />);
-    });
-    await act(async () => {
-      const calls = useNamespaceResourceGridTableMock.mock.calls;
-      requireTableStatePublisher(calls[calls.length - 1]?.[0])(publishedTableState);
-      await Promise.resolve();
-    });
+    await view.show(<NamespaceTable />);
 
-    expect(result?.source.completeness).toBe('partial');
-    expect(result?.source.partialLabel).toContain('Pod data is still syncing');
+    expect(current().source.completeness).toBe('partial');
+    expect(current().source.partialLabel).toContain('Pod data is still syncing');
   });
 
-  it('issues exactly one typed query per render — metrics are joined at serve, never a second domain query', async () => {
-    const cpuSortState = {
-      filters: DEFAULT_GRID_TABLE_FILTER_STATE,
-      sortConfig: { key: 'cpu', direction: 'desc' } as const,
-    };
-    const Probe: React.FC = () => {
-      useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
-        clusterId: 'cluster-a',
-        domain: 'pods',
-        label: 'Namespace Pods',
-        selectRows,
-        viewId: 'namespace-pods',
-        namespace: 'team-a',
-        columns,
-        supportsCustomMetadataColumns: true,
-        keyExtractor: (item) => item.name,
-      });
-      return null;
-    };
-    useNamespaceResourceGridTableMock.mockImplementation((params) => ({
-      gridTableProps: { data: params.data },
-      favModal: null,
-    }));
-
-    act(() => {
-      root.render(<Probe />);
+  it('sorts by usage in its one page query (usage is joined at serve)', async () => {
+    await saveTable('namespace-pods', SHARED_NAMESPACES, {
+      sort: { key: 'cpu', direction: 'desc' },
     });
+    await start();
+    const startupDomains = new Set(app.snapshots.reads().map((read) => read.domain));
 
-    await act(async () => {
-      const calls = useNamespaceResourceGridTableMock.mock.calls;
-      const params = calls[calls.length - 1]?.[0];
-      requireTableStatePublisher(params)(cpuSortState);
-      await Promise.resolve();
-    });
+    await view.show(<NamespaceTable />);
 
-    // The CPU sort rides the single base query (the backend sorts by the
-    // serve-time joined usage); there is no metric-domain query and no
-    // rowKeys hydration leg.
-    const callsPerRender = useTypedResourceQueryMock.mock.calls;
-    expect(callsPerRender.every(([params]) => params.domain === 'pods')).toBe(true);
-    expect(callsPerRender.some(([params]) => params.predicates?.rowKeys !== undefined)).toBe(false);
-    expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        domain: 'pods',
-        enabled: true,
-        sortConfig: { key: 'cpu', direction: 'desc' },
-      })
+    const tableReads = app.snapshots.reads().filter((read) => !startupDomains.has(read.domain));
+    expect(new Set(tableReads.map((read) => read.domain))).toEqual(new Set(['pods']));
+    expect(new Set(pageReads())).toEqual(
+      new Set([`${dev.clusterId}|namespace:team-a?limit=50&sort=cpu&sortDirection=desc`])
     );
-    // Exactly one typed query per render: total calls == render count. Two
-    // renders happened (initial + sort publish), each may re-render once for
-    // state settles; every call must target the base domain with no siblings.
-    const distinctParamsPerRender = new Set(callsPerRender.map(([params]) => params.label));
-    expect(distinctParamsPerRender).toEqual(new Set(['Namespace Pods']));
   });
 
-  it('removes excluded query facets from persisted table state', async () => {
-    persistedFiltersRef.current = {
-      ...DEFAULT_GRID_TABLE_FILTER_STATE,
-      queryFacets: {
-        statuses: { mode: 'some', values: ['Running'] },
-        nodes: { mode: 'some', values: ['node-a'] },
+  it('drops a facet the view hides from the saved filters and from the query', async () => {
+    await saveTable('namespace-pods', SHARED_NAMESPACES, {
+      filters: {
+        ...DEFAULT_GRID_TABLE_FILTER_STATE,
+        queryFacets: {
+          statuses: { mode: 'some', values: ['Running'] },
+          nodes: { mode: 'some', values: ['node-a'] },
+        },
       },
-    };
-
-    const Probe: React.FC = () => {
-      useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
-        clusterId: 'cluster-a',
-        domain: 'pods',
-        label: 'Namespace Pods',
-        selectRows,
-        viewId: 'namespace-pods',
-        namespace: 'team-a',
-        columns,
-        supportsCustomMetadataColumns: true,
-        keyExtractor: (item) => item.name,
-        excludedQueryFacetKeys: ['statuses'],
-      });
-      return null;
-    };
-
-    await act(async () => {
-      root.render(<Probe />);
-      await Promise.resolve();
     });
+    await start();
+    vi.useFakeTimers();
 
-    expect(setFiltersMock).toHaveBeenCalledWith({
-      ...DEFAULT_GRID_TABLE_FILTER_STATE,
-      queryFacets: {
-        nodes: { mode: 'some', values: ['node-a'] },
-      },
+    await view.show(<NamespaceTable excludedQueryFacetKeys={['statuses']} />);
+    await letDebouncesRun();
+
+    expect(lastPageRead().getAll('facet.statuses')).toEqual([]);
+    expect(lastPageRead().getAll('facet.nodes')).toEqual(['node-a']);
+    expect((await savedTable('namespace-pods', SHARED_NAMESPACES))?.filters?.queryFacets).toEqual({
+      nodes: { mode: 'some', values: ['node-a'] },
     });
   });
 
-  it('applies view-owned selection facets to the query without saving them', async () => {
+  it('narrows the query by the view’s row selection without saving it', async () => {
+    await start();
+    vi.useFakeTimers();
     const ownerSelection = { owners: { mode: 'some' as const, values: ['owner:api'] } };
-    const Probe: React.FC = () => {
-      useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
-        clusterId: 'cluster-a',
-        domain: 'pods',
-        label: 'Namespace Pods',
-        selectRows,
-        viewId: 'namespace-pods',
-        namespace: 'team-a',
-        columns,
-        supportsCustomMetadataColumns: true,
-        keyExtractor: (item) => item.name,
-        excludedQueryFacetKeys: ['statuses', 'owners'],
-        selectionQueryFacets: ownerSelection,
-      });
-      return null;
-    };
+    await view.show(
+      <NamespaceTable
+        excludedQueryFacetKeys={['statuses', 'owners']}
+        selectionQueryFacets={ownerSelection}
+      />
+    );
 
-    await act(async () => {
-      root.render(<Probe />);
-      await Promise.resolve();
-    });
-    await act(async () => {
-      const calls = useNamespaceResourceGridTableMock.mock.calls;
-      requireTableStatePublisher(calls[calls.length - 1]?.[0])({
-        filters: { ...DEFAULT_GRID_TABLE_FILTER_STATE, search: 'web' },
-        sortConfig: { key: 'name', direction: 'asc' },
-      });
-      await Promise.resolve();
-    });
-
-    expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        filters: expect.objectContaining({ search: 'web', queryFacets: ownerSelection }),
+    await run(() =>
+      current().gridTableProps.filters?.onChange?.({
+        ...DEFAULT_GRID_TABLE_FILTER_STATE,
+        search: 'web',
       })
     );
-    // The selection never becomes table state, so persistence, favorites, and
-    // the filter bar cannot hold it.
-    expect(setFiltersMock).not.toHaveBeenCalled();
+    await letDebouncesRun();
+
+    expect(lastPageRead().get('search')).toBe('web');
+    expect(lastPageRead().getAll('facet.owners')).toEqual(['owner:api']);
+    const saved = await savedTable('namespace-pods', SHARED_NAMESPACES);
+    expect(saved?.filters?.search).toBe('web');
+    expect(JSON.stringify(saved)).not.toContain('owner:api');
   });
 
-  it('ignores a saved Namespaces filter in an All Namespaces table without a Namespaces control', async () => {
-    const savedNamespaces = { mode: 'some' as const, values: ['team-a'] };
-    persistedFiltersRef.current = {
-      ...DEFAULT_GRID_TABLE_FILTER_STATE,
-      namespaces: savedNamespaces,
-    };
-    const Probe: React.FC = () => {
-      useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
-        clusterId: 'cluster-a',
-        domain: 'pods',
-        label: 'Node Pods',
-        selectRows,
-        viewId: 'cluster-node-pods',
-        namespace: ALL_NAMESPACES_SCOPE,
-        columns,
-        supportsCustomMetadataColumns: true,
-        keyExtractor: (item) => item.name,
-        showNamespaceFilters: false,
-      });
-      return null;
-    };
-
-    await act(async () => {
-      root.render(<Probe />);
-      await Promise.resolve();
+  it('drops a saved Namespaces filter from an All Namespaces table without a Namespaces control', async () => {
+    await saveTable('cluster-node-pods', ALL_NAMESPACES_SCOPE, {
+      filters: {
+        ...DEFAULT_GRID_TABLE_FILTER_STATE,
+        namespaces: { mode: 'some', values: ['team-a'] },
+      },
     });
-    await act(async () => {
-      const calls = useNamespaceResourceGridTableMock.mock.calls;
-      requireTableStatePublisher(calls[calls.length - 1]?.[0])({
-        filters: { ...DEFAULT_GRID_TABLE_FILTER_STATE, namespaces: savedNamespaces },
-        sortConfig: { key: 'name', direction: 'asc' },
-      });
-      await Promise.resolve();
-    });
+    await start();
+    vi.useFakeTimers();
 
-    expect(setFiltersMock).toHaveBeenCalledWith(DEFAULT_GRID_TABLE_FILTER_STATE);
-    expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        filters: expect.objectContaining({
-          namespaces: DEFAULT_GRID_TABLE_FILTER_STATE.namespaces,
-        }),
-      })
+    await view.show(
+      <NamespaceTable
+        viewId="cluster-node-pods"
+        namespace={ALL_NAMESPACES_SCOPE}
+        showNamespaceFilters={false}
+      />
     );
-  });
+    await letDebouncesRun();
 
-  it('passes cluster scoped live refresh revisions into typed queries', () => {
-    const Probe: React.FC = () => {
-      useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
-        clusterId: 'cluster-a',
-        domain: 'nodes',
-        label: 'Cluster Nodes',
-        selectRows,
-        viewId: 'cluster-nodes',
-        columns,
-        supportsCustomMetadataColumns: true,
-        keyExtractor: (item) => item.name,
-      });
-      return null;
-    };
-
-    act(() => {
-      root.render(<Probe />);
-    });
-
-    expect(scopedDomainCallsRef.current).toContainEqual(['nodes', 'cluster-a|']);
-    expect(lifecycleCallsRef.current).toContainEqual(
-      expect.objectContaining({
-        domain: 'nodes',
-        scope: 'cluster-a|',
-        preserveState: true,
-        fetchOnEnable: false,
-      })
+    expect(pageReads().map((scope) => paramsOf('pods', scope).get('namespaces'))).not.toContain(
+      'team-a'
     );
-    // No doorbell has rung yet: the identity is the (empty) doorbell clocks.
-    expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        domain: 'nodes',
-        liveDataVersion: 'object: metric:',
-      })
-    );
-
-    // Doorbell shape: signalVersions + the folded sourceVersion
-    // (bumpSourceVersionOnly writes both).
-    liveDomainStateRef.current = {
-      status: 'ready',
-      data: {},
-      version: 2,
-      sourceVersion: 'node-2',
-      signalVersions: { object: 'node-2' },
-      checksum: 'fresh',
-      lastUpdated: 22,
-    };
-
-    act(() => {
-      root.render(<Probe />);
-    });
-
-    expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        domain: 'nodes',
-        liveDataVersion: 'object:node-2 metric:',
-      })
-    );
-  });
-
-  it('passes namespace scoped live refresh revisions into typed queries', () => {
-    const Probe: React.FC = () => {
-      useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
-        clusterId: 'cluster-a',
-        domain: 'pods',
-        label: 'All Namespaces Pods',
-        selectRows,
-        viewId: 'namespace-pods',
-        namespace: ALL_NAMESPACES_SCOPE,
-        columns,
-        supportsCustomMetadataColumns: true,
-        keyExtractor: (item) => item.name,
-      });
-      return null;
-    };
-
-    act(() => {
-      root.render(<Probe />);
-    });
-
-    expect(scopedDomainCallsRef.current).toContainEqual(['pods', 'cluster-a|namespace:all']);
-    expect(lifecycleCallsRef.current).toContainEqual(
-      expect.objectContaining({
-        domain: 'pods',
-        scope: 'cluster-a|namespace:all',
-        preserveState: true,
-        fetchOnEnable: false,
-      })
-    );
-    // No doorbell has rung yet: the identity is the (empty) doorbell clocks.
-    expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        domain: 'pods',
-        liveDataVersion: 'object: metric:',
-      })
-    );
-
-    liveDomainStateRef.current = {
-      status: 'ready',
-      data: {},
-      version: 3,
-      sourceVersion: 'pods-3',
-      signalVersions: { object: 'pods-3' },
-      checksum: '',
-      lastUpdated: 33,
-    };
-
-    act(() => {
-      root.render(<Probe />);
-    });
-
-    expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        domain: 'pods',
-        liveDataVersion: 'object:pods-3 metric:',
-      })
-    );
-  });
-
-  it('refetches on a metric-only doorbell: the folded sourceVersion advances while data, object version, and checksum stay unchanged', () => {
-    const Probe: React.FC = () => {
-      useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
-        clusterId: 'cluster-a',
-        domain: 'pods',
-        label: 'All Namespaces Pods',
-        selectRows,
-        viewId: 'namespace-pods',
-        namespace: ALL_NAMESPACES_SCOPE,
-        columns,
-        supportsCustomMetadataColumns: true,
-        keyExtractor: (item) => item.name,
-      });
-      return null;
-    };
-
-    act(() => {
-      root.render(<Probe />);
-    });
-
-    expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({ domain: 'pods', liveDataVersion: 'object: metric:' })
-    );
-
-    // Mirror what resourceStreamManager.bumpSourceVersionOnly writes when the
-    // backend metric doorbell arrives (version = the poller collection
-    // revision): the metric SIGNAL clock AND the folded sourceVersion advance.
-    // Data, object version, and checksum stay untouched — no object event
-    // happened.
-    const doorbellRevision = '1719964800000000000';
-    liveDomainStateRef.current = {
-      ...liveDomainStateRef.current,
-      status: 'ready',
-      sourceVersion: doorbellRevision,
-      signalVersions: { metric: doorbellRevision },
-      streamRevision: 1,
-      lastUpdated: 12,
-    };
-
-    act(() => {
-      root.render(<Probe />);
-    });
-
-    // The refetch identity keys on the doorbell clocks, so the metric tick
-    // alone — no object change — must produce a new liveDataVersion.
-    expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        domain: 'pods',
-        liveDataVersion: `object: metric:${doorbellRevision}`,
-      })
-    );
-  });
-
-  it('apply-driven folded sourceVersion churn must NOT change the refetch identity (no echo)', () => {
-    const Probe: React.FC = () => {
-      useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
-        clusterId: 'cluster-a',
-        domain: 'nodes',
-        label: 'Cluster Nodes',
-        selectRows,
-        viewId: 'cluster-nodes',
-        columns,
-        supportsCustomMetadataColumns: true,
-        keyExtractor: (item) => item.name,
-      });
-      return null;
-    };
-
-    // Doorbell shape: signalVersions + folded sourceVersion (what
-    // bumpSourceVersionOnly writes).
-    liveDomainStateRef.current = {
-      ...liveDomainStateRef.current,
-      sourceVersion: 'node-doorbell-1',
-      signalVersions: { object: 'node-doorbell-1' },
-    };
-    act(() => {
-      root.render(<Probe />);
-    });
-    const callsAfterMount = useTypedResourceQueryMock.mock.calls.length;
-    const identityAtMount = useTypedResourceQueryMock.mock.calls[callsAfterMount - 1][0]
-      .liveDataVersion as string;
-
-    // ANOTHER consumer's fetch of the same base scope lands: the apply
-    // rewrites the folded sourceVersion (and payload sourceVersions) but never
-    // touches signalVersions. Keying the table on the folded value made this
-    // look like a new signal — a 304 echo fetch per sibling fetch, per cycle
-    // (observed live in the Web Inspector as 0-byte 304s after each 200 pair).
-    liveDomainStateRef.current = {
-      ...liveDomainStateRef.current,
-      sourceVersion: 'validator-from-sibling-apply',
-      sourceVersions: { object: 'watermark-7', metric: '1719964800000000000' },
-      lastUpdated: 99,
-    };
-    act(() => {
-      root.render(<Probe />);
-    });
-
-    const calls = useTypedResourceQueryMock.mock.calls;
-    const lastCall = calls[calls.length - 1]?.[0];
-    expect(lastCall.liveDataVersion).toBe(identityAtMount);
-  });
-
-  it('changes the refetch identity when the live subscription is acknowledged', () => {
     expect(
-      isLiveDomainInitialLoadPending({
-        status: 'initialising',
-        data: null,
-        streamAcknowledgedVersion: 1,
-      })
-    ).toBe(false);
-
-    const Probe: React.FC = () => {
-      useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
-        clusterId: 'cluster-a',
-        domain: 'nodes',
-        label: 'Cluster Nodes',
-        selectRows,
-        viewId: 'cluster-nodes',
-        columns,
-        supportsCustomMetadataColumns: true,
-        keyExtractor: (item) => item.name,
-      });
-      return null;
-    };
-
-    act(() => {
-      root.render(<Probe />);
-    });
-    const beforeAck = useTypedResourceQueryMock.mock.lastCall?.[0].liveDataVersion;
-
-    liveDomainStateRef.current = {
-      ...liveDomainStateRef.current,
-      streamAcknowledgedVersion: 1,
-    };
-    act(() => {
-      root.render(<Probe />);
-    });
-
-    expect(useTypedResourceQueryMock.mock.lastCall?.[0].liveDataVersion).not.toBe(beforeAck);
-    expect(useTypedResourceQueryMock.mock.lastCall?.[0].liveDataVersion).toContain('stream-ack:1');
+      JSON.stringify((await savedTable('cluster-node-pods', ALL_NAMESPACES_SCOPE)) ?? null)
+    ).not.toContain('team-a');
   });
 
-  it('allows the current page query when fallback reconciliation replaces a missing stream acknowledgement', () => {
+  it.each([
+    {
+      name: 'cluster',
+      table: <ClusterTable defaultSortKey="age" defaultSortDirection="desc" />,
+      domain: 'cluster-events' as const,
+    },
+    {
+      name: 'namespace',
+      table: <NamespaceTable defaultSort={{ key: 'age', direction: 'desc' }} />,
+      domain: 'pods' as const,
+    },
+  ])(
+    'reads in the view’s default sort before any user sort ($name table)',
+    async ({ table, domain }) => {
+      await start();
+
+      await view.show(table);
+
+      const sorts = pageReads(domain).map((scope) => {
+        const params = paramsOf(domain, scope);
+        return `${params.get('sort')} ${params.get('sortDirection')}`;
+      });
+      expect(new Set(sorts)).toEqual(new Set(['age desc']));
+    }
+  );
+
+  it('holds the first read until saved table state hydrates, then reads with the saved filters', async () => {
+    await saveTable('namespace-pods', SHARED_NAMESPACES, {
+      filters: {
+        ...DEFAULT_GRID_TABLE_FILTER_STATE,
+        search: 'api',
+        queryFacets: { nodes: { mode: 'some', values: ['node-a'] } },
+      },
+    });
+    const hydrate = app.backend.hold('GetGridTablePersistence');
+    await start();
+
+    await view.show(<NamespaceTable />);
+    expect(pageReads()).toEqual([]);
+    expect(current().source.loading).toBe(true);
+    expect(current().source.loaded).toBe(false);
+
+    await run(hydrate);
+    expect(pageReads()).not.toEqual([]);
+    // No read shows the unfiltered page first: the saved search is not typing.
     expect(
-      isLiveDomainInitialLoadPending({
-        status: 'initialising',
-        data: null,
-        queryReconcileVersion: 1,
-      } as never)
-    ).toBe(false);
-
-    const Probe: React.FC = () => {
-      useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
-        clusterId: 'cluster-a',
-        domain: 'nodes',
-        label: 'Cluster Nodes',
-        selectRows,
-        viewId: 'cluster-nodes',
-        columns,
-        supportsCustomMetadataColumns: true,
-        keyExtractor: (item) => item.name,
-      });
-      return null;
-    };
-
-    act(() => {
-      root.render(<Probe />);
-    });
-    const beforeReconcile = useTypedResourceQueryMock.mock.lastCall?.[0].liveDataVersion;
-
-    liveDomainStateRef.current = {
-      ...liveDomainStateRef.current,
-      queryReconcileVersion: 1,
-    };
-    act(() => {
-      root.render(<Probe />);
-    });
-
-    expect(useTypedResourceQueryMock.mock.lastCall?.[0].liveDataVersion).not.toBe(beforeReconcile);
-    expect(useTypedResourceQueryMock.mock.lastCall?.[0].liveDataVersion).toContain(
-      'query-reconcile:1'
-    );
+      pageReads().map((scope) => {
+        const params = paramsOf('pods', scope);
+        return [params.get('search'), params.getAll('facet.nodes')];
+      })
+    ).toEqual(pageReads().map(() => ['api', ['node-a']]));
   });
 
-  it('seeds cluster query state from the configured default sort before persistence publishes', () => {
-    const Probe: React.FC = () => {
-      useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
-        clusterId: 'cluster-a',
-        domain: 'cluster-events',
-        label: 'Cluster Events',
-        selectRows,
-        viewId: 'cluster-events',
-        columns,
-        supportsCustomMetadataColumns: true,
-        keyExtractor: (item) => item.name,
-        defaultSortKey: 'age',
-        defaultSortDirection: 'desc',
-      });
-      return null;
-    };
+  it('shows the first-load state only before the first page; a refetch with rows stays quiet', async () => {
+    answerPods = () => podsPage([pod('pod-a')]);
+    await start();
+    vi.useFakeTimers();
+    let release = holdPageReads();
+    await view.show(<NamespaceTable />);
+    expect(current().source.loading).toBe(true);
+    expect(current().source.loaded).toBe(false);
 
-    act(() => {
-      root.render(<Probe />);
-    });
+    await release();
+    expect(current().source.loading).toBe(false);
+    expect(renderedRows()).toEqual([expect.stringContaining('pod-a')]);
 
-    expect(useClusterResourceGridTableMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        defaultSortKey: 'age',
-        defaultSortDirection: 'desc',
+    // A filter refetch is in flight: rows stay, with no loading state.
+    release = holdPageReads();
+    await run(() =>
+      current().gridTableProps.filters?.onChange?.({
+        ...DEFAULT_GRID_TABLE_FILTER_STATE,
+        search: 'pod',
       })
     );
-    expect(useTypedResourceQueryMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        domain: 'cluster-events',
-        sortConfig: { key: 'age', direction: 'desc' },
-      })
-    );
+    await letDebouncesRun();
+    expect(lastPageRead().get('search')).toBe('pod');
+    expect(current().source.loading).toBe(false);
+    expect(renderedRows()).toEqual([expect.stringContaining('pod-a')]);
+    expect(view.container.querySelector('[aria-label="Page request in progress"]')).toBeNull();
+    await release();
   });
 
-  it('seeds namespace query state from the configured default sort before persistence publishes', () => {
-    const Probe: React.FC = () => {
-      useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
-        clusterId: 'cluster-a',
-        domain: 'namespace-events',
-        label: 'All Namespaces Events',
-        selectRows,
-        viewId: 'namespace-events',
-        namespace: ALL_NAMESPACES_SCOPE,
-        columns,
-        supportsCustomMetadataColumns: true,
-        keyExtractor: (item) => item.name,
-        defaultSort: { key: 'age', direction: 'desc' },
-      });
-      return null;
-    };
-
-    act(() => {
-      root.render(<Probe />);
-    });
-
-    expect(useNamespaceResourceGridTableMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        defaultSort: { key: 'age', direction: 'desc' },
-      })
-    );
-    expect(useTypedResourceQueryMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        domain: 'namespace-events',
-        sortConfig: { key: 'age', direction: 'desc' },
-      })
-    );
-  });
-
-  it('keeps cluster tables in initial loading until the typed query can run', () => {
-    let result:
-      | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
-      | undefined;
-    const Probe: React.FC = () => {
-      result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
-        clusterId: 'cluster-a',
-        domain: 'nodes',
-        label: 'Cluster Nodes',
-        selectRows,
-        viewId: 'cluster-nodes',
-        columns,
-        supportsCustomMetadataColumns: true,
-        keyExtractor: (item) => item.name,
-      });
-      return null;
-    };
-
-    useClusterResourceGridTableMock.mockReturnValue({
-      gridTableProps: {
-        data: [],
-      },
-      favModal: null,
-    });
-
-    act(() => {
-      root.render(<Probe />);
-    });
-
-    expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({ enabled: false })
-    );
-    expect(result?.source.loading).toBe(true);
-    expect(result?.source.loaded).toBe(false);
-  });
-
-  it('keeps namespace tables in initial loading until the typed query can run', () => {
-    let result:
-      | ReturnType<typeof useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>>
-      | undefined;
-    const Probe: React.FC = () => {
-      result = useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
-        clusterId: 'cluster-a',
-        domain: 'pods',
-        label: 'All Namespaces Pods',
-        selectRows,
-        viewId: 'namespace-pods',
-        namespace: ALL_NAMESPACES_SCOPE,
-        columns,
-        supportsCustomMetadataColumns: true,
-        keyExtractor: (item) => item.name,
-      });
-      return null;
-    };
-
-    useNamespaceResourceGridTableMock.mockReturnValue({
-      gridTableProps: {
-        data: [],
-      },
-      favModal: null,
-    });
-
-    act(() => {
-      root.render(<Probe />);
-    });
-
-    expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({ enabled: false })
-    );
-    expect(result?.source.loading).toBe(true);
-    expect(result?.source.loaded).toBe(false);
-  });
-
-  it('does not run the first typed query while the live base domain is still initialising', async () => {
-    let result:
-      | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
-      | undefined;
-    const Probe: React.FC = () => {
-      result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
-        clusterId: 'cluster-a',
-        domain: 'cluster-config',
-        label: 'Cluster Configuration',
-        selectRows,
-        viewId: 'cluster-config',
-        columns,
-        supportsCustomMetadataColumns: true,
-        keyExtractor: (item) => item.name,
-      });
-      return null;
-    };
-
-    liveDomainStateRef.current = {
-      status: 'initialising',
-      data: null,
-      version: 1,
-      checksum: '',
-      lastUpdated: 11,
-    };
-    useClusterResourceGridTableMock.mockReturnValue({
-      gridTableProps: {
-        data: [],
-      },
-      favModal: null,
-    });
-
-    act(() => {
-      root.render(<Probe />);
-    });
-
-    await act(async () => {
-      const calls = useClusterResourceGridTableMock.mock.calls;
-      const params = calls[calls.length - 1]?.[0];
-      requireTableStatePublisher(params)(publishedTableState);
-      await Promise.resolve();
-    });
-
-    expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({ enabled: false })
-    );
-    expect(result?.source.loading).toBe(true);
-    expect(result?.source.loaded).toBe(false);
-
-    liveDomainStateRef.current = {
-      status: 'ready',
-      data: { resources: [] },
-      version: 2,
-      sourceVersion: 'source:ready',
-      checksum: 'ready',
-      lastUpdated: 22,
-    };
-
-    act(() => {
-      root.render(<Probe />);
-    });
-
-    expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        domain: 'cluster-config',
-        // The gate opened; no doorbell has rung, so the identity is the
-        // (empty) object clock.
-        liveDataVersion: 'object:',
-      })
-    );
-  });
-
-  it('allows the first cluster query when the live base domain is idle', async () => {
-    let result:
-      | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
-      | undefined;
-    const Probe: React.FC = () => {
-      result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
-        clusterId: 'cluster-a',
-        domain: 'nodes',
-        label: 'Cluster Nodes',
-        selectRows,
-        viewId: 'cluster-nodes',
-        columns,
-        supportsCustomMetadataColumns: true,
-        keyExtractor: (item) => item.name,
-      });
-      return null;
-    };
-
-    liveDomainStateRef.current = {
-      status: 'idle',
-      data: null,
-      version: undefined,
-      checksum: undefined,
-      lastUpdated: undefined,
-    };
-    useTypedResourceQueryMock.mockReturnValue({
-      rows: [],
-      loading: false,
-      loaded: false,
-      error: null,
-      continueToken: null,
-      hasPrevious: false,
-      isRequestingMore: false,
-      loadMore: vi.fn(),
-      loadPrevious: vi.fn(),
-      pageIndex: 1,
-      pageSize: 50,
-      totalCount: 0,
-      totalIsExact: true,
-      filterOptions: {},
-      dynamic: null,
-    });
-    useClusterResourceGridTableMock.mockReturnValue({
-      gridTableProps: {
-        data: [],
-      },
-      favModal: null,
-    });
-
-    act(() => {
-      root.render(<Probe />);
-    });
-
-    await act(async () => {
-      const calls = useClusterResourceGridTableMock.mock.calls;
-      const params = calls[calls.length - 1]?.[0];
-      requireTableStatePublisher(params)(publishedTableState);
-      await Promise.resolve();
-    });
-
-    expect(useTypedResourceQueryMock).toHaveBeenCalledWith(
-      expect.objectContaining({ domain: 'nodes', enabled: true })
-    );
-    expect(result?.source.loading).toBe(true);
-    expect(result?.source.loaded).toBe(false);
-    expect(result?.source.rows).toEqual([]);
-  });
-
-  it('allows the first namespace query when the live base domain is idle', async () => {
-    let result:
-      | ReturnType<typeof useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>>
-      | undefined;
-    const Probe: React.FC = () => {
-      result = useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
-        clusterId: 'cluster-a',
-        domain: 'namespace-config',
-        label: 'All Namespaces Config',
-        selectRows,
-        viewId: 'namespace-config',
-        namespace: ALL_NAMESPACES_SCOPE,
-        columns,
-        supportsCustomMetadataColumns: true,
-        keyExtractor: (item) => item.name,
-      });
-      return null;
-    };
-
-    liveDomainStateRef.current = {
-      status: 'idle',
-      data: null,
-      version: undefined,
-      checksum: undefined,
-      lastUpdated: undefined,
-    };
-    useTypedResourceQueryMock.mockReturnValue({
-      rows: [],
-      loading: false,
-      loaded: false,
-      error: null,
-      continueToken: null,
-      hasPrevious: false,
-      isRequestingMore: false,
-      loadMore: vi.fn(),
-      loadPrevious: vi.fn(),
-      pageIndex: 1,
-      pageSize: 50,
-      totalCount: 0,
-      totalIsExact: true,
-      filterOptions: {},
-      dynamic: null,
-    });
-    useNamespaceResourceGridTableMock.mockReturnValue({
-      gridTableProps: {
-        data: [],
-      },
-      favModal: null,
-    });
-
-    act(() => {
-      root.render(<Probe />);
-    });
-
-    await act(async () => {
-      const calls = useNamespaceResourceGridTableMock.mock.calls;
-      const params = calls[calls.length - 1]?.[0];
-      requireTableStatePublisher(params)(publishedTableState);
-      await Promise.resolve();
-    });
-
-    expect(useTypedResourceQueryMock).toHaveBeenCalledWith(
-      expect.objectContaining({ domain: 'namespace-config', enabled: true })
-    );
-    expect(result?.source.loading).toBe(true);
-    expect(result?.source.loaded).toBe(false);
-    expect(result?.source.rows).toEqual([]);
-  });
-
-  it('does not expose table loading during a query refresh that already has rows', async () => {
-    let result:
-      | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
-      | undefined;
-    const Probe: React.FC = () => {
-      result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
-        clusterId: 'cluster-a',
-        domain: 'nodes',
-        label: 'Cluster Nodes',
-        selectRows,
-        viewId: 'cluster-nodes',
-        columns,
-        supportsCustomMetadataColumns: true,
-        keyExtractor: (item) => item.name,
-      });
-      return null;
-    };
-
-    useTypedResourceQueryMock.mockReturnValue({
-      rows: [row],
-      loading: true,
-      loaded: true,
-      error: null,
-      continueToken: null,
-      hasPrevious: false,
-      isRequestingMore: false,
-      loadMore: vi.fn(),
-      loadPrevious: vi.fn(),
-      pageIndex: 1,
-      pageSize: 50,
-      totalCount: 1,
-      totalIsExact: true,
-      filterOptions: {},
-      dynamic: null,
-    });
-    useClusterResourceGridTableMock.mockReturnValue({
-      gridTableProps: {
-        data: [row],
-      },
-      favModal: null,
-    });
-
-    act(() => {
-      root.render(<Probe />);
-    });
-
-    await act(async () => {
-      const calls = useClusterResourceGridTableMock.mock.calls;
-      const params = calls[calls.length - 1]?.[0];
-      requireTableStatePublisher(params)(publishedTableState);
-      await Promise.resolve();
-    });
-
-    expect(result?.source.loading).toBe(false);
-    expect(paginationLoading(result)).toBeUndefined();
-  });
-
-  it('exposes table loading during a query load with no rows yet', async () => {
-    let result:
-      | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
-      | undefined;
-    const Probe: React.FC = () => {
-      result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
-        clusterId: 'cluster-a',
-        domain: 'nodes',
-        label: 'Cluster Nodes',
-        selectRows,
-        viewId: 'cluster-nodes',
-        columns,
-        supportsCustomMetadataColumns: true,
-        keyExtractor: (item) => item.name,
-      });
-      return null;
-    };
-
-    useTypedResourceQueryMock.mockReturnValue({
-      rows: [],
-      loading: true,
-      loaded: false,
-      error: null,
-      continueToken: null,
-      hasPrevious: false,
-      isRequestingMore: false,
-      loadMore: vi.fn(),
-      loadPrevious: vi.fn(),
-      pageIndex: 1,
-      pageSize: 50,
-      totalCount: 0,
-      totalIsExact: true,
-      filterOptions: {},
-      dynamic: null,
-    });
-    useClusterResourceGridTableMock.mockReturnValue({
-      gridTableProps: {
-        data: [],
-      },
-      favModal: null,
-    });
-
-    act(() => {
-      root.render(<Probe />);
-    });
-
-    await act(async () => {
-      const calls = useClusterResourceGridTableMock.mock.calls;
-      const params = calls[calls.length - 1]?.[0];
-      requireTableStatePublisher(params)(publishedTableState);
-      await Promise.resolve();
-    });
-
-    expect(result?.source.loading).toBe(true);
-    expect(paginationLoading(result)).toBeUndefined();
-  });
-
-  it('uses empty query results by default when local rows exist', async () => {
-    let result:
-      | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
-      | undefined;
-    const Probe: React.FC = () => {
-      result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
-        clusterId: 'cluster-a',
-        domain: 'nodes',
-        label: 'Cluster Nodes',
-        selectRows,
-        viewId: 'cluster-nodes',
-        columns,
-        supportsCustomMetadataColumns: true,
-        keyExtractor: (item) => item.name,
-      });
-      return null;
-    };
-
-    useTypedResourceQueryMock.mockReturnValue({
-      rows: [],
-      loading: false,
-      loaded: true,
-      error: null,
-      continueToken: null,
-      hasPrevious: false,
-      isRequestingMore: false,
-      loadMore: vi.fn(),
-      loadPrevious: vi.fn(),
-      pageIndex: 1,
-      pageSize: 50,
-      totalCount: 0,
-      totalIsExact: true,
-      filterOptions: {},
-      dynamic: null,
-    });
-    useClusterResourceGridTableMock.mockImplementation((params) => ({
-      gridTableProps: {
-        data: params.data,
-      },
-      favModal: null,
-    }));
-
-    act(() => {
-      root.render(<Probe />);
-    });
-
-    await act(async () => {
-      const calls = useClusterResourceGridTableMock.mock.calls;
-      const params = calls[calls.length - 1]?.[0];
-      requireTableStatePublisher(params)(publishedTableState);
-      await Promise.resolve();
-    });
-
-    expect(result?.source.rows).toEqual([]);
-    expect(useClusterResourceGridTableMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({ data: [] })
-    );
-  });
-
-  it('exposes pagination loading only while a pagination request is in flight', async () => {
-    let result:
-      | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
-      | undefined;
-    const Probe: React.FC = () => {
-      result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
-        clusterId: 'cluster-a',
-        domain: 'nodes',
-        label: 'Cluster Nodes',
-        selectRows,
-        viewId: 'cluster-nodes',
-        columns,
-        supportsCustomMetadataColumns: true,
-        keyExtractor: (item) => item.name,
-      });
-      return null;
-    };
-
-    useTypedResourceQueryMock.mockReturnValue({
-      rows: [row],
-      loading: true,
-      loaded: true,
-      error: null,
-      continueToken: 'next-page',
-      hasPrevious: false,
-      isRequestingMore: true,
-      loadMore: vi.fn(),
-      loadPrevious: vi.fn(),
-      pageIndex: 1,
-      pageSize: 50,
-      totalCount: 2,
-      totalIsExact: true,
-      filterOptions: {},
-      dynamic: null,
-    });
-    useClusterResourceGridTableMock.mockReturnValue({
-      gridTableProps: {
-        data: [row],
-      },
-      favModal: null,
-    });
-
-    act(() => {
-      root.render(<Probe />);
-    });
-
-    await act(async () => {
-      const calls = useClusterResourceGridTableMock.mock.calls;
-      const params = calls[calls.length - 1]?.[0];
-      requireTableStatePublisher(params)(publishedTableState);
-      await Promise.resolve();
-    });
-
-    expect(result?.source.loading).toBe(false);
-    expect(paginationLoading(result)).toBe(true);
-  });
-
-  it('never issues the first query with pre-hydration filters', async () => {
-    const Probe: React.FC = () => {
-      useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
-        clusterId: 'cluster-a',
-        domain: 'nodes',
-        label: 'Cluster Nodes',
-        selectRows,
-        viewId: 'cluster-nodes',
-        columns,
-        supportsCustomMetadataColumns: true,
-        keyExtractor: (item) => item.name,
-      });
-      return null;
-    };
-    const publish = async (state: typeof publishedTableState) => {
-      await act(async () => {
-        const calls = useClusterResourceGridTableMock.mock.calls;
-        requireTableStatePublisher(calls[calls.length - 1]?.[0])(state);
-        await Promise.resolve();
-      });
-    };
-
-    // Render before hydration: the table publishes its DEFAULT state.
-    persistenceHydratedRef.current = false;
-    act(() => {
-      root.render(<Probe />);
-    });
-    await publish(publishedTableState);
-    expect(useTypedResourceQueryMock.mock.calls.some(([params]) => params.enabled)).toBe(false);
-
-    // Hydration commits, but the post-hydration publish has not run yet (it is
-    // an effect). The query must NOT fire with the stale default filters.
-    persistenceHydratedRef.current = true;
-    act(() => {
-      root.render(<Probe />);
-    });
-    expect(useTypedResourceQueryMock.mock.calls.some(([params]) => params.enabled)).toBe(false);
-
-    // The post-hydration publish lands with the persisted filters — only now
-    // does the query run, and with those filters.
-    const hydratedState = {
-      filters: { ...DEFAULT_GRID_TABLE_FILTER_STATE, search: 'persisted' },
-      sortConfig: { key: 'name', direction: 'asc' } as const,
-    };
-    await publish(hydratedState);
-    const enabledCalls = useTypedResourceQueryMock.mock.calls.filter(([params]) => params.enabled);
-    expect(enabledCalls.length).toBeGreaterThan(0);
-    expect(enabledCalls[0][0].filters).toEqual(hydratedState.filters);
-  });
-
-  it('uses persisted rows per page for the query and saves page size changes', async () => {
-    let result:
-      | ReturnType<typeof useQueryBackedClusterResourceGridTable<TestPayload, TestRow>>
-      | undefined;
-    const Probe: React.FC = () => {
-      result = useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
-        clusterId: 'cluster-a',
-        domain: 'nodes',
-        label: 'Cluster Nodes',
-        selectRows,
-        viewId: 'cluster-nodes',
-        columns,
-        supportsCustomMetadataColumns: true,
-        keyExtractor: (item) => item.name,
-      });
-      return null;
-    };
-
-    persistedPageSizeRef.current = 250;
-    useTypedResourceQueryMock.mockReturnValue({
-      rows: [row],
-      loading: false,
-      loaded: true,
-      error: null,
-      continueToken: null,
-      hasPrevious: false,
-      isRequestingMore: false,
-      loadMore: vi.fn(),
-      loadPrevious: vi.fn(),
-      pageIndex: 1,
-      pageSize: 250,
-      totalCount: 1000,
-      totalIsExact: true,
-      filterOptions: {},
-      dynamic: null,
-    });
-    useClusterResourceGridTableMock.mockReturnValue({
-      gridTableProps: {
-        data: [row],
-      },
-      favModal: null,
-    });
-
-    act(() => {
-      root.render(<Probe />);
-    });
-
-    await act(async () => {
-      const calls = useClusterResourceGridTableMock.mock.calls;
-      const params = calls[calls.length - 1]?.[0];
-      requireTableStatePublisher(params)(publishedTableState);
-      await Promise.resolve();
-    });
-
-    expect(useTypedResourceQueryMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({ pageLimit: 250 })
+  it('shows a page request in progress only while the next page is being read', async () => {
+    answerPods = (params) =>
+      params.get('continue') === 'page-2'
+        ? podsPage([pod('pod-c')], { total: 3, previous: 'page-1' })
+        : podsPage([pod('pod-a'), pod('pod-b')], { total: 3, continue: 'page-2' });
+    await start();
+    await view.show(<NamespaceTable />);
+    const next = requireValue(
+      view.container.querySelector<HTMLButtonElement>('button[aria-label="Next page"]'),
+      'expected the Next page button'
     );
 
-    const paginationProps = requireValue(
-      paginationControlProps(result),
-      'expected query-backed pagination controls'
-    );
-    requireValue(
-      paginationProps.onPageSizeChange,
-      'expected page-size callback on pagination controls'
-    )(500);
+    const release = holdPageReads((params) => params.get('continue') === 'page-2');
+    await run(() => next.click());
+    expect(view.container.querySelector('[aria-label="Page request in progress"]')).not.toBeNull();
+    expect(next.disabled).toBe(true);
+    expect(current().source.loading).toBe(false);
 
-    expect(setPageSizeMock).toHaveBeenCalledWith(500);
+    await release();
+    expect(view.container.querySelector('[aria-label="Page request in progress"]')).toBeNull();
+    expect(renderedRows()).toEqual([expect.stringContaining('pod-c')]);
   });
 
-  it('lets age text advance without issuing another query', async () => {
+  it('reads the saved rows per page and saves a page-size change', async () => {
+    await saveTable('namespace-pods', SHARED_NAMESPACES, { pageSize: 250 });
+    answerPods = () => podsPage([pod('pod-a')], { total: 1000 });
+    await start();
+    vi.useFakeTimers();
+    await view.show(<NamespaceTable />);
+    expect(lastPageRead().get('limit')).toBe('250');
+
+    const pageSize = requireValue(
+      view.container.querySelector<HTMLElement>('.table-pagination-page-size .dropdown-trigger'),
+      'expected the Rows per page control'
+    );
+    await run(() => pageSize.click());
+    const option = requireValue(
+      Array.from(document.querySelectorAll<HTMLElement>('.dropdown-option')).find(
+        (candidate) => candidate.textContent?.trim() === '500'
+      ),
+      'expected the 500 rows option'
+    );
+    await run(() => option.click());
+    await letDebouncesRun();
+
+    expect(lastPageRead().get('limit')).toBe('500');
+    expect((await savedTable('namespace-pods', SHARED_NAMESPACES))?.pageSize).toBe(500);
+  });
+
+  it('advances age text without reading the page again', async () => {
+    await start();
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:10Z'));
-    const ageRow: TestRow = {
-      ...row,
-      age: 'stale',
-      ageTimestamp: Date.parse('2026-01-01T00:00:00Z'),
-    };
-    const ageColumns: GridColumnDefinition<TestRow>[] = [
-      createAgeColumn<TestRow>('age', 'Age', (item) => item.age ?? '-'),
-    ];
-    let renderedAgeCell: React.ReactNode = null;
-    const Probe: React.FC = () => {
-      useQueryBackedNamespaceResourceGridTable<TestPayload, TestRow>({
-        clusterId: 'cluster-a',
-        domain: 'pods',
-        label: 'Namespace Pods',
-        selectRows,
-        viewId: 'namespace-pods',
-        namespace: 'team-a',
-        columns: ageColumns,
-        supportsCustomMetadataColumns: true,
-        keyExtractor: (item) => item.name,
-      });
-      return <>{renderedAgeCell}</>;
-    };
-
-    useTypedResourceQueryMock.mockImplementation(() => ({
-      rows: [ageRow],
-      payload: { rows: [ageRow] },
-      loading: false,
-      loaded: true,
-      error: null,
-      continueToken: null,
-      hasPrevious: false,
-      isRequestingMore: false,
-      loadMore: vi.fn(),
-      loadPrevious: vi.fn(),
-      pageIndex: 1,
-      pageSize: 50,
-      totalCount: 1,
-      totalIsExact: true,
-      filterOptions: {},
-      kindVocabulary: null,
-      dynamic: null,
-      fetchAllRows: vi.fn().mockResolvedValue([ageRow]),
-    }));
-    useNamespaceResourceGridTableMock.mockImplementation((params) => {
-      renderedAgeCell = params.data[0] ? params.columns[0]?.render(params.data[0]) : null;
-      return {
-        gridTableProps: {
-          data: params.data,
-        },
-        favModal: null,
-      };
-    });
+    answerPods = () =>
+      podsPage([pod('pod-a', { age: 'stale', ageTimestamp: Date.parse('2026-01-01T00:00:00Z') })]);
+    await view.show(<NamespaceTable />);
+    expect(renderedRows()).toEqual([expect.stringContaining('10s')]);
+    const reads = pageReads().length;
 
     await act(async () => {
-      root.render(<Probe />);
-      await Promise.resolve();
-    });
-    await act(async () => {
-      const calls = useNamespaceResourceGridTableMock.mock.calls;
-      const params = calls[calls.length - 1]?.[0];
-      requireTableStatePublisher(params)(publishedTableState);
-      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(1_000);
     });
 
-    expect(container.textContent).toBe('10s');
-    const queryCallCount = useTypedResourceQueryMock.mock.calls.length;
-
-    await act(async () => {
-      vi.advanceTimersByTime(1000);
-      await Promise.resolve();
-    });
-
-    expect(container.textContent).toBe('11s');
-    expect(useTypedResourceQueryMock).toHaveBeenCalledTimes(queryCallCount);
+    expect(renderedRows()).toEqual([expect.stringContaining('11s')]);
+    expect(pageReads()).toHaveLength(reads);
   });
 });

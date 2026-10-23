@@ -440,13 +440,25 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       activeStore.setTabGroups((prev) => setActiveTab(prev, panelId, groupKey));
       return;
     }
+    // The dock shows a panel's tab only once the panel registers, which can be
+    // after the directory docks it.
+    if (!panelRegistrationsSnapshot.has(panelId)) {
+      return;
+    }
     activeStore.focusPanelById(panelId);
     const timer = window.setTimeout(() => {
       focusDockableTab(panelId);
       setPendingFocus(null);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [pendingFocus, selectedClusterId, tabGroups, activeStore, setLastFocusedGroupKey]);
+  }, [
+    pendingFocus,
+    selectedClusterId,
+    tabGroups,
+    panelRegistrationsSnapshot,
+    activeStore,
+    setLastFocusedGroupKey,
+  ]);
 
   // -----------------------------------------------------------------------
   // registerPanel stores panel metadata only.

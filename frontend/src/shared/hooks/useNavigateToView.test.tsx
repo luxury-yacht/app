@@ -1,135 +1,184 @@
+/**
+ * frontend/src/shared/hooks/useNavigateToView.test.tsx
+ *
+ * Alt+click navigation to the view that lists an object: the workspace opens
+ * the kind's view (its resource family's view first), selects the object's
+ * namespace in its cluster with the sidebar following, and leaves a focus
+ * request aimed only at the destination table. A custom resource without an
+ * API version navigates nowhere. Runs the hook inside the production shell
+ * with the real kubeconfig, view-state, sidebar, and namespace owners over a
+ * faked backend (test-utils/appState). How the destination table consumes the
+ * request is covered by modules/resource-grid/useAnchorOnUnmatchedFocusRequest.test.tsx.
+ */
+
+import { peekPendingFocusRequest } from '@shared/components/tables/hooks/useGridTableExternalFocus';
 import { act } from 'react';
-import { createRoot } from 'react-dom/client';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { requireValue } from '@/test-utils/requireValue';
 import type { KubernetesObjectReference } from '@/types/view-state';
 import { type NavigateToViewResult, useNavigateToView } from './useNavigateToView';
 
-const mocks = vi.hoisted(() => ({
-  view: { setViewType: vi.fn(), setActiveNamespaceTab: vi.fn(), setActiveClusterView: vi.fn() },
-  sidebar: { setSidebarSelection: vi.fn() },
-  setNamespace: vi.fn(),
-  pending: vi.fn(),
-  emit: vi.fn(),
-}));
-vi.mock('@/core/contexts/ViewStateContext', () => ({ useOptionalViewState: () => mocks.view }));
-vi.mock('@/core/contexts/SidebarStateContext', () => ({
-  useOptionalSidebarState: () => mocks.sidebar,
-}));
-vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
-  useNamespace: () => ({ setSelectedNamespace: mocks.setNamespace }),
-}));
-vi.mock('@shared/components/tables/hooks/useGridTableExternalFocus', () => ({
-  setPendingFocusRequest: mocks.pending,
-}));
-vi.mock('@/core/events', () => ({ eventBus: { emit: mocks.emit } }));
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
+let navigation: NavigateToViewResult | undefined;
 
-const navigate = (ref: KubernetesObjectReference) => {
-  const container = document.createElement('div');
-  const root = createRoot(container);
-  let result: NavigateToViewResult | undefined;
-  function Test() {
-    result = useNavigateToView();
-    return null;
-  }
-  act(() => root.render(<Test />));
-  act(() => result?.navigateToView(ref));
-  act(() => root.unmount());
+function Probe() {
+  navigation = useNavigateToView();
+  return null;
+}
+
+const start = async () => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['apps', 'team-b']);
+  view = await app.render(null);
+  await view.show(<Probe />);
 };
-afterEach(() => vi.clearAllMocks());
-describe('resource view navigation', () => {
-  it('routes discovered Karpenter identity and focus to its cluster table', () => {
-    navigate({
-      clusterId: 'a',
+
+const navigate = async (ref: KubernetesObjectReference) => {
+  await act(async () => {
+    requireValue(navigation, 'mounted navigation hook').navigateToView(ref);
+  });
+  await app.settle();
+};
+
+const workspace = () => {
+  const { namespace, viewState } = view.owners();
+  return {
+    view: viewState?.viewType,
+    namespaceTab: viewState?.activeNamespaceTab,
+    clusterTab: viewState?.activeClusterTab,
+    sidebar: viewState?.sidebarSelection,
+    namespace: namespace.selectedNamespace,
+  };
+};
+
+describe('useNavigateToView', () => {
+  it('opens a cluster-scoped family object’s cluster view and aims focus at its table', async () => {
+    await start();
+    const before = view.owners().namespace.selectedNamespace;
+
+    await navigate({
+      clusterId: dev.clusterId,
       group: 'karpenter.sh',
       version: 'v1beta1',
       kind: 'NodePool',
       namespace: '',
       name: 'pool',
     });
-    expect(mocks.view.setActiveClusterView).toHaveBeenCalledWith('karpenter');
-    expect(mocks.emit).toHaveBeenCalledWith(
-      'gridtable:focus-request',
-      expect.objectContaining({
-        clusterId: 'a',
-        group: 'karpenter.sh',
-        version: 'v1beta1',
-        rowKey: 'a|karpenter.sh/v1beta1/NodePool//pool',
-        destinationViewId: 'cluster-karpenter',
-      })
-    );
-    expect(mocks.setNamespace).not.toHaveBeenCalled();
+
+    expect(workspace()).toMatchObject({
+      view: 'cluster',
+      clusterTab: 'karpenter',
+      sidebar: { type: 'cluster', value: 'cluster' },
+      namespace: before,
+    });
+    expect(peekPendingFocusRequest()).toMatchObject({
+      clusterId: dev.clusterId,
+      group: 'karpenter.sh',
+      version: 'v1beta1',
+      kind: 'NodePool',
+      name: 'pool',
+      rowKey: `${dev.clusterId}|karpenter.sh/v1beta1/NodePool//pool`,
+      destinationViewId: 'cluster-karpenter',
+    });
   });
-  it('selects the Argo CD object namespace and focuses only its family table', () => {
-    navigate({
-      clusterId: 'b',
+
+  it('selects a namespaced family object’s namespace and aims focus only at its family table', async () => {
+    await start();
+
+    await navigate({
+      clusterId: dev.clusterId,
       group: 'argoproj.io',
       version: 'v1alpha1',
       kind: 'Application',
       namespace: 'team-b',
       name: 'shop',
     });
-    expect(mocks.view.setActiveNamespaceTab).toHaveBeenCalledWith('argocd');
-    expect(mocks.setNamespace).toHaveBeenCalledWith('team-b', 'b');
-    expect(mocks.emit).toHaveBeenCalledWith(
-      'gridtable:focus-request',
-      expect.objectContaining({
-        clusterId: 'b',
-        namespace: 'team-b',
-        destinationViewId: 'namespace-argocd',
-        rowKey: 'b|argoproj.io/v1alpha1/Application/team-b/shop',
-      })
-    );
+
+    expect(workspace()).toMatchObject({
+      view: 'namespace',
+      namespaceTab: 'argocd',
+      sidebar: { type: 'namespace', value: 'team-b' },
+      namespace: 'team-b',
+    });
+    expect(view.owners().namespace.selectedNamespaceClusterId).toBe(dev.clusterId);
+    expect(peekPendingFocusRequest()).toMatchObject({
+      clusterId: dev.clusterId,
+      namespace: 'team-b',
+      rowKey: `${dev.clusterId}|argoproj.io/v1alpha1/Application/team-b/shop`,
+      destinationViewId: 'namespace-argocd',
+    });
   });
-  it('preserves namespace selection and focus for built-in resources', () => {
-    navigate({
-      clusterId: 'b',
+
+  it('opens a built-in object’s namespace view with its namespace selected', async () => {
+    await start();
+
+    await navigate({
+      clusterId: dev.clusterId,
       group: 'apps',
       version: 'v1',
       kind: 'Deployment',
       namespace: 'apps',
       name: 'web',
     });
-    expect(mocks.view.setActiveNamespaceTab).toHaveBeenCalledWith('workloads');
-    expect(mocks.setNamespace).toHaveBeenCalledWith('apps', 'b');
-    expect(mocks.sidebar.setSidebarSelection).toHaveBeenCalledWith({
-      type: 'namespace',
-      value: 'apps',
+
+    expect(workspace()).toMatchObject({
+      view: 'namespace',
+      namespaceTab: 'workloads',
+      sidebar: { type: 'namespace', value: 'apps' },
+      namespace: 'apps',
+    });
+    expect(peekPendingFocusRequest()).toMatchObject({
+      rowKey: `${dev.clusterId}|apps/v1/Deployment/apps/web`,
+      destinationViewId: 'namespace-workloads',
     });
   });
+
   // The Namespaces table keys rows by the same canonical key (see
   // ClusterViewNamespaces.test), so this request focuses the namespace's row.
-  it('routes a Namespace to the cluster Namespaces table and focuses its row', () => {
-    navigate({
-      clusterId: 'cluster-a',
+  it('opens the cluster Namespaces view for a Namespace and aims focus at its row', async () => {
+    await start();
+    const before = view.owners().namespace.selectedNamespace;
+
+    await navigate({
+      clusterId: dev.clusterId,
       group: '',
       version: 'v1',
       kind: 'Namespace',
       name: 'payments',
     });
-    expect(mocks.view.setViewType).toHaveBeenCalledWith('cluster');
-    expect(mocks.view.setActiveClusterView).toHaveBeenCalledWith('namespaces');
-    expect(mocks.sidebar.setSidebarSelection).toHaveBeenCalledWith({
-      type: 'cluster',
-      value: 'cluster',
+
+    expect(workspace()).toMatchObject({
+      view: 'cluster',
+      clusterTab: 'namespaces',
+      sidebar: { type: 'cluster', value: 'cluster' },
+      namespace: before,
     });
-    expect(mocks.emit).toHaveBeenCalledWith(
-      'gridtable:focus-request',
-      expect.objectContaining({
-        clusterId: 'cluster-a',
-        rowKey: 'cluster-a|/v1/Namespace//payments',
-        destinationViewId: 'cluster-namespaces',
-      })
-    );
-    expect(mocks.setNamespace).not.toHaveBeenCalled();
+    expect(peekPendingFocusRequest()).toMatchObject({
+      clusterId: dev.clusterId,
+      rowKey: `${dev.clusterId}|/v1/Namespace//payments`,
+      destinationViewId: 'cluster-namespaces',
+    });
   });
-  it('rejects custom resource navigation without an API version', () => {
-    navigate({ clusterId: 'a', group: 'karpenter.sh', kind: 'NodePool', name: 'pool' });
-    expect(mocks.view.setViewType).not.toHaveBeenCalled();
-    expect(mocks.emit).not.toHaveBeenCalled();
-  });
-  it('rejects incomplete cluster identity before changing navigation', () => {
-    navigate({ group: 'karpenter.sh', version: 'v1', kind: 'NodePool', name: 'pool' });
-    expect(mocks.view.setViewType).not.toHaveBeenCalled();
-    expect(mocks.emit).not.toHaveBeenCalled();
+
+  it('navigates nowhere for a custom resource row without an API version', async () => {
+    await start();
+    const before = workspace();
+
+    await navigate({
+      clusterId: dev.clusterId,
+      group: 'karpenter.sh',
+      kind: 'NodePool',
+      name: 'pool',
+    });
+
+    expect(workspace()).toEqual(before);
+    expect(peekPendingFocusRequest()).toBeNull();
   });
 });

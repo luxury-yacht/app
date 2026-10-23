@@ -1,236 +1,211 @@
 /**
  * frontend/src/core/data-access/dataAccess.test.ts
  *
- * Verifies brokered data access and refresh-domain lifecycle coordination.
+ * Brokered data access over the real refresh orchestrator, store, domain
+ * registrations, and stream managers (test-utils/appState); only the refresh
+ * HTTP API and the stream sockets are faked. Each test states what a broker
+ * request asks the backend for, when the auto-refresh pause blocks it, and
+ * what the broker records in its read diagnostics.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getBrokerReadDiagnosticsSnapshot } from '@/core/read-diagnostics';
 import {
-  getBrokerReadDiagnosticsSnapshot,
-  resetBrokerReadDiagnosticsForTesting,
-} from '@/core/read-diagnostics';
-import { setAppPreferencesForTesting } from '@/core/settings/appPreferences';
-
-const hoisted = vi.hoisted(() => ({
-  fetchScopedDomain: vi.fn(),
-  acquireScopedDomainLease: vi.fn(),
-  releaseScopedDomainLease: vi.fn(),
-  refreshCluster: vi.fn(),
-  getScopedDomainState: vi.fn(),
-}));
-
-vi.mock('@/core/refresh', () => ({
-  refreshOrchestrator: {
-    fetchScopedDomain: (...args: unknown[]) => hoisted.fetchScopedDomain(...args),
-    acquireScopedDomainLease: (...args: unknown[]) => hoisted.acquireScopedDomainLease(...args),
-    releaseScopedDomainLease: (...args: unknown[]) => hoisted.releaseScopedDomainLease(...args),
-    refreshCluster: (...args: unknown[]) => hoisted.refreshCluster(...args),
-  },
-}));
-
-vi.mock('@/core/refresh/store', () => ({
-  getScopedDomainState: (...args: unknown[]) => hoisted.getScopedDomainState(...args),
-}));
-
+  makeClusterConfigSnapshotPayload,
+  makePodSnapshotPayload,
+} from '@/core/refresh/refreshContractTestBuilders';
+import { getScopedDomainState } from '@/core/refresh/store';
+import type { RefreshDomain } from '@/core/refresh/types';
+import {
+  flushRefreshWork,
+  installAppStateHarness,
+  markClusterReady,
+  setAutoRefresh,
+} from '@/test-utils/appState/harness';
+import { snapshotResponse, streamKey } from '@/test-utils/appState/transport';
+import { testScope } from '@/test-utils/refreshScope';
 import {
   acquireRefreshDomainLease,
   isDataAccessBlocked,
   releaseRefreshDomainLease,
-  requestContextRefresh,
   requestData,
   requestRefreshDomain,
   requestRefreshDomainState,
 } from './dataAccess';
 
-describe('dataAccess', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    resetBrokerReadDiagnosticsForTesting();
-    hoisted.fetchScopedDomain.mockResolvedValue(undefined);
-    hoisted.getScopedDomainState.mockReturnValue({ status: 'ready', data: null });
-    hoisted.refreshCluster.mockResolvedValue(undefined);
-    setAppPreferencesForTesting({ autoRefreshEnabled: true });
-  });
+const app = installAppStateHarness({ streams: 'manual' });
 
+// A snapshot-only domain: its reads are exactly the broker's.
+const yamlScope = (clusterId: string) => testScope(clusterId, 'default:apps/v1:Deployment:web');
+
+/** Snapshot reads of `(domain, scope)` so far. */
+const readsOf = (domain: RefreshDomain, scope: string): number =>
+  app.snapshots.reads(domain).filter((read) => read.scope === scope).length;
+
+/** The correlation id each snapshot read carried, in order. */
+const recordCorrelationIds = (): string[] => {
+  const ids: string[] = [];
+  let version = 0;
+  app.snapshots.respond(({ domain, scope, headers }) => {
+    ids.push(headers.get('X-Correlation-ID') ?? '');
+    version += 1;
+    return snapshotResponse({
+      domain,
+      scope,
+      version,
+      payload: { yaml: 'kind: Deployment' },
+    });
+  });
+  return ids;
+};
+
+const settle = async () => {
+  await flushRefreshWork();
+  await vi.advanceTimersByTimeAsync(0);
+  await flushRefreshWork();
+};
+
+const advance = async (ms: number) => {
+  await vi.advanceTimersByTimeAsync(ms);
+  await flushRefreshWork();
+};
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  setAutoRefresh(true);
+});
+
+afterEach(async () => {
+  await vi.runOnlyPendingTimersAsync();
+  vi.useRealTimers();
+});
+
+describe('refresh-domain leases', () => {
+  // The broker passes demand and preserveState to the orchestrator on both
+  // acquire and release; a mismatch strands the lease (the stream never stops)
+  // or drops rows a remount would repaint.
   it.each([
-    { demand: 'snapshot' as const, preserveState: false, expected: undefined },
-    { demand: 'snapshot' as const, preserveState: true, expected: { preserveState: true } },
-    {
-      demand: 'query' as const,
-      preserveState: false,
-      expected: { preserveState: false, demand: 'query' },
-    },
-    {
-      demand: 'query' as const,
-      preserveState: true,
-      expected: { preserveState: true, demand: 'query' },
-    },
-  ])(
-    'balances $demand demand with preserveState=$preserveState across lease acquisition and release',
-    ({ demand, preserveState, expected }) => {
-      const lease = {
-        domain: 'pods' as const,
-        scope: 'cluster-a|namespace:prod',
-        demand,
-        preserveState,
-      };
+    { demand: 'snapshot', preserveState: false },
+    { demand: 'snapshot', preserveState: true },
+    { demand: 'query', preserveState: false },
+    { demand: 'query', preserveState: true },
+  ] as const)(
+    'balances $demand demand with preserveState=$preserveState across acquire and release',
+    async ({ demand, preserveState }) => {
+      const clusterId = `lease-${demand}-${preserveState}`;
+      markClusterReady(clusterId);
+      const scope = testScope(clusterId, 'namespace:prod');
+      app.snapshots.serve('pods', scope, makePodSnapshotPayload({ clusterId }));
+      const lease = { domain: 'pods', scope, demand, preserveState } as const;
+
       acquireRefreshDomainLease(lease);
+      await settle();
+      expect(app.streams.active()).toContain(streamKey('pods', scope));
+      // Only snapshot demand loads the bounded base snapshot; query consumers
+      // read their own pages.
+      expect(readsOf('pods', scope)).toBe(demand === 'snapshot' ? 1 : 0);
+      const loaded = getScopedDomainState('pods', scope).data;
+      expect(Boolean(loaded)).toBe(demand === 'snapshot');
+
       releaseRefreshDomainLease(lease);
-      expect(hoisted.acquireScopedDomainLease).toHaveBeenCalledWith(
-        lease.domain,
-        lease.scope,
-        expected
+      await settle();
+      // A preserved scope's stream lingers briefly for a remount and keeps its
+      // rows; a reset scope stops at once and drops them.
+      expect(app.streams.active().includes(streamKey('pods', scope))).toBe(preserveState);
+      expect(getScopedDomainState('pods', scope).data).toBe(preserveState ? loaded : null);
+
+      await advance(1_000);
+      expect(app.streams.active()).not.toContain(streamKey('pods', scope));
+    }
+  );
+});
+
+describe('auto-refresh pause', () => {
+  it.each(['startup', 'background'] as const)(
+    'blocks %s requests without asking the backend',
+    async (reason) => {
+      markClusterReady('paused-a');
+      const scope = yamlScope('paused-a');
+      setAutoRefresh(false);
+      acquireRefreshDomainLease({ domain: 'object-yaml', scope });
+
+      await expect(requestRefreshDomain({ domain: 'object-yaml', scope, reason })).resolves.toEqual(
+        { status: 'blocked', blockedReason: 'auto-refresh-disabled' }
       );
-      expect(hoisted.releaseScopedDomainLease).toHaveBeenCalledWith(
-        lease.domain,
-        lease.scope,
-        expected
-      );
+      await settle();
+
+      expect(isDataAccessBlocked(reason)).toBe(true);
+      expect(readsOf('object-yaml', scope)).toBe(0);
+      releaseRefreshDomainLease({ domain: 'object-yaml', scope });
     }
   );
 
-  it('blocks startup requests when auto-refresh is disabled', async () => {
-    setAppPreferencesForTesting({ autoRefreshEnabled: false });
+  // Only a user request asks the backend to rebuild the snapshot before
+  // reading it (a manual refresh job); foreground activation and startup reads
+  // are not manual refreshes.
+  it.each([
+    { reason: 'user', paused: true, manualJob: true },
+    { reason: 'foreground', paused: true, manualJob: false },
+    { reason: 'startup', paused: false, manualJob: false },
+  ] as const)(
+    'runs $reason requests (paused=$paused) with the broker correlation id',
+    async ({ reason, paused, manualJob }) => {
+      markClusterReady('run-a');
+      const scope = yamlScope('run-a');
+      const correlationIds = recordCorrelationIds();
+      setAutoRefresh(!paused);
+      acquireRefreshDomainLease({ domain: 'object-yaml', scope });
 
-    await expect(
-      requestRefreshDomain({
-        domain: 'namespaces',
-        scope: 'cluster:alpha',
-        reason: 'startup',
-      })
-    ).resolves.toEqual({
-      status: 'blocked',
-      blockedReason: 'auto-refresh-disabled',
-    });
-    expect(hoisted.fetchScopedDomain).not.toHaveBeenCalled();
-    expect(isDataAccessBlocked('startup', false)).toBe(true);
-  });
+      await expect(requestRefreshDomain({ domain: 'object-yaml', scope, reason })).resolves.toEqual(
+        { status: 'executed' }
+      );
 
-  it('blocks background requests when auto-refresh is disabled', async () => {
-    setAppPreferencesForTesting({ autoRefreshEnabled: false });
+      expect(correlationIds).toEqual(['broker-read-1']);
+      expect(app.snapshots.requests().includes('POST /api/v2/refresh/object-yaml')).toBe(manualJob);
+      releaseRefreshDomainLease({ domain: 'object-yaml', scope });
+    }
+  );
+});
 
-    await expect(
-      requestRefreshDomain({
-        domain: 'cluster-overview',
-        scope: 'cluster:alpha',
-        reason: 'background',
-      })
-    ).resolves.toEqual({
-      status: 'blocked',
-      blockedReason: 'auto-refresh-disabled',
-    });
-    expect(hoisted.fetchScopedDomain).not.toHaveBeenCalled();
-  });
+describe('one-shot refresh-domain reads', () => {
+  // Typed table pages read one-shot query scopes. The read holds its own lease
+  // from before the fetch until after its state is read, so the request never
+  // disables a scope another consumer leases and returns the fetched rows.
+  it.each([false, true])(
+    'reads the scope under its own lease, then releases it (preserveState=%s)',
+    async (preserveState) => {
+      markClusterReady('oneshot-a');
+      const scope = testScope('oneshot-a', '?limit=2');
+      const payload = makeClusterConfigSnapshotPayload({ clusterId: 'oneshot-a' });
+      app.snapshots.serve('cluster-config', scope, payload);
 
-  it('allows user requests when auto-refresh is disabled', async () => {
-    setAppPreferencesForTesting({ autoRefreshEnabled: false });
-
-    await expect(
-      requestRefreshDomain({
-        domain: 'namespaces',
-        scope: 'cluster:alpha',
+      const result = await requestRefreshDomainState({
+        domain: 'cluster-config',
+        scope,
         reason: 'user',
-      })
-    ).resolves.toEqual({
-      status: 'executed',
-    });
-    expect(hoisted.fetchScopedDomain).toHaveBeenCalledWith('namespaces', 'cluster:alpha', {
-      intent: 'user',
-      correlationId: 'broker-read-1',
-    });
-  });
+        preserveState,
+      });
 
-  it('runs foreground activation immediately without classifying it as a manual refresh', async () => {
-    setAppPreferencesForTesting({ autoRefreshEnabled: false });
+      expect(result).toEqual({
+        status: 'executed',
+        data: expect.objectContaining({ status: 'ready', data: payload, scope }),
+      });
+      expect(getScopedDomainState('cluster-config', scope).data).toEqual(
+        preserveState ? payload : null
+      );
+      // Released: nothing keeps reading the scope.
+      app.snapshots.clearReads();
+      await advance(30_000);
+      expect(readsOf('cluster-config', scope)).toBe(0);
+    }
+  );
+});
 
-    await expect(
-      requestRefreshDomain({
-        domain: 'namespaces',
-        scope: 'cluster:alpha',
-        reason: 'foreground',
-      })
-    ).resolves.toEqual({
-      status: 'executed',
-    });
-    expect(hoisted.fetchScopedDomain).toHaveBeenCalledWith('namespaces', 'cluster:alpha', {
-      intent: 'foreground',
-      correlationId: 'broker-read-1',
-    });
-  });
-
-  it('runs startup requests as non-manual refreshes when auto-refresh is enabled', async () => {
-    await expect(
-      requestRefreshDomain({
-        domain: 'cluster-overview',
-        scope: 'cluster:alpha',
-        reason: 'startup',
-      })
-    ).resolves.toEqual({
-      status: 'executed',
-    });
-    expect(hoisted.fetchScopedDomain).toHaveBeenCalledWith('cluster-overview', 'cluster:alpha', {
-      intent: 'startup',
-      correlationId: 'broker-read-1',
-    });
-  });
-
-  it('owns enable, fetch, read, and cleanup ordering for one-shot scoped refresh reads', async () => {
-    const state = {
-      status: 'ready',
-      data: { items: [] },
-      scope: 'cluster:alpha|limit=2',
-    };
-    hoisted.getScopedDomainState.mockReturnValue(state);
-
-    await expect(
-      requestRefreshDomainState({
-        domain: 'catalog',
-        scope: 'cluster:alpha|limit=2',
-        reason: 'user',
-        preserveState: true,
-      })
-    ).resolves.toEqual({
-      status: 'executed',
-      data: state,
-    });
-
-    expect(hoisted.acquireScopedDomainLease).toHaveBeenCalledWith(
-      'catalog',
-      'cluster:alpha|limit=2',
-      { preserveState: true }
-    );
-    expect(hoisted.fetchScopedDomain).toHaveBeenCalledWith('catalog', 'cluster:alpha|limit=2', {
-      coalesce: true,
-      intent: 'user',
-      correlationId: 'broker-read-1',
-    });
-    expect(hoisted.getScopedDomainState).toHaveBeenCalledWith('catalog', 'cluster:alpha|limit=2');
-    expect(hoisted.releaseScopedDomainLease).toHaveBeenCalledWith(
-      'catalog',
-      'cluster:alpha|limit=2',
-      { preserveState: true }
-    );
-    expect(hoisted.acquireScopedDomainLease.mock.invocationCallOrder[0]).toBeLessThan(
-      hoisted.fetchScopedDomain.mock.invocationCallOrder[0]
-    );
-    expect(hoisted.fetchScopedDomain.mock.invocationCallOrder[0]).toBeLessThan(
-      hoisted.getScopedDomainState.mock.invocationCallOrder[0]
-    );
-    expect(hoisted.getScopedDomainState.mock.invocationCallOrder[0]).toBeLessThan(
-      hoisted.releaseScopedDomainLease.mock.invocationCallOrder[0]
-    );
-  });
-
-  it('executes generic cluster-data reads through the shared request path', async () => {
+describe('generic cluster-data reads', () => {
+  it('executes the read with the broker request id and returns its data', async () => {
     const read = vi.fn().mockResolvedValue(['alpha', 'beta']);
 
-    await expect(
-      requestData({
-        resource: 'target-ports',
-        reason: 'user',
-        read,
-      })
-    ).resolves.toEqual({
+    await expect(requestData({ resource: 'target-ports', reason: 'user', read })).resolves.toEqual({
       status: 'executed',
       data: ['alpha', 'beta'],
     });
@@ -239,9 +214,8 @@ describe('dataAccess', () => {
     expect(read).toHaveBeenCalledWith('broker-read-1');
   });
 
-  it('records diagnostics for blocked and executed cluster-data reads', async () => {
-    setAppPreferencesForTesting({ autoRefreshEnabled: false });
-
+  it('records diagnostics for blocked and executed reads', async () => {
+    setAutoRefresh(false);
     await requestData({
       resource: 'namespaces',
       reason: 'startup',
@@ -251,7 +225,7 @@ describe('dataAccess', () => {
       read: vi.fn(),
     });
 
-    setAppPreferencesForTesting({ autoRefreshEnabled: true });
+    setAutoRefresh(true);
     await requestData({
       resource: 'query-permissions',
       reason: 'startup',
@@ -261,8 +235,7 @@ describe('dataAccess', () => {
       read: vi.fn().mockResolvedValue([]),
     });
 
-    const snapshot = getBrokerReadDiagnosticsSnapshot();
-    expect(snapshot).toEqual(
+    expect(getBrokerReadDiagnosticsSnapshot()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           broker: 'data-access',
@@ -290,33 +263,9 @@ describe('dataAccess', () => {
     );
   });
 
-  it('routes user context refreshes to the named cluster through the shared refresh wrapper', async () => {
-    await expect(
-      requestContextRefresh({ reason: 'user', clusterId: 'cluster-a' })
-    ).resolves.toEqual({
-      status: 'executed',
-      blockedReason: undefined,
-    });
-
-    expect(hoisted.refreshCluster).toHaveBeenCalledWith('cluster-a');
-  });
-
-  it('never creates a manual job for an automatic context refresh intent', async () => {
-    await expect(
-      requestContextRefresh({
-        reason: 'startup',
-      } as unknown as Parameters<typeof requestContextRefresh>[0])
-    ).resolves.toEqual({
-      status: 'executed',
-      blockedReason: undefined,
-    });
-
-    expect(hoisted.refreshCluster).not.toHaveBeenCalled();
-  });
   it.each(['throw', 'reject'] as const)(
-    'settles failed reads before rethrowing the original %s',
+    'settles a failed read before rethrowing the original %s',
     async (failure) => {
-      resetBrokerReadDiagnosticsForTesting();
       const error = new Error('read failed');
       const read = vi.fn(() => {
         expect(getBrokerReadDiagnosticsSnapshot()[0].inFlightCount).toBe(1);
@@ -325,7 +274,9 @@ describe('dataAccess', () => {
         }
         return Promise.reject(error);
       });
+
       await expect(requestData({ resource: 'pods', reason: 'user', read })).rejects.toBe(error);
+
       expect(getBrokerReadDiagnosticsSnapshot()).toEqual([
         expect.objectContaining({
           inFlightCount: 0,

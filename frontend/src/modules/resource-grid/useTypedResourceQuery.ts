@@ -293,7 +293,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
   liveDataVersion,
   selectRows,
 }: UseTypedResourceQueryParams<TPayload, TRow>): UseTypedResourceQueryResult<TRow, TPayload> {
-  const [debouncedSearch] = useQuerySearch(filters.search ?? '');
+  const [debouncedSearch] = useQuerySearch(filters.search ?? '', enabled);
   const effectiveFilters = useMemo(
     () =>
       (filters.search ?? '') === debouncedSearch

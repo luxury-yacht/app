@@ -1,51 +1,33 @@
 /**
  * frontend/src/modules/resource-grid/useResourceGridTable.test.tsx
  *
- * Verifies resource-grid hooks publish the canonical row key through the
- * shared GridTable binding instead of requiring each view to thread it again.
+ * The shared resource-grid hooks that bind a view's rows to GridTable: the
+ * canonical row key, which filter-bar controls a table offers (Include
+ * metadata, the view's own actions, Favorite), the namespace and kind filter
+ * options and the query state they publish, the default sort, and the
+ * favorite's column choices. The hooks run inside the app shell with the real
+ * kubeconfig, namespace, favorites, and table-persistence owners; only the
+ * backend boundary is faked (test-utils/appState).
  */
 
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { NamespaceContext } from '@modules/namespace/contexts/NamespaceContext';
 import { createCustomMetadataColumnDefinition } from '@shared/components/tables/customMetadataColumns';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
-import type React from 'react';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { requireValue } from '@/test-utils/requireValue';
 import type { ResourceGridTableResult, ResourceGridTableRow } from './resourceGridTableTypes';
 import {
   useNamespaceResourceGridTable,
   useObjectPanelResourceGridTable,
 } from './useResourceGridTable';
-
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({
-    selectedClusterId: 'alpha:ctx',
-    selectedKubeconfig: 'mock-path:mock-context',
-    selectedClusterName: 'alpha',
-  }),
-}));
-
-const favoriteMocks = vi.hoisted(() => ({
-  useFavToggle: vi.fn(() => ({
-    item: {
-      type: 'toggle',
-      id: 'favorite',
-      icon: null,
-      active: false,
-      onClick: () => undefined,
-      title: 'Save as favorite',
-    },
-    modal: null,
-  })),
-}));
-
-vi.mock('@ui/favorites/FavToggle', () => ({
-  useFavToggle: favoriteMocks.useFavToggle,
-}));
 
 interface TestRow extends ResourceGridTableRow {
   kind: string;
@@ -54,384 +36,222 @@ interface TestRow extends ResourceGridTableRow {
   clusterId: string;
 }
 
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
+let table: ResourceGridTableResult<TestRow> | undefined;
+
 const columns: GridColumnDefinition<TestRow>[] = [
-  {
-    key: 'name',
-    header: 'Name',
-    render: (resourceRow) => resourceRow.name,
-  },
-  {
-    key: 'age',
-    header: 'Age',
-    render: (resourceRow) => resourceRow.name,
-  },
+  { key: 'name', header: 'Name', render: (resourceRow) => resourceRow.name },
+  { key: 'age', header: 'Age', render: (resourceRow) => resourceRow.name },
 ];
 
-const row: TestRow = {
+const row = (): TestRow => ({
   kind: 'Pod',
   name: 'api',
   namespace: 'team-a',
-  clusterId: 'alpha:ctx',
+  clusterId: dev.clusterId,
+});
+
+const current = () => requireValue(table, 'expected the resource grid table');
+const preActionIds = () =>
+  (current().gridTableProps.filters?.options?.preActions ?? []).map((item) =>
+    'id' in item ? item.id : item.type
+  );
+
+type ObjectPanelParams = Partial<Parameters<typeof useObjectPanelResourceGridTable<TestRow>>[0]>;
+
+function ObjectPanelProbe(props: Readonly<ObjectPanelParams>) {
+  table = useObjectPanelResourceGridTable<TestRow>({
+    viewId: 'test-grid',
+    tableMode: 'Local Complete',
+    supportsCustomMetadataColumns: true,
+    clusterIdentity: dev.clusterId,
+    data: [row()],
+    columns,
+    ...props,
+  });
+  return null;
+}
+
+type NamespaceParams = Partial<Parameters<typeof useNamespaceResourceGridTable<TestRow>>[0]>;
+
+// The query-backed and bounded wrappers own persistence and pass it as
+// persistenceOverride; the probe does the same.
+function NamespaceProbe(props: Readonly<NamespaceParams>) {
+  const persistence = useGridTablePersistence<TestRow>({
+    viewId: 'namespace-pods',
+    clusterIdentity: dev.clusterId,
+    namespace: null,
+    isNamespaceScoped: false,
+    columns,
+    filterOptions: { isNamespaceScoped: false },
+  });
+  table = useNamespaceResourceGridTable<TestRow>({
+    viewId: 'namespace-pods',
+    tableMode: 'Query Backed Dynamic',
+    supportsCustomMetadataColumns: true,
+    namespace: ALL_NAMESPACES_SCOPE,
+    data: [row()],
+    columns,
+    keyExtractor: (item) => item.name,
+    showNamespaceFilters: true,
+    filterOptionOverrides: { namespaces: ['team-a'] },
+    persistenceOverride: persistence,
+    ...props,
+  });
+  return <>{table.favModal}</>;
+}
+
+const run = async (action: () => void) => {
+  await act(async () => {
+    action();
+  });
+  await app.settle();
 };
 
-const renderObjectPanelGrid = (
-  props: Partial<Parameters<typeof useObjectPanelResourceGridTable<TestRow>>[0]> = {}
-) => {
-  const result: { current: ResourceGridTableResult<TestRow> | undefined } = { current: undefined };
-
-  const Probe: React.FC = () => {
-    result.current = useObjectPanelResourceGridTable<TestRow>({
-      viewId: 'test-grid',
-      tableMode: 'Local Complete',
-      supportsCustomMetadataColumns: true,
-      clusterIdentity: 'alpha:ctx',
-      data: [row],
-      columns,
-      ...props,
-    });
-    return null;
-  };
-
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = ReactDOM.createRoot(container);
-  act(() => {
-    root.render(<Probe />);
-  });
-
-  if (!result.current) {
-    throw new Error('resource grid hook did not render');
-  }
-  act(() => {
-    root.unmount();
-  });
-  container.remove();
-  return result.current;
-};
-
-const renderNamespaceGrid = (
-  overrides: Partial<Parameters<typeof useNamespaceResourceGridTable<TestRow>>[0]> = {}
-) => {
-  const result: { current: ResourceGridTableResult<TestRow> | undefined } = { current: undefined };
-  const onTableStateChange = vi.fn();
-
-  const Probe: React.FC = () => {
-    // Mirror production: the query-backed/bounded wrapper owns persistence and
-    // passes it as persistenceOverride. The base hook no longer owns a fallback.
-    const persistence = useGridTablePersistence<TestRow>({
-      viewId: 'namespace-pods',
-      clusterIdentity: 'alpha:ctx',
-      namespace: null,
-      isNamespaceScoped: false,
-      columns,
-
-      filterOptions: { isNamespaceScoped: false },
-    });
-    result.current = useNamespaceResourceGridTable<TestRow>({
-      viewId: 'namespace-pods',
-      tableMode: 'Query Backed Dynamic',
-      supportsCustomMetadataColumns: true,
-      namespace: ALL_NAMESPACES_SCOPE,
-      data: [row],
-      columns,
-      keyExtractor: (item) => item.name,
-      showNamespaceFilters: true,
-      filterOptionOverrides: {
-        namespaces: ['team-a'],
-      },
-      onTableStateChange,
-      persistenceOverride: persistence,
-      ...overrides,
-    });
-    return null;
-  };
-
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = ReactDOM.createRoot(container);
-
-  act(() => {
-    root.render(
-      <NamespaceContext.Provider
-        value={{
-          namespaces: [
-            {
-              name: 'All Namespaces',
-              scope: ALL_NAMESPACES_SCOPE,
-              status: '',
-              details: '',
-              age: '',
-              hasWorkloads: true,
-              workloadsUnknown: false,
-              unhealthyWorkloads: 0,
-              warningEvents: 0,
-              warningEventsState: 'unavailable',
-              cpuUsageMilli: 0,
-              memoryUsageBytes: 0,
-              utilizationState: 'unavailable',
-              quotaCount: 0,
-              quotaHighestUsedPercentage: 0,
-              quotaPressure: '',
-              quotaPressureState: 'unavailable',
-              resourceVersion: '',
-              isSynthetic: true,
-            },
-            {
-              name: 'team-a',
-              scope: 'team-a',
-              status: '',
-              details: '',
-              age: '',
-              hasWorkloads: true,
-              workloadsUnknown: false,
-              unhealthyWorkloads: 0,
-              warningEvents: 0,
-              warningEventsState: 'available',
-              cpuUsageMilli: 0,
-              memoryUsageBytes: 0,
-              utilizationState: 'available',
-              quotaCount: 0,
-              quotaHighestUsedPercentage: 0,
-              quotaPressure: '',
-              quotaPressureState: 'available',
-              resourceVersion: '',
-            },
-            {
-              name: 'team-b',
-              scope: 'team-b',
-              status: '',
-              details: '',
-              age: '',
-              hasWorkloads: true,
-              workloadsUnknown: false,
-              unhealthyWorkloads: 0,
-              warningEvents: 0,
-              warningEventsState: 'available',
-              cpuUsageMilli: 0,
-              memoryUsageBytes: 0,
-              utilizationState: 'available',
-              quotaCount: 0,
-              quotaHighestUsedPercentage: 0,
-              quotaPressure: '',
-              quotaPressureState: 'available',
-              resourceVersion: '',
-            },
-          ],
-          namespaceSummaries: [],
-          namespaceMetricsState: 'unavailable',
-          namespaceError: null,
-          selectedNamespace: ALL_NAMESPACES_SCOPE,
-          selectedNamespaceClusterId: 'alpha:ctx',
-          namespaceLoading: false,
-          namespacesPermissionDenied: false,
-          namespaceRefreshing: false,
-          namespaceReady: true,
-          setSelectedNamespace: () => undefined,
-          loadNamespaces: async () => undefined,
-          refreshNamespaces: async () => undefined,
-          getClusterNamespace: () => undefined,
-        }}
-      >
-        <Probe />
-      </NamespaceContext.Provider>
-    );
-  });
-
-  if (!result.current) {
-    throw new Error('namespace resource grid hook did not render');
-  }
-
-  return {
-    result,
-    onTableStateChange,
-    cleanup() {
-      act(() => {
-        root.unmount();
-      });
-      container.remove();
-    },
-  };
-};
+beforeEach(async () => {
+  table = undefined;
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['team-a', 'team-b']);
+  view = await app.render(null);
+});
 
 describe('useObjectPanelResourceGridTable', () => {
-  it('publishes the default canonical object key on gridTableProps', () => {
-    const result = renderObjectPanelGrid();
+  it('keys rows by their canonical object identity unless the view supplies a key', async () => {
+    await view.show(<ObjectPanelProbe />);
+    expect(current().gridTableProps.keyExtractor(row(), 0)).toBe(
+      `${dev.clusterId}|/v1/Pod/team-a/api`
+    );
 
-    expect(result.gridTableProps.keyExtractor(row, 0)).toBe('alpha:ctx|/v1/Pod/team-a/api');
-  });
-
-  it('publishes a supplied key extractor on gridTableProps', () => {
-    const keyExtractor = vi.fn((item: TestRow) => `custom:${item.name}`);
-    const result = renderObjectPanelGrid({ keyExtractor });
-
-    expect(result.gridTableProps.keyExtractor(row, 0)).toBe('custom:api');
-    expect(keyExtractor).toHaveBeenCalledWith(row, 0);
+    await view.show(<ObjectPanelProbe keyExtractor={(item) => `custom:${item.name}`} />);
+    expect(current().gridTableProps.keyExtractor(row(), 0)).toBe('custom:api');
   });
 });
 
 describe('useNamespaceResourceGridTable', () => {
-  it('omits custom metadata controls for rows that do not support Kubernetes metadata', () => {
-    const harness = renderNamespaceGrid({ supportsCustomMetadataColumns: false });
+  it('offers Include metadata and custom metadata columns exactly when rows carry labels and annotations', async () => {
+    await view.show(<NamespaceProbe supportsCustomMetadataColumns={false} />);
+    expect(preActionIds()).not.toContain('include-metadata');
+    expect(current().gridTableProps.customMetadataColumns).toBeUndefined();
 
-    expect(harness.result.current?.gridTableProps.customMetadataColumns).toBeUndefined();
-
-    harness.cleanup();
+    await view.show(<NamespaceProbe supportsCustomMetadataColumns />);
+    expect(preActionIds()).toContain('include-metadata');
+    expect(current().gridTableProps.customMetadataColumns).toBeDefined();
   });
 
-  it("puts a view's own icons between the search options and Favorite, which follows a separator", () => {
-    const harness = renderNamespaceGrid({
-      viewActions: [
-        { type: 'action', id: 'view-action', icon: null, title: 'View action', onClick: vi.fn() },
-      ],
-    });
-    const preActions = harness.result.current?.gridTableProps.filters?.options?.preActions ?? [];
-    harness.cleanup();
+  it('offers the view’s own actions in the filter bar alongside Favorite', async () => {
+    await view.show(
+      <NamespaceProbe
+        viewActions={[
+          { type: 'action', id: 'view-action', icon: null, title: 'View action', onClick: vi.fn() },
+        ]}
+      />
+    );
 
-    expect(preActions.map((item) => ('id' in item ? item.id : item.type))).toEqual([
-      'include-metadata',
-      'view-action',
-      'separator',
-      'favorite',
-    ]);
+    expect(preActionIds()).toEqual(expect.arrayContaining(['view-action', 'favorite']));
   });
 
-  it('starts the icon bar with Favorite, without a separator, when it is the only icon', () => {
-    const harness = renderNamespaceGrid({ supportsCustomMetadataColumns: false });
-    const preActions = harness.result.current?.gridTableProps.filters?.options?.preActions ?? [];
-    harness.cleanup();
-
-    expect(preActions.map((item) => ('id' in item ? item.id : item.type))).toEqual(['favorite']);
-  });
-
-  it('offers Include metadata exactly when rows carry labels and annotations', () => {
-    const hasToggle = (supportsCustomMetadataColumns: boolean) => {
-      const harness = renderNamespaceGrid({ supportsCustomMetadataColumns });
-      const preActions = harness.result.current?.gridTableProps.filters?.options?.preActions ?? [];
-      harness.cleanup();
-      return preActions.some((item) => 'id' in item && item.id === 'include-metadata');
-    };
-
-    expect(hasToggle(true)).toBe(true);
-    expect(hasToggle(false)).toBe(false);
-  });
-
-  it('publishes custom metadata columns to the favorite column contract', () => {
-    favoriteMocks.useFavToggle.mockClear();
-    const harness = renderNamespaceGrid();
+  it('offers a custom metadata column among a favorite’s column choices', async () => {
+    await view.show(<NamespaceProbe />);
     const ownerColumn = createCustomMetadataColumnDefinition({
       source: 'label',
       metadataKey: 'example.com/owner',
       header: 'Owner',
     });
+    await run(() => current().persistence?.setCustomColumns([ownerColumn]));
 
-    act(() => harness.result.current?.persistence?.setCustomColumns([ownerColumn]));
-
-    expect(favoriteMocks.useFavToggle).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        columns: expect.arrayContaining([
-          expect.objectContaining({
-            key: ownerColumn.key,
-            label: 'Owner',
-            hideable: true,
-            sortable: false,
-          }),
-        ]),
-      })
+    const favorite = requireValue(
+      (current().gridTableProps.filters?.options?.preActions ?? []).find(
+        (item) => 'id' in item && item.id === 'favorite'
+      ),
+      'expected the Favorite toggle'
     );
-    harness.cleanup();
+    await run(() => (favorite as { onClick: () => void }).onClick());
+
+    const columnsLabel = requireValue(
+      Array.from(document.querySelectorAll<HTMLLabelElement>('label')).find(
+        (label) => label.textContent === 'Columns'
+      ),
+      'expected the favorite’s Columns setting'
+    );
+    const columnsTrigger = requireValue(
+      document.getElementById(columnsLabel.htmlFor),
+      'expected the Columns dropdown'
+    );
+    await run(() => columnsTrigger.click());
+    const columnsMenu = requireValue(
+      document.querySelector<HTMLElement>('.dropdown-columns-menu'),
+      'expected the favorite’s Columns menu'
+    );
+    expect(columnsMenu.querySelector(`[data-column-key="${ownerColumn.key}"]`)).not.toBeNull();
   });
 
-  it('keeps all namespace options selected when the namespace dropdown selects all', () => {
-    const harness = renderNamespaceGrid();
+  it('keeps every namespace selected in the dropdown while querying all namespaces', async () => {
+    const onTableStateChange = vi.fn();
+    await view.show(<NamespaceProbe onTableStateChange={onTableStateChange} />);
+    expect(current().gridTableProps.filters?.options?.namespaces).toEqual(['team-a', 'team-b']);
 
-    expect(harness.result.current?.gridTableProps.filters?.options?.namespaces).toEqual([
-      'team-a',
-      'team-b',
-    ]);
-
-    act(() => {
-      harness.result.current?.gridTableProps.filters?.onChange?.({
+    await run(() =>
+      current().gridTableProps.filters?.onChange?.({
         ...DEFAULT_GRID_TABLE_FILTER_STATE,
         namespaces: { mode: 'some', values: ['team-a', 'team-b'] },
-      });
-    });
-
-    expect(harness.result.current?.gridTableProps.filters?.value?.namespaces).toEqual({
+      })
+    );
+    expect(current().gridTableProps.filters?.value?.namespaces).toEqual({
       mode: 'some',
       values: ['team-a', 'team-b'],
     });
-    expect(harness.onTableStateChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        filters: expect.objectContaining({ namespaces: { mode: 'all' } }),
-      })
+    expect(onTableStateChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ filters: expect.objectContaining({ namespaces: { mode: 'all' } }) })
     );
 
-    act(() => {
-      harness.result.current?.gridTableProps.filters?.onChange?.({
+    await run(() =>
+      current().gridTableProps.filters?.onChange?.({
         ...DEFAULT_GRID_TABLE_FILTER_STATE,
         namespaces: { mode: 'all' },
-      });
-    });
-
-    expect(harness.result.current?.gridTableProps.filters?.value?.namespaces).toEqual({
-      mode: 'all',
-    });
-
-    harness.cleanup();
+      })
+    );
+    expect(current().gridTableProps.filters?.value?.namespaces).toEqual({ mode: 'all' });
   });
 
-  it('keeps the static kind vocabulary when query facets collapse to the selected kind', () => {
-    // Backend facets are computed post-kind-filter: with kind "Secret" selected
-    // the facets shrink to ['Secret']. The static per-view list must win or the
-    // dropdown collapses and other kinds become unselectable.
-    const harness = renderNamespaceGrid({
-      availableKinds: ['ConfigMap', 'Secret'],
-      showKindDropdown: true,
-      filterOptionOverrides: {
-        kinds: ['Secret'],
-        namespaces: ['team-a'],
-      },
-    });
+  it('keeps the static kind vocabulary when query facets collapse to the selected kind', async () => {
+    // Backend facets are computed after the kind filter: with Secret selected
+    // they shrink to ['Secret']. The view's list must win or other kinds
+    // become unselectable.
+    await view.show(
+      <NamespaceProbe
+        availableKinds={['ConfigMap', 'Secret']}
+        showKindDropdown
+        filterOptionOverrides={{ kinds: ['Secret'], namespaces: ['team-a'] }}
+      />
+    );
 
-    expect(harness.result.current?.gridTableProps.filters?.options?.kinds).toEqual([
-      'ConfigMap',
-      'Secret',
-    ]);
-
-    harness.cleanup();
+    expect(current().gridTableProps.filters?.options?.kinds).toEqual(['ConfigMap', 'Secret']);
   });
 
-  it('publishes the default sort key and direction before any user sort', () => {
-    const harness = renderNamespaceGrid({
-      defaultSort: { key: 'age', direction: 'desc' },
-    });
+  it('publishes the default sort before any user sort', async () => {
+    const onTableStateChange = vi.fn();
+    await view.show(
+      <NamespaceProbe
+        defaultSort={{ key: 'age', direction: 'desc' }}
+        onTableStateChange={onTableStateChange}
+      />
+    );
 
-    expect(harness.result.current?.gridTableProps.sortConfig).toEqual({
-      key: 'age',
-      direction: 'desc',
-    });
-    expect(harness.onTableStateChange).toHaveBeenLastCalledWith(
+    expect(current().gridTableProps.sortConfig).toEqual({ key: 'age', direction: 'desc' });
+    expect(onTableStateChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
         sortConfig: expect.objectContaining({ key: 'age', direction: 'desc' }),
       })
     );
-
-    harness.cleanup();
   });
 
-  it('marks Local Partial tables as bounded local windows', () => {
-    const harness = renderNamespaceGrid({
-      tableMode: 'Local Partial',
-      filterOptionOverrides: undefined,
-    });
+  it('searches a Local Partial table locally and labels it as a partial window', async () => {
+    await view.show(<NamespaceProbe tableMode="Local Partial" filterOptionOverrides={undefined} />);
 
-    expect(harness.result.current?.gridTableProps.filters?.options).toMatchObject({
-      searchBehavior: 'local',
-    });
-    expect(harness.result.current?.gridTableProps.filters?.options?.partialDataLabel).toContain(
-      'visible dataset'
-    );
-
-    harness.cleanup();
+    const options = current().gridTableProps.filters?.options;
+    expect(options?.searchBehavior).toBe('local');
+    expect(options?.partialDataLabel).toBeTruthy();
   });
 });

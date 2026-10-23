@@ -27,7 +27,6 @@ describe('an inactive cluster tab', () => {
     const inactive = app.cluster({ name: 'tab', context: 'inactive' });
     app.namespaces(active, ['default']);
     app.namespaces(inactive, ['default']);
-    app.showCluster(active);
     await app.render(null);
     app.snapshots.clearReads();
 

@@ -10,8 +10,14 @@
 import { Call, Events, Window as WailsWindow } from '@wailsio/runtime';
 import { vi } from 'vitest';
 import type * as BackendApi from '@/core/backend-api';
+import { makeTelemetrySummary } from '@/core/refresh/refreshContractTestBuilders';
 import { encodeScopeSelector, parseRefreshScope } from '@/core/refresh/scopeSelector';
-import type { DomainPayloadMap, ErrorStatus, RefreshDomain } from '@/core/refresh/types';
+import type {
+  DomainPayloadMap,
+  ErrorStatus,
+  RefreshDomain,
+  TelemetrySummary,
+} from '@/core/refresh/types';
 import { compareUtf16Strings } from '@/shared/utils/sort';
 
 // ---------------------------------------------------------------------------
@@ -297,7 +303,10 @@ export interface SnapshotRequest {
  */
 export type SnapshotResponder = (
   request: SnapshotRequest
-) => Response | Promise<Response> | undefined;
+) => Response | undefined | Promise<Response | undefined>;
+
+/** Returns the payload to answer a snapshot read with, or undefined to pass. */
+export type SnapshotAnswer = (request: { domain: string; scope: string }) => unknown;
 
 export interface FakeSnapshotServer {
   /** Serves `payload` for later reads of `(domain, scope)` as a new version. */
@@ -311,12 +320,26 @@ export interface FakeSnapshotServer {
   fail(domain: RefreshDomain, scope: string, status: ErrorStatus): void;
   /** Answers every later read first; `null` removes the responder. */
   respond(responder: SnapshotResponder | null): void;
+  /**
+   * Answers the reads `answer` returns a payload for, as a new version each
+   * time. Answers are consulted in the order added, after `respond` and before
+   * served payloads. Returns a function that removes the answer.
+   */
+  answer(answer: SnapshotAnswer): () => void;
   /** Every snapshot read, in order; `served` is false when nothing was served. */
   reads(domain?: RefreshDomain): SnapshotRead[];
   /** Forgets the reads recorded so far. */
   clearReads(): void;
   /** Every non-snapshot request the app sent, as `"<METHOD> <path>"`. */
   requests(): string[];
+  /** Sets the refresh telemetry later polls read (default: an empty summary). */
+  telemetry(summary: TelemetrySummary): void;
+  /**
+   * Later telemetry reads fail the way an unreachable refresh server does
+   * (the backend's handler itself always answers), until `telemetry` is
+   * called again.
+   */
+  failTelemetry(): void;
 }
 
 type ServedSnapshot =
@@ -367,8 +390,11 @@ const createFakeSnapshotServer = () => {
   let reads: SnapshotRead[] = [];
   const otherRequests: string[] = [];
   let responder: SnapshotResponder | null = null;
+  const answers: SnapshotAnswer[] = [];
   let sequence = 0;
   let jobSequence = 0;
+  // Null while the refresh server is unreachable.
+  let telemetry: TelemetrySummary | null = makeTelemetrySummary();
 
   const declaredResponse = (request: SnapshotRequest): Response => {
     const { domain, scope, headers } = request;
@@ -392,16 +418,32 @@ const createFakeSnapshotServer = () => {
     if (answered) {
       return answered;
     }
+    for (const answer of answers) {
+      const payload = answer({ domain: request.domain, scope: request.scope });
+      if (payload !== undefined) {
+        sequence += 1;
+        return snapshotResponse({
+          domain: request.domain,
+          scope: request.scope,
+          version: sequence,
+          payload,
+        });
+      }
+    }
     read.served = served.has(subscriptionKey(request.domain, request.scope));
     return declaredResponse(request);
   };
 
   // Non-snapshot API calls: metrics activity and manual-refresh jobs. Jobs
   // settle at once; the client then reads the snapshot.
-  const apiResponse = (pathname: string, method: string): Response => {
+  const apiResponse = (pathname: string, method: string): Response | TypeError => {
     otherRequests.push(`${method} ${pathname}`);
     if (pathname === '/api/v2/metrics/active') {
       return new Response(null, { status: 204 });
+    }
+    if (pathname === '/api/v2/telemetry/summary') {
+      // WKWebView's fetch failure (errorStatus.ts BROWSER_FETCH_FAILURES).
+      return telemetry ? json(telemetry) : new TypeError('Load failed');
     }
     if (method === 'POST' && /^\/api\/v2\/refresh\/[^/]+$/.test(pathname)) {
       jobSequence += 1;
@@ -414,20 +456,39 @@ const createFakeSnapshotServer = () => {
     return new Response(null, { status: 404, statusText: 'Not faked' });
   };
 
-  const fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const url = new URL(
-      String(input instanceof Request ? input.url : input),
-      'http://wails.localhost'
-    );
+  const respond = (url: URL, init: RequestInit | undefined): Promise<Response> => {
     const snapshot = /^\/api\/v2\/snapshots\/([^/]+)$/.exec(url.pathname);
     if (!snapshot?.[1]) {
-      return apiResponse(url.pathname, init?.method ?? 'GET');
+      const answer = apiResponse(url.pathname, init?.method ?? 'GET');
+      return answer instanceof Response ? Promise.resolve(answer) : Promise.reject(answer);
     }
     return readSnapshot({
       domain: snapshot[1],
       scope: url.searchParams.get('scope') ?? '',
       headers: new Headers(init?.headers),
       signal: init?.signal ?? null,
+    });
+  };
+
+  // Like a real fetch, an aborted request rejects with the signal's reason,
+  // even while the backend is still holding its answer.
+  const fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const url = new URL(
+      String(input instanceof Request ? input.url : input),
+      'http://wails.localhost'
+    );
+    const signal = init?.signal ?? (input instanceof Request ? input.signal : null);
+    if (signal?.aborted) {
+      return Promise.reject(signal.reason);
+    }
+    const response = respond(url, init);
+    if (!signal) {
+      return response;
+    }
+    return new Promise<Response>((resolve, reject) => {
+      const abort = () => reject(signal.reason);
+      signal.addEventListener('abort', abort, { once: true });
+      response.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
     });
   };
 
@@ -447,11 +508,26 @@ const createFakeSnapshotServer = () => {
     respond(next) {
       responder = next;
     },
+    answer(next) {
+      answers.push(next);
+      return () => {
+        const index = answers.indexOf(next);
+        if (index >= 0) {
+          answers.splice(index, 1);
+        }
+      };
+    },
     reads: (domain) => reads.filter((read) => !domain || read.domain === domain),
     clearReads() {
       reads = [];
     },
     requests: () => [...otherRequests],
+    failTelemetry() {
+      telemetry = null;
+    },
+    telemetry(summary) {
+      telemetry = summary;
+    },
   };
 
   return { server, fetch };
@@ -531,6 +607,13 @@ export const installTransport = (
     emit: eventsApi.Emit,
     matchMedia: Object.getOwnPropertyDescriptor(window, 'matchMedia'),
     scrollIntoView: Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView'),
+    scrollTo: Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTo'),
+    elementsFromPoint: Object.getOwnPropertyDescriptor(document, 'elementsFromPoint'),
+    getClientRects: Object.getOwnPropertyDescriptor(Range.prototype, 'getClientRects'),
+    getBoundingClientRect: Object.getOwnPropertyDescriptor(
+      Range.prototype,
+      'getBoundingClientRect'
+    ),
   };
 
   const rpc = createFakeBackend();
@@ -551,13 +634,37 @@ export const installTransport = (
   globals._wails = { environment: { OS: 'darwin', Arch: 'arm64', Debug: false } };
   globalThis.fetch = snapshots.fetch as typeof globalThis.fetch;
   Object.defineProperty(window, 'matchMedia', { configurable: true, value: matchMedia });
-  // jsdom has no layout, so it has no scrollIntoView; the app scrolls lists to
-  // their selection (the sidebar's namespace, Sidebar.tsx). Scrolling does nothing here.
-  Object.defineProperty(Element.prototype, 'scrollIntoView', {
+  // jsdom has no layout, so it has neither scrollIntoView nor scrollTo; the app
+  // scrolls lists to their selection (the sidebar's namespace, Sidebar.tsx) and
+  // tables to their top or focused row (useGridTableVirtualization.ts,
+  // useGridTableKeyboardNavigation.ts). Scrolling does nothing here.
+  for (const method of ['scrollIntoView', 'scrollTo'] as const) {
+    Object.defineProperty(Element.prototype, method, {
+      configurable: true,
+      writable: true,
+      value: () => undefined,
+    });
+  }
+  // Nor hit testing: the scrollbar tracker asks what is under the pointer on
+  // every move (scrollbarActivity.ts). Nothing is under it here.
+  Object.defineProperty(document, 'elementsFromPoint', {
     configurable: true,
     writable: true,
-    value: () => undefined,
+    value: () => [],
   });
+  // Nor text geometry: the editor measures text ranges (CodeMirror). Text has
+  // no boxes here.
+  const rangeGeometry = {
+    getClientRects: () => [],
+    getBoundingClientRect: () => new DOMRect(),
+  };
+  for (const method of ['getClientRects', 'getBoundingClientRect'] as const) {
+    Object.defineProperty(Range.prototype, method, {
+      configurable: true,
+      writable: true,
+      value: rangeGeometry[method],
+    });
+  }
 
   return {
     backend: rpc.backend,
@@ -585,10 +692,26 @@ export const installTransport = (
       } else {
         Reflect.deleteProperty(window, 'matchMedia');
       }
-      if (previous.scrollIntoView) {
-        Object.defineProperty(Element.prototype, 'scrollIntoView', previous.scrollIntoView);
+      for (const method of ['scrollIntoView', 'scrollTo'] as const) {
+        const descriptor = previous[method];
+        if (descriptor) {
+          Object.defineProperty(Element.prototype, method, descriptor);
+        } else {
+          Reflect.deleteProperty(Element.prototype, method);
+        }
+      }
+      if (previous.elementsFromPoint) {
+        Object.defineProperty(document, 'elementsFromPoint', previous.elementsFromPoint);
       } else {
-        Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
+        Reflect.deleteProperty(document, 'elementsFromPoint');
+      }
+      for (const method of ['getClientRects', 'getBoundingClientRect'] as const) {
+        const descriptor = previous[method];
+        if (descriptor) {
+          Object.defineProperty(Range.prototype, method, descriptor);
+        } else {
+          Reflect.deleteProperty(Range.prototype, method);
+        }
       }
     },
   };
