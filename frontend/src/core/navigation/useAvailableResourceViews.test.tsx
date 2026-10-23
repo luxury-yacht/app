@@ -10,9 +10,13 @@
  */
 
 import { act } from 'react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
-import { buildRefreshScope, CLUSTER_SELECTOR } from '@/core/refresh/scopeSelector';
+import {
+  buildClusterRefreshScope,
+  buildRefreshScope,
+  CLUSTER_SELECTOR,
+} from '@/core/refresh/scopeSelector';
 import type { DomainPayloadMap } from '@/core/refresh/types';
 import {
   installAppStateHarness,
@@ -95,7 +99,56 @@ beforeEach(() => {
   });
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+/** The backend announces a change to the cluster's catalog. */
+const ringCatalog = async (cluster: TestCluster, version: string) => {
+  await act(async () => {
+    app.streams.ring(
+      'catalog',
+      buildClusterRefreshScope('catalog', cluster.clusterId),
+      'catalog',
+      version
+    );
+    // Doorbells coalesce before consumers re-read (resourceStreamManager.ts UPDATE_COALESCE_MS).
+    await vi.advanceTimersByTimeAsync(200);
+  });
+  await app.settle();
+};
+
 describe('discovered resource view availability', () => {
+  it('offers a view a later discovery finds, once the catalog changes', async () => {
+    vi.useFakeTimers();
+    view = await app.mountApp();
+    expect((await offeredExtensions()).namespaced).not.toContain('argocd');
+
+    serveDiscovery(alpha, {
+      cluster: ['cert-manager'],
+      namespaced: ['external-secrets', 'prometheus', 'argocd'],
+    });
+    await ringCatalog(alpha, 'catalog:2');
+
+    expect((await offeredExtensions()).namespaced).toContain('argocd');
+  });
+
+  it('reads discovery again only when the catalog changes', async () => {
+    vi.useFakeTimers();
+    view = await app.mountApp();
+    await offeredExtensions();
+    const discoveryReads = () =>
+      app.snapshots.reads('catalog').filter((read) => read.scope === discoveryScope(alpha)).length;
+    const before = discoveryReads();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    await app.settle();
+
+    expect(discoveryReads()).toBe(before);
+  });
+
   it('offers extension views only for the families discovery found, in their scope', async () => {
     view = await app.mountApp();
 

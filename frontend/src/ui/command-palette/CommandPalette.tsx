@@ -5,7 +5,6 @@
  * Implements CommandPalette logic for the UI layer.
  */
 
-import { onEvent } from '@core/desktop-runtime';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ListboxOptionButton } from '@shared/components/aria/ListboxOptionButton';
@@ -16,6 +15,7 @@ import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { useKeyboardContext, useShortcut, useShortcuts } from '@ui/shortcuts';
 import { KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
+import { modifiersMatch } from '@ui/shortcuts/utils';
 import type React from 'react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -490,6 +490,9 @@ export const CommandPalette = memo(function CommandPaletteComponent({
   const useShortResourceNames = usePreference('useShortResourceNames');
   const parsedTokens = useMemo(() => parseQueryTokens(searchQuery), [searchQuery]);
   const macPlatform = isMacPlatform();
+  const selectNamespaceModifiers = macPlatform
+    ? { meta: true, shift: true }
+    : { ctrl: true, shift: true };
   const focusSearchInput = useCallback(() => {
     const input = inputRef.current;
     if (!input) {
@@ -821,6 +824,11 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     disabled: !isOpen,
     suppressShortcuts: true,
     onKeyDown: (event) => {
+      // The open palette suppresses app shortcuts, so its own namespace
+      // shortcut is handled here.
+      if (event.key.toLowerCase() === 'n' && modifiersMatch(event, selectNamespaceModifiers)) {
+        return openInNamespaceMode();
+      }
       if (event.metaKey || event.ctrlKey || event.altKey) {
         return false;
       }
@@ -849,19 +857,13 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     return false;
   }, [hasActiveBlockingSurface, isOpen, open]);
 
-  // The shared application-menu accelerator and the visible menu item both
-  // emit this event. Held in a ref so the subscription stays stable across the
-  // open/close re-renders that recreate handleGlobalOpenShortcut.
+  // Held in a ref so the 'command-palette:open' subscription below stays
+  // stable across the open/close re-renders that recreate
+  // handleGlobalOpenShortcut.
   const openShortcutRef = useRef(handleGlobalOpenShortcut);
   useEffect(() => {
     openShortcutRef.current = handleGlobalOpenShortcut;
   }, [handleGlobalOpenShortcut]);
-  useEffect(() => {
-    const dispose = onEvent('open-command-palette', () => {
-      openShortcutRef.current();
-    });
-    return dispose;
-  }, []);
 
   // Open the palette directly in a selection sub-mode: kubeconfigs is the
   // "Open Cluster" surface (the "+" in the cluster tab bar, ⌘O, and File →
@@ -894,7 +896,7 @@ export const CommandPalette = memo(function CommandPaletteComponent({
   // shortcut system, like ⌘⇧P above.
   useShortcut({
     key: 'n',
-    modifiers: macPlatform ? { meta: true, shift: true } : { ctrl: true, shift: true },
+    modifiers: selectNamespaceModifiers,
     handler: openInNamespaceMode,
     description: 'Select namespace',
     category: 'Navigation',
@@ -902,8 +904,9 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     enabled: true,
     priority: 100,
   });
-  // The header search button opens the palette in its normal (search) mode via
-  // the same guarded open path as the keyboard shortcut.
+  // Every application-menu path (accelerator, native menu, panel window) and
+  // the header search button open the palette in its normal (search) mode
+  // through this one guarded open.
   useEventBus('command-palette:open', () => openShortcutRef.current(), []);
 
   // Focus input when opened

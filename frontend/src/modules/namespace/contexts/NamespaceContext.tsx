@@ -21,7 +21,6 @@ import {
 } from '@modules/namespace/constants';
 import { useMetricsBannerInfo } from '@shared/hooks/useMetricsBannerInfo';
 import { formatAge } from '@utils/ageFormatter';
-import { errorHandler } from '@utils/errorHandler';
 import type React from 'react';
 import {
   createContext,
@@ -38,11 +37,7 @@ import { requestRefreshDomain, useScopedRefreshDomainLifecycle } from '@/core/da
 import { eventBus } from '@/core/events';
 import { useRefreshScopedDomain, useRefreshScopedDomainStates } from '@/core/refresh';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
-import {
-  errorFromFailure,
-  failureMessage,
-  type RefreshFailure,
-} from '@/core/refresh/refreshFailure';
+import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
 import type { NamespaceSignalState } from '@/core/refresh/types';
 import { setActiveNamespaceContext } from '@/core/telemetry/sentry';
@@ -235,12 +230,6 @@ const projectNamespaceListItem = (
   };
 };
 
-// A domain's failure, only while the domain is in its error state.
-const currentFailure = (state: {
-  status: string;
-  error?: RefreshFailure | null;
-}): RefreshFailure | null => (state.status === 'error' ? (state.error ?? null) : null);
-
 // Every open, refresh-available cluster keeps its namespaces lease, so a
 // background tab's list stays subscribed (data-freshness rule 3) and repaints
 // on return; a closed cluster's rows are cleared when the orchestrator prunes
@@ -304,7 +293,6 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     setActiveNamespaceContext(selectedNamespace);
   }, [selectedNamespace]);
 
-  const lastErrorByScopeRef = useRef<Map<string, string>>(new Map());
   const lastEvaluatedNamespaceRef = useRef<string | null>(null);
   const requestedNamespaceScopesRef = useRef<Set<string>>(new Set());
   const previousForegroundNamespacesScopeRef = useRef(namespacesRefreshScope);
@@ -469,11 +457,10 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     const enabled = Boolean(selectedKubeconfig);
 
     // A scope that leaves the refresh-available set loses its lease with its
-    // owner (NamespacesScopeLease); forget its one-time startup read and error.
+    // owner (NamespacesScopeLease); forget its one-time startup read.
     const activeScopeSet = new Set(namespaceScopes);
     requestedNamespaceScopesRef.current.forEach((scope) => {
       if (!activeScopeSet.has(scope)) {
-        lastErrorByScopeRef.current.delete(scope);
         requestedNamespaceScopesRef.current.delete(scope);
       }
     });
@@ -482,7 +469,6 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       clearSelection();
       updateNamespaces([]);
       lastEvaluatedNamespaceRef.current = null;
-      lastErrorByScopeRef.current.clear();
       requestedNamespaceScopesRef.current.clear();
       return;
     }
@@ -609,14 +595,12 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     const handleResetViews = () => {
       clearSelection();
       updateNamespaces([]);
-      lastErrorByScopeRef.current.clear();
     };
 
     const handleKubeconfigChanging = () => {
       requestedNamespaceScopesRef.current.clear();
       clearSelection();
       updateNamespaces([]);
-      lastErrorByScopeRef.current.clear();
     };
 
     const handleKubeconfigChanged = () => {
@@ -666,36 +650,6 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
   // Structural flag stamped by the orchestrator from the typed 403 (checked
   // once per session; the scope is settled and background retries stop).
   const namespacesPermissionDenied = namespaceDomain.permissionDenied === true;
-
-  const namespaceFailure = currentFailure(namespaceDomain);
-
-  useEffect(() => {
-    if (!namespacesScope) {
-      return;
-    }
-    if (!namespaceFailure) {
-      lastErrorByScopeRef.current.delete(namespacesScope);
-      return;
-    }
-    const message = failureMessage(namespaceFailure);
-    // Permission denial is a designed, rendered state (the sidebar shows the
-    // message) — not an error to toast.
-    if (namespacesPermissionDenied) {
-      lastErrorByScopeRef.current.set(namespacesScope, message);
-      return;
-    }
-    if (message !== lastErrorByScopeRef.current.get(namespacesScope)) {
-      lastErrorByScopeRef.current.set(namespacesScope, message);
-      errorHandler.handle(
-        errorFromFailure(namespaceFailure),
-        {
-          context: 'loadNamespaces',
-          kubeconfig: selectedKubeconfig,
-        },
-        'Failed to load namespaces'
-      );
-    }
-  }, [namespaceFailure, namespacesPermissionDenied, namespacesScope, selectedKubeconfig]);
 
   const contextValue = useMemo(
     () => ({

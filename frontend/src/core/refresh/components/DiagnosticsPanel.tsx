@@ -233,6 +233,12 @@ const FIXED_SCOPE_ROLES: Partial<Record<RefreshDomain, { label: string; tooltip:
 };
 
 const resolveCatalogScopeRole = (query: string): { label: string; tooltip: string } => {
+  if (!query) {
+    return {
+      label: 'Live Scope',
+      tooltip: 'Cluster catalog stream scope; Browse and resource discovery re-read on its changes',
+    };
+  }
   const params = new URLSearchParams(query);
   return params.get('limit') === '1'
     ? {

@@ -15,6 +15,7 @@ import React, { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requestContextRefresh } from '@/core/data-access';
 import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
+import { failureMessage } from '@/core/refresh/refreshFailure';
 import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
 import type { CatalogItem, CatalogSnapshotPayload, ErrorStatus } from '@/core/refresh/types';
 import { backendQuerySource } from '@/modules/resource-grid/backendQuerySource';
@@ -150,14 +151,8 @@ const reads = () => app.snapshots.reads('catalog').map((read) => read.scope);
 const readQueries = () => reads().map(queryOf);
 /** Page reads, without the facet (limit=1) reads. */
 const pageReads = () => readQueries().filter((query) => query.get('limit') !== '1');
-/**
- * Page cursors in read order. A page read twice in a row counts once: a new
- * query scope's stream subscription re-validates it (orchestrator.ts finishFetch).
- */
-const pageAddresses = () =>
-  pageReads()
-    .map((query) => query.get('continue'))
-    .filter((address, index, all) => index === 0 || address !== all[index - 1]);
+/** Page cursors in read order. */
+const pageAddresses = () => pageReads().map((query) => query.get('continue'));
 
 // Views pass a memoized pin list (BrowseView.tsx pinnedNamespaces).
 const DEFAULT_PINNED = ['default'];
@@ -334,6 +329,26 @@ describe('useBrowseCatalog queries', () => {
     const filtered = requireValue(pageReads().slice(-1)[0], 'expected a filtered read');
     expect(filtered.getAll('kind')).toEqual(['Widget']);
     expect(filtered.get('resourceScope')).toBe('cluster');
+  });
+
+  it('reads a changed query once, with no follow-up read', async () => {
+    vi.useFakeTimers();
+    catalog.items = [item('pod-a'), item('web', { kind: 'Deployment' })];
+    await show();
+    const before = pageReads().length;
+
+    await show({ kinds: ['Pod'] });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    await app.settle();
+
+    expect(
+      pageReads()
+        .slice(before)
+        .map((query) => query.getAll('kind'))
+    ).toEqual([['Pod']]);
+    expect(names()).toEqual(['pod-a']);
   });
 
   it('debounces search before re-querying', async () => {
@@ -609,8 +624,8 @@ describe('useBrowseCatalog paging', () => {
   });
 
   // The refresh orchestrator settles a failed read into the scope's state
-  // and reports it (orchestrator.ts executeFetch), so the hook sees no page.
-  it('keeps the current page when the next page fails to load, which is reported', async () => {
+  // and reports it (orchestrator.ts executeFetch); Browse shows the failure.
+  it('keeps the current page and shows the failure when the next page fails to load, which is reported', async () => {
     catalog.items = ['a', 'b', 'c'].map((name) => item(name));
     catalog.override = (query) =>
       query.get('continue') === '2' ? makeErrorStatus('Gone', 'catalog page expired') : undefined;
@@ -621,6 +636,7 @@ describe('useBrowseCatalog paging', () => {
     expect(catalogNow().pageIndex).toBe(1);
     expect(names()).toEqual(['a', 'b']);
     expect(catalogNow().pagination.isRequestingMore).toBe(false);
+    expect(failureMessage(catalogNow().error)).toBe('catalog page expired');
     expect(
       app.errors.take(
         (record) =>

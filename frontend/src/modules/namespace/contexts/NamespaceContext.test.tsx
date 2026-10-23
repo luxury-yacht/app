@@ -498,26 +498,27 @@ describe('namespace selection', () => {
 });
 
 describe('failures', () => {
-  // The refresh layer reports a namespace-list failure itself too
+  // The refresh layer reports a namespace-list failure
   // (core/refresh/refreshErrorNotifier.ts), once per scope and message.
   const failNamespaces = (cluster: TestCluster, message: string) =>
     app.snapshots.fail('namespaces', scopeOf(cluster), makeErrorStatus('ServerTimeout', message));
-  const namespaceReports = () =>
-    app.errors.records().filter((record) => record.context?.context === 'loadNamespaces');
-  const takeReports = () =>
-    app.errors.take(
-      (record) =>
-        record.context?.context === 'loadNamespaces' ||
-        record.context?.source === 'refresh-orchestrator'
-    );
+  const failureReports = () =>
+    app.errors
+      .records()
+      .filter((record) => record.context?.domain === 'namespaces' || record.context?.context);
+  const takeReports = () => app.errors.take(() => true);
 
-  it('reports a transient namespace failure without marking the list denied', async () => {
+  it('reports a transient namespace failure once without marking the list denied', async () => {
     declareClusters();
     failNamespaces(alpha, 'apiserver timeout on startup');
     view = await app.render(null);
 
     expect(ns().namespacesPermissionDenied).toBe(false);
-    expect(namespaceReports()).toHaveLength(1);
+    expect(failureReports()).toEqual([
+      expect.objectContaining({
+        context: expect.objectContaining({ domain: 'namespaces', scope: scopeOf(alpha) }),
+      }),
+    ]);
     takeReports();
   });
 
@@ -525,12 +526,12 @@ describe('failures', () => {
     declareClusters();
     failNamespaces(alpha, 'apiserver timeout before switching');
     view = await app.render(null);
-    expect(namespaceReports()).toHaveLength(1);
+    expect(failureReports()).toHaveLength(1);
 
     await view.selectCluster(beta);
     await view.selectCluster(alpha);
 
-    expect(namespaceReports()).toHaveLength(1);
+    expect(failureReports()).toHaveLength(1);
     takeReports();
   });
 });

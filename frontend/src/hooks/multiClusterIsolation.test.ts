@@ -215,29 +215,22 @@ describe('menu events', () => {
   it('leaves the app’s own handler working after another consumer of the event unmounts', async () => {
     openCluster('dev');
     const view = await app.render(null);
-    const onToggleSidebar = vi.fn();
-    const ignore = () => undefined;
+    const executeCommand = vi.fn();
     function MenuConsumer() {
-      useWailsRuntimeEvents({
-        onOpenSettings: ignore,
-        onOpenAbout: ignore,
-        onOpenCluster: ignore,
-        onToggleSidebar,
-        onToggleAppLogsPanel: ignore,
-        onToggleDiagnostics: ignore,
-        onToggleObjectDiff: ignore,
-      });
+      useWailsRuntimeEvents(executeCommand);
       return null;
     }
     await view.show(createElement(MenuConsumer));
     await emit('toggle-sidebar', undefined);
-    expect(onToggleSidebar).toHaveBeenCalledTimes(1);
+    expect(executeCommand).toHaveBeenCalledExactlyOnceWith(
+      backend.ApplicationMenuCommand.ApplicationMenuCommandToggleSidebar
+    );
     expect(view.owners().viewState?.isSidebarVisible).toBe(false);
 
     view.clear();
     await emit('toggle-sidebar', undefined);
 
-    expect(onToggleSidebar).toHaveBeenCalledTimes(1);
+    expect(executeCommand).toHaveBeenCalledTimes(1);
     expect(view.owners().viewState?.isSidebarVisible).toBe(true);
   });
 });

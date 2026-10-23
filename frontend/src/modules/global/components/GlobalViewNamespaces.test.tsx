@@ -227,6 +227,16 @@ describe('GlobalViewNamespaces', () => {
     );
   });
 
+  it('says it shows only some clusters’ namespaces while one cluster’s list is missing', async () => {
+    await openGlobalNamespaces();
+
+    const filterArea = requireValue(
+      view.container.querySelector<HTMLElement>('.gridtable-filter-container'),
+      'expected the table filter bar'
+    );
+    expect(filterArea.textContent).toContain('Showing namespace data from 2 of 3 clusters');
+  });
+
   it('keeps namespace metrics live only while the view is shown', async () => {
     vi.useFakeTimers();
     await openGlobalNamespaces();

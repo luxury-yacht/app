@@ -81,11 +81,10 @@ export const domainScopeSelectors = (domain: RefreshDomain): readonly ScopeSelec
 
 /**
  * True when a decoded scope carries a one-shot query after its selector
- * (typed-table pages, object-map limits). A catalog tail is the query itself
- * and is the scope's identity, so it never counts.
+ * (typed-table and catalog pages, object-map limits). Query readers keep
+ * current through their domain's base scope, which streams.
  */
-export const hasOneShotQuery = (domain: RefreshDomain, scope: RefreshScope): boolean =>
-  scope.query !== '' && grammarFor(domain).query !== 'catalog';
+export const hasOneShotQuery = (scope: RefreshScope): boolean => scope.query !== '';
 
 /**
  * The namespace views' selection is a namespace name, or the all-namespaces

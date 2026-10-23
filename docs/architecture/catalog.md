@@ -155,8 +155,11 @@ and the catalog does not subscribe to their rows.
 - `backend/refresh/snapshot/catalog.go`: the `catalog` Browse domain; doorbells
   via `backend/refresh/resourcestream`. Delivery diagnostics are the `catalog`
   domain of the unified `resources` stream (no standalone catalog stream).
-- `frontend/src/modules/browse/hooks/useBrowseCatalog.ts`: page-query and
-  metadata/facet scopes share the cluster's one catalog doorbell subscription.
+- `frontend/src/modules/browse/hooks/useBrowseCatalog.ts`: leases the
+  cluster's base catalog scope, whose one doorbell subscription signals
+  changes; page and metadata/facet queries are one-shot reads that never
+  subscribe (`useLiveScope`/`useLiveQueryRead` in
+  `frontend/src/modules/resource-grid/useLiveQueryRead.ts`).
 
 ## Required tests
 

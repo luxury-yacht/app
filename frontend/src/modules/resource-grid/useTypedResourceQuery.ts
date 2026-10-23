@@ -12,12 +12,7 @@ import {
 import { errorHandler } from '@utils/errorHandler';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { requestRefreshDomainState } from '@/core/data-access';
-import {
-  localFailure,
-  permissionDeniedFailure,
-  type RefreshFailure,
-  refreshFailureOf,
-} from '@/core/refresh/refreshFailure';
+import { type RefreshFailure, refreshFailureOf } from '@/core/refresh/refreshFailure';
 import type { ScopeSelector } from '@/core/refresh/scopeSelector';
 import type {
   CanonicalResourceRef,
@@ -27,7 +22,11 @@ import type {
   ResourceQueryDynamicRef,
 } from '@/core/refresh/types';
 import { walkQueryCursorPages } from './cursorPageWalk';
-import { executeQueryPageRequest, type QueryPageRequestResult } from './queryPageRequest';
+import {
+  executeQueryPageRequest,
+  failureOfState,
+  type QueryPageRequestResult,
+} from './queryPageRequest';
 import {
   buildTypedResourceQueryScope,
   filterOptionsFromTypedPayload,
@@ -186,20 +185,6 @@ interface TypedQueryRequestCallbacks<TPayload> {
   onCursorInvalid: () => void;
   onPayload: (payload: TPayload) => void;
 }
-
-// A failed domain state that carries no failure of its own.
-const SNAPSHOT_REQUEST_FAILED = localFailure('Snapshot request failed');
-
-// A denial is settled like any other failure: no warm-up retries.
-const failureOfState = (
-  state: { status?: string; error?: RefreshFailure | null; permissionDenied?: boolean } | undefined
-): RefreshFailure | null => {
-  const error = state?.error ?? null;
-  if (state?.permissionDenied) {
-    return permissionDeniedFailure(error);
-  }
-  return state?.status === 'error' ? (error ?? SNAPSHOT_REQUEST_FAILED) : null;
-};
 
 const dispatchTypedQueryResult = <TPayload extends TypedQueryPayload>(
   result: QueryPageRequestResult,

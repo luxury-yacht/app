@@ -605,18 +605,12 @@ describe('ResourceStreamManager', () => {
     expect(state.data?.rows ?? []).toEqual([]);
   });
 
-  test('catalog doorbell updates each active catalog query report scope', () => {
+  test('a catalog doorbell advances the cluster catalog scope’s catalog clock', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const pageScope = testScope(
-      'cluster-a',
-      'limit=1000&customOnly=true&sort=name&sortDirection=asc&namespace=team-a'
-    );
-    const metadataScope = testScope('cluster-a', 'limit=1&customOnly=true&namespace=team-a');
-
-    subscribe(manager, 'catalog', pageScope);
-    subscribe(manager, 'catalog', metadataScope);
+    const scope = testScope('cluster-a', '');
+    subscribe(manager, 'catalog', scope);
 
     manager.handleMessage(
       JSON.stringify({
@@ -631,43 +625,10 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
-    expect(getScopedDomainState('catalog', pageScope).sourceVersion).toBe('catalog:42');
-    expect(getScopedDomainState('catalog', pageScope).signalVersions?.catalog).toBe('catalog:42');
-    expect(getScopedDomainState('catalog', metadataScope).sourceVersion).toBe('catalog:42');
-    expect(getScopedDomainState('catalog', metadataScope).signalVersions?.catalog).toBe(
-      'catalog:42'
-    );
-  });
-
-  test('adding the Browse metadata query keeps the shared catalog subscription healthy', async () => {
-    vi.useFakeTimers();
-    installWindowTimers();
-    const manager = new ResourceStreamManager();
-    const pageScope = testScope(
-      'cluster-a',
-      'limit=500&resourceScope=namespace&namespace=team-a&scopeNamespace=team-a'
-    );
-    const metadataScope = testScope(
-      'cluster-a',
-      'limit=1&resourceScope=namespace&namespace=team-a&scopeNamespace=team-a'
-    );
-
-    manager.start('catalog', pageScope);
-    await flushPromises();
-    createdSockets[0].onopen?.(new Event('open'));
-    await vi.advanceTimersByTimeAsync(1_100);
-    manager.handleMessage(
-      JSON.stringify({ type: 'ACK', domain: 'catalog', scope: '', clusterId: 'cluster-a' })
-    );
-    expect(manager.getHealthStatus('catalog', pageScope)).toBe('healthy');
-
-    // Browse owns a second report scope for facets. It reuses the same physical
-    // catalog doorbell and may re-arm that subscribe after the resync cooldown.
-    await vi.advanceTimersByTimeAsync(1_100);
-    manager.start('catalog', metadataScope);
-
-    expect(manager.getHealthStatus('catalog', pageScope)).toBe('healthy');
-    expect(manager.getHealthStatus('catalog', metadataScope)).toBe('healthy');
+    expect(getScopedDomainState('catalog', scope)).toMatchObject({
+      sourceVersion: 'catalog:42',
+      signalVersions: { catalog: 'catalog:42' },
+    });
   });
 
   test('A1 changed signal envelope updates sourceVersion without legacy message type', () => {
@@ -1606,11 +1567,6 @@ describe('ResourceStreamManager', () => {
     const podsScope = testScope('c1', 'namespace:default');
     subscribe(manager, 'nodes', nodesScope);
     subscribe(manager, 'pods', podsScope);
-    // Opening the connection resyncs the scopes started before it; count from here.
-    const resyncsOf = (key: string) =>
-      manager.getTelemetrySummaryByClusterDomain()[key]?.resyncCount ?? 0;
-    const nodesBefore = resyncsOf('c1::nodes');
-    const podsBefore = resyncsOf('c1::pods');
     // The server resets a scope (resyncs closer together than the cooldown
     // merge); the client resubscribes, and the server answers it.
     const reset = (domain: DoorbellDomain, scope: string) => {
@@ -1629,14 +1585,25 @@ describe('ResourceStreamManager', () => {
     manager.recordStreamFallback('nodes', nodesScope, 'stream not delivering');
 
     const byClusterDomain = manager.getTelemetrySummaryByClusterDomain();
-    expect(byClusterDomain['c1::nodes']).toMatchObject({
-      resyncCount: nodesBefore + 2,
-      fallbackCount: 1,
-    });
-    expect(byClusterDomain['c1::pods']).toMatchObject({
-      resyncCount: podsBefore + 4,
-      fallbackCount: 0,
-    });
+    expect(byClusterDomain['c1::nodes']).toMatchObject({ resyncCount: 2, fallbackCount: 1 });
+    expect(byClusterDomain['c1::pods']).toMatchObject({ resyncCount: 4, fallbackCount: 0 });
+  });
+
+  test('counts a reconnect as a resync, but not the first connection', () => {
+    vi.useFakeTimers();
+    installWindowTimers();
+    const manager = new ResourceStreamManager();
+    const scope = testScope('c1', '');
+
+    subscribe(manager, 'nodes', scope);
+    expect(manager.getTelemetrySummary().resyncCount).toBe(0);
+
+    vi.advanceTimersByTime(1_100);
+    manager.handleConnectionError('socket closed');
+    vi.advanceTimersByTime(1_100);
+    manager.handleConnectionOpen();
+
+    expect(manager.getTelemetrySummary().resyncCount).toBeGreaterThan(0);
   });
 
   test('accepts newer updates after stale resource versions when sequences advance', async () => {

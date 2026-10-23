@@ -170,16 +170,8 @@ function AppContent({ children }: Readonly<{ children: ReactNode }>) {
     ]
   );
 
-  // Handle Wails runtime events (menu items, etc.)
-  useWailsRuntimeEvents({
-    onOpenSettings: handleToggleSettings,
-    onOpenAbout: () => viewState.setIsAboutOpen(true),
-    onOpenCluster: () => eventBus.emit('command-palette:open-kubeconfigs'),
-    onToggleSidebar: () => viewState.toggleSidebar(),
-    onToggleAppLogsPanel: handleToggleAppLogsPanel,
-    onToggleDiagnostics: handleToggleDiagnostics,
-    onToggleObjectDiff: handleToggleObjectDiff,
-  });
+  // The native macOS menu and panel windows send their commands as events.
+  useWailsRuntimeEvents(executeApplicationMenuCommand);
 
   // Handle sidebar resize
   useSidebarResize({

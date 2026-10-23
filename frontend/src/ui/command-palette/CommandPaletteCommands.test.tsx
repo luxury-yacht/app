@@ -379,6 +379,37 @@ describe('application commands', () => {
   });
 });
 
+describe('shortcut keycaps', () => {
+  const keycaps = async () => {
+    dev = openCluster('dev', 'alpha');
+    await showPalette();
+    await menu('open-command-palette');
+    return options().flatMap((option) =>
+      Array.from(option.querySelectorAll('kbd'), (kbd) => kbd.textContent ?? '')
+    );
+  };
+  const macSymbols = (keys: string[]) => keys.filter((key) => /[⌘⌃⇧⌥]/.test(key));
+
+  it('names the modifier keys outside macOS', async () => {
+    const keys = await keycaps();
+
+    expect(keys).toEqual(expect.arrayContaining(['Ctrl', 'Shift']));
+    expect(macSymbols(keys)).toEqual([]);
+  });
+
+  it('shows the modifier symbols on macOS', async () => {
+    const platform = vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel');
+    try {
+      const keys = await keycaps();
+
+      expect(keys).toEqual(expect.arrayContaining(['⌘', '⇧']));
+      expect(keys).not.toContain('Ctrl');
+    } finally {
+      platform.mockRestore();
+    }
+  });
+});
+
 describe('settings commands', () => {
   const persisted = () =>
     app.backend.calls('UpdateAppPreferences').flatMap(([request]) => request.changes ?? []);

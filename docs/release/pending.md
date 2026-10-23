@@ -11,6 +11,7 @@
   - If the object is deleted and recreated while you edit, you can copy your draft and start editing the new object.
   - Save turns green and Cancel turns red while you have unsaved edits.
 - Scrollbar tweaks. They are wider and higher-contrast. They appear only while scrolling or when the pointer is over the scroll area, and fade out shortly after scrolling stops.
+- A table showing partial data, such as namespaces missing from a cluster, a kind you cannot list, or an approximate count, now shows a Partial chip in its filter bar. Hover over it for the details. Before, this showed only in the result count's tooltip, and only while a filter was active.
 
 ### Fixed
 
@@ -21,6 +22,17 @@
 - Object action menus offer every action you are allowed to take. Before, a custom resource's panel could leave out Delete, and the object map could leave out Scale, until something else had loaded those permissions.
 - Importing settings now reports a failure when the imported settings cannot be read back, and keeps your current settings. Before, it said the import succeeded and reset every setting to its default, including turning error reporting off.
 - Closing the pods listed under a node or workload with their Close button keeps that row highlighted. Before, the highlight cleared.
+- Reopening a cluster whose data still fails to load shows the error again. Before, the error showed only the first time the cluster was open.
+- A namespace list that fails to load shows one error. Before, it showed two.
+- Browse:
+  - A page that fails to load now shows its error in the table as well as in the error notice. Before, only the notice appeared and the table looked loaded.
+  - Sorting, filtering, or paging reads the new page once. Before, each change read it twice.
+- Command palette:
+  - Cmd+Shift+N (Ctrl+Shift+N on Windows and Linux) switches an open palette to namespace selection. Before, it did nothing while the palette was open.
+  - Shortcuts show ⌘ only on macOS. Windows and Linux show Ctrl and Shift.
+- While a window is closing, the macOS menu no longer opens Settings, the command palette, or other views in it.
+- Namespace, node drain, and catalog diff lists no longer redraw unchanged rows on each refresh.
+- Diagnostics no longer counts a stream's first connection as a resync.
 - A panel you open or move into a window now always takes keyboard focus. Before, it could stay unfocused when its contents loaded slowly.
 - A table or Browse view with a saved search now loads filtered rows. Before, it briefly showed every row first.
 - Opening a favorite saved with no sort shows its table unsorted, and the favorite stays selected. Before, the table came back sorted by name and the favorite looked unsaved.

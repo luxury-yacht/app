@@ -3,10 +3,11 @@
  *
  * Application menu commands in a workspace window: Settings runs in the window
  * and New Window goes to the backend. Both keep working while one cluster tab
- * closes, and neither runs while the window itself is closing. Runs in the
- * full app over the faked backend (test-utils/appState); commands are given
+ * closes, and neither runs while the window itself is closing, whether given
  * with the menu's keyboard accelerators, as in a window that draws its own
- * menu (Windows and Linux), and `backend.hold` keeps a close in flight.
+ * menu (Windows and Linux), or as the commands the native macOS menu sends.
+ * Runs in the full app over the faked backend (test-utils/appState);
+ * `backend.hold` keeps a close in flight.
  */
 
 import { act } from 'react';
@@ -39,6 +40,17 @@ const giveSettingsAndNewWindow = async () => {
 };
 
 const settingsOpen = () => document.querySelector('button[aria-label="Close Settings"]') !== null;
+const paletteOpen = () => document.querySelector('dialog.command-palette') !== null;
+
+/** The workspace commands the native macOS menu sends the window (backend/application_menu_commands.go). */
+const giveNativeSettingsAndPalette = async () => {
+  for (const command of ['open-settings', 'open-command-palette']) {
+    await act(async () => {
+      app.events.emit(command, undefined, { sender: app.windowName });
+    });
+    await app.settle();
+  }
+};
 
 beforeEach(async () => {
   dev = app.cluster({ name: 'dev', context: 'alpha' });
@@ -86,8 +98,10 @@ describe('application menu commands', () => {
     expect(app.backend.calls('AcknowledgeWorkspaceWindowClose')).toEqual([[app.windowName]]);
 
     await giveSettingsAndNewWindow();
+    await giveNativeSettingsAndPalette();
 
     expect(settingsOpen()).toBe(false);
+    expect(paletteOpen()).toBe(false);
     expect(app.backend.calls('ExecuteApplicationMenuCommand')).toEqual([]);
     await act(async () => acknowledgeClose());
     await app.settle();

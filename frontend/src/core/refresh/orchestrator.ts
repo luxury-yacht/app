@@ -413,8 +413,8 @@ class RefreshOrchestrator {
     runtime: ClusterRefreshRuntime,
     streaming: StreamingRegistration
   ): void {
-    const shouldStream = this.shouldStreamScope(domain, scope);
-    if (enabled && shouldStream) {
+    const plan = this.scopeStreamPlan(domain, scope);
+    if (enabled && plan === 'now') {
       runtime.clearStreamingReady(domain, scope);
       if (!preserveState) {
         resetScopedDomainState(domain, scope);
@@ -427,6 +427,15 @@ class RefreshOrchestrator {
       this.stopStreamingScope(domain, scope, streaming, !preserveState);
       this.cancelInFlightForScopedDomain(domain, scope);
       return;
+    }
+    if (plan === 'once-serviceable') {
+      // Warm-up is loading: the stream starts once the cluster serves
+      // (handleClusterBecameServiceable), and query readers wait for it.
+      setScopedDomainState(domain, scope, (previous) => ({
+        ...previous,
+        status: previous.data ? previous.status : 'initialising',
+        scope,
+      }));
     }
     if (runtime.hasStreamingBookkeeping(domain, scope)) {
       runtime.clearStreamingReady(domain, scope);
@@ -647,27 +656,29 @@ class RefreshOrchestrator {
   }
 
   private shouldStreamScope(domain: RefreshDomain, scope?: string): boolean {
+    return this.scopeStreamPlan(domain, scope) === 'now';
+  }
+
+  // Whether a scope streams now, once its cluster can serve, or not at all.
+  private scopeStreamPlan(
+    domain: RefreshDomain,
+    scope?: string
+  ): 'now' | 'once-serviceable' | 'never' {
     const trimmed = scope?.trim() ?? '';
-    if (!trimmed) {
-      return false;
-    }
-    if (!getPreference('autoRefreshEnabled')) {
-      return false;
+    if (!trimmed || !getPreference('autoRefreshEnabled')) {
+      return 'never';
     }
     // One-shot query scopes are never streaming targets, for ANY domain: event
     // queries share the singleton named stream with the parameterless base
     // scope and would churn it on every query.
     const parsed = tryParseRefreshScope(domain, trimmed);
-    if (!parsed || hasOneShotQuery(domain, parsed)) {
-      return false;
+    if (!parsed || hasOneShotQuery(parsed) || this.isStreamingBlocked(domain, trimmed)) {
+      return 'never';
     }
     // No stream can be established while the scope's cluster backend is still
     // initializing — the named-stream handler rejects the request and the
     // client would otherwise hot-loop on reconnect attempts.
-    if (!this.isScopeClusterServiceable(trimmed)) {
-      return false;
-    }
-    return !this.isStreamingBlocked(domain, trimmed);
+    return this.isScopeClusterServiceable(trimmed) ? 'now' : 'once-serviceable';
   }
 
   private getConfig(domain: RefreshDomain): DomainRegistration<RefreshDomain> {
@@ -1775,6 +1786,8 @@ class RefreshOrchestrator {
     if (payload.status === 'healthy' && previous?.status !== 'healthy') {
       setScopedDomainState(domain, scope, (state) => ({
         ...state,
+        // A subscription's first acknowledgement ends its start.
+        status: state.status === 'initialising' && !state.data ? 'idle' : state.status,
         streamAcknowledgedVersion: (state.streamAcknowledgedVersion ?? 0) + 1,
       }));
     }

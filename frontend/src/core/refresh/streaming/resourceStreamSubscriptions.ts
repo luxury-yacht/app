@@ -15,8 +15,8 @@ export type StreamSubscription = {
   key: string;
   domain: DoorbellDomain;
   storeScope: string;
-  reportScope: string;
-  reportScopes: Set<string>;
+  /** Whether a consumer holds the subscription (cleared by release). */
+  leased: boolean;
   normalizedScope: string;
   clusterId: string;
   clusterName?: string;
@@ -36,7 +36,6 @@ export const resourceStreamSubscriptionKey = (
 type ResolvedSubscriptionScope = {
   clusterId: string;
   normalizedScope: string;
-  reportScope: string;
   storeScope: string;
 };
 
@@ -45,16 +44,15 @@ export const resolveResourceStreamSubscriptionScope = (
   scope: string
 ): ResolvedSubscriptionScope => {
   const decoded = parseRefreshScope(domain, scope);
-  const { clusterId, selector, query } = decoded;
-  // Streams subscribe to their selector alone; every catalog query shares the
-  // cluster-wide catalog doorbell and reports under its own scope.
-  if (hasOneShotQuery(domain, decoded)) {
+  const { clusterId, selector } = decoded;
+  // Streams subscribe to their selector alone; a query scope is a one-shot
+  // read whose reader follows the base scope's stream.
+  if (hasOneShotQuery(decoded)) {
     throw new Error(`${domain} streams do not accept a query scope`);
   }
   return {
     clusterId,
     normalizedScope: encodeScopeSelector(selector),
-    reportScope: buildRefreshScope(domain, { clusterId, selector, query }),
     storeScope: buildRefreshScope(domain, { clusterId, selector }),
   };
 };
@@ -111,27 +109,16 @@ export class ResourceStreamSubscriptionStore {
     const subscription = this.subscriptions.get(
       resourceStreamSubscriptionKey(resolved.clusterId, domain, resolved.normalizedScope)
     );
-    return subscription?.reportScopes.has(resolved.reportScope) ? subscription : undefined;
+    return subscription?.leased ? subscription : undefined;
   }
 
-  /** Drops one report scope; returns the subscription once its last one is gone. */
+  /** Releases a leased subscription and returns it; a second release returns nothing. */
   release(domain: DoorbellDomain, scope: string): StreamSubscription | undefined {
-    const resolved = tryResolveSubscriptionScope(domain, scope);
-    if (!resolved) {
-      return undefined;
+    const subscription = this.getForScope(domain, scope);
+    if (subscription) {
+      subscription.leased = false;
     }
-    const subscription = this.subscriptions.get(
-      resourceStreamSubscriptionKey(resolved.clusterId, domain, resolved.normalizedScope)
-    );
-    if (!subscription?.reportScopes.has(resolved.reportScope)) {
-      return undefined;
-    }
-    subscription.reportScopes.delete(resolved.reportScope);
-    if (subscription.reportScope === resolved.reportScope) {
-      subscription.reportScope =
-        subscription.reportScopes.values().next().value ?? resolved.reportScope;
-    }
-    return subscription.reportScopes.size === 0 ? subscription : undefined;
+    return subscription;
   }
 
   hasPendingUnsubscribe(subscription: StreamSubscription): boolean {
@@ -215,7 +202,7 @@ export class ResourceStreamSubscriptionStore {
 
   private ensureResolved(
     domain: DoorbellDomain,
-    { clusterId, normalizedScope, reportScope, storeScope }: ResolvedSubscriptionScope
+    { clusterId, normalizedScope, storeScope }: ResolvedSubscriptionScope
   ): StreamSubscription {
     const key = resourceStreamSubscriptionKey(clusterId, domain, normalizedScope);
     const existing = this.subscriptions.get(key);
@@ -223,14 +210,13 @@ export class ResourceStreamSubscriptionStore {
       const replaceBlockedOwner =
         this.hasPendingUnsubscribe(existing) &&
         existing.protocol.phase.status === 'permission-blocked';
-      existing.reportScopes.add(reportScope);
+      existing.leased = true;
       this.cancelPendingUnsubscribe(existing);
       if (replaceBlockedOwner) {
         // Reclaim after a lifecycle stop is a new permission epoch. Install a
         // fresh owner so late callbacks keep the old terminal protocol object.
         const replacement = {
           ...existing,
-          reportScopes: new Set(existing.reportScopes),
           protocol: initialResourceStreamProtocolState(),
         };
         this.subscriptions.set(key, replacement);
@@ -243,8 +229,7 @@ export class ResourceStreamSubscriptionStore {
       key,
       domain,
       storeScope,
-      reportScope,
-      reportScopes: new Set([reportScope]),
+      leased: true,
       normalizedScope,
       clusterId,
       protocol: initialResourceStreamProtocolState(),

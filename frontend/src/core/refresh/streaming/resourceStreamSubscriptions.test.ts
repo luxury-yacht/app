@@ -25,7 +25,6 @@ describe('ResourceStreamSubscriptionStore', () => {
     expect(resolveResourceStreamSubscriptionScope('pods', scope)).toEqual({
       clusterId: 'cluster-a',
       normalizedScope: 'namespace:default',
-      reportScope: scope,
       storeScope: scope,
     });
   });
@@ -42,48 +41,14 @@ describe('ResourceStreamSubscriptionStore', () => {
     expect(store.getForScope('pods', scope)).toBe(subscription);
   });
 
-  it('resolves catalog query scopes to a cluster doorbell subscription while preserving the report scope', () => {
-    const queryScope = testScope(
-      'fusionauth-prod-ap-southeast-2',
-      'limit=1000&customOnly=true&sort=name&sortDirection=asc&namespace=fa-atmail-au'
-    );
-
-    expect(resolveResourceStreamSubscriptionScope('catalog', queryScope)).toEqual({
-      clusterId: 'fusionauth-prod-ap-southeast-2',
-      normalizedScope: '',
-      reportScope: queryScope,
-      storeScope: testScope('fusionauth-prod-ap-southeast-2'),
-    });
-
+  it('releases a leased subscription once', () => {
     const store = new ResourceStreamSubscriptionStore(500, vi.fn());
-    const subscription = store.ensure('catalog', queryScope);
+    const scope = testScope('cluster-a', 'namespace:default');
+    const subscription = store.ensure('pods', scope);
 
-    expect(store.buildRequestMessage(subscription)).toEqual(
-      expect.objectContaining({
-        type: 'REQUEST',
-        clusterId: 'fusionauth-prod-ap-southeast-2',
-        domain: 'catalog',
-        scope: testScope('fusionauth-prod-ap-southeast-2', ''),
-      })
-    );
-  });
-
-  it('shares one catalog doorbell subscription across active catalog query report scopes', () => {
-    const store = new ResourceStreamSubscriptionStore(500, vi.fn());
-    const pageScope = testScope(
-      'cluster-a',
-      'limit=1000&customOnly=true&sort=name&sortDirection=asc&namespace=team-a'
-    );
-    const metadataScope = testScope('cluster-a', 'limit=1&customOnly=true&namespace=team-a');
-
-    const pageSubscription = store.ensure('catalog', pageScope);
-    const metadataSubscription = store.ensure('catalog', metadataScope);
-
-    expect(metadataSubscription).toBe(pageSubscription);
-    expect(pageSubscription.reportScopes).toEqual(new Set([pageScope, metadataScope]));
-    expect(store.release('catalog', pageScope)).toBeUndefined();
-    expect(pageSubscription.reportScopes).toEqual(new Set([metadataScope]));
-    expect(store.release('catalog', metadataScope)).toBe(pageSubscription);
+    expect(store.release('pods', scope)).toBe(subscription);
+    expect(store.release('pods', scope)).toBeUndefined();
+    expect(store.getForScope('pods', scope)).toBeUndefined();
   });
 
   it('rejects stream scopes outside the domain grammar or carrying a query', () => {
@@ -91,6 +56,10 @@ describe('ResourceStreamSubscriptionStore', () => {
     expect(() => resolveResourceStreamSubscriptionScope('pods', 'namespace:default')).toThrow();
     expect(() =>
       resolveResourceStreamSubscriptionScope('pods', 'cluster-a|namespace:all?limit=50')
+    ).toThrow();
+    // A catalog query reads once; its reader follows the cluster's catalog stream.
+    expect(() =>
+      resolveResourceStreamSubscriptionScope('catalog', testScope('cluster-a', 'limit=50'))
     ).toThrow();
     expect(() => resolveResourceStreamSubscriptionScope('nodes', 'cluster-a|cluster')).toThrow();
   });

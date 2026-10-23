@@ -6,6 +6,7 @@
  * and per-cluster health events.
  */
 import { useCallback, useEffect, useMemo } from 'react';
+import { backend } from '@/core/backend-api/models';
 import type { ClusterHealthStatus } from '@/core/cluster-workspace/clusterWorkspaceStore';
 import { useClusterWorkspaceSnapshot } from '@/core/cluster-workspace/useClusterWorkspace';
 import { onEvent } from '@/core/desktop-runtime';
@@ -27,55 +28,40 @@ export interface UseClusterHealthListenerResult {
   getActiveClusterHealth: () => ClusterHealthStatus;
 }
 
-interface WailsRuntimeEventHandlers {
-  onOpenSettings: () => void;
-  onOpenAbout: () => void;
-  onOpenCluster: () => void;
-  onToggleSidebar: () => void;
-  onToggleAppLogsPanel: () => void;
-  onToggleDiagnostics: () => void;
-  onToggleObjectDiff: () => void;
-}
+const menuCommand = backend.ApplicationMenuCommand;
+
+// The workspace commands the backend sends this window: native macOS menu
+// items, and commands a panel window routes to its workspace window
+// (internal/panelwindow/workspace_command.go). Each runs as its application
+// menu command, under the same rules as the window's own accelerators.
+const WORKSPACE_COMMAND_EVENTS = [
+  ['open-settings', menuCommand.ApplicationMenuCommandSettings],
+  ['open-about', menuCommand.ApplicationMenuCommandAbout],
+  ['open-cluster', menuCommand.ApplicationMenuCommandOpenCluster],
+  ['open-command-palette', menuCommand.ApplicationMenuCommandCommandPalette],
+  ['toggle-sidebar', menuCommand.ApplicationMenuCommandToggleSidebar],
+  ['toggle-app-logs-panel', menuCommand.ApplicationMenuCommandToggleAppLogs],
+  ['toggle-diagnostics', menuCommand.ApplicationMenuCommandToggleDiagnostics],
+  ['toggle-object-diff', menuCommand.ApplicationMenuCommandToggleObjectDiff],
+] as const;
 
 /**
- * Subscribes to Wails runtime events for UI actions (menu items, etc.)
+ * Runs the workspace commands the backend sends this window with the
+ * window's application menu command executor.
  */
-export function useWailsRuntimeEvents(handlers: WailsRuntimeEventHandlers): void {
-  const {
-    onOpenSettings,
-    onOpenAbout,
-    onOpenCluster,
-    onToggleSidebar,
-    onToggleAppLogsPanel,
-    onToggleDiagnostics,
-    onToggleObjectDiff,
-  } = handlers;
-
+export function useWailsRuntimeEvents(
+  executeCommand: (command: backend.ApplicationMenuCommand) => void
+): void {
   useEffect(() => {
-    const disposers = [
-      onEvent('open-settings', onOpenSettings),
-      onEvent('open-about', onOpenAbout),
-      onEvent('open-cluster', onOpenCluster),
-      onEvent('toggle-sidebar', onToggleSidebar),
-      onEvent('toggle-app-logs-panel', onToggleAppLogsPanel),
-      onEvent('toggle-diagnostics', onToggleDiagnostics),
-      onEvent('toggle-object-diff', onToggleObjectDiff),
-    ];
-
+    const disposers = WORKSPACE_COMMAND_EVENTS.map(([eventName, command]) =>
+      onEvent(eventName, () => executeCommand(command))
+    );
     return () => {
       disposers.forEach((dispose) => {
         dispose();
       });
     };
-  }, [
-    onOpenSettings,
-    onOpenAbout,
-    onOpenCluster,
-    onToggleSidebar,
-    onToggleAppLogsPanel,
-    onToggleDiagnostics,
-    onToggleObjectDiff,
-  ]);
+  }, [executeCommand]);
 }
 
 /**

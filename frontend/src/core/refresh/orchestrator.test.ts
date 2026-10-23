@@ -739,9 +739,10 @@ describe('manual refresh', () => {
     refreshOrchestrator.releaseScopedDomainLease('object-yaml', scope);
   });
 
-  // Polling-list payloads merge onto the rows already shown (snapshotMerge.ts);
-  // a merge must never keep a row the new snapshot changed.
-  it('applies the changed rows of every merged polling list', async () => {
+  // Polling-list payloads merge onto the rows already shown (snapshotMerge.ts):
+  // an unchanged row keeps its object, so its table row does not re-render,
+  // and a merge never keeps a row the new snapshot changed.
+  it('applies the changed rows of every merged polling list and keeps the unchanged ones', async () => {
     const clusterId = 'merge-a';
     markClusterReady(clusterId);
     serveOnly();
@@ -795,7 +796,7 @@ describe('manual refresh', () => {
       scope: 'Namespace' as const,
     });
     // Serves `first`, reads it, serves `second`, reads again: what a scope
-    // holds after its next poll.
+    // holds before and after its next poll.
     const readTwice = async <D extends RefreshDomain>(
       domain: D,
       scope: string,
@@ -806,12 +807,13 @@ describe('manual refresh', () => {
       refreshOrchestrator.acquireScopedDomainLease(domain, scope);
       await refreshOrchestrator.fetchScopedDomain(domain, scope, { intent: 'user' });
       await settle();
+      const before = getScopedDomainState(domain, scope).data as DomainPayloadMap[D];
       app.snapshots.serve(domain, scope, second);
       await refreshOrchestrator.fetchScopedDomain(domain, scope, { intent: 'user' });
       await settle();
-      const held = getScopedDomainState(domain, scope).data;
+      const after = getScopedDomainState(domain, scope).data as DomainPayloadMap[D];
       refreshOrchestrator.releaseScopedDomainLease(domain, scope);
-      return held;
+      return { before, after };
     };
 
     const namespaces = {
@@ -819,44 +821,47 @@ describe('manual refresh', () => {
       clusterName: clusterId,
       namespaces: [namespace('alpha', 'Active'), namespace('beta', 'Terminating')],
     };
-    await expect(
-      readTwice(
-        'namespaces',
-        baseScope(clusterId),
-        {
-          clusterId,
-          clusterName: clusterId,
-          namespaces: [namespace('alpha', 'Active'), namespace('beta', 'Active')],
-        },
-        namespaces
-      )
-    ).resolves.toEqual(namespaces);
+    const namespacePolls = await readTwice(
+      'namespaces',
+      baseScope(clusterId),
+      {
+        clusterId,
+        clusterName: clusterId,
+        namespaces: [namespace('alpha', 'Active'), namespace('beta', 'Active')],
+      },
+      namespaces
+    );
+    expect(namespacePolls.after).toEqual(namespaces);
+    expect(namespacePolls.after.namespaces?.[0]).toBe(namespacePolls.before.namespaces?.[0]);
+    expect(namespacePolls.after.namespaces?.[1]).not.toBe(namespacePolls.before.namespaces?.[1]);
 
     const drains = { clusterId, drains: [drain('1', 'running'), drain('2', 'succeeded')] };
-    await expect(
-      readTwice(
-        'object-maintenance',
-        testScope(clusterId, 'node:node-a'),
-        { clusterId, drains: [drain('1', 'running'), drain('2', 'failed')] },
-        drains
-      )
-    ).resolves.toEqual(drains);
+    const drainPolls = await readTwice(
+      'object-maintenance',
+      testScope(clusterId, 'node:node-a'),
+      { clusterId, drains: [drain('1', 'running'), drain('2', 'failed')] },
+      drains
+    );
+    expect(drainPolls.after).toEqual(drains);
+    expect(drainPolls.after.drains?.[0]).toBe(drainPolls.before.drains?.[0]);
+    expect(drainPolls.after.drains?.[1]).not.toBe(drainPolls.before.drains?.[1]);
 
     const items = makeCatalogSnapshotPayload({
       clusterId,
       items: [catalogItem('web', '10'), catalogItem('api', '6')],
     });
-    await expect(
-      readTwice(
-        'catalog-diff',
-        testScope(clusterId, 'limit=50'),
-        makeCatalogSnapshotPayload({
-          clusterId,
-          items: [catalogItem('web', '10'), catalogItem('api', '5')],
-        }),
-        items
-      )
-    ).resolves.toEqual(items);
+    const catalogPolls = await readTwice(
+      'catalog-diff',
+      testScope(clusterId, 'limit=50'),
+      makeCatalogSnapshotPayload({
+        clusterId,
+        items: [catalogItem('web', '10'), catalogItem('api', '5')],
+      }),
+      items
+    );
+    expect(catalogPolls.after).toEqual(items);
+    expect(catalogPolls.after.items?.[0]).toBe(catalogPolls.before.items?.[0]);
+    expect(catalogPolls.after.items?.[1]).not.toBe(catalogPolls.before.items?.[1]);
   });
 });
 
@@ -1023,23 +1028,25 @@ describe('stream health and polling fallback', () => {
   });
 
   // A healthy stream signals changes; it does not deliver a new query's first
-  // page, so a new filter must still read one.
-  it('reads the first page of a new catalog scope while the catalog stream is healthy', async () => {
+  // page, so a new filter reads one, once: the query does not join the stream.
+  it('reads the first page of a new catalog query once while the catalog stream is healthy', async () => {
     const clusterId = 'catalog-filter';
-    const metadata = testScope(clusterId, 'limit=1&namespace=cluster');
+    const live = baseScope(clusterId);
     const page = testScope(clusterId, 'limit=50&customOnly=true&kind=Widget&namespace=cluster');
     markClusterReady(clusterId);
-    await leaseHealthy('catalog', metadata);
+    await leaseHealthy('catalog', live);
     app.snapshots.clearReads();
+    const subscribed = app.streams.requests().length;
 
     refreshOrchestrator.acquireScopedDomainLease('catalog', page);
     await refreshOrchestrator.fetchScopedDomain('catalog', page, { intent: 'startup' });
     await settle();
 
-    expect(readsOf('catalog', page)).toBeGreaterThanOrEqual(1);
+    expect(readsOf('catalog', page)).toBe(1);
+    expect(app.streams.requests()).toHaveLength(subscribed);
     expect(getScopedDomainState('catalog', page).data).toBeTruthy();
     refreshOrchestrator.releaseScopedDomainLease('catalog', page);
-    refreshOrchestrator.releaseScopedDomainLease('catalog', metadata);
+    refreshOrchestrator.releaseScopedDomainLease('catalog', live);
   });
 
   it('blocks a drifted stream only in its own cluster', async () => {
@@ -1232,7 +1239,8 @@ describe('leases and scopes', () => {
   });
 
   // Typed events queries share the singleton named stream with the base
-  // scope; streaming their one-shot scopes churned that connection.
+  // scope; streaming their one-shot scopes churned that connection. Catalog
+  // queries share the cluster's catalog stream the same way.
   it('reads one-shot query scopes as snapshots and never streams them', async () => {
     const clusterId = 'query-scopes';
     markClusterReady(clusterId);
@@ -1241,6 +1249,7 @@ describe('leases and scopes', () => {
       { domain: 'pods', scope: pods },
       { domain: 'cluster-events', scope: testScope(clusterId, '?limit=50&sort=age') },
       { domain: 'namespace-events', scope: testScope(clusterId, 'namespace:all?limit=50') },
+      { domain: 'catalog', scope: testScope(clusterId, 'limit=50&namespace=cluster') },
     ] as const;
     serveOnly();
     app.snapshots.serve(

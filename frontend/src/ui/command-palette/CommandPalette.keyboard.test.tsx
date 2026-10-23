@@ -5,7 +5,8 @@
  * keeps Tab inside itself and returns focus to the control that invoked it;
  * the application-menu accelerators reach it while it is open (Cmd/Ctrl+
  * Shift+P leaves an open palette and its query alone, Cmd/Ctrl+O switches it
- * to the kubeconfig picker); and no entry point opens it over another modal.
+ * to the kubeconfig picker), as does its own Cmd/Ctrl+Shift+N (to the
+ * namespace picker); and no entry point opens it over another modal.
  * Runs in provider mode inside the real app shell, whose KeyboardProvider,
  * application-menu shortcuts, and menu-command wiring (App.tsx AppContent)
  * are the production ones; only the backend boundary is faked
@@ -167,6 +168,25 @@ describe('CommandPalette in the keyboard system', () => {
 
     expect(palette()).not.toBeNull();
     expect(groups()).toEqual(['Kubeconfigs']);
+  });
+
+  it('switches an open palette to the namespace picker on Cmd/Ctrl+Shift+N', async () => {
+    view = await app.render(null);
+    await view.show(
+      <CommandPalette
+        commands={[
+          command('first', 'First', 'Application'),
+          command('ns-prod', 'prod', 'Namespaces'),
+        ]}
+      />
+    );
+    await menu('open-command-palette');
+    expect(groups()).toEqual(['Application', 'Namespaces']);
+
+    await press('N', { ...primary(), shiftKey: true });
+
+    expect(palette()).not.toBeNull();
+    expect(groups()).toEqual(['Namespaces']);
   });
 
   it('does not open from any entry point while another modal is open', async () => {

@@ -18,6 +18,7 @@ import {
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import { ColumnsIcon, PlusIcon, ResetFiltersIcon } from '@shared/components/icons/SharedIcons';
 import SearchInput from '@shared/components/inputs/SearchInput';
+import { StatusChip } from '@shared/components/StatusChip';
 import Tooltip from '@shared/components/Tooltip';
 import type {
   GridTableFilterState,
@@ -204,11 +205,6 @@ function renderResultCountChip(
                   configured exact-count budget.
                 </p>
               )}
-              {!!resultCount.partialDataLabel && (
-                <p className="gridtable-filter-result-tooltip-paragraph">
-                  {resultCount.partialDataLabel}
-                </p>
-              )}
               <p className="gridtable-filter-result-tooltip-paragraph">
                 {searchBehavior === 'query'
                   ? 'This table is showing the current backend query page.'
@@ -228,6 +224,24 @@ function renderResultCountChip(
         formatResultCountLabel(resultCount)
       )}
     </span>
+  );
+}
+
+// Partial data is marked whether or not a filter is active; the chip explains it.
+function renderPartialDataChip(label: string | undefined): React.ReactNode {
+  if (!label) {
+    return undefined;
+  }
+  return (
+    <output className="active-filter-chips__summary" data-gridtable-filter-role="partial-data">
+      <StatusChip
+        variant="warning"
+        tooltip={<p className="gridtable-filter-result-tooltip-paragraph">{label}</p>}
+      >
+        Partial
+      </StatusChip>
+      <span className="sr-only">{label}</span>
+    </output>
   );
 }
 
@@ -560,6 +574,14 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
     hasNarrowingFilters,
     resolvedFilterOptions.searchBehavior
   );
+  const partialDataChip = renderPartialDataChip(resultCount?.partialDataLabel);
+  const summary =
+    resultCountChip || partialDataChip ? (
+      <>
+        {resultCountChip}
+        {partialDataChip}
+      </>
+    ) : undefined;
 
   return (
     <div className="gridtable-filter-container">
@@ -609,7 +631,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
         ariaLabel="Active GridTable filters"
         chips={activeFilterChips}
         onClearAll={onReset}
-        summary={resultCountChip}
+        summary={summary}
       />
     </div>
   );

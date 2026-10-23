@@ -118,8 +118,16 @@ displayed rows in place.
   data access still owns acquisition, fetch, read, and release. Adapter policies
   stay out of this helper: typed queries own declarative scopes, warm-up retry,
   anchors, and failed-navigation rollback; Browse owns imperative cursor
-  requests, separate metadata scopes, quiet-request coalescing, and its
-  blocked-result/error policies.
+  requests (page one included), quiet-request coalescing with one trailing
+  re-read for a signal that arrives mid-read, and its warm-up/error policies.
+  Every query scope is one-shot for every domain (`hasOneShotQuery`); only base
+  scopes stream.
+- `useLiveScope` (`modules/resource-grid/useLiveQueryRead.ts`) is the reader's
+  live lease: query demand on the domain's base scope, ready once the lease
+  has taken effect and the scope is not starting. `useLiveQueryRead` reads one
+  whole query (Browse facets, resource discovery) once per scope and again per
+  live signal, retrying an empty read; its result stays in the store under its
+  scope.
 - `useQueryStreamSignal` (core refresh hooks) owns query signal identity; typed
   tables invalidate their declarative query with it, and Browse supplies a
   current-page reconciliation callback. Snapshot leases need no hook: the

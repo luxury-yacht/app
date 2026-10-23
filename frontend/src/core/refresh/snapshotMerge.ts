@@ -10,6 +10,7 @@ import {
   buildCatalogResourceRowKey,
   buildClusterNameRowKey,
 } from '@shared/utils/resourceRowIdentity';
+import { enumerableValuesEqual } from '@shared/utils/structuralShareResourceRows';
 import { getScopedDomainState } from './store';
 import type {
   CatalogSnapshotPayload,
@@ -22,23 +23,6 @@ import type {
 type NamespaceRow = NonNullable<NamespaceSnapshotPayload['namespaces']>[number];
 type CatalogRow = NonNullable<CatalogSnapshotPayload['items']>[number];
 type NodeMaintenanceRow = NonNullable<NodeMaintenanceSnapshotPayload['drains']>[number];
-
-const shallowEqualRecord = (left: Record<string, unknown>, right: Record<string, unknown>) => {
-  if (left === right) {
-    return true;
-  }
-  const leftKeys = Object.keys(left);
-  const rightKeys = Object.keys(right);
-  if (leftKeys.length !== rightKeys.length) {
-    return false;
-  }
-  for (const key of leftKeys) {
-    if (left[key] !== right[key]) {
-      return false;
-    }
-  }
-  return true;
-};
 
 // Reuse cached row objects when incoming rows are unchanged to cut re-render churn.
 const mergeListByKey = <T extends object>(
@@ -63,10 +47,9 @@ const mergeListByKey = <T extends object>(
       return item;
     }
     const cached = previousByKey.get(key);
-    if (
-      cached &&
-      shallowEqualRecord(cached as Record<string, unknown>, item as Record<string, unknown>)
-    ) {
+    // Rows nest objects (refs, options, events) that every parsed snapshot
+    // recreates, so only a deep comparison finds the unchanged ones.
+    if (cached && enumerableValuesEqual(cached, item)) {
       reused = true;
       return cached;
     }

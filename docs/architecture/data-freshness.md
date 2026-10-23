@@ -90,7 +90,9 @@ causes Kubernetes API work. Mechanics and transport live in
   initial `RESET` advances an acknowledgement identity that causes one
   acknowledged page read; a response for an older query identity cannot
   overwrite a newer page. This closes the send/registration race without a
-  second retained row snapshot.
+  second retained row snapshot. A streamed scope stays `initialising` while
+  its cluster cannot serve and until its subscription's first acknowledgement,
+  so readers gated on `isLiveDomainInitialLoadPending` read once, after it.
 - The scheduler never satisfies query-only fallback or global manual refresh by
   fetching the bounded base snapshot. While the stream is unhealthy, or on
   global manual refresh, it advances a query-reconciliation identity and the

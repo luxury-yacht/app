@@ -130,16 +130,8 @@ describe('a reused failing scope', () => {
     app.snapshots.fail('namespace-metrics', scope, timeout);
     await app.render(null);
     return app.errors
-      .take(
-        (record) =>
-          record.context?.source === 'refresh-orchestrator' ||
-          record.context?.context === 'loadNamespaces'
-      )
-      .filter(
-        (record) =>
-          record.context?.source === 'refresh-orchestrator' &&
-          record.context?.domain === 'namespaces'
-      );
+      .take((record) => record.context?.source === 'refresh-orchestrator')
+      .filter((record) => record.context?.domain === 'namespaces');
   };
 
   it('reports the namespace list failure', async () => {

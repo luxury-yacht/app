@@ -297,7 +297,7 @@ export function useCommandPaletteCommands() {
           viewState.setIsSettingsOpen(true);
         },
         keywords: ['settings', 'preferences', 'config'],
-        shortcut: ['⌘', ','],
+        shortcut: platformShortcut(['⌘', ','], ['Ctrl', ',']),
       },
       {
         id: 'toggle-sidebar',
@@ -337,7 +337,7 @@ export function useCommandPaletteCommands() {
           eventBus.emit('view:toggle-app-logs-panel');
         },
         keywords: ['logs', 'application', 'debug'],
-        shortcut: ['⇧', '⌃', 'L'],
+        shortcut: platformShortcut(['⇧', '⌃', 'L'], ['Ctrl', 'Shift', 'L']),
       },
       {
         id: 'toggle-diagnostics',
@@ -349,7 +349,7 @@ export function useCommandPaletteCommands() {
           eventBus.emit('view:toggle-diagnostics');
         },
         keywords: ['diagnostics', 'status', 'permissions', 'refresh'],
-        shortcut: ['⇧', '⌃', 'D'],
+        shortcut: platformShortcut(['⇧', '⌃', 'D'], ['Ctrl', 'Shift', 'D']),
       },
 
       // Zoom Commands
@@ -468,7 +468,7 @@ export function useCommandPaletteCommands() {
           }
         },
         keywords: ['refresh', 'reload', 'update'],
-        shortcut: ['⌘', 'R'],
+        shortcut: platformShortcut(['⌘', 'R'], ['Ctrl', 'R']),
       },
       {
         id: 'reset-all-gridtable-state',

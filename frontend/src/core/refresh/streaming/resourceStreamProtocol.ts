@@ -592,7 +592,8 @@ const connectionOpened = (state: ResourceStreamProtocolState): ResourceStreamPro
   return transition(state, [
     {
       type: 'request-resync',
-      reason: 'reconnect',
+      // A subscription that has heard nothing yet is on its first connection.
+      reason: state.activity.lastMessageAt === undefined ? 'initial' : 'reconnect',
       force: true,
       ...(phaseError(state.phase) ? { errorReason: phaseError(state.phase) } : {}),
     },

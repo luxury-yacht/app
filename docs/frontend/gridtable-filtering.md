@@ -25,6 +25,9 @@ zoom follow [interaction boundaries](gridtable-interaction.md#interaction-bounda
   when the view supplies `fetchAllRows`, otherwise the local filtered rows, and
   says "visible rows" instead of "all matching rows" for a backend page without
   `fetchAllRows` or a partial window (`partialDataLabel`).
+- A table with partial data (`partialDataLabel`) shows a warning `Partial` chip
+  in the filter bar's summary row, filtered or not, with the label on hover and
+  as screen-reader text.
 - Every visible multi-select Kinds dropdown has search, `Select all`, and
   `Select none`; GridTable owns this, and views only decide whether it shows.
 - Filter multiselects have three explicit states: `all` (unrestricted, includes

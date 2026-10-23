@@ -4,8 +4,8 @@
  * The table filter bar: its Kinds, Namespaces, Clusters, and query-facet
  * menus report the values the user picks (cluster IDs compared exactly), its
  * chips clear one filter or all of them, the result count appears only while
- * a filter narrows the rows (marking approximate totals and the view's
- * partial-window note), the search box keeps focus while typing and answers
+ * a filter narrows the rows (marking approximate totals), partial data shows a
+ * Partial chip that explains it, filtered or not, the search box keeps focus while typing and answers
  * the app's Find shortcut, and the Columns menu shows, reorders, resets, and
  * edits custom columns. Runs the real filter bar and dropdowns inside the
  * production shell (keyboard and zoom owners) with only the backend boundary
@@ -327,19 +327,25 @@ describe('GridTableFiltersBar result count', () => {
     expect(resultCount()?.textContent).toContain('100001+');
   });
 
-  it('explains a partial local window with the view’s note', async () => {
+  it('marks partial data with a Partial chip that explains it, without a filter', async () => {
     vi.useFakeTimers();
     await renderFilters({
-      activeFilters: { ...NO_FILTERS, search: 'web' },
+      activeFilters: NO_FILTERS,
       resultCount: {
-        filtered: 50,
+        filtered: 500,
         unfiltered: 500,
         capped: true,
         partialDataLabel: 'Only the recent local window is loaded.',
       },
     });
 
-    const trigger = requireValue(resultCount()?.querySelector('.tooltip-trigger'), 'count tooltip');
+    const trigger = requireValue(
+      Array.from(view.container.querySelectorAll<HTMLElement>('.tooltip-trigger')).find(
+        (element) => element.textContent === 'Partial'
+      ),
+      'expected the Partial chip'
+    );
+    expect(resultCount()).toBeNull();
     await act(async () => {
       trigger.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
       await vi.advanceTimersByTimeAsync(300);

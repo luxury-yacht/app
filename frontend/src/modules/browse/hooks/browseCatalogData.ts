@@ -6,7 +6,7 @@ import {
   parseContinueToken,
   reconcileByUID,
 } from '@modules/browse/utils/browseUtils';
-import { buildClusterRefreshScope, tryParseRefreshScope } from '@/core/refresh/scopeSelector';
+import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { compareUtf16Strings } from '@/shared/utils/sort';
 
@@ -202,25 +202,6 @@ export const catalogSortScope = (
     return {};
   }
   return { sort: key, sortDirection: direction };
-};
-
-export const acceptsCatalogSnapshotScope = (
-  scope: string | undefined,
-  fallbackScope: string,
-  pinnedNamespaces: string[]
-): boolean => {
-  if (pinnedNamespaces.length === 0) {
-    return true;
-  }
-  const incomingScopeParams = new URLSearchParams(
-    tryParseRefreshScope('catalog', scope ?? fallbackScope)?.query ?? ''
-  );
-  const incomingNamespaces = incomingScopeParams.getAll('namespace').sort(compareUtf16Strings);
-  const expectedNamespaces = pinnedNamespaces.slice().sort(compareUtf16Strings);
-  return (
-    incomingNamespaces.length === expectedNamespaces.length &&
-    incomingNamespaces.every((ns, index) => ns === expectedNamespaces[index])
-  );
 };
 
 export const applyCatalogBaseline = (

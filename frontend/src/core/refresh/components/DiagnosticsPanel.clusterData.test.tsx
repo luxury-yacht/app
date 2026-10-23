@@ -325,9 +325,9 @@ describe('DiagnosticsPanel Cluster Data', () => {
     );
   });
 
-  // The backend reports telemetry per (domain, cluster, scope); Browse's page
-  // query and its metadata query share a domain and a stream, so each row
-  // must carry its own scope's figures.
+  // The backend reports telemetry per (domain, cluster, scope); Browse's live
+  // catalog scope and its metadata query share a domain, so each row must
+  // carry its own scope's figures.
   it('joins the backend’s snapshot telemetry onto the row of exactly that scope', async () => {
     app.snapshots.answer(({ domain, scope }) =>
       domain === 'catalog' && scope.includes('resourceScope=')
@@ -348,10 +348,7 @@ describe('DiagnosticsPanel Cluster Data', () => {
       browseScopes.find((scope) => scope.startsWith(`${dev.clusterId}|limit=1&`)),
       'expected Browse’s metadata query'
     );
-    const pageScope = requireValue(
-      browseScopes.find((scope) => scope !== metadataScope),
-      'expected Browse’s page query'
-    );
+    const liveScope = buildClusterRefreshScope('catalog', dev.clusterId);
     const namespacesScope = buildClusterRefreshScope('namespaces', dev.clusterId);
     app.snapshots.telemetry(
       makeTelemetrySummary({
@@ -359,9 +356,9 @@ describe('DiagnosticsPanel Cluster Data', () => {
           {
             domain: 'catalog',
             clusterId: dev.clusterId,
-            scope: pageScope,
+            scope: liveScope,
             lastStatus: 'error',
-            lastError: 'page query failed',
+            lastError: 'catalog read failed',
             lastDurationMs: 10,
             lastUpdated: Date.now(),
             successCount: 2,
@@ -395,13 +392,13 @@ describe('DiagnosticsPanel Cluster Data', () => {
 
     await openClusterData();
 
-    const page = rowOf('Browse Catalog', pageScope);
+    const live = rowOf('Browse Catalog', liveScope);
     const metadata = rowOf('Browse Catalog', metadataScope);
-    expect(page.activity).toBe('2✓ 1✗ 10 ms');
-    expect(page.error).toContain('page query failed');
+    expect(live.activity).toBe('2✓ 1✗ 10 ms');
+    expect(live.error).toContain('catalog read failed');
     expect(metadata.activity).toBe('7✓ 0✗ 20 ms');
-    expect(metadata.error).not.toContain('page query failed');
-    expect((await detailsOf(page)).Role).toBe('Page Query');
+    expect(metadata.error).not.toContain('catalog read failed');
+    expect((await detailsOf(live)).Role).toBe('Live Scope');
     expect((await detailsOf(metadata)).Role).toBe('Metadata');
     expect((await detailsOf(rowOf('Namespaces', namespacesScope)))['Sync wait']).toBe('1500 ms');
   });
