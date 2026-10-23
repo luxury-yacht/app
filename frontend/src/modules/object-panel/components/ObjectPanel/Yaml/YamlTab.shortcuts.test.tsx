@@ -154,6 +154,35 @@ const nextFrame = () =>
     await new Promise((resolve) => window.requestAnimationFrame(resolve));
   });
 
+/**
+ * Holds animation frames until `flush` runs them, as a busy render delays the
+ * frame the tab focuses its editor on past the user's next input.
+ */
+const holdFrames = () => {
+  const frames = new Map<number, FrameRequestCallback>();
+  let nextId = 0;
+  const request = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+    nextId += 1;
+    frames.set(nextId, callback);
+    return nextId;
+  });
+  const cancel = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((id) => {
+    frames.delete(id);
+  });
+  return {
+    flush: () =>
+      act(async () => {
+        request.mockRestore();
+        cancel.mockRestore();
+        const held = [...frames.values()];
+        frames.clear();
+        for (const callback of held) {
+          callback(performance.now());
+        }
+      }),
+  };
+};
+
 const press = async (key: string, modifiers: KeyboardEventInit = {}) => {
   const target = document.activeElement ?? document.body;
   await act(async () => {
@@ -266,6 +295,38 @@ describe('YamlTab shortcuts', () => {
 
     expect(document.activeElement).toBe(search);
     expect(search.value).toBe('apiVersion');
+  });
+
+  it('keeps focus in the search when the tab’s editor focus lands after the shortcut', async () => {
+    await renderYamlTab();
+    const search = requireValue(
+      view.container.querySelector<HTMLInputElement>('.find-input'),
+      'expected the find input'
+    );
+    await view.show(tab(false));
+    const frames = holdFrames();
+
+    await view.show(tab(true));
+    await press('f', searchModifiers());
+    await frames.flush();
+
+    expect(document.activeElement).toBe(search);
+  });
+
+  it('does not focus the editor of a tab the user left before its focus landed', async () => {
+    await renderYamlTab();
+    await view.show(tab(false));
+    const elsewhere = document.body.appendChild(document.createElement('button'));
+    elsewhere.focus();
+    const frames = holdFrames();
+
+    await view.show(tab(true));
+    // The user moves on to another panel tab within the same frame.
+    await view.show(tab(false));
+    await frames.flush();
+
+    expect(document.activeElement).toBe(elsewhere);
+    elsewhere.remove();
   });
 
   it('copies the read-only editor selection from the Edit menu', async () => {

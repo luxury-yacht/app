@@ -27,6 +27,8 @@ export interface DriftField {
   started?: string;
   now?: string;
   draft?: string;
+  /** The draft changed the field from its value when editing began. */
+  edited: boolean;
   /** The draft changed the field too, to a value other than the live one. */
   conflict: boolean;
 }
@@ -135,6 +137,7 @@ export const compareDriftFields = ({
       return [];
     }
     const mine = draft?.get(key);
+    const edited = Boolean(draft) && !sameValue(mine, before);
     const path = (after ?? before)?.path ?? [];
     return [
       {
@@ -144,10 +147,39 @@ export const compareDriftFields = ({
         started: display(before),
         now: display(after),
         draft: draft ? display(mine) : undefined,
-        conflict: Boolean(draft) && !sameValue(mine, before) && !sameValue(mine, after),
+        edited,
+        conflict: edited && !sameValue(mine, after),
       },
     ];
   });
+};
+
+// Shorter shared prefixes are left whole: eliding them saves little width.
+const MIN_ELIDED_PREFIX = 12;
+
+const commonPrefix = (values: string[]): string =>
+  values.reduce((prefix, value) => {
+    let length = 0;
+    while (length < prefix.length && prefix[length] === value[length]) {
+      length += 1;
+    }
+    return prefix.slice(0, length);
+  });
+
+/**
+ * Display forms of one field's values side by side. A long path prefix they
+ * all share, up to its last "/", is shown as "…", so the part that differs,
+ * such as an image tag, stays visible in a narrow panel.
+ */
+export const compactDriftValues = (
+  values: ReadonlyArray<string | undefined>
+): Array<string | undefined> => {
+  const present = values.filter((value): value is string => value !== undefined);
+  const cut = present.length < 2 ? 0 : commonPrefix(present).lastIndexOf('/') + 1;
+  if (cut < MIN_ELIDED_PREFIX) {
+    return [...values];
+  }
+  return values.map((value) => (value === undefined ? value : `…${value.slice(cut)}`));
 };
 
 type ResolvedStep = { key: string | number; node: unknown } | null;
@@ -187,35 +219,36 @@ const concretePath = (
 };
 
 /**
- * Sets the draft's field at `path` to the live object's value, or removes it
- * where the live object has none ("Use theirs"). The draft's other content is
- * kept; an unparseable draft or a list item the draft no longer has is left
- * unchanged.
+ * Sets `targetYaml`'s field at `path` to `sourceYaml`'s value, or removes it
+ * where the source has none: their value into the draft, your earlier value
+ * back into it, or their value into a merge baseline. The target's other
+ * content is kept; an unparseable document or a list item the target no
+ * longer has leaves the target unchanged.
  */
-export const copyLiveFieldIntoDraft = (
-  draftYaml: string,
-  liveYaml: string,
+export const copyDriftField = (
+  targetYaml: string,
+  sourceYaml: string,
   path: DriftFieldPath
 ): string => {
-  const draft = YAML.parseDocument(draftYaml);
-  const live = YAML.parseDocument(liveYaml);
-  if (draft.errors.length > 0 || live.errors.length > 0) {
-    return draftYaml;
+  const target = YAML.parseDocument(targetYaml);
+  const source = YAML.parseDocument(sourceYaml);
+  if (target.errors.length > 0 || source.errors.length > 0) {
+    return targetYaml;
   }
-  const draftPath = concretePath(draft.toJS(), path, true);
-  if (!draftPath) {
-    return draftYaml;
+  const targetPath = concretePath(target.toJS(), path, true);
+  if (!targetPath) {
+    return targetYaml;
   }
-  const liveRoot: unknown = live.toJS();
-  const livePath = concretePath(liveRoot, path, false);
-  if (livePath) {
-    const value = livePath.reduce<unknown>(
+  const sourceRoot: unknown = source.toJS();
+  const sourcePath = concretePath(sourceRoot, path, false);
+  if (sourcePath) {
+    const value = sourcePath.reduce<unknown>(
       (node, step) => (node as Record<string | number, unknown>)[step],
-      liveRoot
+      sourceRoot
     );
-    draft.setIn(draftPath, draft.createNode(value));
+    target.setIn(targetPath, target.createNode(value));
   } else {
-    draft.deleteIn(draftPath);
+    target.deleteIn(targetPath);
   }
-  return draft.toString(YAML_STRINGIFY_OPTIONS);
+  return target.toString(YAML_STRINGIFY_OPTIONS);
 };

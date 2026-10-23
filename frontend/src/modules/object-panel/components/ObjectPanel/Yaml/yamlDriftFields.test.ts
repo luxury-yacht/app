@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from 'vitest';
 import * as YAML from 'yaml';
-import { compareDriftFields, copyLiveFieldIntoDraft } from './yamlDriftFields';
+import { compactDriftValues, compareDriftFields, copyDriftField } from './yamlDriftFields';
 
 const deployment = ({
   resourceVersion = '1',
@@ -65,13 +65,16 @@ describe('compareDriftFields', () => {
         started: undefined,
         now: 'payments',
         draft: undefined,
+        edited: false,
         conflict: false,
       }),
+      // The draft still holds the original value: you did not edit it.
       expect.objectContaining({
         key: 'spec.replicas',
         started: '3',
         now: '5',
         draft: '3',
+        edited: false,
         conflict: false,
       }),
     ]);
@@ -91,6 +94,7 @@ describe('compareDriftFields', () => {
         started: 'registry.example.com/api:1.4.2',
         now: 'registry.example.com/api:1.4.3',
         draft: 'registry.example.com/api:1.5.0',
+        edited: true,
         conflict: true,
       }),
     ]);
@@ -127,7 +131,7 @@ describe('compareDriftFields', () => {
   });
 });
 
-describe('copyLiveFieldIntoDraft', () => {
+describe('copyDriftField', () => {
   it('sets the draft’s field to the live value, finding containers by name', () => {
     const [field] = compareDriftFields({
       baselineYaml: deployment(),
@@ -136,7 +140,7 @@ describe('copyLiveFieldIntoDraft', () => {
     });
 
     const draft = YAML.parse(
-      copyLiveFieldIntoDraft(
+      copyDriftField(
         deployment({ image: '1.5.0', replicas: 4 }),
         deployment({ image: '1.4.3' }),
         field.path
@@ -159,9 +163,27 @@ describe('copyLiveFieldIntoDraft', () => {
     });
 
     const draft = YAML.parse(
-      copyLiveFieldIntoDraft(deployment({ team: 'billing' }), deployment(), field.path)
+      copyDriftField(deployment({ team: 'billing' }), deployment(), field.path)
     );
 
     expect(draft.metadata.labels).toEqual({ app: 'api' });
+  });
+});
+
+describe('compactDriftValues', () => {
+  // A narrow panel must still show what differs between the values offered.
+  it('elides the path prefix long values share, keeping the parts that differ', () => {
+    expect(
+      compactDriftValues([
+        'registry.example.com/payments/api:1.4.2',
+        'registry.example.com/payments/api:1.4.3',
+        undefined,
+      ])
+    ).toEqual(['…api:1.4.2', '…api:1.4.3', undefined]);
+  });
+
+  it('keeps values that share no long path prefix whole', () => {
+    expect(compactDriftValues(['3', '2', '5'])).toEqual(['3', '2', '5']);
+    expect(compactDriftValues(['nginx:1.25', 'nginx:1.26'])).toEqual(['nginx:1.25', 'nginx:1.26']);
   });
 });

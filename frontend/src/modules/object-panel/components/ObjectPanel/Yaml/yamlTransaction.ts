@@ -18,7 +18,7 @@ import {
   requestRefreshDomain,
   useScopedRefreshDomainLifecycle,
 } from '@/core/data-access';
-import { compareDriftFields, copyLiveFieldIntoDraft, type DriftField } from './yamlDriftFields';
+import { compareDriftFields, copyDriftField, type DriftField } from './yamlDriftFields';
 import { LINT_DEBOUNCE_MS } from './yamlTabConfig';
 import {
   applyResourceVersionToYaml,
@@ -100,16 +100,16 @@ export interface UseYamlTransactionResult {
   objectReplaced: boolean;
   /** Fields someone else changed since editing began, with the draft's values. */
   driftFields: DriftField[];
-  /** Conflicting fields the user chose to keep their own value for. */
-  keptFieldKeys: ReadonlySet<string>;
+  /** The value chosen for each field both sides changed, by field key. */
+  driftChoices: ReadonlyMap<string, DriftChoiceView>;
   /** Why drift keeps Save unavailable, or null. */
   saveBlockedReason: string | null;
-  /** Why Merge into draft is unavailable, or null. */
+  /** Why merging the live changes into the draft is unavailable, or null. */
   mergeBlockedReason: string | null;
-  /** Use theirs: copies the live value of a drifted field into the draft. */
+  /** Copies their value of a field both sides changed into the draft. */
   chooseTheirs: (field: DriftField) => void;
-  /** Keep mine: saving will write the draft's value over theirs. */
-  keepMine: (field: DriftField) => void;
+  /** Keeps your value of a field both sides changed, restoring it after theirs. */
+  chooseYours: (field: DriftField) => void;
   /** Discards the draft and edits the recreated object instead. */
   editNewObject: () => void;
   postApplyNotice: YamlPostApplyNotice | null;
@@ -259,42 +259,87 @@ const driftLiveYamlOf = ({
   return isEditing && (hasRemoteDrift || objectReplaced) ? liveYaml : null;
 };
 
-const fieldList = (fields: DriftField[]): string => fields.map((field) => field.key).join(', ');
+export type DriftChoice = 'theirs' | 'yours';
+
+/** A field's chosen value, and your value to show while theirs is chosen. */
+export type DriftChoiceView = { choice: DriftChoice; yours: string | undefined };
+
+/**
+ * A choice on a field both sides changed, made while their value was `now`.
+ * `yoursDraftYaml` is a draft holding your value, to restore it from.
+ */
+type ConflictChoice = DriftChoiceView & { now: string | undefined; yoursDraftYaml: string };
+
+// A choice holds while their value is unchanged and the draft still matches
+// it: theirs while the draft has their value, yours while it has another.
+const choiceOf = (
+  field: DriftField,
+  choices: ReadonlyMap<string, ConflictChoice>
+): ConflictChoice | null => {
+  const recorded = choices.get(field.key);
+  if (!recorded || recorded.now !== field.now) {
+    return null;
+  }
+  return (recorded.choice === 'yours') === field.conflict ? recorded : null;
+};
+
+// Records `choice` on `field`. While the field is a conflict the draft holds
+// your value; once theirs is in the draft, the earlier record still does.
+const withChoice = (
+  choices: ReadonlyMap<string, ConflictChoice>,
+  field: DriftField,
+  choice: DriftChoice,
+  draftYaml: string
+): ReadonlyMap<string, ConflictChoice> => {
+  const recorded = choices.get(field.key);
+  const held =
+    field.conflict || !recorded
+      ? { yours: field.draft, yoursDraftYaml: draftYaml }
+      : { yours: recorded.yours, yoursDraftYaml: recorded.yoursDraftYaml };
+  return new Map(choices).set(field.key, { choice, now: field.now, ...held });
+};
+
+const fieldList = (fields: DriftField[]): string => fields.map((field) => field.label).join(', ');
 
 type DriftGates = {
-  keptFieldKeys: ReadonlySet<string>;
+  driftChoices: ReadonlyMap<string, DriftChoiceView>;
+  /** Fields where your value was chosen over theirs. */
+  yoursFields: DriftField[];
   saveBlockedReason: string | null;
   mergeBlockedReason: string | null;
 };
 
-// A conflict blocks Save until the user picks a value. A kept field stays a
-// conflict for the merge, which would stop on it.
+// A field both sides changed blocks Save and Merge until a value is chosen.
 const resolveDriftGates = (
   fields: DriftField[],
-  kept: ReadonlyMap<string, string | undefined>,
+  choices: ReadonlyMap<string, ConflictChoice>,
   objectReplaced: boolean
 ): DriftGates => {
-  const conflicts = fields.filter((field) => field.conflict);
-  const keptConflicts = conflicts.filter(
-    (field) => kept.has(field.key) && kept.get(field.key) === field.now
-  );
-  const undecided = conflicts.filter((field) => !keptConflicts.includes(field));
-  let saveBlockedReason: string | null = null;
-  if (objectReplaced) {
-    saveBlockedReason = 'The object was recreated, so this draft cannot be saved to it.';
-  } else if (undecided.length > 0) {
-    saveBlockedReason = `Choose Use theirs or Keep mine for ${fieldList(undecided)}.`;
+  const driftChoices = new Map<string, DriftChoiceView>();
+  const undecided: DriftField[] = [];
+  const yoursFields: DriftField[] = [];
+  for (const field of fields) {
+    const chosen = choiceOf(field, choices);
+    if (chosen) {
+      driftChoices.set(field.key, { choice: chosen.choice, yours: chosen.yours });
+    } else if (field.conflict) {
+      undecided.push(field);
+    }
+    if (chosen?.choice === 'yours') {
+      yoursFields.push(field);
+    }
   }
-  let mergeBlockedReason: string | null = null;
-  if (undecided.length > 0) {
-    mergeBlockedReason = `Choose a value for ${fieldList(undecided)} first.`;
-  } else if (keptConflicts.length > 0) {
-    mergeBlockedReason = `Merging would stop on the field you keep: ${fieldList(keptConflicts)}.`;
-  }
+  const choiceNeeded =
+    undecided.length > 0
+      ? `You both changed ${fieldList(undecided)}. Choose which value to keep.`
+      : null;
   return {
-    keptFieldKeys: new Set(keptConflicts.map((field) => field.key)),
-    saveBlockedReason,
-    mergeBlockedReason,
+    driftChoices,
+    yoursFields,
+    saveBlockedReason: objectReplaced
+      ? 'The object was recreated, so this draft cannot be saved to it.'
+      : choiceNeeded,
+    mergeBlockedReason: choiceNeeded,
   };
 };
 
@@ -613,8 +658,8 @@ export const useYamlTransaction = ({
   const [driftForced, setDriftForced] = useState(false);
   const [backendDriftCurrentYaml, setBackendDriftCurrentYaml] = useState<string | null>(null);
   const [replacedByConflict, setReplacedByConflict] = useState(false);
-  // Keep-mine choices: field key -> the live value the user kept theirs over.
-  const [keptFields, setKeptFields] = useState<ReadonlyMap<string, string | undefined>>(
+  // Choices on fields both sides changed, by field key.
+  const [conflictChoices, setConflictChoices] = useState<ReadonlyMap<string, ConflictChoice>>(
     () => new Map()
   );
   // Set by Edit the new object: edit again once the snapshot is a new object.
@@ -664,9 +709,9 @@ export const useYamlTransaction = ({
         : [],
     [baselineMergeYaml, draftYaml, driftLiveYaml, isEditing]
   );
-  const { keptFieldKeys, saveBlockedReason, mergeBlockedReason } = useMemo(
-    () => resolveDriftGates(driftFields, keptFields, objectReplaced),
-    [driftFields, keptFields, objectReplaced]
+  const { driftChoices, yoursFields, saveBlockedReason, mergeBlockedReason } = useMemo(
+    () => resolveDriftGates(driftFields, conflictChoices, objectReplaced),
+    [driftFields, conflictChoices, objectReplaced]
   );
 
   // The tab keeps watching the object while editing, so a remote change shows
@@ -851,7 +896,7 @@ export const useYamlTransaction = ({
     setDriftForced(false);
     setBackendDriftCurrentYaml(null);
     setReplacedByConflict(false);
-    setKeptFields(new Map());
+    setConflictChoices(new Map());
     setIsSaving(false);
     setHasServerYamlError(false);
     setPendingSnapshotAdoptionYaml(null);
@@ -917,7 +962,7 @@ export const useYamlTransaction = ({
     setDriftForced(false);
     setBackendDriftCurrentYaml(null);
     setReplacedByConflict(false);
-    setKeptFields(new Map());
+    setConflictChoices(new Map());
     setPostApplyNotice(null);
     setPendingSnapshotAdoptionYaml(null);
     setHasServerYamlError(false);
@@ -998,7 +1043,14 @@ export const useYamlTransaction = ({
     try {
       const result = await requestPreparedYamlMerge({
         clusterId: resolvedClusterId,
-        baselineMergeYaml,
+        // A field where yours was chosen starts from their value, so the
+        // merge applies yours instead of stopping on it.
+        baselineMergeYaml: driftLiveYaml
+          ? yoursFields.reduce(
+              (yaml, field) => copyDriftField(yaml, driftLiveYaml, field.path),
+              baselineMergeYaml
+            )
+          : baselineMergeYaml,
         sourceYaml: manualYamlOverride?.yaml ?? yamlContent,
         draftYaml,
         effectiveIdentity,
@@ -1025,7 +1077,7 @@ export const useYamlTransaction = ({
       setDriftForced(false);
       setBackendDriftCurrentYaml(null);
       setReplacedByConflict(false);
-      setKeptFields(new Map());
+      setConflictChoices(new Map());
       setPostApplyNotice(null);
       setVerifiedPostApply(null);
       setPendingSnapshotAdoptionYaml(null);
@@ -1044,6 +1096,7 @@ export const useYamlTransaction = ({
   }, [
     baselineMergeYaml,
     draftYaml,
+    driftLiveYaml,
     effectiveIdentity,
     handleReloadMergeConflict,
     handleReloadMergeError,
@@ -1054,6 +1107,7 @@ export const useYamlTransaction = ({
     resolvedClusterId,
     scope,
     yamlContent,
+    yoursFields,
   ]);
 
   const verifyAppliedYaml = useCallback(
@@ -1240,19 +1294,23 @@ export const useYamlTransaction = ({
       if (!driftLiveYaml) {
         return;
       }
-      setDraftYaml((current) => copyLiveFieldIntoDraft(current, driftLiveYaml, field.path));
-      setKeptFields((current) => {
-        const next = new Map(current);
-        next.delete(field.key);
-        return next;
-      });
+      setConflictChoices((current) => withChoice(current, field, 'theirs', draftYaml));
+      setDraftYaml((current) => copyDriftField(current, driftLiveYaml, field.path));
     },
-    [driftLiveYaml]
+    [draftYaml, driftLiveYaml]
   );
 
-  const keepMine = useCallback((field: DriftField) => {
-    setKeptFields((current) => new Map(current).set(field.key, field.now));
-  }, []);
+  const chooseYours = useCallback(
+    (field: DriftField) => {
+      const recorded = conflictChoices.get(field.key);
+      if (!field.conflict && recorded) {
+        // Theirs is in the draft: put yours back.
+        setDraftYaml((current) => copyDriftField(current, recorded.yoursDraftYaml, field.path));
+      }
+      setConflictChoices((current) => withChoice(current, field, 'yours', draftYaml));
+    },
+    [conflictChoices, draftYaml]
+  );
 
   const editNewObject = useCallback(() => {
     setRestartFrom({ uid: baselineIdentity?.uid ?? null });
@@ -1308,11 +1366,11 @@ export const useYamlTransaction = ({
     backendDriftCurrentYaml,
     objectReplaced,
     driftFields,
-    keptFieldKeys,
+    driftChoices,
     saveBlockedReason,
     mergeBlockedReason,
     chooseTheirs,
-    keepMine,
+    chooseYours,
     editNewObject,
     postApplyNotice,
     dismissPostApplyNotice,

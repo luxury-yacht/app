@@ -453,37 +453,58 @@ const buttonWithText = (text: string) =>
     button.textContent?.includes(text)
   );
 
-/**
- * The drift notice's row for `field`: its value when editing began, now, and in
- * the draft, and whether it is marked as a conflict.
- */
-const driftRow = (field: string) => {
-  const row = Array.from(
+const driftRowElement = (field: string) =>
+  Array.from(
     view.container.querySelectorAll<HTMLTableRowElement>('.yaml-drift-notice tbody tr')
   ).find((candidate) => candidate.cells[0]?.textContent?.startsWith(field));
-  return (
-    row && {
-      values: Array.from(row.cells)
-        .slice(1, 4)
-        .map((cell) => cell.textContent?.trim()),
-      conflict: Boolean(row.querySelector('.status-chip')),
-    }
-  );
+
+// The drift table's columns: field, before, theirs, yours.
+const THEIRS_CELL = 2;
+const YOURS_CELL = 3;
+
+const rowOption = (row: HTMLTableRowElement, cell: number) =>
+  row.cells[cell]?.querySelector<HTMLInputElement>('input[type="radio"]') ?? null;
+
+/**
+ * The drift notice's row for `field`: its value when editing began, theirs, and
+ * yours, and the choice the row offers: undefined when it needs none, null
+ * while undecided, or the option that is checked.
+ */
+const driftRow = (field: string) => {
+  const row = driftRowElement(field);
+  if (!row) {
+    return undefined;
+  }
+  const theirs = rowOption(row, THEIRS_CELL);
+  const yours = rowOption(row, YOURS_CELL);
+  let choice: 'theirs' | 'yours' | null | undefined;
+  if (theirs && yours) {
+    choice = theirs.checked ? 'theirs' : yours.checked ? 'yours' : null;
+  }
+  return {
+    values: Array.from(row.cells)
+      .slice(1, 4)
+      .map((cell) => cell.textContent?.trim()),
+    choice,
+  };
 };
 
-/** Clicks `text` on the choice line for the conflicting `field`. */
-const clickRowButton = async (field: string, text: string) => {
-  const line = Array.from(view.container.querySelectorAll('.yaml-drift-notice-conflict')).find(
-    (candidate) => candidate.textContent?.startsWith(field)
+/** Picks theirs or yours in the conflicting `field`'s row. */
+const chooseInRow = async (field: string, choice: 'theirs' | 'yours') => {
+  const row = requireValue(driftRowElement(field), `expected the ${field} row`);
+  const option = requireValue(
+    rowOption(row, choice === 'theirs' ? THEIRS_CELL : YOURS_CELL),
+    `expected the ${choice} option on ${field}`
   );
-  const button = requireValue(
-    Array.from(line?.querySelectorAll('button') ?? []).find((candidate) =>
-      candidate.textContent?.includes(text)
-    ),
-    `expected the ${text} button on ${field}`
-  );
-  await activate(() => button.click());
+  await activate(() => option.click());
 };
+
+/** The text of the elements that describe `element` to assistive technology. */
+const describedText = (element: Element) =>
+  (element.getAttribute('aria-describedby') ?? '')
+    .split(' ')
+    .map((id) => document.getElementById(id)?.textContent ?? '')
+    .join(' ');
 
 /**
  * Serves `yaml` as the object's live YAML and lets the tab's next poll read it
@@ -929,16 +950,30 @@ describe('YamlTab', () => {
     // The other client's change is listed field by field, next to the draft's value.
     expect(driftRow('spec.restartPolicy')).toEqual({
       values: ['—', 'Always', '—'],
-      conflict: false,
+      choice: undefined,
     });
-    // Both sides changed the image to the same value: no conflict.
-    expect(driftRow('containers[demo].image')?.conflict).toBe(false);
-    expect(buttonWithText('Merge into draft')?.disabled).toBe(false);
+    // Both sides changed the image to the same value: no choice to make.
+    expect(driftRow('containers[demo].image')?.choice).toBeUndefined();
+    expect(buttonWithText('Merge changes and continue editing')?.disabled).toBe(false);
     expect(getIconButton('Save YAML')?.disabled).toBe(false);
 
     await save();
 
     expect(applyCalls()).toHaveLength(1);
+  });
+
+  it('shows no value of yours for a field changed externally that you did not edit', async () => {
+    vi.useFakeTimers();
+    await renderYamlTab();
+    // Editing begins, but the draft keeps the original image.
+    await editTo(YAML);
+
+    await pollLiveYaml(LATER_MUTATED_YAML);
+
+    expect(driftRow('containers[demo].image')).toEqual({
+      values: ['demo:v1', 'demo:v2', '—'],
+      choice: undefined,
+    });
   });
 
   it('does not flag status churn on the live object while editing', async () => {
@@ -950,10 +985,10 @@ describe('YamlTab', () => {
     await pollLiveYaml(`${YAML.replace('"123"', '"124"')}\nstatus:\n  phase: Running`);
 
     expect(container.querySelector('.yaml-drift-notice')).toBeNull();
-    expect(buttonWithText('Merge into draft')).toBeUndefined();
+    expect(buttonWithText('Merge changes and continue editing')).toBeUndefined();
   });
 
-  it('asks for a choice on a field both sides changed, and uses theirs in the draft', async () => {
+  it('asks for a choice in the row of a field both sides changed, and lets it be changed back', async () => {
     vi.useFakeTimers();
     await renderYamlTab();
     await editTo(UPDATED_YAML.replace('image: demo:v2', 'image: demo:v3'));
@@ -963,20 +998,61 @@ describe('YamlTab', () => {
 
     expect(driftRow('containers[demo].image')).toEqual({
       values: ['demo:v1', 'demo:v2', 'demo:v3'],
-      conflict: true,
+      choice: null,
     });
     expect(getIconButton('Save YAML')?.disabled).toBe(true);
-    expect(buttonWithText('Merge into draft')?.disabled).toBe(true);
+    // The merge waits for the choice.
+    const merge = requireValue(
+      buttonWithText('Select values to keep'),
+      'expected the merge button waiting for a choice'
+    );
+    expect(merge.disabled).toBe(true);
+    // The reason is on screen, not only in a tooltip, and names the field.
+    expect(describedText(merge)).toContain('containers[demo].image');
 
-    await clickRowButton('containers[demo].image', 'Use theirs');
+    await chooseInRow('containers[demo].image', 'theirs');
 
     expect(parseYaml(codeMirrorState.value).spec.containers[0].image).toBe('demo:v2');
-    expect(driftRow('containers[demo].image')?.conflict).toBe(false);
+    // Your value stays on offer.
+    expect(driftRow('containers[demo].image')).toEqual({
+      values: ['demo:v1', 'demo:v2', 'demo:v3'],
+      choice: 'theirs',
+    });
     expect(getIconButton('Save YAML')?.disabled).toBe(false);
-    expect(buttonWithText('Merge into draft')?.disabled).toBe(false);
+    expect(buttonWithText('Merge changes and continue editing')?.disabled).toBe(false);
+
+    await chooseInRow('containers[demo].image', 'yours');
+
+    expect(parseYaml(codeMirrorState.value).spec.containers[0].image).toBe('demo:v3');
+    expect(driftRow('containers[demo].image')?.choice).toBe('yours');
   });
 
-  it('saves your value over theirs once you keep it, but merges nothing', async () => {
+  it('merges their other changes while keeping your value for a field you chose', async () => {
+    vi.useFakeTimers();
+    app.backend.answer('MergeObjectYamlWithLatest', () => ({
+      currentYAML: LATER_MUTATED_YAML,
+      mergedYAML: LATER_MUTATED_YAML.replace('image: demo:v2', 'image: demo:v3'),
+      resourceVersion: '790',
+    }));
+    await renderYamlTab();
+    await editTo(UPDATED_YAML.replace('image: demo:v2', 'image: demo:v3'));
+    await pollLiveYaml(LATER_MUTATED_YAML);
+
+    await chooseInRow('containers[demo].image', 'yours');
+    await clickText('Merge changes and continue editing');
+
+    // The merge applies only the draft's edits from its baseline
+    // (backend/object_yaml_reload_merge.go), so the baseline carries their
+    // value for the field and the draft carries yours.
+    const [, request] = requireValue(
+      app.backend.calls('MergeObjectYamlWithLatest')[0],
+      'expected the merge call'
+    );
+    expect(parseYaml(request.baseYAML).spec.containers[0].image).toBe('demo:v2');
+    expect(parseYaml(request.draftYAML).spec.containers[0].image).toBe('demo:v3');
+  });
+
+  it('saves your value over theirs once you choose it', async () => {
     vi.useFakeTimers();
     answerApply('791');
     answerLiveYaml(LATER_MUTATED_YAML);
@@ -985,11 +1061,9 @@ describe('YamlTab', () => {
     await editTo(draft);
     await pollLiveYaml(LATER_MUTATED_YAML);
 
-    await clickRowButton('containers[demo].image', 'Keep mine');
+    await chooseInRow('containers[demo].image', 'yours');
 
     expect(codeMirrorState.value).toBe(draft);
-    // The merge would stop on the kept field.
-    expect(buttonWithText('Merge into draft')?.disabled).toBe(true);
     expect(getIconButton('Save YAML')?.disabled).toBe(false);
 
     await save();
@@ -1041,7 +1115,7 @@ describe('YamlTab', () => {
     expect(container.querySelector('.yaml-drift-notice')).not.toBeNull();
     // backend/object_yaml_reload_merge.go refuses to merge into a replaced object,
     // and the save would be refused too.
-    expect(buttonWithText('Merge into draft')).toBeUndefined();
+    expect(buttonWithText('Merge changes and continue editing')).toBeUndefined();
     expect(getIconButton('Save YAML')?.disabled).toBe(true);
 
     await clickText('Copy draft');
@@ -1078,7 +1152,7 @@ describe('YamlTab', () => {
         serveYaml(current);
       }
 
-      await clickText('Merge into draft');
+      await clickText('Merge changes and continue editing');
 
       expect(app.backend.calls('MergeObjectYamlWithLatest')).toHaveLength(1);
       const [clusterId, request] = requireValue(
@@ -1261,7 +1335,7 @@ describe('YamlTab', () => {
     expect(app.backend.calls('GetObjectYAMLByGVK')).toEqual([]);
     expect(driftRow('spec.restartPolicy')?.values).toEqual(['—', 'Always', '—']);
     expect(buttonWithText('Copy draft')).toBeDefined();
-    expect(buttonWithText('Merge into draft')).toBeUndefined();
+    expect(buttonWithText('Merge changes and continue editing')).toBeUndefined();
     expect(getIconButton('Save YAML')?.disabled).toBe(true);
   });
 
@@ -1282,7 +1356,7 @@ describe('YamlTab', () => {
     await editTo(UPDATED_YAML);
     await openObjectDiffReading(LATER_MUTATED_YAML);
 
-    await clickText('Merge into draft');
+    await clickText('Merge changes and continue editing');
 
     expect(container.textContent).toContain('conflicting live changes');
     expect(container.textContent).toContain('spec.containers');
@@ -1296,7 +1370,7 @@ describe('YamlTab', () => {
     await editTo(UPDATED_YAML);
     await openObjectDiffReading(LATER_MUTATED_YAML);
 
-    await clickText('Merge into draft');
+    await clickText('Merge changes and continue editing');
 
     expect(container.textContent).toContain('merge backend unavailable');
     expect(takeReports('reloadAndMerge')).toEqual([['inline']]);

@@ -16,13 +16,12 @@ import { WrapTextIcon } from '@shared/components/icons/LogIcons';
 import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
-import { StatusChip } from '@shared/components/StatusChip';
 import { YamlEditor, type YamlEditorHandle } from '@shared/components/yaml';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { useShortcut } from '@ui/shortcuts';
 import { errorHandler } from '@utils/errorHandler';
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import * as YAML from 'yaml';
 import { usePanelLifecycleGuard } from '@/core/panel-windows/panelLifecycleGuards';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
@@ -36,13 +35,18 @@ import {
   YamlSaveIcon,
 } from '@shared/components/icons/YamlIcons';
 import { failureMessage } from '@/core/refresh/refreshFailure';
-import type { DriftField } from './yamlDriftFields';
+import { compactDriftValues, type DriftField } from './yamlDriftFields';
 import { resolveProtectedYamlRanges } from './yamlFieldPolicy';
 import { getYamlPanelBlockReason } from './yamlPanelGuard';
 import { INACTIVE_SCOPE, LARGE_MANIFEST_THRESHOLD, YAML_STRINGIFY_OPTIONS } from './yamlTabConfig';
 import type { YamlTabProps } from './yamlTabTypes';
 import { prepareDraftYaml } from './yamlTabUtils';
-import { useYamlTransaction, type YamlTransactionDiffResult } from './yamlTransaction';
+import {
+  type DriftChoice,
+  type DriftChoiceView,
+  useYamlTransaction,
+  type YamlTransactionDiffResult,
+} from './yamlTransaction';
 
 const buildYamlDiffView = (
   diff: YamlTransactionDiffResult | null,
@@ -300,7 +304,7 @@ type YamlNoticeDiffProps = {
 
 /**
  * Why the draft is shown against a newer live object: someone else changed it,
- * it was deleted and recreated, or Merge into draft stopped on a field.
+ * it was deleted and recreated, or the merge stopped on a field.
  */
 type YamlDriftNoticeKind = 'changed' | 'replaced' | 'unmerged';
 
@@ -314,85 +318,155 @@ const driftHeadline = (kind: YamlDriftNoticeKind, saveFailed: boolean): string =
       : 'This object was deleted and recreated.';
   }
   return kind === 'unmerged'
-    ? 'Merge into draft stopped on a field both versions changed.'
-    : 'Someone else changed this object while you were editing.';
+    ? 'The merge stopped on a field both versions changed.'
+    : 'This object was modified while you were editing.';
 };
 
 type YamlDriftChoiceProps = {
   isSaving: boolean;
+  choices: ReadonlyMap<string, DriftChoiceView>;
   onChooseTheirs: (field: DriftField) => void;
-  onKeepMine: (field: DriftField) => void;
+  onChooseYours: (field: DriftField) => void;
 };
 
-// One line per conflict, under the table, so the choice stays visible however
-// wide the values make the table.
-const DriftConflictChoice = ({
-  field,
-  kept,
-  isSaving,
-  onChooseTheirs,
-  onKeepMine,
-}: YamlDriftChoiceProps & { field: DriftField; kept: boolean }) => (
-  <div className="yaml-drift-notice-conflict">
-    <span className="yaml-drift-notice-conflict-field" title={field.key}>
-      {field.label}
-    </span>
-    <button
-      type="button"
-      className="button generic"
-      disabled={isSaving}
-      onClick={() => onChooseTheirs(field)}
-    >
-      Use theirs
-    </button>
-    {kept ? (
-      <span className="yaml-drift-notice-kept">Keeping yours</span>
-    ) : (
-      <button
-        type="button"
-        className="button generic"
-        disabled={isSaving}
-        onClick={() => onKeepMine(field)}
-      >
-        Keep mine
-      </button>
-    )}
-  </div>
-);
+type DriftOption = {
+  group: string;
+  checked: boolean;
+  disabled: boolean;
+  label: string;
+  onChoose: () => void;
+};
 
-const DriftFieldTable = ({ fields }: { fields: DriftField[] }) => (
-  <div className="yaml-drift-notice-table">
-    <table className="confirmation-modal-details-table">
-      <thead>
-        <tr>
-          <th>Field</th>
-          <th>When you started</th>
-          <th>Now</th>
-          <th>Your draft</th>
-        </tr>
-      </thead>
-      <tbody>
-        {fields.map((field) => (
-          <tr key={field.key}>
-            <td className="monospace" title={field.key}>
-              {field.label}{' '}
-              {!!field.conflict && <StatusChip variant="warning">Conflict</StatusChip>}
-            </td>
-            <td className="monospace">{field.started ?? ABSENT_VALUE}</td>
-            <td className="monospace">{field.now ?? ABSENT_VALUE}</td>
-            <td className="monospace yaml-drift-notice-mine">{field.draft ?? ABSENT_VALUE}</td>
+// A value cell; on a field both sides changed it is also that value's option.
+// `shown` may be shortened; the full value is the tooltip.
+const DriftValueCell = ({
+  value,
+  shown,
+  option,
+  className = 'monospace',
+}: {
+  value: string | undefined;
+  shown: string | undefined;
+  option: DriftOption | null;
+  className?: string;
+}) => {
+  const text = (
+    <span className="yaml-drift-notice-value" title={value}>
+      {shown ?? ABSENT_VALUE}
+    </span>
+  );
+  return (
+    <td className={className}>
+      {option ? (
+        <label className="yaml-drift-notice-option">
+          <input
+            type="radio"
+            name={option.group}
+            checked={option.checked}
+            disabled={option.disabled}
+            aria-label={option.label}
+            onChange={option.onChoose}
+          />
+          {text}
+        </label>
+      ) : (
+        text
+      )}
+    </td>
+  );
+};
+
+type DriftTableProps = YamlDriftChoiceProps & {
+  /** False for a replaced object, whose draft cannot be saved to it. */
+  choosable: boolean;
+};
+
+const DriftFieldRow = ({
+  field,
+  group,
+  choosable,
+  isSaving,
+  choices,
+  onChooseTheirs,
+  onChooseYours,
+}: DriftTableProps & { field: DriftField; group: string }) => {
+  const chosen = choices.get(field.key);
+  // With the external edit in the draft, yours is the value it replaced. A
+  // field you did not edit shows no value of yours.
+  let yours = field.edited ? field.draft : undefined;
+  if (chosen?.choice === 'theirs') {
+    yours = chosen.yours;
+  }
+  const offersChoice = choosable && (field.conflict || !!chosen);
+  const [startedShown, nowShown, yoursShown] = compactDriftValues([
+    field.started,
+    field.now,
+    yours,
+  ]);
+  const option = (choice: DriftChoice, value: string | undefined, onChoose: () => void) =>
+    offersChoice
+      ? {
+          group,
+          checked: chosen?.choice === choice,
+          disabled: isSaving,
+          label: `${choice === 'theirs' ? 'Use the external edit' : 'Keep your edit'} for ${field.key}: ${value ?? 'absent'}`,
+          onChoose,
+        }
+      : null;
+  return (
+    <tr className={offersChoice ? 'yaml-drift-notice-choice-row' : undefined}>
+      <td className="monospace yaml-drift-notice-field" title={field.key}>
+        {field.label}
+      </td>
+      <DriftValueCell value={field.started} shown={startedShown} option={null} />
+      <DriftValueCell
+        value={field.now}
+        shown={nowShown}
+        option={option('theirs', field.now, () => onChooseTheirs(field))}
+      />
+      <DriftValueCell
+        value={yours}
+        shown={yoursShown}
+        className="monospace yaml-drift-notice-mine"
+        option={option('yours', yours, () => onChooseYours(field))}
+      />
+    </tr>
+  );
+};
+
+// Choices sit in their field's row: pick the external edit or your edit.
+const DriftFieldTable = ({ fields, ...rowProps }: DriftTableProps & { fields: DriftField[] }) => {
+  const groupPrefix = useId();
+  return (
+    <div className="yaml-drift-notice-table">
+      <table className="confirmation-modal-details-table">
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Original Value</th>
+            <th>External Edit</th>
+            <th>Your Edit</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-);
+        </thead>
+        <tbody>
+          {fields.map((field) => (
+            <DriftFieldRow
+              key={field.key}
+              field={field}
+              group={`${groupPrefix}-${field.key}`}
+              {...rowProps}
+            />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
 
 type YamlDriftNoticeProps = YamlDriftChoiceProps & {
   kind: YamlDriftNoticeKind | null;
   saveFailed: boolean;
   fields: DriftField[];
-  keptFieldKeys: ReadonlySet<string>;
   mergeBlockedReason: string | null;
   onMerge: () => void;
   onDiscard: () => void;
@@ -404,6 +478,7 @@ const DriftNoticeActions = ({
   replaced,
   isSaving,
   mergeBlockedReason,
+  reasonId,
   onMerge,
   onDiscard,
   onCopyDraft,
@@ -411,7 +486,7 @@ const DriftNoticeActions = ({
 }: Pick<
   YamlDriftNoticeProps,
   'isSaving' | 'mergeBlockedReason' | 'onMerge' | 'onDiscard' | 'onCopyDraft' | 'onEditNewObject'
-> & { replaced: boolean }) => (
+> & { replaced: boolean; reasonId: string }) => (
   <div className="yaml-drift-notice-actions">
     {replaced ? (
       <>
@@ -425,16 +500,16 @@ const DriftNoticeActions = ({
     ) : (
       <>
         <button type="button" className="button generic" disabled={isSaving} onClick={onDiscard}>
-          Discard my draft
+          Cancel edit
         </button>
         <button
           type="button"
           className="button action"
           disabled={isSaving || Boolean(mergeBlockedReason)}
-          title={mergeBlockedReason ?? undefined}
+          aria-describedby={mergeBlockedReason ? reasonId : undefined}
           onClick={onMerge}
         >
-          Merge into draft
+          {mergeBlockedReason ? 'Select values to keep' : 'Merge changes and continue editing'}
         </button>
       </>
     )}
@@ -446,13 +521,15 @@ const YamlDriftNotice = ({
   kind,
   saveFailed,
   fields,
-  keptFieldKeys,
+  choices,
   isSaving,
   onChooseTheirs,
-  onKeepMine,
+  onChooseYours,
+  mergeBlockedReason,
   ...actions
 }: YamlDriftNoticeProps) => {
   const [showAll, setShowAll] = useState(false);
+  const reasonId = useId();
   if (!kind) {
     return null;
   }
@@ -467,7 +544,21 @@ const YamlDriftNotice = ({
           edit the new object.
         </p>
       )}
-      {visibleFields.length > 0 && <DriftFieldTable fields={visibleFields} />}
+      {!replaced && !!mergeBlockedReason && (
+        <p className="yaml-drift-notice-sub" id={reasonId}>
+          {mergeBlockedReason}
+        </p>
+      )}
+      {visibleFields.length > 0 && (
+        <DriftFieldTable
+          fields={visibleFields}
+          choosable={!replaced}
+          choices={choices}
+          isSaving={isSaving}
+          onChooseTheirs={onChooseTheirs}
+          onChooseYours={onChooseYours}
+        />
+      )}
       {fields.length > DRIFT_ROW_LIMIT && (
         <button
           type="button"
@@ -477,20 +568,13 @@ const YamlDriftNotice = ({
           {showAll ? 'Show fewer' : `Show all ${fields.length}`}
         </button>
       )}
-      {!replaced &&
-        fields
-          .filter((field) => field.conflict)
-          .map((field) => (
-            <DriftConflictChoice
-              key={field.key}
-              field={field}
-              kept={keptFieldKeys.has(field.key)}
-              isSaving={isSaving}
-              onChooseTheirs={onChooseTheirs}
-              onKeepMine={onKeepMine}
-            />
-          ))}
-      <DriftNoticeActions replaced={replaced} isSaving={isSaving} {...actions} />
+      <DriftNoticeActions
+        replaced={replaced}
+        isSaving={isSaving}
+        mergeBlockedReason={mergeBlockedReason}
+        reasonId={reasonId}
+        {...actions}
+      />
     </div>
   );
 };
@@ -789,11 +873,11 @@ const YamlTab: React.FC<YamlTabProps> = ({
     backendDriftCurrentYaml,
     objectReplaced,
     driftFields,
-    keptFieldKeys,
+    driftChoices,
     saveBlockedReason,
     mergeBlockedReason,
     chooseTheirs,
-    keepMine,
+    chooseYours,
     editNewObject,
     postApplyNotice,
     dismissPostApplyNotice,
@@ -905,8 +989,18 @@ const YamlTab: React.FC<YamlTabProps> = ({
       return;
     }
     // Focus the editor in read mode too: clipboard and select-all shortcuts
-    // route to the surface that contains the focused element.
-    window.requestAnimationFrame(() => yamlEditorRef.current?.focus());
+    // route to the surface that contains the focused element. The focus waits
+    // a frame, which a busy render can delay past the user's next input; a
+    // focus the user moved meanwhile (the search shortcut) wins. Focus that
+    // fell back to the body, because its element was removed, does not count.
+    const focusedBefore = document.activeElement;
+    const frame = window.requestAnimationFrame(() => {
+      const focused = document.activeElement;
+      if (focused === focusedBefore || focused === document.body) {
+        yamlEditorRef.current?.focus();
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [isActive, isEditing]);
 
   useShortcut({
@@ -1008,11 +1102,11 @@ const YamlTab: React.FC<YamlTabProps> = ({
           kind={yamlView.driftNotice}
           saveFailed={hasServerYamlError}
           fields={driftFields}
-          keptFieldKeys={keptFieldKeys}
+          choices={driftChoices}
           isSaving={isSaving}
           mergeBlockedReason={mergeBlockedReason}
           onChooseTheirs={chooseTheirs}
-          onKeepMine={keepMine}
+          onChooseYours={chooseYours}
           onMerge={handleReloadAndMerge}
           onDiscard={handleCancelClick}
           onCopyDraft={handleCopyDraft}

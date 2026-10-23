@@ -54,23 +54,34 @@ backend and object panel. Editor mechanics: [YAML editor](../frontend/yaml-edito
      managedFields, and the other server-managed fields are ignored, so
      controller churn is not drift.
    - A drifted object shows a field table (`yamlDriftFields.ts`): each field
-     someone else changed, with its value when editing began, now, and in the
-     draft. Named list items are keyed by name.
-   - A conflict is a field the draft also changed, to a different value.
-     - Use theirs copies the live value into the draft; Keep mine keeps the
-       draft's.
-     - Save waits until every conflict has a choice. A kept choice lasts only
-       while the live value is unchanged.
-   - Merge into draft is Reload & Merge, which never writes. It applies the
-     draft's own edits (the two-way baseline → draft patch, the same family
-     Save sends) to the live object, so a field only someone else changed
-     keeps its live value.
+     changed outside the editor, with its Original Value (when editing
+     began), External Edit (live), and Your Edit (the draft's value, or a
+     dash where the draft still holds the original value). Named list items
+     are keyed by name. A long path prefix shared by a row's values
+     is shown as "…", so the part that differs (an image tag) stays visible
+     in a docked panel.
+   - A conflict is a field the draft also changed, to a different value. Its
+     row offers the external edit and your edit as a radio pair.
+     - The external edit copies the live value into the draft. Your edit
+       keeps the draft's value, and restores it after the external edit was
+       chosen.
+     - A choice holds while the live value is unchanged and the draft still
+       holds the chosen value.
+     - Save and Merge wait until every conflict has a choice. The notice says
+       which fields need one, and the merge button reads "Select values to
+       keep" until then.
+   - "Merge changes and continue editing" is Reload & Merge, which never
+     writes. It applies the draft's own edits (the two-way baseline → draft
+     patch, the same family Save sends) to the live object, so a field only
+     changed outside the editor keeps its live value.
      - An edit to a field the live object also changed, to a different
        value, returns a `MergeConflict` with the live YAML. This is the field
        table's conflict rule.
-     - It is disabled while a conflict is undecided or kept, since it would
-       stop on that field. Saving still keeps others' changes to fields the
-       draft did not edit.
+     - For each field where your edit was chosen, the merge request's
+       baseline carries the live value, so the merge applies your edit
+       instead of stopping.
+     - Saving without merging also keeps others' changes to fields the draft
+       did not edit.
    - A replaced object (a live uid that differs from the baseline's, or an
      `ObjectUIDMismatch` conflict from Apply) offers Copy draft and Edit the
      new object. It offers no merge (the merge refuses a different object),

@@ -6,8 +6,8 @@
   - Cluster tabs you are not looking at no longer refresh in the background. A tab's data refreshes when you return to it.
   - The "Refresh background clusters" setting is removed.
 - YAML editing:
-  - While you edit, the YAML tab now shows when someone else changes the object: a table lists each changed field, with its value when you started, now, and in your draft. Status-only updates are ignored.
-  - When someone else changed a field you also edited, you choose Use theirs or Keep mine before saving, so nobody's change is overwritten by accident. Merge into draft brings in their other changes.
+  - While you edit, the YAML tab now shows when the object is modified outside the editor: a table lists each changed field, with its original value, the external edit, and your edit. Status-only updates are ignored.
+  - When a field you edited was also changed outside the editor, you pick the external edit or your edit in that field's row before saving, so no change is overwritten by accident. You can change your pick, and "Merge changes and continue editing" brings in the other external changes either way.
   - If the object is deleted and recreated while you edit, you can copy your draft and start editing the new object.
 - Scrollbar tweaks. They are wider and higher-contrast. They appear only while scrolling or when the pointer is over the scroll area, and fade out shortly after scrolling stops.
 
