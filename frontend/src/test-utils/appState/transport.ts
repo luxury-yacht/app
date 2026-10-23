@@ -116,9 +116,11 @@ const createFakeBackend = () => {
       unfaked.push(method);
       return Promise.reject(new Error(`Unfaked RPC: ${method}`));
     }
-    return new Promise((resolve) => {
-      resolve(handler(...args));
-    });
+    try {
+      return Promise.resolve(handler(...args));
+    } catch (error) {
+      return Promise.reject(error);
+    }
   };
 
   return { backend, dispatch };
