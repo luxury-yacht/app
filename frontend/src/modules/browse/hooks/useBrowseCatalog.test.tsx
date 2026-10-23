@@ -66,6 +66,8 @@ const catalog = {
   items: [] as CatalogItem[],
   override: null as null | ((query: URLSearchParams) => CatalogAnswer | undefined),
   hold: null as null | ((query: URLSearchParams) => boolean),
+  // Held reads answer with the catalog as it was when they went out.
+  asOfRequest: false,
   parked: [] as Array<() => void>,
 };
 
@@ -261,14 +263,16 @@ beforeEach(async () => {
   catalog.items = [];
   catalog.override = null;
   catalog.hold = null;
+  catalog.asOfRequest = false;
   catalog.parked = [];
   app.snapshots.respond((request) => {
     if (request.domain !== 'catalog') {
       return undefined;
     }
     if (catalog.hold?.(queryOf(request.scope))) {
+      const asSent = catalog.asOfRequest ? catalogResponse(request.scope) : null;
       return new Promise<Response>((resolve) => {
-        catalog.parked.push(() => resolve(catalogResponse(request.scope)));
+        catalog.parked.push(() => resolve(asSent ?? catalogResponse(request.scope)));
       });
     }
     return catalogResponse(request.scope);
@@ -289,7 +293,9 @@ describe('useBrowseCatalog queries', () => {
     await show({ pageLimit: null });
 
     expect(catalogNow().pageLimit).toBe(250);
-    expect(pageReads().map((query) => query.get('limit'))).toEqual(['250']);
+    // The read at mount, and the one the live subscription's acknowledgement
+    // asks for (as typed tables do), both use the default size.
+    expect(new Set(pageReads().map((query) => query.get('limit')))).toEqual(new Set(['250']));
     expect(names()).toEqual(['pod-a']);
   });
 
@@ -301,9 +307,9 @@ describe('useBrowseCatalog queries', () => {
 
     // Hydration enables the query with the saved search, which is not typing.
     await show({ enabled: true, pageLimit: 250, search: 'api', onPageLimitChange });
-    expect(pageReads().map((query) => [query.get('limit'), query.get('search')])).toEqual([
-      ['250', 'api'],
-    ]);
+    expect(
+      new Set(pageReads().map((query) => `${query.get('limit')} ${query.get('search')}`))
+    ).toEqual(new Set(['250 api']));
     expect(names()).toEqual(['api']);
 
     await run(() => catalogNow().setPageLimit(500));
@@ -473,6 +479,21 @@ describe('useBrowseCatalog loading and scope switches', () => {
 });
 
 describe('useBrowseCatalog doorbells', () => {
+  it('reads the page again when the catalog changes while its first read is out', async () => {
+    vi.useFakeTimers();
+    catalog.items = [item('pod-a')];
+    catalog.hold = (query) => query.get('limit') !== '1';
+    catalog.asOfRequest = true;
+    await show();
+    expect(catalog.parked).toHaveLength(1);
+
+    catalog.items = [item('pod-a'), item('pod-b')];
+    await ringCatalog();
+    await releaseHeld();
+
+    expect(names()).toEqual(['pod-a', 'pod-b']);
+  });
+
   it('re-reads the current page once per catalog doorbell, without echo reads', async () => {
     vi.useFakeTimers();
     catalog.items = [item('pod-a')];
@@ -482,17 +503,20 @@ describe('useBrowseCatalog doorbells', () => {
       `catalog ${buildClusterRefreshScope('catalog', dev.clusterId)}`
     );
 
+    const baseReads = () => reads().filter((scope) => scope === baseScope).length;
+    const atMount = baseReads();
+
     catalog.items = [item('pod-a'), item('pod-b')];
     await ringCatalog();
     expect(names()).toEqual(['pod-a', 'pod-b']);
-    expect(reads().filter((scope) => scope === baseScope)).toHaveLength(2);
+    expect(baseReads()).toBe(atMount + 1);
 
     // The applied response must not count as another doorbell.
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1_000);
     });
     await app.settle();
-    expect(reads().filter((scope) => scope === baseScope)).toHaveLength(2);
+    expect(baseReads()).toBe(atMount + 1);
   });
 
   // Refresh Now (command palette, connectivity status) reconciles every query
@@ -579,13 +603,15 @@ describe('useBrowseCatalog paging', () => {
     catalog.items = ['a', 'b', 'c', 'd', 'e'].map((name) => item(name));
     await show();
     expect(names()).toEqual(['a', 'b']);
+    const atMount = pageAddresses().length;
 
     await run(() => catalogNow().handleLoadMore());
     await run(() => catalogNow().handleLoadMore());
     expect(names()).toEqual(['e']);
     expect(catalogNow().pageIndex).toBe(3);
     expect(catalogNow().continueToken).toBeNull();
-    expect(pageAddresses()).toEqual([null, '2', '4']);
+    // Each page is read once.
+    expect(pageAddresses().slice(atMount)).toEqual(['2', '4']);
 
     await run(() => catalogNow().handleLoadPrevious());
     expect(names()).toEqual(['c', 'd']);

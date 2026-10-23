@@ -1786,8 +1786,6 @@ class RefreshOrchestrator {
     if (payload.status === 'healthy' && previous?.status !== 'healthy') {
       setScopedDomainState(domain, scope, (state) => ({
         ...state,
-        // A subscription's first acknowledgement ends its start.
-        status: state.status === 'initialising' && !state.data ? 'idle' : state.status,
         streamAcknowledgedVersion: (state.streamAcknowledgedVersion ?? 0) + 1,
       }));
     }

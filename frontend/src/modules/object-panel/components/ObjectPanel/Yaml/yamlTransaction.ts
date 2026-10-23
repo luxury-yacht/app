@@ -241,22 +241,40 @@ const differsFromBaseline = (baselineYaml: string, liveYaml: string): boolean =>
 const isReplacementOf = (baseline: ObjectIdentity | null, live: ObjectIdentity | null): boolean =>
   Boolean(baseline?.uid && live?.uid && baseline.uid !== live.uid);
 
-// The live YAML the drift notice compares with: a conflict's live object, or
-// the watched snapshot once it has drifted from the baseline or been replaced.
+// Whether resourceVersion `version` is newer than `than`. Versions are opaque,
+// but the API server's are integer etcd revisions; others are not ordered.
+const isNewerResourceVersion = (
+  version: string | null | undefined,
+  than: string | null | undefined
+): boolean =>
+  Boolean(
+    version && than && /^\d+$/.test(version) && /^\d+$/.test(than) && BigInt(version) > BigInt(than)
+  );
+
+// The live YAML the drift notice compares with: a conflict's live object until
+// a newer watched snapshot arrives, or the watched snapshot once it has drifted
+// from the baseline or been replaced.
 const driftLiveYamlOf = ({
   isEditing,
   backendDriftCurrentYaml,
+  conflictResourceVersion,
   hasRemoteDrift,
   objectReplaced,
   liveYaml,
+  liveResourceVersion,
 }: {
   isEditing: boolean;
   backendDriftCurrentYaml: string | null;
+  conflictResourceVersion: string | null;
   hasRemoteDrift: boolean;
   objectReplaced: boolean;
   liveYaml: string;
+  liveResourceVersion: string | null;
 }): string | null => {
-  if (backendDriftCurrentYaml !== null) {
+  if (
+    backendDriftCurrentYaml !== null &&
+    !isNewerResourceVersion(liveResourceVersion, conflictResourceVersion)
+  ) {
     return backendDriftCurrentYaml;
   }
   return isEditing && (hasRemoteDrift || objectReplaced) ? liveYaml : null;
@@ -694,12 +712,21 @@ export const useYamlTransaction = ({
   const liveIdentity = latestObjectIdentity ?? objectIdentity ?? null;
   const objectReplaced =
     isEditing && (replacedByConflict || isReplacementOf(baselineIdentity, liveIdentity));
+  const conflictResourceVersion = useMemo(
+    () =>
+      backendDriftCurrentYaml === null
+        ? null
+        : (parseObjectIdentity(backendDriftCurrentYaml)?.resourceVersion ?? null),
+    [backendDriftCurrentYaml]
+  );
   const driftLiveYaml = driftLiveYamlOf({
     isEditing,
     backendDriftCurrentYaml,
+    conflictResourceVersion,
     hasRemoteDrift,
     objectReplaced,
     liveYaml: effectiveYamlContent,
+    liveResourceVersion: objectIdentity?.resourceVersion ?? null,
   });
   const driftFields = useMemo(
     () =>

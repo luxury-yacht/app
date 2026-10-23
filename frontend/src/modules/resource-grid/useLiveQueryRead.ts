@@ -33,8 +33,10 @@ interface LiveScopeOptions<K extends RefreshDomain> {
 /**
  * Leases a domain's base scope for its change signals (demand 'query': no
  * snapshot read). `ready` once the lease has taken effect and the scope is not
- * waiting for its stream to start, so a first read neither races the
- * subscription nor goes out while its cluster is still warming up.
+ * waiting for its stream to start, so a first read does not go out before the
+ * subscription is sent or while its cluster is still warming up. The
+ * subscription's acknowledgement then signals one more read, which closes the
+ * subscribe race (docs/architecture/data-freshness.md).
  */
 export function useLiveScope<K extends RefreshDomain>({
   domain,
@@ -111,17 +113,14 @@ const startScopeReads = (
   return { scope, version, phase: 'reading', inFlight: false, pending: false, retry: null };
 };
 
-// Whether a new live version should read now. During the first read it is
-// the live stream confirming itself, which that read covers; during a later
-// read it is latched for one more read.
+// Whether a new live version should read now. A version that arrives during a
+// read, the first one included, is latched for one more read: the read may
+// have captured the object before the change.
 const takesVersion = (reads: ScopeReads, version: string): boolean => {
   if (reads.version === version) {
     return false;
   }
   reads.version = version;
-  if (reads.phase === 'reading') {
-    return false;
-  }
   if (reads.inFlight) {
     reads.pending = true;
     return false;

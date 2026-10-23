@@ -155,6 +155,27 @@ describe('copyDriftField', () => {
     expect(draft.spec.replicas).toBe(4);
   });
 
+  // A named list item (an environment variable) one side deleted and the
+  // other changed: the copy adds or removes the whole item.
+  const ENV_PATH = ['spec', 'containers', { name: 'api' }, 'env', { name: 'MODE' }, 'value'];
+  const podWithEnv = (...env: Array<{ name: string; value: string }>) =>
+    YAML.stringify({ spec: { containers: [{ name: 'api', env }] } });
+  const MODE_B = { name: 'MODE', value: 'b' };
+  const KEEP = { name: 'KEEP', value: '1' };
+
+  it('restores a named item the draft deleted when the live value is copied', () => {
+    const draft = YAML.parse(copyDriftField(podWithEnv(KEEP), podWithEnv(MODE_B, KEEP), ENV_PATH));
+
+    expect(draft.spec.containers[0].env).toEqual(expect.arrayContaining([MODE_B, KEEP]));
+    expect(draft.spec.containers[0].env).toHaveLength(2);
+  });
+
+  it('removes the whole named item, not only its field, when the source has no such item', () => {
+    const draft = YAML.parse(copyDriftField(podWithEnv(MODE_B, KEEP), podWithEnv(KEEP), ENV_PATH));
+
+    expect(draft.spec.containers[0].env).toEqual([KEEP]);
+  });
+
   it('removes the draft’s field when the live object no longer has it', () => {
     const [field] = compareDriftFields({
       baselineYaml: deployment({ team: 'payments' }),

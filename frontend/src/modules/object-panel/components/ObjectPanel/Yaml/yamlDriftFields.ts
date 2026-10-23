@@ -190,12 +190,74 @@ const concretePath = (
   return concrete;
 };
 
+// The value at a concrete path, or undefined where the path runs out.
+const valueAt = (root: unknown, path: ReadonlyArray<string | number>): unknown =>
+  path.reduce<unknown>(
+    (node, step) =>
+      node !== null && typeof node === 'object'
+        ? (node as Record<string | number, unknown>)[step]
+        : undefined,
+    root
+  );
+
+// The first named list item on `path` that only one document has.
+const firstOneSidedItem = (
+  targetRoot: unknown,
+  sourceRoot: unknown,
+  path: DriftFieldPath
+): { prefix: DriftFieldPath; inSource: boolean } | null => {
+  for (let end = 1; end <= path.length; end += 1) {
+    if (typeof path[end - 1] === 'string') {
+      continue;
+    }
+    const prefix = path.slice(0, end);
+    const inTarget = concretePath(targetRoot, prefix, false) !== null;
+    const inSource = concretePath(sourceRoot, prefix, false) !== null;
+    if (inTarget !== inSource) {
+      return { prefix, inSource };
+    }
+    if (!inTarget) {
+      return null;
+    }
+  }
+  return null;
+};
+
+// Adds the source's whole item to the target's list, creating the list where
+// the target has none, or removes the target's whole item.
+const copyWholeItem = (
+  target: YAML.Document,
+  roots: { target: unknown; source: unknown },
+  prefix: DriftFieldPath,
+  inSource: boolean
+): void => {
+  if (!inSource) {
+    const itemPath = concretePath(roots.target, prefix, false);
+    if (itemPath) {
+      target.deleteIn(itemPath);
+    }
+    return;
+  }
+  const listPath = concretePath(roots.target, prefix.slice(0, -1), true);
+  const sourcePath = concretePath(roots.source, prefix, false);
+  if (!listPath || !sourcePath) {
+    return;
+  }
+  const item = valueAt(roots.source, sourcePath);
+  if (Array.isArray(valueAt(roots.target, listPath))) {
+    target.addIn(listPath, target.createNode(item));
+  } else {
+    target.setIn(listPath, target.createNode([item]));
+  }
+};
+
 /**
  * Sets `targetYaml`'s field at `path` to `sourceYaml`'s value, or removes it
  * where the source has none: their value into the draft, your earlier value
- * back into it, or their value into a merge baseline. The target's other
- * content is kept; an unparseable document or a list item the target no
- * longer has leaves the target unchanged.
+ * back into it, or their value into a merge baseline. A named list item only
+ * one side has is copied or removed whole, so keeping a value restores the
+ * item that holds it. The target's other content is kept; an unparseable
+ * document leaves the target unchanged.
  */
 export const copyDriftField = (
   targetYaml: string,
@@ -207,18 +269,19 @@ export const copyDriftField = (
   if (target.errors.length > 0 || source.errors.length > 0) {
     return targetYaml;
   }
-  const targetPath = concretePath(target.toJS(), path, true);
+  const roots = { target: target.toJS() as unknown, source: source.toJS() as unknown };
+  const oneSided = firstOneSidedItem(roots.target, roots.source, path);
+  if (oneSided) {
+    copyWholeItem(target, roots, oneSided.prefix, oneSided.inSource);
+    return target.toString(YAML_STRINGIFY_OPTIONS);
+  }
+  const targetPath = concretePath(roots.target, path, true);
   if (!targetPath) {
     return targetYaml;
   }
-  const sourceRoot: unknown = source.toJS();
-  const sourcePath = concretePath(sourceRoot, path, false);
+  const sourcePath = concretePath(roots.source, path, false);
   if (sourcePath) {
-    const value = sourcePath.reduce<unknown>(
-      (node, step) => (node as Record<string | number, unknown>)[step],
-      sourceRoot
-    );
-    target.setIn(targetPath, target.createNode(value));
+    target.setIn(targetPath, target.createNode(valueAt(roots.source, sourcePath)));
   } else {
     target.deleteIn(targetPath);
   }

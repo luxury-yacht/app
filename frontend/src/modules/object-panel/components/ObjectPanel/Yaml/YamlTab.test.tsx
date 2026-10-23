@@ -1117,6 +1117,75 @@ describe('YamlTab', () => {
     );
   });
 
+  it('compares with a newer live object after a merge conflict, so an earlier choice no longer holds', async () => {
+    vi.useFakeTimers();
+    app.backend.answer('MergeObjectYamlWithLatest', () => ({
+      currentYAML: '',
+      mergedYAML: '',
+      resourceVersion: '',
+      yamlConflict: {
+        code: 'MergeConflict',
+        message: 'Kubernetes-aware merge found conflicting live changes.',
+        causes: ['spec.containers'],
+        currentYaml: LATER_MUTATED_YAML,
+        currentResourceVersion: '790',
+      },
+    }));
+    await renderYamlTab();
+    await editTo(UPDATED_YAML.replace('image: demo:v2', 'image: demo:v3'));
+    await pollLiveYaml(LATER_MUTATED_YAML);
+    await chooseInRow('containers[demo].image', 'yours');
+    await clickText('Merge changes and continue editing');
+
+    // Someone sets the image again after the conflict.
+    await pollLiveYaml(
+      LATER_MUTATED_YAML.replace('image: demo:v2', 'image: demo:v4').replace('"790"', '"791"')
+    );
+
+    expect(driftRow('containers[demo].image')).toEqual({
+      values: ['demo:v1', 'demo:v4', 'demo:v3'],
+      choice: null,
+    });
+    expect(getIconButton('Save YAML')?.disabled).toBe(true);
+  });
+
+  it('restores an environment variable you deleted when you keep their changed value', async () => {
+    vi.useFakeTimers();
+    const withEnv = (resourceVersion: string, ...env: string[]) =>
+      [
+        'apiVersion: v1',
+        'kind: Pod',
+        'metadata:',
+        '  name: demo',
+        '  namespace: default',
+        `  resourceVersion: "${resourceVersion}"`,
+        'spec:',
+        '  containers:',
+        '    - name: demo',
+        '      image: demo:v1',
+        '      env:',
+        ...env,
+      ].join('\n');
+    const MODE = (value: string) => ['        - name: MODE', `          value: ${value}`];
+    const KEEP = ['        - name: KEEP', '          value: "1"'];
+    serveYaml(withEnv('123', ...MODE('a'), ...KEEP));
+    await renderYamlTab();
+    // You delete MODE while someone else changes it.
+    await editTo(withEnv('123', ...KEEP));
+    await pollLiveYaml(withEnv('790', ...MODE('b'), ...KEEP));
+
+    await chooseInRow('env[MODE].value', 'theirs');
+
+    expect(parseYaml(codeMirrorState.value).spec.containers[0].env).toEqual(
+      expect.arrayContaining([
+        { name: 'MODE', value: 'b' },
+        { name: 'KEEP', value: '1' },
+      ])
+    );
+    expect(driftRow('env[MODE].value')?.choice).toBe('theirs');
+    expect(getIconButton('Save YAML')?.disabled).toBe(false);
+  });
+
   it('finishes a save normally when a live change lands while the save is in flight', async () => {
     vi.useFakeTimers();
     // The live object after the save: the other client's change plus the draft's.

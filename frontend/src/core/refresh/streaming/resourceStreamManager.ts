@@ -125,18 +125,6 @@ const advancesDeclaredClock = (
     (clock) => next[clock] !== undefined && next[clock] !== previous?.[clock]
   );
 
-// A resync's status once it completes: ready with data; otherwise idle, unless
-// the scope is still waiting for its subscription's first acknowledgement.
-const settledStatus = (
-  previous: { data?: unknown; status: string },
-  unacknowledged: boolean
-): 'ready' | 'idle' | 'initialising' => {
-  if (previous.data) {
-    return 'ready';
-  }
-  return unacknowledged && previous.status === 'initialising' ? 'initialising' : 'idle';
-};
-
 export class ResourceStreamManager {
   private readonly subscriptions = new ResourceStreamSubscriptionStore(
     STREAM_UNSUBSCRIBE_DEBOUNCE_MS,
@@ -684,13 +672,9 @@ export class ResourceStreamManager {
   private markResyncComplete(subscription: StreamSubscription): void {
     const now = Date.now();
     const scope = subscription.storeScope;
-    // A subscription the server has not acknowledged yet is still starting;
-    // the acknowledgement settles it (orchestrator handleResourceStreamHealth).
-    const { phase } = subscription.protocol;
-    const unacknowledged = phase.status === 'awaiting-ack' && !phase.preservedHealth;
     setScopedDomainState(subscription.domain, scope, (previous) => ({
       ...previous,
-      status: settledStatus(previous, unacknowledged),
+      status: previous.data ? 'ready' : 'idle',
       error: null,
       lastUpdated: previous.lastUpdated ?? now,
       lastAutoRefresh: now,

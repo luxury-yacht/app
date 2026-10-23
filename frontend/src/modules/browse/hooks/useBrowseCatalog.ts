@@ -433,12 +433,10 @@ export function useBrowseCatalog({
   // stream signals changes, and reads every query page (page one included) as
   // a one-shot read that never joins the stream.
   const handleLiveSignal = useCallback(() => {
-    // During the query's first read, a signal is the live stream confirming
-    // itself, which that read covers.
-    if (
-      requestedQueryRef.current === catalogScopeRef.current &&
-      queryPhaseRef.current !== 'reading'
-    ) {
+    // Before the query's first read is requested, that read covers the
+    // change; once it is out, the change is read after it (requestPage
+    // latches a signal that arrives mid-read).
+    if (requestedQueryRef.current === catalogScopeRef.current) {
       reReadCurrentPageRef.current('stream-signal');
     }
   }, []);

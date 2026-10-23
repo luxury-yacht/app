@@ -25,6 +25,7 @@ import {
 } from '@/test-utils/appState/harness';
 import { snapshotResponse } from '@/test-utils/appState/transport';
 import { requireValue } from '@/test-utils/requireValue';
+import { useAvailableClusterViews } from './useAvailableResourceViews';
 
 const app = installAppStateHarness();
 let view: MountedApp;
@@ -103,6 +104,17 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+/** The cluster views a cluster's discovery offers. */
+function ClusterViews({ clusterId }: Readonly<{ clusterId: string }>) {
+  return (
+    <output>
+      {useAvailableClusterViews(clusterId)
+        .map((entry) => entry.id)
+        .join(',')}
+    </output>
+  );
+}
+
 /** The backend announces a change to the cluster's catalog. */
 const ringCatalog = async (cluster: TestCluster, version: string) => {
   await act(async () => {
@@ -131,6 +143,46 @@ describe('discovered resource view availability', () => {
     await ringCatalog(alpha, 'catalog:2');
 
     expect((await offeredExtensions()).namespaced).toContain('argocd');
+  });
+
+  it('reads discovery again when the catalog changes while its first read is out', async () => {
+    vi.useFakeTimers();
+    const asSent = discovery(alpha, { cluster: ['cert-manager'], namespaced: [] });
+    const held: Array<() => void> = [];
+    let holding = true;
+    // Every discovery read before the change is answered as it was sent.
+    app.snapshots.respond((request) => {
+      if (!holding || request.domain !== 'catalog' || request.scope !== discoveryScope(alpha)) {
+        return undefined;
+      }
+      return new Promise<Response>((resolve) => {
+        held.push(() =>
+          resolve(
+            snapshotResponse({
+              domain: request.domain,
+              scope: request.scope,
+              version: 1,
+              payload: asSent,
+            })
+          )
+        );
+      });
+    });
+    view = await app.render(null);
+    await view.show(<ClusterViews clusterId={alpha.clusterId} />);
+    expect(held.length).toBeGreaterThan(0);
+
+    serveDiscovery(alpha, { cluster: ['cert-manager', 'karpenter'], namespaced: [] });
+    await ringCatalog(alpha, 'catalog:2');
+    holding = false;
+    await act(async () => {
+      for (const answer of held) {
+        answer();
+      }
+    });
+    await app.settle();
+
+    expect(view.container.textContent).toContain('karpenter');
   });
 
   it('reads discovery again only when the catalog changes', async () => {
