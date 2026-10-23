@@ -1605,6 +1605,23 @@ describe('failures and error reports', () => {
     refreshOrchestrator.releaseScopedDomainLease('object-yaml', scope);
   });
 
+  it('reports a still-failing scope again after a kubeconfig change', async () => {
+    const clusterId = 'kubeconfig-forgets';
+    const scope = yamlScope(clusterId);
+    markClusterReady(clusterId);
+    app.snapshots.respond(failWith('InternalError', 'kubeconfig-forgets: backend unavailable'));
+    refreshOrchestrator.acquireScopedDomainLease('object-yaml', scope);
+    await refreshOrchestrator.fetchScopedDomain('object-yaml', scope, { intent: 'user' });
+    expect(takeToasts()).toHaveLength(1);
+
+    eventBus.emit('kubeconfig:changing', '');
+    refreshOrchestrator.acquireScopedDomainLease('object-yaml', scope);
+    await refreshOrchestrator.fetchScopedDomain('object-yaml', scope, { intent: 'user' });
+
+    expect(takeToasts()).toHaveLength(1);
+    refreshOrchestrator.releaseScopedDomainLease('object-yaml', scope);
+  });
+
   it('records a failed stream start on its scope and reports it', async () => {
     const clusterId = 'start-fail';
     const scope = namespaceScope(clusterId);
@@ -1697,6 +1714,31 @@ describe('closing clusters', () => {
       }
     }
   );
+
+  it('reports a reopened cluster’s failure again and an open cluster’s repeat once', async () => {
+    const reopened = yamlScope('reopen-failing');
+    const open = yamlScope('reopen-open');
+    markClusterReady('reopen-failing');
+    markClusterReady('reopen-open');
+    app.snapshots.respond(failWith('InternalError', 'reopen: backend unavailable'));
+    const read = (scope: string) =>
+      refreshOrchestrator.fetchScopedDomain('object-yaml', scope, { intent: 'user' });
+    refreshOrchestrator.acquireScopedDomainLease('object-yaml', reopened);
+    refreshOrchestrator.acquireScopedDomainLease('object-yaml', open);
+    await read(reopened);
+    await read(open);
+    expect(takeToasts()).toHaveLength(2);
+
+    refreshOrchestrator.setConnectedClusters(['reopen-open']);
+    refreshOrchestrator.setConnectedClusters(['reopen-open', 'reopen-failing']);
+    refreshOrchestrator.acquireScopedDomainLease('object-yaml', reopened);
+    await read(reopened);
+    await read(open);
+
+    expect(takeToasts().map((report) => report.context?.scope)).toEqual([reopened]);
+    refreshOrchestrator.releaseScopedDomainLease('object-yaml', reopened);
+    refreshOrchestrator.releaseScopedDomainLease('object-yaml', open);
+  });
 
   it('drops deferred reads when their cluster closes', async () => {
     const clusterId = 'drop-deferred';

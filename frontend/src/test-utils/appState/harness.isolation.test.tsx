@@ -119,6 +119,38 @@ describe('a reused cluster identity', () => {
   });
 });
 
+// The refresh layer reports a scope's failure once until a read succeeds; a
+// later test failing the same way must still get its report.
+describe('a reused failing scope', () => {
+  const namespaceListReports = async () => {
+    const dev = app.cluster({ name: 'dev', context: 'alpha' });
+    const scope = buildClusterRefreshScope('namespaces', dev.clusterId);
+    const timeout = makeErrorStatus('ServerTimeout', 'apiserver timeout');
+    app.snapshots.fail('namespaces', scope, timeout);
+    app.snapshots.fail('namespace-metrics', scope, timeout);
+    await app.render(null);
+    return app.errors
+      .take(
+        (record) =>
+          record.context?.source === 'refresh-orchestrator' ||
+          record.context?.context === 'loadNamespaces'
+      )
+      .filter(
+        (record) =>
+          record.context?.source === 'refresh-orchestrator' &&
+          record.context?.domain === 'namespaces'
+      );
+  };
+
+  it('reports the namespace list failure', async () => {
+    expect(await namespaceListReports()).toHaveLength(1);
+  });
+
+  it('reports the same failure of the same cluster again', async () => {
+    expect(await namespaceListReports()).toHaveLength(1);
+  });
+});
+
 let shownReplicas: unknown;
 
 function OpenDetails({ detailScope }: Readonly<{ detailScope: string }>) {

@@ -955,6 +955,7 @@ class RefreshOrchestrator {
     // cluster-events, polling disabled — are cleaned up too. forEachScopedDomain only sees
     // enabled leases, so it would leave those orphaned for a closed cluster.
     this.resetScopedStatesForRemovedClusters(connected);
+    this.errorNotifier.clearRemovedClusters(connected);
     Array.from(this.clusterRuntimes.entries()).forEach(([clusterId, runtime]) => {
       if (connected.has(clusterId)) {
         return;
@@ -1857,8 +1858,10 @@ class RefreshOrchestrator {
   };
 
   private readonly handleKubeconfigChanging = () => {
-    // A kubeconfig change supersedes tracked auth-failure state.
+    // A kubeconfig change supersedes tracked auth-failure state and the
+    // errors already reported.
     this.forEachRuntime((runtime) => runtime.markAuthRecovered());
+    this.errorNotifier.clearAll();
     this.incrementContextVersion();
     this.stopAllStreaming(true);
     this.forEachRuntime((runtime) => this.cancelRuntimePolls(runtime));

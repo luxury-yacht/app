@@ -1,5 +1,6 @@
 import { errorHandler } from '@utils/errorHandler';
 import { errorStatusOf, isBrowserFetchFailure } from '@utils/errorStatus';
+import { parseClusterScope } from './clusterScope';
 import type { DomainCategory } from './domainRegistry';
 import { makeInFlightKey } from './refreshRuntime';
 import type { ErrorStatusReason, RefreshDomain } from './types';
@@ -19,7 +20,7 @@ type NotifyRefreshErrorOptions = {
 };
 
 export class RefreshErrorNotifier {
-  private readonly lastNotifiedErrors = new Map<string, string>();
+  private readonly lastNotifiedErrors = new Map<string, { scope?: string; message: string }>();
   private suppressNetworkErrorsUntil = 0;
 
   notify({
@@ -34,17 +35,17 @@ export class RefreshErrorNotifier {
       return;
     }
     const key = this.getErrorNotificationKey(domain, scope);
-    if (this.lastNotifiedErrors.get(key) === message) {
+    if (this.lastNotifiedErrors.get(key)?.message === message) {
       return;
     }
 
     if (domain === 'object-details' && errorStatusOf(error)?.reason === 'NotFound') {
       // The panel shows its object as deleted when the NotFound names it.
-      this.lastNotifiedErrors.set(key, message);
+      this.lastNotifiedErrors.set(key, { scope, message });
       return;
     }
 
-    this.lastNotifiedErrors.set(key, message);
+    this.lastNotifiedErrors.set(key, { scope, message });
     errorHandler.handle(
       error ?? new Error(message),
       {
@@ -65,6 +66,17 @@ export class RefreshErrorNotifier {
 
   clearAll(): void {
     this.lastNotifiedErrors.clear();
+  }
+
+  // Forgets the errors of closed clusters, so a reopened cluster that still
+  // fails reports it again. Errors of scopes without a cluster stay.
+  clearRemovedClusters(connected: ReadonlySet<string>): void {
+    this.lastNotifiedErrors.forEach(({ scope }, key) => {
+      const { clusterId } = parseClusterScope(scope);
+      if (clusterId && !connected.has(clusterId)) {
+        this.lastNotifiedErrors.delete(key);
+      }
+    });
   }
 
   suppressNetworkErrors(durationMs: number): void {

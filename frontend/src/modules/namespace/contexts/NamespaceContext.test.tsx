@@ -499,8 +499,7 @@ describe('namespace selection', () => {
 
 describe('failures', () => {
   // The refresh layer reports a namespace-list failure itself too
-  // (core/refresh/refreshErrorNotifier.ts), once per scope and message. Its
-  // dedupe outlives a test, so each test fails with its own message.
+  // (core/refresh/refreshErrorNotifier.ts), once per scope and message.
   const failNamespaces = (cluster: TestCluster, message: string) =>
     app.snapshots.fail('namespaces', scopeOf(cluster), makeErrorStatus('ServerTimeout', message));
   const namespaceReports = () =>
