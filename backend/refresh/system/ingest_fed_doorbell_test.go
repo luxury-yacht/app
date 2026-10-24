@@ -110,8 +110,9 @@ func newIngestHarnessReviewing(t *testing.T, allow func(authorizationv1.Resource
 // everyGatewayKind is a cluster that serves every Gateway API kind.
 type everyGatewayKind struct{}
 
-func (everyGatewayKind) AnyPresent() bool { return true }
-func (everyGatewayKind) Has(string) bool  { return true }
+func (everyGatewayKind) AnyPresent() bool   { return true }
+func (everyGatewayKind) Has(string) bool    { return true }
+func (everyGatewayKind) Absent(string) bool { return false }
 
 func (h *ingestHarness) store(t *testing.T, gvr schema.GroupVersionResource) *ingest.ProjectingStore {
 	t.Helper()

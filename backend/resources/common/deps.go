@@ -31,9 +31,11 @@ type EnsureClientFunc func(resourceKind string) error
 type EnsureAPIExtensionsFunc func(resourceKind string) error
 
 // GatewayAPIPresence reports which Gateway API kinds are installed on a cluster.
+// Absent is true only for a kind discovery confirmed the cluster does not serve.
 type GatewayAPIPresence interface {
 	AnyPresent() bool
 	Has(kind string) bool
+	Absent(kind string) bool
 }
 
 // ResourceRequestOperation converts a package-owned resource identity into the

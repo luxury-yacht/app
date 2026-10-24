@@ -16,7 +16,10 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"k8s.io/client-go/kubernetes/fake"
 	ktesting "k8s.io/client-go/testing"
 )
@@ -406,4 +409,41 @@ func TestNodeMaintainedStoreSpillRestoreRoundTrip(t *testing.T) {
 
 	require.ElementsMatch(t, orig.rows("", available), restored.rows("", available),
 		"restored nodes maintained store must hold the same own-rows as the spilled one")
+}
+
+// The Nodes table counts each node's pods, so its payload names the Pod source
+// when pods cannot be read, and only then. Built through the snapshot service,
+// as the app serves it, with the runtime permission check in play.
+func TestNodeQueryReportsThePodSourceOnlyWhenPodsAreDenied(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		podsAllowed    bool
+		wantIssueKinds []string
+	}{
+		{name: "pods readable", podsAllowed: true, wantIssueKinds: nil},
+		{name: "pods denied", podsAllowed: false, wantIssueKinds: []string{"Pod"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			meta := testClusterMeta()
+			node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-1", ResourceVersion: "1"}}
+			builder := newNodeBuilderForTest(meta, newFakePodAggregateSource(nil).withNodes(meta, "1", node), node)
+			reg := domain.New()
+			require.NoError(t, reg.Register(refresh.DomainConfig{Name: "nodes", BuildSnapshot: builder.Build}))
+			checker := permissions.NewCheckerWithReview(meta.ClusterID, 0, func(_ context.Context, _, resource, _, _ string) (bool, error) {
+				return resource != "pods" || tc.podsAllowed, nil
+			})
+			service := NewServiceWithPermissions(reg, nil, meta, checker)
+
+			snapshot, err := service.Build(context.Background(), "nodes", meta.ClusterID+"|?limit=50&sort=name&sortDirection=asc")
+			require.NoError(t, err)
+			payload := snapshot.Payload.(NodeSnapshot)
+			require.Len(t, payload.Rows, 1)
+			require.Equal(t, "node-1", payload.Rows[0].Ref.Name)
+			var issueKinds []string
+			for _, issue := range payload.Issues {
+				issueKinds = append(issueKinds, issue.Kind)
+			}
+			require.Equal(t, tc.wantIssueKinds, issueKinds)
+		})
+	}
 }

@@ -63,7 +63,10 @@ Shared rules and table modes live in [large data](large-data.md).
   permission-blocked source is inexact and issue-bearing. When an ingest sync
   deadline releases the liveness gate before the initial list succeeds, the
   envelope stays partial and inexact until raw source readiness is
-  authoritative.
+  authoritative. A kind discovery confirms the cluster does not serve (a
+  Gateway API kind on a cluster without the Gateway API) is not a missing
+  source: it has no rows, no kind option, and no issue. When discovery did not
+  complete for its group, the kind stays an unavailable source.
 - Object-panel related-resource tables stay local while their owner-scoped
   domain keeps them bounded; they become typed query-backed only at namespace or
   cluster scale.

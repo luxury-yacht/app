@@ -421,6 +421,8 @@ func (s servedGatewayKinds) Has(kind string) bool {
 	return ok
 }
 
+func (servedGatewayKinds) Absent(string) bool { return false }
+
 // A partial Gateway API install must not get a reflector for a kind the
 // server does not serve: it would LIST a 404 forever and report the kind as
 // unavailable instead of absent.

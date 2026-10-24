@@ -34,6 +34,12 @@ failure behavior, and diagnostics.
 - Single-resource domains are all-or-nothing. Multi-resource domains degrade to
   partial data when showing permitted resources is useful; partial builders
   guard nil or missing listers.
+- A resource a domain reads but does not require, such as the pods behind
+  Nodes' pod counts, is an `Optional` runtime resource. Each read checks it and
+  records the result in the domain's allowed resources, so the builder can
+  report it as missing; it never denies the domain or joins its feed
+  readiness. A builder must not check a resource its policy omits: an
+  unevaluated resource reads as denied.
 - `namespaces` is deliberately fail-fast with no degraded fallback: the sidebar
   shows an explicit permission message, and a permission-denied build still
   fires the cluster-Ready transition.

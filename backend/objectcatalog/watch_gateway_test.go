@@ -18,7 +18,8 @@ import (
 // everyGatewayKind is a cluster that serves every Gateway API kind.
 type everyGatewayKind struct{}
 
-func (everyGatewayKind) Has(string) bool { return true }
+func (everyGatewayKind) Has(string) bool    { return true }
+func (everyGatewayKind) Absent(string) bool { return false }
 
 // Every Gateway API kind reaches the catalog through its owned ingest store:
 // an add, an update, and a delete each show up in catalog queries. Adding a

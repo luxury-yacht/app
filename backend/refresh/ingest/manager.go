@@ -59,15 +59,23 @@ const gatewayGroup = "gateway.networking.k8s.io"
 // GatewaySource is the Gateway API client plus the kinds discovery reports as
 // served. A Gateway kind gets a reflector only when Presence serves it, so a
 // partial install never LISTs an unserved resource. A nil source disables every
-// Gateway kind.
+// Gateway kind. Presence.Absent confirms a kind the cluster does not serve.
 type GatewaySource struct {
 	Client   gatewayversioned.Interface
-	Presence interface{ Has(kind string) bool }
+	Presence interface {
+		Has(kind string) bool
+		Absent(kind string) bool
+	}
 }
 
 // serves reports whether the source can watch kind.
 func (g *GatewaySource) serves(kind string) bool {
 	return g != nil && g.Client != nil && g.Presence != nil && g.Presence.Has(kind)
+}
+
+// absent reports whether discovery confirmed the cluster does not serve kind.
+func (g *GatewaySource) absent(kind string) bool {
+	return g != nil && g.Presence != nil && g.Presence.Absent(kind)
 }
 
 // apiextensionsGroup is the API group served by the apiextensions client.
@@ -287,6 +295,14 @@ func (m *IngestManager) addDescriptor(desc streamspec.Descriptor) {
 	e := &entry{desc: desc}
 	e.store = newIngestProjectingStore(projectionFor(m.meta, e))
 	m.installReflector(e, desc.GVR(), gvk, restClient, example)
+}
+
+// NotServed reports whether discovery confirmed the cluster does not serve gvk,
+// so a table can leave the kind out instead of reporting its data missing. Of
+// the reasons sourceFor skips a kind, only this one describes the cluster; a
+// missing client or scheme still reads as unavailable.
+func (m *IngestManager) NotServed(gvk schema.GroupVersionKind) bool {
+	return gvk.Group == gatewayGroup && m.gateway.absent(gvk.Kind)
 }
 
 // sourceFor resolves the REST client and example object a kind's reflector

@@ -26,7 +26,9 @@ var emptyIndexer = cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{c
 // availableFromIndexers reports a kind available when the test supplies an
 // indexer for it, as registration does when a kind is permitted and served.
 func availableFromIndexers(indexerFor func(streamspec.Descriptor) cache.Indexer) kindAvailability {
-	return func(d streamspec.Descriptor) bool { return indexerFor(d) != nil }
+	return func(d streamspec.Descriptor) typedTableResourceState {
+		return typedTableSourceState(indexerFor(d) != nil)
+	}
 }
 
 // maintainedFromIndexers fills a domain's maintained store from the test

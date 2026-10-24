@@ -2,6 +2,7 @@ package domainpermissions
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
@@ -105,5 +106,39 @@ func TestRuntimeAccessHelmPolicyFollowsTheNamespaceScope(t *testing.T) {
 		decision, err := access.Check(context.Background(), domainName, checker)
 		require.NoError(t, err)
 		require.True(t, decision.Allowed, "%s must register on per-namespace grants", domainName)
+	}
+}
+
+// The Nodes table joins each node's pods for its pod counts. Its policy checks
+// pods on every request without requiring them: readable pods are reported
+// allowed, and denied or unevaluable pods are reported not allowed while the
+// Nodes view still loads.
+func TestRuntimeAccessChecksNodePodsWithoutRequiringThem(t *testing.T) {
+	access := NewRuntimeAccess()
+	for _, tc := range []struct {
+		name     string
+		pods     func() (bool, error)
+		wantPods bool
+	}{
+		{name: "pods readable", pods: func() (bool, error) { return true, nil }, wantPods: true},
+		{name: "pods denied", pods: func() (bool, error) { return false, nil }, wantPods: false},
+		{name: "pods check failed", pods: func() (bool, error) { return false, errors.New("review failed") }, wantPods: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			checker := permissions.NewCheckerWithReview("cluster-a", 0, func(_ context.Context, _, resource, _, _ string) (bool, error) {
+				if resource == "pods" {
+					return tc.pods()
+				}
+				return true, nil
+			})
+
+			decision, err := access.Check(context.Background(), "nodes", checker)
+			require.NoError(t, err)
+			require.True(t, decision.Allowed)
+			require.Equal(t, AllowedResources{
+				permissions.ResourceKey("", "nodes"): true,
+				permissions.ResourceKey("", "pods"):  tc.wantPods,
+			}, decision.AllowedResources)
+		})
 	}
 }

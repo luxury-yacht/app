@@ -189,6 +189,7 @@ func runtimePolicyAllows(ctx context.Context, checker *permissions.Checker, poli
 			allAllowed = false
 		}
 	}
+	recordOptionalResources(ctx, checker, policy.Optional, allowedResources)
 	if policy.Mode == ModeOptional {
 		return allowedResources, true, nil
 	}
@@ -196,6 +197,16 @@ func runtimePolicyAllows(ctx context.Context, checker *permissions.Checker, poli
 		return allowedResources, anyAllowed, nil
 	}
 	return allowedResources, allAllowed, nil
+}
+
+// recordOptionalResources adds each optional resource's decision without
+// letting it deny the domain: a check the cluster could not evaluate counts as
+// not allowed, so the domain still loads and reports that source as missing.
+func recordOptionalResources(ctx context.Context, checker *permissions.Checker, optional []permissions.ResourceRequirement, allowedResources AllowedResources) {
+	for _, req := range optional {
+		decision, err := checker.Can(ctx, req.Group, req.Resource, req.Verb)
+		allowedResources[permissions.ResourceKey(req.Group, req.Resource)] = err == nil && decision.Allowed
+	}
 }
 
 func deniedReason(policy Policy) string {

@@ -1,14 +1,17 @@
 package snapshot
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	kubefake "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
+	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
@@ -31,7 +34,8 @@ func ingestManagerForTest(t *testing.T) *ingest.IngestManager {
 // everyGatewayKind is a cluster that serves every Gateway API kind.
 type everyGatewayKind struct{}
 
-func (everyGatewayKind) Has(string) bool { return true }
+func (everyGatewayKind) Has(string) bool    { return true }
+func (everyGatewayKind) Absent(string) bool { return false }
 
 // allowAll builds an AllowedResources permitting every descriptor in the domain, so the
 // registration gate passes and the only remaining factor is ingest-store presence.
@@ -56,7 +60,7 @@ func TestIngestAvailabilityResolvesKindsFromIngestStore(t *testing.T) {
 	// Every permitted kind resolves from the ingest store's sentinel indexer.
 	collect := ingestAvailability(allowAll(domainName), domainName, ingestManager)
 	for _, d := range cut {
-		require.True(t, collect(d),
+		require.Equal(t, typedTableResourceAvailable, collect(d),
 			"kind %s must be available from its ingest store", d.Kind)
 	}
 }
@@ -77,7 +81,7 @@ func TestIngestAvailabilityRespectsRegistrationPermission(t *testing.T) {
 	denied := domainpermissions.AllowedResources{}
 	collect := ingestAvailability(denied, domainName, ingestManager)
 	for _, d := range cut {
-		require.False(t, collect(d),
+		require.Equal(t, typedTableResourceUnavailable, collect(d),
 			"cut kind %s denied at registration must be unavailable even with an ingest store", d.Kind)
 	}
 }
@@ -94,7 +98,7 @@ func TestUnconditionalIngestAvailabilityResolvesKindsFromIngestStore(t *testing.
 	ingestManager := ingestManagerForTest(t)
 	collect := unconditionalIngestAvailability(domainName, ingestManager)
 	for _, d := range cut {
-		require.True(t, collect(d),
+		require.Equal(t, typedTableResourceAvailable, collect(d),
 			"kind %s must be available from its ingest store", d.Kind)
 	}
 }
@@ -134,7 +138,7 @@ func TestEveryTypedTableDomainResolvesAvailabilityFromIngest(t *testing.T) {
 		require.NotEmptyf(t, cut, "domain %s expected to have stream kinds", tc.domain)
 		for _, d := range cut {
 			totalCut++
-			require.Truef(t, tc.collect(d),
+			require.Equalf(t, typedTableResourceAvailable, tc.collect(d),
 				"domain %s kind %s must resolve from its ingest store", tc.domain, d.Kind)
 		}
 	}
@@ -189,7 +193,53 @@ func TestIngestAvailabilityWithNoIngestManagerIsUnavailable(t *testing.T) {
 
 	collect := ingestAvailability(allowAll(domainName), domainName, nil)
 	for _, d := range cut {
-		require.False(t, collect(d),
+		require.Equal(t, typedTableResourceUnavailable, collect(d),
 			"kind %s with no ingest manager must be unavailable", d.Kind)
+	}
+}
+
+// gatewayDiscovery is a cluster's Gateway API discovery result: the cluster
+// serves no Gateway kind, and complete says whether discovery finished for the
+// Gateway group (so the absence is confirmed).
+type gatewayDiscovery struct{ complete bool }
+
+func (gatewayDiscovery) Has(string) bool      { return false }
+func (d gatewayDiscovery) Absent(string) bool { return d.complete }
+
+// A cluster that does not serve the Gateway API has no GatewayClasses to miss:
+// Cluster Config reports no GatewayClass gap and offers no GatewayClass kind.
+// When discovery could not tell, GatewayClass stays reported as unavailable.
+func TestClusterConfigLeavesOutGatewayClassWhenTheClusterDoesNotServeIt(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		discovery      gatewayDiscovery
+		wantIssueKinds []string
+	}{
+		{name: "Gateway API not served", discovery: gatewayDiscovery{complete: true}, wantIssueKinds: nil},
+		{name: "Gateway API discovery failed", discovery: gatewayDiscovery{complete: false}, wantIssueKinds: []string{"GatewayClass"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ingestManager := ingest.NewIngestManager(
+				streamrows.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+				kubefake.NewSimpleClientset(),
+				apiextensionsfake.NewClientset(),
+				&ingest.GatewaySource{Presence: tc.discovery},
+			)
+			builder := &ClusterConfigBuilder{
+				available:  ingestAvailability(allowAll(clusterConfigDomainName), clusterConfigDomainName, ingestManager),
+				maintained: maintainedFromIndexers(ClusterMeta{}, clusterConfigDomainSpec(), func(streamspec.Descriptor) cache.Indexer { return nil }),
+			}
+
+			snapshot, err := builder.Build(context.Background(), "c1|?limit=10")
+			require.NoError(t, err)
+			payload := snapshot.Payload.(ClusterConfigSnapshot)
+			var issueKinds []string
+			for _, issue := range payload.Issues {
+				issueKinds = append(issueKinds, issue.Kind)
+			}
+			require.Equal(t, tc.wantIssueKinds, issueKinds)
+			require.NotContains(t, payload.Capabilities.KindVocabulary, "GatewayClass")
+			require.Contains(t, payload.Capabilities.KindVocabulary, "StorageClass")
+		})
 	}
 }

@@ -57,14 +57,17 @@ const (
 )
 
 // Policy is the shared permission contract for one refresh domain. Runtime
-// requirements gate snapshot reads; stream requirements describe resources that
-// resource streams must be able to list and watch.
+// requirements gate snapshot reads; optional requirements are read sources the
+// domain does not require, checked per read without gating it; stream
+// requirements describe resources that resource streams must be able to list
+// and watch.
 type Policy struct {
-	Domain  string
-	Mode    Mode
-	Reason  string
-	Runtime []permissions.ResourceRequirement
-	Stream  []permissions.ResourceRequirement
+	Domain   string
+	Mode     Mode
+	Reason   string
+	Runtime  []permissions.ResourceRequirement
+	Optional []permissions.ResourceRequirement
+	Stream   []permissions.ResourceRequirement
 }
 
 // Resource describes one Kubernetes resource used by a refresh domain. Group
@@ -92,7 +95,11 @@ type policySpec struct {
 	Mode    Mode
 	Reason  string
 	Runtime []Resource
-	Stream  []Resource
+	// Optional resources are read sources the domain does not require: each is
+	// checked per read and reported in AllowedResources, but never denies the
+	// domain or holds its feed readiness.
+	Optional []Resource
+	Stream   []Resource
 }
 
 // Compositions returns the shared resource composition for refresh domains.
@@ -172,6 +179,9 @@ func PreflightRequirements() []permissions.ResourceRequirement {
 		for _, req := range policy.Runtime {
 			add(req)
 		}
+		for _, req := range policy.Optional {
+			add(req)
+		}
 		for _, req := range policy.Stream {
 			add(req)
 		}
@@ -183,11 +193,12 @@ func buildPolicies() []Policy {
 	result := make([]Policy, 0, len(policySpecs))
 	for _, spec := range policySpecs {
 		result = append(result, Policy{
-			Domain:  spec.Domain,
-			Mode:    spec.Mode,
-			Reason:  spec.Reason,
-			Runtime: listRequirements(spec.Runtime),
-			Stream:  listWatchRequirements(spec.Stream),
+			Domain:   spec.Domain,
+			Mode:     spec.Mode,
+			Reason:   spec.Reason,
+			Runtime:  listRequirements(spec.Runtime),
+			Optional: listRequirements(spec.Optional),
+			Stream:   listWatchRequirements(spec.Stream),
 		})
 	}
 	return result
@@ -195,6 +206,7 @@ func buildPolicies() []Policy {
 
 func copyPolicy(policy Policy) Policy {
 	policy.Runtime = append([]permissions.ResourceRequirement(nil), policy.Runtime...)
+	policy.Optional = append([]permissions.ResourceRequirement(nil), policy.Optional...)
 	policy.Stream = append([]permissions.ResourceRequirement(nil), policy.Stream...)
 	return policy
 }
@@ -378,7 +390,9 @@ var policySpecs = []policySpec{
 		Domain:  "nodes",
 		Mode:    ModeAll,
 		Runtime: []Resource{fromIdentity(nodes.Identity)},
-		Stream:  []Resource{fromIdentity(nodes.Identity)},
+		// Each node's pod counts come from pods; without them the table is partial.
+		Optional: []Resource{fromIdentity(pods.Identity)},
+		Stream:   []Resource{fromIdentity(nodes.Identity)},
 	},
 	{
 		// ModeAny: the overview stays useful for identities without node access
