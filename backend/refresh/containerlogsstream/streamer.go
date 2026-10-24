@@ -612,9 +612,16 @@ func (r *containerLogRun) applyPodEvent(ctx context.Context, event podEvent) {
 	}
 	r.mu.Lock()
 	delete(r.seeded, event.pod.Name)
+	unchanged := r.holdsVersionLocked(event.pod)
 	r.mu.Unlock()
 	if event.deleted {
 		r.removePod(ctx, event.pod.Name)
+		return
+	}
+	// The informer's first list, and its re-list after an expired watch,
+	// re-deliver every pod the session holds. An unchanged pod changes no target,
+	// and re-selecting for each one would make those lists cost pods².
+	if unchanged {
 		return
 	}
 	if !r.ownsPod(ctx, event.pod) {
@@ -625,6 +632,13 @@ func (r *containerLogRun) applyPodEvent(ctx context.Context, event podEvent) {
 	r.mu.Unlock()
 	r.cancelRemoval(event.pod.Name)
 	r.reconcileTargets(ctx)
+}
+
+// holdsVersionLocked reports whether the run already holds this version of the
+// pod. A pod without a resource version is never treated as unchanged.
+func (r *containerLogRun) holdsVersionLocked(pod *corev1.Pod) bool {
+	held, ok := r.currentPods[pod.Name]
+	return ok && pod.ResourceVersion != "" && held.ResourceVersion == pod.ResourceVersion
 }
 
 func (r *containerLogRun) ownsPod(ctx context.Context, pod *corev1.Pod) bool {

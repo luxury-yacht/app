@@ -384,7 +384,12 @@ func TestTargetLimitWarningFollowsANewPod(t *testing.T) {
 	selector := &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}}
 	objects := []runtime.Object{&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "web"}, Spec: appsv1.DeploymentSpec{Selector: selector}}}
 	for i := range containerlogs.DefaultPerScopeTargetLimit + 2 {
-		objects = append(objects, runningPod(fmt.Sprintf("web-%03d", i), "app"))
+		pod := runningPod(fmt.Sprintf("web-%03d", i), "app")
+		// Real pods carry a resource version, so the informer's first list is
+		// recognised as the pods the session already holds; the fake tracker
+		// does not set one.
+		pod.ResourceVersion = fmt.Sprint(100 + i)
+		objects = append(objects, pod)
 	}
 	var client *fake.Clientset
 	session := startLogSession(t, sessionSetup{
