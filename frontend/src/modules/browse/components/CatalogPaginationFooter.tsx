@@ -31,7 +31,6 @@ export const shouldRenderCatalogPaginationFooter = (pagination: BrowseCatalogPag
   shouldRenderTablePaginationControls({
     pageSizeOptions: pagination.pageLimitOptions,
     totalCount: pagination.totalCount,
-    totalIsExact: pagination.totalIsExact,
     hasPrevious: pagination.hasPrevious,
     hasNext: pagination.hasMore,
   });

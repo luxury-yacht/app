@@ -12,7 +12,6 @@ import type { ObjectDiffOpenRequest } from '@shared/components/diff/objectDiffSe
 import type { GridTableFilterRequest } from '@shared/components/tables/hooks/gridTableFilterRequest';
 import type { GridTableFocusRequest } from '@shared/components/tables/hooks/gridTableFocusRequest';
 import type { ClusterLifecycleState } from '@/core/contexts/clusterLifecycleState';
-import type { RefresherState } from '@/core/refresh/RefreshManager';
 
 import type {
   DoorbellDomain as DoorbellStreamDomain,
@@ -74,8 +73,6 @@ export interface AppEvents {
   // Refresh events
   /** A cluster's refresh runtime was torn down (cluster closed/deselected). */
   'refresh:cluster-pruned': { clusterId: string };
-  'refresh:state-change': { name: string; state: RefresherState };
-  'refresh:registered': { name: string };
   'refresh:start': { name: string; isManual: boolean };
   'refresh:complete': { name: string; isManual: boolean; success: boolean; error?: unknown };
   /** A stream scope got a permission-denied error frame: streaming for it is
@@ -94,6 +91,11 @@ export interface AppEvents {
     missingKeys: number;
     extraKeys: number;
   };
+  // A doorbell advanced a declared signal clock for one stored scope.
+  'refresh:stream-signal': {
+    domain: DoorbellStreamDomain;
+    scope: string;
+  };
   'refresh:resource-stream-health': {
     domain: DoorbellStreamDomain;
     scope: string;
@@ -104,36 +106,9 @@ export interface AppEvents {
     lastDeliveryAt?: number;
   };
 
-  // Settings events
-  'settings:auto-refresh': boolean;
-  'settings:refresh-background': boolean;
-  'settings:short-names': boolean;
-  'settings:dim-inactive-namespaces': boolean;
-  'settings:exclusive-namespaces': boolean;
-  'settings:sidebar-expansion': undefined;
-  'settings:error-reporting': boolean;
-  'settings:appearance-mode': 'light' | 'dark' | 'system';
-  'settings:kubernetes-client-qps': number;
-  'settings:default-table-page-size': number;
-  'settings:kubernetes-client-burst': number;
-  'settings:permission-ssrr-fetch-concurrency': number;
-  'settings:obj-panel-logs-buffer-size': number;
-  'settings:obj-panel-logs-api-timestamp-format': string;
-  'settings:obj-panel-logs-api-timestamp-use-local-time-zone': boolean;
-  'settings:obj-panel-logs-target-per-scope-limit': number;
-  'settings:obj-panel-logs-target-global-limit': number;
-  'settings:palette-tint': {
-    mode: 'light' | 'dark';
-    hue: number;
-    saturation: number;
-    brightness: number;
-  };
-  'settings:accent-color': { mode: 'light' | 'dark'; color: string };
-  'settings:link-color': { mode: 'light' | 'dark'; color: string };
+  // Settings events. Preference changes are not bus events: subscribe through
+  // subscribePreference / usePreference in core/settings.
   'settings:appearance-mode-resolved': 'light' | 'dark';
-
-  // Feature events
-  'gridtable:persistence-mode': 'namespaced' | 'shared';
 
   // Grid table external focus — emitted to request that a visible GridTable
   // finds and focuses a specific row matching the given resource fields.

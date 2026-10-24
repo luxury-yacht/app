@@ -6,7 +6,6 @@ import type {
   CatalogSnapshotPayload,
 } from '@/core/refresh/types';
 import {
-  acceptsCatalogSnapshotScope,
   applyCatalogBaseline,
   applyCatalogPage,
   buildBrowseCatalogPageScope,
@@ -149,23 +148,6 @@ describe('browseCatalogData', () => {
     ).toBe(
       'cluster-1|limit=200&resourceScope=namespace&sort=name&sortDirection=desc&namespace=default&scopeNamespace=default&continue=cursor'
     );
-  });
-
-  it('rejects stale pinned-namespace snapshots', () => {
-    expect(
-      acceptsCatalogSnapshotScope(
-        'cluster-1|limit=200&namespace=kube-system',
-        'cluster-1|limit=200&namespace=default',
-        ['default']
-      )
-    ).toBe(false);
-    expect(
-      acceptsCatalogSnapshotScope(
-        'cluster-1|limit=200&namespace=default',
-        'cluster-1|limit=200&namespace=default',
-        ['default']
-      )
-    ).toBe(true);
   });
 
   it('applies baseline snapshots as full replacements', () => {

@@ -1,5 +1,7 @@
 package backend
 
+import "github.com/luxury-yacht/app/backend/internal/errorstatus"
+
 type ClusterHealthState string
 
 const (
@@ -41,9 +43,11 @@ type ClusterWorkspaceCommand struct {
 	VisibleClusterID          string   `json:"visibleClusterId"`
 }
 
+// ClusterWorkspaceResult returns the latest coherent workspace state even when
+// the command failed; Error is the failure's status.
 type ClusterWorkspaceResult struct {
 	State ClusterWorkspaceState `json:"state"`
-	Error string                `json:"error,omitempty"`
+	Error *errorstatus.Status   `json:"error,omitempty"`
 }
 
 func readConsistentClusterWorkspaceState(
@@ -97,7 +101,8 @@ func clusterWorkspaceStateWithDefaults(clusterID string, cluster ClusterWorkspac
 func clusterWorkspaceResult(state ClusterWorkspaceState, err error) ClusterWorkspaceResult {
 	result := ClusterWorkspaceResult{State: state}
 	if err != nil {
-		result.Error = err.Error()
+		status := errorstatus.Classify(err)
+		result.Error = &status
 	}
 	return result
 }

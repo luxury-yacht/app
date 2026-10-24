@@ -6,6 +6,8 @@ import (
 	"maps"
 	"sync"
 	"sync/atomic"
+
+	"github.com/luxury-yacht/app/backend/internal/preferenceschema"
 )
 
 // ClusterRuntimeManager is the sole state owner for Kubernetes cluster
@@ -89,7 +91,7 @@ func newClusterRuntimeManager(dependencies ClusterRuntimeManagerDependencies) *C
 	}
 	containerLogsPolicy := dependencies.ContainerLogsPolicy
 	if containerLogsPolicy == nil {
-		containerLogsPolicy = NewContainerLogsSelectionPolicy(defaultObjPanelLogsTargetPerScopeLimit)
+		containerLogsPolicy = NewContainerLogsSelectionPolicy(preferenceschema.DefaultObjPanelLogsTargetPerScopeLimit)
 	}
 	projection := dependencies.Projection
 	if projection == nil {
@@ -109,8 +111,8 @@ func newClusterRuntimeManager(dependencies ClusterRuntimeManagerDependencies) *C
 		clusterClients:      make(map[string]*clusterClients),
 		clusterOps:          newClusterOperationCoordinator(),
 		kubeAPIMetrics:      newKubernetesAPIMetricsRegistry(),
-		kubernetesQPS:       defaultKubernetesClientQPS,
-		kubernetesBurst:     defaultKubernetesClientBurst,
+		kubernetesQPS:       preferenceschema.DefaultKubernetesClientQPS,
+		kubernetesBurst:     preferenceschema.DefaultKubernetesClientBurst,
 		intents:             newClusterRuntimeIntentQueue(),
 	}
 	if dependencies.RateLimitsBridge != nil {

@@ -57,3 +57,6 @@ export const objectMapG6EndpointLabel = (node: PositionedNode | null): string =>
 
 export const objectMapG6EndpointKind = (node: PositionedNode | null): string =>
   node?.ref.kind ?? 'Object';
+
+export const objectMapG6EndpointGroup = (node: PositionedNode | null): string =>
+  node?.ref.group ?? '';

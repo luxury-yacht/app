@@ -1,170 +1,101 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelLogsCapability.test.tsx
  *
- * The Logs tab gate through the real capability path: the named `view-logs`
- * descriptor for a pod is answered by QueryPermissions, and the unnamed
- * Pod-level descriptor for a workload by the shared permission map.
+ * The Logs tab gate of an opened object panel, through the real panel, its
+ * namespace permission query, the capability hook, and the permission store.
+ * A pod's `view-logs` check names the pod and is answered by QueryPermissions;
+ * a workload's is Pod-level and resolves from the panel's namespace query
+ * (ObjectPanel.tsx), so the suite mounts the full app and opens the panel.
+ * Only the backend boundary is faked (test-utils/appState).
  */
 
-import type React from 'react';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { PermissionStatus } from '@/core/capabilities/permissionTypes';
-import { requireValue } from '@/test-utils/requireValue';
-import type { FeatureSupport, PanelObjectData } from '../types';
-import { useObjectPanelCapabilities } from './useObjectPanelCapabilities';
+import { describe, expect, it } from 'vitest';
+import type { ObjectDetail } from '@/core/refresh/types';
+import {
+  installAppStateHarness,
+  type ObjectIdentity,
+  type PermissionQuery,
+} from '@/test-utils/appState/harness';
+import { objectDetailOf } from '@/test-utils/objectDetail';
 
-type QueryItem = { id: string; name?: string; subresource?: string };
+const app = installAppStateHarness();
 
-const backend = vi.hoisted(() => ({
-  // Decides each QueryPermissions item; the default allows everything.
-  allow: (_item: QueryItem): boolean => true,
-  permissionMap: new Map<string, PermissionStatus>(),
-}));
+const isPodLogs = (query: PermissionQuery) =>
+  query.resourceKind === 'Pod' && query.subresource === 'log';
 
-vi.mock('@core/backend-api', () => ({
-  QueryPermissions: async (items: QueryItem[]) => ({
-    results: items.map((item) => ({
-      ...item,
-      allowed: backend.allow(item),
-      source: 'ssrr',
-      reason: '',
-      error: '',
-    })),
-  }),
-}));
+const podLogQueries = () =>
+  app.backend
+    .calls('QueryPermissions')
+    .flatMap(([queries]) => queries ?? [])
+    .filter(isPodLogs);
 
-vi.mock('@core/desktop-runtime', () => ({
-  desktopRuntimeAvailable: () => true,
-  onEvent: () => () => undefined,
-}));
-
-vi.mock('@/core/contexts/ClusterLifecycleContext', () => ({
-  useOptionalClusterLifecycle: () => undefined,
-}));
-
-vi.mock('@/core/capabilities/permissionStore', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/core/capabilities/permissionStore')>();
-  return {
-    ...actual,
-    subscribeUserPermissions: () => () => undefined,
-    getUserPermissionMap: () => backend.permissionMap,
-  };
-});
-
-vi.mock('../NodeLogs/nodeLogsApi', () => ({
-  discoverNodeLogs: vi.fn(),
-  getCachedNodeLogDiscovery: () => null,
-}));
-
-const featureSupport: FeatureSupport = {
-  objPanelLogs: true,
-  nodeLogs: false,
-  manifest: false,
-  values: false,
-  delete: false,
-  restart: false,
-  scale: false,
-  edit: false,
-  shell: false,
-  debug: false,
-  trigger: false,
-  suspend: false,
+const openPanel = async (identity: ObjectIdentity, detail: ObjectDetail) => {
+  const dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['team-a']);
+  app.startScreen(dev);
+  // The panel's reads, including its metrics collector's base table scope (test-utils/appState).
+  const panel = app.servePanel(dev, identity, detail as never);
+  // backend/autoscaling_details.go IsWorkloadHPAManaged: no HPA targets the workload.
+  app.backend.answer('IsWorkloadHPAManaged', () => false);
+  const view = await app.mountApp();
+  await act(async () => {
+    view.owners().objectPanel.openWithObject(panel.ref);
+  });
+  await app.settle();
+  // The tab strip owns its tabs by id (aria-owns), as assistive technology reads them.
+  const tablist = document.querySelector('[role="tablist"][aria-label="Object Panel Tabs"]');
+  const tabLabels = (tablist?.getAttribute('aria-owns') ?? '')
+    .split(' ')
+    .map((id) => document.getElementById(id)?.textContent?.trim().toLowerCase());
+  return { dev, tabLabels };
 };
 
-const pod: PanelObjectData = {
-  kind: 'Pod',
-  name: 'web-0',
-  namespace: 'team-a',
-  clusterId: 'cluster-a',
+const pod: ObjectIdentity = {
   group: '',
   version: 'v1',
+  kind: 'Pod',
+  namespace: 'team-a',
+  name: 'web-0',
 };
+const podDetail = objectDetailOf('pod', { name: 'web-0', namespace: 'team-a' });
 
 describe('Logs tab gate', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
-  let result: ReturnType<typeof useObjectPanelCapabilities> | null = null;
+  it("shows a pod's Logs tab when the user may read that pod's logs by name only", async () => {
+    // Pod logs are denied namespace-wide but granted for this pod.
+    app.permissions((query) => !isPodLogs(query) || query.name === 'web-0');
 
-  const render = async (objectData: PanelObjectData, objectKind: string) => {
-    const Harness: React.FC = () => {
-      result = useObjectPanelCapabilities({
-        objectData,
-        objectKind,
-        detailScope: `${objectData.clusterId}|${objectData.namespace}:${objectData.group}/${objectData.version}:${objectKind}:${objectData.name}`,
-        featureSupport,
-      });
-      return null;
-    };
-    await act(async () => {
-      root.render(<Harness />);
-    });
-    // Let the QueryPermissions round trip settle.
-    for (let index = 0; index < 4; index += 1) {
-      await act(async () => {
-        await Promise.resolve();
-      });
-    }
-    return requireValue(result, 'expected the capabilities hook to render').capabilities;
-  };
+    const { dev, tabLabels } = await openPanel(pod, podDetail);
 
-  beforeEach(() => {
-    backend.allow = () => true;
-    backend.permissionMap = new Map();
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
+    expect(podLogQueries()).toContainEqual(
+      expect.objectContaining({
+        clusterId: dev.clusterId,
+        namespace: 'team-a',
+        name: 'web-0',
+        verb: 'get',
+      })
+    );
+    expect(tabLabels).toContain('logs');
   });
 
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-    result = null;
+  it("hides a pod's Logs tab once its named pod-logs check is denied", async () => {
+    app.permissions((query) => !isPodLogs(query));
+
+    const { tabLabels } = await openPanel(pod, podDetail);
+
+    expect(tabLabels).toContain('details');
+    expect(tabLabels).not.toContain('logs');
   });
 
-  it('shows the tab for a pod whose logs the user may read by name', async () => {
-    backend.allow = (item) => item.subresource !== 'log' || item.name === 'web-0';
+  it("hides a workload's Logs tab when pod logs are denied in its namespace", async () => {
+    app.permissions((query) => !(isPodLogs(query) && query.namespace === 'team-a'));
 
-    expect((await render(pod, 'pod')).hasObjPanelLogs).toBe(true);
-  });
+    const { tabLabels } = await openPanel(
+      { group: 'apps', version: 'v1', kind: 'Deployment', namespace: 'team-a', name: 'web' },
+      objectDetailOf('deployment', { name: 'web', namespace: 'team-a' })
+    );
 
-  it('hides the tab once the named pod-logs check is denied', async () => {
-    backend.allow = (item) => item.subresource !== 'log';
-
-    expect((await render(pod, 'pod')).hasObjPanelLogs).toBe(false);
-  });
-
-  it('hides a workload tab when pod logs are denied in the namespace', async () => {
-    const { getPermissionKey } = await import('@/core/capabilities/permissionStore');
-    const key = getPermissionKey('Pod', 'get', 'team-a', 'log', 'cluster-a', '', 'v1');
-    backend.permissionMap = new Map([
-      [
-        key,
-        {
-          id: key,
-          allowed: false,
-          pending: false,
-          reason: 'forbidden',
-          error: null,
-          source: 'ssrr',
-          descriptor: {
-            clusterId: 'cluster-a',
-            group: '',
-            version: 'v1',
-            resourceKind: 'Pod',
-            verb: 'get',
-            namespace: 'team-a',
-            subresource: 'log',
-          },
-          entry: { status: 'ready' },
-        },
-      ],
-    ]);
-
-    const deployment: PanelObjectData = { ...pod, kind: 'Deployment', name: 'web', group: 'apps' };
-    expect((await render(deployment, 'deployment')).hasObjPanelLogs).toBe(false);
+    expect(tabLabels).toContain('details');
+    expect(tabLabels).not.toContain('logs');
   });
 });

@@ -17,11 +17,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/stretchr/testify/require"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
-	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -29,14 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
-	clientfeatures "k8s.io/client-go/features"
-	clientfeaturestesting "k8s.io/client-go/features/testing"
-	"k8s.io/client-go/informers"
 	kubernetesfake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayfake "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned/fake"
-	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 )
 
 func TestServiceSyncCollectsResources(t *testing.T) {
@@ -122,6 +112,9 @@ func TestServiceSyncCollectsResources(t *testing.T) {
 type fakeCatalogIngestSource struct {
 	rows   map[schema.GroupVersionResource][]interface{}
 	synced map[schema.GroupVersionResource]bool
+	// partitions overrides the readiness a synced store reports: one Ready
+	// cluster-wide partition, as the ingest manager reports for it.
+	partitions map[schema.GroupVersionResource][]ingest.PartitionReadiness
 }
 
 func (f *fakeCatalogIngestSource) CatalogRows(gvr schema.GroupVersionResource) []interface{} {
@@ -153,11 +146,15 @@ func (f *fakeCatalogIngestSource) Tracks(gvr schema.GroupVersionResource) bool {
 	return ok
 }
 
+// A bulk replay replaces only its own kind: the ConfigMap store's rows
+// replace the catalog's ConfigMaps and leave other kinds alone.
 func TestIngestCatalogSinkBulkReplaceScopesGVR(t *testing.T) {
 	now := time.Date(2026, 6, 26, 12, 0, 0, 0, time.UTC)
-	svc := NewService(Dependencies{Now: func() time.Time { return now }}, nil)
 	cmGVR := schema.GroupVersionResource{Version: "v1", Resource: "configmaps"}
 	secGVR := schema.GroupVersionResource{Version: "v1", Resource: "secrets"}
+	stored := map[schema.GroupVersionResource][]interface{}{}
+	svc := NewService(Dependencies{Now: func() time.Time { return now }, IngestSource: replayIngestSource{rows: stored}}, nil)
+	defer svc.stopIngestReconciliation()
 	cmDesc := Descriptor{Group: cmGVR.Group, Version: "v1", Kind: "ConfigMap", Resource: "configmaps", Namespaced: true, Scope: ScopeNamespace}
 	secDesc := Descriptor{Group: secGVR.Group, Version: "v1", Kind: "Secret", Resource: "secrets", Namespaced: true, Scope: ScopeNamespace}
 	svc.resources = map[string]Descriptor{
@@ -171,32 +168,27 @@ func TestIngestCatalogSinkBulkReplaceScopesGVR(t *testing.T) {
 		catalogKey(cmDesc, oldCM.Ref.Namespace, oldCM.Ref.Name): oldCM,
 	}
 	svc.catalogIndex.rebuildCacheFromItems(cloneSummaryMap(svc.items), svc.Descriptors())
-
 	sink := ingestCatalogSink{service: svc, gvr: cmGVR}
-	bulk, ok := interface{}(sink).(ingest.Replacer)
-	if !ok {
-		t.Fatal("ingest catalog sink must support bulk replace")
+	replay := func(rows ...interface{}) {
+		stored[cmGVR] = rows
+		sink.Replace(rows)
+		waitForIngestReconciliation(t, svc)
 	}
-	newCM := Summary{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "ConfigMap", Resource: "configmaps", Namespace: "default", Name: "cm-new"}, Scope: ScopeNamespace}
-	bulk.Replace([]interface{}{newCM})
-
-	if _, ok := svc.items[catalogKey(cmDesc, "default", "cm-old")]; ok {
-		t.Fatal("old ConfigMap summary survived bulk replace")
-	}
-	if _, ok := svc.items[catalogKey(cmDesc, "default", "cm-new")]; !ok {
-		t.Fatal("new ConfigMap summary missing after bulk replace")
-	}
-	if _, ok := svc.items[catalogKey(secDesc, "default", "sec-a")]; !ok {
-		t.Fatal("Secret summary was removed by ConfigMap bulk replace")
+	present := func(desc Descriptor, name string) bool {
+		svc.mu.RLock()
+		defer svc.mu.RUnlock()
+		_, ok := svc.items[catalogKey(desc, "default", name)]
+		return ok
 	}
 
-	bulk.Replace(nil)
-	if _, ok := svc.items[catalogKey(cmDesc, "default", "cm-new")]; ok {
-		t.Fatal("ConfigMap summary survived empty bulk replace")
-	}
-	if _, ok := svc.items[catalogKey(secDesc, "default", "sec-a")]; !ok {
-		t.Fatal("Secret summary was removed by empty ConfigMap bulk replace")
-	}
+	replay(Summary{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "ConfigMap", Resource: "configmaps", Namespace: "default", Name: "cm-new"}, Scope: ScopeNamespace})
+	require.False(t, present(cmDesc, "cm-old"), "old ConfigMap summary survived bulk replace")
+	require.True(t, present(cmDesc, "cm-new"), "new ConfigMap summary missing after bulk replace")
+	require.True(t, present(secDesc, "sec-a"), "Secret summary was removed by ConfigMap bulk replace")
+
+	replay()
+	require.False(t, present(cmDesc, "cm-new"), "ConfigMap summary survived empty bulk replace")
+	require.True(t, present(secDesc, "sec-a"), "Secret summary was removed by empty ConfigMap bulk replace")
 }
 
 // TestCollectViaIngestServesCutKindSummaries proves a cut kind's collect is served
@@ -207,7 +199,7 @@ func TestCollectViaIngestServesCutKindSummaries(t *testing.T) {
 	// A real ingest-owned GVR from the registry's facet, so the cut-set membership
 	// check passes exactly as in production.
 	var cutGVR schema.GroupVersionResource
-	for gvr := range catalogIngestOwnedGVRs {
+	for gvr := range catalogIngestGVRs {
 		if gvr.Resource == "resourcequotas" {
 			cutGVR = gvr
 		}
@@ -230,7 +222,7 @@ func TestCollectViaIngestServesCutKindSummaries(t *testing.T) {
 	svc := NewService(Dependencies{IngestSource: source, ClusterID: "c1"}, nil)
 
 	// Namespace-scoped request to team-a returns only the team-a summary, byte-identical.
-	summaries, handled, err := svc.collectViaIngest(desc, []string{"team-a"}, nil)
+	summaries, handled, err := svc.collectViaIngest(context.Background(), desc, []string{"team-a"}, nil)
 	if err != nil || !handled {
 		t.Fatalf("collectViaIngest handled=%v err=%v, want handled=true err=nil", handled, err)
 	}
@@ -242,20 +234,80 @@ func TestCollectViaIngestServesCutKindSummaries(t *testing.T) {
 	}
 
 	// An all-namespaces request returns both, proving no scoping when none requested.
-	all, handled, err := svc.collectViaIngest(desc, nil, nil)
+	all, handled, err := svc.collectViaIngest(context.Background(), desc, nil, nil)
 	if err != nil || !handled || len(all) != 2 {
 		t.Fatalf("all-namespaces collectViaIngest handled=%v err=%v len=%d, want true/nil/2", handled, err, len(all))
 	}
 }
 
+// A static kind's store holds only its watched partitions. A partition the
+// permission filter skipped (LIST allowed, WATCH denied) is collected with
+// LIST, as it was before the kind moved to ingest, rows restored into it from
+// spill are not served as watched, and neither a reconcile of the watched
+// partition nor a bulk replay of the store drops the LIST-collected rows.
+func TestCollectViaIngestListsPartitionsWithoutAWatch(t *testing.T) {
+	gvr := schema.GroupVersionResource{Group: "autoscaling", Version: "v2", Resource: "horizontalpodautoscalers"}
+	_, static := catalogIngestGVRs[gvr]
+	require.True(t, static, "HPAs must be collected from their owned reflector")
+	desc := builtinDescriptor(gvr.Group, gvr.Version, "HorizontalPodAutoscaler", gvr.Resource, true)
+	stored := func(namespace, name string) Summary {
+		return summaryFromObject("c1", desc, &metav1.PartialObjectMetadata{
+			ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: name, ResourceVersion: "1"},
+		})
+	}
+	source := &fakeCatalogIngestSource{
+		rows: map[schema.GroupVersionResource][]interface{}{gvr: {stored("watchable", "watched"), stored("list-only", "restored")}},
+		partitions: map[schema.GroupVersionResource][]ingest.PartitionReadiness{gvr: {
+			{Namespace: "watchable", State: refresh.ResourceReadinessReady},
+			{Namespace: "list-only", State: refresh.ResourceReadinessUnavailable},
+		}},
+	}
+	listed := &unstructured.Unstructured{}
+	listed.SetGroupVersionKind(schema.GroupVersionKind{Group: "autoscaling", Version: "v2", Kind: "HorizontalPodAutoscaler"})
+	listed.SetNamespace("list-only")
+	listed.SetName("listed")
+	listed.SetResourceVersion("2")
+	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
+		map[schema.GroupVersionResource]string{gvr: "HorizontalPodAutoscalerList"}, listed)
+	scope := []string{"watchable", "list-only"}
+	svc := NewService(Dependencies{
+		Common: common.Dependencies{DynamicClient: dyn}, IngestSource: source, ClusterID: "c1", AllowedNamespaces: scope,
+	}, &Options{PageSize: 200, ListWorkers: 2})
+	names := func(summaries []Summary) []string {
+		out := make([]string, 0, len(summaries))
+		for _, summary := range summaries {
+			out = append(out, summary.Ref.Name)
+		}
+		return out
+	}
+
+	summaries, handled, err := svc.collectViaIngest(context.Background(), desc, scope, nil)
+	require.True(t, handled)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"watched", "listed"}, names(summaries))
+
+	registerDesc(svc, desc)
+	svc.replaceIngestCatalogSummaries(gvr, summaries)
+	svc.syncMu.Lock()
+	svc.reconcileCurrentIngestSource(gvr)
+	svc.syncMu.Unlock()
+	require.ElementsMatch(t, []string{"watched", "listed"}, names(svc.Query(QueryOptions{}).Items))
+
+	// A subscription replay or a relist delivers the store's rows in bulk; it
+	// must reconcile by partition too, not replace the kind with them.
+	defer svc.stopIngestReconciliation()
+	ingestCatalogSink{service: svc, gvr: gvr}.Replace(source.CatalogRows(gvr))
+	waitForIngestReconciliation(t, svc)
+	require.ElementsMatch(t, []string{"watched", "listed"}, names(svc.Query(QueryOptions{}).Items))
+}
+
 // TestCollectViaIngestAlwaysHandlesCutKind proves a cut kind's collect is ALWAYS
 // served by ingest — even with no rows yet — so the catalog never falls through to
-// the shared factory for a GVR the factory no longer registers (which would lazily
-// create an unstarted informer). An uncut GVR is not handled, so the factory/list
-// path still serves it.
+// a LIST for a kind its owned reflector feeds. An uncut GVR is not handled, so the
+// list path still serves it.
 func TestCollectViaIngestAlwaysHandlesCutKind(t *testing.T) {
 	var cutGVR schema.GroupVersionResource
-	for gvr := range catalogIngestOwnedGVRs {
+	for gvr := range catalogIngestGVRs {
 		if gvr.Resource == "resourcequotas" {
 			cutGVR = gvr
 		}
@@ -265,22 +317,21 @@ func TestCollectViaIngestAlwaysHandlesCutKind(t *testing.T) {
 		rows: map[schema.GroupVersionResource][]interface{}{cutGVR: {}},
 	}
 	svc := NewService(Dependencies{IngestSource: source}, nil)
-	if summaries, handled, err := svc.collectViaIngest(cutDesc, nil, nil); !handled || err != nil || len(summaries) != 0 {
+	if summaries, handled, err := svc.collectViaIngest(context.Background(), cutDesc, nil, nil); !handled || err != nil || len(summaries) != 0 {
 		t.Fatalf("cut kind collectViaIngest handled=%v err=%v len=%d, want true/nil/0", handled, err, len(summaries))
 	}
 
-	// HorizontalPodAutoscaler is NOT cut (it keeps its typed informer — no v2 shared informer
-	// for the ingest path), so its collect must NOT be handled by ingest — the factory/list
-	// path still serves it.
-	uncutDesc := builtinDescriptor("autoscaling", "v2", "HorizontalPodAutoscaler", "horizontalpodautoscalers", false)
-	if _, handled, _ := svc.collectViaIngest(uncutDesc, nil, nil); handled {
+	// A kind the registry does not own (a custom resource) is not handled by the static
+	// ingest path; the dynamic/list path serves it.
+	uncutDesc := builtinDescriptor("example.com", "v1", "Widget", "widgets", true)
+	if _, handled, _ := svc.collectViaIngest(context.Background(), uncutDesc, nil, nil); handled {
 		t.Fatal("uncut kind must not be handled by ingest")
 	}
 }
 
 func TestCollectViaIngestReportsUnsyncedStaticCutKind(t *testing.T) {
 	var cutGVR schema.GroupVersionResource
-	for gvr := range catalogIngestOwnedGVRs {
+	for gvr := range catalogIngestGVRs {
 		if gvr.Resource == "resourcequotas" {
 			cutGVR = gvr
 		}
@@ -292,7 +343,7 @@ func TestCollectViaIngestReportsUnsyncedStaticCutKind(t *testing.T) {
 	}
 	svc := NewService(Dependencies{IngestSource: source}, nil)
 
-	summaries, handled, err := svc.collectViaIngest(cutDesc, nil, nil)
+	summaries, handled, err := svc.collectViaIngest(context.Background(), cutDesc, nil, nil)
 	if !handled {
 		t.Fatal("unsynced static cut kind must still be handled by ingest")
 	}
@@ -742,172 +793,16 @@ func (source *fakeCatalogIngestSource) SubscribeCatalogSink(gvr schema.GroupVers
 	return func() {}
 }
 
-func (*fakeCatalogIngestSource) PartitionReadinessFor(schema.GroupVersionResource) []ingest.PartitionReadiness {
-	return nil
+func (*fakeCatalogIngestSource) SubscribeBundleSink(schema.GroupVersionResource, ingest.BundleSink) func() {
+	return func() {}
 }
 
-// An informer can stop blocking startup before its initial LIST finishes: it
-// passed the factory's sync deadline and is still retrying. Its empty cache does
-// not prove the objects are gone, so the kind must fail and keep its published
-// rows, like an unsynced ingest store, until a retry can read the synced cache.
-func TestCatalogFailsKindWhileInformerIsStillSyncing(t *testing.T) {
-	tests := []struct {
-		name     string
-		desc     Descriptor
-		register func(*Dependencies)
-	}{{
-		name:     "shared informer",
-		desc:     Descriptor{Group: "apps", Version: "v1", Resource: "replicasets", Kind: "ReplicaSet", Scope: ScopeNamespace, Namespaced: true},
-		register: registerUnsyncedReplicaSetInformer,
-	}, {
-		name: "CRD informer",
-		desc: Descriptor{Group: "apiextensions.k8s.io", Version: "v1", Resource: "customresourcedefinitions", Kind: "CustomResourceDefinition", Scope: ScopeCluster},
-		register: func(deps *Dependencies) {
-			factory := apiextinformers.NewSharedInformerFactory(apiextensionsfake.NewClientset(), 0)
-			factory.Apiextensions().V1().CustomResourceDefinitions().Informer()
-			deps.APIExtensionsInformerFactory = factory
-		},
-	}}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			// The API holds no objects, so listing it instead would also delete the row.
-			deps := Dependencies{
-				ClusterID: "c1",
-				Common: common.Dependencies{DynamicClient: dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
-					map[schema.GroupVersionResource]string{test.desc.GVR(): test.desc.Kind + "List"})},
-				InformerReadiness: informerReadinessStub{readiness: refresh.ResourceReadinessDegraded},
-			}
-			test.register(&deps)
-			svc := newSingleKindCatalog(deps, test.desc)
-			object := &unstructured.Unstructured{}
-			object.SetGroupVersionKind(schema.GroupVersionKind{Group: test.desc.Group, Version: test.desc.Version, Kind: test.desc.Kind})
-			if test.desc.Namespaced {
-				object.SetNamespace("default")
-			}
-			object.SetName("retained")
-			old := summaryFromObject("c1", test.desc, object)
-			svc.items[catalogKey(test.desc, object.GetNamespace(), object.GetName())] = old
-			svc.catalogIndex.rebuildCacheFromItems(svc.items, []Descriptor{test.desc})
-
-			err := svc.sync(t.Context())
-
-			var partial *PartialSyncError
-			require.ErrorAs(t, err, &partial)
-			require.Equal(t, []string{test.desc.GVR().String()}, partial.FailedDescriptors)
-			require.Equal(t, []Summary{old}, svc.Query(QueryOptions{Kinds: []string{test.desc.Kind}}).Items,
-				"a still-syncing informer's empty cache must not delete the kind's published rows")
-		})
+func (f *fakeCatalogIngestSource) PartitionReadinessFor(gvr schema.GroupVersionResource) []ingest.PartitionReadiness {
+	if partitions, ok := f.partitions[gvr]; ok {
+		return partitions
 	}
-}
-
-// An informer the factory reports unavailable will never sync: the API refused
-// its watch after the permission check passed, or it was created after the
-// factory started (for example Gateway API installed while connected). The kind
-// is collected from the API, as when the permission check denies the informer.
-func TestCatalogListsLiveWhenInformerIsUnavailable(t *testing.T) {
-	desc := Descriptor{Group: "apps", Version: "v1", Resource: "replicasets", Kind: "ReplicaSet", Scope: ScopeNamespace, Namespaced: true}
-	live := &unstructured.Unstructured{}
-	live.SetGroupVersionKind(schema.GroupVersionKind{Group: desc.Group, Version: desc.Version, Kind: desc.Kind})
-	live.SetNamespace("default")
-	live.SetName("live")
-	live.SetUID("live-uid")
-	deps := Dependencies{
-		ClusterID: "c1",
-		Common: common.Dependencies{DynamicClient: dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
-			map[schema.GroupVersionResource]string{desc.GVR(): "ReplicaSetList"}, live)},
-		InformerReadiness: informerReadinessStub{readiness: refresh.ResourceReadinessUnavailable},
+	if !f.HasSyncedFor(gvr) {
+		return []ingest.PartitionReadiness{{State: refresh.ResourceReadinessPending}}
 	}
-	registerUnsyncedReplicaSetInformer(&deps)
-	svc := newSingleKindCatalog(deps, desc)
-
-	require.NoError(t, svc.sync(t.Context()))
-
-	rows := svc.Query(QueryOptions{Kinds: []string{desc.Kind}}).Items
-	require.Len(t, rows, 1, "an unavailable informer's empty cache must not be published as the kind's membership")
-	require.Equal(t, "live", rows[0].Ref.Name)
-	require.Equal(t, "c1", rows[0].Ref.ClusterID)
-}
-
-// A synced informer is the kind's authoritative source: collection publishes its
-// cache without an API LIST. Each informer factory the catalog reads is covered.
-func TestCatalogReadsSyncedInformerWithoutListingAPI(t *testing.T) {
-	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
-	cached := metav1.ObjectMeta{Name: "cached", UID: "cached-uid"}
-	namespacedCached := metav1.ObjectMeta{Name: "cached", Namespace: "default", UID: "cached-uid"}
-	tests := []struct {
-		name     string
-		desc     Descriptor
-		register func(ctx context.Context, deps *Dependencies)
-	}{{
-		name: "shared informer",
-		desc: Descriptor{Group: "apps", Version: "v1", Resource: "replicasets", Kind: "ReplicaSet", Scope: ScopeNamespace, Namespaced: true},
-		register: func(ctx context.Context, deps *Dependencies) {
-			factory := informers.NewSharedInformerFactory(kubernetesfake.NewClientset(&appsv1.ReplicaSet{ObjectMeta: namespacedCached}), 0)
-			factory.Apps().V1().ReplicaSets().Informer()
-			factory.Start(ctx.Done())
-			factory.WaitForCacheSync(ctx.Done())
-			deps.InformerFactory = factory
-		},
-	}, {
-		name: "CRD informer",
-		desc: Descriptor{Group: "apiextensions.k8s.io", Version: "v1", Resource: "customresourcedefinitions", Kind: "CustomResourceDefinition", Scope: ScopeCluster},
-		register: func(ctx context.Context, deps *Dependencies) {
-			factory := apiextinformers.NewSharedInformerFactory(apiextensionsfake.NewClientset(&apiextensionsv1.CustomResourceDefinition{ObjectMeta: cached}), 0)
-			factory.Apiextensions().V1().CustomResourceDefinitions().Informer()
-			factory.Start(ctx.Done())
-			factory.WaitForCacheSync(ctx.Done())
-			deps.APIExtensionsInformerFactory = factory
-		},
-	}, {
-		name: "Gateway API informer",
-		desc: Descriptor{Group: "gateway.networking.k8s.io", Version: "v1", Resource: "gatewayclasses", Kind: "GatewayClass", Scope: ScopeCluster},
-		register: func(ctx context.Context, deps *Dependencies) {
-			factory := gatewayinformers.NewSharedInformerFactory(gatewayfake.NewSimpleClientset(&gatewayv1.GatewayClass{ObjectMeta: cached}), 0)
-			factory.Gateway().V1().GatewayClasses().Informer()
-			factory.Start(ctx.Done())
-			factory.WaitForCacheSync(ctx.Done())
-			deps.GatewayInformerFactory = factory
-		},
-	}}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			dynamicClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
-			listed := false
-			dynamicClient.PrependReactor("list", "*", func(k8stesting.Action) (bool, runtime.Object, error) {
-				listed = true
-				return true, nil, errors.New("collection must read the synced informer")
-			})
-			deps := Dependencies{
-				ClusterID:         "c1",
-				Common:            common.Dependencies{DynamicClient: dynamicClient},
-				InformerReadiness: informerReadinessStub{readiness: refresh.ResourceReadinessReady},
-			}
-			test.register(t.Context(), &deps)
-			svc := newSingleKindCatalog(deps, test.desc)
-
-			require.NoError(t, svc.sync(t.Context()))
-
-			rows := svc.Query(QueryOptions{Kinds: []string{test.desc.Kind}}).Items
-			require.Len(t, rows, 1)
-			require.Equal(t, "cached", rows[0].Ref.Name)
-			require.False(t, listed, "a synced informer must serve the kind without an API LIST")
-		})
-	}
-}
-
-// registerUnsyncedReplicaSetInformer registers a ReplicaSet informer that is never
-// started, so its cache stays empty and unsynced.
-func registerUnsyncedReplicaSetInformer(deps *Dependencies) {
-	factory := informers.NewSharedInformerFactory(kubernetesfake.NewClientset(), 0)
-	factory.Apps().V1().ReplicaSets().Informer()
-	deps.InformerFactory = factory
-}
-
-func newSingleKindCatalog(deps Dependencies, desc Descriptor) *Service {
-	svc := NewService(deps, nil)
-	svc.discoveryClient = &stubDiscovery{lists: []*metav1.APIResourceList{{
-		GroupVersion: desc.Group + "/" + desc.Version,
-		APIResources: []metav1.APIResource{{Name: desc.Resource, Kind: desc.Kind, Namespaced: desc.Namespaced, Verbs: []string{"list", "watch"}}},
-	}}}
-	return svc
+	return []ingest.PartitionReadiness{{State: refresh.ResourceReadinessReady}}
 }

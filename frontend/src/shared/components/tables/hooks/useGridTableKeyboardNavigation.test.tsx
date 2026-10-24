@@ -4,6 +4,7 @@ import type { FC, RefObject } from 'react';
 import { act, useLayoutEffect, useRef } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 interface HarnessCapture {
   moveSelectionByDelta: (delta: number) => boolean;
@@ -57,17 +58,25 @@ const KeyboardNavigationHarness: FC<HarnessProps> = ({
     if (!wrapper) {
       return;
     }
+    // The wrapper scrolls its rows; each row's position follows its scrollTop.
     Object.defineProperty(wrapper, 'clientHeight', {
       configurable: true,
       value: wrapperHeight,
     });
-    wrapper.querySelectorAll<HTMLElement>('.gridtable-row').forEach((row) => {
-      row.getBoundingClientRect = () =>
-        ({
-          height: rowHeight,
-        }) as DOMRect;
+    Object.defineProperty(wrapper, 'scrollHeight', {
+      configurable: true,
+      value: tableDataLength * rowHeight,
     });
-  }, [rowHeight, wrapperHeight]);
+    Object.defineProperty(wrapper, 'scrollTop', { configurable: true, value: 0, writable: true });
+    wrapper.querySelectorAll<HTMLElement>('.gridtable-row').forEach((row, index) => {
+      row.getBoundingClientRect = () =>
+        DOMRect.fromRect({
+          y: index * rowHeight - wrapper.scrollTop,
+          width: 400,
+          height: rowHeight,
+        });
+    });
+  }, [rowHeight, tableDataLength, wrapperHeight]);
 
   const capture = useGridTableKeyboardNavigation({
     tableDataLength,
@@ -170,16 +179,42 @@ describe('useGridTableKeyboardNavigation', () => {
     expect(requireCapture(capture).getPageSizeRef.current).toBe(4);
   });
 
-  it('scrolls and updates hover for focused rendered rows', async () => {
+  // The app zooms the page: a row's bounding rect is in zoomed pixels while the
+  // viewport height is in CSS pixels.
+  it('sizes a page by CSS row heights at a page zoom', async () => {
+    document.documentElement.style.setProperty('--app-zoom-factor', '2');
+    let capture: HarnessCapture | null = null;
+    try {
+      await act(async () => {
+        root.render(
+          <KeyboardNavigationHarness
+            tableDataLength={5}
+            focusedRowIndex={null}
+            focusedRowKey={null}
+            wrapperHeight={120}
+            rowHeight={30 * 2}
+            onCapture={(next) => {
+              capture = next;
+            }}
+          />
+        );
+      });
+
+      expect(requireCapture(capture).getPageSizeRef.current).toBe(4);
+    } finally {
+      document.documentElement.style.removeProperty('--app-zoom-factor');
+    }
+  });
+
+  it('scrolls a focused row below the viewport into view and updates hover for it', async () => {
     const updateHoverForElement = vi.fn();
     let capture: HarnessCapture | null = null;
-
-    await act(async () => {
+    const renderHarness = () =>
       root.render(
         <KeyboardNavigationHarness
-          tableDataLength={3}
-          focusedRowIndex={1}
-          focusedRowKey="row-1"
+          tableDataLength={10}
+          focusedRowIndex={7}
+          focusedRowKey="row-7"
           shortcutsActive
           updateHoverForElement={updateHoverForElement}
           onCapture={(next) => {
@@ -187,34 +222,26 @@ describe('useGridTableKeyboardNavigation', () => {
           }}
         />
       );
-    });
 
     await act(async () => {
-      requireCapture(capture).jumpToIndex(1);
+      renderHarness();
     });
-    const row = container.querySelector<HTMLDivElement>('[data-testid="row-1"]');
-    const scrollIntoView = vi.fn();
-    if (row) {
-      row.scrollIntoView = scrollIntoView;
-    }
+    const wrapper = requireValue(container.firstElementChild, 'wrapper');
+    // A pointer focus leaves the scroll position alone.
+    expect(wrapper.scrollTop).toBe(0);
 
     await act(async () => {
-      root.render(
-        <KeyboardNavigationHarness
-          tableDataLength={3}
-          focusedRowIndex={1}
-          focusedRowKey="row-1"
-          shortcutsActive
-          updateHoverForElement={updateHoverForElement}
-          onCapture={(next) => {
-            capture = next;
-          }}
-        />
-      );
+      requireCapture(capture).jumpToIndex(7);
+    });
+    await act(async () => {
+      renderHarness();
     });
 
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
-    expect(updateHoverForElement).toHaveBeenCalledWith(row);
+    // Row 7 spans 140-160 in a 100px viewport: scroll just far enough to show it.
+    expect(wrapper.scrollTop).toBe(60);
+    expect(updateHoverForElement).toHaveBeenCalledWith(
+      container.querySelector('[data-testid="row-7"]')
+    );
   });
 
   it('matches rendered rows with selector-sensitive keys without CSS escaping', async () => {
@@ -242,10 +269,6 @@ describe('useGridTableKeyboardNavigation', () => {
       requireCapture(capture).jumpToIndex(0);
     });
     const row = container.querySelector<HTMLDivElement>('[data-testid="row-0"]');
-    const scrollIntoView = vi.fn();
-    if (row) {
-      row.scrollIntoView = scrollIntoView;
-    }
 
     await act(async () => {
       root.render(
@@ -263,7 +286,6 @@ describe('useGridTableKeyboardNavigation', () => {
       );
     });
 
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
     expect(updateHoverForElement).toHaveBeenCalledWith(row);
   });
 

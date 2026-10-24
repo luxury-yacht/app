@@ -2,19 +2,14 @@ package snapshot
 
 import (
 	"context"
-	"fmt"
 	"sort"
-
-	informers "k8s.io/client-go/informers"
-	"k8s.io/client-go/tools/cache"
-	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
-	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/admission"
@@ -28,8 +23,8 @@ const clusterConfigDomainName = "cluster-config"
 // ClusterConfigBuilder aggregates configuration resources for the cluster tab via
 // the shared typed-table domain skeleton (typed_table_domain.go).
 type ClusterConfigBuilder struct {
-	collectIndexer func(streamspec.Descriptor) cache.Indexer
-	// maintained, when set, is an informer-fed store the builder serves rows from
+	available kindAvailability
+	// maintained, when set, is a reflector-fed store the builder serves rows from
 	// instead of listing + re-projecting per request. nil falls back to the list path.
 	maintained *typedMaintainedStore[ClusterConfigEntry]
 }
@@ -74,6 +69,9 @@ func clusterConfigDomainSpec() typedTableDomainSpec[ClusterConfigEntry] {
 		schema:       clusterConfigQuerypageSchema(),
 		capabilities: clusterConfigQueryCapabilities(),
 		sortRows:     sortClusterConfigEntries,
+		payload: func(meta ClusterMeta, envelope ResourceQueryEnvelope, rows []ClusterConfigEntry) any {
+			return ClusterConfigSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: envelope, Rows: rows}
+		},
 	}
 }
 
@@ -86,33 +84,27 @@ func sortClusterConfigEntries(entries []ClusterConfigEntry) {
 	})
 }
 
-// RegisterClusterConfigDomainWithGatewayAPI registers the cluster-config domain.
-//
-// This domain is MIXED: StorageClass, IngressClass, and the admission webhook kinds
-// are owned-reflector ingest kinds (IngestOwned), fed from the ingest reflectors'
-// Table-half Sink; GatewayClass is NOT cut and is still fed from the Gateway-API
-// informer via registerMaintainedHandlers (which skips the ingest-owned kinds). When
-// ingestManager is nil (a unit test) the cut kinds have no feed.
-func RegisterClusterConfigDomainWithGatewayAPI(
+// RegisterClusterConfigDomain registers the cluster-config domain. Every kind
+// (StorageClass, IngressClass, the admission webhooks, GatewayClass) is an
+// owned-reflector ingest kind fed from its ingest Sink. When ingestManager is
+// nil (a unit test) the store has no feed.
+func RegisterClusterConfigDomain(
 	reg *domain.Registry,
-	factory informers.SharedInformerFactory,
-	gatewayFactory gatewayinformers.SharedInformerFactory,
 	allowed domainpermissions.AllowedResources,
 	clusterMeta ClusterMeta,
 	ingestManager *ingest.IngestManager,
+	bell doorbell.Bell,
 ) error {
-	if factory == nil {
-		return fmt.Errorf("shared informer factory is nil")
-	}
-	collectIndexer := factoryIndexers(factory, gatewayFactory, allowed, clusterConfigDomainName, ingestManager)
-	maintained, err := newRegisteredTypedTableStore(reg, clusterConfigDomainSpec(), clusterMeta, collectIndexer, factory, gatewayFactory, ingestManager)
+	available := ingestAvailability(allowed, clusterConfigDomainName, ingestManager)
+	maintained, err := newRegisteredTypedTableStore(reg, clusterConfigDomainSpec(), clusterMeta,
+		ingestManager, bell)
 	if err != nil {
 		return err
 	}
 
 	builder := &ClusterConfigBuilder{
-		collectIndexer: collectIndexer,
-		maintained:     maintained,
+		available:  available,
+		maintained: maintained,
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          clusterConfigDomainName,
@@ -122,8 +114,5 @@ func RegisterClusterConfigDomainWithGatewayAPI(
 
 // Build produces the cluster configuration snapshot.
 func (b *ClusterConfigBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	return buildTypedTableSnapshot(ctx, scope, clusterConfigDomainSpec(), b.collectIndexer, b.maintained,
-		func(meta ClusterMeta, envelope ResourceQueryEnvelope, rows []ClusterConfigEntry) any {
-			return ClusterConfigSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: envelope, Rows: rows}
-		})
+	return buildTypedTableSnapshot(ctx, scope, clusterConfigDomainSpec(), b.available, b.maintained)
 }

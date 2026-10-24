@@ -364,6 +364,39 @@ describe('transitionResourceStreamProtocol', () => {
     ]);
   });
 
+  it('stopping cancels a pending trailing resync so it never resubscribes', () => {
+    let state = initialResourceStreamProtocolState();
+    ({ state } = transitionResourceStreamProtocol(state, {
+      type: 'resync-requested',
+      reason: 'complete-only update',
+      now: 2_000,
+      force: false,
+      cooldownMs: 1_000,
+    }));
+    ({ state } = transitionResourceStreamProtocol(state, { type: 'resync-completed' }));
+
+    const latched = transitionResourceStreamProtocol(state, {
+      type: 'resync-requested',
+      reason: 'complete-only update',
+      now: 2_020,
+      force: false,
+      cooldownMs: 1_000,
+    });
+    expect(latched.effects).toEqual([{ type: 'schedule-trailing-resync', delayMs: 980 }]);
+    ({ state } = transitionResourceStreamProtocol(latched.state, {
+      type: 'trailing-resync-timer-attached',
+      timer: 7,
+    }));
+
+    const stopped = transitionResourceStreamProtocol(state, { type: 'stopping' });
+    expect(stopped.effects).toEqual([{ type: 'cancel-trailing-resync', timer: 7 }]);
+    const late = transitionResourceStreamProtocol(stopped.state, {
+      type: 'trailing-resync-fired',
+      timer: 7,
+    });
+    expect(late.effects).toEqual([]);
+  });
+
   it('resumes from a sequence on reconnect and cancels coalescing when stopping', () => {
     let state = initialResourceStreamProtocolState();
     let result = receive(state, {

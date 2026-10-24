@@ -543,8 +543,6 @@ const ObjectMapDebugEntry = ({ map }: { map: ObjectMapDebugSnapshot }) => (
       <dl className="map-debug-grid">
         <dt>auto-fit</dt>
         <dd>{map.autoFit ? 'on' : 'off'}</dd>
-        <dt>focus</dt>
-        <dd>{map.focusMode ? 'on' : 'off'}</dd>
         <dt>active</dt>
         <dd>{map.activeNodeId ?? 'none'}</dd>
         <dt>preserve</dt>
@@ -601,8 +599,6 @@ const ObjectMapDebugEntry = ({ map }: { map: ObjectMapDebugSnapshot }) => (
     <div className="debug-overlay__section">
       <div className="debug-overlay__label">Limits</div>
       <dl className="map-debug-grid">
-        <dt>max depth</dt>
-        <dd>{map.payload.maxDepth}</dd>
         <dt>max objects</dt>
         <dd>{map.payload.maxNodes}</dd>
         <dt>truncated</dt>

@@ -8,12 +8,10 @@ import "github.com/luxury-yacht/app/backend/kind/kindspec"
 
 var Descriptor = kindspec.Descriptor{
 	Identity:        Identity,
-	CatalogSource:   kindspec.CatalogShared,
+	Display:         kindspec.Display{ShortName: "pv"},
 	DetailCacheable: true,
-	IngestOwned:     true,
 	Stream:          &StreamDescriptor,
 	Collector:       &ObjectMapNode,
 	Edges:           ObjectMapEdges,
 	Binding:         &DetailBinding,
-	Graph:           kindspec.ObjectMapGraph{DirectionalTraversal: true},
 }

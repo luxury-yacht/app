@@ -68,6 +68,12 @@ func (tab TabSnapshot) identity() panelIdentity {
 	return panelIdentity{tab.Kind, tab.ObjectRef, tab.IdentityRef}
 }
 
+// SameIdentity reports whether two tabs show the same panel and target,
+// regardless of the view either one currently shows.
+func (tab TabSnapshot) SameIdentity(other TabSnapshot) bool {
+	return tab.PanelID == other.PanelID && tab.identity() == other.identity()
+}
+
 func validateTabReference(tab TabSnapshot) error {
 	switch tab.Kind {
 	case TabKindObject:
@@ -196,11 +202,15 @@ const (
 )
 
 type WindowDescriptor struct {
-	WindowName string        `json:"windowName"`
-	ClusterID  string        `json:"clusterId"`
-	GroupID    string        `json:"groupId"`
-	State      WindowState   `json:"state"`
-	Snapshot   GroupSnapshot `json:"snapshot"`
+	WindowName string      `json:"windowName"`
+	ClusterID  string      `json:"clusterId"`
+	GroupID    string      `json:"groupId"`
+	State      WindowState `json:"state"`
+	// TransferID names the window's pending open or dock; empty while live.
+	TransferID string `json:"transferId"`
+	// Group is the directory's placement for the window: the tabs it holds, or
+	// while it opens, the tabs moving into it.
+	Group WorkspaceGroup `json:"group"`
 }
 
 const NativeDescriptorSchemaVersion = 1
@@ -225,7 +235,6 @@ type NativeDescriptor struct {
 
 const (
 	WindowOpenedEventName                      = "panel-window:opened"
-	WindowDockRequestedEventName               = "panel-window:dock-requested"
 	WindowFocusRequestedEventName              = "panel-window:focus-requested"
 	WindowCloseRequestedEventName              = "panel-window:close-requested"
 	WindowClosedEventName                      = "panel-window:closed"
@@ -236,18 +245,12 @@ const (
 )
 
 type WindowOpenedEvent struct {
-	WindowName string        `json:"windowName"`
-	TransferID string        `json:"transferId"`
-	ClusterID  string        `json:"clusterId"`
-	GroupID    string        `json:"groupId"`
-	Snapshot   GroupSnapshot `json:"snapshot"`
-}
-
-type WindowDockRequestedEvent struct {
-	WindowName     string        `json:"windowName"`
-	TransferID     string        `json:"transferId"`
-	TargetPosition string        `json:"targetPosition"`
-	Snapshot       GroupSnapshot `json:"snapshot"`
+	WindowName       string        `json:"windowName"`
+	TransferID       string        `json:"transferId"`
+	SourceWindowName string        `json:"sourceWindowName"`
+	ClusterID        string        `json:"clusterId"`
+	GroupID          string        `json:"groupId"`
+	Tabs             []TabSnapshot `json:"tabs"`
 }
 
 type WindowFocusRequestedEvent struct {

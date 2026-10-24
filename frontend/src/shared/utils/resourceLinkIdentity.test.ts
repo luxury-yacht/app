@@ -38,10 +38,9 @@ describe('resourceLinkIdentity', () => {
   it('builds object references only from openable ResourceLink refs', () => {
     const link: ResourceLink = { ref };
 
-    expect(resourceLinkToObjectReference(link, 'alpha')).toEqual(
+    expect(resourceLinkToObjectReference(link)).toEqual(
       expect.objectContaining({
         clusterId: 'cluster-a',
-        clusterName: 'alpha',
         group: 'apps',
         version: 'v1',
         kind: 'Deployment',
@@ -146,13 +145,13 @@ describe('resourceLinkIdentity', () => {
         name: 'api',
       })
     );
-    expect(findCatalogObjectMatchMock).toHaveBeenCalledWith(
-      'cluster-a',
-      'prod',
-      'apps',
-      'v1',
-      'Deployment',
-      'api'
-    );
+    expect(findCatalogObjectMatchMock).toHaveBeenCalledWith({
+      clusterId: 'cluster-a',
+      group: 'apps',
+      version: 'v1',
+      kind: 'Deployment',
+      namespace: 'prod',
+      name: 'api',
+    });
   });
 });

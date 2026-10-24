@@ -25,7 +25,7 @@ func TestPanelWindowCommandsFailWhenTheNativeRegistryIsUnavailable(t *testing.T)
 	_, err = shell.AcknowledgePanelWindowReady("panel-1", "transfer-1")
 	require.ErrorContains(t, err, "panel-window registry is not available")
 	require.ErrorContains(t, shell.BeginPanelWindowDock("panel-1", "right", snapshot), "panel-window registry is not available")
-	require.ErrorContains(t, shell.AcknowledgePanelWindowDock("workspace-1", "panel-1", "transfer-1"), "panel-window registry is not available")
+	require.ErrorContains(t, shell.AcknowledgePanelTransfer("workspace-1", "transfer-1", true), "panel-window registry is not available")
 	require.ErrorContains(t, shell.FailPanelWindowTransfer("workspace-1", "panel-1", "transfer-1"), "panel-window registry is not available")
 	require.ErrorContains(t, shell.AcknowledgePanelWindowClose("panel-1"), "panel-window registry is not available")
 	require.ErrorContains(t, shell.AcknowledgeWorkspaceWindowClose("workspace-1"), "panel-window registry is not available")
@@ -246,12 +246,12 @@ func TestDesktopServiceDelegatesEveryPanelWindowCommandThroughTheShellOwner(t *t
 			return window, nil
 		},
 		BeginPanelWindowDock:       func(string, string, panelwindow.GroupSnapshot) error { mark(); return nil },
-		AcknowledgePanelDock:       func(string, string, string) error { mark(); return nil },
+		AcknowledgePanelTransfer:   func(string, string, bool) error { mark(); return nil },
 		FailPanelTransfer:          func(string, string, string) error { mark(); return nil },
 		AcknowledgePanelClose:      func(string) error { mark(); return nil },
 		AcknowledgeWorkspaceClose:  func(string) error { mark(); return nil },
 		RoutePanelCommand:          func(string, panelwindow.WorkspaceCommand) error { mark(); return nil },
-		UpdatePanelSnapshot:        func(string, panelwindow.GroupSnapshot) error { mark(); return nil },
+		PublishPanelGroup:          func(string, panelwindow.WorkspaceGroup) error { mark(); return nil },
 		RequestPanelTabClose:       func(string, string) error { mark(); return nil },
 		RequestPanelTabTransfer:    func(string, panelwindow.TabTransferRequest) error { mark(); return nil },
 		AcceptPanelTabTransfer:     func(string, string) error { mark(); return nil },
@@ -272,11 +272,11 @@ func TestDesktopServiceDelegatesEveryPanelWindowCommandThroughTheShellOwner(t *t
 	require.NoError(t, err)
 	require.Equal(t, window, gotWindow)
 	require.NoError(t, service.BeginPanelWindowDock(ctx, "panel-1", "right", snapshot))
-	require.NoError(t, service.AcknowledgePanelWindowDock(ctx, "workspace-1", "panel-1", "transfer-1"))
+	require.NoError(t, service.AcknowledgePanelTransfer(ctx, "workspace-1", "transfer-1", true))
 	require.NoError(t, service.FailPanelWindowTransfer(ctx, "workspace-1", "panel-1", "transfer-1"))
 	require.NoError(t, service.AcknowledgePanelWindowClose(ctx, "panel-1"))
 	require.NoError(t, service.AcknowledgeWorkspaceWindowClose(ctx, "workspace-1"))
-	require.NoError(t, service.UpdatePanelWindowSnapshot(ctx, "panel-1", snapshot))
+	require.NoError(t, service.PublishPanelWindowGroup(ctx, "panel-1", panelwindow.WorkspaceGroup{}))
 	require.NoError(t, service.RequestPanelTabClose(ctx, "panel-1", "panel-a"))
 	require.NoError(t, service.RequestPanelTabTransfer(ctx, "workspace-1", panelwindow.TabTransferRequest{}))
 	require.NoError(t, service.AcceptPanelTabTransfer(ctx, "workspace-1", "tab-transfer-1"))

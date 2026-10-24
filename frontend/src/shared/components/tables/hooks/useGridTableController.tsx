@@ -37,8 +37,15 @@ import { useGridTableInteractionWiring } from '@shared/components/tables/hooks/u
 import { useGridTableKeyboardNavigation } from '@shared/components/tables/hooks/useGridTableKeyboardNavigation';
 import { useGridTableLocalPagination } from '@shared/components/tables/hooks/useGridTableLocalPagination';
 import { useGridTableProfiler } from '@shared/components/tables/hooks/useGridTableProfiler';
+import {
+  type RenderRowDetailFn,
+  useGridTableRowDetailRenderer,
+  useGridTableRowDetailState,
+} from '@shared/components/tables/hooks/useGridTableRowDetail';
+import { useGridTableRowDetailNavigation } from '@shared/components/tables/hooks/useGridTableRowDetailNavigation';
 import type { RenderRowContentFn } from '@shared/components/tables/hooks/useGridTableRowRenderer';
 import { useGridTableRowRenderer } from '@shared/components/tables/hooks/useGridTableRowRenderer';
+import { useGridTableScreenOrderNavigation } from '@shared/components/tables/hooks/useGridTableScreenOrderNavigation';
 import { useGridTableShortcuts } from '@shared/components/tables/hooks/useGridTableShortcuts';
 import { useGridTableVirtualization } from '@shared/components/tables/hooks/useGridTableVirtualization';
 import {
@@ -161,6 +168,10 @@ export interface GridTableControllerResult<T> {
 
   // Rendering
   renderRowContent: RenderRowContentFn<T>;
+  rowDetailIndexes: readonly number[];
+  /** False while a table nested in a row detail holds the keyboard. */
+  bodyInTabOrder: boolean;
+  renderRowDetail: RenderRowDetailFn<T>;
   headerRow: ReactNode;
 
   // Loading
@@ -189,7 +200,7 @@ export function useGridTableController<T>({
   getRowStyle,
   onRowClick,
   onRowPointerClick,
-  onRowSelectionToggle,
+  onRowExpandToggle,
   onRowSelectionClear,
   onSort,
   sortConfig,
@@ -219,6 +230,7 @@ export function useGridTableController<T>({
   exportFilename,
   diagnosticsLabel,
   diagnosticsMode = 'local',
+  rowDetail,
 }: GridTableProps<T>): GridTableControllerResult<T> {
   const sourceData = useMemo<T[]>(
     () => (Array.isArray(inputData) ? inputData : ([] as T[])),
@@ -362,6 +374,16 @@ export function useGridTableController<T>({
     loadingOverlay
   );
 
+  const rowDetailState = useGridTableRowDetailState(rowDetail, tableData, keyExtractor);
+  // The keyboard (and the one row highlight) is either in this table's rows or
+  // in a table nested in one of its row details.
+  const rowDetailNavigation = useGridTableRowDetailNavigation({
+    wrapperRef,
+    openRows: rowDetailState.openRows,
+    onRowSelectionClear,
+  });
+  const { holdsKeyboard } = rowDetailNavigation;
+
   const {
     hoverState,
     hoverRowRef,
@@ -402,6 +424,8 @@ export function useGridTableController<T>({
     headerInnerRef,
     hideHeader,
     contextMenuActiveRef,
+    keyboardDetailKey: rowDetailNavigation.keyboardDetailKey,
+    holdsKeyboard,
   });
 
   const {
@@ -461,6 +485,8 @@ export function useGridTableController<T>({
     getTextContent,
     fetchAllRows,
     exportFilename,
+    // The filter shortcut finds the filter of the table holding the keyboard.
+    holdsKeyboard,
   });
   const filtersNode = (
     <>
@@ -509,7 +535,36 @@ export function useGridTableController<T>({
     stopFrameSampler,
     updateColumnWindowRange,
     hideHeader,
+    detailHeights: rowDetailState.heights,
   });
+
+  const renderRowDetail = useGridTableRowDetailRenderer({
+    rowDetail,
+    state: rowDetailState,
+    getRowTop,
+    viewportWidth: tableViewportWidth,
+    viewportHeight,
+    gridRef,
+    focusByIndex,
+    lastNavigationMethodRef,
+    getNavigation: rowDetailNavigation.getNavigation,
+  });
+  // An open row also carries its detail's group class, so the two read as one block.
+  const openDetailRows = rowDetailState.openRows;
+  const getGroupClassName = rowDetail?.getGroupClassName;
+  const getRowClassNameWithDetail = useCallback(
+    (item: T, index: number) => {
+      const base = getRowClassNameWithFocus(item, index);
+      if (openDetailRows.get(index) !== keyExtractor(item, index)) {
+        return base;
+      }
+      return [base, 'gridtable-row--detail-open', getGroupClassName?.(item)]
+        .filter(Boolean)
+        .join(' ');
+    },
+    [getGroupClassName, getRowClassNameWithFocus, keyExtractor, openDetailRows]
+  );
+  const rowDetailIndexes = useMemo(() => Array.from(openDetailRows.keys()), [openDetailRows]);
 
   // The dirty queue hashes rendered cells before measuring. Row virtualization changes that
   // visible signature without changing the callback identity, so both range bounds must invalidate
@@ -520,12 +575,21 @@ export function useGridTableController<T>({
     markVisibleAutoColumnsDirty();
   }, [markVisibleAutoColumnsDirty, virtualRange.end, virtualRange.start]);
 
+  // A keyboard move carries the only row highlight: it clears the view's row
+  // selection, which would otherwise stay lit on the row it was made on.
+  const focusByKeyboard = useCallback(
+    (index: number) => {
+      onRowSelectionClear?.();
+      focusByIndex(index);
+    },
+    [focusByIndex, onRowSelectionClear]
+  );
   const { getPageSizeRef, moveSelectionByDelta, jumpToIndex } = useGridTableKeyboardNavigation({
     tableDataLength: tableData.length,
     focusedRowIndex,
     focusedRowKey,
     shortcutsActive,
-    focusByIndex,
+    focusByIndex: focusByKeyboard,
     lastNavigationMethodRef,
     wrapperRef,
     updateHoverForElement,
@@ -535,41 +599,57 @@ export function useGridTableController<T>({
     getRowTop,
   });
 
+  const { moveRow, jumpToStart, jumpToEnd, moveParentRow } = useGridTableScreenOrderNavigation({
+    tableData,
+    keyExtractor,
+    focusedRowIndex,
+    openRows: rowDetailState.openRows,
+    rowDetailNavigation,
+    hasRowDetail: Boolean(rowDetail),
+    focusByIndex,
+    focusByKeyboard,
+    moveSelectionByDelta,
+    jumpToIndex,
+    gridRef,
+    lastNavigationMethodRef,
+  });
+
+  // Space only ever expands or collapses a row; a table whose rows do not
+  // expand claims it with no action.
   useGridTableKeyboardScopes({
     filteringEnabled,
     filtersContainerRef,
     filterFocusIndexRef,
     wrapperRef,
+    gridRef,
+    hasRowExpandToggle: Boolean(onRowExpandToggle),
     suppressFocusedRowHighlight,
   });
 
-  const selectFocusedRow = useCallback(() => {
-    if (
-      !onRowSelectionToggle ||
-      focusedRowIndex === null ||
-      focusedRowIndex < 0 ||
-      focusedRowIndex >= tableData.length
-    ) {
-      return false;
+  const toggleFocusedRow = useCallback(() => {
+    const item = focusedRowIndex === null ? undefined : tableData[focusedRowIndex];
+    if (onRowExpandToggle && item !== undefined) {
+      onRowExpandToggle(item);
     }
-    onRowSelectionToggle(tableData[focusedRowIndex]);
     return true;
-  }, [focusedRowIndex, onRowSelectionToggle, tableData]);
+  }, [focusedRowIndex, onRowExpandToggle, tableData]);
 
   useGridTableShortcuts({
     shortcutsActive,
     enableContextMenu,
     onOpenFocusedRow: activateFocusedRow,
-    onSelectFocusedRow: onRowSelectionToggle ? selectFocusedRow : undefined,
+    onToggleFocusedRow: onRowExpandToggle ? toggleFocusedRow : undefined,
     onOpenContextMenu: openFocusedRowContextMenu,
+    moveRow,
     moveSelectionByDelta,
-    jumpToIndex,
+    jumpToStart,
+    jumpToEnd,
+    moveParentRow,
     getPageSizeRef,
     onPagePrevious: resolvedPagePrevious,
     onPageNext: resolvedPageNext,
     canPagePrevious: resolvedCanPagePrevious,
     canPageNext: resolvedCanPageNext,
-    tableDataLength: tableData.length,
     isContextMenuVisible,
   });
 
@@ -593,7 +673,7 @@ export function useGridTableController<T>({
 
   const renderRowContent = useGridTableRowRenderer({
     keyExtractor,
-    getRowClassName: getRowClassNameWithFocus,
+    getRowClassName: getRowClassNameWithDetail,
     isRowSelected,
     getRowStyle,
     handleRowClick,
@@ -645,6 +725,9 @@ export function useGridTableController<T>({
     tableContentWidth,
     tableViewportWidth,
     renderRowContent,
+    rowDetailIndexes,
+    bodyInTabOrder: rowDetailNavigation.keyboardDetailKey === null,
+    renderRowDetail,
     headerRow,
     showLoadingOverlay,
     loadingOverlayMessage,

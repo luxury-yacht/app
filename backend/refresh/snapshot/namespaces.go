@@ -2,7 +2,6 @@ package snapshot
 
 import (
 	"context"
-	"fmt"
 	"hash/fnv"
 	"sort"
 	"strconv"
@@ -14,12 +13,8 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	informers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
-	corelisters "k8s.io/client-go/listers/core/v1"
-	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
@@ -27,6 +22,7 @@ import (
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	namespacepkg "github.com/luxury-yacht/app/backend/resources/namespaces"
@@ -35,23 +31,23 @@ import (
 
 var ResourceQuotaGVR = schema.GroupVersionResource{Group: resourcequotapkg.Identity.Group, Version: resourcequotapkg.Identity.Version, Resource: resourcequotapkg.Identity.Resource}
 
-// NamespaceBuilder constructs namespace snapshots from informer caches. Pods AND the five
-// workload kinds are cut to the ingest path, so the legacy per-namespace workload-detection
-// count reads each kind's projected rows from the ingest manager rather than a typed lister.
+// NamespaceBuilder constructs namespace snapshots from the owned namespace
+// reflector's store, joined at serve with workload presence from the pod and
+// workload ingest stores, warning events, and quota pressure.
 type NamespaceBuilder struct {
-	namespaces  corelisters.NamespaceLister
-	eventLister corelisters.EventLister
-	// eventsExpected is true only when the identity may list and watch the
-	// cluster-wide Events informer. A denied source is unavailable, while an
-	// allowed source that has not synced yet is loading.
+	namespaces namespaceProvider
+	// events is the owned events store the warning rollup counts.
+	// eventsExpected is true only when the identity may list and watch
+	// Events. A denied source is unavailable, while an allowed source that has
+	// not synced yet is loading.
+	events         namespaceEventSource
 	eventsExpected bool
-	eventsSynced   cache.InformerSynced
 	ingest         namespacePodIngestSource
 	tracker        *NamespaceWorkloadTracker
 	// scope is the cluster's configured namespace scope
 	// (docs/architecture/namespace-scope.md). Non-empty means the rows are
 	// synthesized from these names instead of read from the (cluster-wide,
-	// permission-gated) namespace lister; empty means today's lister path.
+	// permission-gated) namespace store.
 	scope []string
 
 	// client backs the scoped-mode per-namespace GET probe that enriches
@@ -232,26 +228,37 @@ const (
 
 const namespaceQuotaWarningPercentage = 80
 
-// RegisterNamespaceDomain registers the namespace domain with the registry. The cut workload +
-// pod kinds' projected rows come from the ingest manager (read per build for workload presence);
-// the tracker only gates the read on those stores having synced. ingestManager may be nil in a
-// unit test.
+// NamespaceDomainOptions configures the namespaces domain for the cluster's access.
+type NamespaceDomainOptions struct {
+	// AllowedNamespaces, when set, scopes the list to configured namespaces
+	// instead of the cluster-wide namespaces LIST.
+	AllowedNamespaces []string
+	// Client probes configured namespaces by name; used only when scoped.
+	Client kubernetes.Interface
+	// EventsExpected is true only when the identity may list and watch Events.
+	EventsExpected bool
+}
+
+// RegisterNamespaceDomain registers the namespace domain with the registry. Namespaces and the
+// workload + pod kinds' projected rows come from the ingest manager (read per build); the
+// tracker only gates the workload read on those stores having synced. ingestManager may be nil
+// in a unit test.
 //
-// It returns the change notifier that replaces the frontend's namespaces poll: namespace
-// informer events and workload/pod ingest events feed it (handlers/sinks registered HERE,
-// before the informer factory and ingest manager start), and the subsystem wires its
-// broadcast to the resource-stream doorbell once the stream manager exists.
-func RegisterNamespaceDomain(reg *domain.Registry, factory informers.SharedInformerFactory, ingestManager namespacePodIngestSource, allowedNamespaces []string, client kubernetes.Interface, eventsExpected bool) (*NamespaceChangeNotifier, error) {
+// It returns the change notifier that replaces the frontend's namespaces poll: namespace,
+// workload, pod, quota, and event ingest changes feed it (sinks registered HERE, before the
+// ingest manager starts). It rings bell, then calls afterRing.
+func RegisterNamespaceDomain(
+	reg *domain.Registry,
+	ingestManager namespacePodIngestSource,
+	options NamespaceDomainOptions,
+	bell doorbell.Bell,
+	afterRing func(version, reason string),
+) (*NamespaceChangeNotifier, error) {
 	tracker := NewNamespaceWorkloadTracker(ingestManager)
-	builder := newNamespaceDomainBuilder(ingestManager, tracker, allowedNamespaces, client)
-	notifier := NewNamespaceChangeNotifier(ingestManager, tracker)
-	if err := wireNamespaceEventInformer(factory, builder, notifier, eventsExpected); err != nil {
-		return nil, err
-	}
-	if err := wireNamespaceObjectInformer(factory, builder, notifier); err != nil {
-		return nil, err
-	}
-	wireNamespaceIngestSinks(ingestManager, notifier)
+	builder := newNamespaceDomainBuilder(ingestManager, tracker, options.AllowedNamespaces, options.Client)
+	notifier := NewNamespaceChangeNotifier(ingestManager, tracker, bell, afterRing)
+	wireNamespaceEvents(ingestManager, builder, notifier, options.EventsExpected)
+	wireNamespaceIngestSinks(ingestManager, builder, notifier)
 	return registerNamespaceSnapshotBuilder(reg, builder, notifier)
 }
 
@@ -274,85 +281,50 @@ func newNamespaceDomainBuilder(
 	return builder
 }
 
-func wireNamespaceEventInformer(
-	factory informers.SharedInformerFactory,
+// wireNamespaceEvents feeds the warning rollup from the owned events store
+// when the identity may read Events. The store's sink tells the notifier to
+// recount; the builder counts at serve.
+func wireNamespaceEvents(
+	ingestManager namespacePodIngestSource,
 	builder *NamespaceBuilder,
 	notifier *NamespaceChangeNotifier,
 	eventsExpected bool,
-) error {
-	if !eventsExpected || factory == nil {
-		return nil
+) {
+	events, ok := ingestManager.(interface {
+		namespaceEventSource
+		AddBundleSink(gvr schema.GroupVersionResource, sink ingest.BundleSink) bool
+	})
+	if !eventsExpected || !ok || !events.AddBundleSink(EventGVR, namespaceEventSink{notifier: notifier}) {
+		return
 	}
-	eventInformer := factory.Core().V1().Events()
-	builder.eventLister = eventInformer.Lister()
+	builder.events = events
 	builder.eventsExpected = true
-	builder.eventsSynced = eventInformer.Informer().HasSynced
-	notifier.eventLister = builder.eventLister
+	notifier.events = events
 	notifier.eventsExpected = true
-	notifier.eventsSynced = builder.eventsSynced
-	if _, err := eventInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(interface{}) { notifier.EventChanged() },
-		UpdateFunc: func(oldObj, newObj interface{}) {
-			// Resync echoes cannot change a warning count; skip the rollup rescan.
-			if !informerUpdateIsEcho(oldObj, newObj) {
-				notifier.EventChanged()
-			}
-		},
-		DeleteFunc: func(interface{}) { notifier.EventChanged() },
-	}); err != nil {
-		return fmt.Errorf("namespaces: register event aggregate handler: %w", err)
-	}
-	return nil
 }
 
-func wireNamespaceObjectInformer(
-	factory informers.SharedInformerFactory,
-	builder *NamespaceBuilder,
-	notifier *NamespaceChangeNotifier,
-) error {
-	// Scoped clusters synthesize rows from the configured names: the
-	// (cluster-scoped, typically denied) namespaces informer is never
-	// instantiated, and namespace add/delete events cannot occur — the row
-	// set only changes through a settings-triggered subsystem rebuild.
-	if len(builder.scope) > 0 {
-		return nil
-	}
-	namespaceInformer := factory.Core().V1().Namespaces()
-	builder.namespaces = namespaceInformer.Lister()
-	if _, err := namespaceInformer.Informer().AddEventHandler(namespaceEventHandler(notifier)); err != nil {
-		return fmt.Errorf("namespaces: register namespace handler: %w", err)
-	}
-	return nil
-}
-
-func namespaceEventHandler(notifier *NamespaceChangeNotifier) cache.ResourceEventHandlerFuncs {
-	return cache.ResourceEventHandlerFuncs{
-		AddFunc: func(interface{}) { notifier.NamespaceChanged() },
-		UpdateFunc: func(oldObj, newObj interface{}) {
-			// Informer resyncs re-deliver every namespace with an unchanged
-			// ResourceVersion; only real updates ring the doorbell.
-			if informerUpdateIsEcho(oldObj, newObj) {
-				return
-			}
-			notifier.NamespaceChanged()
-		},
-		DeleteFunc: func(interface{}) { notifier.NamespaceChanged() },
-	}
-}
-
-func wireNamespaceIngestSinks(ingestManager namespacePodIngestSource, notifier *NamespaceChangeNotifier) {
+func wireNamespaceIngestSinks(ingestManager namespacePodIngestSource, builder *NamespaceBuilder, notifier *NamespaceChangeNotifier) {
 	// Bundle sinks fire on every Upsert/Delete/Replace for their GVR, which is all
 	// the notifier needs: the flush decides via the presence signature whether the
 	// event actually flipped a namespace's workload presence. AddBundleSink returns
 	// false for an untracked GVR (permission-skipped) — those kinds then simply
 	// never contribute events, matching the builder's per-build read.
-	if sinks, ok := ingestManager.(interface {
+	sinks, ok := ingestManager.(interface {
 		AddBundleSink(gvr schema.GroupVersionResource, sink ingest.BundleSink) bool
-	}); ok {
-		for _, gvr := range trackedWorkloadGVRs {
-			sinks.AddBundleSink(gvr, namespaceNotifierSink{notifier: notifier})
-		}
-		sinks.AddBundleSink(ResourceQuotaGVR, namespaceQuotaNotifierSink{notifier: notifier})
+	})
+	if !ok {
+		return
+	}
+	for _, gvr := range trackedWorkloadGVRs {
+		sinks.AddBundleSink(gvr, namespaceNotifierSink{notifier: notifier})
+	}
+	sinks.AddBundleSink(ResourceQuotaGVR, namespaceQuotaNotifierSink{notifier: notifier})
+	// Scoped clusters synthesize rows from the configured names, so namespace
+	// changes cannot alter the row set: it changes only through a
+	// settings-triggered subsystem rebuild.
+	if len(builder.scope) == 0 {
+		builder.namespaces = ingestNamespaces{ingest: ingestManager}
+		sinks.AddBundleSink(NamespaceGVR, namespaceObjectSink{notifier: notifier})
 	}
 }
 
@@ -393,65 +365,58 @@ func (s namespaceQuotaNotifierSink) DeleteBundle(ingest.Bundle)     { s.notifier
 func (s namespaceQuotaNotifierSink) ReplaceBundles([]ingest.Bundle) { s.notifier.QuotaChanged() }
 
 type namespaceBuildInputs struct {
-	meta               ClusterMeta
-	namespaces         []*corev1.Namespace
-	scopeStatuses      map[string]NamespaceScopeStatus
-	workloadReadiness  NamespaceWorkloadReadiness
-	workloadRollups    namespaceWorkloadRollups
-	warningEvents      map[string]int
-	warningEventsState NamespaceSignalState
-	quotaRollups       map[string]namespaceQuotaRollup
-	quotaState         NamespaceSignalState
+	meta              ClusterMeta
+	namespaces        []*corev1.Namespace
+	scopeStatuses     map[string]NamespaceScopeStatus
+	workloadReadiness NamespaceWorkloadReadiness
+	workloadRollups   namespaceWorkloadRollups
+	warningEvents     warningEventRollup
+	quotaRollups      map[string]namespaceQuotaRollup
+	quotaState        NamespaceSignalState
 }
 
 // Build returns the namespace snapshot payload.
 func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
-	_, scopeValue := refresh.SplitClusterScope(scope)
-	namespaces, scopeStatuses, err := b.collectNamespaces(ctx, scopeValue)
+	namespaces, scopeStatuses, err := b.collectNamespaces(ctx)
 	if err != nil {
 		return nil, err
 	}
 	sortNamespaces(namespaces)
 	workloadReadiness := b.workloadTrackerReadiness()
 	workloadRollups := namespaceWorkloadRollupsFromIngest(b.ingest)
-	warningEvents, warningEventsState := b.warningEventRollups()
+	warningEvents := b.warningEventRollups()
 	quotaRollups, quotaState := namespaceQuotaRollupsFromIngest(b.ingest)
 	inputs := namespaceBuildInputs{
-		meta:               meta,
-		namespaces:         namespaces,
-		scopeStatuses:      scopeStatuses,
-		workloadReadiness:  workloadReadiness,
-		workloadRollups:    workloadRollups,
-		warningEvents:      warningEvents,
-		warningEventsState: warningEventsState,
-		quotaRollups:       quotaRollups,
-		quotaState:         quotaState,
+		meta:              meta,
+		namespaces:        namespaces,
+		scopeStatuses:     scopeStatuses,
+		workloadReadiness: workloadReadiness,
+		workloadRollups:   workloadRollups,
+		warningEvents:     warningEvents,
+		quotaRollups:      quotaRollups,
+		quotaState:        quotaState,
 	}
 	items, version := b.buildNamespaceSummaries(inputs)
 	return b.namespaceSnapshot(scope, inputs, items, version), nil
 }
 
-func (b *NamespaceBuilder) collectNamespaces(ctx context.Context, scopeValue string) ([]*corev1.Namespace, map[string]NamespaceScopeStatus, error) {
-	switch {
-	case len(b.scope) > 0:
-		return b.collectScopedNamespaces(ctx, scopeValue)
-	case strings.TrimSpace(scopeValue) != "":
-		return b.collectNamedNamespace(scopeValue)
-	default:
-		namespaces, err := b.namespaces.List(labels.Everything())
-		return namespaces, map[string]NamespaceScopeStatus{}, err
+// collectNamespaces lists the cluster's namespaces, or probes the configured
+// namespace scope when one restricts the cluster.
+func (b *NamespaceBuilder) collectNamespaces(ctx context.Context) ([]*corev1.Namespace, map[string]NamespaceScopeStatus, error) {
+	if len(b.scope) > 0 {
+		return b.collectScopedNamespaces(ctx)
 	}
+	if b.namespaces == nil {
+		return nil, map[string]NamespaceScopeStatus{}, nil
+	}
+	return b.namespaces.Namespaces(), map[string]NamespaceScopeStatus{}, nil
 }
 
-func (b *NamespaceBuilder) collectScopedNamespaces(ctx context.Context, scopeValue string) ([]*corev1.Namespace, map[string]NamespaceScopeStatus, error) {
+func (b *NamespaceBuilder) collectScopedNamespaces(ctx context.Context) ([]*corev1.Namespace, map[string]NamespaceScopeStatus, error) {
 	var namespaces []*corev1.Namespace
 	statuses := make(map[string]NamespaceScopeStatus)
-	requested := strings.TrimSpace(scopeValue)
 	for _, name := range b.scope {
-		if requested != "" && name != requested {
-			continue
-		}
 		probed, status := b.probeScopedNamespace(ctx, name)
 		statuses[name] = status
 		if probed == nil {
@@ -460,17 +425,6 @@ func (b *NamespaceBuilder) collectScopedNamespaces(ctx context.Context, scopeVal
 		namespaces = append(namespaces, probed)
 	}
 	return namespaces, statuses, nil
-}
-
-func (b *NamespaceBuilder) collectNamedNamespace(name string) ([]*corev1.Namespace, map[string]NamespaceScopeStatus, error) {
-	namespace, err := b.namespaces.Get(name)
-	if apimachineryerrors.IsNotFound(err) {
-		return []*corev1.Namespace{}, map[string]NamespaceScopeStatus{}, nil
-	}
-	if err != nil {
-		return nil, nil, err
-	}
-	return []*corev1.Namespace{namespace}, map[string]NamespaceScopeStatus{}, nil
 }
 
 func sortNamespaces(namespaces []*corev1.Namespace) {
@@ -522,8 +476,8 @@ func (b *NamespaceBuilder) buildNamespaceSummaries(inputs namespaceBuildInputs) 
 			HasWorkloads:               facts.HasWorkloads,
 			WorkloadsUnknown:           !facts.WorkloadsKnown,
 			UnhealthyWorkloads:         inputs.workloadRollups.unhealthy[ns.Name],
-			WarningEvents:              inputs.warningEvents[ns.Name],
-			WarningEventsState:         inputs.warningEventsState,
+			WarningEvents:              inputs.warningEvents.counts[ns.Name],
+			WarningEventsState:         inputs.warningEvents.state(ns.Name),
 			CPURequestsMilli:           reservations.cpuRequestsMilli,
 			CPULimitsMilli:             reservations.cpuLimitsMilli,
 			MemoryRequestsBytes:        reservations.memoryRequestsBytes,
@@ -564,7 +518,7 @@ func (b *NamespaceBuilder) namespaceSnapshot(
 		// 304 Not Modified and the client keeps a stale (e.g. the first, pre-sync) snapshot.
 		SourceVersions: map[string]string{
 			"workloads":      workloadRollupSignature(inputs.workloadRollups, inputs.workloadReadiness),
-			"warning-events": warningEventRollupSignature(inputs.warningEvents, inputs.warningEventsState),
+			"warning-events": inputs.warningEvents.signature(),
 			"quota-pressure": namespaceQuotaRollupSignature(inputs.quotaRollups, inputs.quotaState),
 		},
 	}
@@ -577,48 +531,96 @@ func (b *NamespaceBuilder) namespaceSnapshot(
 	return snapshot
 }
 
-func (b *NamespaceBuilder) warningEventRollups() (map[string]int, NamespaceSignalState) {
-	return namespaceWarningEventRollups(b.eventLister, b.eventsExpected, b.eventsSynced)
+// namespaceEventSource is the owned events store the namespace list counts
+// warnings from, with the partition readiness that says which namespaces its
+// watch covers.
+type namespaceEventSource interface {
+	eventStore
+	partitionReadinessReporter
 }
 
-func namespaceWarningEventRollups(eventLister corelisters.EventLister, eventsExpected bool, eventsSynced cache.InformerSynced) (map[string]int, NamespaceSignalState) {
-	counts := make(map[string]int)
-	if !eventsExpected || eventLister == nil {
-		return counts, NamespaceSignalUnavailable
-	}
-	if eventsSynced == nil || !eventsSynced() {
-		return counts, NamespaceSignalLoading
-	}
-	events, err := eventLister.List(labels.Everything())
-	if err != nil {
-		return counts, NamespaceSignalUnavailable
-	}
-	for _, event := range events {
-		if event == nil || !strings.EqualFold(event.Type, corev1.EventTypeWarning) {
-			continue
-		}
-		namespace := strings.TrimSpace(event.InvolvedObject.Namespace)
-		if namespace == "" {
-			continue
-		}
-		counts[namespace]++
-	}
-	return counts, NamespaceSignalAvailable
+// warningEventRollup is one read of the Warning Event counts per involved
+// namespace and the Event partitions behind them. A scoped identity may read
+// Events in only some namespaces, so availability is per namespace.
+type warningEventRollup struct {
+	counts     map[string]int
+	partitions []ingest.PartitionReadiness
 }
 
-func warningEventRollupSignature(counts map[string]int, state NamespaceSignalState) string {
-	names := make([]string, 0, len(counts))
-	for namespace := range counts {
+func (b *NamespaceBuilder) warningEventRollups() warningEventRollup {
+	return namespaceWarningEventRollups(b.events, b.eventsExpected)
+}
+
+func namespaceWarningEventRollups(events namespaceEventSource, eventsExpected bool) warningEventRollup {
+	rollup := warningEventRollup{counts: make(map[string]int)}
+	if !eventsExpected || events == nil {
+		return rollup
+	}
+	rollup.partitions = events.PartitionReadinessFor(EventGVR)
+	available := make(map[string]bool)
+	visitStoredEvents(events, func(_ ingest.Bundle, fact *EventFact) {
+		namespace := strings.TrimSpace(fact.InvolvedNamespace)
+		if namespace == "" || !strings.EqualFold(fact.Type, corev1.EventTypeWarning) {
+			return
+		}
+		counted, known := available[namespace]
+		if !known {
+			counted = rollup.state(namespace) == NamespaceSignalAvailable
+			available[namespace] = counted
+		}
+		if counted {
+			rollup.counts[namespace]++
+		}
+	})
+	return rollup
+}
+
+// state reports namespace's warning-event availability from the Event
+// partitions covering it. Every covering partition must be Ready for the count
+// to be authoritative, and a namespace no partition covers has no Event watch.
+func (r warningEventRollup) state(namespace string) NamespaceSignalState {
+	state := NamespaceSignalUnavailable
+	for _, part := range r.partitions {
+		if part.Namespace != "" && part.Namespace != namespace {
+			continue
+		}
+		switch part.State {
+		case refresh.ResourceReadinessUnavailable:
+			return NamespaceSignalUnavailable
+		case refresh.ResourceReadinessReady:
+			if state == NamespaceSignalUnavailable {
+				state = NamespaceSignalAvailable
+			}
+		default:
+			state = NamespaceSignalLoading
+		}
+	}
+	return state
+}
+
+// signature changes whenever a count or a partition's readiness changes, so the
+// namespace list re-delivers either.
+func (r warningEventRollup) signature() string {
+	partitions := make([]string, 0, len(r.partitions))
+	for _, part := range r.partitions {
+		partitions = append(partitions, part.Namespace+"="+strconv.Itoa(int(part.State)))
+	}
+	sort.Strings(partitions)
+	names := make([]string, 0, len(r.counts))
+	for namespace := range r.counts {
 		names = append(names, namespace)
 	}
 	sort.Strings(names)
 	h := fnv.New64a()
-	_, _ = h.Write([]byte(state))
-	_, _ = h.Write([]byte{0})
+	for _, partition := range partitions {
+		_, _ = h.Write([]byte(partition))
+		_, _ = h.Write([]byte{0})
+	}
+	_, _ = h.Write([]byte{1})
 	for _, namespace := range names {
 		_, _ = h.Write([]byte(namespace))
 		_, _ = h.Write([]byte{'='})
-		_, _ = h.Write([]byte(strconv.Itoa(counts[namespace])))
+		_, _ = h.Write([]byte(strconv.Itoa(r.counts[namespace])))
 		_, _ = h.Write([]byte{0})
 	}
 	return strconv.FormatUint(h.Sum64(), 16)

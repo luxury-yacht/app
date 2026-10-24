@@ -1,20 +1,13 @@
 import { panelTargetFromSnapshot } from '@modules/object-panel/panelTarget';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { backend } from '@/core/backend-api/models';
 import { useZoom } from '@/core/contexts/ZoomContext';
-import {
-  focusWindow,
-  maximiseWindow,
-  minimiseWindow,
-  onEvent,
-  openDevTools,
-  restoreWindow,
-  toggleMaximise,
-} from '@/core/desktop-runtime';
+import { focusWindow, minimiseWindow, onEvent, openDevTools } from '@/core/desktop-runtime';
 import type { PanelWindowDescriptor } from '@/core/panel-windows';
 import {
   acceptPanelTabTransfer,
   acknowledgeClusterPanelClose,
+  acknowledgePanelTransfer,
   acknowledgePanelWindowClose,
   beginPanelWindowOpen,
   failPanelTabTransfer,
@@ -27,8 +20,8 @@ import {
   onPanelTabTransferRequested,
   onPanelWindowCloseRequested,
   onPanelWindowFocusRequested,
+  publishPanelWindowGroup,
   requestPanelTabClose,
-  updatePanelWindowSnapshot,
 } from '@/core/panel-windows';
 import type { PanelLifecycleBlocker } from '@/core/panel-windows/panelLifecycleGuards';
 import {
@@ -42,6 +35,7 @@ import {
   tornOffTabSnapshot,
 } from '@/core/panel-windows/tabTransfer';
 import { useApplicationQuitPreflight } from '@/core/panel-windows/useApplicationQuitPreflight';
+import { useClosedPanelIntents } from '@/core/panel-windows/useClosedPanelIntents';
 import type { ViewType } from '@/modules/object-panel/components/ObjectPanel/types';
 import {
   useObjectPanelActiveTabs,
@@ -67,7 +61,13 @@ export function PanelWindowShortcuts({
     useDockablePanelContext();
   const guards = usePanelLifecycleGuardRegistry();
   const { resetZoom, zoomIn, zoomOut } = useZoom();
-  const insertedTabTransfersRef = useRef(new Map<string, string>());
+  // Tabs the directory is moving into this window, by transfer ID. Each is
+  // acknowledged once mounted; a failed move removes the inserted copy.
+  const [insertedTabTransfers, setInsertedTabTransfers] = useState<ReadonlyMap<string, string>>(
+    new Map()
+  );
+  const acknowledgingRef = useRef(new Set<string>());
+  useClosedPanelIntents(nativePanelPublication, descriptor.windowName);
   const focusLifecycleBlocker = useCallback(
     (blocker: PanelLifecycleBlocker) => {
       if (blocker.panelId) {
@@ -172,9 +172,9 @@ export function PanelWindowShortcuts({
           return;
         }
         guards.freeze(request.transferId, [request.tab.panelId]);
-        void nativePanelPublication
-          .flush()
-          .then(() => acceptPanelTabTransfer(descriptor.windowName, request.transferId))
+        // Accepting begins the directory move; it checks identity, not this
+        // window's published view, so no publication flush comes first.
+        void acceptPanelTabTransfer(descriptor.windowName, request.transferId)
           .then(() => {
             if (request.targetKind === 'new-window') {
               return beginPanelWindowOpen(descriptor.windowName, tornOffTabSnapshot(request));
@@ -196,8 +196,8 @@ export function PanelWindowShortcuts({
       return;
     }
     const group = getGroupTabs(tabGroups, 'right') ?? getGroupTabs(tabGroups, 'bottom');
-    const activePanelId = group?.activeTab ?? descriptor.snapshot.activePanelId;
-    const tabs = group?.tabs ?? descriptor.snapshot.tabs?.map((tab) => tab.panelId) ?? [];
+    const activePanelId = group?.activeTab ?? descriptor.group.activePanelId;
+    const tabs = group?.tabs ?? descriptor.group.tabs?.map((tab) => tab.panelId) ?? [];
     const blocker = guards.firstBlocker(activePanelId ? [activePanelId] : tabs);
     if (blocker) {
       focusLifecycleBlocker(blocker);
@@ -243,9 +243,6 @@ export function PanelWindowShortcuts({
         zoomOut,
         zoomReset: resetZoom,
         minimise: () => runWindowOperation('minimise-window', minimiseWindow),
-        maximise: () => runWindowOperation('maximise-window', maximiseWindow),
-        restore: () => runWindowOperation('restore-window', restoreWindow),
-        toggleMaximise: () => runWindowOperation('toggle-maximise-window', toggleMaximise),
         openInspector: requestInspector,
       };
       if (!dispatchPanelApplicationMenuCommand(menuCommand, actions)) {
@@ -322,7 +319,7 @@ export function PanelWindowShortcuts({
           void failPanelTabTransfer(descriptor.windowName, request.transferId);
           return;
         }
-        insertedTabTransfersRef.current.set(request.transferId, panelId);
+        setInsertedTabTransfers((current) => new Map(current).set(request.transferId, panelId));
         movePanelBetweenGroups(panelId, 'right', request.targetIndex);
       }),
     [descriptor, movePanelBetweenGroups, openPanels, upsertOwnedPanel, guards]
@@ -332,7 +329,7 @@ export function PanelWindowShortcuts({
     () =>
       onPanelTabTransferCommitted(({ request }) => {
         guards.releaseTransfer(request.transferId);
-        insertedTabTransfersRef.current.delete(request.transferId);
+        setInsertedTabTransfers((current) => withoutTransfer(current, request.transferId));
         if (request.sourceWindowName !== descriptor.windowName) {
           return;
         }
@@ -358,15 +355,37 @@ export function PanelWindowShortcuts({
     () =>
       onPanelTabTransferFailed(({ request }) => {
         guards.releaseTransfer(request.transferId);
-        const insertedPanelId = insertedTabTransfersRef.current.get(request.transferId);
+        const insertedPanelId = insertedTabTransfers.get(request.transferId);
         if (request.targetWindowName !== descriptor.windowName || !insertedPanelId) {
           return;
         }
-        insertedTabTransfersRef.current.delete(request.transferId);
+        setInsertedTabTransfers((current) => withoutTransfer(current, request.transferId));
         commitTabClose(insertedPanelId);
       }),
-    [commitTabClose, descriptor.windowName, guards.releaseTransfer]
+    [commitTabClose, descriptor.windowName, guards.releaseTransfer, insertedTabTransfers]
   );
+
+  // Once an inserted tab is mounted, land queued snapshots (so none can later
+  // omit the committed tab), then let the directory commit the move.
+  useEffect(() => {
+    const group = getGroupTabs(tabGroups, 'right') ?? getGroupTabs(tabGroups, 'bottom');
+    for (const [transferId, panelId] of insertedTabTransfers) {
+      if (acknowledgingRef.current.has(transferId) || !group?.tabs.includes(panelId)) {
+        continue;
+      }
+      acknowledgingRef.current.add(transferId);
+      void nativePanelPublication
+        .flush()
+        .then(() => acknowledgePanelTransfer(descriptor.windowName, transferId, true))
+        .catch((error) => {
+          cancelInsertedTab(descriptor.windowName, transferId);
+          reportOperationalError(error, {
+            source: 'PanelWindowShortcuts',
+            action: 'acknowledge-inserted-tab',
+          });
+        });
+    }
+  }, [descriptor.windowName, insertedTabTransfers, tabGroups]);
 
   useEffect(() => {
     if (!ready) {
@@ -376,10 +395,7 @@ export function PanelWindowShortcuts({
     if (!group || group.tabs.length === 0) {
       return;
     }
-    const snapshot: import('@/core/backend-api/models').panelwindow.GroupSnapshot = {
-      schemaVersion: 1,
-      transferId: descriptor.snapshot.transferId,
-      sourceWindowName: descriptor.windowName,
+    const arrangement: import('@/core/backend-api/models').panelwindow.WorkspaceGroup = {
       clusterId: descriptor.clusterId,
       groupId: descriptor.groupId,
       tabs: group.tabs.flatMap((panelId) => {
@@ -391,11 +407,11 @@ export function PanelWindowShortcuts({
       activePanelId: group.activeTab ?? group.tabs[0],
     };
     nativePanelPublication.publish(
-      () => updatePanelWindowSnapshot(descriptor.windowName, snapshot),
+      () => publishPanelWindowGroup(descriptor.windowName, arrangement),
       (error) => {
         reportOperationalError(error, {
           source: 'PanelWindowShortcuts',
-          action: 'sync-panel-window-snapshot',
+          action: 'publish-panel-window-group',
         });
       }
     );
@@ -423,4 +439,21 @@ export function PanelWindowShortcuts({
   useEffect(() => onPanelWindowFocusRequested(({ panelId }) => focusPanel(panelId)), [focusPanel]);
 
   return <ApplicationMenuShortcuts enabled={ready} execute={executeApplicationMenuCommand} />;
+}
+
+// The registry may already have cancelled the move; only the commit error matters.
+function cancelInsertedTab(windowName: string, transferId: string): void {
+  void acknowledgePanelTransfer(windowName, transferId, false).catch(() => undefined);
+}
+
+function withoutTransfer(
+  transfers: ReadonlyMap<string, string>,
+  transferId: string
+): ReadonlyMap<string, string> {
+  if (!transfers.has(transferId)) {
+    return transfers;
+  }
+  const next = new Map(transfers);
+  next.delete(transferId);
+  return next;
 }

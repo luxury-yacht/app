@@ -4,14 +4,21 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/kubernetes/scheme"
+	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
+	restfake "k8s.io/client-go/rest/fake"
+	"k8s.io/client-go/tools/remotecommand"
 )
 
 func TestTerminalSizeQueueBehavior(t *testing.T) {
@@ -115,7 +122,9 @@ func TestShellSessionLifecycleHelpers(t *testing.T) {
 	if operations.shellSessionLifecycle().get("sess") != nil {
 		t.Fatalf("expected session to be removed")
 	}
-	if len(events) != 1 || events[0].Status != "closed" || events[0].ClusterID != "cluster1" {
+	// Every renderer must be able to tell a user-requested end from a remote
+	// exit, whichever window asked for it.
+	if len(events) != 1 || events[0].Status != types.ShellSessionStatusEnded || events[0].ClusterID != "cluster1" {
 		t.Fatalf("unexpected status events %+v", events)
 	}
 }
@@ -130,8 +139,7 @@ func TestTerminateShellWithReasonUnregistersRuntimeOperation(t *testing.T) {
 	sess := &shellSession{
 		id:        "sess",
 		clusterID: "cluster1",
-		namespace: "default",
-		podName:   "pod-a",
+		target:    *runtimeOperationTarget("cluster1", "", "v1", "Pod", "default", "pod-a"),
 		container: "app",
 		command:   []string{"/bin/sh"},
 		startedAt: time.Now(),
@@ -178,8 +186,7 @@ func TestShellSessionLifecycleFinishStreamIsIdempotent(t *testing.T) {
 	sess := &shellSession{
 		id:        "sess-stream",
 		clusterID: "cluster1",
-		namespace: "default",
-		podName:   "pod-a",
+		target:    *runtimeOperationTarget("cluster1", "", "v1", "Pod", "default", "pod-a"),
 		container: "app",
 		command:   []string{"/bin/sh"},
 		startedAt: time.Now(),
@@ -189,10 +196,10 @@ func TestShellSessionLifecycleFinishStreamIsIdempotent(t *testing.T) {
 	listEvents = 0
 
 	lifecycle := operations.shellSessionLifecycle()
-	if finished := lifecycle.finishStream(sess.id, "closed", ""); !finished {
+	if finished, _ := lifecycle.finishStream(sess.id, "closed", ""); !finished {
 		t.Fatal("expected first stream finish to remove session")
 	}
-	if finished := lifecycle.finishStream(sess.id, "closed", ""); finished {
+	if finished, _ := lifecycle.finishStream(sess.id, "closed", ""); finished {
 		t.Fatal("expected repeated stream finish to be ignored")
 	}
 
@@ -300,8 +307,7 @@ func TestListShellSessionsAndClusterCount(t *testing.T) {
 			id:          "s1",
 			clusterID:   "cluster-a",
 			clusterName: "cluster-a-name",
-			namespace:   "ns-a",
-			podName:     "pod-a",
+			target:      *runtimeOperationTarget("cluster-a", "", "v1", "Pod", "ns-a", "pod-a"),
 			container:   "app",
 			command:     []string{"/bin/sh"},
 			startedAt:   now.Add(-2 * time.Minute),
@@ -310,8 +316,7 @@ func TestListShellSessionsAndClusterCount(t *testing.T) {
 			id:          "s2",
 			clusterID:   "cluster-b",
 			clusterName: "cluster-b-name",
-			namespace:   "ns-b",
-			podName:     "pod-b",
+			target:      *runtimeOperationTarget("cluster-b", "", "v1", "Pod", "ns-b", "pod-b"),
 			container:   "debug",
 			command:     []string{"/bin/bash"},
 			startedAt:   now.Add(-1 * time.Minute),
@@ -345,8 +350,7 @@ func TestOperationsCoordinatorStopClusterCleansShellSessions(t *testing.T) {
 		"s1": {
 			id:        "s1",
 			clusterID: "cluster-a",
-			namespace: "default",
-			podName:   "pod-a",
+			target:    *runtimeOperationTarget("cluster-a", "", "v1", "Pod", "default", "pod-a"),
 			container: "app",
 			command:   []string{"/bin/sh"},
 			startedAt: time.Now().Add(-3 * time.Minute),
@@ -354,8 +358,7 @@ func TestOperationsCoordinatorStopClusterCleansShellSessions(t *testing.T) {
 		"s2": {
 			id:        "s2",
 			clusterID: "cluster-a",
-			namespace: "default",
-			podName:   "pod-b",
+			target:    *runtimeOperationTarget("cluster-a", "", "v1", "Pod", "default", "pod-b"),
 			container: "app",
 			command:   []string{"/bin/sh"},
 			startedAt: time.Now().Add(-2 * time.Minute),
@@ -363,8 +366,7 @@ func TestOperationsCoordinatorStopClusterCleansShellSessions(t *testing.T) {
 		"s3": {
 			id:        "s3",
 			clusterID: "cluster-b",
-			namespace: "default",
-			podName:   "pod-c",
+			target:    *runtimeOperationTarget("cluster-b", "", "v1", "Pod", "default", "pod-c"),
 			container: "app",
 			command:   []string{"/bin/sh"},
 			startedAt: time.Now().Add(-1 * time.Minute),
@@ -538,7 +540,7 @@ func TestStartShellSessionValidation(t *testing.T) {
 	}
 
 	// missing client should fail fast
-	if _, err := operations.StartShellSession(shellClusterID, ShellSessionRequest{}); err == nil {
+	if _, err := operations.StartShellSession(ShellSessionRequest{}); err == nil {
 		t.Fatal("expected error when client is nil")
 	}
 
@@ -555,10 +557,10 @@ func TestStartShellSessionValidation(t *testing.T) {
 		},
 	}
 
-	if _, err := operations.StartShellSession(shellClusterID, ShellSessionRequest{}); err == nil {
+	if _, err := operations.StartShellSession(ShellSessionRequest{}); err == nil {
 		t.Fatal("expected namespace validation error")
 	}
-	if _, err := operations.StartShellSession(shellClusterID, ShellSessionRequest{Namespace: "ns"}); err == nil {
+	if _, err := operations.StartShellSession(ShellSessionRequest{Target: shellPodTarget("ns", "")}); err == nil {
 		t.Fatal("expected pod name validation error")
 	}
 }
@@ -587,7 +589,7 @@ func TestStartShellSessionPodValidation(t *testing.T) {
 		},
 	}
 
-	_, err := operations.StartShellSession(shellClusterID, ShellSessionRequest{Namespace: "default", PodName: "pod-1"})
+	_, err := operations.StartShellSession(ShellSessionRequest{Target: shellPodTarget("default", "pod-1")})
 	if err == nil {
 		t.Fatal("expected error when pod has no containers")
 	}
@@ -604,7 +606,7 @@ func TestStartShellSessionPodValidation(t *testing.T) {
 		},
 	}
 
-	if _, err := operations.StartShellSession(shellClusterID, ShellSessionRequest{Namespace: "default", PodName: "pod-1", Container: "missing"}); err == nil {
+	if _, err := operations.StartShellSession(ShellSessionRequest{Target: shellPodTarget("default", "pod-1"), Container: "missing"}); err == nil {
 		t.Fatal("expected error for missing container")
 	}
 }
@@ -634,9 +636,8 @@ func TestStartShellSessionRequiresExecPermission(t *testing.T) {
 		},
 	}
 
-	_, err := operations.StartShellSession(shellClusterID, ShellSessionRequest{
-		Namespace: "default",
-		PodName:   "pod-1",
+	_, err := operations.StartShellSession(ShellSessionRequest{
+		Target:    shellPodTarget("default", "pod-1"),
 		Container: "main",
 	})
 	if err == nil || !strings.Contains(err.Error(), "exec denied") {
@@ -644,5 +645,86 @@ func TestStartShellSessionRequiresExecPermission(t *testing.T) {
 	}
 	if len(operations.ListShellSessions()) != 0 {
 		t.Fatalf("expected denied shell session not to be registered")
+	}
+}
+
+// execURLClientset gives a fake clientset a CoreV1 REST client, which the fake
+// leaves nil, so shell starts can build their exec request URL.
+type execURLClientset struct {
+	*fake.Clientset
+}
+
+func (c execURLClientset) CoreV1() typedcorev1.CoreV1Interface {
+	return execURLCoreV1{CoreV1Interface: c.Clientset.CoreV1()}
+}
+
+type execURLCoreV1 struct {
+	typedcorev1.CoreV1Interface
+}
+
+func (execURLCoreV1) RESTClient() rest.Interface {
+	return &restfake.RESTClient{
+		NegotiatedSerializer: scheme.Codecs.WithoutConversion(),
+		GroupVersion:         corev1.SchemeGroupVersion,
+	}
+}
+
+// blockingShellExecutor holds the exec stream open until the session context ends.
+type blockingShellExecutor struct{}
+
+func (blockingShellExecutor) Stream(remotecommand.StreamOptions) error { return nil }
+
+func (blockingShellExecutor) StreamWithContext(ctx context.Context, _ remotecommand.StreamOptions) error {
+	<-ctx.Done()
+	return nil
+}
+
+func TestStartShellSessionPublishesCompletePodTarget(t *testing.T) {
+	fixture := newOperationsCoordinatorFixture(t)
+	app := fixture.runtime
+	operations := fixture.coordinator
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "pod-1"},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "main"}}},
+	}
+	fakeClient := fake.NewClientset(pod)
+	allowSelfSubjectAccessReviews(fakeClient)
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
+		shellClusterID: {
+			meta:              ClusterMeta{ID: shellClusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client:            execURLClientset{Clientset: fakeClient},
+			restConfig:        &rest.Config{},
+		},
+	}
+	operations.websocketExec = func(*rest.Config, string, string) (remotecommand.Executor, error) {
+		return blockingShellExecutor{}, nil
+	}
+	operations.spdyExecutor = func(*rest.Config, string, *url.URL) (remotecommand.Executor, error) {
+		return blockingShellExecutor{}, nil
+	}
+
+	session, err := operations.StartShellSession(ShellSessionRequest{Target: shellPodTarget("default", "pod-1")})
+	if err != nil {
+		t.Fatalf("start shell session: %v", err)
+	}
+	t.Cleanup(func() { _ = operations.CloseShellSession(session.SessionID) })
+
+	// The start response, the Sessions list, and the runtime-operation registry
+	// must all name the same complete object, so navigation never rebuilds it.
+	want := resourcemodel.ResourceRef{ClusterID: shellClusterID, Group: "", Version: "v1", Kind: "Pod", Namespace: "default", Name: "pod-1"}
+	if session.Target != want {
+		t.Fatalf("start response target = %+v, want %+v", session.Target, want)
+	}
+	sessions := operations.ListShellSessions()
+	if len(sessions) != 1 || sessions[0].Target != want {
+		t.Fatalf("listed shell sessions = %+v, want one with target %+v", sessions, want)
+	}
+	runtimeOperations := operations.ListRuntimeOperations()
+	if len(runtimeOperations) != 1 || runtimeOperations[0].Target == nil || *runtimeOperations[0].Target != want {
+		t.Fatalf("runtime operations = %+v, want one with target %+v", runtimeOperations, want)
 	}
 }

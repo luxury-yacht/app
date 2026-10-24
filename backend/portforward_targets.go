@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"k8s.io/client-go/kubernetes"
 )
@@ -50,13 +51,13 @@ func lookupPortForwardTargetCapability(kind string) (portForwardTargetCapability
 func validatePortForwardTargetGVK(target portForwardTargetRef) error {
 	capability, ok := lookupPortForwardTargetCapability(target.Kind)
 	if !ok {
-		return fmt.Errorf("unsupported target kind: %s", target.Kind)
+		return errorstatus.BadRequest(fmt.Errorf("unsupported target kind: %s", target.Kind))
 	}
 	if target.Version == "" {
-		return fmt.Errorf("target version is required")
+		return errorstatus.BadRequest(fmt.Errorf("target version is required"))
 	}
 	if target.Group != capability.Group || target.Version != capability.Version {
-		return fmt.Errorf("target %s must use apiVersion %s", target.Kind, capability.apiVersion())
+		return errorstatus.BadRequest(fmt.Errorf("target %s must use apiVersion %s", target.Kind, capability.apiVersion()))
 	}
 	return nil
 }

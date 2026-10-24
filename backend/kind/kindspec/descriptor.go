@@ -8,8 +8,8 @@
  * every subsystem loops that registry and filters by facet, so no subsystem ever
  * names a kind itself.
  *
- * This package imports only leaves (resourcekind, streamspec, objectmapnode,
- * objectmapspec, appbinding + metav1) and NO kind packages, so a kind can declare
+ * This package imports only leaves (resourcekind, streamspec, logspec,
+ * objectmapnode, objectmapspec, appbinding + metav1) and NO kind packages, so a kind can declare
  * its Descriptor without an import cycle.
  */
 
@@ -18,6 +18,7 @@ package kindspec
 import (
 	"context"
 
+	"github.com/luxury-yacht/app/backend/kind/logspec"
 	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
 	"github.com/luxury-yacht/app/backend/kind/objectmapspec"
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
@@ -58,13 +59,9 @@ func ScaleObject(namespace, name string, replicas int32) *autoscalingv1.Scale {
 
 // ObjectMapGraph holds how a kind behaves in the object-map graph traversal — its
 // graph ROLE, not its edges. The object-map walker reads these instead of
-// hard-coding kind names: ScalableWorkload kinds carry HPA-managed action facts;
-// DirectionalTraversal kinds are graph leaves walked one-way; StopsReverseExpansion
-// kinds (cluster-scoped "class" resources) halt reverse namespace-map expansion.
+// hard-coding kind names: ScalableWorkload kinds carry HPA-managed action facts.
 type ObjectMapGraph struct {
-	ScalableWorkload      bool
-	DirectionalTraversal  bool
-	StopsReverseExpansion bool
+	ScalableWorkload bool
 }
 
 // ObjectActions declares non-workload mutation families whose handlers are
@@ -75,23 +72,86 @@ type ObjectActions struct {
 	Suspend bool
 	Cordon  bool
 	Drain   bool
-	Aliases []string
+	// NamespaceFinalizer offers removing a Namespace's spec finalizers.
+	NamespaceFinalizer bool
 }
 
-// CatalogSource names how the object catalog lists a kind's objects.
+// PanelPods selects how the object panel's Pods tab lists the object's pods.
+type PanelPods int
+
+const (
+	// PanelPodsNone shows no Pods tab.
+	PanelPodsNone PanelPods = iota
+	// PanelPodsByOwner lists the pods the object owns (the pods domain's
+	// workload selector).
+	PanelPodsByOwner
+	// PanelPodsByNode lists the pods scheduled on the node (the node selector).
+	PanelPodsByNode
+)
+
+// PanelShell selects the object panel's Shell tab.
+type PanelShell int
+
+const (
+	// PanelShellNone shows no Shell tab.
+	PanelShellNone PanelShell = iota
+	// PanelShellExec execs into one of the pod's containers.
+	PanelShellExec
+	// PanelShellNode opens a shell on the node through a debug pod.
+	PanelShellNode
+)
+
+// ObjectPanel declares the object panel's kind-dependent tabs. The zero value is
+// a kind with only the generic tabs.
+type ObjectPanel struct {
+	Pods PanelPods
+	// Jobs shows a Jobs tab listing the Jobs the detail DTO carries.
+	Jobs bool
+	// NodeLogs shows a Logs tab of the node's journal and log files, served by
+	// the node-log service. Container logs come from Descriptor.Logs instead.
+	NodeLogs bool
+	Shell    PanelShell
+	// DebugContainer allows starting an ephemeral debug container.
+	DebugContainer bool
+	// HideEvents hides the Events tab (an Event has no events of its own).
+	HideEvents bool
+	// HideYAML hides the YAML tab.
+	HideYAML bool
+}
+
+// Display is how the UI names a kind. Every registered kind declares a short name.
+type Display struct {
+	// ShortName is shown when "short resource names" is on.
+	ShortName string
+	// Label overrides the full name shown for the kind; empty means the Kind.
+	Label string
+	// SearchAliases are extra command-palette tokens for the kind (kubectl short
+	// names that its short name, kind, and resource plural do not cover).
+	SearchAliases []string
+}
+
+// MetricsSource names the refresh domain whose rows carry the object's live
+// usage. The zero value means the panel shows no metrics for the kind.
+type MetricsSource int
+
+const (
+	MetricsNone MetricsSource = iota
+	// MetricsPods reads the pods domain.
+	MetricsPods
+	// MetricsWorkloads reads the namespace-workloads domain.
+	MetricsWorkloads
+	// MetricsNodes reads the nodes domain.
+	MetricsNodes
+)
+
+// CatalogSource names how the object catalog lists a kind's objects that no
+// owned reflector ingests.
 type CatalogSource int
 
 const (
-	// CatalogDynamic lists the kind via the dynamic client (no shared informer in
-	// the catalog's collection plan). This is the default for kinds with no
-	// dedicated informer wired into the catalog.
+	// CatalogDynamic collects the kind from its owned reflector's store. It is
+	// the default.
 	CatalogDynamic CatalogSource = iota
-	// CatalogShared lists the kind from the core shared informer factory.
-	CatalogShared
-	// CatalogGateway lists the kind from the Gateway-API informer factory.
-	CatalogGateway
-	// CatalogAPIExtensions lists the kind from the apiextensions informer factory.
-	CatalogAPIExtensions
 	// CatalogNone excludes a built-in kind from object-catalog collection. The
 	// kind can still participate in other descriptor-driven subsystems.
 	CatalogNone
@@ -104,42 +164,29 @@ const (
 // subsystems each read only the facets they care about.
 type Descriptor struct {
 	// Identity is the kind's canonical group/version/kind/resource. It is the
-	// single source of identity; subsystems key informers and listers off it.
+	// single source of identity; subsystems key reflectors and stores off it.
 	Identity resourcekind.Identity
 
-	// CatalogSource tells the object catalog which informer factory (or the dynamic
-	// client) backs this kind's list/watch, or excludes it with CatalogNone.
+	// CatalogSource tells the object catalog whether it collects the kind, or
+	// excludes it with CatalogNone.
 	CatalogSource CatalogSource
 
-	// DetailCacheable marks kinds whose informer drives response-cache eviction of
-	// cached detail/YAML/Helm responses. The factory is implied by the kind's group.
+	// DetailCacheable marks kinds whose cached detail/YAML responses the gateway
+	// keeps; the kind's reflector evicts them on change.
 	DetailCacheable bool
 
 	// DetailListsPods marks kinds whose cached details embed their pods, so a
 	// pod change in the namespace evicts them.
 	DetailListsPods bool
 
-	// IngestOwned marks a kind cut over to the owned-reflector ingestion path: its
-	// objects are projected at intake by an ingest reflector and the shared informer
-	// factory no longer caches it as a typed object. Every subsystem that would
-	// otherwise read this kind from the shared informer (the typed-table maintained
-	// store, the object catalog, the object map, the response-cache invalidator)
-	// instead reads the ingest projections. Adding the next domain to the ingest path
-	// is flipping this facet on its kinds — the consumers are already generic over it.
-	IngestOwned bool
-
 	// Stream is the directly-streamed-table descriptor; nil when the kind is not
 	// streamed via the generic descriptor dispatch (it streams via a bespoke path
 	// or not at all).
 	Stream *streamspec.Descriptor
 
-	// Collector projects this kind into the object map from the shared informer
-	// cache; nil when the kind has no shared-informer object-map node.
+	// Collector projects this kind into an object-map node; nil when the kind
+	// has no object-map node.
 	Collector *objectmapnode.Collector
-
-	// GatewayCollector projects a Gateway-API kind into the object map via the
-	// Gateway client; nil for non-Gateway kinds.
-	GatewayCollector *objectmapnode.GatewayCollector
 
 	// Edges builds this kind's object-map relationship edges; nil when the kind
 	// contributes no edges.
@@ -164,6 +211,25 @@ type Descriptor struct {
 	// a backing pod, plus reconnect / service-port-spec behaviour); nil for kinds
 	// that cannot be port-forwarded.
 	PortForward *PortForwardTarget
+
+	// Panel declares the object panel's kind-dependent tabs (generated into the
+	// frontend kind facets table).
+	Panel ObjectPanel
+
+	// Metrics names the domain whose rows carry the object's live usage.
+	Metrics MetricsSource
+
+	// Display is how the UI names the kind.
+	Display Display
+
+	// Logs is the kind's container-log target (how to find its pods and keep
+	// following them); nil for kinds whose containers cannot be read.
+	Logs *logspec.Target
+
+	// ListDomain is the refresh domain whose table lists the kind, for kinds without
+	// a Stream descriptor (Stream.Domain names it for the rest). Empty means no view
+	// lists the kind, so navigation falls back to Browse.
+	ListDomain string
 }
 
 // PortForwardTarget is a kind's port-forward behaviour, declared in the kind's

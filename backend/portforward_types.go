@@ -3,6 +3,8 @@ package backend
 import (
 	"context"
 	"sync"
+
+	"github.com/luxury-yacht/app/backend/resources/types"
 )
 
 const (
@@ -25,17 +27,16 @@ const (
 
 // PortForwardSession represents an active port forwarding session.
 type PortForwardSession struct {
-	ID            string            `json:"id"`
-	ClusterID     string            `json:"clusterId"`
-	ClusterName   string            `json:"clusterName"`
-	Namespace     string            `json:"namespace"`
+	ID          string `json:"id"`
+	ClusterID   string `json:"clusterId"`
+	ClusterName string `json:"clusterName"`
+	// Target is the complete identity of the object the user forwarded.
+	Target types.ObjectRef `json:"target"`
+	// PodName is the pod currently serving the forward. It changes when a
+	// workload or Service forward reconnects to a replacement pod.
 	PodName       string            `json:"podName"`
 	ContainerPort int               `json:"containerPort"`
 	LocalPort     int               `json:"localPort"`
-	TargetKind    string            `json:"targetKind"`
-	TargetGroup   string            `json:"targetGroup"`
-	TargetVersion string            `json:"targetVersion"`
-	TargetName    string            `json:"targetName"`
 	Status        PortForwardStatus `json:"status"`
 	StatusReason  string            `json:"statusReason,omitempty"`
 	StartedAt     string            `json:"startedAt"`
@@ -79,8 +80,8 @@ func (s *portForwardSessionInternal) setStatus(status PortForwardStatus, reason 
 
 func (s PortForwardSession) targetRef() portForwardTargetRef {
 	return portForwardTargetRef{
-		Namespace: s.Namespace, Kind: s.TargetKind, Group: s.TargetGroup,
-		Version: s.TargetVersion, Name: s.TargetName,
+		Namespace: s.Target.Namespace, Kind: s.Target.Kind, Group: s.Target.Group,
+		Version: s.Target.Version, Name: s.Target.Name,
 	}
 }
 
@@ -107,15 +108,4 @@ type PortForwardStatusEvent struct {
 	StatusReason string            `json:"statusReason,omitempty"`
 	LocalPort    int               `json:"localPort,omitempty"`
 	PodName      string            `json:"podName,omitempty"`
-}
-
-// PortForwardRequest contains parameters for starting a port forward.
-type PortForwardRequest struct {
-	Namespace     string `json:"namespace"`
-	TargetKind    string `json:"targetKind"`
-	TargetGroup   string `json:"targetGroup"`
-	TargetVersion string `json:"targetVersion"`
-	TargetName    string `json:"targetName"`
-	ContainerPort int    `json:"containerPort"`
-	LocalPort     int    `json:"localPort"`
 }

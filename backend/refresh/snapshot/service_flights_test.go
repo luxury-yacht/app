@@ -196,9 +196,9 @@ func TestServiceCancelInFlightStopsReadinessWaitAndAllowsFreshBuild(t *testing.T
 			return &refresh.Snapshot{Domain: "readiness-build", Scope: scope}, nil
 		},
 	}))
-	hub := &fakeInformerHub{}
-	service := NewServiceWithPermissions(registry, nil, testClusterMeta(), nil).WithInformerHub(hub)
-	service.informerSyncTimeout = 5 * time.Second
+	hub := &fakeFeedHub{}
+	service := NewServiceWithPermissions(registry, nil, testClusterMeta(), nil).WithFeedHub(hub)
+	service.syncTimeout = 5 * time.Second
 
 	firstResult := make(chan snapshotBuildResult, 1)
 	go func() {
@@ -238,4 +238,46 @@ func requireResult(t *testing.T, results <-chan snapshotBuildResult) snapshotBui
 		t.Fatal("timed out waiting for snapshot build result")
 		return snapshotBuildResult{}
 	}
+}
+
+type recordedPanic struct {
+	recovered any
+	message   string
+}
+
+type panicRecordingLogger struct {
+	mu     sync.Mutex
+	panics []recordedPanic
+}
+
+func (*panicRecordingLogger) Debug(string, ...string) {}
+func (*panicRecordingLogger) Info(string, ...string)  {}
+func (*panicRecordingLogger) Warn(string, ...string)  {}
+func (*panicRecordingLogger) Error(string, ...string) {}
+func (l *panicRecordingLogger) Panic(recovered any, message string, _ ...string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.panics = append(l.panics, recordedPanic{recovered: recovered, message: message})
+}
+
+// A panicking build fails the request with a short message the UI can show;
+// the panic itself, with its stack, goes to the backend's panic report.
+func TestServiceBuildPanicIsReportedNotShown(t *testing.T) {
+	registry := domain.New()
+	require.NoError(t, registry.Register(refresh.DomainConfig{
+		Name: "panicking",
+		BuildSnapshot: func(context.Context, string) (*refresh.Snapshot, error) {
+			panic("boom")
+		},
+	}))
+	logger := &panicRecordingLogger{}
+	service := NewServiceWithPermissions(registry, nil, testClusterMeta(), nil).WithLogger(logger)
+
+	_, err := service.Build(context.Background(), "panicking", "cluster-a|scope")
+
+	require.EqualError(t, err, "snapshot build panic: boom")
+	logger.mu.Lock()
+	defer logger.mu.Unlock()
+	require.Len(t, logger.panics, 1)
+	require.Equal(t, "boom", logger.panics[0].recovered)
 }

@@ -40,10 +40,7 @@ export interface UseObjectMapG6GraphLifecycleOptions {
   paletteReady: boolean;
   paletteRef: MutableRefObject<ObjectMapG6Palette | null>;
   selectionStateRef: MutableRefObject<ObjectMapSelectionState>;
-  scheduleSelectionState: (
-    nextLayout: ObjectMapLayout,
-    nextSelectionState: ObjectMapSelectionState
-  ) => void;
+  scheduleSelectionState: (nextSelectionState: ObjectMapSelectionState) => void;
   updateTooltipPosition: () => void;
 }
 
@@ -74,7 +71,9 @@ export const useObjectMapG6GraphLifecycle = ({
     }
     ensureObjectMapG6CardNodeRegistered();
     ensureObjectMapG6PathEdgeRegistered();
+    // Both refs are assigned in the same render, so the data matches its layout.
     const initialData = dataRef.current;
+    const initialLayout = layoutRef.current;
     const graph = new Graph({
       container,
       autoResize: true,
@@ -106,25 +105,29 @@ export const useObjectMapG6GraphLifecycle = ({
         graph.destroy();
       }
     };
+    const isCurrentGraph = () => !disposed && !graph.destroyed && graphRef.current === graph;
+    const reportInitialRenderError = (error: unknown) => {
+      if (isCurrentGraph()) {
+        reportOperationalError(error, {
+          source: 'ObjectMapG6Renderer',
+          action: 'renderGraph',
+        });
+      }
+    };
     const renderInitialGraph = async () => {
       try {
         await graph.render();
         initialRenderSettled = true;
-        if (disposed || graph.destroyed || graphRef.current !== graph) {
+        if (!isCurrentGraph()) {
           return;
         }
-        applyQueue.setRenderedData(initialData);
+        applyQueue.setRenderedData(initialData, initialLayout);
         applyQueue.setReady(true);
         onGraphReadyChange?.(true);
-        scheduleSelectionState(layoutRef.current, selectionStateRef.current);
+        scheduleSelectionState(selectionStateRef.current);
       } catch (error) {
         initialRenderSettled = true;
-        if (!disposed && graphRef.current === graph && !graph.destroyed) {
-          reportOperationalError(error, {
-            source: 'ObjectMapG6Renderer',
-            action: 'renderGraph',
-          });
-        }
+        reportInitialRenderError(error);
       } finally {
         if (disposed) {
           destroyGraph();

@@ -2,18 +2,14 @@ package snapshot
 
 import (
 	"context"
-	"fmt"
 	"sort"
-
-	informers "k8s.io/client-go/informers"
-	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
-	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/limitrange"
@@ -28,8 +24,8 @@ const (
 // NamespaceQuotasBuilder constructs ResourceQuota/LimitRange/PodDisruptionBudget
 // summaries via the shared typed-table domain skeleton (typed_table_domain.go).
 type NamespaceQuotasBuilder struct {
-	collectIndexer func(streamspec.Descriptor) cache.Indexer
-	// maintained, when set, is an informer-fed store the builder serves rows from
+	available kindAvailability
+	// maintained, when set, is a reflector-fed store the builder serves rows from
 	// instead of listing + re-projecting per request. nil falls back to the list path.
 	maintained *typedMaintainedStore[QuotaSummary]
 }
@@ -76,6 +72,9 @@ func namespaceQuotasDomainSpec() typedTableDomainSpec[QuotaSummary] {
 		schema:           quotasQuerypageSchema(),
 		capabilities:     namespaceQuotasQueryCapabilities(),
 		sortRows:         sortQuotaSummaries,
+		payload: func(meta ClusterMeta, envelope ResourceQueryEnvelope, rows []QuotaSummary) any {
+			return NamespaceQuotasSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: envelope, Rows: rows}
+		},
 	}
 }
 
@@ -88,34 +87,27 @@ func sortQuotaSummaries(resources []QuotaSummary) {
 	})
 }
 
-// RegisterNamespaceQuotasDomain registers quotas domain.
-// Only listers for permitted resources are wired; denied resources are left nil
-// so the builder skips them gracefully.
-//
-// When ingestManager is non-nil the quotas kinds are owned-reflector ingest kinds:
-// the maintained store is fed by the ingest reflectors' Table-half Sink (the
-// projected QuotaSummary) instead of typed-informer event handlers, so the shared
-// factory no longer caches them. When it is nil (e.g. uncut, or a unit test) the
-// store falls back to informer handlers.
+// RegisterNamespaceQuotasDomain registers the quotas domain. Its kinds are
+// owned-reflector ingest kinds: the maintained store is fed by their ingest
+// sinks (the projected QuotaSummary), and only permitted kinds serve rows.
+// ingestManager is nil in unit tests, where the store has no feed.
 func RegisterNamespaceQuotasDomain(
 	reg *domain.Registry,
-	factory informers.SharedInformerFactory,
 	allowed domainpermissions.AllowedResources,
 	clusterMeta ClusterMeta,
 	ingestManager *ingest.IngestManager,
+	bell doorbell.Bell,
 ) error {
-	if factory == nil {
-		return fmt.Errorf("shared informer factory is nil")
-	}
-	collectIndexer := sharedFactoryIndexers(factory, allowed, namespaceQuotasDomainName, ingestManager)
-	maintained, err := newRegisteredTypedTableStore(reg, namespaceQuotasDomainSpec(), clusterMeta, collectIndexer, factory, nil, ingestManager)
+	available := ingestAvailability(allowed, namespaceQuotasDomainName, ingestManager)
+	maintained, err := newRegisteredTypedTableStore(reg, namespaceQuotasDomainSpec(), clusterMeta,
+		ingestManager, bell)
 	if err != nil {
 		return err
 	}
 
 	builder := &NamespaceQuotasBuilder{
-		collectIndexer: collectIndexer,
-		maintained:     maintained,
+		available:  available,
+		maintained: maintained,
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceQuotasDomainName,
@@ -125,8 +117,5 @@ func RegisterNamespaceQuotasDomain(
 
 // Build assembles quota summaries for the namespace by looping the kind collectors.
 func (b *NamespaceQuotasBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	return buildTypedTableSnapshot(ctx, scope, namespaceQuotasDomainSpec(), b.collectIndexer, b.maintained,
-		func(meta ClusterMeta, envelope ResourceQueryEnvelope, rows []QuotaSummary) any {
-			return NamespaceQuotasSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: envelope, Rows: rows}
-		})
+	return buildTypedTableSnapshot(ctx, scope, namespaceQuotasDomainSpec(), b.available, b.maintained)
 }

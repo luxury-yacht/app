@@ -3,6 +3,7 @@ package nodes
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -16,6 +17,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/rest"
 
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
 )
 
@@ -58,8 +60,11 @@ var (
 	wellKnownNodeLogServices = []string{"kubelet", "containerd", "crio", "cri-o", "docker"}
 )
 
-func nodeLogRequest(client rest.Interface, absPath string) *rest.Request {
-	return client.Get().AbsPath(absPath).SetHeader("Accept", nodeLogAcceptHeader)
+// nodeLogRequest sends a server-relative node log URI. RequestURI keeps its
+// query (sinceTime, query, tailLines) as parameters; AbsPath would fold them
+// into the path, and the kubelet would answer 404.
+func nodeLogRequest(client rest.Interface, uri string) *rest.Request {
+	return client.Get().RequestURI(uri).SetHeader("Accept", nodeLogAcceptHeader)
 }
 
 type nodeLogListingEntry struct {
@@ -98,7 +103,7 @@ func (s *Service) DiscoverLogs(ctx context.Context, nodeName string) restypes.No
 
 	rootBody, err := s.fetchNodeLogPath(ctx, nodeName, "", "")
 	if err != nil {
-		return restypes.NodeLogDiscoveryResponse{Reason: classifyNodeLogError(err)}
+		return restypes.NodeLogDiscoveryResponse{Reason: nodeLogFetchError(err).Error()}
 	}
 
 	if !isNodeLogDirectoryListing(rootBody) {
@@ -142,78 +147,53 @@ func (s *Service) DiscoverLogs(ctx context.Context, nodeName string) restypes.No
 }
 
 // FetchLogs returns the raw content for a previously discovered node log source.
-func (s *Service) FetchLogs(ctx context.Context, nodeName string, req restypes.NodeLogFetchRequest) restypes.NodeLogFetchResponse {
+func (s *Service) FetchLogs(ctx context.Context, nodeName string, req restypes.NodeLogFetchRequest) (restypes.NodeLogFetchResponse, error) {
 	sourcePath := strings.TrimSpace(req.SourcePath)
-	tailBytes := normalizeNodeLogTailBytes(req.TailBytes)
-	source := newNodeLogSource(sourcePath)
-
-	if !isDisplayableNodeLogSource(sourcePath) {
-		return restypes.NodeLogFetchResponse{
-			Source:     source,
-			SourcePath: sourcePath,
-			Error:      "selected source appears to be compressed or binary and cannot be displayed",
-		}
+	if err := requireReadableNodeLogSource(sourcePath); err != nil {
+		return restypes.NodeLogFetchResponse{}, err
 	}
-	if !isSupportedNodeLogSource(sourcePath) {
-		return restypes.NodeLogFetchResponse{
-			Source:     source,
-			SourcePath: sourcePath,
-			Error:      "selected source is already available in the pod/workload logs views",
-		}
-	}
-	if err := validateNodeLogSourcePath(sourcePath); err != nil {
-		return restypes.NodeLogFetchResponse{
-			Source:     source,
-			SourcePath: sourcePath,
-			Error:      err.Error(),
-		}
-	}
-
 	if err := s.ensureClient("Nodes"); err != nil {
-		return restypes.NodeLogFetchResponse{Source: source, SourcePath: sourcePath, Error: err.Error()}
+		return restypes.NodeLogFetchResponse{}, err
 	}
 	if s.deps.KubernetesClient == nil {
-		return restypes.NodeLogFetchResponse{
-			Source:     source,
-			SourcePath: sourcePath,
-			Error:      "kubernetes client not initialized",
-		}
+		return restypes.NodeLogFetchResponse{}, errors.New("kubernetes client not initialized")
 	}
 
-	sinceTime := strings.TrimSpace(req.SinceTime)
-	body, err := s.fetchNodeLogPath(ctx, nodeName, sourcePath, sinceTime)
+	body, err := s.fetchNodeLogPath(ctx, nodeName, sourcePath, strings.TrimSpace(req.SinceTime))
 	if err != nil {
-		return restypes.NodeLogFetchResponse{
-			Source:     source,
-			SourcePath: sourcePath,
-			Error:      classifyNodeLogError(err),
-		}
+		return restypes.NodeLogFetchResponse{}, nodeLogFetchError(err)
 	}
-
-	probeKind := probeNodeLogPath(sourcePath, body)
-	switch probeKind {
+	switch probeNodeLogPath(sourcePath, body) {
 	case nodeLogProbeDirectory:
-		return restypes.NodeLogFetchResponse{
-			Source:     source,
-			SourcePath: sourcePath,
-			Error:      "selected source is a directory; deeper browsing is not supported yet",
-		}
+		return restypes.NodeLogFetchResponse{}, errorstatus.BadRequest(errors.New("selected source is a directory; deeper browsing is not supported yet"))
 	case nodeLogProbeBinary:
-		return restypes.NodeLogFetchResponse{
-			Source:     source,
-			SourcePath: sourcePath,
-			Error:      "selected source appears to be compressed or binary and cannot be displayed",
-		}
+		return restypes.NodeLogFetchResponse{}, errNodeLogNotDisplayable
 	}
 
-	content, truncated := truncateNodeLogContent(body, tailBytes)
-
+	content, truncated := truncateNodeLogContent(body, normalizeNodeLogTailBytes(req.TailBytes))
 	return restypes.NodeLogFetchResponse{
-		Source:     source,
+		Source:     newNodeLogSource(sourcePath),
 		SourcePath: sourcePath,
 		Content:    content,
 		Truncated:  truncated,
+	}, nil
+}
+
+var errNodeLogNotDisplayable = errorstatus.BadRequest(errors.New("selected source appears to be compressed or binary and cannot be displayed"))
+
+// requireReadableNodeLogSource rejects a source this tab cannot show before
+// any request reaches the node.
+func requireReadableNodeLogSource(sourcePath string) error {
+	if !isDisplayableNodeLogSource(sourcePath) {
+		return errNodeLogNotDisplayable
 	}
+	if !isSupportedNodeLogSource(sourcePath) {
+		return errorstatus.BadRequest(errors.New("selected source is already available in the pod/workload logs views"))
+	}
+	if err := validateNodeLogSourcePath(sourcePath); err != nil {
+		return errorstatus.BadRequest(err)
+	}
+	return nil
 }
 
 func (s *Service) discoverNodeLogSources(
@@ -484,17 +464,16 @@ func validateNodeLogPathCandidate(candidate string) error {
 	return nil
 }
 
-func classifyNodeLogError(err error) string {
+// nodeLogFetchError explains a denied or missing node log endpoint, keeping
+// the API status in the chain.
+func nodeLogFetchError(err error) error {
 	switch {
-	case err == nil:
-		return ""
 	case apierrors.IsForbidden(err) || apierrors.IsUnauthorized(err):
-		return "node logs are not accessible with the current permissions"
+		return errorstatus.WithMessage("node logs are not accessible with the current permissions", err)
 	case apierrors.IsNotFound(err):
-		return "node logs are not supported on this cluster"
-	default:
-		return err.Error()
+		return errorstatus.WithMessage("node logs are not supported on this cluster", err)
 	}
+	return err
 }
 
 func isNodeLogDirectoryListing(body []byte) bool {

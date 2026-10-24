@@ -23,7 +23,8 @@
  * entries and don't collide.
  */
 
-import type { LogScrollPosition, LogViewerPrefs } from '../types';
+import type { LogScrollPosition } from '@shared/hooks/useLogScrollRestoration';
+import type { LogViewerPrefs } from '../types';
 
 const cache = new Map<string, LogViewerPrefs>();
 

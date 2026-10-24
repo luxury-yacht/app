@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/stretchr/testify/require"
 )
@@ -109,7 +110,7 @@ func TestManagerProcessesManualRefreshJob(t *testing.T) {
 		case <-deadline:
 			stored, ok := queue.Status(jobID)
 			if ok && stored != nil {
-				t.Fatalf("job never finished; state=%s error=%s", stored.State, stored.Error)
+				t.Fatalf("job never finished; state=%s error=%+v", stored.State, stored.Error)
 			}
 			t.Fatal("job never finished; job missing from queue")
 		default:
@@ -230,6 +231,29 @@ func TestManualRefreshPublishesVersionAndFailureFromItsExecution(t *testing.T) {
 			})
 		})
 	}
+}
+
+// A failed manual refresh reports the failure's status, so a denied scope is
+// recognized as denied whether the user refreshed it or the poller did.
+func TestManualRefreshFailureCarriesStatus(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		registry := &manualRegistry{result: &refresh.ManualRefreshResult{}}
+		service := manualSnapshotBuilder(func(context.Context, string, string) (*refresh.Snapshot, error) {
+			return nil, errorstatus.NewPermissionDenied("pods", "core/pods")
+		})
+		queue := &finishingManualQueue{refresh.NewInMemoryQueue(), make(chan refresh.ManualRefreshJob, 1)}
+		_, err := queue.Enqueue(context.Background(), "pods", "cluster-a|namespace:prod", "user")
+		require.NoError(t, err)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		require.NoError(t, refresh.NewManager(registry, nil, service, nil, queue).Start(ctx))
+
+		finished := <-queue.finished
+		require.Equal(t, refresh.JobStateFailed, finished.State)
+		require.NotNil(t, finished.Error)
+		require.Equal(t, errorstatus.ReasonForbidden, finished.Error.Reason)
+		require.Equal(t, "pods", finished.Error.Details.Domain)
+	})
 }
 
 func TestInMemoryQueueReturnsJobCopies(t *testing.T) {

@@ -1,7 +1,7 @@
 /*
  * backend/objectcatalog/collect.go
  *
- * Catalog collection and informer integration.
+ * Catalog collection and owned-reflector integration.
  */
 
 package objectcatalog
@@ -16,8 +16,6 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/internal/timeutil"
-	"github.com/luxury-yacht/app/backend/refresh"
-	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/argocd"
 	"github.com/luxury-yacht/app/backend/resources/karpenter"
@@ -25,20 +23,18 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	unstructuredv1 "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 )
 
 func (s *Service) collectResource(ctx context.Context, desc Descriptor, namespaces []string, agg *streamingAggregator) ([]Summary, error) {
-	// Ingest-owned (cut) kinds are no longer cached by the shared informer factory;
-	// their Summaries come from the ingest manager (projected at intake) instead of a
-	// shared/dynamic lister, for every namespace scope.
-	if summaries, handled, err := s.collectViaIngest(desc, namespaces, agg); handled {
+	// Built-in kinds' Summaries come from their owned reflectors' stores (projected
+	// at intake), for every namespace scope.
+	if summaries, handled, err := s.collectViaIngest(ctx, desc, namespaces, agg); handled {
 		return summaries, err
 	}
-	if summaries, handled, err := s.collectViaSharedInformer(desc, namespaces, agg); handled {
-		return summaries, err
+	if planCollectionSource(desc).source == collectionSourceSkip {
+		return nil, nil
 	}
 	confirmedCRD := s.deps.IngestSource != nil && s.deps.IngestSource.ReconcileDiscoveredResource(desc.GVR())
 	if summaries, handled, err := s.collectViaDynamicIngest(ctx, desc, namespaces, agg); handled {
@@ -52,129 +48,6 @@ func (s *Service) collectResource(ctx context.Context, desc Descriptor, namespac
 		s.maybePromote(desc, len(summaries))
 	}
 	return summaries, nil
-}
-
-func (s *Service) collectViaSharedInformer(desc Descriptor, namespaces []string, agg *streamingAggregator) ([]Summary, bool, error) {
-	plan := planCollectionSource(desc)
-	switch plan.source {
-	case collectionSourceSkip:
-		return nil, true, nil
-	case collectionSourceAPIExtensionsInformer:
-		return s.collectViaAPIExtensionsInformer(desc, agg)
-	case collectionSourceSharedInformer:
-		return s.collectViaCoreSharedInformer(desc, namespaces, plan.groupResource, agg)
-	case collectionSourceGatewayInformer:
-		return s.collectViaGatewayInformer(desc, namespaces, plan.groupResource, agg)
-	default:
-		return emitSummaries(agg, nil, nil, false)
-	}
-}
-
-func (s *Service) collectViaAPIExtensionsInformer(desc Descriptor, agg *streamingAggregator) ([]Summary, bool, error) {
-	if s.deps.APIExtensionsInformerFactory == nil {
-		return emitSummaries(agg, nil, nil, false)
-	}
-	definitions := s.deps.APIExtensionsInformerFactory.Apiextensions().V1().CustomResourceDefinitions()
-	if !definitions.Informer().HasSynced() {
-		return s.collectWithoutSyncedInformer(desc, agg)
-	}
-	items, err := definitions.Lister().List(labels.Everything())
-	if err != nil {
-		return emitSummaries(agg, nil, err, true)
-	}
-	return emitSummaries(agg, s.summariesFromObjects(desc, toMetaObjects(items)), nil, true)
-}
-
-func (s *Service) collectViaCoreSharedInformer(
-	desc Descriptor,
-	namespaces []string,
-	gr schema.GroupResource,
-	agg *streamingAggregator,
-) ([]Summary, bool, error) {
-	if s.deps.InformerFactory == nil {
-		return emitSummaries(agg, nil, nil, false)
-	}
-	// Check permissions before accessing shared informer listers to avoid triggering
-	// lazy informer creation for resources the user cannot list/watch.
-	if s.deps.PermissionChecker != nil && !s.deps.PermissionChecker.CanListWatch(gr.Group, gr.Resource) {
-		// No permission - fall back to listResource which handles 403 gracefully.
-		return emitSummaries(agg, nil, nil, false)
-	}
-	return s.collectFromInformer(desc, namespaces, sharedInformerFor(s.deps.InformerFactory, sharedInformerGroupResources[gr]), agg)
-}
-
-func (s *Service) collectViaGatewayInformer(
-	desc Descriptor,
-	namespaces []string,
-	gr schema.GroupResource,
-	agg *streamingAggregator,
-) ([]Summary, bool, error) {
-	if s.deps.GatewayInformerFactory == nil {
-		return emitSummaries(agg, nil, nil, false)
-	}
-	return s.collectFromInformer(desc, namespaces, gatewayInformerFor(s.deps.GatewayInformerFactory, gatewayInformerGroupResources[gr]), agg)
-}
-
-// collectFromInformer reads a resolved informer's cache once its initial LIST has
-// synced. A nil informer did not resolve, so collection lists the API instead.
-func (s *Service) collectFromInformer(desc Descriptor, namespaces []string, informer genericInformer, agg *streamingAggregator) ([]Summary, bool, error) {
-	if informer == nil {
-		return emitSummaries(agg, nil, nil, false)
-	}
-	if !informer.Informer().HasSynced() {
-		return s.collectWithoutSyncedInformer(desc, agg)
-	}
-	summaries, err := s.collectFromNamespacedLister(desc, namespaces, genericListerFunc(informer.Lister()))
-	return emitSummaries(agg, summaries, err, true)
-}
-
-// collectWithoutSyncedInformer handles an informer whose initial LIST has not
-// synced; its empty cache is not authoritative absence. An informer that will
-// never sync (forbidden watch, created after its factory started) is replaced by
-// a live LIST, as when the permission check denies the informer. One still
-// syncing fails the kind like an unsynced ingest store: it keeps its published
-// rows, and the failed-sync retry reads the cache once it has synced.
-func (s *Service) collectWithoutSyncedInformer(desc Descriptor, agg *streamingAggregator) ([]Summary, bool, error) {
-	if s.informerUnavailable(desc) {
-		return emitSummaries(agg, nil, nil, false)
-	}
-	return emitSummaries(agg, nil, fmt.Errorf("catalog informer for %s is not synced", desc.GVR()), true)
-}
-
-func (s *Service) informerUnavailable(desc Descriptor) bool {
-	readiness := s.deps.InformerReadiness
-	if readiness == nil {
-		return false
-	}
-	key := permissions.ResourceKey(desc.Group, desc.Resource)
-	return readiness.ResourceReadiness([]string{key})[key] == refresh.ResourceReadinessUnavailable
-}
-
-func (s *Service) collectFromNamespacedLister(desc Descriptor, namespaces []string, list func(namespace string) ([]metav1.Object, error)) ([]Summary, error) {
-	targets := listTargets(desc, namespaces)
-	summaries := make([]Summary, 0)
-	for _, ns := range targets {
-		objects, err := list(ns)
-		if err != nil {
-			return nil, err
-		}
-		summaries = append(summaries, s.summariesFromObjects(desc, objects)...)
-	}
-	return summaries, nil
-}
-
-func (s *Service) summariesFromObjects(desc Descriptor, objs []metav1.Object) []Summary {
-	if len(objs) == 0 {
-		return nil
-	}
-	result := make([]Summary, 0, len(objs))
-	for _, obj := range objs {
-		if obj == nil {
-			continue
-		}
-		result = append(result, s.buildSummary(desc, obj))
-	}
-	return result
 }
 
 func (s *Service) listResource(ctx context.Context, desc Descriptor, namespaces []string, agg *streamingAggregator) ([]Summary, error) {
@@ -389,7 +262,7 @@ func (s *Service) namespaceWorkerLimit(targetCount int) int {
 // maybePromote retains the existing threshold policy for dynamic resources whose
 // CRD definition is not visible. Confirmed CRDs are admitted independently of count.
 func (s *Service) maybePromote(desc Descriptor, itemCount int) {
-	if s.opts.InformerPromotionThreshold <= 0 || itemCount < s.opts.InformerPromotionThreshold {
+	if s.opts.ReflectorPromotionThreshold <= 0 || itemCount < s.opts.ReflectorPromotionThreshold {
 		return
 	}
 	source := s.deps.IngestSource
@@ -418,7 +291,7 @@ func (s *Service) buildSummary(desc Descriptor, item metav1.Object) Summary {
 // Service's buildSummary delegates here so the same projection serves both the
 // live collect path and the ingest Catalog-half projector (SummaryProjector), which
 // runs before any Service exists. Keeping it one function guarantees the ingest
-// path's Summaries are byte-identical to the shared-informer collect path's.
+// path's Summaries are byte-identical to the paged LIST collect path's.
 func summaryFromObject(clusterID string, desc Descriptor, item metav1.Object) Summary {
 	creationTimestamp := ""
 	if ts := item.GetCreationTimestamp(); !ts.IsZero() {

@@ -1,978 +1,518 @@
-import { DockablePanelTestHost } from '@/test-utils/DockablePanelTestHost';
 /**
- * frontend/src/components/content/AppLogsPanel/AppLogsPanel.test.tsx
+ * frontend/src/ui/panels/app-logs/AppLogsPanel.test.tsx
  *
- * Test suite for AppLogsPanel.
- * Covers key behaviors and edge cases for AppLogsPanel.
+ * The Application Logs panel as the app opens it: it tells the backend when it
+ * is shown, lists the backend's lines with each field in its column, appends
+ * the lines the backend announces without duplicates, filters by level,
+ * component, cluster (keeping case-distinct and global scopes apart), and
+ * text, pauses and resumes with auto-refresh and while scrolled up, keeps the
+ * newest 10,000 lines, copies, saves, or clears them, and takes part in Tab
+ * order. Runs in the full app with the real dockable panel, log table, and
+ * dropdowns over the faked backend (test-utils/appState): lines come from
+ * GetAppLogs and GetAppLogsSince, and announcements as `app-logs:added`
+ * events. useGridTableDownloadAction.test.tsx covers the shared Download
+ * button's busy state, failure reports, and feedback timer.
  */
 
-import { ZoomProvider } from '@core/contexts/ZoomContext';
-import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
-import { DockablePanelProvider } from '@ui/dockable/DockablePanelProvider';
-import { KeyboardProvider } from '@ui/shortcuts/context';
-import { act, type ComponentProps, type ReactNode } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Clipboard } from '@wailsio/runtime';
+import { act } from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { installAppStateHarness } from '@/test-utils/appState/harness';
+import type { BackendResult } from '@/test-utils/appState/transport';
 import { requireValue } from '@/test-utils/requireValue';
-import { installWailsDragRuntime } from '@/test-utils/wailsDragRuntime.test.helpers';
 
-interface CapturedDropdownProps {
-  value: string | string[];
-  options: DropdownOption[];
-  onChange: (value: string | string[]) => void;
-  renderOption?: (option: DropdownOption, isSelected: boolean) => ReactNode;
-  renderValue: (value: string | string[], options: DropdownOption[]) => ReactNode;
-  showBulkActions?: boolean;
-  ariaLabel: string;
-}
+type LogLine = NonNullable<BackendResult<'GetAppLogs'>>[number];
 
-const getAppLogsMock = vi.hoisted(() => vi.fn());
-const getAppLogsSinceMock = vi.hoisted(() => vi.fn());
-const clearAppLogsMock = vi.hoisted(() => vi.fn());
-const setAppLogsPanelVisibleMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
-const useShortcutMock = vi.hoisted(() => vi.fn());
-const realNavigation = vi.hoisted(() => ({ enabled: false }));
-const errorHandlerMock = vi.hoisted(() => ({ handle: vi.fn() }));
-const reportOperationalErrorMock = vi.hoisted(() => vi.fn());
-const dropdownInstances = vi.hoisted(() => [] as CapturedDropdownProps[]);
-const runtimeEventHandlers = vi.hoisted(() => new Map<string, (...args: unknown[]) => void>());
-const runtimeDisposerMock = vi.hoisted(() => vi.fn());
-const clipboardWriteTextMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
-const nativeClipboardWriteTextMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
-const saveLogFileMock = vi.hoisted(() => vi.fn());
+const app = installAppStateHarness();
+const logLine = (sequence: number, message = `line ${sequence}`, extra: Partial<LogLine> = {}) =>
+  ({
+    sequence,
+    timestamp: '2024-01-01T00:00:00.000Z',
+    level: 'info',
+    message,
+    source: 'core',
+    ...extra,
+  }) as LogLine;
 
-// Data-oriented tests use a transparent panel; the keyboard regression uses
-// the actual dockable owner and providers.
-vi.mock('@ui/dockable', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@ui/dockable')>();
-  return {
-    ...actual,
-    DockablePanel: (props: ComponentProps<typeof actual.DockablePanel>) =>
-      realNavigation.enabled ? (
-        <actual.DockablePanel {...props} />
-      ) : (
-        <div data-testid="dockable-panel">
-          <div data-testid="body">{props.children}</div>
-        </div>
-      ),
-  };
-});
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedClusterId: 'cluster-a', selectedClusterIds: ['cluster-a'] }),
-}));
+const logLines = (from: number, to: number) =>
+  Array.from({ length: to - from + 1 }, (_value, index) => logLine(from + index));
 
-vi.mock('@shared/components/dropdowns/Dropdown', () => ({
-  Dropdown: (props: CapturedDropdownProps) => {
-    dropdownInstances.push(props);
-    return <div data-testid={`dropdown-${props.ariaLabel}`}></div>;
-  },
-}));
-
-vi.mock('@shared/components/LoadingSpinner', () => ({
-  default: ({ message }: { message: string }) => <div data-testid="loading-spinner">{message}</div>,
-}));
-
-vi.mock('@ui/shortcuts', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@ui/shortcuts')>()),
-  useShortcut: useShortcutMock,
-  useSearchShortcutTarget: () => undefined,
-}));
-
-vi.mock('@core/backend-api', () => ({
-  GetZoomLevel: vi.fn().mockResolvedValue(100),
-  SetZoomLevel: vi.fn().mockResolvedValue(undefined),
-  GetAppLogs: (...args: unknown[]) => getAppLogsMock(...args),
-  GetAppLogsSince: (...args: unknown[]) => getAppLogsSinceMock(...args),
-  ClearAppLogs: (...args: unknown[]) => clearAppLogsMock(...args),
-  SetAppLogsPanelVisible: (...args: unknown[]) => setAppLogsPanelVisibleMock(...args),
-  SaveLogFile: (...args: unknown[]) => saveLogFileMock(...args),
-}));
-
-vi.mock('@core/desktop-runtime', () => ({
-  desktopRuntimeAvailable: () => true,
-  writeClipboardText: (...args: unknown[]) => nativeClipboardWriteTextMock(...args),
-  onEvent: (eventName: string, handler: (...args: unknown[]) => void) => {
-    runtimeEventHandlers.set(eventName, handler);
-    return runtimeDisposerMock;
-  },
-}));
-
-// The app renders panels inside ZoomProvider, which the Download menu reads.
-vi.mock('@core/contexts/ZoomContext', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@core/contexts/ZoomContext')>()),
-  useZoom: () => ({ zoomLevel: 100 }),
-}));
-
-vi.mock('@utils/errorHandler', () => ({
-  errorHandler: errorHandlerMock,
-  reportOperationalError: (...args: unknown[]) => reportOperationalErrorMock(...args),
-}));
-
-import AppLogsPanel from './AppLogsPanel';
-
-// Opens the Download menu and picks one of its choices.
-const chooseDownload = async (
-  container: HTMLElement,
-  choice: 'Copy to Clipboard' | 'Save to File'
-): Promise<void> => {
-  await act(async () => {
-    container
-      .querySelector<HTMLButtonElement>('button[aria-label="Download logs"]')
-      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await Promise.resolve();
-  });
-  const item = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find(
-    (element) => element.textContent === choice
-  );
-  if (!item) {
-    throw new Error(`expected the ${choice} menu item`);
-  }
-  await act(async () => {
-    item.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await Promise.resolve();
-    await Promise.resolve();
-  });
+/** Answers the panel's first read and its later reads of what is new. */
+const backendLines = (initial: LogLine[], since: LogLine[] = []) => {
+  app.backend.answer('GetAppLogs', () => initial);
+  app.backend.answer('GetAppLogsSince', () => since);
 };
 
-const renderPanel = async (initialIsOpen = true) => {
-  const container = document.createElement('div');
-  if (realNavigation.enabled) {
-    container.className = 'content';
-  }
-  document.body.appendChild(container);
-  const root = ReactDOM.createRoot(container);
-  const onCloseMock = vi.fn();
-
-  await act(async () => {
-    const panel = <AppLogsPanel isOpen={initialIsOpen} onClose={onCloseMock} />;
-    root.render(
-      realNavigation.enabled ? (
-        <KeyboardProvider>
-          <ZoomProvider>
-            <DockablePanelProvider>
-              <DockablePanelTestHost />
-              {panel}
-            </DockablePanelProvider>
-          </ZoomProvider>
-        </KeyboardProvider>
-      ) : (
-        panel
-      )
-    );
-    await Promise.resolve();
-  });
-
-  return {
-    container,
-    root,
-    onCloseMock,
-    rerender: async (nextIsOpen = true) => {
-      await act(async () => {
-        root.render(<AppLogsPanel isOpen={nextIsOpen} onClose={onCloseMock} />);
-        await Promise.resolve();
-      });
-    },
-    cleanup: () => {
-      act(() => root.unmount());
-      container.remove();
-    },
-  };
-};
-
-const flushInitialLoad = async () => {
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(300);
-  });
-  await act(async () => {
-    await Promise.resolve();
-  });
-};
-
-const setInputValue = (input: HTMLInputElement, value: string) => {
-  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-  setter?.call(input, value);
-};
-
-const latestDropdown = (ariaLabel: string) =>
-  [...dropdownInstances].reverse().find((instance) => instance.ariaLabel === ariaLabel);
-
-const triggerText = (ariaLabel: string) => {
-  const instance = latestDropdown(ariaLabel);
-  return instance?.renderValue(instance.value, instance.options);
-};
-
-let restoreClipboard: (() => void) | undefined;
-
-beforeEach(() => {
-  useShortcutMock.mockClear();
-  realNavigation.enabled = false;
-  getAppLogsMock.mockReset();
-  getAppLogsSinceMock.mockReset();
-  clearAppLogsMock.mockReset();
-  setAppLogsPanelVisibleMock.mockReset();
-  setAppLogsPanelVisibleMock.mockResolvedValue(undefined);
-  errorHandlerMock.handle.mockReset();
-  dropdownInstances.length = 0;
-  runtimeEventHandlers.clear();
-  runtimeDisposerMock.mockReset();
-  clipboardWriteTextMock.mockReset();
-  clipboardWriteTextMock.mockResolvedValue(undefined);
-  nativeClipboardWriteTextMock.mockReset();
-  nativeClipboardWriteTextMock.mockResolvedValue(undefined);
-  const previousClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
-  Object.defineProperty(navigator, 'clipboard', {
-    configurable: true,
-    value: { writeText: clipboardWriteTextMock },
-  });
-  restoreClipboard = () => {
-    if (previousClipboardDescriptor) {
-      Object.defineProperty(navigator, 'clipboard', previousClipboardDescriptor);
-      return;
-    }
-    Reflect.deleteProperty(navigator, 'clipboard');
-  };
+beforeEach(async () => {
+  vi.useFakeTimers();
+  vi.mocked(Clipboard.SetText).mockReset().mockResolvedValue(undefined);
+  const dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['default']);
+  app.startScreen(dev);
+  app.backend.answer('ClearAppLogs', () => undefined);
+  await app.mountApp();
 });
 
 afterEach(() => {
-  restoreClipboard?.();
-  restoreClipboard = undefined;
   vi.useRealTimers();
 });
 
-afterAll(() => {
-  restoreClipboard?.();
-});
+const keydown = (key: string, init: KeyboardEventInit = {}) =>
+  new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init });
+
+/** View > Application Logs (Ctrl+Shift+L outside macOS). */
+const togglePanel = async () => {
+  await act(async () => {
+    document.body.dispatchEvent(keydown('L', { ctrlKey: true, shiftKey: true }));
+  });
+  await app.settle();
+};
+
+const openPanel = async () => {
+  await togglePanel();
+  // The panel reads its lines once its opening animation ends (300 ms).
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(300);
+  });
+  await app.settle();
+};
+
+const panel = () =>
+  requireValue(
+    document.querySelector<HTMLElement>('.app-logs-panel-content'),
+    'expected the Application Logs panel'
+  );
+
+const rows = () => Array.from(panel().querySelectorAll<HTMLElement>('.gridtable-row'));
+
+const messages = () =>
+  Array.from(panel().querySelectorAll('.gridtable-row .log-message'), (cell) => cell.textContent);
+
+/** The line count: "(shown / all)" while filtered, "(all)" otherwise. */
+const lineCount = () => panel().querySelector('.app-logs-count')?.textContent;
+
+const control = (label: string) =>
+  requireValue(
+    panel().querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`),
+    `expected the ${label} control`
+  );
+
+const click = async (element: HTMLElement) => {
+  await act(async () => element.click());
+  await app.settle();
+};
+
+const announce = async (sequence: number) => {
+  await act(async () => {
+    app.events.emit('app-logs:added', { sequence });
+  });
+  await app.settle();
+};
+
+// Scroll and row measurement settle on animation frames.
+const flushFrames = async () => {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(100);
+  });
+};
+
+/** Opens the filter dropdown named `label` and applies `choose` to its menu. */
+const filter = async (label: string, choose: (menu: HTMLElement) => HTMLElement[]) => {
+  const trigger = control(label);
+  await click(trigger);
+  const menu = requireValue(
+    document.getElementById(trigger.getAttribute('aria-controls') ?? ''),
+    `expected the ${label} options`
+  );
+  for (const target of choose(menu)) {
+    await click(target);
+  }
+  await click(trigger);
+};
+
+// A multi-select filter's options toggle like checkboxes.
+const option = (name: string) => (menu: HTMLElement) =>
+  requireValue(
+    Array.from(menu.querySelectorAll<HTMLElement>('button[data-dropdown-option-index]')).find(
+      (candidate) => candidate.textContent?.trim() === name
+    ),
+    `expected the ${name} option`
+  );
+
+const bulk = (label: 'Select all' | 'Select none') => (menu: HTMLElement) =>
+  requireValue(menu.querySelector<HTMLElement>(`[aria-label="${label}"]`), `expected ${label}`);
+
+/** Keeps only the named options of a filter. */
+const only =
+  (...names: string[]) =>
+  (menu: HTMLElement) => [bulk('Select none')(menu), ...names.map((name) => option(name)(menu))];
+
+const autoRefresh = () =>
+  requireValue(
+    panel().querySelector<HTMLButtonElement>(
+      'button[aria-label="Stop auto-refresh"], button[aria-label="Start auto-refresh"]'
+    ),
+    'expected the auto-refresh button'
+  );
+
+const autoRefreshOn = () => autoRefresh().getAttribute('aria-label') === 'Stop auto-refresh';
 
 describe('AppLogsPanel', () => {
-  it('syncs backend visibility when open state changes', async () => {
-    vi.useFakeTimers();
-    getAppLogsMock.mockResolvedValue([]);
+  it('tells the backend whether the panel is shown', async () => {
+    backendLines([]);
+    const latest = () => app.backend.calls('SetAppLogsPanelVisible').slice(-1)[0];
+    expect(latest()).toEqual([false]);
 
-    const { rerender, cleanup } = await renderPanel(true);
-    expect(setAppLogsPanelVisibleMock).toHaveBeenLastCalledWith(true);
+    await openPanel();
+    expect(latest()).toEqual([true]);
 
-    await rerender(false);
-    expect(setAppLogsPanelVisibleMock).toHaveBeenLastCalledWith(false);
-
-    cleanup();
+    await togglePanel();
+    expect(latest()).toEqual([false]);
   });
 
-  it('loads logs when opened and renders entries', async () => {
-    vi.useFakeTimers();
-    getAppLogsMock.mockResolvedValue([
-      {
-        sequence: 1,
-        timestamp: '2024-01-01T00:00:00.000Z',
-        level: 'info',
-        message: 'Ready',
-        source: 'core',
-      },
-      {
-        sequence: 2,
-        timestamp: '2024-01-01T00:00:01.000Z',
-        level: 'error',
-        message: 'Boom',
-        source: 'worker',
-      },
+  it('shows the backend’s lines with each field in its column', async () => {
+    backendLines([
+      logLine(1, 'Ready'),
+      logLine(2, 'Slow response', {
+        level: 'warn',
+        source: 'refresh',
+        clusterId: 'kube:alpha',
+        clusterName: 'alpha',
+      }),
     ]);
 
-    const { container, cleanup } = await renderPanel();
+    await openPanel();
 
-    await flushInitialLoad();
-
-    const entries = container.querySelectorAll('.log-entry');
-    expect(entries.length).toBe(2);
-    expect(getAppLogsMock).toHaveBeenCalledTimes(1);
-
-    cleanup();
-  });
-
-  it('resizes log columns from the header row', async () => {
-    vi.useFakeTimers();
-    getAppLogsMock.mockResolvedValue([
-      {
-        sequence: 1,
-        timestamp: '2024-01-01T00:00:00.000Z',
-        level: 'info',
-        message: 'Ready',
-        source: 'core',
-      },
-    ]);
-
-    const { container, cleanup } = await renderPanel();
-
-    await flushInitialLoad();
-
-    const header = container.querySelector<HTMLElement>('.app-logs-header');
-    const clusterResizer = container.querySelector<HTMLElement>(
-      '[aria-label="Resize Cluster column"]'
+    expect(app.backend.calls('GetAppLogs')).toHaveLength(1);
+    expect(rows()).toHaveLength(2);
+    const cells = Array.from(rows()[1]?.querySelectorAll('.grid-cell') ?? [], (cell) =>
+      cell.textContent?.trim()
     );
-    expect(header?.style.getPropertyValue('--app-log-cluster-width')).toBe('140px');
-    expect(clusterResizer).not.toBeNull();
+    expect(cells.slice(1)).toEqual(['warn', '[refresh]', '[alpha]', 'Slow response']);
+  });
+
+  // Long messages sit on one line like any table cell; expanding a row shows all
+  // of it, as in the Logs tab's Table format.
+  it('expands a row to read a long message in full', async () => {
+    backendLines([logLine(1, `start ${'x'.repeat(400)} end`)]);
+    await openPanel();
+    const row = () => requireValue(rows()[0], 'expected a log row');
+    const message = () =>
+      requireValue(row().querySelector<HTMLElement>('.log-message'), 'expected the message');
+
+    await click(message());
+    expect(row().classList.contains('parsed-row-expanded')).toBe(true);
+    await click(message());
+    expect(row().classList.contains('parsed-row-expanded')).toBe(false);
+  });
+
+  it('appends only the new lines the backend announces and stops listening once closed', async () => {
+    backendLines([logLine(1, 'Ready')], [logLine(2, 'Delta', { level: 'warn' })]);
+    await openPanel();
+
+    await announce(2);
+
+    expect(app.backend.calls('GetAppLogsSince')).toEqual([[1]]);
+    expect(app.backend.calls('GetAppLogs')).toHaveLength(1);
+    expect(messages()).toEqual(['Ready', 'Delta']);
+    await togglePanel();
+    expect(app.events.listenerCount('app-logs:added')).toBe(0);
+  });
+
+  it('adds a line once when overlapping announcements read the same lines', async () => {
+    backendLines([logLine(1, 'Ready')], [logLine(2, 'Delta')]);
+    await openPanel();
 
     await act(async () => {
-      requireValue(clusterResizer, 'expected test value in AppLogsPanel.test.tsx').dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })
+      app.events.emit('app-logs:added', { sequence: 2 });
+      app.events.emit('app-logs:added', { sequence: 2 });
+    });
+    await app.settle();
+
+    expect(app.backend.calls('GetAppLogsSince')).toHaveLength(2);
+    expect(messages()).toEqual(['Ready', 'Delta']);
+  });
+
+  it('reports a failed read and shows no lines', async () => {
+    app.backend.answer('GetAppLogs', () => {
+      throw new Error('load failed');
+    });
+
+    await openPanel();
+
+    expect(app.errors.take((record) => record.context?.action === 'loadLogs')).toHaveLength(1);
+    expect(rows()).toEqual([]);
+  });
+
+  it('narrows the lines by level, component, and text and counts what is shown', async () => {
+    backendLines([
+      logLine(1, 'System ready'),
+      logLine(2, 'Debug info', { level: 'debug', source: 'worker' }),
+    ]);
+    await openPanel();
+    expect(lineCount()).toBe('(2)');
+
+    await filter('Filter by component', (menu) => [option('worker')(menu)]);
+    expect(lineCount()).toBe('(1 / 2)');
+    expect(messages()).toEqual(['System ready']);
+
+    await filter('Filter by component', (menu) => [bulk('Select all')(menu)]);
+    await filter('Filter by log level', (menu) => [option('Debug')(menu)]);
+    expect(messages()).toEqual(['System ready']);
+    await filter('Filter by log level', (menu) => [bulk('Select none')(menu)]);
+    expect(lineCount()).toBe('(0 / 2)');
+    expect(rows()).toEqual([]);
+
+    await filter('Filter by log level', (menu) => [bulk('Select all')(menu)]);
+    const text = requireValue(
+      panel().querySelector<HTMLInputElement>('.app-logs-text-filter'),
+      'expected the text filter'
+    );
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+        text,
+        'missing'
       );
-      await Promise.resolve();
+      text.dispatchEvent(new Event('input', { bubbles: true }));
     });
-
-    expect(header?.style.getPropertyValue('--app-log-cluster-width')).toBe('150px');
-
-    cleanup();
+    await app.settle();
+    expect(lineCount()).toBe('(0 / 2)');
+    expect(rows()).toEqual([]);
   });
 
-  it('does not restore a finished log-column cursor after leaving a window edge', async () => {
-    vi.useFakeTimers();
-    const runtime = await installWailsDragRuntime('linux');
-    const { container, cleanup } = await renderPanel();
-    try {
-      await flushInitialLoad();
-      const resizer = container.querySelector<HTMLElement>('[aria-label="Resize Cluster column"]');
-      await act(async () => {
-        resizer?.dispatchEvent(
-          new MouseEvent('pointerdown', { bubbles: true, clientX: 200, button: 0 })
-        );
-      });
-      document.body.dispatchEvent(
-        new MouseEvent('mousemove', { bubbles: true, clientX: 1, clientY: 300, buttons: 1 })
-      );
-      expect(document.body.style.cursor).toBe('ew-resize');
-      await act(async () => {
-        window.dispatchEvent(new MouseEvent('pointerup'));
-      });
-      document.body.dispatchEvent(
-        new MouseEvent('mousemove', { bubbles: true, clientX: 400, clientY: 300 })
-      );
-      expect(document.body.style.cursor).not.toBe('col-resize');
-    } finally {
-      cleanup();
-      runtime.cleanup();
-      document.body.style.cursor = '';
-    }
-  });
-
-  it('appends new logs from app-logs events using delta reads and listener disposers', async () => {
-    vi.useFakeTimers();
-    getAppLogsMock.mockResolvedValue([
-      {
-        sequence: 1,
-        timestamp: '2024-01-01T00:00:00.000Z',
-        level: 'info',
-        message: 'Ready',
-        source: 'core',
-      },
-    ]);
-    getAppLogsSinceMock.mockResolvedValue([
-      {
-        sequence: 2,
-        timestamp: '2024-01-01T00:00:01.000Z',
-        level: 'warn',
-        message: 'Delta',
-        source: 'core',
-      },
-    ]);
-
-    const { container, cleanup } = await renderPanel();
-
-    await flushInitialLoad();
-    expect(container.querySelectorAll('.log-entry')).toHaveLength(1);
-
-    const handler = runtimeEventHandlers.get('app-logs:added');
-    expect(handler).toBeTruthy();
-
-    await act(async () => {
-      handler?.({ sequence: 2 });
-      await Promise.resolve();
-    });
-
-    expect(getAppLogsSinceMock).toHaveBeenCalledWith(1);
-    expect(getAppLogsMock).toHaveBeenCalledTimes(1);
-    expect(container.querySelectorAll('.log-entry')).toHaveLength(2);
-    expect(container.textContent).toContain('Delta');
-
-    cleanup();
-
-    expect(runtimeDisposerMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not duplicate logs when overlapping app-logs events read the same delta', async () => {
-    vi.useFakeTimers();
-    getAppLogsMock.mockResolvedValue([
-      {
-        sequence: 1,
-        timestamp: '2024-01-01T00:00:00.000Z',
-        level: 'info',
-        message: 'Ready',
-        source: 'core',
-      },
-    ]);
-    getAppLogsSinceMock.mockResolvedValue([
-      {
-        sequence: 2,
-        timestamp: '2024-01-01T00:00:01.000Z',
-        level: 'warn',
-        message: 'Delta',
-        source: 'core',
-      },
-    ]);
-
-    const { container, cleanup } = await renderPanel();
-
-    await flushInitialLoad();
-    const handler = runtimeEventHandlers.get('app-logs:added');
-    expect(handler).toBeTruthy();
-
-    await act(async () => {
-      handler?.({ sequence: 2 });
-      handler?.({ sequence: 2 });
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(getAppLogsSinceMock).toHaveBeenCalledTimes(2);
-    expect(container.querySelectorAll('.log-entry')).toHaveLength(2);
-    expect(container.textContent?.match(/Delta/g)).toHaveLength(1);
-
-    cleanup();
-  });
-
-  it('handles load errors gracefully', async () => {
-    vi.useFakeTimers();
-    const error = new Error('load failed');
-    getAppLogsMock.mockRejectedValue(error);
-
-    const { container, cleanup } = await renderPanel();
-
-    await flushInitialLoad();
-
-    expect(errorHandlerMock.handle).toHaveBeenCalledWith(error, { action: 'loadLogs' });
-    expect(container.querySelector('.app-logs-empty')?.textContent).toContain('No logs available');
-
-    cleanup();
-  });
-
-  it('toggles dropdown filters and updates counts', async () => {
-    vi.useFakeTimers();
-    getAppLogsMock.mockResolvedValue([
-      {
-        timestamp: '2024-01-01T00:00:00.000Z',
-        level: 'info',
-        message: 'System ready',
-        source: 'core',
-      },
-      {
-        timestamp: '2024-01-01T00:00:01.000Z',
-        level: 'debug',
-        message: 'Debug info',
-        source: 'worker',
-      },
-    ]);
-
-    const { container, cleanup } = await renderPanel();
-
-    await flushInitialLoad();
-
-    const countBadge = container.querySelector('.app-logs-count');
-    expect(countBadge?.textContent).toBe('(2)');
-
-    const logLevelsDropdown = latestDropdown('Filter by log level');
-    const componentsDropdown = latestDropdown('Filter by component');
-    expect(logLevelsDropdown).toBeTruthy();
-    expect(componentsDropdown).toBeTruthy();
-
-    await act(async () => {
-      logLevelsDropdown?.onChange(['info', 'warn', 'error', 'debug']);
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      latestDropdown('Filter by component')?.onChange(['core']);
-      await Promise.resolve();
-    });
-
-    expect(countBadge?.textContent).toBe('(1 / 2)');
-    expect(triggerText('Filter by component')).toBe('Components (1)');
-
-    await act(async () => {
-      latestDropdown('Filter by component')?.onChange(['core', 'worker']);
-      await Promise.resolve();
-    });
-
-    expect(countBadge?.textContent).toBe('(2)');
-    expect(triggerText('Filter by component')).toBe('Components');
-
-    await act(async () => {
-      latestDropdown('Filter by component')?.onChange([]);
-      await Promise.resolve();
-    });
-
-    expect(countBadge?.textContent).toBe('(0 / 2)');
-    expect(triggerText('Filter by component')).toBe('Components (0)');
-
-    cleanup();
-  });
-
-  it('filters and renders cluster metadata', async () => {
-    vi.useFakeTimers();
-    getAppLogsMock.mockResolvedValue([
-      {
-        timestamp: '2024-01-01T00:00:00.000Z',
-        level: 'info',
-        message: 'Cluster A ready',
+  it('filters by cluster, with lines from no cluster under Global', async () => {
+    backendLines([
+      logLine(1, 'Settings loaded', { source: 'Settings' }),
+      logLine(2, 'Cluster A ready', {
         source: 'Auth',
         clusterId: 'kube-alpha:alpha',
         clusterName: 'alpha',
-      },
-      {
-        timestamp: '2024-01-01T00:00:01.000Z',
-        level: 'info',
-        message: 'Cluster B ready',
+      }),
+      logLine(3, 'Cluster B ready', {
         source: 'Auth',
         clusterId: 'kube-bravo:bravo',
         clusterName: 'bravo',
-      },
+      }),
     ]);
-
-    const { container, cleanup } = await renderPanel();
-
-    await flushInitialLoad();
-
-    expect(container.querySelector('.app-logs-container .log-cluster')?.textContent).toBe(
-      '[alpha]'
-    );
-
-    const clustersDropdown = latestDropdown('Filter by cluster');
-    expect(clustersDropdown).toBeTruthy();
-    expect(clustersDropdown?.options.map((option) => option.label)).toEqual([
-      'kube-alpha:alpha',
-      'kube-bravo:bravo',
-    ]);
-
-    const renderedClusterOption = renderToStaticMarkup(
-      requireValue(
-        clustersDropdown?.renderOption,
-        'expected cluster option renderer in AppLogsPanel.test.tsx'
-      )(
-        requireValue(
-          clustersDropdown?.options[0],
-          'expected first cluster option in AppLogsPanel.test.tsx'
-        ),
-        true
+    await openPanel();
+    expect(
+      Array.from(
+        panel().querySelectorAll('.gridtable-row .log-cluster'),
+        (cell) => cell.textContent
       )
-    );
-    expect(renderedClusterOption).toContain('app-logs-cluster-file');
-    expect(renderedClusterOption).toContain('kube-alpha');
-    expect(renderedClusterOption).toContain('app-logs-cluster-context');
-    expect(renderedClusterOption).toContain('alpha');
+    ).toEqual(['[Global]', '[alpha]', '[bravo]']);
 
-    await act(async () => {
-      clustersDropdown?.onChange(['kube-bravo:bravo']);
-      await Promise.resolve();
-    });
+    await filter('Filter by cluster', only('kube-bravo:bravo'));
+    expect(messages()).toEqual(['Cluster B ready']);
 
-    const entries = Array.from(container.querySelectorAll('.log-entry'));
-    expect(entries.length).toBe(1);
-    expect(entries[0]?.textContent).toContain('Cluster B ready');
-    expect(entries[0]?.textContent).toContain('[bravo]');
-
-    cleanup();
+    await filter('Filter by cluster', only('Global'));
+    expect(messages()).toEqual(['Settings loaded']);
   });
 
-  it('keeps case-distinct cluster scopes separate while logs arrive', async () => {
-    vi.useFakeTimers();
+  it('keeps case-distinct cluster scopes apart while lines arrive', async () => {
     const clusterIds = ['config:Production', 'config:production'];
-    const timestamp = '2024-01-01T00:00:00.000Z';
-    getAppLogsMock.mockResolvedValue([
-      ...clusterIds.map((clusterId, index) => ({
-        sequence: index + 1,
-        timestamp,
-        level: 'info',
-        message: clusterId,
-        clusterId,
-      })),
-      { sequence: 3, timestamp, level: 'info', message: 'Global message' },
-    ]);
-    const { container, cleanup } = await renderPanel();
-    try {
-      await flushInitialLoad();
-      expect(latestDropdown('Filter by cluster')?.value).toEqual(
-        expect.arrayContaining(clusterIds)
+    backendLines(
+      [
+        ...clusterIds.map((clusterId, index) => logLine(index + 1, clusterId, { clusterId })),
+        logLine(3, 'Global message'),
+      ],
+      [logLine(4, 'Another global message')]
+    );
+    await openPanel();
+
+    await filter('Filter by cluster', only('config:Production'));
+    expect(messages()).toEqual(['config:Production']);
+
+    await filter('Filter by cluster', only(...clusterIds));
+    expect(messages()).toEqual(clusterIds);
+    // A new global line stays out of the explicit cluster selection.
+    await announce(4);
+    expect(messages()).toEqual(clusterIds);
+  });
+
+  it('stops applying new lines while auto-refresh is off and catches up when R restarts it', async () => {
+    backendLines([logLine(1, 'Ready')], [logLine(2, 'Missed while stopped')]);
+    await openPanel();
+
+    await click(autoRefresh());
+    expect(autoRefreshOn()).toBe(false);
+    await announce(2);
+    expect(app.backend.calls('GetAppLogsSince')).toEqual([]);
+    expect(messages()).toEqual(['Ready']);
+
+    // R toggles it, as in container logs.
+    await act(async () => {
+      document.body.dispatchEvent(keydown('r'));
+    });
+    await app.settle();
+
+    expect(autoRefreshOn()).toBe(true);
+    expect(app.backend.calls('GetAppLogsSince')).toEqual([[1]]);
+    expect(messages()).toEqual(['Ready', 'Missed while stopped']);
+  });
+
+  it('drops a read already in flight when auto-refresh stops', async () => {
+    backendLines([logLine(1, 'Ready')], [logLine(2, 'Late line')]);
+    await openPanel();
+    const finishRead = app.backend.hold('GetAppLogsSince');
+    await announce(2);
+    expect(app.backend.calls('GetAppLogsSince')).toHaveLength(1);
+
+    await click(autoRefresh());
+    await act(async () => finishRead());
+    await app.settle();
+
+    expect(messages()).toEqual(['Ready']);
+  });
+
+  // Troubleshooting the app can need more history than a Logs tab keeps, so the
+  // panel keeps a fixed 10,000 lines whatever the Logs tabs' Buffer size is, and
+  // draws only the rows in view.
+  it('keeps the newest 10,000 lines regardless of the Logs tabs buffer size, drawing only rows in view', async () => {
+    app.preferences({ objPanelLogsBufferMaxSize: 100 });
+    backendLines(logLines(1, 9_990), logLines(9_991, 10_010));
+    await openPanel();
+    await flushFrames();
+    expect(lineCount()).toBe('(9990)');
+    expect(rows().length).toBeGreaterThan(0);
+    expect(rows().length).toBeLessThan(200);
+
+    await announce(10_010);
+    await flushFrames();
+
+    expect(lineCount()).toBe('(10000)');
+    expect(messages()).not.toContain('line 10');
+  });
+
+  describe('while scrolled up', () => {
+    const descriptors = {
+      scrollHeight: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight'),
+      clientHeight: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight'),
+    };
+
+    // jsdom has no layout: the log body is 400 px of content in a 100 px view.
+    beforeEach(() => {
+      for (const [name, height] of [
+        ['scrollHeight', 400],
+        ['clientHeight', 100],
+      ] as const) {
+        Object.defineProperty(HTMLElement.prototype, name, {
+          configurable: true,
+          get(this: HTMLElement) {
+            return this.classList.contains('gridtable-wrapper') ? height : 0;
+          },
+        });
+      }
+    });
+
+    afterEach(() => {
+      for (const name of ['scrollHeight', 'clientHeight'] as const) {
+        const original = descriptors[name];
+        if (original) {
+          Object.defineProperty(HTMLElement.prototype, name, original);
+        } else {
+          Reflect.deleteProperty(HTMLElement.prototype, name);
+        }
+      }
+    });
+
+    it('holds the shown lines and resumes from a bottom button', async () => {
+      backendLines(logLines(1, 10_000), logLines(10_001, 10_010));
+      await openPanel();
+      const body = requireValue(
+        panel().querySelector<HTMLElement>('.gridtable-wrapper'),
+        'expected the log body'
       );
+      expect(panel().querySelector('button[aria-label="Resume scrolling"]')).toBeNull();
 
       await act(async () => {
-        latestDropdown('Filter by cluster')?.onChange([clusterIds[0]]);
+        body.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -100 }));
+        body.scrollTop = 0;
+        body.dispatchEvent(new Event('scroll'));
       });
-      expect(
-        Array.from(
-          container.querySelectorAll('.log-entry .log-message'),
-          (entry) => entry.textContent
-        )
-      ).toEqual([clusterIds[0]]);
-      expect(latestDropdown('Filter by cluster')?.value).toEqual([clusterIds[0]]);
+      await flushFrames();
+      const resume = control('Resume scrolling');
 
-      await act(async () => {
-        latestDropdown('Filter by cluster')?.onChange(clusterIds);
-      });
-      expect(container.querySelectorAll('.log-entry')).toHaveLength(2);
-      getAppLogsSinceMock.mockResolvedValue([
-        { sequence: 4, timestamp, level: 'info', message: 'Another global message' },
-      ]);
-      await act(async () => {
-        runtimeEventHandlers.get('app-logs:added')?.({ sequence: 4 });
-        await Promise.resolve();
-      });
-      expect(container.querySelectorAll('.log-entry')).toHaveLength(2);
-      expect(latestDropdown('Filter by cluster')?.value).toEqual(clusterIds);
-    } finally {
-      cleanup();
-    }
-  });
+      // New lines arrive while scrolled up: the oldest shown line stays put.
+      await announce(10_010);
+      await flushFrames();
+      expect(lineCount()).toBe('(10010)');
+      expect(messages()).toContain('line 1');
+      expect(body.scrollTop).toBe(0);
 
-  it('renders and filters app-global logs with an explicit scope', async () => {
-    vi.useFakeTimers();
-    getAppLogsMock.mockResolvedValue([
-      {
-        timestamp: '2024-01-01T00:00:00.000Z',
-        level: 'info',
-        message: 'Settings loaded',
-        source: 'Settings',
-      },
-      {
-        timestamp: '2024-01-01T00:00:01.000Z',
-        level: 'info',
-        message: 'Cluster A ready',
-        source: 'Auth',
-        clusterId: 'kube-alpha:alpha',
-        clusterName: 'alpha',
-      },
-    ]);
+      await click(autoRefresh());
+      expect(autoRefreshOn()).toBe(false);
 
-    const { container, cleanup } = await renderPanel();
-
-    await flushInitialLoad();
-
-    const clusters = Array.from(container.querySelectorAll('.app-logs-container .log-cluster')).map(
-      (entry) => entry.textContent
-    );
-    expect(clusters).toEqual(['[Global]', '[alpha]']);
-
-    const clustersDropdown = latestDropdown('Filter by cluster');
-    expect(clustersDropdown?.options.map((option) => option.label)).toEqual([
-      'Global',
-      'kube-alpha:alpha',
-    ]);
-
-    await act(async () => {
-      clustersDropdown?.onChange(['__app_global__']);
-      await Promise.resolve();
+      // Resuming follows the tail again, restarts auto-refresh, and applies the 10,000-line cap.
+      await click(resume);
+      await flushFrames();
+      expect(panel().querySelector('button[aria-label="Resume scrolling"]')).toBeNull();
+      expect(autoRefreshOn()).toBe(true);
+      expect(lineCount()).toBe('(10000)');
+      expect(messages()).not.toContain('line 1');
+      expect(body.scrollTop).toBe(400);
     });
-
-    const entries = Array.from(container.querySelectorAll('.log-entry'));
-    expect(entries).toHaveLength(1);
-    expect(entries[0]?.textContent).toContain('[Global]');
-    expect(entries[0]?.textContent).toContain('Settings loaded');
-
-    cleanup();
-  });
-
-  it('uses shared dropdown bulk actions instead of custom select-all options', async () => {
-    vi.useFakeTimers();
-    getAppLogsMock.mockResolvedValue([
-      {
-        timestamp: '2024-01-01T00:00:00.000Z',
-        level: 'info',
-        message: 'Cluster A ready',
-        source: 'Auth',
-        clusterId: 'kube-alpha:alpha',
-        clusterName: 'alpha',
-      },
-      {
-        timestamp: '2024-01-01T00:00:01.000Z',
-        level: 'debug',
-        message: 'Cluster B ready',
-        source: 'Refresh',
-        clusterId: 'kube-bravo:bravo',
-        clusterName: 'bravo',
-      },
-    ]);
-
-    const { cleanup } = await renderPanel();
-
-    await flushInitialLoad();
-
-    const logLevelsDropdown = latestDropdown('Filter by log level');
-    const componentsDropdown = latestDropdown('Filter by component');
-    const clustersDropdown = latestDropdown('Filter by cluster');
-
-    expect(logLevelsDropdown?.showBulkActions).toBe(true);
-    expect(componentsDropdown?.showBulkActions).toBe(true);
-    expect(clustersDropdown?.showBulkActions).toBe(true);
-
-    expect(logLevelsDropdown?.options.map((option) => option.value)).toEqual([
-      'info',
-      'warn',
-      'error',
-      'debug',
-    ]);
-    expect(componentsDropdown?.options.map((option) => option.value)).toEqual(['Auth', 'Refresh']);
-    expect(clustersDropdown?.options.map((option) => option.value)).toEqual([
-      'kube-alpha:alpha',
-      'kube-bravo:bravo',
-    ]);
-
-    cleanup();
-  });
-
-  it('renders app log actions in the shared iconbar', async () => {
-    vi.useFakeTimers();
-    getAppLogsMock.mockResolvedValue([
-      { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
-    ]);
-
-    const { container, cleanup } = await renderPanel();
-
-    await flushInitialLoad();
-
-    const iconbar = container.querySelector('.app-logs-action-iconbar');
-    expect(iconbar).toBeTruthy();
-    expect(iconbar?.querySelectorAll('.icon-bar-button')).toHaveLength(3);
-
-    const autoScrollButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Toggle auto-scroll"]'
-    );
-    const downloadButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Download logs"]'
-    );
-    const clearButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Clear logs"]'
-    );
-
-    expect(autoScrollButton?.getAttribute('aria-pressed')).toBe('true');
-    expect(downloadButton?.disabled).toBe(false);
-    expect(clearButton?.disabled).toBe(false);
-
-    await act(async () => {
-      autoScrollButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    expect(autoScrollButton?.getAttribute('aria-pressed')).toBe('false');
-
-    cleanup();
   });
 
   // The Download menu is the log viewers' menu: Copy to Clipboard through the
   // native clipboard, or Save to File with the same text in a .log file.
-  it('copies or saves the shown logs from the Download menu', async () => {
-    vi.useFakeTimers();
-    getAppLogsMock.mockResolvedValue([
-      { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
+  it('copies or saves the shown lines from the Download menu', async () => {
+    backendLines([logLine(1, 'Ready')]);
+    app.backend.answer('SaveLogFile', () => ({ path: '/tmp/app.log', bytes: 1 }));
+    await openPanel();
+    const download = async (choice: 'Copy to Clipboard' | 'Save to File') => {
+      await click(control('Download logs'));
+      await click(
+        requireValue(
+          Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
+            (item) => item.textContent === choice
+          ),
+          `expected the ${choice} choice`
+        )
+      );
+    };
+
+    await download('Copy to Clipboard');
+    const copied = vi.mocked(Clipboard.SetText).mock.calls.map(([text]) => text);
+    expect(copied).toEqual([expect.stringContaining('[core] [Global] Ready')]);
+
+    await download('Save to File');
+    expect(app.backend.calls('SaveLogFile')).toEqual([
+      [expect.stringMatching(/^luxury-yacht-app-logs-\d{14}\.log$/), copied[0]],
     ]);
-    saveLogFileMock.mockResolvedValue({ path: '/tmp/app.log', bytes: 1 });
-
-    const { container, cleanup } = await renderPanel();
-    await flushInitialLoad();
-
-    await chooseDownload(container, 'Copy to Clipboard');
-    expect(nativeClipboardWriteTextMock).toHaveBeenCalledOnce();
-    const copied = nativeClipboardWriteTextMock.mock.calls[0]?.[0];
-    expect(copied).toContain('[core] [Global] Ready');
-    expect(clipboardWriteTextMock).not.toHaveBeenCalled();
-
-    await chooseDownload(container, 'Save to File');
-    expect(saveLogFileMock).toHaveBeenCalledWith(
-      expect.stringMatching(/^luxury-yacht-app-logs-\d{14}\.log$/),
-      copied
-    );
-
-    cleanup();
   });
 
-  it('applies text filters and shows empty state when no matches', async () => {
-    vi.useFakeTimers();
-    getAppLogsMock.mockResolvedValue([
-      {
-        timestamp: '2024-01-01T00:00:00.000Z',
-        level: 'info',
-        message: 'System ready',
-        source: 'core',
-      },
-    ]);
+  it('clears the lines on demand', async () => {
+    backendLines([logLine(1, 'Ready')]);
+    await openPanel();
 
-    const { container, cleanup } = await renderPanel();
+    await click(control('Clear logs'));
 
-    await flushInitialLoad();
-
-    const input = container.querySelector<HTMLInputElement>('.app-logs-text-filter');
-    expect(input).toBeTruthy();
-
-    await act(async () => {
-      if (input) {
-        setInputValue(input, 'missing');
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        input.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-      await Promise.resolve();
-    });
-    await act(async () => undefined);
-
-    const emptyMessage = container.querySelector('.app-logs-empty');
-    const remainingEntries = container.querySelectorAll('.log-entry');
-    expect(remainingEntries.length).toBe(0);
-    expect(emptyMessage?.textContent ?? '').toContain('No logs match the selected filter');
-
-    cleanup();
+    expect(app.backend.calls('ClearAppLogs')).toHaveLength(1);
+    expect(rows()).toEqual([]);
   });
 
   it('tabs into and back out of the log body', async () => {
-    realNavigation.enabled = true;
-    vi.useFakeTimers();
-    getAppLogsMock.mockResolvedValue([
-      { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
-    ]);
-    const { cleanup } = await renderPanel();
-    await flushInitialLoad();
+    backendLines([logLine(1, 'Ready')]);
+    await openPanel();
     const logs = requireValue(
-      document.querySelector<HTMLElement>('.app-logs-container'),
+      panel().querySelector<HTMLElement>('.app-logs-table .gridtable--body'),
       'log body'
     );
-    const panel = requireValue(logs.closest<HTMLElement>('.dockable-panel'), 'real dockable panel');
     const previous = requireValue(
-      panel.querySelector<HTMLElement>('[aria-label="Resize Cluster column"]'),
+      panel().querySelector<HTMLElement>('[aria-label="Resize Cluster column"]'),
       'preceding column resizer'
     );
     await act(async () => previous.focus());
     expect(logs.tabIndex).toBe(0);
-    await act(async () =>
-      previous.dispatchEvent(
-        new KeyboardEvent('keydown', {
-          key: 'Tab',
-          bubbles: true,
-          cancelable: true,
-        })
-      )
-    );
+
+    await act(async () => {
+      previous.dispatchEvent(keydown('Tab'));
+    });
     expect(document.activeElement).toBe(logs);
     await act(async () => {
-      logs.dispatchEvent(
-        new KeyboardEvent('keydown', {
-          key: 'Tab',
-          shiftKey: true,
-          bubbles: true,
-          cancelable: true,
-        })
-      );
+      logs.dispatchEvent(keydown('Tab', { shiftKey: true }));
     });
     expect(document.activeElement).toBe(previous);
-    cleanup();
-  });
-
-  it('clears logs on demand', async () => {
-    vi.useFakeTimers();
-    getAppLogsMock.mockResolvedValue([
-      { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
-    ]);
-    clearAppLogsMock.mockResolvedValue(undefined);
-
-    const { container, cleanup } = await renderPanel();
-
-    await flushInitialLoad();
-
-    const clearButton = container.querySelector<HTMLButtonElement>('button[title="Clear logs"]');
-    expect(clearButton).toBeTruthy();
-
-    await act(async () => {
-      clearButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    expect(clearAppLogsMock).toHaveBeenCalled();
-    expect(container.querySelector('.app-logs-empty')?.textContent).toContain('No logs available');
-
-    cleanup();
-  });
-
-  it('reports clipboard failures when copying logs', async () => {
-    vi.useFakeTimers();
-    const clipboardError = new Error('clipboard blocked');
-    nativeClipboardWriteTextMock.mockRejectedValueOnce(clipboardError);
-    getAppLogsMock.mockResolvedValue([
-      { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
-    ]);
-
-    const { container, cleanup } = await renderPanel();
-
-    await flushInitialLoad();
-
-    await chooseDownload(container, 'Copy to Clipboard');
-
-    // As in the other log views: reported, and the button flashes an error.
-    expect(reportOperationalErrorMock).toHaveBeenCalledWith(clipboardError, {
-      source: 'AppLogsPanel',
-      action: 'copyLogs',
-    });
-    expect(
-      container
-        .querySelector('button[aria-label="Download logs"]')
-        ?.classList.contains('feedback-error')
-    ).toBe(true);
-
-    cleanup();
-  });
-
-  // Every Download button, table or log, is busy while a choice runs, so a save
-  // dialog left open can't be stacked with another.
-  it('keeps the Download button busy while a save is in progress', async () => {
-    vi.useFakeTimers();
-    getAppLogsMock.mockResolvedValue([
-      { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
-    ]);
-    let finishSave: ((result: { path: string }) => void) | undefined;
-    saveLogFileMock.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          finishSave = resolve;
-        })
-    );
-
-    const { container, cleanup } = await renderPanel();
-    await flushInitialLoad();
-    const downloadButton = () =>
-      container.querySelector<HTMLButtonElement>('button[aria-label="Download logs"]');
-
-    await chooseDownload(container, 'Save to File');
-    expect(downloadButton()?.disabled).toBe(true);
-
-    await act(async () => {
-      finishSave?.({ path: '/tmp/app.log' });
-      await Promise.resolve();
-    });
-    expect(downloadButton()?.disabled).toBe(false);
-    expect(downloadButton()?.classList.contains('feedback-success')).toBe(true);
-
-    cleanup();
-  });
-
-  it('clears pending download feedback timers on unmount', async () => {
-    vi.useFakeTimers();
-    getAppLogsMock.mockResolvedValue([
-      { timestamp: '2024-01-01T00:00:00.000Z', level: 'info', message: 'Ready', source: 'core' },
-    ]);
-
-    const { container, cleanup } = await renderPanel();
-
-    await flushInitialLoad();
-
-    await chooseDownload(container, 'Copy to Clipboard');
-    // Let the menu's immediate work run; the feedback reset is still pending.
-    await act(async () => {
-      vi.advanceTimersByTime(1);
-    });
-
-    expect(vi.getTimerCount()).toBe(1);
-    cleanup();
-    expect(vi.getTimerCount()).toBe(0);
   });
 });

@@ -6,12 +6,15 @@
  */
 
 import type { backend } from '@core/backend-api/models';
+import { isBrowserFetchFailure, isErrorStatus } from '@utils/errorStatus';
 import { GetKubernetesAPIClientDiagnostics, GetSelectionDiagnostics } from '@/core/backend-api';
-import { formatPermissionDeniedStatus, isPermissionDeniedStatus } from './permissionErrors';
+import { formatPermissionDeniedStatus } from './permissionErrors';
 import {
   assertRefreshSnapshotEnvelope,
   assertTelemetrySummary,
+  type ErrorStatus,
   type RefreshDomain,
+  type RefreshManualJob,
   type RefreshSnapshot,
   type TelemetrySummary,
 } from './types';
@@ -38,11 +41,7 @@ interface FetchSnapshotOptions {
   correlationId?: string;
 }
 
-type ManualRefreshJob = {
-  jobId: string;
-  state: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
-  error?: string;
-};
+type ManualRefreshJob = Pick<RefreshManualJob, 'jobId' | 'state' | 'error'>;
 
 const MANUAL_REFRESH_TIMEOUT_MS = 60_000;
 const INITIAL_MANUAL_JOB_POLL_MS = 50;
@@ -69,8 +68,7 @@ const abortableDelay = (ms: number, signal: AbortSignal): Promise<void> =>
 
 const parseManualRefreshJob = async (response: Response): Promise<ManualRefreshJob> => {
   if (!response.ok) {
-    const { message } = await safeParseError(response);
-    throw new Error(message);
+    throw await requestErrorFrom(response);
   }
   const job = (await response.json()) as Partial<ManualRefreshJob>;
   if (!job.jobId || !job.state) {
@@ -143,7 +141,11 @@ const waitForManualRefresh = async (
     );
     const job = await pollManualRefreshJob(startedJob, controller.signal, correlationId);
     if (job.state === 'failed' || job.state === 'cancelled') {
-      throw new Error(job.error || `Manual refresh failed for ${domain}`);
+      const status = isErrorStatus(job.error) ? job.error : null;
+      throw new RefreshRequestError(
+        status?.message || `Manual refresh failed for ${domain}`,
+        status
+      );
     }
   } catch (error) {
     if (timedOut) {
@@ -190,19 +192,8 @@ const requestSnapshot = async (
   });
 };
 
-const isRetryableNetworkError = (error: unknown, signal?: AbortSignal): boolean => {
-  if (signal?.aborted) {
-    return false;
-  }
-  if (error instanceof DOMException && error.name === 'AbortError') {
-    return false;
-  }
-  if (error instanceof TypeError) {
-    const message = error.message.toLowerCase();
-    return message.includes('failed to fetch') || message.includes('load failed');
-  }
-  return false;
-};
+const isRetryableNetworkError = (error: unknown, signal?: AbortSignal): boolean =>
+  !signal?.aborted && isBrowserFetchFailure(error);
 
 const SNAPSHOT_REQUEST_MAX_ATTEMPTS = 3;
 
@@ -243,8 +234,7 @@ export async function fetchSnapshot<TPayload>(
   }
 
   if (!response.ok) {
-    const { message, permissionDenied } = await safeParseError(response);
-    throw permissionDenied ? new SnapshotPermissionDeniedError(message) : new Error(message);
+    throw await requestErrorFrom(response);
   }
 
   const snapshot = parseRefreshSnapshotValue<TPayload>(await response.json(), domain);
@@ -255,32 +245,32 @@ export async function fetchSnapshot<TPayload>(
   };
 }
 
-// A snapshot request the backend refused for lack of RBAC permission. Typed
-// so the orchestrator can mark the scope permissionDenied structurally and
-// stop background retries (permission is checked ONCE per session — recovery
-// is an app restart), without string-matching messages.
-export class SnapshotPermissionDeniedError extends Error {
-  readonly permissionDenied = true;
+/**
+ * A refresh request the backend answered with a failure. `status` is the
+ * backend's typed status, which callers act on (a denial settles the scope, a
+ * cluster still starting is held); it is null only when the response carried
+ * no status.
+ */
+class RefreshRequestError extends Error {
+  readonly status: ErrorStatus | null;
+
+  constructor(message: string, status: ErrorStatus | null) {
+    super(message);
+    this.name = 'RefreshRequestError';
+    this.status = status;
+  }
 }
 
-async function safeParseError(
-  response: Response
-): Promise<{ message: string; permissionDenied: boolean }> {
-  try {
-    const data = await response.json();
-    if (isPermissionDeniedStatus(data)) {
-      return { message: formatPermissionDeniedStatus(data), permissionDenied: true };
-    }
-    if (data?.message) {
-      return { message: data.message as string, permissionDenied: false };
-    }
-  } catch (_) {
-    // Ignore JSON parse errors and fall back to status text
+async function requestErrorFrom(response: Response): Promise<RefreshRequestError> {
+  const data: unknown = await response.json().catch(() => null);
+  if (!isErrorStatus(data)) {
+    return new RefreshRequestError(
+      `Snapshot request failed: ${response.status} ${response.statusText}`,
+      null
+    );
   }
-  return {
-    message: `Snapshot request failed: ${response.status} ${response.statusText}`,
-    permissionDenied: false,
-  };
+  const message = data.reason === 'Forbidden' ? formatPermissionDeniedStatus(data) : data.message;
+  return new RefreshRequestError(message, data);
 }
 
 export async function fetchTelemetrySummary(): Promise<NormalizedTelemetrySummary> {

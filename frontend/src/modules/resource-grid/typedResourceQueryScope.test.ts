@@ -9,7 +9,8 @@ import {
 
 describe('typedResourceQueryScope', () => {
   it('builds a stable all-namespaces resource query scope', () => {
-    const scope = buildTypedResourceQueryScope('cluster-a', {
+    const scope = buildTypedResourceQueryScope('pods', 'cluster-a', {
+      baseSelector: { kind: 'all-namespaces' },
       filters: {
         ...DEFAULT_GRID_TABLE_FILTER_STATE,
         search: 'api',
@@ -34,7 +35,8 @@ describe('typedResourceQueryScope', () => {
   it('serializes opaque facet selections as repeated query values', () => {
     const deployment = '["owner","Deployment","api","cluster-a","apps","v1","team-a"]';
     const cronJob = '["owner","CronJob","nightly","cluster-a","batch","v1","team-a"]';
-    const scope = buildTypedResourceQueryScope('cluster-a', {
+    const scope = buildTypedResourceQueryScope('pods', 'cluster-a', {
+      baseSelector: { kind: 'all-namespaces' },
       filters: {
         ...DEFAULT_GRID_TABLE_FILTER_STATE,
         queryFacets: { owners: { mode: 'some', values: [deployment, cronJob] } },
@@ -48,8 +50,8 @@ describe('typedResourceQueryScope', () => {
   });
 
   it('serializes Event and Application triage facet selections as provider-owned query keys', () => {
-    const scope = buildTypedResourceQueryScope('cluster-a', {
-      baseScope: 'namespace:team-a',
+    const scope = buildTypedResourceQueryScope('namespace-events', 'cluster-a', {
+      baseSelector: { kind: 'namespace', namespace: 'team-a' },
       filters: {
         ...DEFAULT_GRID_TABLE_FILTER_STATE,
         queryFacets: {
@@ -70,8 +72,20 @@ describe('typedResourceQueryScope', () => {
     );
   });
 
+  it('builds a cluster-wide query scope with no selector tail', () => {
+    const scope = buildTypedResourceQueryScope('cluster-events', 'cluster-a', {
+      baseSelector: { kind: 'cluster' },
+      filters: DEFAULT_GRID_TABLE_FILTER_STATE,
+      sortConfig: { key: 'name', direction: 'asc' },
+      pageLimit: 50,
+    });
+
+    expect(scope).toBe('cluster-a|?limit=50&sort=name&sortDirection=asc');
+  });
+
   it('sends includeMetadata in the scope when metadata search is enabled', () => {
-    const scope = buildTypedResourceQueryScope('cluster-a', {
+    const scope = buildTypedResourceQueryScope('pods', 'cluster-a', {
+      baseSelector: { kind: 'all-namespaces' },
       filters: { ...DEFAULT_GRID_TABLE_FILTER_STATE, search: 'team', includeMetadata: true },
       sortConfig: { key: 'name', direction: 'asc' },
       pageLimit: 50,
@@ -154,6 +168,7 @@ describe('typedResourceQueryScope', () => {
     const base = {
       enabled: true,
       domain: 'pods' as const,
+      baseSelector: { kind: 'all-namespaces' } as const,
       pageLimit: 250,
       filters: DEFAULT_GRID_TABLE_FILTER_STATE,
       sortConfig: { key: 'name', direction: 'asc' } as const,

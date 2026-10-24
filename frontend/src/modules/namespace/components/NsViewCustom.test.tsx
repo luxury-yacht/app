@@ -1,1132 +1,431 @@
 /**
  * frontend/src/modules/namespace/components/NsViewCustom.test.tsx
  *
- * Test suite for NsViewCustom.
- * Covers key behaviors and edge cases for NsViewCustom.
+ * The namespace Custom Resources view and the resource-family views built on
+ * it (Argo CD, External Secrets). They list the namespace's custom resources
+ * from the object catalog's custom-only query in the visible cluster, with
+ * the status and family facts the backend hydrates for the page; open a row's
+ * object with its own API group when Kinds collide, and its CRD; sort only by
+ * the catalog's fields; delete after confirmation with full identity; discard
+ * a pending delete when the user leaves the view; and under All Namespaces
+ * list every namespace's objects. The status column and page hydration are
+ * covered once in CustomResourceGridView.test.tsx and
+ * useHydratedCustomCatalogRows.test.tsx. Runs in the full app, navigated
+ * through the sidebar, over a faked backend (test-utils/appState).
  */
 
-import AllNamespacesView from '@modules/namespace/components/AllNamespacesView';
-import NsResourcesViews from '@modules/namespace/components/NsResourcesViews';
-import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
-import type ConfirmationModal from '@shared/components/modals/ConfirmationModal';
-import type { GridTableProps } from '@shared/components/tables/GridTable';
-import type React from 'react';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CanonicalRowTestOverrides, CatalogItem } from '@/core/refresh/types';
-import { requireReactElement } from '@/test-utils/requireReactElement';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
+import { buildRefreshScope, CLUSTER_SELECTOR } from '@/core/refresh/scopeSelector';
+import type { CatalogItem, CustomResourceSummary } from '@/core/refresh/types';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type ObjectIdentity,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
 
-vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
-  useNamespaceColumnLink: () => ({
-    onClick: vi.fn(),
-    getClassName: () => 'object-panel-link',
-    isInteractive: () => true,
-  }),
-}));
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
 
-import NsViewCustom, { type CustomResourceData } from '@modules/namespace/components/NsViewCustom';
-
-type BaseGridTableProps = GridTableProps<CustomResourceData>;
-type CapturedGridTableProps = BaseGridTableProps & {
-  getCustomContextMenuItems: NonNullable<BaseGridTableProps['getCustomContextMenuItems']>;
-  filters: NonNullable<BaseGridTableProps['filters']> & {
-    options: NonNullable<NonNullable<BaseGridTableProps['filters']>['options']>;
-  };
-};
-type ConfirmationProps = React.ComponentProps<typeof ConfirmationModal>;
-
-const errorHandlerMock = vi.hoisted(() => ({ handle: vi.fn() }));
-
-const gridTableMock = vi.fn<(props: CapturedGridTableProps) => void>();
-const modalProps: { current: ConfirmationProps } = {
-  current: null as unknown as ConfirmationProps,
-};
-const openWithObjectMock = vi.fn();
-const sortHandlerMock = vi.fn();
-const useTableSortMock = vi.fn();
-const useShortNamesMock = vi.fn();
-const runObjectActionMock = vi.fn();
-const useBrowseCatalogMock = vi.hoisted(() => vi.fn());
-const useHydratedCustomCatalogRowsMock = vi.hoisted(() => vi.fn());
-
-vi.mock('@core/contexts/FavoritesContext', () => ({
-  useFavorites: () => ({
-    favorites: [],
-
-    addFavorite: vi.fn(),
-    updateFavorite: vi.fn(),
-    deleteFavorite: vi.fn(),
-    reorderFavorites: vi.fn(),
-  }),
-  FavoritesProvider: ({ children }: { children: React.ReactNode }) => children,
-}));
-
-vi.mock('@ui/favorites/FavToggle', () => ({
-  useFavToggle: () => ({
-    type: 'toggle',
-    id: 'favorite',
-    icon: null,
-    active: false,
-    onClick: () => undefined,
-    title: 'Save as favorite',
-  }),
-}));
-
-vi.mock('@shared/components/tables/GridTable', () => ({
-  __esModule: true,
-  default: (props: CapturedGridTableProps) => {
-    gridTableMock(props);
-    return <div data-testid="grid-table" />;
-  },
-  GRIDTABLE_VIRTUALIZATION_DEFAULT: { enabled: true },
-}));
-
-vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
-  __esModule: true,
-  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
-
-vi.mock('@shared/components/modals/ConfirmationModal', () => ({
-  __esModule: true,
-  default: (props: ConfirmationProps) => {
-    modalProps.current = props;
-    return <div data-testid="confirmation-modal" />;
-  },
-}));
-
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: openWithObjectMock }),
-}));
-
-vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: vi.fn() }),
-}));
-
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({
-    selectedKubeconfig: 'path:context',
-    selectedClusterId: 'cluster-a',
-    selectedClusterName: 'alpha',
-  }),
-}));
-
-vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (...args: unknown[]) => useTableSortMock(...args),
-}));
-
-vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
-  useNamespaceGridTablePersistence: () => {
-    const persistence = {
-      sortConfig: { key: 'name', direction: 'asc' },
-      setSortConfig: vi.fn(),
-      columnWidths: null,
-      setColumnWidths: vi.fn(),
-      columnVisibility: null,
-      setColumnVisibility: vi.fn(),
-      filters: { search: '', kinds: [], namespaces: [] },
-      setFilters: vi.fn(),
-      pageSize: null,
-      setPageSize: vi.fn(),
-      resetState: vi.fn(),
-      hydrated: true,
-    };
-    return {
-      ...persistence,
-      onSortChange: vi.fn(),
-      isNamespaceScoped: true,
-      persistence,
-    };
-  },
-}));
-
-vi.mock('@modules/browse/hooks/useBrowseCatalog', () => ({
-  useBrowseCatalog: (...args: unknown[]) => useBrowseCatalogMock(...args),
-}));
-
-vi.mock('@modules/browse/hooks/useHydratedCustomCatalogRows', () => ({
-  useHydratedCustomCatalogRows: (...args: unknown[]) => useHydratedCustomCatalogRowsMock(...args),
-}));
-
-vi.mock('@/hooks/useShortNames', () => ({
-  useShortNames: () => useShortNamesMock(),
-}));
-
-vi.mock('@core/backend-api', () => ({
-  RunObjectAction: (...args: unknown[]) => runObjectActionMock(...args),
-}));
-
-vi.mock('@utils/errorHandler', () => ({
-  errorHandler: errorHandlerMock,
-}));
-
-vi.mock('@/core/capabilities', () => ({
-  useUserPermissions: () =>
-    new Map([
-      ['CronJob:delete', { allowed: true, pending: false }],
-      ['CustomResource:delete', { allowed: true, pending: false }],
-      ['DBInstance:delete', { allowed: true, pending: false }],
-      ['Application:delete', { allowed: true, pending: false }],
-    ]),
-  getPermissionKey: (kind: string, action: string) => `${kind}:${action}`,
-  // Stubbed for CRDs not covered by the static permission map; the real
-  // function lazy-loads delete permissions on first context-menu open.
-  queryKindPermissions: vi.fn(),
-}));
-
-const baseResource: CustomResourceData = {
-  ref: {
-    clusterId: 'alpha:ctx',
-    group: 'batch',
-    version: 'v1',
-    kind: 'CronJob',
-    resource: 'cronjobs',
-    namespace: 'ops',
-    name: 'nightly-cleanup',
-  },
-
-  age: '10m',
-  labels: { team: 'platform' },
-  annotations: { owner: 'ops' },
+type CustomObject = ObjectIdentity & {
+  resource: string;
+  /** What the backend hydrates for the object (HydrateCatalogCustomRows). */
+  hydrated?: Partial<CustomResourceSummary>;
 };
 
-const browseCatalogResult = (items: CatalogItem[] = []) => ({
-  items,
-  loading: false,
-  hasLoadedOnce: true,
-  filterOptions: {
-    kinds: [],
-    namespaces: [],
-  },
-  totalCount: items.length,
-  totalIsExact: true,
-  queryDescriptor: {
-    clusterId: 'cluster-a',
-    namespaces: ['team-a'],
-    hasUserNamespaceScope: true,
-    kinds: [],
-    search: '',
-    sortField: 'name',
-    sortDirection: 'asc',
-    scope: 'cluster-a|customOnly=true&limit=1000&namespace=team-a&sort=name&sortDirection=asc',
-    customOnly: true,
-  },
-  queryPending: false,
-  pagination: {
-    pageIndex: 1,
-    pageLimit: 50,
-    pageLimitOptions: [25, 50, 100, 250, 500, 1000],
-    setPageLimit: () => undefined,
-    totalCount: items.length,
-    totalIsExact: true,
-    previousToken: null,
-    continueToken: null,
-    queryPending: false,
-    hasMore: false,
-    hasPrevious: false,
-    isRequestingMore: false,
-    onRequestMore: () => undefined,
-    onRequestPrevious: () => undefined,
-  },
+const rdsInstance: CustomObject = {
+  group: 'rds.services.k8s.aws',
+  version: 'v1alpha1',
+  kind: 'DBInstance',
+  resource: 'dbinstances',
+  namespace: 'team-a',
+  name: 'db-1',
+  hydrated: { status: 'Available', statusPresentation: 'ready' },
+};
+// Same Kind, namespace, and name, from another operator's API group.
+const documentDbInstance: CustomObject = {
+  ...rdsInstance,
+  group: 'documentdb.services.k8s.aws',
+  hydrated: { status: 'Creating', statusPresentation: 'warning' },
+};
+
+const identityOf = ({ group, version, kind, namespace, name }: CustomObject): ObjectIdentity => ({
+  group,
+  version,
+  kind,
+  namespace,
+  name,
 });
 
-const catalogItemFromResource = (
-  resource: CustomResourceData,
-  overrides: CanonicalRowTestOverrides<CatalogItem> = {}
-): CatalogItem => {
-  const { ref, ...row } = overrides;
-  return {
-    ref: {
-      clusterId: resource.ref.clusterId,
-      group: resource.ref.group,
-      version: resource.ref.version,
-      kind: resource.ref.kind || resource.kindAlias || 'CustomResource',
-      resource: 'cronjobs',
-      namespace: resource.ref.namespace,
-      name: resource.ref.name,
-      uid: `${resource.ref.name}-uid`,
-      ...ref,
-    },
-    resourceVersion: '1',
-    creationTimestamp: resource.age ?? '',
-    scope: 'Namespace',
-    actionFacts: resource.status ? { status: resource.status } : undefined,
-    ...row,
-  };
-};
-
-const catalogItemToCustomResourceData = (item: CatalogItem): CustomResourceData => ({
-  ref: {
-    clusterId: item.ref.clusterId,
-    group: item.ref.group,
-    version: item.ref.version,
-    kind: item.ref.kind,
-    resource: item.ref.resource,
-    namespace: item.ref.namespace ?? '',
-    name: item.ref.name,
-    uid: item.ref.uid,
-  },
-
-  kindAlias: item.ref.kind,
-
-  crdName: item.ref.group ? `${item.ref.resource}.${item.ref.group}` : item.ref.resource,
-  status: item.actionFacts?.status,
-  statusPresentation: item.actionFacts?.status,
-  age: item.creationTimestamp,
+/** A catalog row as backend/objectcatalog projects a namespaced custom resource. */
+const catalogItem = ({ hydrated: _hydrated, ...object }: CustomObject): CatalogItem => ({
+  ref: { clusterId: dev.clusterId, uid: `${object.group}/${object.name}-uid`, ...object },
+  resourceVersion: '1',
+  creationTimestamp: '2026-10-01T10:00:00Z',
+  scope: 'Namespace',
 });
 
-const getLastGridProps = () => gridTableMock.mock.calls[gridTableMock.mock.calls.length - 1]?.[0];
+/**
+ * Answers the view's custom-only catalog queries in the visible cluster with
+ * the objects in the queried namespace and resource family, and hydrates each
+ * page the way backend/refresh_object_catalog.go HydrateCatalogCustomRows does.
+ */
+const serveCustomResources = (objects: CustomObject[], families: Record<string, string[]> = {}) => {
+  app.snapshots.answer(({ domain, scope }) => {
+    if (domain !== 'catalog' || !scope.startsWith(`${dev.clusterId}|`)) {
+      return undefined;
+    }
+    const query = new URLSearchParams(scope.slice(scope.indexOf('|') + 1));
+    if (query.get('customOnly') !== 'true') {
+      return undefined;
+    }
+    const namespaces = query.getAll('namespace');
+    const family = query.get('resourceFamily');
+    const items = objects
+      .filter((object) => namespaces.length === 0 || namespaces.includes(object.namespace))
+      .filter((object) => !family || (families[family] ?? []).includes(object.group))
+      .map(catalogItem);
+    return makeCatalogSnapshotPayload({
+      clusterId: dev.clusterId,
+      clusterName: dev.clusterName,
+      items,
+      total: items.length,
+      unfilteredTotal: items.length,
+      resourceCount: items.length,
+    });
+  });
+  app.backend.answer(
+    'HydrateCatalogCustomRows',
+    (_clusterId, pageRows) =>
+      (pageRows ?? []).map((row) => ({
+        ref: row,
+        crdName: `${row.resource}.${row.group}`,
+        age: '3d',
+        ...objects.find((object) => object.group === row.group && object.name === row.name)
+          ?.hydrated,
+      })) as never
+  );
+};
+
+/** The cluster discovered these resource families (core/navigation/useAvailableResourceViews.ts). */
+const discoverFamilies = (namespaced: string[]) => {
+  app.snapshots.serve(
+    'catalog',
+    buildRefreshScope('catalog', {
+      clusterId: dev.clusterId,
+      selector: CLUSTER_SELECTOR,
+      query: 'limit=1',
+    }),
+    makeCatalogSnapshotPayload({
+      clusterId: dev.clusterId,
+      clusterName: dev.clusterName,
+      resourceFamilies: { namespaced },
+    })
+  );
+};
+
+const start = async (target: { namespace: string; view: string }) => {
+  view = await app.mountApp();
+  await view.goTo(target);
+};
+
+const rows = () => Array.from(view.container.querySelectorAll<HTMLElement>('.gridtable-row'));
+const rowTexts = () => rows().map((row) => row.textContent);
+
+const cellButton = (row: HTMLElement, column: string) =>
+  requireValue(
+    row.querySelector<HTMLButtonElement>(`[data-column="${column}"] button`),
+    `expected the ${column} link`
+  );
+
+const activate = async (run: () => void) => {
+  await act(async () => {
+    run();
+  });
+  await app.settle();
+};
+
+const menuItems = () =>
+  Array.from(document.body.querySelectorAll<HTMLElement>('[role="menu"] .context-menu-item'));
+const menuItem = (label: string) =>
+  requireValue(
+    menuItems().find(
+      (item) => item.querySelector('.context-menu-label')?.textContent?.trim() === label
+    ),
+    `expected the ${label} menu item`
+  );
+
+const openRowMenu = async (row: HTMLElement) => {
+  const cell = requireValue(
+    row.querySelector<HTMLElement>('[data-column="age"]'),
+    'expected a cell in the row'
+  );
+  await activate(() => {
+    cell.dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 })
+    );
+  });
+};
+
+const deleteConfirmation = () =>
+  Array.from(
+    document.body.querySelectorAll<HTMLButtonElement>('.confirmation-modal-footer button')
+  ).find((button) => button.textContent?.trim() === 'Delete');
+
+const requestDelete = async (row: HTMLElement) => {
+  await openRowMenu(row);
+  await activate(() => menuItem('Delete').click());
+};
+
+const inCluster = (identity: ObjectIdentity) => ({
+  clusterId: dev.clusterId,
+  clusterName: dev.clusterName,
+  ...identity,
+});
+
+beforeEach(() => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['team-a', 'team-b']);
+  app.startScreen(dev);
+  // The sidebar's Extensions group, where these views live, as the user left it open.
+  app.preferences({ sidebarNamespaceExtensionsExpanded: true });
+});
 
 describe('NsViewCustom', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  it('lists the namespace’s custom resources from the catalog with their hydrated status, in the visible cluster', async () => {
+    serveCustomResources([rdsInstance, { ...rdsInstance, namespace: 'team-b', name: 'db-2' }]);
+    await start({ namespace: 'team-a', view: 'custom' });
 
-  beforeEach(() => {
-    gridTableMock.mockReset();
-    openWithObjectMock.mockReset();
-    sortHandlerMock.mockReset();
-    runObjectActionMock.mockReset();
-    useBrowseCatalogMock.mockReset();
-    useHydratedCustomCatalogRowsMock.mockReset();
-    modalProps.current = null as unknown as ConfirmationProps;
-    useTableSortMock.mockImplementation((data: CustomResourceData[]) => ({
-      sortedData: data,
-      sortConfig: { key: 'name', direction: 'asc' },
-      handleSort: sortHandlerMock,
-    }));
-    useShortNamesMock.mockReturnValue(false);
-    useBrowseCatalogMock.mockReturnValue(browseCatalogResult());
-    useHydratedCustomCatalogRowsMock.mockImplementation(
-      (_clusterId: string, items: CatalogItem[]) => items.map(catalogItemToCustomResourceData)
+    expect(rowTexts()).toEqual([expect.stringMatching(/db-1.*Available.*dbinstances\.rds/)]);
+    const pageRead = requireValue(
+      app.snapshots
+        .reads('catalog')
+        .map((read) => read.scope)
+        .find((scope) => scope.includes('customOnly=true') && scope.includes('limit=50')),
+      'expected the custom resources query'
     );
-    errorHandlerMock.handle.mockClear();
-
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-  });
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-  });
-
-  type NsViewCustomProps = React.ComponentProps<typeof NsViewCustom>;
-
-  const renderComponent = async (props: Partial<NsViewCustomProps> = {}) => {
-    const mergedProps: NsViewCustomProps = {
-      namespace: 'team-a',
-      showNamespaceColumn: false,
-      ...props,
-    };
-
-    await act(async () => {
-      root.render(<NsViewCustom {...mergedProps} />);
-      await Promise.resolve();
-    });
-  };
-
-  const flush = async () => {
-    await act(async () => {
-      await Promise.resolve();
-    });
-  };
-
-  it.each(['all namespaces', 'one namespace'] as const)(
-    'discards a pending object action when leaving an extension in %s',
-    async (scope) => {
-      const application = catalogItemFromResource({
-        ref: {
-          clusterId: 'cluster-a',
-          group: 'argoproj.io',
-          version: 'v1alpha1',
-          kind: 'Application',
-          resource: 'applications',
-          namespace: 'argocd',
-          name: 'app',
-        },
-      });
-      useBrowseCatalogMock.mockReturnValue(browseCatalogResult([application]));
-      const renderRoute = async (activeTab: 'argocd' | 'external-secrets') => {
-        await act(async () => {
-          root.render(
-            scope === 'all namespaces' ? (
-              <AllNamespacesView activeTab={activeTab} />
-            ) : (
-              <NsResourcesViews namespace="argocd" activeTab={activeTab} />
-            )
-          );
-        });
-      };
-      await renderRoute('argocd');
-      const grid = requireValue(getLastGridProps(), 'expected the resource table');
-      const remove = grid
-        .getCustomContextMenuItems(grid.data[0], 'name')
-        .find((item) => item.actionId === OBJECT_ACTION_IDS.delete);
-      act(() => requireValue(remove?.onClick, 'expected the delete action')());
-      expect(modalProps.current.isOpen).toBe(true);
-
-      await renderRoute('argocd');
-      expect(modalProps.current.isOpen).toBe(true);
-      await renderRoute('external-secrets');
-      expect(modalProps.current.isOpen).toBe(false);
-      await renderRoute('argocd');
-      expect(modalProps.current.isOpen).toBe(false);
-      expect(runObjectActionMock).not.toHaveBeenCalled();
-    }
-  );
-
-  it('renders GridTable with context menu actions and opens the object panel', async () => {
-    useBrowseCatalogMock.mockReturnValue(
-      browseCatalogResult([catalogItemFromResource(baseResource)])
-    );
-
-    await renderComponent({ showNamespaceColumn: true });
-
-    expect(gridTableMock).toHaveBeenCalled();
-
-    const gridProps = gridTableMock.mock.calls[0][0];
-    expect(gridProps.data).toEqual([
-      expect.objectContaining({
-        ref: expect.objectContaining({
-          kind: 'CronJob',
-          name: 'nightly-cleanup',
-          namespace: 'ops',
-          clusterId: 'alpha:ctx',
-          group: 'batch',
-          version: 'v1',
-        }),
-        crdName: 'cronjobs.batch',
-      }),
+    expect(pageRead.startsWith(`${dev.clusterId}|`)).toBe(true);
+    expect(
+      new URLSearchParams(pageRead.slice(pageRead.indexOf('|') + 1)).getAll('namespace')
+    ).toEqual(['team-a']);
+    expect(app.backend.calls('HydrateCatalogCustomRows')).toEqual([
+      [
+        dev.clusterId,
+        [expect.objectContaining({ clusterId: dev.clusterId, ...identityOf(rdsInstance) })],
+      ],
     ]);
-    const row = gridProps.data[0];
-    expect(gridProps.keyExtractor(row, 0)).toBe('alpha:ctx|batch/v1/CronJob/ops/nightly-cleanup');
-    gridProps.onSort?.('name');
-    expect(sortHandlerMock).toHaveBeenCalledWith('name');
-
-    const contextItems = gridProps.getCustomContextMenuItems(row, 'kind');
-    expect(contextItems[0].actionId).toBe(OBJECT_ACTION_IDS.viewDetails);
-    requireValue(contextItems[0]?.onClick, 'expected the custom-resource details action')();
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'CronJob',
-        name: 'nightly-cleanup',
-        namespace: 'ops',
-        clusterId: 'alpha:ctx',
-        group: 'batch',
-        version: 'v1',
-      })
-    );
   });
 
-  it.each(['team-a', ALL_NAMESPACES_SCOPE])(
-    'keeps Argo CD filtering and namespace scope for %s',
-    async (namespace) => {
-      await renderComponent({
-        namespace,
-        resourceFamily: 'argocd',
-        showNamespaceColumn: namespace === ALL_NAMESPACES_SCOPE,
-      });
-      expect(useBrowseCatalogMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          clusterId: 'cluster-a',
-          resourceFamily: 'argocd',
-          customOnly: true,
-          pinnedNamespaces: namespace === ALL_NAMESPACES_SCOPE ? [] : ['team-a'],
-        })
+  it('opens a row’s object with its own API group when another operator’s Kind collides', async () => {
+    app.servePanel(dev, identityOf(documentDbInstance));
+    serveCustomResources([rdsInstance, documentDbInstance]);
+    await start({ namespace: 'team-a', view: 'custom' });
+    const documentDbRow = requireValue(
+      rows().find((row) => row.textContent?.includes('documentdb')),
+      'expected the DocumentDB row'
+    );
+
+    await activate(() => cellButton(documentDbRow, 'name').click());
+
+    expect(view.openPanels()).toEqual([inCluster(identityOf(documentDbInstance))]);
+  });
+
+  it('opens a row’s CRD from its CRD cell', async () => {
+    const crd: ObjectIdentity = {
+      group: 'apiextensions.k8s.io',
+      version: 'v1',
+      kind: 'CustomResourceDefinition',
+      namespace: '',
+      name: 'dbinstances.rds.services.k8s.aws',
+    };
+    app.servePanel(dev, crd);
+    serveCustomResources([rdsInstance]);
+    await start({ namespace: 'team-a', view: 'custom' });
+
+    await activate(() => cellButton(requireValue(rows()[0], 'expected the row'), 'crd').click());
+
+    expect(view.openPanels()).toEqual([inCluster(crd)]);
+  });
+
+  it('sorts only by the catalog’s fields, through the catalog query', async () => {
+    serveCustomResources([rdsInstance]);
+    await start({ namespace: 'team-a', view: 'custom' });
+    const sortControls = () =>
+      Array.from(view.container.querySelectorAll<HTMLButtonElement>('.gridtable-sort-button')).map(
+        (button) => button.getAttribute('aria-label')
       );
-      expect(getLastGridProps()?.columns.map((column) => column.key)).toContain('sync');
-      expect(getLastGridProps()?.columns.map((column) => column.key)).not.toContain('crd');
-    }
-  );
 
-  it('uses the catalog query current page on first render for a single namespace', async () => {
-    const queryResource: CustomResourceData = {
-      ...baseResource,
-      ref: {
-        ...baseResource.ref,
-        name: 'query-custom',
-        namespace: 'team-a',
-        clusterId: 'cluster-a',
-      },
-    };
-    const queryItem = catalogItemFromResource(queryResource);
-    useBrowseCatalogMock.mockReturnValue(browseCatalogResult([queryItem]));
+    // Status and CRD are hydrated after the catalog selects the page, so no global sort exists.
+    expect(sortControls()).toEqual(['Sort by Kind', 'Sort by Name', 'Sort by Age']);
 
-    await renderComponent({
-      namespace: 'team-a',
-      showNamespaceColumn: false,
-    });
-
-    expect(useBrowseCatalogMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        clusterId: 'cluster-a',
-        pinnedNamespaces: ['team-a'],
-        customOnly: true,
-      })
+    const sortByName = requireValue(
+      view.container.querySelector<HTMLButtonElement>('[aria-label="Sort by Name"]'),
+      'expected the Name sort control'
     );
-    expect(useHydratedCustomCatalogRowsMock).toHaveBeenCalledWith('cluster-a', [queryItem]);
-    expect(getLastGridProps()?.data).toEqual([
-      expect.objectContaining({
-        ref: expect.objectContaining({
-          kind: 'CronJob',
-          name: 'query-custom',
-          namespace: 'team-a',
-          clusterId: 'cluster-a',
-          group: 'batch',
-          version: 'v1',
-        }),
-        crdName: 'cronjobs.batch',
-      }),
-    ]);
-    expect(getLastGridProps()?.data).not.toEqual([
-      expect.objectContaining({ ref: expect.objectContaining({ name: 'stale-local-custom' }) }),
-    ]);
-  });
+    await activate(() => sortByName.click());
 
-  it('uses the catalog query current page on first render for all namespaces', async () => {
-    const queryResource: CustomResourceData = {
-      ...baseResource,
-      ref: {
-        ...baseResource.ref,
-        name: 'query-all-custom',
-        namespace: 'team-b',
-        clusterId: 'cluster-a',
-      },
-    };
-    const queryItem = catalogItemFromResource(queryResource);
-    useBrowseCatalogMock.mockReturnValue(browseCatalogResult([queryItem]));
-
-    await renderComponent({
-      namespace: ALL_NAMESPACES_SCOPE,
-      showNamespaceColumn: true,
-    });
-
-    expect(useBrowseCatalogMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        clusterId: 'cluster-a',
-        pinnedNamespaces: [],
-        customOnly: true,
-      })
-    );
-    expect(useHydratedCustomCatalogRowsMock).toHaveBeenCalledWith('cluster-a', [queryItem]);
-    expect(getLastGridProps()?.data).toEqual([
-      expect.objectContaining({
-        ref: expect.objectContaining({
-          kind: 'CronJob',
-          name: 'query-all-custom',
-          namespace: 'team-b',
-          clusterId: 'cluster-a',
-          group: 'batch',
-          version: 'v1',
-        }),
-        crdName: 'cronjobs.batch',
-      }),
-    ]);
-    expect(getLastGridProps()?.data).not.toEqual([
-      expect.objectContaining({ ref: expect.objectContaining({ name: 'stale-local-custom' }) }),
-    ]);
-  });
-
-  it('shows the kind dropdown in the all-namespaces custom view', async () => {
-    await renderComponent({
-      namespace: ALL_NAMESPACES_SCOPE,
-      showNamespaceColumn: true,
-    });
-
-    const gridProps = gridTableMock.mock.calls[0][0];
-    expect(gridProps.filters.options.showKindDropdown).toBe(true);
-    // Export is now the unified frontend fetcher, not a server-side per-action catalog export.
-    expect(typeof gridProps.fetchAllRows).toBe('function');
-  });
-
-  it('uses catalog facet metadata instead of deriving kinds from loaded rows', async () => {
-    useBrowseCatalogMock.mockReturnValue({
-      ...browseCatalogResult(),
-      filterOptions: {
-        kinds: ['DBCluster', 'Widget'],
-        namespaces: [],
-        partialDataLabel: 'Catalog health: Catalog data may be stale.',
-      },
-    });
-
-    await renderComponent({});
-
-    const gridProps = getLastGridProps();
-    expect(gridProps?.filters?.options?.kinds).toEqual(['DBCluster', 'Widget']);
-    expect(gridProps?.filters?.options?.partialDataLabel).toContain('Catalog health');
-  });
-
-  it('renders hydrated custom-resource status and metadata for the current page', async () => {
-    useBrowseCatalogMock.mockReturnValue(
-      browseCatalogResult([catalogItemFromResource(baseResource)])
-    );
-    useHydratedCustomCatalogRowsMock.mockReturnValue([
-      {
-        ...baseResource,
-        crdName: 'cronjobs.batch',
-        status: 'Ready',
-        statusState: 'Ready',
-        statusPresentation: 'ready',
-      },
-    ]);
-
-    await renderComponent();
-
-    const gridProps = getLastGridProps();
-    expect(gridProps?.data?.[0]).toEqual(
-      expect.objectContaining({
-        status: 'Ready',
-        statusPresentation: 'ready',
-        labels: { team: 'platform' },
-        annotations: { owner: 'ops' },
-      })
-    );
-  });
-
-  it('preserves the column definitions across rerenders with unchanged inputs', async () => {
-    await renderComponent({
-      namespace: 'team-a',
-      showNamespaceColumn: true,
-    });
-
-    const firstColumnsRef = getLastGridProps()?.columns;
-
-    await renderComponent({
-      namespace: 'team-a',
-      showNamespaceColumn: true,
-    });
-
-    expect(getLastGridProps()?.columns).toBe(firstColumnsRef);
-  });
-
-  it('preserves the filters config across rerenders with unchanged inputs', async () => {
-    await renderComponent({
-      namespace: 'team-a',
-      showNamespaceColumn: true,
-    });
-
-    const firstFiltersRef = getLastGridProps()?.filters;
-
-    await renderComponent({
-      namespace: 'team-a',
-      showNamespaceColumn: true,
-    });
-
-    expect(getLastGridProps()?.filters).toBe(firstFiltersRef);
-  });
-
-  // Regression test for the kind-only-objects bug. When the user clicks a custom
-  // resource whose Kind collides with another CRD from a different API
-  // group (e.g. DBInstance from rds.services.k8s.aws vs DBInstance from
-  // documentdb.services.k8s.aws), handleResourceClick MUST forward both
-  // group and version into openWithObject. Without them, the panel
-  // state has no group/version to emit in the refresh-domain scope, the
-  // backend falls back to first-match-wins kind-only GVR resolution, and
-  // the user sees the wrong DBInstance's YAML.
-  //
-  // Before the fix at NsViewCustom.tsx handleResourceClick, this test
-  // would have failed with:
-  //   Expected: objectContaining({ group: 'documentdb.services.k8s.aws', version: 'v1alpha1' })
-  //   Received: { kind: 'DBInstance', name: 'db-dc-test-1-v4', ... } // no group/version
-  //
-  // Keeping this as a permanent regression guardrail so we don't
-  // silently drop these fields again in a future refactor.
-  it('forwards group and version into openWithObject for colliding CRDs', async () => {
-    const dbInstance: CustomResourceData = {
-      ref: {
-        clusterId: 'alpha:ctx',
-        group: 'documentdb.services.k8s.aws',
-        version: 'v1alpha1',
-        kind: 'DBInstance',
-        resource: 'dbinstances',
-        namespace: 'team-a',
-        name: 'db-dc-test-1-v4',
-      },
-
-      age: '2h',
-      labels: {},
-      annotations: {},
-    };
-
-    await renderComponent({ showNamespaceColumn: true });
-
-    const gridProps = gridTableMock.mock.calls[0][0];
-    const contextItems = gridProps.getCustomContextMenuItems(dbInstance, 'kind');
-    expect(contextItems[0].actionId).toBe(OBJECT_ACTION_IDS.viewDetails);
-    requireValue(contextItems[0]?.onClick, 'expected the custom-resource details action')();
-
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'DBInstance',
-        name: 'db-dc-test-1-v4',
-        namespace: 'team-a',
-        clusterId: 'alpha:ctx',
-        group: 'documentdb.services.k8s.aws',
-        version: 'v1alpha1',
-      })
-    );
-
-    // Also assert the openWithObject payload that downstream code receives
-    // has group/version as actual OWN properties of the object (not lost
-    // through a spread), since any spread-loss would defeat the purpose.
-    const callArg = openWithObjectMock.mock.calls.find(
-      ([arg]) => (arg as { name?: string }).name === 'db-dc-test-1-v4'
-    )?.[0] as Record<string, unknown>;
-    expect(callArg).toBeDefined();
-    expect(callArg.group).toBe('documentdb.services.k8s.aws');
-    expect(callArg.version).toBe('v1alpha1');
-  });
-
-  it('confirms deletion with a full object action target', async () => {
-    runObjectActionMock.mockResolvedValue(undefined);
-
-    // Every custom resource row the backend catalog produces carries
-    // group/version — the delete path is GVK-only after the
-    // kind-only-objects fix.
-    const resourceWithGVK: CustomResourceData = {
-      ...baseResource,
-      ref: { ...baseResource.ref, group: 'batch', version: 'v1' },
-    };
-
-    await renderComponent({
-      showNamespaceColumn: true,
-    });
-
-    const gridProps = gridTableMock.mock.calls[0][0];
-    const contextItems = gridProps.getCustomContextMenuItems(resourceWithGVK, 'kind');
-    const deleteItem = contextItems.find(
-      (item: { label?: string; onClick?: () => void }) => item.label === 'Delete'
-    );
-    await act(async () => {
-      deleteItem?.onClick?.();
-      await Promise.resolve();
-    });
-    expect(modalProps.current?.isOpen).toBe(true);
-
-    await act(async () => {
-      await modalProps.current.onConfirm();
-    });
-
-    expect(runObjectActionMock).toHaveBeenCalledWith({
-      action: 'delete',
-      target: {
-        clusterId: 'alpha:ctx',
-        group: 'batch',
-        version: 'v1',
-        kind: 'CronJob',
-        namespace: 'ops',
-        name: 'nightly-cleanup',
-      },
-    });
-    await flush();
-    expect(modalProps.current?.isOpen).toBe(false);
-  });
-
-  // Regression test for the delete-path leg of the kind-only-objects bug.
-  // When the user confirms deletion of a custom
-  // resource whose Kind collides with another CRD from a different API
-  // group (e.g. two DBInstance CRDs), handleDeleteConfirm must carry the
-  // strict GVK through the action boundary so the backend targets the exact object.
-  it('routes delete through RunObjectAction when group/version are present', async () => {
-    runObjectActionMock.mockResolvedValue(undefined);
-
-    const dbInstance: CustomResourceData = {
-      ref: {
-        clusterId: 'alpha:ctx',
-        group: 'documentdb.services.k8s.aws',
-        version: 'v1alpha1',
-        kind: 'DBInstance',
-        resource: 'dbinstances',
-        namespace: 'team-a',
-        name: 'db-dc-test-1-v4',
-      },
-
-      age: '2h',
-      labels: {},
-      annotations: {},
-    };
-
-    await renderComponent({ showNamespaceColumn: true });
-
-    const gridProps = gridTableMock.mock.calls[0][0];
-    const contextItems = gridProps.getCustomContextMenuItems(dbInstance, 'kind');
-    const deleteItem = contextItems.find(
-      (item: { label?: string; onClick?: () => void }) => item.label === 'Delete'
-    );
-    await act(async () => {
-      deleteItem?.onClick?.();
-      await Promise.resolve();
-    });
-    expect(modalProps.current?.isOpen).toBe(true);
-
-    await act(async () => {
-      await modalProps.current.onConfirm();
-    });
-
-    expect(runObjectActionMock).toHaveBeenCalledWith({
-      action: 'delete',
-      target: {
-        clusterId: 'alpha:ctx',
-        group: 'documentdb.services.k8s.aws',
-        version: 'v1alpha1',
-        kind: 'DBInstance',
-        namespace: 'team-a',
-        name: 'db-dc-test-1-v4',
-      },
-    });
-    // The legacy kind-only path has been retired entirely. This assertion
-    // used to check that it wasn't hit; now it's gone from the app surface.
-
-    await flush();
-    expect(modalProps.current?.isOpen).toBe(false);
-  });
-
-  it('rejects incomplete identity before offering custom resource actions', async () => {
-    const missingGVK: CustomResourceData = {
-      ...baseResource,
-      ref: { ...baseResource.ref, group: '', version: '' },
-    };
-    await renderComponent({ showNamespaceColumn: true });
-    const gridProps = gridTableMock.mock.calls[0][0];
-
-    expect(gridProps.getCustomContextMenuItems(missingGVK, 'kind')).toEqual([]);
-    expect(errorHandlerMock.handle).toHaveBeenCalledWith(
-      expect.objectContaining({ message: expect.stringMatching(/missing version/) }),
-      expect.objectContaining({
-        source: 'CustomResourceGrid',
-        action: 'getContextMenuItems',
-        clusterId: missingGVK.ref.clusterId,
-      })
-    );
-    expect(runObjectActionMock).not.toHaveBeenCalled();
-    expect(modalProps.current?.isOpen).toBe(false);
-
-    const complete = {
-      ...missingGVK,
-      ref: { ...missingGVK.ref, group: 'batch', version: 'v1' },
-    };
-    const items = gridProps.getCustomContextMenuItems(complete, 'kind');
-    expect(items.some((item: { label?: string }) => item.label === 'Delete')).toBe(true);
-  });
-
-  it('handles delete failure with errorHandler and reverts modal state', async () => {
-    runObjectActionMock.mockRejectedValue(new Error('failure'));
-
-    const resourceWithGVK: CustomResourceData = {
-      ...baseResource,
-      ref: { ...baseResource.ref, group: 'batch', version: 'v1' },
-    };
-
-    await renderComponent({
-      showNamespaceColumn: true,
-    });
-
-    const gridProps = gridTableMock.mock.calls[0][0];
-    const deleteItem = gridProps
-      .getCustomContextMenuItems(resourceWithGVK, 'kind')
-      .find((item: { label?: string; onClick?: () => void }) => item.label === 'Delete');
-    await act(async () => {
-      deleteItem?.onClick?.();
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      await modalProps.current.onConfirm();
-    });
-
-    expect(runObjectActionMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: 'delete',
-        target: expect.objectContaining({
-          clusterId: 'alpha:ctx',
-          group: 'batch',
-          version: 'v1',
-          kind: 'CronJob',
-          namespace: 'ops',
-          name: 'nightly-cleanup',
-        }),
-      })
-    );
-    expect(errorHandlerMock.handle).toHaveBeenCalledWith(expect.any(Error), {
-      action: 'delete',
-      kind: 'CronJob',
-      name: 'nightly-cleanup',
-    });
-
-    await flush();
-    expect(modalProps.current?.isOpen).toBe(false);
-  });
-
-  it('adjusts column sizing when short names are enabled', async () => {
-    useShortNamesMock.mockReturnValue(true);
-
-    await renderComponent({
-      showNamespaceColumn: true,
-    });
-
-    const gridProps = gridTableMock.mock.calls[0][0];
-
-    const generatedKey = gridProps.keyExtractor(
-      {
-        ref: {
-          clusterId: 'alpha:ctx',
-          group: 'batch',
-          version: 'v1',
-          kind: 'CronJob',
-          resource: 'cronjobs',
-          namespace: 'tools',
-          name: 'svc',
-        },
-        kind: 'CronJob',
-        name: 'svc',
-        namespace: 'tools',
-        kindAlias: 'CR',
-        clusterId: 'alpha:ctx',
-        group: 'batch',
-        version: 'v1',
-      } as CustomResourceData,
-      0
-    );
-    expect(generatedKey).toBe('alpha:ctx|batch/v1/CronJob/tools/svc');
-  });
-
-  // CRD column: each row gets a clickable cell that opens the owning
-  // CustomResourceDefinition in the object panel. The CRD itself is a
-  // built-in (apiextensions.k8s.io/v1) so its GVK comes from the
-  // built-in lookup table, not from the row data.
-  //
-  // The column factory bakes the click handler into the rendered React
-  // element rather than exposing it on the column object, so these
-  // tests drive the behavior by inspecting / calling the rendered
-  // element's `onClick` prop directly.
-  describe('CRD column', () => {
-    const findColumn = (props: CapturedGridTableProps, key: string) =>
+    const lastPageQuery = new URLSearchParams(
       requireValue(
-        props.columns.find((column) => column.key === key),
-        `expected the custom-resource ${key} column`
-      );
+        app.snapshots
+          .reads('catalog')
+          .map((read) => read.scope)
+          .filter((scope) => scope.includes('limit=50'))
+          .slice(-1)[0],
+        'expected a page query'
+      ).split('|')[1]
+    );
+    expect(lastPageQuery.get('sort')).toBe('name');
+    expect(lastPageQuery.get('sortDirection')).toBe('desc');
+  });
 
-    it('adds a CRD column that renders the row crdName', async () => {
-      const resource: CustomResourceData = {
-        ...baseResource,
-        ref: {
-          ...baseResource.ref,
-          group: 'rds.services.k8s.aws',
-          version: 'v1alpha1',
-          kind: 'DBInstance',
+  it('deletes the row’s own object after confirmation when Kinds collide', async () => {
+    app.backend.answer('RunObjectAction', () => ({}) as never);
+    serveCustomResources([rdsInstance, documentDbInstance]);
+    await start({ namespace: 'team-a', view: 'custom' });
+    const documentDbRow = requireValue(
+      rows().find((row) => row.textContent?.includes('documentdb')),
+      'expected the DocumentDB row'
+    );
+
+    await requestDelete(documentDbRow);
+    expect(app.backend.calls('RunObjectAction')).toEqual([]);
+    await activate(() => requireValue(deleteConfirmation(), 'expected the confirmation').click());
+
+    expect(app.backend.calls('RunObjectAction')).toEqual([
+      [
+        {
+          action: 'delete',
+          target: { clusterId: dev.clusterId, ...identityOf(documentDbInstance) },
         },
-        crdName: 'dbinstances.rds.services.k8s.aws',
-      };
+      ],
+    ]);
+    expect(deleteConfirmation()).toBeUndefined();
+  });
 
-      await renderComponent();
-
-      const gridProps = gridTableMock.mock.calls[0][0];
-      const crdCol = findColumn(gridProps, 'crd');
-      expect(crdCol).toBeTruthy();
-      expect(crdCol.header).toBe('CRD');
-
-      // Interactive cells render as native buttons with the CRD name as text.
-      const rendered = requireReactElement<{
-        role?: string;
-        children?: React.ReactNode;
-        title?: string;
-      }>(crdCol.render(resource), 'expected the CRD link element');
-      expect(rendered.type).toBe('button');
-      expect(rendered.props.role).toBeUndefined();
-      expect(rendered.props.children).toBe('dbinstances.rds.services.k8s.aws');
-      expect(rendered.props.title).toBe('Open dbinstances.rds.services.k8s.aws');
+  it('reports a delete the backend refuses', async () => {
+    app.backend.answer('RunObjectAction', () => {
+      throw new Error('dbinstances "db-1" is forbidden');
     });
+    serveCustomResources([rdsInstance]);
+    await start({ namespace: 'team-a', view: 'custom' });
 
-    it('opens the CRD in the object panel when the CRD cell is clicked', async () => {
-      const resource: CustomResourceData = {
-        ...baseResource,
-        ref: {
-          ...baseResource.ref,
-          group: 'rds.services.k8s.aws',
-          version: 'v1alpha1',
-          kind: 'DBInstance',
-        },
-        crdName: 'dbinstances.rds.services.k8s.aws',
-      };
+    await requestDelete(requireValue(rows()[0], 'expected the row'));
+    await activate(() => requireValue(deleteConfirmation(), 'expected the confirmation').click());
 
-      await renderComponent();
+    expect(app.errors.take((record) => record.context?.action === 'delete')).toEqual([
+      expect.objectContaining({
+        context: expect.objectContaining({ kind: 'DBInstance', name: 'db-1' }),
+      }),
+    ]);
+    expect(deleteConfirmation()).toBeUndefined();
+  });
 
-      const gridProps = gridTableMock.mock.calls[0][0];
-      const crdCol = findColumn(gridProps, 'crd');
-      const rendered = requireReactElement<{
-        onClick?: (event: {
-          altKey: boolean;
-          preventDefault: () => void;
-          stopPropagation: () => void;
-        }) => void;
-      }>(crdCol.render(resource), 'expected the CRD link element');
-
-      // The rendered span carries the click handler. Drive it directly
-      // with a synthetic event that doesn't have altKey set (so the
-      // primary onClick fires, not onAltClick).
-      openWithObjectMock.mockClear();
-      const onClick = requireValue(rendered.props.onClick, 'expected the CRD link click handler');
-      onClick({ altKey: false, preventDefault: () => undefined, stopPropagation: () => undefined });
-
-      expect(openWithObjectMock).toHaveBeenCalledTimes(1);
-      const callArg = openWithObjectMock.mock.calls[0][0] as Record<string, unknown>;
-      expect(callArg.kind).toBe('CustomResourceDefinition');
-      expect(callArg.name).toBe('dbinstances.rds.services.k8s.aws');
-      // The CRD is a built-in — its GVK comes from resolveBuiltinGroupVersion,
-      // which returns apiextensions.k8s.io/v1.
-      expect(callArg.group).toBe('apiextensions.k8s.io');
-      expect(callArg.version).toBe('v1');
-      // CRDs are cluster-scoped — namespace must NOT be set on the ref.
-      expect(callArg.namespace).toBeUndefined();
-      // ClusterId/clusterName threaded through for multi-cluster routing.
-      expect(callArg.clusterId).toBe('alpha:ctx');
-      expect(callArg.clusterName).toBe('alpha');
-    });
-
-    it('does not expose hydrated custom-resource fields as query-backed sort keys', async () => {
-      // Custom-resource rows are page-selected by the object catalog before
-      // CRD/status are hydrated. Those fields cannot be globally sorted by
-      // the query backend, so the columns must not advertise sorting.
-      const resource: CustomResourceData = {
-        ...baseResource,
-        crdName: 'dbinstances.rds.services.k8s.aws',
-      };
-
-      await renderComponent();
-
-      const gridProps = gridTableMock.mock.calls[0][0];
-      const crdCol = findColumn(gridProps, 'crd');
-      const statusCol = findColumn(gridProps, 'status');
-      expect(crdCol.sortable).toBe(false);
-      expect(statusCol.sortable).toBe(false);
-
-      // Keep the local extractor intact for defensive consumers, but do not
-      // make this a query-backed sortable column.
-      expect(crdCol.sortValue).toBeTypeOf('function');
-
-      const sortValue = requireValue(crdCol.sortValue, 'expected the CRD sort accessor');
-      expect(sortValue(resource)).toBe('dbinstances.rds.services.k8s.aws');
-
-      const noCRD: CustomResourceData = { ...baseResource };
-      expect(sortValue(noCRD)).toBe('');
-    });
-
-    it('publishes only catalog-backed sortable keys', async () => {
-      await renderComponent({ showNamespaceColumn: true });
-
-      const gridProps = gridTableMock.mock.calls[0][0];
-      const sortableKeys = gridProps.columns
-        .filter((column) => column.sortable !== false)
-        .map((column) => column.key)
-        .sort((left: string, right: string) => left.localeCompare(right));
-
-      expect(sortableKeys).toEqual(['age', 'kind', 'name', 'namespace']);
-    });
-
-    it('renders the CRD cell as inert text when crdName is missing', async () => {
-      // Defensive: a row from a legacy snapshot or a synthetic source
-      // might not carry crdName. The cell should not be clickable, must
-      // not throw, and must not call openWithObject. The column factory
-      // returns the placeholder string '-' for accessor === undefined
-      // when the cell is non-interactive.
-      const resource: CustomResourceData = {
-        ...baseResource,
-        ref: { ...baseResource.ref, group: 'batch', version: 'v1', kind: 'CronJob' },
-        // crdName intentionally omitted
-      };
-
-      await renderComponent();
-
-      const gridProps = gridTableMock.mock.calls[0][0];
-      const crdCol = findColumn(gridProps, 'crd');
-      const rendered = crdCol.render(resource);
-
-      // Non-interactive accessor-undefined path returns the string '-'
-      // directly (no wrapping span, no role="button", no onClick).
-      expect(rendered).toBe('-');
-    });
-
-    it('renders hydrated Argo CD sync and health as independent chips with the backend presentation', async () => {
-      const resource: CustomResourceData = {
-        ...baseResource,
-        ref: { ...baseResource.ref, group: 'argoproj.io', kind: 'Application' },
+  it('lists the namespace’s Argo CD objects with the sync and health each one reports', async () => {
+    const application: CustomObject = {
+      group: 'argoproj.io',
+      version: 'v1alpha1',
+      kind: 'Application',
+      resource: 'applications',
+      namespace: 'team-a',
+      name: 'storefront',
+      hydrated: {
         argoCD: {
           sync: 'Synced',
           syncPresentation: 'ready',
           health: 'Degraded',
           healthPresentation: 'error',
           project: 'production',
-          destination: 'remote-prod',
-          destinationNamespace: 'store',
         },
-      };
-      useHydratedCustomCatalogRowsMock.mockReturnValue([resource]);
-      await renderComponent({ resourceFamily: 'argocd' });
-      const props = requireValue(getLastGridProps(), 'Argo CD table props');
-      // A synced Application can still be degraded: each signal keeps its own severity.
-      for (const [key, value, chip] of [
-        ['sync', 'Synced', 'status-chip--healthy'],
-        ['health', 'Degraded', 'status-chip--unhealthy'],
-        ['project', 'production', undefined],
-        ['destination', 'remote-prod', undefined],
-        ['destinationNamespace', 'store', undefined],
-      ] as const) {
-        const rendered = renderToStaticMarkup(findColumn(props, key).render(props.data[0]));
-        expect(rendered).toContain(value);
-        if (chip) {
-          expect(rendered).toContain(chip);
-        }
-      }
+      },
+    };
+    const applicationSet: CustomObject = {
+      ...application,
+      kind: 'ApplicationSet',
+      resource: 'applicationsets',
+      name: 'storefront-set',
+      hydrated: { argoCD: { project: 'production' } },
+    };
+    discoverFamilies(['argocd']);
+    serveCustomResources([application, applicationSet, rdsInstance], {
+      argocd: ['argoproj.io'],
     });
+    await start({ namespace: 'team-a', view: 'argocd' });
 
-    it('leaves Argo CD sync and health empty for objects that do not report them', async () => {
-      const resource: CustomResourceData = {
-        ...baseResource,
-        ref: { ...baseResource.ref, group: 'argoproj.io', kind: 'ApplicationSet' },
-        argoCD: { project: 'production' },
-      };
-      useHydratedCustomCatalogRowsMock.mockReturnValue([resource]);
-      await renderComponent({ resourceFamily: 'argocd' });
-      const props = requireValue(getLastGridProps(), 'Argo CD table props');
-      // No chip may claim a sync or health state the object does not have.
-      for (const key of ['sync', 'health']) {
-        const rendered = renderToStaticMarkup(findColumn(props, key).render(props.data[0]));
-        expect(rendered).not.toContain('status-chip');
-        expect(rendered).toContain('-');
-      }
+    expect(
+      app.snapshots
+        .reads('catalog')
+        .some(
+          (read) =>
+            read.scope.includes('resourceFamily=argocd') && read.scope.includes('namespace=team-a')
+        )
+    ).toBe(true);
+    const cellText = (name: string, column: string) =>
+      requireValue(
+        rows().find((row) => row.querySelector('[data-column="name"]')?.textContent === name),
+        `expected the ${name} row`
+      ).querySelector(`[data-column="${column}"]`)?.textContent;
+    // A synced Application can still be degraded: each signal is its own.
+    expect([cellText('storefront', 'sync'), cellText('storefront', 'health')]).toEqual([
+      'Synced',
+      'Degraded',
+    ]);
+    // An object that reports neither shows neither.
+    expect([cellText('storefront-set', 'sync'), cellText('storefront-set', 'health')]).toEqual([
+      '-',
+      '-',
+    ]);
+    expect(rows()).toHaveLength(2);
+  });
+
+  it.each([
+    { scope: 'one namespace', namespace: 'team-a' },
+    { scope: 'All Namespaces', namespace: 'namespace:all' },
+  ])('discards a pending delete when the user leaves the view in $scope', async ({ namespace }) => {
+    app.backend.answer('RunObjectAction', () => ({}) as never);
+    const application: CustomObject = {
+      group: 'argoproj.io',
+      version: 'v1alpha1',
+      kind: 'Application',
+      resource: 'applications',
+      namespace: 'team-a',
+      name: 'storefront',
+    };
+    discoverFamilies(['argocd', 'external-secrets']);
+    serveCustomResources([application], {
+      argocd: ['argoproj.io'],
+      'external-secrets': ['external-secrets.io'],
     });
+    await start({ namespace, view: 'argocd' });
+    await requestDelete(requireValue(rows()[0], 'expected the Application row'));
+    expect(deleteConfirmation()).toBeDefined();
 
-    it('uses backend statusPresentation for custom-resource status styling', async () => {
-      const resource: CustomResourceData = {
-        ...baseResource,
-        ref: {
-          ...baseResource.ref,
-          group: 'rds.services.k8s.aws',
-          version: 'v1alpha1',
-          kind: 'DBInstance',
-        },
-        status: 'Not Ready',
-        statusState: 'false',
-        statusPresentation: 'warning',
-      };
+    await view.goTo({ namespace, view: 'external-secrets' });
+    expect(deleteConfirmation()).toBeUndefined();
+    await view.goTo({ namespace, view: 'argocd' });
 
-      await renderComponent();
+    expect(deleteConfirmation()).toBeUndefined();
+    expect(app.backend.calls('RunObjectAction')).toEqual([]);
+  });
 
-      const gridProps = gridTableMock.mock.calls[0][0];
-      const statusCol = findColumn(gridProps, 'status');
-      const rendered = requireReactElement<{
-        children?: React.ReactNode;
-        className?: string;
-      }>(statusCol.render(resource), 'expected the custom-resource status element');
+  it('lists every namespace’s custom resources under All Namespaces and opens a row’s namespace in Custom Resources', async () => {
+    serveCustomResources([rdsInstance, { ...rdsInstance, namespace: 'team-b', name: 'db-2' }]);
+    await start({ namespace: 'namespace:all', view: 'custom' });
 
-      expect(rendered.props.children).toBe('Not Ready');
-      expect(rendered.props.className).toBe('status-text warning');
-    });
+    expect(rowTexts()).toEqual([
+      expect.stringMatching(/db-1.*team-a/),
+      expect.stringMatching(/db-2.*team-b/),
+    ]);
+
+    const teamBRow = requireValue(rows()[1], 'expected the team-b row');
+    await activate(() => cellButton(teamBRow, 'namespace').click());
+
+    const owners = view.owners();
+    expect(owners.namespace.selectedNamespace).toBe('team-b');
+    expect(owners.viewState?.viewType).toBe('namespace');
+    expect(owners.viewState?.activeNamespaceTab).toBe('custom');
   });
 });

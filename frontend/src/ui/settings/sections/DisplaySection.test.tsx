@@ -1,188 +1,107 @@
 /**
  * frontend/src/ui/settings/sections/DisplaySection.test.tsx
  *
- * Test suite for DisplaySection.
+ * The Display settings save their switches and the default page size through
+ * the preference owner, and a switch whose save fails shows the saved value
+ * again and reports the failure under its action. Runs inside the production
+ * shell with the real preference owner and dropdown over the faked backend
+ * (test-utils/appState).
  */
 
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { eventBus } from '@/core/events';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { installAppStateHarness, type MountedApp } from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
 import DisplaySection from './DisplaySection';
 
-const appPreferenceMocks = vi.hoisted(() => ({
-  values: {
+const app = installAppStateHarness();
+let view: MountedApp;
+
+/** Preference changes the backend saved, in order. */
+const saved = () =>
+  app.backend.calls('UpdateAppPreferences').flatMap(([request]) => request.changes ?? []);
+
+const control = (label: string) =>
+  requireValue(
+    view.container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`),
+    `expected the ${label} control`
+  );
+
+const click = async (target: HTMLElement) => {
+  await act(async () => target.click());
+  await app.settle();
+};
+
+beforeEach(async () => {
+  app.preferences({
     useShortResourceNames: false,
     dimInactiveNamespaces: true,
     exclusiveNamespaces: true,
     defaultTablePageSize: 50,
-  },
-  hydrateAppPreferences: vi.fn(),
-  setUseShortResourceNames: vi.fn(),
-  setDimInactiveNamespaces: vi.fn(),
-  setExclusiveNamespaces: vi.fn(),
-  setDefaultTablePageSize: vi.fn(),
-}));
-
-vi.mock('@/core/settings/appPreferences', () => ({
-  getUseShortResourceNames: () => appPreferenceMocks.values.useShortResourceNames,
-  getDimInactiveNamespaces: () => appPreferenceMocks.values.dimInactiveNamespaces,
-  getExclusiveNamespaces: () => appPreferenceMocks.values.exclusiveNamespaces,
-  getDefaultTablePageSize: () => appPreferenceMocks.values.defaultTablePageSize,
-  hydrateAppPreferences: (...args: unknown[]) => appPreferenceMocks.hydrateAppPreferences(...args),
-  setUseShortResourceNames: (...args: unknown[]) =>
-    appPreferenceMocks.setUseShortResourceNames(...args),
-  setDimInactiveNamespaces: (...args: unknown[]) =>
-    appPreferenceMocks.setDimInactiveNamespaces(...args),
-  setExclusiveNamespaces: (...args: unknown[]) =>
-    appPreferenceMocks.setExclusiveNamespaces(...args),
-  setDefaultTablePageSize: (...args: unknown[]) =>
-    appPreferenceMocks.setDefaultTablePageSize(...args),
-}));
-
-vi.mock('@utils/errorHandler', () => ({
-  errorHandler: {
-    handle: vi.fn(),
-  },
-}));
-
-// Render the shared Dropdown as a native select so options and changes are
-// directly assertable without driving the custom popup.
-vi.mock('@shared/components/dropdowns/Dropdown', () => ({
-  Dropdown: ({
-    value = '',
-    onChange,
-    options = [],
-    ariaLabel,
-  }: {
-    value?: string;
-    onChange?: (value: string) => void;
-    options?: Array<{ value: string; label: string }>;
-    ariaLabel?: string;
-  }) => (
-    <select
-      value={value}
-      aria-label={ariaLabel}
-      onChange={(event) => onChange?.(event.target.value)}
-    >
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
-  ),
-}));
+  });
+  // Mirrors backend/preferences_settings.go UpdateAppPreferences.
+  app.backend.answer('UpdateAppPreferences', (request) => ({
+    settings: null,
+    changedKeys: (request.changes ?? []).map(({ key }) => key),
+  }));
+  view = await app.render(null);
+  await view.show(<DisplaySection />);
+});
 
 describe('DisplaySection', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  it('saves each display switch', async () => {
+    await click(control('Short resource names'));
+    await click(control('Dim inactive namespaces'));
+    await click(control('Exclusive namespaces'));
 
-  beforeEach(async () => {
-    appPreferenceMocks.values = {
-      useShortResourceNames: false,
-      dimInactiveNamespaces: true,
-      exclusiveNamespaces: true,
-      defaultTablePageSize: 50,
-    };
-    appPreferenceMocks.hydrateAppPreferences.mockReset();
-    appPreferenceMocks.setUseShortResourceNames.mockReset();
-    appPreferenceMocks.setDimInactiveNamespaces.mockReset();
-    appPreferenceMocks.setExclusiveNamespaces.mockReset();
-    appPreferenceMocks.hydrateAppPreferences.mockResolvedValue({
-      useShortResourceNames: false,
-      dimInactiveNamespaces: true,
-      exclusiveNamespaces: true,
-      defaultTablePageSize: 50,
-    });
-    appPreferenceMocks.setUseShortResourceNames.mockImplementation(async (value: boolean) => {
-      appPreferenceMocks.values.useShortResourceNames = value;
-      eventBus.emit('settings:short-names', value);
-    });
-    appPreferenceMocks.setDimInactiveNamespaces.mockImplementation(async (value: boolean) => {
-      appPreferenceMocks.values.dimInactiveNamespaces = value;
-      eventBus.emit('settings:dim-inactive-namespaces', value);
-    });
-    appPreferenceMocks.setExclusiveNamespaces.mockImplementation(async (value: boolean) => {
-      appPreferenceMocks.values.exclusiveNamespaces = value;
-      eventBus.emit('settings:exclusive-namespaces', value);
-    });
-
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-
-    await act(async () => {
-      root.render(<DisplaySection />);
-      await Promise.resolve();
-    });
+    expect(saved()).toEqual([
+      { key: 'useShortResourceNames', value: true },
+      { key: 'dimInactiveNamespaces', value: false },
+      { key: 'exclusiveNamespaces', value: false },
+    ]);
+    expect(
+      ['Short resource names', 'Dim inactive namespaces', 'Exclusive namespaces'].map((label) =>
+        control(label).getAttribute('aria-checked')
+      )
+    ).toEqual(['true', 'false', 'false']);
   });
 
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-    document.body.innerHTML = '';
+  it('saves the default page size chosen from its dropdown', async () => {
+    const trigger = control('Default page size');
+    await click(trigger);
+    const menu = requireValue(
+      document.getElementById(trigger.getAttribute('aria-controls') ?? ''),
+      'expected the page size menu'
+    );
+    await click(
+      requireValue(
+        Array.from(menu.querySelectorAll<HTMLElement>('.dropdown-option')).find(
+          (option) => option.textContent?.trim() === '250'
+        ),
+        'expected the 250 option'
+      )
+    );
+
+    expect(saved()).toEqual([{ key: 'defaultTablePageSize', value: 250 }]);
+    expect(trigger.textContent).toContain('250');
   });
 
-  it('restores the displayed preference when a toggle fails to persist', async () => {
-    appPreferenceMocks.setUseShortResourceNames.mockRejectedValueOnce(
-      new Error('persistence failed')
-    );
-    const toggle = requireValue(
-      container.querySelector<HTMLButtonElement>('button[aria-label="Short resource names"]'),
-      'expected short-name toggle'
-    );
+  it('shows the saved value again and reports the failure when a switch fails to save', async () => {
+    const failure = new Error('persistence failed');
+    app.backend.answer('UpdateAppPreferences', () => {
+      throw failure;
+    });
+    const toggle = control('Short resource names');
+
+    await click(toggle);
+
+    expect(saved()).toEqual([{ key: 'useShortResourceNames', value: true }]);
     expect(toggle.getAttribute('aria-checked')).toBe('false');
-    await act(async () => toggle.click());
-    expect(appPreferenceMocks.setUseShortResourceNames).toHaveBeenCalledWith(true);
-    expect(toggle.getAttribute('aria-checked')).toBe('false');
-  });
-
-  it('persists exclusive namespaces changes', async () => {
-    const toggle = requireValue(
-      container.querySelector<HTMLButtonElement>('button[aria-label="Exclusive namespaces"]'),
-      'expected the Exclusive namespaces toggle'
-    );
-
-    await act(async () => {
-      toggle.click();
-      await Promise.resolve();
-    });
-
-    expect(appPreferenceMocks.setExclusiveNamespaces).toHaveBeenCalledWith(false);
-    expect(toggle?.getAttribute('aria-checked')).toBe('false');
-  });
-
-  it('persists default page size changes', async () => {
-    const dropdown = requireValue(
-      container.querySelector<HTMLSelectElement>('select[aria-label="Default page size"]'),
-      'expected the Default page size dropdown'
-    );
-
-    await act(async () => {
-      dropdown.value = '250';
-      dropdown.dispatchEvent(new Event('change', { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    expect(appPreferenceMocks.setDefaultTablePageSize).toHaveBeenCalledWith(250);
-  });
-
-  it('persists dim inactive namespaces changes', async () => {
-    const toggle = requireValue(
-      container.querySelector<HTMLButtonElement>('button[aria-label="Dim inactive namespaces"]'),
-      'expected the Dim inactive namespaces toggle'
-    );
-
-    await act(async () => {
-      toggle.click();
-      await Promise.resolve();
-    });
-
-    expect(appPreferenceMocks.setDimInactiveNamespaces).toHaveBeenCalledWith(false);
-    expect(toggle?.getAttribute('aria-checked')).toBe('false');
+    expect(
+      app.errors.take(
+        (record) =>
+          record.error === failure && record.context?.action === 'setUseShortResourceNames'
+      )
+    ).toHaveLength(1);
   });
 });

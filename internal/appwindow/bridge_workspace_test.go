@@ -24,6 +24,9 @@ func (r *sharedWorkspaceBridgeRecorder) GetPanelWorkspace(windowName, clusterID 
 func (r *sharedWorkspaceBridgeRecorder) OpenPanelWorkspaceObject(windowName string, tab panelwindow.TabSnapshot) (panelwindow.PanelOpenResult, error) {
 	return panelwindow.PanelOpenResult{Panel: panelwindow.WorkspacePanel{Tab: tab}, Render: true}, r.record(windowName, tab)
 }
+func (r *sharedWorkspaceBridgeRecorder) ClosePanelWorkspaceObject(windowName, clusterID, panelID string) error {
+	return r.record(windowName, clusterID, panelID)
+}
 func (r *sharedWorkspaceBridgeRecorder) PublishDockedPanels(windowName string, groups []panelwindow.WorkspaceGroup) error {
 	return r.record(windowName, groups)
 }
@@ -47,7 +50,7 @@ func TestSharedWorkspaceBridgePreservesIdentityAndReportsUnboundRegistry(t *test
 	tab := panelwindow.TabSnapshot{Kind: panelwindow.TabKindObject, PanelID: "api", ActiveView: "yaml", ObjectRef: panelwindow.ObjectReference{ClusterID: "production", Version: "v1", Kind: "Pod", Namespace: "payments", Name: "api"}}
 	groups := []panelwindow.WorkspaceGroup{{ClusterID: "production", GroupID: "right", Tabs: []panelwindow.TabSnapshot{tab}, ActivePanelID: tab.PanelID}}
 	request := panelwindow.ClusterTabTransferRequest{TransferID: "transfer-1", SourceWindowName: "workspace-1", TargetWindowName: "workspace-2", ClusterID: "production"}
-	snapshot := panelwindow.ClusterViewSnapshot{SchemaVersion: 1, ViewState: "{}", Groups: groups}
+	snapshot := panelwindow.ClusterViewSnapshot{SchemaVersion: 1, ViewState: "{}"}
 	cases := []struct {
 		name string
 		call func(*Bridge) error
@@ -79,6 +82,9 @@ func TestSharedWorkspaceBridgePreservesIdentityAndReportsUnboundRegistry(t *test
 			}
 			return err
 		}, []any{"workspace-1", tab}},
+		{"ClosePanelWorkspaceObject", func(bridge *Bridge) error {
+			return bridge.ClosePanelWorkspaceObject("workspace-1", "production", "api")
+		}, []any{"workspace-1", "production", "api"}},
 		{"PublishDockedPanels", func(bridge *Bridge) error { return bridge.PublishDockedPanels("workspace-1", groups) }, []any{"workspace-1", groups}},
 		{"OpenClusterWindow", func(bridge *Bridge) error {
 			return bridge.OpenClusterWindow("workspace-1", "production")

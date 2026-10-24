@@ -284,24 +284,6 @@ func TestClusterLifecycleCancellationPublishesAllJobsBeforeCallbacks(t *testing.
 	}
 }
 
-func TestParseScope(t *testing.T) {
-	tests := []struct {
-		scope string
-		want  string
-	}{
-		{"", ""},
-		{"   ", ""},
-		{"node:Worker-1", "worker-1"},
-		{"worker-2", "worker-2"},
-		{AggregateScope, ""},
-	}
-	for _, tt := range tests {
-		if got := ParseScope(tt.scope); got != tt.want {
-			t.Fatalf("ParseScope(%q)=%q, want %q", tt.scope, got, tt.want)
-		}
-	}
-}
-
 func TestJobForClusterReturnsClusterScopedClone(t *testing.T) {
 	store := NewStore(5)
 	job := store.StartDrainForCluster("worker-1", restypes.DrainNodeOptions{}, "cluster-a", "Cluster A")

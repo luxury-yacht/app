@@ -203,95 +203,6 @@ func TestObjectMutationContextUsesAvailableContext(t *testing.T) {
 	}
 }
 
-func TestValidateObjectYamlSuccess(t *testing.T) {
-	app, _, clusterID := setupYAMLTestApp(t)
-
-	request := ObjectYAMLMutationRequest{
-		BaseYAML: baseYAML(),
-		YAML: `apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: demo
-  namespace: default
-  uid: demo-uid
-  resourceVersion: "42"
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: demo
-  template:
-    metadata:
-      labels:
-        app: demo
-    spec:
-      containers:
-        - name: app
-          image: nginx:1.26
-`,
-		Kind:            "Deployment",
-		APIVersion:      "apps/v1",
-		Namespace:       "default",
-		Name:            "demo",
-		UID:             "demo-uid",
-		ResourceVersion: "42",
-	}
-
-	response, err := app.ValidateObjectYaml(clusterID, request)
-	if err != nil {
-		t.Fatalf("ValidateObjectYaml returned error: %v", err)
-	}
-	if response == nil {
-		t.Fatalf("expected validation response, got nil")
-	}
-	if response.ResourceVersion == "" {
-		t.Fatalf("expected resourceVersion in response")
-	}
-}
-
-func TestValidateObjectYamlAllowsLiveResourceVersionDrift(t *testing.T) {
-	app, dynamicClient, clusterID := setupYAMLTestApp(t)
-
-	// Bump live resourceVersion to simulate drift.
-	resource := dynamicClient.Resource(appsv1.SchemeGroupVersion.WithResource("deployments")).Namespace("default")
-	live, err := resource.Get(context.Background(), "demo", metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("failed to get live object: %v", err)
-	}
-	live.SetResourceVersion("99")
-	if err := dynamicClient.Tracker().Update(appsv1.SchemeGroupVersion.WithResource("deployments"), live, "default"); err != nil {
-		t.Fatalf("failed to update live object: %v", err)
-	}
-
-	request := ObjectYAMLMutationRequest{
-		BaseYAML: baseYAML(),
-		YAML: `apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: demo
-  namespace: default
-  uid: demo-uid
-  resourceVersion: "42"
-spec:
-  replicas: 3
-`,
-		Kind:            "Deployment",
-		APIVersion:      "apps/v1",
-		Namespace:       "default",
-		Name:            "demo",
-		UID:             "demo-uid",
-		ResourceVersion: "42",
-	}
-
-	response, err := app.ValidateObjectYaml(clusterID, request)
-	if err != nil {
-		t.Fatalf("expected validation to succeed despite live resourceVersion drift: %v", err)
-	}
-	if response == nil || response.ResourceVersion != "99" {
-		t.Fatalf("expected dry-run validation to reflect live resourceVersion 99, got %#v", response)
-	}
-}
-
 func TestApplyObjectYamlSuccess(t *testing.T) {
 	app, _, clusterID := setupYAMLTestApp(t)
 	app.responseCache = newResponseCache(time.Minute, 10)
@@ -328,9 +239,9 @@ spec:
 	}
 	gvk := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
 	gvkKey := objectDetailCacheKeyForGVK(gvk, "default", "demo")
-	kindKey := objectDetailCacheKey("Deployment", "default", "demo")
+	headerKey := objectHeaderMetadataCacheKey(gvk, "default", "demo")
 	app.seedResponseCache(clusterID, gvkKey, "stale-gvk")
-	app.seedResponseCache(clusterID, kindKey, "stale-kind")
+	app.seedResponseCache(clusterID, headerKey, "stale-header")
 
 	response, err := app.ApplyObjectYaml(clusterID, request)
 	if err != nil {
@@ -342,8 +253,8 @@ spec:
 	if _, ok := app.responseCacheLookup(clusterID, gvkKey); ok {
 		t.Fatalf("expected GVK detail cache to be evicted after apply")
 	}
-	if _, ok := app.responseCacheLookup(clusterID, kindKey); ok {
-		t.Fatalf("expected kind detail cache to be evicted after apply")
+	if _, ok := app.responseCacheLookup(clusterID, headerKey); ok {
+		t.Fatalf("expected header metadata cache to be evicted after apply")
 	}
 }
 
@@ -449,7 +360,7 @@ func TestBuildKubectlEditPatchRejectsMetadataManagedFieldsChanges(t *testing.T) 
 	}
 }
 
-func TestValidateObjectYamlRejectsProtectedFieldBypassAttempts(t *testing.T) {
+func TestApplyObjectYamlRejectsProtectedFieldBypassAttempts(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
 		editedYAML  string
@@ -496,7 +407,7 @@ func TestValidateObjectYamlRejectsProtectedFieldBypassAttempts(t *testing.T) {
 				ResourceVersion: "42",
 			}
 
-			_, err := app.ValidateObjectYaml(clusterID, request)
+			_, err := app.ApplyObjectYaml(clusterID, request)
 			if err == nil {
 				t.Fatalf("expected protected field validation error")
 			}
@@ -610,7 +521,7 @@ func TestMergeObjectYamlWithLatestRejectsConflictingBuiltInListEdits(t *testing.
 		t.Fatalf("failed to seed live deployment: %v", err)
 	}
 
-	_, err = app.MergeObjectYamlWithLatest(clusterID, ObjectYAMLReloadMergeRequest{
+	response, err := app.MergeObjectYamlWithLatest(clusterID, ObjectYAMLReloadMergeRequest{
 		BaseYAML:   deploymentYAML("42", "nginx:1.25"),
 		DraftYAML:  deploymentYAML("42", "nginx:1.26"),
 		Kind:       "Deployment",
@@ -619,13 +530,12 @@ func TestMergeObjectYamlWithLatestRejectsConflictingBuiltInListEdits(t *testing.
 		Name:       "demo",
 		UID:        "demo-uid",
 	})
-	if err == nil {
-		t.Fatalf("expected reload merge conflict")
+	if err != nil {
+		t.Fatalf("expected the merge conflict as a result, got error %v", err)
 	}
-
-	var objErr *objectYAMLError
-	if !errors.As(err, &objErr) {
-		t.Fatalf("expected objectYAMLError, got %T", err)
+	objErr := response.YAMLConflict
+	if objErr == nil {
+		t.Fatalf("expected reload merge conflict")
 	}
 	if objErr.Code != objectYAMLMergeConflictCode {
 		t.Fatalf("expected merge conflict code %q, got %q", objectYAMLMergeConflictCode, objErr.Code)
@@ -651,7 +561,7 @@ func TestMergeObjectYamlWithLatestDetectsUIDMismatch(t *testing.T) {
 		t.Fatalf("failed to seed replacement deployment: %v", err)
 	}
 
-	_, err = app.MergeObjectYamlWithLatest(clusterID, ObjectYAMLReloadMergeRequest{
+	response, err := app.MergeObjectYamlWithLatest(clusterID, ObjectYAMLReloadMergeRequest{
 		BaseYAML:   deploymentYAML("42", "nginx:1.25"),
 		DraftYAML:  deploymentYAML("42", "nginx:1.26"),
 		Kind:       "Deployment",
@@ -660,13 +570,12 @@ func TestMergeObjectYamlWithLatestDetectsUIDMismatch(t *testing.T) {
 		Name:       "demo",
 		UID:        "demo-uid",
 	})
-	if err == nil {
-		t.Fatalf("expected reload merge uid mismatch")
+	if err != nil {
+		t.Fatalf("expected the uid mismatch as a result, got error %v", err)
 	}
-
-	var objErr *objectYAMLError
-	if !errors.As(err, &objErr) {
-		t.Fatalf("expected objectYAMLError, got %T", err)
+	objErr := response.YAMLConflict
+	if objErr == nil {
+		t.Fatalf("expected reload merge uid mismatch")
 	}
 	if objErr.Code != "ObjectUIDMismatch" {
 		t.Fatalf("expected ObjectUIDMismatch code, got %q", objErr.Code)
@@ -676,112 +585,12 @@ func TestMergeObjectYamlWithLatestDetectsUIDMismatch(t *testing.T) {
 	}
 }
 
-func TestValidateObjectYamlForbiddenError(t *testing.T) {
-	app, dynamicClient, clusterID := setupYAMLTestApp(t)
-
-	dynamicClient.Fake.PrependReactor("patch", "*", func(action cgotesting.Action) (bool, runtime.Object, error) {
-		patchAction := action.(cgotesting.PatchActionImpl)
-		return true, nil, apierrors.NewForbidden(
-			schema.GroupResource{Group: "apps", Resource: "deployments"},
-			patchAction.GetResource().Resource,
-			fmt.Errorf("update forbidden"),
-		)
-	})
-
-	request := ObjectYAMLMutationRequest{
-		BaseYAML:        baseYAML(),
-		YAML:            baseYAML(),
-		Kind:            "Deployment",
-		APIVersion:      "apps/v1",
-		Namespace:       "default",
-		Name:            "demo",
-		UID:             "demo-uid",
-		ResourceVersion: "42",
-	}
-
-	_, err := app.ValidateObjectYaml(clusterID, request)
-	if err == nil {
-		t.Fatalf("expected validation to return error")
-	}
-
-	var objErr *objectYAMLError
-	if !errors.As(err, &objErr) {
-		t.Fatalf("expected objectYAMLError, got %T", err)
-	}
-
-	if objErr.Code != string(metav1.StatusReasonForbidden) {
-		t.Fatalf("expected code %s, got %s", metav1.StatusReasonForbidden, objErr.Code)
-	}
-	if len(objErr.Causes) != 0 {
-		t.Fatalf("expected no causes for simple forbidden error, got %v", objErr.Causes)
-	}
-}
-
 func TestNamespaceLabel(t *testing.T) {
 	if got := namespaceLabel(""); got != "<cluster-scoped>" {
 		t.Fatalf("expected cluster scoped label, got %q", got)
 	}
 	if got := namespaceLabel("ns"); got != "ns" {
 		t.Fatalf("expected namespace passthrough, got %q", got)
-	}
-}
-
-func TestValidateObjectYamlDetectsUIDDrift(t *testing.T) {
-	app, dynamicClient, clusterID := setupYAMLTestApp(t)
-
-	resource := dynamicClient.Resource(appsv1.SchemeGroupVersion.WithResource("deployments")).Namespace("default")
-	live, err := resource.Get(context.Background(), "demo", metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("failed to get live object: %v", err)
-	}
-	live.SetUID(types.UID("replacement-uid"))
-	live.SetResourceVersion("99")
-	if err := dynamicClient.Tracker().Update(appsv1.SchemeGroupVersion.WithResource("deployments"), live, "default"); err != nil {
-		t.Fatalf("failed to update live object: %v", err)
-	}
-
-	request := ObjectYAMLMutationRequest{
-		BaseYAML: `apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: demo
-  namespace: default
-  uid: demo-uid
-  resourceVersion: "42"
-spec:
-  replicas: 3
-`,
-		YAML: `apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: demo
-  namespace: default
-  uid: demo-uid
-  resourceVersion: "42"
-spec:
-  replicas: 3
-`,
-		Kind:            "Deployment",
-		APIVersion:      "apps/v1",
-		Namespace:       "default",
-		Name:            "demo",
-		UID:             "demo-uid",
-		ResourceVersion: "42",
-	}
-
-	_, err = app.ValidateObjectYaml(clusterID, request)
-	if err == nil {
-		t.Fatalf("expected validation to fail due to uid drift")
-	}
-	var objErr *objectYAMLError
-	if !errors.As(err, &objErr) {
-		t.Fatalf("expected objectYAMLError, got %T", err)
-	}
-	if objErr.Code != "ObjectUIDMismatch" {
-		t.Fatalf("expected ObjectUIDMismatch code, got %s", objErr.Code)
-	}
-	if !strings.Contains(objErr.Message, "current uid is replacement-uid") {
-		t.Fatalf("unexpected uid mismatch message: %q", objErr.Message)
 	}
 }
 
@@ -862,7 +671,7 @@ func TestSanitizeForUpdateStripsServerManagedMetadata(t *testing.T) {
 	}
 }
 
-func TestWrapKubernetesErrorFormatsStatusErrors(t *testing.T) {
+func TestWrapKubernetesErrorKeepsStatusErrors(t *testing.T) {
 	statusErr := apierrors.NewInvalid(
 		schema.GroupKind{Group: "apps", Kind: "Deployment"},
 		"demo",
@@ -871,51 +680,12 @@ func TestWrapKubernetesErrorFormatsStatusErrors(t *testing.T) {
 		},
 	)
 
-	wrapped := wrapKubernetesError(statusErr, "apply failed")
-	objErr, ok := wrapped.(*objectYAMLError)
-	if !ok {
-		t.Fatalf("expected objectYAMLError, got %T", wrapped)
+	if wrapped := wrapKubernetesError(statusErr, "apply failed"); wrapped != error(statusErr) {
+		t.Fatalf("expected the Kubernetes error unchanged, got %T: %v", wrapped, wrapped)
 	}
-	if objErr.Code != string(statusErr.ErrStatus.Reason) {
-		t.Fatalf("unexpected error code: %s", objErr.Code)
-	}
-	if len(objErr.Causes) == 0 {
-		t.Fatalf("expected causes to be populated")
-	}
-	if !strings.Contains(objErr.Causes[0], "spec.replicas") {
-		t.Fatalf("expected field in causes, got %#v", objErr.Causes)
-	}
-}
-
-func TestWrapKubernetesErrorFormatsFieldManagerConflicts(t *testing.T) {
-	statusErr := apierrors.NewApplyConflict(
-		[]metav1.StatusCause{
-			{
-				Type:    metav1.CauseTypeFieldManagerConflict,
-				Field:   "spec.replicas",
-				Message: `conflict with "deployment-controller" using apps/v1 at 2026-04-16T00:00:00Z`,
-			},
-		},
-		`Apply failed with 1 conflict: conflict with "deployment-controller": .spec.replicas`,
-	)
-
-	wrapped := wrapKubernetesError(statusErr, "apply failed")
-	objErr, ok := wrapped.(*objectYAMLError)
-	if !ok {
-		t.Fatalf("expected objectYAMLError, got %T", wrapped)
-	}
-	if objErr.Code != string(metav1.StatusReasonConflict) {
-		t.Fatalf("unexpected error code: %s", objErr.Code)
-	}
-	expectedMessage := "Server-side apply found field ownership conflicts. Reload the latest object or remove the conflicting field edits listed below."
-	if objErr.Message != expectedMessage {
-		t.Fatalf("expected conflict summary %q, got %q", expectedMessage, objErr.Message)
-	}
-	if len(objErr.Causes) != 1 {
-		t.Fatalf("expected one conflict cause, got %#v", objErr.Causes)
-	}
-	if objErr.Causes[0] != `spec.replicas: conflict with "deployment-controller" using apps/v1 at 2026-04-16T00:00:00Z` {
-		t.Fatalf("unexpected formatted conflict cause: %#v", objErr.Causes)
+	plain := errors.New("connection reset")
+	if wrapped := wrapKubernetesError(plain, "apply failed"); !errors.Is(wrapped, plain) || wrapped.Error() != "apply failed: connection reset" {
+		t.Fatalf("expected a wrapped non-API error, got %v", wrapped)
 	}
 }
 

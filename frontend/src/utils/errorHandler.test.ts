@@ -6,6 +6,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { bindingRejection, makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import type { ErrorHandlerOptions } from './errorHandler';
 import { ErrorCategory, ErrorSeverity, errorHandler } from './errorHandler';
 
@@ -46,53 +47,129 @@ describe('ErrorHandler', () => {
     console.groupEnd = originalConsole.groupEnd;
   });
 
-  it('categorises network errors, marks retryable, and notifies subscribers and telemetry', () => {
+  it('takes category, retry and severity policy from the backend status', () => {
+    handler.updateOptions({ defaultSeverity: ErrorSeverity.WARNING });
+    for (const [reason, category, retryable, severity] of [
+      ['ClusterUnreachable', ErrorCategory.NETWORK, true, ErrorSeverity.WARNING],
+      ['CredentialsRejected', ErrorCategory.AUTHENTICATION, false, ErrorSeverity.ERROR],
+      ['Forbidden', ErrorCategory.PERMISSION, false, ErrorSeverity.ERROR],
+      ['NotFound', ErrorCategory.NOT_FOUND, false, ErrorSeverity.INFO],
+      ['BadRequest', ErrorCategory.VALIDATION, false, ErrorSeverity.WARNING],
+      ['Conflict', ErrorCategory.CONFLICT, false, ErrorSeverity.WARNING],
+      ['DeadlineExceeded', ErrorCategory.TIMEOUT, true, ErrorSeverity.WARNING],
+      ['TooManyRequests', ErrorCategory.RATE_LIMIT, true, ErrorSeverity.WARNING],
+      ['InternalError', ErrorCategory.SERVER_ERROR, true, ErrorSeverity.CRITICAL],
+      ['Unknown', ErrorCategory.UNKNOWN, false, ErrorSeverity.WARNING],
+    ] as const) {
+      expect(handler.describe(bindingRejection(makeErrorStatus(reason)))).toMatchObject({
+        category,
+        retryable,
+        severity,
+      });
+    }
+  });
+
+  // Behavior comes from the status, never from words in the message.
+  it.each([
+    'permission denied',
+    'token has expired',
+    'object not found',
+    'internal server error',
+    'Error loading SSO Token Provider',
+  ])('treats %s without a status as an unknown failure', (message) => {
     const listener = vi.fn();
-    const unsubscribe = handler.subscribe(listener);
-    const details = handler.handle(new Error('Network connection lost'));
+    handler.subscribe(listener);
+
+    const details = handler.handle(new Error(message));
+
+    expect(details.category).toBe(ErrorCategory.UNKNOWN);
+    expect(details.userMessage).toBe(message);
+    expect(listener).toHaveBeenCalledOnce();
+    expect(telemetryMocks.captureUserVisibleError).toHaveBeenCalledOnce();
+  });
+
+  it('treats a browser fetch failure as a network failure', () => {
+    const details = handler.describe(new TypeError('Failed to fetch'));
 
     expect(details.category).toBe(ErrorCategory.NETWORK);
     expect(details.retryable).toBe(true);
-    expect(details.severity).toBe(ErrorSeverity.ERROR);
-    expect(handler.getHistory()).toHaveLength(1);
-    expect(listener).toHaveBeenCalledWith(
-      expect.objectContaining({ category: ErrorCategory.NETWORK })
-    );
-    expect(telemetryMocks.captureUserVisibleError).toHaveBeenCalledWith(
-      expect.any(Error),
-      expect.objectContaining({
-        category: ErrorCategory.NETWORK,
-        expectedCondition: true,
-      })
+  });
+
+  it('shows and reports a conflict whose message mentions a token', () => {
+    const listener = vi.fn();
+    handler.subscribe(listener);
+    const conflict = bindingRejection(
+      makeErrorStatus(
+        'Conflict',
+        'Operation cannot be fulfilled on secrets "ci-token": the object has been modified'
+      )
     );
 
-    unsubscribe();
+    const details = handler.handle(conflict, { action: 'deleteObject' });
+
+    expect(details.category).toBe(ErrorCategory.CONFLICT);
+    expect(details.userMessage).toBe(
+      'This object changed or already exists. Refresh and try again.'
+    );
+    expect(details.technicalMessage).toBe(conflict.message);
+    expect(listener).toHaveBeenCalledWith(details);
+    expect(telemetryMocks.captureUserVisibleError).toHaveBeenCalledWith(
+      conflict,
+      expect.objectContaining({ category: ErrorCategory.CONFLICT })
+    );
+  });
+
+  // The UI offers an action only after its permission gate allows it, so a
+  // denial there is a bug to see and report.
+  it('shows and reports a gated action the server still denies', () => {
+    const listener = vi.fn();
+    handler.subscribe(listener);
+    const denial = bindingRejection(
+      makeErrorStatus('Forbidden', 'deployments.apps "web" is forbidden', { expected: false })
+    );
+
+    const details = handler.handle(denial, { action: 'scaleWorkload' });
+
+    expect(details.category).toBe(ErrorCategory.PERMISSION);
+    expect(listener).toHaveBeenCalledWith(details);
+    expect(handler.getHistory()).toContainEqual(details);
+    expect(telemetryMocks.captureUserVisibleError).toHaveBeenCalledOnce();
   });
 
   it.each([
-    ['network disconnected', ErrorCategory.NETWORK, true, ErrorSeverity.WARNING],
-    ['token expired', ErrorCategory.AUTHENTICATION, false, ErrorSeverity.ERROR],
-    ['permission denied', ErrorCategory.PERMISSION, false, ErrorSeverity.ERROR],
-    ['object not found', ErrorCategory.NOT_FOUND, false, ErrorSeverity.INFO],
-    ['invalid input', ErrorCategory.VALIDATION, false, ErrorSeverity.WARNING],
-    ['operation timed out', ErrorCategory.TIMEOUT, true, ErrorSeverity.WARNING],
-    ['too many requests', ErrorCategory.RATE_LIMIT, true, ErrorSeverity.WARNING],
-    ['internal server error', ErrorCategory.SERVER_ERROR, true, ErrorSeverity.CRITICAL],
-    ['unexpected failure', ErrorCategory.UNKNOWN, false, ErrorSeverity.WARNING],
-  ] as const)(
-    'keeps retry and severity policy for %s under a configured default',
-    (message, category, retryable, severity) => {
-      handler.updateOptions({ defaultSeverity: ErrorSeverity.WARNING });
-      expect(handler.describe(message)).toMatchObject({ category, retryable, severity });
-    }
-  );
+    ['a refresh denial', makeErrorStatus('Forbidden', 'permission denied for domain pods')],
+    ['rejected credentials the auth overlay shows', makeErrorStatus('CredentialsRejected')],
+  ])('keeps %s out of toasts and telemetry', (_name, status) => {
+    const listener = vi.fn();
+    handler.subscribe(listener);
+
+    handler.handle(bindingRejection(status));
+
+    expect(listener).not.toHaveBeenCalled();
+    expect(handler.getHistory()).toHaveLength(0);
+    expect(console.info).toHaveBeenCalled();
+    expect(telemetryMocks.captureUserVisibleError).not.toHaveBeenCalled();
+  });
+
+  it('shows the specific message of a rejected request', () => {
+    const rejected = bindingRejection(
+      makeErrorStatus('BadRequest', 'remove finalizer requires finalizerPath')
+    );
+
+    const details = handler.handle(rejected, { action: 'removeFinalizer' });
+
+    expect(details.userMessage).toBe('remove finalizer requires finalizerPath');
+    expect(details.severity).toBe(ErrorSeverity.WARNING);
+    expect(telemetryMocks.captureUserVisibleError).toHaveBeenCalledOnce();
+  });
 
   it('keeps recovery suggestions independent between notifications', () => {
-    const first = handler.describe('network disconnected');
+    const unreachable = bindingRejection(makeErrorStatus('ClusterUnreachable'));
+    const first = handler.describe(unreachable);
     const originalSuggestions = [...(first.suggestions ?? [])];
     expect(originalSuggestions.length).toBeGreaterThan(0);
     first.suggestions?.splice(0);
-    expect(handler.describe('network disconnected').suggestions).toEqual(originalSuggestions);
+    expect(handler.describe(unreachable).suggestions).toEqual(originalSuggestions);
   });
 
   it('reports a caught user-visible error through the centralized telemetry boundary', () => {
@@ -110,23 +187,16 @@ describe('ErrorHandler', () => {
     );
   });
 
-  it('keeps not found conditions user-visible while marking telemetry as expected', () => {
+  it('keeps a not-found failure user-visible', () => {
     const listener = vi.fn();
     handler.subscribe(listener);
-    const error = new Error('Requested resource was not found');
+    const error = bindingRejection(makeErrorStatus('NotFound', 'pods "web" not found'));
 
     const details = handler.handle(error, { source: 'object-panel' });
 
     expect(details.category).toBe(ErrorCategory.NOT_FOUND);
     expect(handler.getHistory()).toContainEqual(details);
     expect(listener).toHaveBeenCalledWith(details);
-    expect(telemetryMocks.captureUserVisibleError).toHaveBeenCalledWith(
-      error,
-      expect.objectContaining({
-        category: ErrorCategory.NOT_FOUND,
-        expectedCondition: true,
-      })
-    );
   });
 
   it('reports an inline failure without creating a duplicate toast', () => {
@@ -144,7 +214,6 @@ describe('ErrorHandler', () => {
       error,
       expect.objectContaining({
         context: { action: 'startPortForward', clusterId: 'cluster-a' },
-        expectedCondition: false,
       })
     );
     expect(listener).not.toHaveBeenCalled();
@@ -162,7 +231,6 @@ describe('ErrorHandler', () => {
       error,
       expect.objectContaining({
         surface: 'operational',
-        expectedCondition: false,
         context: { action: 'persistTableState' },
       })
     );
@@ -178,146 +246,10 @@ describe('ErrorHandler', () => {
     expect(telemetryMocks.captureUserVisibleError).not.toHaveBeenCalled();
   });
 
-  it('parses STDERR payloads and enriches context', () => {
-    const details = handler.handle(
-      new Error('kubectl failed STDERR: CrashLoopBackOff at container foo'),
-      { namespace: 'default' }
-    );
-
-    expect(details.technicalMessage).toBe('CrashLoopBackOff at container foo');
-    expect(details.context).toMatchObject({
-      namespace: 'default',
-      originalError: 'kubectl failed',
-      stderr: 'CrashLoopBackOff at container foo',
-    });
-  });
-
-  it('suppresses permission notifications but still logs', () => {
-    const listener = vi.fn();
-    handler.subscribe(listener);
-
-    const details = handler.handle('403 forbidden access');
-
-    expect(details.category).toBe(ErrorCategory.PERMISSION);
-    expect(handler.getHistory()).toHaveLength(0);
-    expect(listener).not.toHaveBeenCalled();
-    expect(console.info).toHaveBeenCalled();
-    expect(telemetryMocks.captureUserVisibleError).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    ['Failed to fetch: dial tcp 10.0.0.1:8403: connection refused', ErrorCategory.NETWORK],
-    ['Fetching cluster state failed', ErrorCategory.NETWORK],
-    ['Could not refetch cluster state', ErrorCategory.NETWORK],
-    ['All cluster connections were closed', ErrorCategory.NETWORK],
-    [
-      'Post "https://cluster.example.test": dial tcp: lookup cluster.example.test: no such host',
-      ErrorCategory.NETWORK,
-    ],
-    ['Container logs stream disconnected. Reconnecting soon', ErrorCategory.NETWORK],
-    ['dial tcp 10.0.0.1:403: i/o timeout', ErrorCategory.TIMEOUT],
-    ['request took 403 ms: internal server error', ErrorCategory.SERVER_ERROR],
-    ['processed 403 records before too many requests', ErrorCategory.RATE_LIMIT],
-  ])('does not treat incidental 403 digits in %s as permission denial', (message, category) => {
-    const details = handler.handle(message);
-
-    expect(details.category).toBe(category);
-  });
-
-  it.each([
-    'request failed with HTTP 403',
-    'request failed with status code 403',
-    'server responded with a status of 403',
-  ])('treats structured 403 status in %s as permission denial', (message) => {
-    const details = handler.handle(message);
-
-    expect(details.category).toBe(ErrorCategory.PERMISSION);
-  });
-
-  it('treats forbidden Kubernetes resources with network in their API group as permission conditions', () => {
-    const listener = vi.fn();
-    handler.subscribe(listener);
-    const error = new Error(
-      'failed to list networking.k8s.aws/v1alpha1, Resource=applicationnetworkpolicies: forbidden'
-    );
-
-    const details = handler.handle(error, { source: 'backend-fetch' });
-
-    expect(details.category).toBe(ErrorCategory.PERMISSION);
-    expect(handler.getHistory()).toHaveLength(0);
-    expect(listener).not.toHaveBeenCalled();
-    expect(telemetryMocks.captureUserVisibleError).not.toHaveBeenCalled();
-  });
-
-  it('suppresses authentication failures for Kubernetes resources with network in their API group', () => {
-    const listener = vi.fn();
-    handler.subscribe(listener);
-    const error = new Error(
-      'failed to watch networking.example.io/v1, Resource=widgets: auth invalid: 401 Unauthorized'
-    );
-
-    const details = handler.handle(error, { source: 'backend-fetch' });
-
-    expect(details.category).toBe(ErrorCategory.AUTHENTICATION);
-    expect(handler.getHistory()).toHaveLength(0);
-    expect(listener).not.toHaveBeenCalled();
-    expect(telemetryMocks.captureUserVisibleError).not.toHaveBeenCalled();
-  });
-
-  it('still captures permission-shaped failures at an operational boundary', () => {
-    const error = new Error('permission cache invariant failed');
-
-    handler.handleOperational(error, { action: 'rebuildPermissionCache' });
-
-    expect(telemetryMocks.captureUserVisibleError).toHaveBeenCalledWith(
-      error,
-      expect.objectContaining({
-        category: ErrorCategory.PERMISSION,
-        surface: 'operational',
-      })
-    );
-  });
-
-  it('does not treat token substrings in resource names as auth failures', () => {
-    const details = handler.handle('failed to list cloudsmithaccesstokens');
-    expect(details.category).toBe(ErrorCategory.UNKNOWN);
-  });
-
-  it('detects authentication when token errors are explicit', () => {
-    const details = handler.handle('token has expired');
-    expect(details.category).toBe(ErrorCategory.AUTHENTICATION);
-  });
-
-  it('suppresses toast notification for SSO token expiration errors', () => {
-    const listener = vi.fn();
-    handler.subscribe(listener);
-
-    handler.handle('token has expired');
-    handler.handle('token is expired');
-    handler.handle('Error loading SSO Token Provider');
-
-    // Auth errors should be suppressed — the AuthFailureOverlay handles them.
-    expect(handler.getHistory()).toHaveLength(0);
-    expect(listener).not.toHaveBeenCalled();
-    expect(telemetryMocks.captureUserVisibleError).not.toHaveBeenCalled();
-  });
-
   it('updates options and disables console logging when requested', () => {
     handler.updateOptions({ enableLogging: true, logToConsole: false });
     handler.handle('Unknown failure');
     expect(console.groupCollapsed).not.toHaveBeenCalled();
-  });
-
-  it('suppresses notification for exec credential failures handled by AuthFailureOverlay', () => {
-    const listener = vi.fn();
-    handler.subscribe(listener);
-
-    handler.handle(
-      new Error('getting credentials: exec: executable aws failed with exit code 255')
-    );
-
-    expect(handler.getHistory()).toHaveLength(0);
-    expect(listener).not.toHaveBeenCalled();
   });
 
   it('warn() emits a WARNING advisory with a title, verbatim message, and auto-dismiss', () => {

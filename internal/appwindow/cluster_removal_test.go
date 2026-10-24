@@ -37,10 +37,10 @@ func TestKubeconfigPruneDisposesItsNativePanelWorkspace(t *testing.T) {
 	snapshot.ClusterID = clusterID
 	snapshot.Tabs[0].ObjectRef.ClusterID = clusterID
 	native := livePanelWindowForTabTransfer(t, registry.panels, snapshot)
-	snapshot.SourceWindowName = native.WindowName
 	registry.emitWindowEvent = func(string, string, any) bool { return true }
 	require.NoError(t, runtime.Workspace.RetainPanelCluster(native.WindowName, clusterID))
-	require.NoError(t, registry.UpdatePanelWindowSnapshot(native.WindowName, snapshot))
+	seedNativeGroup(t, registry.workspace, native.WindowName, snapshot)
+	require.NoError(t, registry.PublishPanelWindowGroup(native.WindowName, nativeGroup(snapshot)))
 	closed := make(chan string, 1)
 	registry.closeWindow = func(name string) bool { closed <- name; return true }
 	require.NoError(t, runtime.Workspace.SetKubeconfigSearchPaths([]string{t.TempDir()}))

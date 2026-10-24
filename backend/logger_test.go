@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"sync"
 	"testing"
@@ -12,9 +13,8 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/authstate"
-	"github.com/luxury-yacht/app/backend/internal/errorcapture"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
-	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/internal/sentry"
 	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -235,7 +235,7 @@ func TestLoggerKeepsExpectedClusterFailuresLocal(t *testing.T) {
 		},
 		{
 			name: "refresh domain permission denial",
-			err:  fmt.Errorf("snapshot blocked: %w", refresh.NewPermissionDeniedError("pods", "core/pods")),
+			err:  fmt.Errorf("snapshot blocked: %w", errorstatus.NewPermissionDenied("pods", "core/pods")),
 		},
 		{
 			name: "wrapped structured not found",
@@ -272,6 +272,41 @@ func TestLoggerKeepsExpectedClusterFailuresLocal(t *testing.T) {
 			name: "API server unavailable",
 			err:  apierrors.NewServiceUnavailable("cluster temporarily unavailable"),
 		},
+		{
+			name: "connection closed before response",
+			err:  &url.Error{Op: "Post", URL: "https://cluster.example.test", Err: io.EOF},
+		},
+		{
+			name: "HTTP/2 connection lost",
+			err: &url.Error{
+				Op:  "Post",
+				URL: "https://cluster.example.test",
+				Err: errors.New("http2: client connection lost"),
+			},
+		},
+		{
+			name: "HTTP/2 connection lost while reading response body",
+			err: fmt.Errorf(
+				"unexpected error when reading response body. Please retry. Original error: %w",
+				errors.New("http2: client connection lost"),
+			),
+		},
+		{
+			name: "HTTP/2 connection closed by client teardown",
+			err: &url.Error{
+				Op:  "Post",
+				URL: "https://cluster.example.test",
+				Err: errors.New("http2: client connection force closed via ClientConn.Close"),
+			},
+		},
+		{
+			name: "HTTP/2 server GOAWAY",
+			err: &url.Error{
+				Op:  "Post",
+				URL: "https://cluster.example.test",
+				Err: errors.New(`http2: server sent GOAWAY and closed the connection; LastStreamID=109, ErrCode=NO_ERROR, debug=""`),
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -300,6 +335,11 @@ func TestLoggerReportsDeadlineAndUnexpectedURLFailures(t *testing.T) {
 		err  error
 	}{
 		{name: "deadline exceeded", err: context.DeadlineExceeded},
+		{
+			// Only a transport EOF proves a dropped connection; a decoder EOF is a defect.
+			name: "EOF outside a transport request",
+			err:  fmt.Errorf("decode cached payload: %w", io.EOF),
+		},
 		{
 			name: "URL application failure",
 			err: &url.Error{
@@ -415,80 +455,6 @@ func TestLoggerForwardsOperationIdentityToBreadcrumbsAndError(t *testing.T) {
 	require.Equal(t, "backend-op-3", transport.event.Breadcrumbs[0].Data["operationId"])
 	require.Equal(t, "backend-op-3", transport.event.Tags["operation.id"])
 	require.Equal(t, "backend-op-3", transport.event.Contexts["error"]["operationId"])
-}
-
-func TestFetchResourceReportsOriginalKubernetesError(t *testing.T) {
-	reporter := &recordingErrorReporter{}
-	app := newWorkspaceCoordinatorTestFixture(t, reporter)
-	cause := apierrors.NewInternalError(errors.New("unexpected API response"))
-
-	_, err := FetchResourceWithSelection(
-		app.Resources,
-		"cluster-a",
-		"deployment/default/web",
-		"Deployment",
-		"default/web",
-		func(context.Context) (string, error) { return "", cause },
-	)
-	require.Error(t, err)
-
-	reporter.mu.Lock()
-	require.Empty(t, reporter.messages)
-	require.Len(t, reporter.exceptions, 1)
-	require.Same(t, cause, reporter.exceptions[0].err)
-	require.Equal(t, sentryreporting.Operation{}, reporter.exceptions[0].context.Operation)
-	require.Equal(t, "cluster-a", reporter.exceptions[0].context.ClusterID)
-	reporter.mu.Unlock()
-}
-
-func TestFetchResourceKeepsPermissionDenialLocal(t *testing.T) {
-	reporter := &recordingErrorReporter{}
-	app := newWorkspaceCoordinatorTestFixture(t, reporter)
-	cause := apierrors.NewForbidden(
-		schema.GroupResource{Group: "apps", Resource: "deployments"},
-		"web",
-		errors.New("RBAC denied the request"),
-	)
-
-	_, err := FetchResourceWithSelection(
-		app.Resources,
-		"cluster-a",
-		"deployment/default/web",
-		"Deployment",
-		"default/web",
-		func(context.Context) (string, error) {
-			return "", fmt.Errorf("read deployment: %w", cause)
-		},
-	)
-	require.ErrorIs(t, err, cause, "the UI still receives the permission denial")
-	require.True(t, apierrors.IsForbidden(err))
-
-	reporter.mu.Lock()
-	defer reporter.mu.Unlock()
-	require.Empty(t, reporter.messages)
-	require.Empty(t, reporter.exceptions, "RBAC denial is not an application defect")
-}
-
-func TestFetchResourceDoesNotReportTelemetryHandledErrorAgain(t *testing.T) {
-	reporter := &recordingErrorReporter{}
-	app := newWorkspaceCoordinatorTestFixture(t, reporter)
-	cause := errors.New("already reported")
-
-	_, err := FetchResourceWithSelection(
-		app.Resources,
-		"cluster-a",
-		"deployment/default/web",
-		"Deployment",
-		"default/web",
-		func(context.Context) (string, error) { return "", errorcapture.MarkTelemetryHandled(cause) },
-	)
-	require.Error(t, err)
-	require.ErrorIs(t, err, cause)
-
-	reporter.mu.Lock()
-	require.Empty(t, reporter.messages)
-	require.Empty(t, reporter.exceptions)
-	reporter.mu.Unlock()
 }
 
 func TestLoggerReportsRecoveredPanicWithoutFlattening(t *testing.T) {
@@ -609,4 +575,19 @@ func TestApplicationRuntimePassesErrorReporterToApplicationLogger(t *testing.T) 
 		message: "startup failed",
 		context: sentryreporting.Context{Source: "App"},
 	}}, reporter.messages)
+}
+
+// Application Logs keep a fixed 10,000 entries, enough history to troubleshoot
+// the app; older entries give way to new ones.
+func TestApplicationLogsKeepTheNewestTenThousandEntries(t *testing.T) {
+	app := newWorkspaceCoordinatorTestFixture(t)
+	app.AppLogs.logger.Clear()
+	for i := range 10_005 {
+		app.AppLogs.logger.Info(fmt.Sprintf("line %d", i))
+	}
+
+	entries := app.AppLogs.logger.GetEntries()
+	require.Len(t, entries, 10_000)
+	require.Equal(t, "line 5", entries[0].Message)
+	require.Equal(t, "line 10004", entries[len(entries)-1].Message)
 }

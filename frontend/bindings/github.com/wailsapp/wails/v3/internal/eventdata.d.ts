@@ -17,7 +17,6 @@ declare module "@wailsio/runtime" {
         interface CustomEvents {
             "app-logs:added": backend$0.AppLogsAddedEvent;
             "app-update": backend$0.UpdateInfo | null;
-            "backend-error": backend$0.BackendErrorEvent;
             "cluster-panel-close:requested": panelwindow$0.ClusterPanelCloseEvent;
             "cluster-panel-close:settled": panelwindow$0.ClusterPanelCloseEvent;
             "cluster-tab-transfer:committed": panelwindow$0.ClusterTabTransferEvent;
@@ -56,7 +55,6 @@ declare module "@wailsio/runtime" {
             "panel-window:application-quit-preflight-settled": panelwindow$0.ApplicationQuitPreflightRequestedEvent;
             "panel-window:close-requested": panelwindow$0.WindowCloseRequestedEvent;
             "panel-window:closed": panelwindow$0.WindowClosedEvent;
-            "panel-window:dock-requested": panelwindow$0.WindowDockRequestedEvent;
             "panel-window:focus-requested": panelwindow$0.WindowFocusRequestedEvent;
             "panel-window:opened": panelwindow$0.WindowOpenedEvent;
             "panel-window:tab-close-authorized": panelwindow$0.TabCloseAuthorizedEvent;

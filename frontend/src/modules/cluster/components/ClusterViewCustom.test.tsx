@@ -1,868 +1,432 @@
 /**
  * frontend/src/modules/cluster/components/ClusterViewCustom.test.tsx
  *
- * Test suite for ClusterViewCustom.
- * Covers key behaviors and edge cases for ClusterViewCustom.
+ * The cluster Custom Resources view and the cluster extension views
+ * (Karpenter, Cert Manager, External Secrets) it renders. It lists the visible
+ * cluster's cluster-scoped custom resources from the object catalog, sorted
+ * the way its header shows (the default, or the user's persisted sort), with
+ * each page's status and CRD hydrated by the backend; its Kinds filter offers
+ * every kind the catalog reports; it sorts only by catalog fields; it opens a resource and its owning CRD with complete identity and
+ * deletes a resource after confirmation; it names a catalog permission denial;
+ * it replays the last page on revisit instead of a cold spinner; an extension
+ * view queries only its resource family and shows that family's facts; and a
+ * pending object action does not survive leaving an extension view. Runs in
+ * the full app, navigated through the sidebar, over a faked backend
+ * (test-utils/appState).
  */
 
 import {
-  type CatalogBackedCustomResourceRow,
-  catalogItemToFallbackCustomRow,
-} from '@modules/browse/hooks/customCatalogRowAdapter';
-import ClusterResourcesViews from '@modules/cluster/components/ClusterResourcesViews';
-import ClusterViewCustom from '@modules/cluster/components/ClusterViewCustom';
-import { resetResourceInventoryRowCache } from '@modules/resource-grid/useResourceInventoryTable';
-import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
-import type ConfirmationModal from '@shared/components/modals/ConfirmationModal';
-import type { GridTableProps } from '@shared/components/tables/GridTable';
+  buildGridTableStorageKey,
+  computeClusterHash,
+} from '@shared/components/tables/persistence/gridTablePersistence';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CanonicalRowTestOverrides, CatalogItem } from '@/core/refresh/types';
-import { requireReactElement } from '@/test-utils/requireReactElement';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
+import { buildRefreshScope, CLUSTER_SELECTOR } from '@/core/refresh/scopeSelector';
+import type {
+  CatalogItem,
+  CatalogSnapshotPayload,
+  CustomResourceSummary,
+} from '@/core/refresh/types';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type ObjectIdentity,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { snapshotResponse, statusResponse } from '@/test-utils/appState/transport';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { requireValue } from '@/test-utils/requireValue';
 
-type BaseGridTableProps = GridTableProps<CatalogBackedCustomResourceRow>;
-type CapturedGridTableProps = BaseGridTableProps & {
-  getCustomContextMenuItems: NonNullable<BaseGridTableProps['getCustomContextMenuItems']>;
-  filters: NonNullable<BaseGridTableProps['filters']> & {
-    options: NonNullable<NonNullable<BaseGridTableProps['filters']>['options']>;
-  };
-};
-type ConfirmationProps = React.ComponentProps<typeof ConfirmationModal>;
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
 
-vi.mock('@core/contexts/FavoritesContext', () => ({
-  useFavorites: () => ({
-    favorites: [],
-
-    addFavorite: vi.fn(),
-    updateFavorite: vi.fn(),
-    deleteFavorite: vi.fn(),
-    reorderFavorites: vi.fn(),
-  }),
-  FavoritesProvider: ({ children }: { children: React.ReactNode }) => children,
-}));
-
-vi.mock('@ui/favorites/FavToggle', () => ({
-  useFavToggle: () => ({
-    type: 'toggle',
-    id: 'favorite',
-    icon: null,
-    active: false,
-    onClick: () => undefined,
-    title: 'Save as favorite',
-  }),
-}));
-
-const gridTablePropsRef: { current: CapturedGridTableProps } = {
-  current: null as unknown as CapturedGridTableProps,
-};
-const openWithObjectMock = vi.fn();
-const runObjectActionMock = vi.fn();
-const useBrowseCatalogMock = vi.hoisted(() => vi.fn());
-const useHydratedCustomCatalogRowsMock = vi.hoisted(() => vi.fn());
-const modalProps: { current: ConfirmationProps } = {
-  current: null as unknown as ConfirmationProps,
-};
-
-vi.mock('@shared/components/tables/GridTable', async () => {
-  const actual = await vi.importActual<typeof import('@shared/components/tables/GridTable')>(
-    '@shared/components/tables/GridTable'
-  );
-  return {
-    ...actual,
-    default: (props: CapturedGridTableProps) => {
-      gridTablePropsRef.current = props;
-      return <div data-testid="grid-table" />;
-    },
-  };
-});
-
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: openWithObjectMock }),
-}));
-
-vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: vi.fn() }),
-}));
-
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({
-    selectedKubeconfig: 'path:context',
-    selectedClusterId: 'cluster-a',
-    selectedClusterName: 'alpha',
-  }),
-}));
-
-vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
-  __esModule: true,
-  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
-
-vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (data: CatalogBackedCustomResourceRow[]) => ({
-    sortedData: data,
-    sortConfig: { key: 'name', direction: 'asc' },
-    handleSort: vi.fn(),
-  }),
-}));
-
-const setFiltersMock = vi.fn();
-
-// The persisted sort starts as null in production (nothing persisted yet);
-// tests can set this ref to simulate a stored user sort.
-const persistedSortRef = vi.hoisted(() => ({
-  current: null as { key: string; direction: 'asc' | 'desc' | null } | null,
-}));
-
-vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
-  useGridTablePersistence: () => ({
-    sortConfig: persistedSortRef.current,
-    setSortConfig: vi.fn(),
-    columnWidths: null,
-    setColumnWidths: vi.fn(),
-    columnVisibility: null,
-    setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [] },
-    setFilters: setFiltersMock,
-    resetState: vi.fn(),
-    hydrated: true,
-    storageKey: 'gridtable:v1:test',
-  }),
-}));
-
-vi.mock('@modules/browse/hooks/useBrowseCatalog', () => ({
-  useBrowseCatalog: (...args: unknown[]) => useBrowseCatalogMock(...args),
-}));
-
-vi.mock('@modules/browse/hooks/useHydratedCustomCatalogRows', () => ({
-  useHydratedCustomCatalogRows: (...args: unknown[]) => useHydratedCustomCatalogRowsMock(...args),
-}));
-
-vi.mock('@/hooks/useShortNames', () => ({
-  useShortNames: () => false,
-}));
-
-vi.mock('@core/backend-api', () => ({
-  RunObjectAction: (...args: unknown[]) => runObjectActionMock(...args),
-}));
-
-vi.mock('@shared/components/modals/ConfirmationModal', () => ({
-  __esModule: true,
-  default: (props: ConfirmationProps) => {
-    modalProps.current = props;
-    return <div data-testid="confirmation-modal" />;
-  },
-}));
-
-vi.mock('@/core/capabilities', () => ({
-  useUserPermissions: () =>
-    new Map([
-      ['Widget:delete', { allowed: true, pending: false }],
-      ['DBCluster:delete', { allowed: true, pending: false }],
-      ['NodePool:delete', { allowed: true, pending: false }],
-    ]),
-  getPermissionKey: (kind: string, action: string) => `${kind}:${action}`,
-  queryKindPermissions: vi.fn(),
-}));
-
-const baseCustom = {
-  ref: {
-    clusterId: 'alpha:ctx',
-    group: 'example.com',
-    version: 'v1',
-    kind: 'Widget',
-    resource: 'widgets',
-    namespace: '',
-    name: 'gizmo',
-  },
-  kind: 'Widget',
-  name: 'gizmo',
-  namespace: '',
+const widget: ObjectIdentity = {
   group: 'example.com',
   version: 'v1',
-  age: '1d',
-  clusterId: 'alpha:ctx',
-  clusterName: 'alpha',
-  labels: { env: 'prod' },
-  annotations: { owner: 'custom-team' },
+  kind: 'Widget',
+  namespace: '',
+  name: 'gizmo',
+};
+// A kind another operator's CRD group also defines: only group/version tell them apart.
+const dbCluster: ObjectIdentity = {
+  group: 'postgresql.cnpg.io',
+  version: 'v1',
+  kind: 'DBCluster',
+  namespace: '',
+  name: 'shared-pg',
+};
+const nodePool: ObjectIdentity = {
+  group: 'karpenter.sh',
+  version: 'v1',
+  kind: 'NodePool',
+  namespace: '',
+  name: 'workers',
 };
 
-const browseCatalogResult = (items: CatalogItem[] = []) => ({
-  items,
-  loading: false,
-  hasLoadedOnce: true,
-  filterOptions: {
-    kinds: [],
-    namespaces: [],
+const RESOURCES: Record<string, string> = {
+  Widget: 'widgets',
+  DBCluster: 'dbclusters',
+  NodePool: 'nodepools',
+};
+
+/** A cluster-scoped custom resource as backend/refresh/snapshot/catalog.go lists it. */
+const catalogItem = (identity: ObjectIdentity): CatalogItem => ({
+  ref: {
+    clusterId: dev.clusterId,
+    group: identity.group,
+    version: identity.version,
+    kind: identity.kind,
+    resource: RESOURCES[identity.kind] ?? '',
+    name: identity.name,
+    uid: `${identity.name}-uid`,
   },
-  totalCount: items.length,
-  totalIsExact: true,
-  queryDescriptor: {
-    clusterId: 'cluster-a',
-    namespaces: ['cluster'],
-    hasUserNamespaceScope: false,
-    kinds: [],
-    search: '',
-    sortField: 'name',
-    sortDirection: 'asc',
-    scope: 'cluster-a|customOnly=true&limit=1000&namespace=cluster&sort=name&sortDirection=asc',
-    customOnly: true,
-  },
-  queryPending: false,
-  pagination: {
-    pageIndex: 1,
-    pageLimit: 50,
-    pageLimitOptions: [25, 50, 100, 250, 500, 1000],
-    setPageLimit: () => undefined,
-    totalCount: items.length,
-    totalIsExact: true,
-    previousToken: null,
-    continueToken: null,
-    queryPending: false,
-    hasMore: false,
-    hasPrevious: false,
-    isRequestingMore: false,
-    onRequestMore: () => undefined,
-    onRequestPrevious: () => undefined,
-  },
+  resourceVersion: '1',
+  creationTimestamp: new Date(Date.now() - 86_400_000).toISOString(),
+  scope: 'Cluster',
 });
 
-const catalogItemFromCustom = (
-  resource: CatalogBackedCustomResourceRow,
-  overrides: CanonicalRowTestOverrides<CatalogItem> = {}
-): CatalogItem => {
-  const { ref, ...row } = overrides;
-  const creationTimestamp =
-    resource.age === '1d'
-      ? new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-      : (resource.age ?? '');
-  return {
-    ref: {
-      clusterId: resource.ref.clusterId,
-      group: resource.ref.group,
-      version: resource.ref.version,
-      kind: resource.ref.kind,
-      resource: 'widgets',
-      name: resource.ref.name,
-      uid: `${resource.ref.name}-uid`,
-      ...ref,
-    },
-    resourceVersion: '1',
-    creationTimestamp,
-    scope: 'Cluster',
-    actionFacts: resource.status ? { status: resource.status } : undefined,
-    ...row,
-  };
+const isCustomCatalogRead = ({ domain, scope }: { domain: string; scope: string }) =>
+  domain === 'catalog' &&
+  scope.startsWith(`${dev.clusterId}|`) &&
+  scope.includes('customOnly=true');
+
+/** The catalog's answer to a custom-resource query listing `items`. */
+const catalogPage = (
+  items: CatalogItem[],
+  overrides: Partial<CatalogSnapshotPayload> = {}
+): CatalogSnapshotPayload =>
+  makeCatalogSnapshotPayload({
+    clusterId: dev.clusterId,
+    clusterName: dev.clusterName,
+    items,
+    total: items.length,
+    unfilteredTotal: items.length,
+    ...overrides,
+  });
+
+/** Answers every custom-resource catalog read in the cluster with `items`. */
+const serveCatalog = (
+  items: () => CatalogItem[],
+  overrides: Partial<CatalogSnapshotPayload> = {}
+) =>
+  app.snapshots.answer((request) =>
+    isCustomCatalogRead(request) ? catalogPage(items(), overrides) : undefined
+  );
+
+/**
+ * backend/resource_gateway_catalog.go HydrateCatalogCustomRows: the page's rows
+ * with their CRD and projected status, plus any family facts.
+ */
+const hydrate = (facts: Partial<CustomResourceSummary> = {}) => {
+  app.backend.answer(
+    'HydrateCatalogCustomRows',
+    (_clusterId, rows) =>
+      (rows ?? []).map((row) => ({
+        ref: row,
+        crdName: `${row.resource}.${row.group}`,
+        status: 'Ready',
+        statusPresentation: 'ready',
+        age: '1d',
+        ...facts,
+      })) as never
+  );
 };
 
-const catalogItemToClusterCustomData = (item: CatalogItem) => catalogItemToFallbackCustomRow(item);
+/** The catalog's discovered families (core/navigation/useAvailableResourceViews.ts). */
+const discoverFamilies = (cluster: string[]) =>
+  app.snapshots.serve(
+    'catalog',
+    buildRefreshScope('catalog', {
+      clusterId: dev.clusterId,
+      selector: CLUSTER_SELECTOR,
+      query: 'limit=1',
+    }),
+    makeCatalogSnapshotPayload({
+      clusterId: dev.clusterId,
+      clusterName: dev.clusterName,
+      resourceFamilies: { cluster },
+    })
+  );
+
+const start = async (clusterView = 'custom') => {
+  view = await app.mountApp();
+  await view.goTo({ clusterView });
+};
+
+const tableRows = () => Array.from(view.container.querySelectorAll<HTMLElement>('.gridtable-row'));
+const rowOf = (name: string) =>
+  requireValue(
+    tableRows().find((row) => row.textContent?.includes(name)),
+    `expected the ${name} row`
+  );
+const cellOf = (name: string, column: string) =>
+  requireValue(
+    rowOf(name).querySelector<HTMLElement>(`.grid-cell[data-column="${column}"]`),
+    `expected the ${column} cell of ${name}`
+  );
+
+const lastCatalogScope = () =>
+  requireValue(
+    app.snapshots
+      .reads('catalog')
+      .filter((read) => read.scope.includes('limit=50'))
+      .slice(-1)[0],
+    'expected a custom-resource catalog page read'
+  ).scope;
+
+const menuItems = () =>
+  Array.from(document.body.querySelectorAll<HTMLElement>('[role="menu"] .context-menu-item'));
+const menuLabel = (item: HTMLElement) =>
+  item.querySelector('.context-menu-label')?.textContent?.trim();
+
+const chooseFromRowMenu = async (name: string, label: string) => {
+  await act(async () => {
+    cellOf(name, 'name').dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 })
+    );
+  });
+  await app.settle();
+  await act(async () =>
+    requireValue(
+      menuItems().find((item) => menuLabel(item) === label),
+      `expected the ${label} menu item`
+    ).click()
+  );
+  await app.settle();
+};
+
+const deleteConfirmation = () =>
+  Array.from(
+    document.body.querySelectorAll<HTMLButtonElement>('.confirmation-modal-footer button')
+  ).find((button) => button.textContent?.trim() === 'Delete');
+
+const opened = (identity: ObjectIdentity) => ({
+  ...identity,
+  clusterId: dev.clusterId,
+  clusterName: dev.clusterName,
+});
+
+beforeEach(() => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['team-a']);
+  app.startScreen(dev);
+  // The custom-resource views sit in the sidebar's Extensions group, collapsed by default.
+  app.preferences({ sidebarClusterExtensionsExpanded: true });
+  hydrate();
+});
 
 describe('ClusterViewCustom', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  it('lists cluster-scoped custom resources from the catalog, sorted as displayed, with hydrated status', async () => {
+    serveCatalog(() => [catalogItem(widget)]);
+    await start();
 
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    gridTablePropsRef.current = null as unknown as CapturedGridTableProps;
-    modalProps.current = null as unknown as ConfirmationProps;
-    persistedSortRef.current = null;
-    resetResourceInventoryRowCache();
-    openWithObjectMock.mockReset();
-    runObjectActionMock.mockReset();
-    useBrowseCatalogMock.mockReset();
-    useBrowseCatalogMock.mockReturnValue(browseCatalogResult());
-    useHydratedCustomCatalogRowsMock.mockReset();
-    useHydratedCustomCatalogRowsMock.mockImplementation(
-      (_clusterId: string, items: CatalogItem[]) => items.map(catalogItemToClusterCustomData)
-    );
-  });
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-  });
-
-  it('discards a pending object action when leaving a cluster extension', async () => {
-    const nodePool = catalogItemFromCustom({
-      ref: {
-        clusterId: 'cluster-a',
-        group: 'karpenter.sh',
-        version: 'v1',
-        kind: 'NodePool',
-        resource: 'nodepools',
-        namespace: '',
-        name: 'workers',
-      },
-    });
-    useBrowseCatalogMock.mockReturnValue(browseCatalogResult([nodePool]));
-    const renderRoute = async (activeTab: 'karpenter' | 'external-secrets') => {
-      await act(async () => root.render(<ClusterResourcesViews activeTab={activeTab} />));
-    };
-    await renderRoute('karpenter');
-    const grid = gridTablePropsRef.current;
-    const remove = grid
-      .getCustomContextMenuItems(grid.data[0], 'name')
-      .find((item) => item.actionId === OBJECT_ACTION_IDS.delete);
-    act(() => requireValue(remove?.onClick, 'expected the delete action')());
-    expect(modalProps.current.isOpen).toBe(true);
-
-    await renderRoute('karpenter');
-    expect(modalProps.current.isOpen).toBe(true);
-    await renderRoute('external-secrets');
-    expect(modalProps.current.isOpen).toBe(false);
-    await renderRoute('karpenter');
-    expect(modalProps.current.isOpen).toBe(false);
-    expect(runObjectActionMock).not.toHaveBeenCalled();
-  });
-
-  it('leads generic custom resources with the identity columns followed by Status', async () => {
-    await act(async () => {
-      root.render(<ClusterViewCustom />);
-    });
-
-    expect(gridTablePropsRef.current.columns.map((column) => column.header)).toEqual([
-      'Kind',
-      'Name',
-      'Status',
-      'CRD',
-      'Age',
+    const scope = lastCatalogScope();
+    expect(scope.startsWith(`${dev.clusterId}|`)).toBe(true);
+    expect(scope).toContain('customOnly=true');
+    expect(scope).toContain('resourceScope=cluster');
+    // The header shows Name ascending by default; the catalog must sort the same way.
+    expect(scope).toContain('sort=name&sortDirection=asc');
+    expect(app.backend.calls('HydrateCatalogCustomRows')).toEqual([
+      [
+        dev.clusterId,
+        [
+          {
+            clusterId: dev.clusterId,
+            group: 'example.com',
+            version: 'v1',
+            kind: 'Widget',
+            resource: 'widgets',
+            name: 'gizmo',
+            uid: 'gizmo-uid',
+          },
+        ],
+      ],
     ]);
+    expect(cellOf('gizmo', 'status').textContent).toBe('Ready');
+    expect(cellOf('gizmo', 'crd').textContent).toBe('widgets.example.com');
   });
 
-  it('scopes Karpenter queries and renders the resource-specific columns', async () => {
-    await act(async () => {
-      root.render(<ClusterViewCustom resourceFamily="karpenter" />);
-    });
-    expect(useBrowseCatalogMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        resourceFamily: 'karpenter',
-        clusterScopedOnly: true,
-        clusterId: 'cluster-a',
-      })
+  it('queries the catalog with the user’s persisted sort', async () => {
+    const storageKey =
+      buildGridTableStorageKey({
+        clusterHash: await computeClusterHash(dev.clusterId),
+        viewId: 'cluster-custom',
+      }) ?? '';
+    // backend/ui_state_store_persistence.go GetGridTablePersistence: saved table states.
+    app.backend.answer(
+      'GetGridTablePersistence',
+      () => ({ [storageKey]: { version: 3, sort: { key: 'age', direction: 'desc' } } }) as never
     );
-    const columns = gridTablePropsRef.current.columns;
-    expect(columns.map((column) => column.header)).toEqual([
-      'Kind',
-      'Name',
-      'Status',
-      'Usage',
-      'NodePool',
-      'NodeClass',
-      'Instance Type',
-      'Age',
-    ]);
+    serveCatalog(() => [catalogItem(widget)]);
+    await start();
+
+    expect(lastCatalogScope()).toContain('sort=age&sortDirection=desc');
   });
 
-  it('renders the errored empty state for a catalog error (details report via toasts)', async () => {
-    useBrowseCatalogMock.mockReturnValue({
-      ...browseCatalogResult(),
-      hasLoadedOnce: false,
-      error: 'catalog list forbidden',
+  it('offers every kind the catalog reports in the Kinds filter, not only the loaded page’s', async () => {
+    serveCatalog(() => [catalogItem(widget)], {
+      kinds: [
+        { kind: 'DBCluster', namespaced: false },
+        { kind: 'Widget', namespaced: false },
+      ],
     });
+    await start();
 
-    await act(async () => {
-      root.render(<ClusterViewCustom />);
-      await Promise.resolve();
-    });
-
-    // No in-table banner exists. A permission-classified catalog error reads
-    // as the designed permission state; non-permission errors keep the
-    // "Unable to load data" treatment (covered by the inventory-table tests).
-    expect(container.querySelector('[role="alert"]')).toBeNull();
-    expect(gridTablePropsRef.current?.emptyMessage).toBe('Insufficient permissions');
-  });
-
-  it('passes the unfiltered total through to the filter options', async () => {
-    useBrowseCatalogMock.mockReturnValue({
-      ...browseCatalogResult([catalogItemFromCustom(baseCustom)]),
-      totalCount: 1,
-      unfilteredTotal: 25,
-    });
-
-    await act(async () => {
-      root.render(<ClusterViewCustom loaded={true} />);
-      await Promise.resolve();
-    });
-
-    expect(gridTablePropsRef.current?.filters?.options?.unfilteredTotal).toBe(25);
-  });
-
-  it('replays the last rows on revisit instead of a cold spinner', async () => {
-    useBrowseCatalogMock.mockReturnValue(browseCatalogResult([catalogItemFromCustom(baseCustom)]));
-
-    await act(async () => {
-      root.render(<ClusterViewCustom loaded={true} />);
-      await Promise.resolve();
-    });
-    expect(gridTablePropsRef.current?.data).toHaveLength(1);
-
-    act(() => {
-      root.unmount();
-    });
-    root = ReactDOM.createRoot(container);
-
-    // Revisit: the catalog restarts cold (no rows, loading). The controller
-    // must replay the previous rows instead of blanking to a spinner.
-    useBrowseCatalogMock.mockReturnValue({
-      ...browseCatalogResult([]),
-      loading: true,
-      hasLoadedOnce: false,
-    });
-    await act(async () => {
-      root.render(<ClusterViewCustom />);
-      await Promise.resolve();
-    });
-
-    expect(gridTablePropsRef.current?.data).toHaveLength(1);
-  });
-
-  it('queries the catalog with the displayed default sort when no sort is persisted', async () => {
-    // The header arrow shows name-ascending by default; the catalog query must
-    // sort the same way or the rows render in backend kind-grouped order under
-    // a lying indicator.
-    await act(async () => {
-      root.render(<ClusterViewCustom loaded={true} />);
-      await Promise.resolve();
-    });
-
-    expect(useBrowseCatalogMock).toHaveBeenCalledWith(
-      expect.objectContaining({ sort: { key: 'name', direction: 'asc' } })
+    const trigger = requireValue(
+      view.container
+        .querySelector('[name="gridtable-filter-kind"]')
+        ?.parentElement?.querySelector<HTMLButtonElement>('button.dropdown-trigger'),
+      'expected the Kinds filter'
     );
-  });
-
-  it('queries the catalog with the persisted user sort when one exists', async () => {
-    persistedSortRef.current = { key: 'age', direction: 'desc' };
-
-    await act(async () => {
-      root.render(<ClusterViewCustom loaded={true} />);
-      await Promise.resolve();
-    });
-
-    expect(useBrowseCatalogMock).toHaveBeenCalledWith(
-      expect.objectContaining({ sort: { key: 'age', direction: 'desc' } })
+    await act(async () => trigger.click());
+    await app.settle();
+    const menu = requireValue(
+      document.getElementById(trigger.getAttribute('aria-controls') ?? ''),
+      'expected the Kinds menu'
     );
+
+    expect(
+      Array.from(menu.querySelectorAll('.dropdown-option')).map((option) =>
+        option.textContent?.trim()
+      )
+    ).toEqual(['DBCluster', 'Widget']);
   });
 
-  it('passes metadata to the object panel when opening a resource', async () => {
-    useBrowseCatalogMock.mockReturnValue(browseCatalogResult([catalogItemFromCustom(baseCustom)]));
+  it('sorts only by fields the catalog can sort, not by hydrated CRD or status', async () => {
+    serveCatalog(() => [catalogItem(widget)]);
+    await start();
 
-    await act(async () => {
-      root.render(<ClusterViewCustom loaded={true} />);
-      await Promise.resolve();
-    });
-
-    const props = gridTablePropsRef.current;
-    expect(props).toBeTruthy();
-    expect(props.data).toEqual([
-      expect.objectContaining({
-        ref: expect.objectContaining({
-          kind: 'Widget',
-          name: 'gizmo',
-          clusterId: 'alpha:ctx',
-          group: 'example.com',
-          version: 'v1',
-        }),
-        crdName: 'widgets.example.com',
-        ageTimestamp: expect.any(Number),
-      }),
-    ]);
-    expect(props.data[0].age).toBeUndefined();
-
-    requireValue(
-      props.getCustomContextMenuItems(props.data[0], 'kind')[0]?.onClick,
-      'expected the cluster custom-resource details action'
-    )();
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'Widget',
-        name: 'gizmo',
-        ageTimestamp: props.data[0].ageTimestamp,
-        clusterId: 'alpha:ctx',
-        group: 'example.com',
-        version: 'v1',
-      })
-    );
+    const sortable = Array.from(
+      view.container.querySelectorAll<HTMLElement>('.grid-cell-header[data-sortable="true"]')
+    ).map((header) => header.dataset.column);
+    expect(sortable).toEqual(['kind', 'name', 'age']);
   });
 
-  it('uses the catalog query current page on first render', async () => {
-    const queryItem = catalogItemFromCustom({
-      ...baseCustom,
-      ref: { ...baseCustom.ref, name: 'query-widget', clusterId: 'cluster-a' },
-    });
-    useBrowseCatalogMock.mockReturnValue(browseCatalogResult([queryItem]));
+  it('opens a resource with its group and version so colliding kinds stay distinct', async () => {
+    app.servePanel(dev, dbCluster);
+    serveCatalog(() => [catalogItem(dbCluster)]);
+    await start();
 
-    await act(async () => {
-      root.render(<ClusterViewCustom loaded={true} />);
-      await Promise.resolve();
-    });
+    await chooseFromRowMenu('shared-pg', 'Open Details');
 
-    expect(useHydratedCustomCatalogRowsMock).toHaveBeenCalledWith('cluster-a', [queryItem]);
-    expect(gridTablePropsRef.current?.data).toEqual([
-      expect.objectContaining({
-        ref: expect.objectContaining({
-          kind: 'Widget',
-          name: 'query-widget',
-          clusterId: 'cluster-a',
-          group: 'example.com',
-          version: 'v1',
-        }),
-        crdName: 'widgets.example.com',
-      }),
-    ]);
-    expect(gridTablePropsRef.current?.data).not.toEqual([
-      expect.objectContaining({ ref: expect.objectContaining({ name: 'stale-local-widget' }) }),
-    ]);
+    expect(view.openPanels()).toEqual([opened(dbCluster)]);
   });
 
-  it('shows the kind dropdown for custom resources', async () => {
-    await act(async () => {
-      root.render(<ClusterViewCustom loaded={true} />);
-      await Promise.resolve();
-    });
-
-    const props = gridTablePropsRef.current;
-    expect(props?.filters?.options?.showKindDropdown).toBe(true);
-    // Export is now the unified frontend fetcher (the GridTable filter bar wires the Copy/Export
-    // cluster from it), not a server-side per-action catalog export.
-    expect(typeof props?.fetchAllRows).toBe('function');
-  });
-
-  it('uses catalog facet metadata instead of deriving kinds from loaded rows', async () => {
-    useBrowseCatalogMock.mockReturnValue({
-      ...browseCatalogResult(),
-      filterOptions: {
-        kinds: ['DBCluster', 'Widget'],
-        namespaces: [],
-        partialDataLabel: 'Catalog health: Catalog data may be stale.',
-      },
-    });
-
-    await act(async () => {
-      root.render(<ClusterViewCustom loaded={true} />);
-      await Promise.resolve();
-    });
-
-    const props = gridTablePropsRef.current;
-    expect(props?.filters?.options?.kinds).toEqual(['DBCluster', 'Widget']);
-    expect(props?.filters?.options?.partialDataLabel).toContain('Catalog health');
-  });
-
-  it('renders hydrated custom-resource status and metadata for the current page', async () => {
-    useBrowseCatalogMock.mockReturnValue(browseCatalogResult([catalogItemFromCustom(baseCustom)]));
-    useHydratedCustomCatalogRowsMock.mockReturnValue([
-      {
-        ...baseCustom,
-        crdName: 'widgets.example.com',
-        status: 'Ready',
-        statusState: 'Ready',
-        statusPresentation: 'ready',
-      },
-    ]);
-
-    await act(async () => {
-      root.render(<ClusterViewCustom loaded={true} />);
-      await Promise.resolve();
-    });
-
-    const props = gridTablePropsRef.current;
-    expect(props?.data?.[0]).toEqual(
-      expect.objectContaining({
-        status: 'Ready',
-        statusPresentation: 'ready',
-        labels: { env: 'prod' },
-        annotations: { owner: 'custom-team' },
-      })
-    );
-  });
-
-  // Regression test mirroring NsViewCustom's colliding-CRD guardrail.
-  // The cluster-scoped custom view has
-  // the same bug potential: if handleResourceClick drops group/version,
-  // a cluster-scoped custom resource whose Kind collides with another CRD
-  // group would open against the wrong GVR.
-  it('forwards group and version into openWithObject for colliding CRDs', async () => {
-    const clusterScopedCR = {
-      ref: {
-        clusterId: 'alpha:ctx',
-        group: 'postgresql.cnpg.io',
-        version: 'v1',
-        kind: 'DBCluster',
-        resource: 'dbclusters',
-        namespace: '',
-        name: 'shared-pg',
-      },
-      kind: 'DBCluster',
-      name: 'shared-pg',
-      namespace: '',
-      group: 'postgresql.cnpg.io',
+  it('opens the owning CRD from the CRD link', async () => {
+    const crd: ObjectIdentity = {
+      group: 'apiextensions.k8s.io',
       version: 'v1',
-      age: '3d',
-      clusterId: 'alpha:ctx',
-      clusterName: 'alpha',
-      labels: {},
-      annotations: {},
-    };
-
-    await act(async () => {
-      root.render(<ClusterViewCustom loaded={true} />);
-      await Promise.resolve();
-    });
-
-    const props = gridTablePropsRef.current;
-    expect(props).toBeTruthy();
-
-    requireValue(
-      props.getCustomContextMenuItems(clusterScopedCR, 'kind')[0]?.onClick,
-      'expected the cluster custom-resource details action'
-    )();
-
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'DBCluster',
-        name: 'shared-pg',
-        clusterId: 'alpha:ctx',
-        group: 'postgresql.cnpg.io',
-        version: 'v1',
-      })
-    );
-
-    const callArg = openWithObjectMock.mock.calls.find(
-      ([arg]) => (arg as { name?: string }).name === 'shared-pg'
-    )?.[0] as Record<string, unknown>;
-    expect(callArg).toBeDefined();
-    expect(callArg.group).toBe('postgresql.cnpg.io');
-    expect(callArg.version).toBe('v1');
-  });
-
-  // Regression test for the delete-path leg of the kind-only-objects bug
-  // ( "I Should Have Done This Without Having
-  // To Be Asked" item 2). Mirrors NsViewCustom's delete guardrail for the
-  // cluster-scoped custom view.
-  it('routes delete through RunObjectAction when group/version are present', async () => {
-    runObjectActionMock.mockResolvedValue(undefined);
-
-    const clusterScopedCR = {
-      ref: {
-        clusterId: 'alpha:ctx',
-        group: 'postgresql.cnpg.io',
-        version: 'v1',
-        kind: 'DBCluster',
-        resource: 'dbclusters',
-        namespace: '',
-        name: 'shared-pg',
-      },
-      kind: 'DBCluster',
-      name: 'shared-pg',
+      kind: 'CustomResourceDefinition',
       namespace: '',
-      group: 'postgresql.cnpg.io',
-      version: 'v1',
-      age: '3d',
-      clusterId: 'alpha:ctx',
-      clusterName: 'alpha',
-      labels: {},
-      annotations: {},
+      name: 'dbclusters.postgresql.cnpg.io',
     };
+    app.servePanel(dev, crd);
+    serveCatalog(() => [catalogItem(dbCluster)]);
+    await start();
 
-    await act(async () => {
-      root.render(<ClusterViewCustom loaded={true} />);
-      await Promise.resolve();
-    });
-
-    const props = gridTablePropsRef.current;
-    expect(props).toBeTruthy();
-
-    const contextItems = props.getCustomContextMenuItems(clusterScopedCR, 'kind');
-    const deleteItem = contextItems.find(
-      (item: { label?: string; onClick?: () => void }) => item.label === 'Delete'
+    await act(async () =>
+      requireValue(
+        cellOf('shared-pg', 'crd').querySelector('button'),
+        'expected the CRD link'
+      ).click()
     );
-    await act(async () => {
-      deleteItem?.onClick?.();
-      await Promise.resolve();
-    });
-    expect(modalProps.current?.isOpen).toBe(true);
+    await app.settle();
 
-    await act(async () => {
-      await modalProps.current.onConfirm();
-    });
-
-    expect(runObjectActionMock).toHaveBeenCalledWith({
-      action: 'delete',
-      target: {
-        clusterId: 'alpha:ctx',
-        group: 'postgresql.cnpg.io',
-        version: 'v1',
-        kind: 'DBCluster',
-        namespace: '',
-        name: 'shared-pg',
-      },
-    });
+    expect(view.openPanels()).toEqual([opened(crd)]);
   });
 
-  // CRD column: each row gets a clickable cell that opens the owning
-  // CustomResourceDefinition in the object panel. Replaces the previous
-  // "API Group" column — `<plural>.<group>` is a strict superset of the
-  // group alone, and the click-through adds a navigation path the old
-  // column lacked. Mirrors NsViewCustom's CRD column tests.
-  describe('CRD column', () => {
-    const findColumn = (props: CapturedGridTableProps, key: string) =>
-      props.columns.find((column) => column.key === key);
-    const requireColumn = (props: CapturedGridTableProps, key: string) =>
-      requireValue(findColumn(props, key), `expected the cluster custom-resource ${key} column`);
+  it('deletes a resource with its full identity after confirmation', async () => {
+    app.backend.answer('RunObjectAction', () => ({}) as never);
+    serveCatalog(() => [catalogItem(dbCluster)]);
+    await start();
 
-    const resourceWithCRD = {
-      ...baseCustom,
-      ref: {
-        ...baseCustom.ref,
-        kind: 'DBCluster',
-        name: 'shared-pg',
-        group: 'postgresql.cnpg.io',
-        version: 'v1',
-      },
-      crdName: 'dbclusters.postgresql.cnpg.io',
-    };
+    await chooseFromRowMenu('shared-pg', 'Delete');
+    expect(app.backend.calls('RunObjectAction')).toEqual([]);
+    await act(async () => requireValue(deleteConfirmation(), 'expected the confirmation').click());
+    await app.settle();
 
-    const renderWith = async (rows: CatalogBackedCustomResourceRow[]) => {
-      useBrowseCatalogMock.mockReturnValue(
-        browseCatalogResult(rows.map((row) => catalogItemFromCustom(row)))
-      );
-      await act(async () => {
-        root.render(<ClusterViewCustom loaded={true} />);
-        await Promise.resolve();
+    expect(app.backend.calls('RunObjectAction')).toEqual([
+      [{ action: 'delete', target: { ...dbCluster, clusterId: dev.clusterId } }],
+    ]);
+  });
+
+  it('names a permission denial when the catalog refuses the read', async () => {
+    app.snapshots.respond((request) =>
+      isCustomCatalogRead(request)
+        ? statusResponse(makeErrorStatus('Forbidden', 'catalog list forbidden'))
+        : undefined
+    );
+    await start();
+
+    expect(tableRows()).toEqual([]);
+    expect(view.container.textContent).toContain('Insufficient permissions');
+    // A denial is an expected outcome: the app reports it without a toast.
+    const reports = app.errors.records();
+    expect(reports).not.toEqual([]);
+    expect(
+      reports.every((record) => record.kinds.every((kind) => kind === 'expected-denial'))
+    ).toBe(true);
+  });
+
+  it('replays the last page on revisit while the catalog reloads', async () => {
+    serveCatalog(() => [catalogItem(widget)]);
+    await start();
+    await view.goTo({ clusterView: 'overview' });
+
+    // The revisit's catalog reads stay in flight.
+    const parked: Array<() => void> = [];
+    app.snapshots.respond((request) =>
+      isCustomCatalogRead(request)
+        ? new Promise<Response>((resolve) => {
+            parked.push(() =>
+              resolve(
+                snapshotResponse({
+                  ...request,
+                  version: 100,
+                  payload: catalogPage([catalogItem(widget)]),
+                })
+              )
+            );
+          })
+        : undefined
+    );
+    await view.goTo({ clusterView: 'custom' });
+
+    expect(parked).not.toEqual([]);
+    expect(tableRows().map((row) => row.textContent)).toEqual([expect.stringContaining('gizmo')]);
+    app.snapshots.respond(null);
+    await act(async () => {
+      parked.splice(0).forEach((answer) => {
+        answer();
       });
-    };
-
-    it('replaces the API Group column with a CRD column', async () => {
-      await renderWith([resourceWithCRD]);
-
-      const props = gridTablePropsRef.current;
-      // Old column is gone…
-      expect(findColumn(props, 'apiGroup')).toBeUndefined();
-      // …replaced with the new CRD column.
-      const crdCol = requireColumn(props, 'crd');
-      expect(crdCol).toBeTruthy();
-      expect(crdCol.header).toBe('CRD');
     });
+    await app.settle();
+  });
 
-    it('renders the CRD cell with the row crdName as a clickable link', async () => {
-      await renderWith([resourceWithCRD]);
+  it('queries only Karpenter resources in its view and shows their Karpenter facts', async () => {
+    discoverFamilies(['karpenter']);
+    hydrate({ karpenter: { instanceType: 'm5.large' } });
+    serveCatalog(() => [catalogItem(nodePool)]);
+    await start('karpenter');
 
-      const props = gridTablePropsRef.current;
-      const crdCol = requireColumn(props, 'crd');
-      const rendered = requireReactElement<{
-        role?: string;
-        children?: React.ReactNode;
-        title?: string;
-      }>(crdCol.render(resourceWithCRD), 'expected the cluster CRD link element');
+    expect(lastCatalogScope()).toContain('resourceFamily=karpenter');
+    expect(cellOf('workers', 'instanceType').textContent).toBe('m5.large');
+  });
 
-      expect(rendered.type).toBe('button');
-      expect(rendered.props.role).toBeUndefined();
-      expect(rendered.props.children).toBe('dbclusters.postgresql.cnpg.io');
-      expect(rendered.props.title).toBe('Open dbclusters.postgresql.cnpg.io');
-    });
+  it('discards a pending object action when the user leaves an extension view', async () => {
+    discoverFamilies(['karpenter', 'external-secrets']);
+    app.backend.answer('RunObjectAction', () => ({}) as never);
+    serveCatalog(() => [catalogItem(nodePool)]);
+    await start('karpenter');
+    await chooseFromRowMenu('workers', 'Delete');
+    expect(deleteConfirmation()).toBeDefined();
 
-    it('opens the CRD in the object panel when the CRD cell is clicked', async () => {
-      await renderWith([resourceWithCRD]);
+    await view.goTo({ clusterView: 'external-secrets' });
+    await view.goTo({ clusterView: 'karpenter' });
 
-      const props = gridTablePropsRef.current;
-      const crdCol = requireColumn(props, 'crd');
-      const rendered = requireReactElement<{
-        onClick?: (event: {
-          altKey: boolean;
-          preventDefault: () => void;
-          stopPropagation: () => void;
-        }) => void;
-      }>(crdCol.render(resourceWithCRD), 'expected the cluster CRD link element');
-
-      openWithObjectMock.mockClear();
-      const onClick = requireValue(
-        rendered.props.onClick,
-        'expected the cluster CRD click handler'
-      );
-      onClick({ altKey: false, preventDefault: () => undefined, stopPropagation: () => undefined });
-
-      expect(openWithObjectMock).toHaveBeenCalledTimes(1);
-      const callArg = openWithObjectMock.mock.calls[0][0] as Record<string, unknown>;
-      expect(callArg.kind).toBe('CustomResourceDefinition');
-      expect(callArg.name).toBe('dbclusters.postgresql.cnpg.io');
-      // The CRD is a built-in — apiextensions.k8s.io/v1.
-      expect(callArg.group).toBe('apiextensions.k8s.io');
-      expect(callArg.version).toBe('v1');
-      // CRDs are cluster-scoped — no namespace on the ref.
-      expect(callArg.namespace).toBeUndefined();
-      expect(callArg.clusterId).toBe('alpha:ctx');
-      expect(callArg.clusterName).toBe('alpha');
-    });
-
-    it('does not expose hydrated custom-resource fields as query-backed sort keys', async () => {
-      // Custom-resource rows are page-selected by the object catalog before
-      // CRD/status are hydrated. Those fields cannot be globally sorted by
-      // the query backend, so the columns must not advertise sorting.
-      await renderWith([resourceWithCRD]);
-
-      const props = gridTablePropsRef.current;
-      const crdCol = requireColumn(props, 'crd');
-      const statusCol = requireColumn(props, 'status');
-      expect(crdCol.sortable).toBe(false);
-      expect(statusCol.sortable).toBe(false);
-
-      // Keep the local extractor intact for defensive consumers, but do not
-      // make this a query-backed sortable column.
-      expect(crdCol.sortValue).toBeTypeOf('function');
-      const sortValue = requireValue(crdCol.sortValue, 'expected the cluster CRD sort accessor');
-      expect(sortValue(resourceWithCRD)).toBe('dbclusters.postgresql.cnpg.io');
-
-      const noCRD = { ...baseCustom };
-      expect(sortValue(noCRD)).toBe('');
-    });
-
-    it('publishes only catalog-backed sortable keys', async () => {
-      await renderWith([resourceWithCRD]);
-
-      const props = gridTablePropsRef.current;
-      const sortableKeys = props.columns
-        .filter((column) => column.sortable !== false)
-        .map((column) => column.key)
-        .sort((left: string, right: string) => left.localeCompare(right));
-
-      expect(sortableKeys).toEqual(['age', 'kind', 'name']);
-    });
-
-    it('renders the CRD cell as inert text when crdName is missing', async () => {
-      // Defensive: a row from a legacy snapshot that pre-dates the
-      // CRDName field. Cell should render the bare "-" placeholder
-      // with no click handler and no openWithObject call.
-      const noCRD = { ...baseCustom };
-      await renderWith([noCRD]);
-
-      const props = gridTablePropsRef.current;
-      const crdCol = requireColumn(props, 'crd');
-      const rendered = crdCol.render(noCRD);
-      expect(rendered).toBe('-');
-    });
-
-    it('uses backend statusPresentation for custom-resource status styling', async () => {
-      const resource = {
-        ...resourceWithCRD,
-        status: 'Ready',
-        statusState: 'true',
-        statusPresentation: 'ready',
-      };
-      await renderWith([resource]);
-
-      const props = gridTablePropsRef.current;
-      const statusCol = requireColumn(props, 'status');
-      const rendered = requireReactElement<{
-        children?: React.ReactNode;
-        className?: string;
-      }>(statusCol.render(resource), 'expected the cluster custom-resource status element');
-
-      expect(rendered.props.children).toBe('Ready');
-      expect(rendered.props.className).toBe('status-text ready');
-    });
+    expect(deleteConfirmation()).toBeUndefined();
+    expect(app.backend.calls('RunObjectAction')).toEqual([]);
   });
 });

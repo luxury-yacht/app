@@ -25,7 +25,6 @@ const resourceStreamRegistration: OrchestratorRegistrationBuilder = (domain) => 
     stop: (scope, options) => resourceStreamManager.stop(domain, scope, options?.reset ?? false),
     refreshOnce: (scope) =>
       settleStreamOperation(() => resourceStreamManager.refreshOnce(domain, scope)),
-    pauseRefresherWhenStreaming: true,
   };
 };
 
@@ -59,10 +58,8 @@ export function registerDefaultRefreshDomains(registrar: RefreshDomainRegistrar)
     const streaming = orchestratorRegistrationBuilders[policy.frontend.orchestrator](policy.domain);
     registrar.registerDomain({
       domain: policy.domain,
-      refresherName: policy.frontend.refresherName,
       category: policy.category,
       ...(streaming ? { streaming } : {}),
-      ...(policy.frontend.scheduled ? {} : { scheduled: false }),
     });
   }
 }

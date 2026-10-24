@@ -5,6 +5,7 @@
  * Encapsulates state and side effects for the shared components.
  */
 
+import { getAppZoomFactor } from '@shared/utils/appZoom';
 import { type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 
 // Keeps the header/body hover overlay aligned with the current row, while
@@ -87,10 +88,12 @@ export function useGridTableHoverSync({
       if (!wrapper) {
         return;
       }
+      // The overlay is placed in CSS pixels; rects are zoomed under page zoom.
+      const zoom = getAppZoomFactor();
       const wrapperRect = wrapper.getBoundingClientRect();
       const rowRect = element.getBoundingClientRect();
-      const top = rowRect.top - wrapperRect.top + wrapper.scrollTop;
-      const height = rowRect.height;
+      const top = (rowRect.top - wrapperRect.top) / zoom + wrapper.scrollTop;
+      const height = rowRect.height / zoom;
       const selected = element.dataset.rowSelected === 'true';
       const focused = element.dataset.rowFocused === 'true';
       hoverRowRef.current = element;

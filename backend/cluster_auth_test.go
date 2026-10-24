@@ -10,7 +10,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -24,104 +23,43 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAuthFailureScanLeavesOtherClusterClientsAvailable(t *testing.T) {
-	authCallbackStarted := make(chan struct{})
-	releaseAuthCallback := make(chan struct{})
-	failureReported := make(chan struct{})
-	manager := authstate.New(authstate.Config{
-		OnStateChange: func(authstate.State, authstate.FailureDiagnostic) {
-			close(authCallbackStarted)
-			<-releaseAuthCallback
-		},
-	})
-	go func() {
-		manager.ReportFailure("credentials expired")
-		close(failureReported)
-	}()
-	<-authCallbackStarted
-	var releaseOnce sync.Once
-	release := func() {
-		releaseOnce.Do(func() { close(releaseAuthCallback) })
-		<-failureReported
-	}
-	defer manager.Shutdown()
-	defer release()
-
-	healthyClients := &clusterClients{meta: ClusterMeta{ID: "healthy"}}
-	clusterRuntime := &ClusterRuntimeManager{clusterClients: map[string]*clusterClients{
-		"recovering": {authManager: manager},
-		"healthy":    healthyClients,
-	}}
-	scanStarted := make(chan struct{})
-	scanResult := make(chan bool, 1)
-	go func() {
-		close(scanStarted)
-		scanResult <- clusterRuntime.anyClusterAuthInvalid()
-	}()
-	<-scanStarted
-
-	// Keep serving another cluster while the auth callback is busy. Repeated
-	// lookups give the concurrent scan a chance to reach the blocked manager.
-	lookupsFinished := make(chan struct{})
-	go func() {
-		defer close(lookupsFinished)
-		until := time.Now().Add(50 * time.Millisecond)
-		for time.Now().Before(until) {
-			if clusterRuntime.clusterClientsForID("healthy") != healthyClients {
-				t.Error("another cluster lost its installed clients during auth failure")
-				return
-			}
-			runtime.Gosched()
-		}
-	}()
-	select {
-	case <-lookupsFinished:
-	case <-time.After(time.Second):
-		t.Error("auth failure scan blocked access to another cluster's clients")
-	}
-
-	release()
-	require.True(t, <-scanResult)
-	<-lookupsFinished
-}
-
-type recoveryStartInformerHub struct {
+type recoveryStartFeedHub struct {
 	started chan struct{}
 	once    sync.Once
 }
 
-type blockingShutdownInformerHub struct {
+type blockingShutdownFeedHub struct {
 	shutdownStarted chan struct{}
 	releaseShutdown chan struct{}
 	startOnce       sync.Once
 	releaseOnce     sync.Once
 }
 
-func (*blockingShutdownInformerHub) Start(context.Context) error { return nil }
-func (*blockingShutdownInformerHub) HasSynced(context.Context) bool {
+func (*blockingShutdownFeedHub) Start(context.Context) error { return nil }
+func (*blockingShutdownFeedHub) HasSynced(context.Context) bool {
 	return true
 }
-func (*blockingShutdownInformerHub) ResourcesSettled([]string) bool { return true }
-func (h *blockingShutdownInformerHub) Shutdown() error {
+func (*blockingShutdownFeedHub) ResourcesSettled([]string) bool { return true }
+func (h *blockingShutdownFeedHub) Shutdown() error {
 	h.startOnce.Do(func() { close(h.shutdownStarted) })
 	<-h.releaseShutdown
 	return nil
 }
 
-func (h *blockingShutdownInformerHub) release() {
+func (h *blockingShutdownFeedHub) release() {
 	h.releaseOnce.Do(func() { close(h.releaseShutdown) })
 }
 
-func (h *recoveryStartInformerHub) Start(context.Context) error {
+func (h *recoveryStartFeedHub) Start(context.Context) error {
 	h.once.Do(func() { close(h.started) })
 	return nil
 }
 
-func (*recoveryStartInformerHub) HasSynced(context.Context) bool { return true }
-func (*recoveryStartInformerHub) ResourcesSettled([]string) bool { return true }
-func (*recoveryStartInformerHub) Shutdown() error                { return nil }
+func (*recoveryStartFeedHub) HasSynced(context.Context) bool { return true }
+func (*recoveryStartFeedHub) ResourcesSettled([]string) bool { return true }
+func (*recoveryStartFeedHub) Shutdown() error                { return nil }
 
-func (h *recoveryStartInformerHub) isStarted() bool {
+func (h *recoveryStartFeedHub) isStarted() bool {
 	select {
 	case <-h.started:
 		return true
@@ -246,7 +184,7 @@ func TestClusterClientsAuthInvalid(t *testing.T) {
 // When the first selected cluster fails authentication, refresh setup never
 // runs and the refresh lifetime remains absent. Recovery must create that runtime before it
 // starts the rebuilt manager; otherwise the HTTP/catalog shell comes up around
-// stopped informers and the cluster remains loading_slow forever.
+// stopped reflectors and the cluster remains loading_slow forever.
 func TestClusterSubsystemRebuildStartsMissingRefreshRuntimeBeforeReadiness(t *testing.T) {
 	const clusterID = "cluster-a"
 	app := newWorkspaceCoordinatorTestFixture(t)
@@ -261,7 +199,7 @@ func TestClusterSubsystemRebuildStartsMissingRefreshRuntimeBeforeReadiness(t *te
 	app.ClusterRuntime.clusterLifecycle.SetState(clusterID, ClusterStateLoading)
 	require.Nil(t, app.Refresh.currentRefreshRuntimeContext(), "precondition: initial auth failure left refresh uninitialised")
 
-	hub := &recoveryStartInformerHub{started: make(chan struct{})}
+	hub := &recoveryStartFeedHub{started: make(chan struct{})}
 	service := stubSnapshotService{build: func(context.Context, string, string) (*refresh.Snapshot, error) {
 		return &refresh.Snapshot{
 			Domain:  "namespaces",
@@ -313,7 +251,7 @@ func TestClusterSubsystemRebuildDoesNotPublishWhenRefreshRuntimeStopped(t *testi
 	require.NotNil(t, app.Refresh.ensureRefreshRuntimeContext())
 	app.Refresh.stopRefreshRuntimeContext()
 
-	hub := &recoveryStartInformerHub{started: make(chan struct{})}
+	hub := &recoveryStartFeedHub{started: make(chan struct{})}
 	subsystem := &system.Subsystem{Manager: refresh.NewManager(nil, hub, nil, nil, nil)}
 	rebuild := clusterSubsystemRebuild{refresh: app.Refresh, clusterID: "cluster-a", clusterName: "Cluster A"}
 	published := rebuild.activateSubsystem(&clusterClients{meta: ClusterMeta{ID: "cluster-a", Name: "Cluster A"}}, subsystem)
@@ -334,7 +272,7 @@ func TestClusterSubsystemRebuildPublishesAfterManagerStartIsScheduled(t *testing
 	setRefreshServiceReadyForTest(app.Refresh)
 	app.Refresh.refreshAggregates.Store(&refreshAggregateHandlers{})
 
-	hub := &recoveryStartInformerHub{started: make(chan struct{})}
+	hub := &recoveryStartFeedHub{started: make(chan struct{})}
 	subsystem := &system.Subsystem{Manager: refresh.NewManager(nil, hub, nil, nil, nil)}
 	clients := &clusterClients{meta: ClusterMeta{ID: "cluster-a", Name: "Cluster A"}}
 	rebuild := clusterSubsystemRebuild{refresh: app.Refresh, clusterID: "cluster-a", clusterName: "Cluster A"}
@@ -382,15 +320,15 @@ func TestClusterSubsystemRebuildRoutesReplacementBeforeStoppingPrevious(t *testi
 	require.NotNil(t, app.Refresh.ensureRefreshRuntimeContext())
 	setRefreshServiceReadyForTest(app.Refresh)
 
-	oldStream := resourcestream.NewManager(nil, nil, nil, snapshot.ClusterMeta{ClusterID: clusterID}, nil)
-	newStream := resourcestream.NewManager(nil, nil, nil, snapshot.ClusterMeta{ClusterID: clusterID}, nil)
+	oldStream := resourcestream.NewManager(nil, nil, snapshot.ClusterMeta{ClusterID: clusterID}, nil)
+	newStream := resourcestream.NewManager(nil, nil, snapshot.ClusterMeta{ClusterID: clusterID}, nil)
 	resources, err := newAggregateResourceStreamHandler(map[string]*system.Subsystem{
 		clusterID: {ResourceStream: oldStream},
 	}, nil, nil)
 	require.NoError(t, err)
 	app.Refresh.refreshAggregates.Store(&refreshAggregateHandlers{resources: resources})
 
-	oldHub := &blockingShutdownInformerHub{
+	oldHub := &blockingShutdownFeedHub{
 		shutdownStarted: make(chan struct{}),
 		releaseShutdown: make(chan struct{}),
 	}
@@ -427,7 +365,7 @@ func TestClusterSubsystemRebuildRoutesReplacementBeforeStoppingPrevious(t *testi
 	select {
 	case <-catalogStopped:
 	default:
-		t.Error("old informer shutdown started before its catalog stopped")
+		t.Error("old feed shutdown started before its catalog stopped")
 	}
 
 	oldHub.release()

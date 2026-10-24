@@ -1,9 +1,8 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelFeatureSupport.test.tsx
- */
-
-/**
- * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelFeatureSupport.test.tsx
+ *
+ * The panel features a kind supports come from the generated kind facets, matched
+ * by the object's complete identity.
  */
 
 import type React from 'react';
@@ -11,25 +10,28 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
-import type { ResourceCapability } from '../types';
+import type { PanelObjectData } from '../types';
 import { useObjectPanelFeatureSupport } from './useObjectPanelFeatureSupport';
 
 type HookResult = ReturnType<typeof useObjectPanelFeatureSupport>;
+
+const ref = (group: string, version: string, kind: string): PanelObjectData => ({
+  clusterId: 'cluster-a',
+  group,
+  version,
+  kind,
+  namespace: 'team-a',
+  name: 'example',
+});
 
 describe('useObjectPanelFeatureSupport', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
   const resultRef: { current: HookResult | null } = { current: null };
 
-  const capabilities: Record<string, ResourceCapability> = {
-    deployment: { objPanelLogs: true, restart: true, scale: true, delete: true },
-    node: { nodeLogs: true },
-    helmrelease: { delete: true },
-  };
-
-  const renderHook = async (objectKind: string | null, isHelmRelease = false) => {
+  const renderHook = async (objectData: PanelObjectData | null) => {
     const HookHarness: React.FC = () => {
-      resultRef.current = useObjectPanelFeatureSupport(objectKind, capabilities, isHelmRelease);
+      resultRef.current = useObjectPanelFeatureSupport(objectData);
       return null;
     };
 
@@ -58,109 +60,46 @@ describe('useObjectPanelFeatureSupport', () => {
     container.remove();
   });
 
-  it('returns disabled features when kind is unknown', async () => {
-    const result = await renderHook(null);
-
-    expect(result).toEqual({
-      objPanelLogs: false,
-      nodeLogs: false,
-      manifest: false,
-      values: false,
-      delete: false,
-      restart: false,
-      scale: false,
+  it('supports nothing without an object', async () => {
+    expect(await renderHook(null)).toEqual({
+      logs: 'none',
+      shell: 'none',
+      debug: false,
       edit: false,
-      shell: false,
-      debug: false,
-      trigger: false,
-      suspend: false,
     });
   });
 
-  it('mirrors configuration flags for known workloads', async () => {
-    const result = await renderHook('deployment');
-
-    expect(result).toEqual({
-      objPanelLogs: true,
-      nodeLogs: false,
-      manifest: false,
-      values: false,
-      delete: true,
-      restart: true,
-      scale: true,
-      edit: true,
-      shell: false,
-      debug: false,
-      trigger: false,
-      suspend: false,
-    });
-  });
-
-  it('enables manifest and values for Helm releases', async () => {
-    const result = await renderHook('helmrelease', true);
-
-    expect(result).toEqual({
-      objPanelLogs: false,
-      nodeLogs: false,
-      manifest: true,
-      values: true,
-      delete: true,
-      restart: false,
-      scale: false,
-      edit: true,
-      shell: false,
-      debug: false,
-      trigger: false,
-      suspend: false,
-    });
-  });
-
-  it('does not enable Helm CLI tabs for real HelmRelease custom resources', async () => {
-    const result = await renderHook('helmrelease', false);
-
-    expect(result).toMatchObject({
-      manifest: false,
-      values: false,
-      delete: true,
+  it('reads a pod’s logs, shell, and debug containers', async () => {
+    expect(await renderHook(ref('', 'v1', 'Pod'))).toEqual({
+      logs: 'pod',
+      shell: 'exec',
+      debug: true,
       edit: true,
     });
   });
 
-  it('defaults to delete/edit for unlisted kinds', async () => {
-    const result = await renderHook('customkind');
-
-    expect(result).toEqual({
-      objPanelLogs: false,
-      nodeLogs: false,
-      manifest: false,
-      values: false,
-      delete: true,
-      restart: false,
-      scale: false,
-      edit: true,
-      shell: false,
-      debug: false,
-      trigger: false,
-      suspend: false,
+  it('reads a workload’s pod logs', async () => {
+    expect(await renderHook(ref('apps', 'v1', 'Deployment'))).toMatchObject({
+      logs: 'owned-pods',
+      shell: 'none',
     });
   });
 
-  it('enables node logs for nodes', async () => {
-    const result = await renderHook('node');
-
-    expect(result).toEqual({
-      objPanelLogs: false,
-      nodeLogs: true,
-      manifest: false,
-      values: false,
-      delete: false,
-      restart: false,
-      scale: false,
-      edit: true,
-      shell: false,
+  it('reads a node’s own logs and opens a node shell', async () => {
+    expect(await renderHook(ref('', 'v1', 'Node'))).toEqual({
+      logs: 'node',
+      shell: 'node',
       debug: false,
-      trigger: false,
-      suspend: false,
+      edit: true,
+    });
+  });
+
+  it('gives a custom resource named like a built-in kind none of its features', async () => {
+    expect(await renderHook(ref('batch.volcano.sh', 'v1alpha1', 'Job'))).toEqual({
+      logs: 'none',
+      shell: 'none',
+      debug: false,
+      edit: true,
     });
   });
 });

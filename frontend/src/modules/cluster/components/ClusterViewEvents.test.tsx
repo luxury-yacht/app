@@ -1,506 +1,218 @@
 /**
  * frontend/src/modules/cluster/components/ClusterViewEvents.test.tsx
  *
- * Test suite for ClusterViewEvents.
- * Covers key behaviors and edge cases for ClusterViewEvents.
+ * The cluster Events view: it queries the visible cluster's events newest
+ * first by default, opens the Event itself from Enter on its row or its Kind
+ * badge, opens the involved object from the Object Name link (resolving a
+ * custom resource's object through the catalog by UID when the Event carries
+ * no apiVersion, and opening nothing when that lookup fails), and opens
+ * nothing from a pointer click on the row. Every panel opens with complete
+ * object identity in the visible cluster. Runs in the full app, navigated
+ * through the sidebar, over a faked backend (test-utils/appState).
  */
 
-import ClusterViewEvents from '@modules/cluster/components/ClusterViewEvents';
-import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ClusterEventsSnapshotPayload } from '@/core/refresh/types';
-import type { SortConfig, UseTableSortOptions } from '@/hooks/useTableSort';
-import { makeResourceRef } from '@/test-utils/makeResourceRef';
-import { requireReactElement } from '@/test-utils/requireReactElement';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { objectcatalog } from '@/core/backend-api/models';
+import type { ClusterEventEntry } from '@/core/refresh/types';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type ObjectIdentity,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
 
-type GeneratedEventRow = NonNullable<ClusterEventsSnapshotPayload['rows']>[number];
-type EventRow = Omit<GeneratedEventRow, 'objectNamespace' | 'objectUid'> &
-  Partial<Pick<GeneratedEventRow, 'objectNamespace' | 'objectUid'>>;
-type BaseGridTableProps = GridTableProps<EventRow>;
-type CapturedGridTableProps = BaseGridTableProps & {
-  filters: NonNullable<BaseGridTableProps['filters']> & {
-    options: NonNullable<NonNullable<BaseGridTableProps['filters']>['options']>;
-  };
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
+
+const eventIdentity: ObjectIdentity = {
+  group: '',
+  version: 'v1',
+  kind: 'Event',
+  namespace: 'team-a',
+  name: 'api.17f',
+};
+const pod: ObjectIdentity = {
+  group: '',
+  version: 'v1',
+  kind: 'Pod',
+  namespace: 'team-a',
+  name: 'api',
+};
+const database: ObjectIdentity = {
+  group: 'db.example.io',
+  version: 'v1',
+  kind: 'Database',
+  namespace: 'team-a',
+  name: 'primary',
 };
 
-const { persistedSortRef, useTableSortMock } = vi.hoisted(() => ({
-  persistedSortRef: { current: null as SortConfig | null },
-  useTableSortMock: vi.fn(
-    (
-      data: EventRow[],
-      defaultKey?: string,
-      defaultDir?: SortConfig['direction'],
-      opts?: UseTableSortOptions<EventRow>
-    ) => {
-      const fallbackSort = defaultKey
-        ? { key: defaultKey, direction: defaultDir ?? 'asc' }
-        : { key: '', direction: null };
-      return {
-        sortedData: data,
-        sortConfig: opts?.controlledSort ?? fallbackSort,
-        handleSort: vi.fn(),
-      };
-    }
-  ),
-}));
-
-const openWithObjectMock = vi.fn();
-const findCatalogObjectByUIDMock = vi.fn();
-
-vi.mock('@core/contexts/FavoritesContext', () => ({
-  useFavorites: () => ({
-    favorites: [],
-
-    addFavorite: vi.fn(),
-    updateFavorite: vi.fn(),
-    deleteFavorite: vi.fn(),
-    reorderFavorites: vi.fn(),
-  }),
-  FavoritesProvider: ({ children }: { children: React.ReactNode }) => children,
-}));
-
-vi.mock('@ui/favorites/FavToggle', () => ({
-  useFavToggle: () => ({
-    type: 'toggle',
-    id: 'favorite',
-    icon: null,
-    active: false,
-    onClick: () => undefined,
-    title: 'Save as favorite',
-  }),
-}));
-
-const gridTablePropsRef: { current: CapturedGridTableProps } = {
-  current: null as unknown as CapturedGridTableProps,
-};
-
-vi.mock('@shared/components/tables/GridTable', async () => {
-  const actual = await vi.importActual<typeof import('@shared/components/tables/GridTable')>(
-    '@shared/components/tables/GridTable'
-  );
-  return {
-    ...actual,
-    default: (props: CapturedGridTableProps) => {
-      gridTablePropsRef.current = props;
-      return <div data-testid="grid-table" />;
-    },
-  };
-});
-
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: openWithObjectMock }),
-}));
-
-vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: vi.fn() }),
-}));
-
-vi.mock('@core/backend-api', () => ({
-  FindCatalogObjectByUID: (...args: unknown[]) => findCatalogObjectByUIDMock(...args),
-}));
-
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({
-    selectedKubeconfig: 'path:context',
-    selectedClusterId: 'cluster-a',
-    selectedClusterName: 'alpha',
-  }),
-}));
-
-vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
-  __esModule: true,
-  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
-
-vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (
-    data: EventRow[],
-    defaultKey?: string,
-    defaultDirection?: SortConfig['direction'],
-    options?: UseTableSortOptions<EventRow>
-  ) => useTableSortMock(data, defaultKey, defaultDirection, options),
-}));
-
-vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
-  useGridTablePersistence: () => ({
-    sortConfig: persistedSortRef.current,
-    setSortConfig: vi.fn(),
-    columnWidths: null,
-    setColumnWidths: vi.fn(),
-    columnVisibility: null,
-    setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [] },
-    setFilters: vi.fn(),
-    resetState: vi.fn(),
-    hydrated: true,
-    storageKey: 'gridtable:v1:test',
-  }),
-}));
-
-vi.mock('@/hooks/useShortNames', () => ({
-  useShortNames: () => false,
-}));
-
-const baseEvent: EventRow = {
+/**
+ * An Event row as backend/refresh/snapshot/cluster_events.go projects it: an
+ * openable involved-object link when the Event names an apiVersion.
+ */
+const podEvent = (): ClusterEventEntry => ({
   ref: {
-    ...makeResourceRef({
-      clusterId: 'test-cluster',
-      kind: 'Event',
-      resource: 'events',
-      namespace: 'team-a',
-      name: 'test',
-      uid: 'event-uid',
-    }),
-    kind: 'Event',
-    name: 'test',
+    ...eventIdentity,
+    clusterId: dev.clusterId,
+    resource: 'events',
     uid: 'event-uid',
-    namespace: 'team-a',
-    clusterId: 'test-cluster',
   },
-
   resourceVersion: '1',
-
+  objectKind: 'Pod',
+  objectName: 'api',
   objectNamespace: 'team-a',
   objectUid: 'pod-uid',
+  involvedObject: {
+    ref: { ...pod, clusterId: dev.clusterId, resource: 'pods', uid: 'pod-uid' },
+  },
   type: 'Warning',
   source: 'kubelet',
-  reason: 'Failed',
-  object: 'Pod/foo',
-  objectKind: 'Pod',
-  objectName: 'foo',
-  // The backend's openable link for a versioned involved object.
-  involvedObject: {
-    ref: {
-      clusterId: 'test-cluster',
-      group: '',
-      version: 'v1',
-      kind: 'Pod',
-      resource: 'pods',
-      namespace: 'team-a',
-      name: 'foo',
-      uid: 'pod-uid',
-    },
-  },
-  message: 'Something happened',
+  reason: 'BackOff',
+  object: 'Pod/api',
+  message: 'Back-off restarting failed container',
   age: '1m',
   ageTimestamp: 123,
+});
+
+/** The backend sends only a display link when the Event names no apiVersion. */
+const databaseEvent = (): ClusterEventEntry => ({
+  ...podEvent(),
+  objectKind: 'Database',
+  objectName: 'primary',
+  objectUid: 'database-uid',
+  object: 'Database/primary',
+  involvedObject: {
+    display: {
+      clusterId: dev.clusterId,
+      kind: 'Database',
+      namespace: 'team-a',
+      name: 'primary',
+      uid: 'database-uid',
+    },
+  },
+});
+
+const start = async (event: () => ClusterEventEntry = podEvent) => {
+  app.serveTable(dev, 'cluster-events', { rows: [event()] });
+  view = await app.mountApp();
+  await view.goTo({ clusterView: 'events' });
 };
 
+const eventRow = () =>
+  requireValue(
+    view.container.querySelector<HTMLElement>('.gridtable-row'),
+    'expected the event row'
+  );
+
+const cellOf = (column: string) =>
+  requireValue(
+    eventRow().querySelector<HTMLElement>(`.grid-cell[data-column="${column}"]`),
+    `expected the ${column} cell`
+  );
+
+const click = async (element: HTMLElement) => {
+  await act(async () => element.click());
+  await app.settle();
+};
+
+const clickObjectName = () =>
+  click(requireValue(cellOf('objectName').querySelector('button'), 'expected the object link'));
+
+const opened = (identity: ObjectIdentity) => ({
+  ...identity,
+  clusterId: dev.clusterId,
+  clusterName: dev.clusterName,
+});
+
+beforeEach(() => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['team-a']);
+  app.startScreen(dev);
+});
+
 describe('ClusterViewEvents', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  it('lists the visible cluster’s events from a query sorted newest first by default', async () => {
+    await start();
 
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    gridTablePropsRef.current = null as unknown as CapturedGridTableProps;
-    persistedSortRef.current = null;
-    openWithObjectMock.mockReset();
-    findCatalogObjectByUIDMock.mockReset();
-    useTableSortMock.mockClear();
+    expect(eventRow().textContent).toContain('Back-off restarting failed container');
+    const read = requireValue(
+      app.snapshots.reads('cluster-events').slice(-1)[0],
+      'expected a cluster-events read'
+    );
+    expect(read.scope.startsWith(`${dev.clusterId}|`)).toBe(true);
+    // Last Seen ascending is newest first: age grows with time since the event.
+    expect(read.scope).toContain('sort=age&sortDirection=asc');
   });
 
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-  });
+  it('opens the Event from Enter on the focused row and from its Kind badge', async () => {
+    app.servePanel(dev, eventIdentity);
+    await start();
+    const table = requireValue(
+      view.container.querySelector<HTMLElement>('table[tabindex="0"]'),
+      'expected the events table'
+    );
 
-  it('passes the query-backed newest-first Last Seen sort to GridTable when no persisted sort exists', async () => {
+    await act(async () => table.focus());
     await act(async () => {
-      root.render(<ClusterViewEvents />);
-      await Promise.resolve();
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+      );
     });
+    await app.settle();
+    expect(view.openPanels()).toEqual([opened(eventIdentity)]);
 
-    const props = gridTablePropsRef.current;
-    expect(props).toBeTruthy();
-    expect(props.sortConfig).toEqual({ key: 'age', direction: 'asc' });
-    expect(props.columnVisibility).toBe(null);
-    expect(props.filters?.value).toEqual({
-      search: '',
-      kinds: [],
-      namespaces: [],
-    });
-
-    const key = props.keyExtractor(baseEvent, 0);
-    expect(key).toContain('team-a');
-    expect(props.columnWidths).toBe(null);
+    await act(async () => view.owners().objectPanels.onCloseObjectPanel());
+    await app.settle();
+    await click(requireValue(cellOf('kind').querySelector('button'), 'expected the Kind badge'));
+    expect(view.openPanels()).toEqual([opened(eventIdentity)]);
   });
 
-  it('uses the shared newest-first Last Seen sort value for local table fallback rows', async () => {
-    await act(async () => {
-      root.render(<ClusterViewEvents />);
-      await Promise.resolve();
-    });
+  it('opens the involved object from the Object Name link', async () => {
+    app.servePanel(dev, pod);
+    await start();
 
-    const ageColumn = requireValue(
-      gridTablePropsRef.current.columns.find((column) => column.key === 'age'),
-      'expected the cluster event age column'
-    );
+    await clickObjectName();
 
-    expect(
-      requireValue(ageColumn.sortValue, 'expected the cluster event age sort accessor')(baseEvent)
-    ).toBe(-123);
+    expect(view.openPanels()).toEqual([opened(pod)]);
   });
 
-  it('renders Event types with status chips', async () => {
-    await act(async () => {
-      root.render(<ClusterViewEvents />);
-      await Promise.resolve();
-    });
+  it('resolves a custom resource’s involved object by UID when the Event names no apiVersion', async () => {
+    app.servePanel(dev, database);
+    // The catalog's summary of the object
+    // (backend/resource_gateway_catalog.go FindCatalogObjectByUID).
+    app.backend.answer('FindCatalogObjectByUID', () => ({
+      ref: { ...database, clusterId: dev.clusterId, resource: 'databases', uid: 'database-uid' },
+      resourceVersion: '1',
+      creationTimestamp: '',
+      scope: objectcatalog.Scope.ScopeNamespace,
+    }));
+    await start(databaseEvent);
 
-    const typeColumn = requireValue(
-      gridTablePropsRef.current.columns.find((column) => column.key === 'type'),
-      'expected the cluster event type column'
-    );
-    const warning = requireReactElement<{ children?: React.ReactNode; variant?: string }>(
-      typeColumn.render(baseEvent),
-      'expected the cluster event type chip'
-    );
-    const normal = requireReactElement<{ children?: React.ReactNode; variant?: string }>(
-      typeColumn.render({ ...baseEvent, type: 'Normal' }),
-      'expected the cluster normal event type chip'
-    );
-    const custom = requireReactElement<{ children?: React.ReactNode; variant?: string }>(
-      typeColumn.render({ ...baseEvent, type: 'Notice' }),
-      'expected the cluster custom event type chip'
-    );
+    await clickObjectName();
 
-    expect(warning.props).toMatchObject({ children: 'Warning', variant: 'warning' });
-    expect(normal.props).toMatchObject({ children: 'Normal', variant: 'healthy' });
-    expect(custom.props).toMatchObject({ children: 'Notice', variant: 'info' });
+    expect(app.backend.calls('FindCatalogObjectByUID')).toEqual([[dev.clusterId, 'database-uid']]);
+    expect(view.openPanels()).toEqual([opened(database)]);
   });
 
-  it('opens the involved object with group/version when object name is clicked', async () => {
-    await act(async () => {
-      root.render(<ClusterViewEvents />);
-      await Promise.resolve();
+  it('opens nothing when the catalog cannot resolve the involved object', async () => {
+    app.backend.answer('FindCatalogObjectByUID', () => {
+      throw new Error('catalog unavailable');
     });
+    await start(databaseEvent);
 
-    const props = gridTablePropsRef.current;
-    const objectNameColumn = requireValue(
-      props.columns.find((column) => column.key === 'objectName'),
-      'expected the cluster event object-name column'
-    );
+    await clickObjectName();
 
-    const cell = requireReactElement<{ onClick: (event: { altKey: boolean }) => void }>(
-      objectNameColumn.render(baseEvent),
-      'expected the cluster event object-name cell element'
-    );
-
-    expect(cell.props).toMatchObject({ 'data-gridtable-rowclick': 'suppress' });
-
-    await act(async () => {
-      cell.props.onClick({ altKey: false });
-      await Promise.resolve();
-    });
-
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'Pod',
-        name: 'foo',
-        group: '',
-        version: 'v1',
-        clusterId: 'test-cluster',
-      })
-    );
+    expect(view.openPanels()).toEqual([]);
   });
 
-  it('opens the Event object from Enter on the row and from the Kind badge', async () => {
-    await act(async () => {
-      root.render(<ClusterViewEvents />);
-      await Promise.resolve();
-    });
-
-    const props = gridTablePropsRef.current;
-    const onRowClick = requireValue(props.onRowClick, 'expected the cluster Event row action');
-
-    act(() => {
-      onRowClick(baseEvent);
-    });
-
-    expect(openWithObjectMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        clusterId: 'test-cluster',
-        clusterName: 'alpha',
-        group: '',
-        version: 'v1',
-        kind: 'Event',
-        resource: 'events',
-        namespace: 'team-a',
-        name: 'test',
-        uid: 'event-uid',
-      })
-    );
-
-    openWithObjectMock.mockClear();
-    const kindColumn = requireValue(
-      props.columns.find((column) => column.key === 'kind'),
-      'expected the cluster Event kind column'
-    );
-    const kindCell = requireReactElement<{
-      onClick: (event: { altKey: boolean }) => void;
-      'data-gridtable-rowclick'?: string;
-    }>(kindColumn.render(baseEvent), 'expected the cluster Event kind badge');
-
-    // Clicking the badge may focus its row like any other cell; the row itself
-    // opens nothing on a pointer click, so the badge needs no suppression.
-    expect(kindCell.props['data-gridtable-rowclick']).toBe('allow');
-
-    act(() => {
-      kindCell.props.onClick({ altKey: false });
-    });
-
-    expect(openWithObjectMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        clusterId: 'test-cluster',
-        group: '',
-        version: 'v1',
-        kind: 'Event',
-        namespace: 'team-a',
-        name: 'test',
-      })
-    );
-  });
-
-  // A mouse click on a row only focuses it, as in every other table; the Kind
-  // and Object Name links and Enter on the focused row open panels.
   it('opens no panel from a pointer click on the row', async () => {
-    await act(async () => {
-      root.render(<ClusterViewEvents />);
-      await Promise.resolve();
-    });
+    await start();
 
-    expect(gridTablePropsRef.current.onRowPointerClick).toBeUndefined();
-  });
+    await click(cellOf('message'));
 
-  it('passes stable event row identity into useTableSort', async () => {
-    await act(async () => {
-      root.render(<ClusterViewEvents />);
-      await Promise.resolve();
-    });
-
-    const options = requireValue(
-      useTableSortMock.mock.calls[0]?.[3],
-      'expected cluster event table sort options'
-    );
-    const rowIdentity = requireValue(options.rowIdentity, 'expected cluster event row identity');
-    expect(rowIdentity(baseEvent, 0)).toBe('test-cluster|/v1/Event/team-a/test');
-  });
-
-  it('resolves CRD involved objects by UID when the stream omits apiVersion', async () => {
-    findCatalogObjectByUIDMock.mockResolvedValue({
-      ref: {
-        kind: 'Database',
-        name: 'primary',
-        namespace: 'team-a',
-        clusterId: 'test-cluster',
-        group: 'db.example.io',
-        version: 'v1',
-        resource: 'databases',
-        uid: 'database-uid',
-      },
-    });
-    const event = {
-      ...baseEvent,
-      object: 'Database/primary',
-      objectKind: 'Database',
-      objectName: 'primary',
-      objectUid: 'database-uid',
-      involvedObject: {
-        display: {
-          clusterId: 'test-cluster',
-          kind: 'Database',
-          name: 'primary',
-          uid: 'database-uid',
-        },
-      },
-    };
-
-    await act(async () => {
-      root.render(<ClusterViewEvents />);
-      await Promise.resolve();
-    });
-
-    const props = gridTablePropsRef.current;
-    const objectNameColumn = requireValue(
-      props.columns.find((column) => column.key === 'objectName'),
-      'expected the cluster event object-name column'
-    );
-    const cell = requireReactElement<{ onClick: (event: { altKey: boolean }) => void }>(
-      objectNameColumn.render(event),
-      'expected the cluster event object-name cell element'
-    );
-
-    await act(async () => {
-      cell.props.onClick({ altKey: false });
-      await Promise.resolve();
-    });
-
-    expect(findCatalogObjectByUIDMock).toHaveBeenCalledWith('test-cluster', 'database-uid');
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'Database',
-        name: 'primary',
-        group: 'db.example.io',
-        version: 'v1',
-        uid: 'database-uid',
-      })
-    );
-  });
-
-  it('fails closed when catalog lookup rejects during involved object resolution', async () => {
-    findCatalogObjectByUIDMock.mockRejectedValue(new Error('catalog unavailable'));
-    const event = {
-      ...baseEvent,
-      object: 'Database/primary',
-      objectKind: 'Database',
-      objectName: 'primary',
-      objectUid: 'database-uid',
-      involvedObject: {
-        display: {
-          clusterId: 'test-cluster',
-          kind: 'Database',
-          name: 'primary',
-          uid: 'database-uid',
-        },
-      },
-    };
-
-    await act(async () => {
-      root.render(<ClusterViewEvents />);
-      await Promise.resolve();
-    });
-
-    const props = gridTablePropsRef.current;
-    const objectNameColumn = requireValue(
-      props.columns.find((column) => column.key === 'objectName'),
-      'expected the cluster event object-name column'
-    );
-    const cell = requireReactElement<{ onClick: (event: { altKey: boolean }) => void }>(
-      objectNameColumn.render(event),
-      'expected the cluster event object-name cell element'
-    );
-
-    await act(async () => {
-      cell.props.onClick({ altKey: false });
-      await Promise.resolve();
-    });
-
-    expect(openWithObjectMock).not.toHaveBeenCalled();
-  });
-
-  it('does not expose recent-window copy for query-backed cluster events', async () => {
-    await act(async () => {
-      root.render(<ClusterViewEvents />);
-      await Promise.resolve();
-    });
-
-    expect(gridTablePropsRef.current.filters.options.partialDataLabel).toBeUndefined();
+    expect(view.openPanels()).toEqual([]);
   });
 });

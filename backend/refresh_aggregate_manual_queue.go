@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 )
@@ -63,17 +64,16 @@ func newAggregateManualQueue(subsystems map[string]*system.Subsystem) *aggregate
 // Enqueue registers a manual refresh job for exactly one target cluster.
 func (q *aggregateManualQueue) Enqueue(ctx context.Context, domain, scope, reason string) (*refresh.ManualRefreshJob, error) {
 	if domain == "" {
-		return nil, errors.New("domain is required")
+		return nil, errorstatus.BadRequest(errors.New("domain is required"))
 	}
 	queues := q.snapshotConfig()
-	clusterIDs, scopeValue := refresh.SplitClusterScopeList(scope)
-	target, err := q.resolveTarget(domain, clusterIDs, queues)
-	if err != nil {
+	target, scopeValue := refresh.SplitClusterScope(scope)
+	if err := requireActiveTarget(domain, target, queues); err != nil {
 		return nil, err
 	}
 	queue := queues[target]
 	if queue == nil {
-		return nil, fmt.Errorf("manual queue unavailable for %s", target)
+		return nil, errorstatus.ClusterNotReady(fmt.Errorf("manual queue unavailable for %s", target))
 	}
 	scoped := refresh.JoinClusterScope(target, scopeValue)
 	job, err := queue.Enqueue(ctx, domain, scoped, reason)
@@ -133,32 +133,14 @@ func (q *aggregateManualQueue) Next(ctx context.Context) (*refresh.ManualRefresh
 	return nil, ctx.Err()
 }
 
-func (q *aggregateManualQueue) resolveTarget(
-	domain string,
-	clusterIDs []string,
-	queues map[string]refresh.ManualQueue,
-) (string, error) {
-	if len(clusterIDs) == 0 {
-		return "", fmt.Errorf("cluster scope is required for domain %s", domain)
-	}
-	if len(clusterIDs) > 1 {
-		return "", fmt.Errorf("domain %s requires a single cluster scope (requested: %v)", domain, clusterIDs)
-	}
-
-	target := clusterIDs[0]
-	if _, ok := queues[target]; !ok {
-		return "", fmt.Errorf("cluster %s not active", target)
-	}
-	return target, nil
-}
-
 func buildAggregateStatus(
 	base *refresh.ManualRefreshJob,
 	clusterID string,
 	child aggregateManualChildJob,
 ) *refresh.ManualRefreshJob {
+	missing := errorstatus.Classify(fmt.Errorf("cluster %s job missing", clusterID))
 	base.State = refresh.JobStateFailed
-	base.Error = fmt.Sprintf("cluster %s job missing", clusterID)
+	base.Error = &missing
 	base.LatestVersion = 0
 	base.StartedAt = 0
 	base.FinishedAt = 0
@@ -175,9 +157,11 @@ func buildAggregateStatus(
 	default:
 		base.State = refresh.JobStateSucceeded
 	}
-	base.Error = ""
-	if job.Error != "" {
-		base.Error = fmt.Sprintf("%s: %s", clusterID, job.Error)
+	base.Error = nil
+	if job.Error != nil {
+		failure := *job.Error
+		failure.Message = fmt.Sprintf("%s: %s", clusterID, failure.Message)
+		base.Error = &failure
 	}
 	base.LatestVersion = job.LatestVersion
 	base.StartedAt = max(0, job.StartedAt)
@@ -230,7 +214,7 @@ func (q *aggregateManualQueue) unfinishedJobMigrations(queues map[string]refresh
 		if !manualChildNeedsMigration(aggregateJob.child, replacement) {
 			continue
 		}
-		_, scope := refresh.SplitClusterScopeList(aggregateJob.job.Scope)
+		_, scope := refresh.SplitClusterScope(aggregateJob.job.Scope)
 		migrations = append(migrations, aggregateManualJobMigration{
 			aggregateJobID: aggregateJobID,
 			clusterID:      aggregateJob.clusterID,

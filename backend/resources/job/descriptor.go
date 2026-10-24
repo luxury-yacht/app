@@ -8,12 +8,13 @@ import "github.com/luxury-yacht/app/backend/kind/kindspec"
 
 var Descriptor = kindspec.Descriptor{
 	Identity:        Identity,
-	IngestOwned:     true,
-	CatalogSource:   kindspec.CatalogShared,
+	ListDomain:      "namespace-workloads",
+	Display:         kindspec.Display{ShortName: "job"},
 	DetailCacheable: true,
 	DetailListsPods: true,
 	Collector:       &ObjectMapNode,
 	Edges:           ObjectMapEdges,
 	Binding:         &DetailBinding,
-	Actions:         kindspec.ObjectActions{Aliases: []string{"job"}},
+	Panel:           kindspec.ObjectPanel{Pods: kindspec.PanelPodsByOwner},
+	Logs:            &LogsTarget,
 }

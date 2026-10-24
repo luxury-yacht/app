@@ -64,6 +64,12 @@ func (i *JobControllerOwnerIndex) DeleteBundle(bundle ingest.Bundle) {
 	i.mu.Unlock()
 }
 
+// SeedBundles fills the index from Jobs restored from spill, which a resumed
+// watch never re-delivers.
+func (i *JobControllerOwnerIndex) SeedBundles(bundles []ingest.Bundle) {
+	i.ReplaceBundles(bundles)
+}
+
 func (i *JobControllerOwnerIndex) ReplaceBundles(bundles []ingest.Bundle) {
 	if i == nil {
 		return

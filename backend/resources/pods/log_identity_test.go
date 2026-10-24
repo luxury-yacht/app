@@ -22,11 +22,11 @@ func TestFetchContainerLogsRejectsSameKindWithDifferentAPIIdentity(t *testing.T)
 		for _, matchNone := range []bool{false, true} {
 			t.Run(scope, func(t *testing.T) {
 				client := fake.NewClientset()
-				service := NewService(common.Dependencies{KubernetesClient: client})
-				response := service.FetchContainerLogs(context.Background(), types.ContainerLogsFetchRequest{
+				service := newLogsService(common.Dependencies{KubernetesClient: client})
+				_, err := service.FetchContainerLogs(context.Background(), types.ContainerLogsFetchRequest{
 					Scope: scope, MatchNone: matchNone,
 				})
-				require.NotEmpty(t, response.Error)
+				require.Error(t, err)
 				require.Empty(t, client.Actions(), "invalid GVK must not select a built-in object with the same kind")
 			})
 		}

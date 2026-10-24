@@ -77,14 +77,21 @@ func newRenderer(resolvedEnums []enumSpec) (*renderer, error) {
 }
 
 func (r *renderer) renderOutput(resolvedEnums []enumSpec, domains []domainSpec) ([]byte, error) {
+	tagField, detailsField, err := objectDetailCarrierFields()
+	if err != nil {
+		return nil, err
+	}
+	variants := r.resolveObjectDetailVariants()
 	var out bytes.Buffer
 	out.WriteString(generatedHeader)
+	renderObjectDetailImports(&out, variants)
 	for _, spec := range resolvedEnums {
 		r.renderEnum(&out, spec)
 	}
 	if err := r.renderDefinitions(&out); err != nil {
 		return nil, err
 	}
+	renderObjectDetailUnion(&out, variants, tagField, detailsField)
 	r.renderAliasesAndDomains(&out, domains)
 	r.renderDomainPolicies(&out, domains)
 	r.renderValidationSupport(&out)
@@ -138,6 +145,17 @@ export type GeneratedRefreshDiagnosticsStream =
   | 'resources'
   | 'container-logs';
 
+export type GeneratedRefreshScopeSelector =
+  | 'cluster'
+  | 'namespace'
+  | 'all-namespaces'
+  | 'node'
+  | 'workload'
+  | 'object'
+  | 'helm-release';
+
+export type GeneratedRefreshScopeQuery = 'none' | 'typed-table' | 'object-map' | 'catalog';
+
 export interface GeneratedRefreshDomainPolicy {
   domain: RefreshDomain;
   category: GeneratedRefreshDomainCategory;
@@ -150,13 +168,15 @@ export interface GeneratedRefreshDomainPolicy {
     bypassSingleflight: boolean;
   };
   frontend: {
-    refresherName: string;
     orchestrator: GeneratedRefreshOrchestratorKind;
     diagnosticsStream: GeneratedRefreshDiagnosticsStream | null;
-    timing: { interval: number; cooldown: number; timeout: number };
+    timing: { interval: number; timeout: number };
     priority: number | null;
     registrationOrder: number;
-    scheduled: boolean;
+  };
+  scope: {
+    selectors: ReadonlyArray<GeneratedRefreshScopeSelector>;
+    query: GeneratedRefreshScopeQuery;
   };
 }
 
@@ -181,16 +201,14 @@ export const REFRESH_DOMAIN_POLICIES = [
 			domain.backendBypassSingleflight,
 		)
 		out.WriteString("    frontend: {\n")
-		fmt.Fprintf(out, "      refresherName: %s,\n", quoteString(domain.frontendRefresherName))
 		fmt.Fprintf(out, "      orchestrator: %s,\n", quoteString(domain.frontendOrchestrator))
 		if domain.frontendDiagnosticsStream == "" {
 			out.WriteString("      diagnosticsStream: null,\n")
 		} else {
 			fmt.Fprintf(out, "      diagnosticsStream: %s,\n", quoteString(domain.frontendDiagnosticsStream))
 		}
-		fmt.Fprintf(out, "      timing: { interval: %d, cooldown: %d, timeout: %d },\n",
+		fmt.Fprintf(out, "      timing: { interval: %d, timeout: %d },\n",
 			domain.frontendTimingInterval,
-			domain.frontendTimingCooldown,
 			domain.frontendTimingTimeout,
 		)
 		if domain.frontendHasPriority {
@@ -199,10 +217,19 @@ export const REFRESH_DOMAIN_POLICIES = [
 			out.WriteString("      priority: null,\n")
 		}
 		fmt.Fprintf(out, "      registrationOrder: %d,\n", domain.frontendRegistrationOrder)
-		fmt.Fprintf(out, "      scheduled: %t,\n", domain.frontendScheduled)
-		out.WriteString("    },\n  },\n")
+		out.WriteString("    },\n")
+		renderTSScopeGrammar(out, domain)
+		out.WriteString("  },\n")
 	}
 	out.WriteString("] as const satisfies ReadonlyArray<GeneratedRefreshDomainPolicy>;\n\n")
+}
+
+func renderTSScopeGrammar(out *bytes.Buffer, domain domainSpec) {
+	selectors := make([]string, 0, len(domain.scopeSelectors))
+	for _, selector := range domain.scopeSelectors {
+		selectors = append(selectors, quoteString(selector))
+	}
+	fmt.Fprintf(out, "    scope: { selectors: [%s], query: %s },\n", strings.Join(selectors, ", "), quoteString(domain.scopeQuery))
 }
 
 func (r *renderer) renderDefinitions(out *bytes.Buffer) error {
@@ -723,15 +750,26 @@ func (r *renderer) renderInterface(out *bytes.Buffer, typeOf reflect.Type) error
 	if name == "" {
 		return fmt.Errorf("missing TypeScript name for %s", typeOf)
 	}
-	fmt.Fprintf(out, "export interface %s {\n", name)
 	fields, err := r.renderFields(typeOf, false)
 	if err != nil {
 		return err
 	}
+	// A payload embedding the tagged object detail is the intersection of its
+	// own fields with the detail union; an interface cannot extend a union.
+	tagged := embedsObjectDetail(typeOf)
+	if tagged {
+		fmt.Fprintf(out, "export type %s = {\n", name)
+	} else {
+		fmt.Fprintf(out, "export interface %s {\n", name)
+	}
 	for _, field := range fields {
 		fmt.Fprintf(out, "  %s%s: %s;\n", quoteProperty(field.name), optionalMarker(field.optional), field.typeScript)
 	}
-	out.WriteString("}\n\n")
+	if tagged {
+		fmt.Fprintf(out, "} & %s;\n\n", objectDetailUnionName)
+	} else {
+		out.WriteString("}\n\n")
+	}
 	return nil
 }
 
@@ -760,6 +798,10 @@ func (r *renderer) renderField(typeOf reflect.Type, field reflect.StructField, i
 	}
 	if field.Anonymous && name == "" {
 		embedded := indirect(field.Type)
+		if embedded == objectDetailCarrier {
+			// Rendered as the ObjectDetail intersection by renderInterface.
+			return nil, nil
+		}
 		if embedded.Kind() != reflect.Struct {
 			return nil, fmt.Errorf("cannot flatten non-struct embedded field %s.%s", typeOf, field.Name)
 		}

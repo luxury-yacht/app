@@ -237,14 +237,14 @@ describe('RollbackModal', () => {
       await Promise.resolve();
     });
 
-    expect(backendMocks.GetRevisionHistory).toHaveBeenCalledWith(
-      'prod-cluster',
-      'default',
-      'apps',
-      'v1',
-      'Deployment',
-      'my-deploy'
-    );
+    expect(backendMocks.GetRevisionHistory).toHaveBeenCalledWith({
+      clusterId: 'prod-cluster',
+      group: 'apps',
+      version: 'v1',
+      kind: 'Deployment',
+      namespace: 'default',
+      name: 'my-deploy',
+    });
   });
 
   it('renders the shared diff viewer for selectable revisions', async () => {

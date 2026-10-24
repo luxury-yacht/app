@@ -27,9 +27,10 @@ import { readKubeconfigs, requestAppState } from '@/core/app-state-access';
 import { ApplyClusterWorkspace } from '@/core/backend-api';
 import { clusterWorkspaceStore } from '@/core/cluster-workspace/clusterWorkspaceStore';
 import { eventBus } from '@/core/events';
-import { refreshOrchestrator, useBackgroundRefresh } from '@/core/refresh';
+import { refreshOrchestrator } from '@/core/refresh';
 import { clusterReadiness } from '@/core/refresh/clusterReadiness';
 import { getWindowIdentity } from '@/core/window-identity';
+import { statusError } from '@/utils/errorStatus';
 import {
   buildSelectionTransitionPlan,
   normalizeSelections,
@@ -185,10 +186,8 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
   const [selectedKubeconfigs, setSelectedKubeconfigsState] = useState<string[]>([]);
   const [selectedKubeconfig, setSelectedKubeconfigState] = useState<string>('');
   const [committedSelectedKubeconfigs, setCommittedSelectedKubeconfigs] = useState<string[]>([]);
-  const [committedSelectedKubeconfig, setCommittedSelectedKubeconfig] = useState<string>('');
   const [kubeconfigsLoading, setKubeconfigsLoading] = useState(true);
   const [discoveryRefreshPending, setDiscoveryRefreshPending] = useState(false);
-  const { enabled: backgroundRefreshEnabled } = useBackgroundRefresh();
   const kubeconfigsRef = useRef<types.KubeconfigInfo[]>([]);
   const selectedKubeconfigsRef = useRef<string[]>([]);
   const selectedKubeconfigRef = useRef<string>('');
@@ -196,6 +195,13 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
   const committedActiveRef = useRef<string>('');
   const latestSelectionRequestIdRef = useRef(0);
   const latestActiveIntentRef = useRef(0);
+  // These queues are this window's ordering guarantee, not a copy of the
+  // backend's: each ApplyClusterWorkspace is its own request and carries no
+  // sequence, so two sent together can reach the backend in either order. The
+  // backend applies a window's selection commands in lock order without
+  // dropping older ones, and applies visibility commands without that lock.
+  // Sending the next command only after the previous one settles keeps the
+  // user's last tab change last.
   const selectionQueueRef = useRef<Promise<void> | null>(null);
   const visibilityQueueRef = useRef<Promise<void> | null>(null);
   const latestVisibilityRequestIdRef = useRef(0);
@@ -204,7 +210,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
   const closingSelectionsRef = useRef(new Set<string>());
   const [closingSelections, setClosingSelections] = useState<ReadonlySet<string>>(new Set());
   const pendingOpenIntentsRef = useRef(new Map<string, symbol>());
-  // Prevent refresh context churn until the backend confirms selection updates.
+  // Hold the open-cluster set until the backend confirms selection updates.
   const selectionPendingRef = useRef(false);
 
   useEffect(() => clusterWorkspaceStore.acquire(), []);
@@ -214,13 +220,6 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
   const selectedClusterMeta = useMemo(
     () => resolveClusterMeta(selectedKubeconfig, kubeconfigs),
     [selectedKubeconfig, kubeconfigs]
-  );
-
-  // Refresh selection stays on the last backend-confirmed open set. A switch
-  // among those already-open tabs commits immediately below.
-  const committedSelectedClusterMeta = useMemo(
-    () => resolveClusterMeta(committedSelectedKubeconfig, kubeconfigs),
-    [committedSelectedKubeconfig, kubeconfigs]
   );
 
   useEffect(() => {
@@ -271,32 +270,13 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     [committedSelectedKubeconfigs, kubeconfigs]
   );
 
-  const updateRefreshContext = useCallback(
-    (meta: { id: string; name: string }, clusterIds: string[]) => {
-      // Foreground view-specific domains only refresh for the active cluster.
-      const foregroundClusterIds = meta.id ? [meta.id] : [];
-      refreshOrchestrator.updateContext({
-        selectedClusterId: meta.id || undefined,
-        selectedClusterName: meta.name || undefined,
-        selectedClusterIds: foregroundClusterIds,
-        // This is the open/connected cluster set used for runtime disposal.
-        // Background refresh eligibility is controlled separately by
-        // useBackgroundClusterRefresh, so disabling background refresh must not
-        // make inactive open tabs look disconnected.
-        allConnectedClusterIds: clusterIds,
-        backgroundRefreshEnabled,
-      });
-    },
-    [backgroundRefreshEnabled]
-  );
-
-  // Keep refresh context aligned with the active kubeconfig selection.
+  // The open cluster set: a cluster that leaves it loses its refresh runtime.
   useEffect(() => {
     if (selectionPendingRef.current) {
       return;
     }
-    updateRefreshContext(committedSelectedClusterMeta, committedSelectedClusterIds);
-  }, [committedSelectedClusterIds, committedSelectedClusterMeta, updateRefreshContext]);
+    refreshOrchestrator.setConnectedClusters(committedSelectedClusterIds);
+  }, [committedSelectedClusterIds]);
 
   const activateVisibleCluster = useCallback((clusterId: string, reportFailure = false) => {
     const requestId = ++latestVisibilityRequestIdRef.current;
@@ -326,7 +306,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     const pending = (visibilityQueueRef.current?.then(activate) ?? activate())
       .then((result) => {
         if (result?.error) {
-          throw new Error(result.error);
+          throw statusError(result.error);
         }
       })
       .catch((error) => {
@@ -358,7 +338,6 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     committedSelectionsRef.current = selections;
     committedActiveRef.current = activeSelection;
     setCommittedSelectedKubeconfigs(selections);
-    setCommittedSelectedKubeconfig(activeSelection);
   }, []);
 
   const activateSelection = useCallback(
@@ -370,7 +349,6 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       setSelectedKubeconfigState(config);
       if (!config || committedSelectionsRef.current.includes(config)) {
         committedActiveRef.current = config;
-        setCommittedSelectedKubeconfig(config);
         activateVisibleCluster(resolveClusterMeta(config, kubeconfigsRef.current).id);
       }
     },
@@ -544,7 +522,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
           return;
         }
         if (result.error) {
-          throw new Error(result.error);
+          throw statusError(result.error);
         }
         completeSelectionTransition(
           plan,
@@ -650,12 +628,11 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         remaining,
         clusterWorkspaceStore.getSnapshot().visibleClusterId
       );
-      updateRefreshContext(
-        resolveClusterMeta(committedActiveRef.current, kubeconfigsRef.current),
+      refreshOrchestrator.setConnectedClusters(
         selectedClusterIdsFor(remaining, kubeconfigsRef.current)
       );
     },
-    [beginSelectionTransition, completeSelectionTransition, updateRefreshContext]
+    [beginSelectionTransition, completeSelectionTransition]
   );
 
   const closeKubeconfig = useCallback(
@@ -811,8 +788,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       selectedKubeconfigs: visibleSelections,
       managedKubeconfigs: selectedKubeconfigs,
       selectedKubeconfig,
-      // Cluster-scoped UI follows the selected tab immediately; refresh context
-      // remains backend-confirmed through committedSelectedClusterMeta above.
+      // Cluster-scoped UI follows the selected tab immediately.
       selectedClusterId: selectedClusterMeta.id,
       selectedClusterName: selectedClusterMeta.name,
       selectedClusterIds,

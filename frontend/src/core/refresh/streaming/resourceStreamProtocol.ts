@@ -1,5 +1,6 @@
+import { isErrorStatus } from '@utils/errorStatus';
 import { parseClusterScope } from '../clusterScope';
-import { isPermissionDeniedStatus, resolvePermissionDeniedMessage } from '../permissionErrors';
+import { resolvePermissionDeniedMessage } from '../permissionErrors';
 import {
   RESOURCE_STREAM_MESSAGE_TYPES,
   RESOURCE_STREAM_SIGNALS,
@@ -61,7 +62,7 @@ const normalizeScope = (
 ): string | null => {
   if (typeof scope === 'string') {
     const parsed = parseClusterScope(scope);
-    if (parsed.isMultiCluster || (parsed.clusterId && parsed.clusterId !== clusterId)) {
+    if (parsed.clusterId && parsed.clusterId !== clusterId) {
       return null;
     }
     return parsed.scope || isClusterScopedDomain(domain) ? parsed.scope : null;
@@ -125,8 +126,8 @@ const canonicalMessage = (
   const version = wire.version?.trim() || undefined;
   const sequence = parsePositiveInteger(wire.sequence);
   const resourceVersion = parsePositiveInteger(wire.resourceVersion);
-  const errorReason =
-    resolvePermissionDeniedMessage(wire.error, wire.errorDetails) || 'stream error';
+  const errorStatus = isErrorStatus(wire.errorDetails) ? wire.errorDetails : null;
+  const errorReason = resolvePermissionDeniedMessage(wire.error, errorStatus) || 'stream error';
 
   const signal = modernSignal ?? legacySignal(wire.type);
   if (signal === 'changed') {
@@ -144,7 +145,7 @@ const canonicalMessage = (
     return {
       kind: 'error',
       reason: errorReason,
-      permissionDenied: isPermissionDeniedStatus(wire.errorDetails),
+      permissionDenied: errorStatus?.reason === 'Forbidden',
     };
   }
 
@@ -237,12 +238,20 @@ export type ResourceStreamCoalescingState =
   | ({ status: 'waiting-for-timer' } & PendingChanges)
   | ({ status: 'scheduled'; timer: number } & PendingChanges);
 
+// One resync owed for requests that arrived while another resync was running
+// or inside its cooldown. It runs when the cooldown ends.
+export type ResourceStreamTrailingResyncState =
+  | { status: 'idle' }
+  | { status: 'waiting-for-timer'; reason: string }
+  | { status: 'scheduled'; reason: string; timer: number };
+
 export type ResourceStreamProtocolState = {
   phase: ResourceStreamProtocolPhase;
   resume: { lastSequence?: bigint; resourceVersion?: bigint };
   activity: { lastMessageAt?: number; lastDeliveryAt?: number };
   coalescing: ResourceStreamCoalescingState;
   lastResyncAt: number;
+  trailingResync: ResourceStreamTrailingResyncState;
 };
 
 export type ResourceStreamProtocolEffect =
@@ -255,6 +264,8 @@ export type ResourceStreamProtocolEffect =
     }
   | { type: 'advance-legacy-reset' }
   | { type: 'request-resync'; reason: string; force: boolean; errorReason?: string }
+  | { type: 'schedule-trailing-resync'; delayMs: number }
+  | { type: 'cancel-trailing-resync'; timer: number }
   | { type: 'permission-denied'; reason: string }
   | { type: 'mark-resyncing'; reason: string }
   | { type: 'mark-resync-complete' }
@@ -284,6 +295,8 @@ export type ResourceStreamProtocolEvent =
       errorReason?: string;
     }
   | { type: 'resync-completed' }
+  | { type: 'trailing-resync-timer-attached'; timer: number }
+  | { type: 'trailing-resync-fired'; timer: number }
   | { type: 'stopping' };
 
 export type ResourceStreamProtocolTransition = {
@@ -297,6 +310,7 @@ export const initialResourceStreamProtocolState = (): ResourceStreamProtocolStat
   activity: {},
   coalescing: { status: 'idle' },
   lastResyncAt: 0,
+  trailingResync: { status: 'idle' },
 });
 
 const transition = (
@@ -578,7 +592,8 @@ const connectionOpened = (state: ResourceStreamProtocolState): ResourceStreamPro
   return transition(state, [
     {
       type: 'request-resync',
-      reason: 'reconnect',
+      // A subscription that has heard nothing yet is on its first connection.
+      reason: state.activity.lastMessageAt === undefined ? 'initial' : 'reconnect',
       force: true,
       ...(phaseError(state.phase) ? { errorReason: phaseError(state.phase) } : {}),
     },
@@ -633,21 +648,50 @@ const flushPendingChanges = (
   );
 };
 
+const cancelTrailingResyncEffect = (
+  trailing: ResourceStreamTrailingResyncState
+): ResourceStreamProtocolEffect[] =>
+  trailing.status === 'scheduled'
+    ? [{ type: 'cancel-trailing-resync', timer: trailing.timer }]
+    : [];
+
+const inResyncCooldown = (
+  state: ResourceStreamProtocolState,
+  event: Extract<ResourceStreamProtocolEvent, { type: 'resync-requested' }>
+): boolean =>
+  !event.force && state.lastResyncAt > 0 && event.now - state.lastResyncAt < event.cooldownMs;
+
+// A resync that cannot start now is owed, never dropped: the first such
+// request latches one trailing resync at the end of the cooldown, and later
+// ones join it (docs/architecture/data-freshness.md, signal latching).
+const latchTrailingResync = (
+  state: ResourceStreamProtocolState,
+  event: Extract<ResourceStreamProtocolEvent, { type: 'resync-requested' }>
+): ResourceStreamProtocolTransition => {
+  if (state.trailingResync.status !== 'idle') {
+    return transition(state);
+  }
+  const delayMs = Math.max(0, state.lastResyncAt + event.cooldownMs - event.now);
+  return transition(
+    { ...state, trailingResync: { status: 'waiting-for-timer', reason: event.reason } },
+    [{ type: 'schedule-trailing-resync', delayMs }]
+  );
+};
+
 const requestResync = (
   state: ResourceStreamProtocolState,
   event: Extract<ResourceStreamProtocolEvent, { type: 'resync-requested' }>
 ): ResourceStreamProtocolTransition => {
-  if (
-    state.phase.status === 'resyncing' ||
-    state.phase.status === 'permission-blocked' ||
-    state.phase.status === 'stopping' ||
-    (!event.force && state.lastResyncAt > 0 && event.now - state.lastResyncAt < event.cooldownMs)
-  ) {
+  if (state.phase.status === 'permission-blocked' || state.phase.status === 'stopping') {
     return transition(state);
+  }
+  if (state.phase.status === 'resyncing' || inResyncCooldown(state, event)) {
+    return latchTrailingResync(state, event);
   }
   const preservedHealth = preservesConfirmedHealth(event.reason)
     ? confirmedHealth(state.phase)
     : undefined;
+  // This resync covers every change so far, so an owed trailing one is not needed.
   return transition(
     {
       ...state,
@@ -660,15 +704,40 @@ const requestResync = (
       resume: { ...state.resume, lastSequence: undefined },
       coalescing: { status: 'idle' },
       lastResyncAt: event.now,
+      trailingResync: { status: 'idle' },
     },
     [
       ...cancelFlushEffect(state.coalescing),
+      ...cancelTrailingResyncEffect(state.trailingResync),
       ...advancePendingEffect(state.coalescing, true),
       ...(event.reason === 'initial'
         ? []
         : ([{ type: 'mark-resyncing', reason: event.reason }] as const)),
     ]
   );
+};
+
+const attachTrailingResyncTimer = (
+  state: ResourceStreamProtocolState,
+  event: Extract<ResourceStreamProtocolEvent, { type: 'trailing-resync-timer-attached' }>
+): ResourceStreamProtocolTransition =>
+  state.trailingResync.status !== 'waiting-for-timer'
+    ? transition(state)
+    : transition({
+        ...state,
+        trailingResync: { ...state.trailingResync, status: 'scheduled', timer: event.timer },
+      });
+
+const fireTrailingResync = (
+  state: ResourceStreamProtocolState,
+  event: Extract<ResourceStreamProtocolEvent, { type: 'trailing-resync-fired' }>
+): ResourceStreamProtocolTransition => {
+  if (state.trailingResync.status !== 'scheduled' || state.trailingResync.timer !== event.timer) {
+    return transition(state);
+  }
+  return transition({ ...state, trailingResync: { status: 'idle' } }, [
+    { type: 'request-resync', reason: state.trailingResync.reason, force: false },
+  ]);
 };
 
 const completeResync = (state: ResourceStreamProtocolState): ResourceStreamProtocolTransition => {
@@ -691,8 +760,13 @@ const completeResync = (state: ResourceStreamProtocolState): ResourceStreamProto
 
 const stopProtocol = (state: ResourceStreamProtocolState): ResourceStreamProtocolTransition =>
   transition(
-    { ...state, phase: { status: 'stopping' }, coalescing: { status: 'idle' } },
-    cancelFlushEffect(state.coalescing)
+    {
+      ...state,
+      phase: { status: 'stopping' },
+      coalescing: { status: 'idle' },
+      trailingResync: { status: 'idle' },
+    },
+    [...cancelFlushEffect(state.coalescing), ...cancelTrailingResyncEffect(state.trailingResync)]
   );
 
 export const transitionResourceStreamProtocol = (
@@ -716,6 +790,10 @@ export const transitionResourceStreamProtocol = (
       return requestResync(state, event);
     case 'resync-completed':
       return completeResync(state);
+    case 'trailing-resync-timer-attached':
+      return attachTrailingResyncTimer(state, event);
+    case 'trailing-resync-fired':
+      return fireTrailingResync(state, event);
     case 'stopping':
       return stopProtocol(state);
   }

@@ -24,6 +24,9 @@ func (r *sharedWorkspaceRecorder) GetPanelWorkspace(windowName, clusterID string
 func (r *sharedWorkspaceRecorder) OpenPanelWorkspaceObject(windowName string, tab panelwindow.TabSnapshot) (panelwindow.PanelOpenResult, error) {
 	return panelwindow.PanelOpenResult{Panel: panelwindow.WorkspacePanel{Tab: tab}, Render: true}, r.record(windowName, tab)
 }
+func (r *sharedWorkspaceRecorder) ClosePanelWorkspaceObject(windowName, clusterID, panelID string) error {
+	return r.record(windowName, clusterID, panelID)
+}
 func (r *sharedWorkspaceRecorder) PublishDockedPanels(windowName string, groups []panelwindow.WorkspaceGroup) error {
 	return r.record(windowName, groups)
 }
@@ -47,7 +50,7 @@ func TestSharedPanelWorkspaceBoundaryAuthenticatesAndPreservesEveryCommand(t *te
 	tab := panelwindow.TabSnapshot{Kind: panelwindow.TabKindObject, PanelID: "api", ActiveView: "yaml", ObjectRef: panelwindow.ObjectReference{ClusterID: "production", Version: "v1", Kind: "Pod", Namespace: "payments", Name: "api"}}
 	groups := []panelwindow.WorkspaceGroup{{ClusterID: "production", GroupID: "right", Tabs: []panelwindow.TabSnapshot{tab}, ActivePanelID: tab.PanelID}}
 	request := panelwindow.ClusterTabTransferRequest{TransferID: "transfer-1", SourceWindowName: "workspace-1", TargetWindowName: "workspace-2", ClusterID: "production"}
-	snapshot := panelwindow.ClusterViewSnapshot{SchemaVersion: 1, ViewState: "{}", Groups: groups}
+	snapshot := panelwindow.ClusterViewSnapshot{SchemaVersion: 1, ViewState: "{}"}
 	ctx := context.WithValue(context.Background(), application.WindowKey, panelCommandCaller("workspace-1"))
 	cases := []struct {
 		name string
@@ -82,6 +85,9 @@ func TestSharedPanelWorkspaceBoundaryAuthenticatesAndPreservesEveryCommand(t *te
 			}
 			return err
 		}, []any{"workspace-1", tab}},
+		{"ClosePanelWorkspaceObject", func(service *DesktopService, ctx context.Context, caller string) error {
+			return service.ClosePanelWorkspaceObject(ctx, caller, "production", "api")
+		}, []any{"workspace-1", "production", "api"}},
 		{"PublishDockedPanels", func(service *DesktopService, ctx context.Context, caller string) error {
 			return service.PublishDockedPanels(ctx, caller, groups)
 		}, []any{"workspace-1", groups}},

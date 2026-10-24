@@ -30,6 +30,16 @@
   cursor: pointer;
 }
 
+/* A node shell has one mode, so its heading is a plain label, not a toggle. */
+.shell-tab__intro {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
 .shell-tab__debug-toggle input {
   width: 14px;
   height: 14px;
@@ -65,9 +75,10 @@
   align-self: flex-start;
 }
 
-.shell-tab__button {
+.shell-tab__button,
+.shell-tab__end-session {
   border: 1px solid var(--color-border);
-  background: var(--color-surface-secondary);
+  background: var(--color-bg-secondary);
   padding: 0.25rem 0.6rem;
   border-radius: 4px;
   font-size: 0.8rem;
@@ -75,9 +86,33 @@
   align-self: flex-start;
 }
 
+/* Shown only while a session is connected. */
+.shell-tab__session-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.shell-tab__session-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.shell-tab__end-session {
+  flex-shrink: 0;
+  align-self: center;
+}
+
 .shell-tab__debug-button {
   border: 1px solid var(--color-border);
-  background: var(--color-surface-secondary);
+  background: var(--color-bg-secondary);
   padding: 0.25rem 0.6rem;
   border-radius: 4px;
   font-size: 0.8rem;
@@ -88,8 +123,13 @@
 .shell-tab__notice {
   padding: 0.5rem 0.75rem;
   border-radius: 4px;
-  background: var(--color-surface-warning);
+  background: var(--color-warning-bg);
   color: var(--color-text);
+}
+
+/* Rendered as <output>, which is inline by default. */
+.shell-tab__cleanup-failure {
+  display: block;
 }
 
 .shell-tab__custom-image-input {

@@ -1,80 +1,69 @@
-/** Regression coverage for the built-in search shortcut registered by KeyboardProvider. */
+/**
+ * frontend/src/ui/shortcuts/components/SearchShortcutHandler.test.tsx
+ *
+ * The search shortcut the app's KeyboardProvider registers: Cmd+F (macOS) or
+ * Ctrl+F focuses the active registered search field and keeps the key from the
+ * webview, and leaves the key to the webview's own find when no search field
+ * is active. Runs in provider mode inside the real app shell, whose
+ * KeyboardProvider and search-target registry are the production ones; only
+ * the backend boundary is faked (test-utils/appState).
+ */
 
-import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { KeyboardProvider } from '../context';
+import { useSearchShortcutTarget } from '@ui/shortcuts';
+import { act, useRef } from 'react';
+import { describe, expect, it } from 'vitest';
+import { installAppStateHarness, type MountedApp } from '@/test-utils/appState/harness';
+import { requireValue } from '@/test-utils/requireValue';
+import { isMacPlatform } from '@/utils/platform';
 
-const registryMocks = vi.hoisted(() => ({
-  focusRegisteredSearchShortcutTarget: vi.fn(),
-}));
+const app = installAppStateHarness();
+let view: MountedApp;
 
-const isMacPlatformMock = vi.hoisted(() => vi.fn(() => true));
+function SearchField({ active }: Readonly<{ active: boolean }>) {
+  const ref = useRef<HTMLInputElement>(null);
+  useSearchShortcutTarget({ isActive: active, focus: () => ref.current?.focus() });
+  return <input ref={ref} aria-label="Filter" />;
+}
 
-vi.mock('../searchShortcutRegistry', () => ({
-  focusRegisteredSearchShortcutTarget: (...args: unknown[]) =>
-    registryMocks.focusRegisteredSearchShortcutTarget(...args),
-}));
+const showSearchField = async (active: boolean) => {
+  view = await app.render(null);
+  await view.show(<SearchField active={active} />);
+  return requireValue(
+    view.container.querySelector<HTMLInputElement>('input[aria-label="Filter"]'),
+    'expected the search field'
+  );
+};
 
-vi.mock('@/utils/platform', () => ({
-  isMacPlatform: () => isMacPlatformMock(),
-}));
+/** Presses the platform's find shortcut where focus is, and returns the event. */
+const pressFind = async () => {
+  const event = new KeyboardEvent('keydown', {
+    key: 'f',
+    bubbles: true,
+    cancelable: true,
+    ...(isMacPlatform() ? { metaKey: true } : { ctrlKey: true }),
+  });
+  await act(async () => {
+    (document.activeElement ?? document.body).dispatchEvent(event);
+  });
+  return event;
+};
 
 describe('KeyboardProvider search shortcut', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  it('focuses the active search field and keeps the key from the webview', async () => {
+    const field = await showSearchField(true);
 
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    registryMocks.focusRegisteredSearchShortcutTarget.mockClear();
-    isMacPlatformMock.mockReturnValue(true);
+    const event = await pressFind();
+
+    expect(document.activeElement).toBe(field);
+    expect(event.defaultPrevented).toBe(true);
   });
 
-  afterEach(() => {
-    act(() => root.unmount());
-    container.remove();
-  });
+  it('leaves the key to the webview’s find when no search field is active', async () => {
+    const field = await showSearchField(false);
 
-  const renderProvider = async () => {
-    await act(async () => {
-      root.render(<KeyboardProvider>{null}</KeyboardProvider>);
-      await Promise.resolve();
-    });
-  };
+    const event = await pressFind();
 
-  it('registers Cmd or Ctrl+F and focuses the active search target', async () => {
-    registryMocks.focusRegisteredSearchShortcutTarget.mockReturnValue(true);
-    await renderProvider();
-
-    const metaEvent = new KeyboardEvent('keydown', { key: 'f', metaKey: true, cancelable: true });
-    document.dispatchEvent(metaEvent);
-
-    expect(metaEvent.defaultPrevented).toBe(true);
-    expect(registryMocks.focusRegisteredSearchShortcutTarget).toHaveBeenCalledTimes(1);
-
-    act(() => root.unmount());
-    root = ReactDOM.createRoot(container);
-    registryMocks.focusRegisteredSearchShortcutTarget.mockClear();
-    isMacPlatformMock.mockReturnValue(false);
-    await renderProvider();
-
-    const ctrlEvent = new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, cancelable: true });
-    document.dispatchEvent(ctrlEvent);
-
-    expect(ctrlEvent.defaultPrevented).toBe(true);
-    expect(registryMocks.focusRegisteredSearchShortcutTarget).toHaveBeenCalledTimes(1);
-  });
-
-  it('allows fallback browser search when the registry has no active target', async () => {
-    registryMocks.focusRegisteredSearchShortcutTarget.mockReturnValue(false);
-    await renderProvider();
-
-    const event = new KeyboardEvent('keydown', { key: 'f', metaKey: true, cancelable: true });
-    document.dispatchEvent(event);
-
+    expect(document.activeElement).not.toBe(field);
     expect(event.defaultPrevented).toBe(false);
-    expect(registryMocks.focusRegisteredSearchShortcutTarget).toHaveBeenCalledTimes(1);
   });
 });

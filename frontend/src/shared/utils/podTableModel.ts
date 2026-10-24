@@ -4,21 +4,18 @@ import type { PodSnapshotEntry } from '@/core/refresh/types';
 
 // Pod rows carry the resolved controller's API version, including custom owners.
 // Missing identity (including the backend's None sentinel) stays display-only.
-export const podOwnerReference = (pod: PodSnapshotEntry, clusterName?: string | null) => {
+export const podOwnerReference = (pod: PodSnapshotEntry) => {
   const { group, version } = parseApiVersion(pod.ownerApiVersion);
-  return resourceLinkToObjectReference(
-    {
-      ref: {
-        clusterId: pod.ref.clusterId,
-        namespace: pod.ref.namespace,
-        group: group ?? '',
-        version: version ?? '',
-        kind: pod.ownerKind,
-        name: pod.ownerName,
-      },
+  return resourceLinkToObjectReference({
+    ref: {
+      clusterId: pod.ref.clusterId,
+      namespace: pod.ref.namespace,
+      group: group ?? '',
+      version: version ?? '',
+      kind: pod.ownerKind,
+      name: pod.ownerName,
     },
-    clusterName
-  );
+  });
 };
 
 // Keep the first spelling of a namespace while deduplicating within each exact cluster.

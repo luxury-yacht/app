@@ -1,363 +1,264 @@
 /**
  * frontend/src/ui/settings/sections/AppearanceSection.test.tsx
  *
- * Tests for Appearance settings interactions and preference workflow wiring.
+ * The Appearance settings: every input is named; the chosen mode is saved and
+ * applied to the page; tint, accent, and link edits save through the
+ * preference owner for the visible mode (bounded, normalized, and keeping the
+ * other fields), and a live change or reset offers to save the default theme
+ * with both modes' values; saved themes reorder from the keyboard with the
+ * default theme last, save from the keyboard after their pattern validates,
+ * cancel without saving, and show an invalid pattern inline. Runs inside the
+ * production shell with the real preference and appearance owners over the
+ * faked backend (test-utils/appState). reorderThemeByOffset is tested directly.
  */
 
 import type { types } from '@core/backend-api/models';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { installAppStateHarness, type MountedApp } from '@/test-utils/appState/harness';
 import { controlName } from '@/test-utils/controlName';
 import { partialModelFixture } from '@/test-utils/partialModelFixture';
 import { requireValue } from '@/test-utils/requireValue';
 import AppearanceSection, { reorderThemeByOffset } from './AppearanceSection';
 
+const app = installAppStateHarness();
+let view: MountedApp;
+let themes: types.Theme[];
+
+// The light and dark values the app starts with.
+const appearance = {
+  paletteHueLight: 20,
+  paletteSaturationLight: 0,
+  paletteBrightnessLight: 0,
+  paletteHueDark: 210,
+  paletteSaturationDark: 12,
+  paletteBrightnessDark: -3,
+  accentColorLight: '#123456',
+  accentColorDark: '#abcdef',
+  linkColorLight: '#654321',
+  linkColorDark: '#fedcba',
+};
+
+const theme = (fields: Partial<types.Theme> & Pick<types.Theme, 'id' | 'name'>) =>
+  partialModelFixture<types.Theme>({ clusterPattern: '', ...appearance, ...fields });
+
+/** Preference changes the backend saved, in order. */
+const saved = () =>
+  app.backend.calls('UpdateAppPreferences').flatMap(([request]) => request.changes ?? []);
+const savedThemes = () => app.backend.calls('SaveTheme').map(([sent]) => sent);
+
 const setInputValue = (input: HTMLInputElement, value: string): void => {
-  const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-  valueSetter?.call(input, value);
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value);
   input.dispatchEvent(new Event('input', { bubbles: true }));
 };
 
-const appPreferenceMocks = vi.hoisted(() => ({
-  getThemes: vi.fn(),
-  saveTheme: vi.fn(),
-  reorderThemes: vi.fn(),
-  validateThemeClusterPattern: vi.fn(),
-  getPaletteTint: vi.fn(),
-  getPreferenceMetadata: vi.fn((key: string) => ({
-    key,
-    type: key === 'appearanceMode' ? 'enum' : 'integer',
-    defaultValue: key === 'appearanceMode' ? 'system' : 0,
-    currentValue: key === 'appearanceMode' ? 'light' : 0,
-    min: key.includes('Brightness') ? -50 : 0,
-    max: key.includes('Hue') ? 360 : 100,
-    enumOptions: key === 'appearanceMode' ? ['light', 'dark', 'system'] : undefined,
-    runtimeSideEffect: key === 'appearanceMode',
-  })),
-  getIntegerPreferenceMetadata: vi.fn((key: string) => ({
-    key,
-    type: 'integer',
-    defaultValue: 0,
-    currentValue: 0,
-    min: key.includes('Brightness') ? -50 : 0,
-    max: key.includes('Hue') ? 360 : 100,
-    runtimeSideEffect: false,
-  })),
-  normalizeIntegerPreferenceValue: vi.fn((key: string, value: number) => {
-    const min = key.includes('Brightness') ? -50 : 0;
-    const max = key.includes('Hue') ? 360 : 100;
-    return Math.max(min, Math.min(max, Math.floor(value)));
-  }),
-  setPaletteTint: vi.fn(),
-  getAccentColor: vi.fn(),
-  setAccentColor: vi.fn(),
-  getLinkColor: vi.fn(),
-  setLinkColor: vi.fn(),
-}));
-
-const errorHandlerMocks = vi.hoisted(() => ({
-  handle: vi.fn(),
-}));
-
-const appearanceModeMocks = vi.hoisted(() => ({
-  changeAppearanceMode: vi.fn().mockResolvedValue(undefined),
-}));
-
-vi.mock('@/core/contexts/AppearanceModeContext', () => ({
-  useAppearanceMode: () => ({ mode: 'light', resolvedMode: 'light' }),
-}));
-
-vi.mock('@/core/settings/appPreferences', async (importOriginal) => {
-  const { palettePreferenceKeys } =
-    await importOriginal<typeof import('@/core/settings/appPreferences')>();
-  const createPreferenceWorkflowMock = <T,>(commit: (input: T) => void) => ({
-    commit,
-    commitDebounced: commit,
-    cancelPending: vi.fn(),
+const press = async (target: HTMLElement, key: string) => {
+  await act(async () => {
+    target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
   });
+  await app.settle();
+};
 
-  return {
-    palettePreferenceKeys,
-    hydrateAppPreferences: vi.fn().mockResolvedValue({}),
-    getPreferenceMetadata: (key: string) => appPreferenceMocks.getPreferenceMetadata(key),
-    getIntegerPreferenceMetadata: (key: string) =>
-      appPreferenceMocks.getIntegerPreferenceMetadata(key),
-    normalizeIntegerPreferenceValue: (key: string, value: number) =>
-      appPreferenceMocks.normalizeIntegerPreferenceValue(key, value),
-    getPaletteTint: (...args: unknown[]) => appPreferenceMocks.getPaletteTint(...args),
-    createPaletteTintPreferenceWorkflow: () =>
-      createPreferenceWorkflowMock(
-        (input: { mode: 'light' | 'dark'; hue: number; saturation: number; brightness?: number }) =>
-          appPreferenceMocks.setPaletteTint(
-            input.mode,
-            input.hue,
-            input.saturation,
-            input.brightness
-          )
-      ),
-    getAccentColor: (...args: unknown[]) => appPreferenceMocks.getAccentColor(...args),
-    createAccentColorPreferenceWorkflow: () =>
-      createPreferenceWorkflowMock((input: { mode: 'light' | 'dark'; color: string }) =>
-        appPreferenceMocks.setAccentColor(input.mode, input.color)
-      ),
-    getLinkColor: (...args: unknown[]) => appPreferenceMocks.getLinkColor(...args),
-    createLinkColorPreferenceWorkflow: () =>
-      createPreferenceWorkflowMock((input: { mode: 'light' | 'dark'; color: string }) =>
-        appPreferenceMocks.setLinkColor(input.mode, input.color)
-      ),
-    getThemes: (...args: unknown[]) => appPreferenceMocks.getThemes(...args),
-    saveTheme: (...args: unknown[]) => appPreferenceMocks.saveTheme(...args),
-    validateThemeClusterPattern: (...args: unknown[]) =>
-      appPreferenceMocks.validateThemeClusterPattern(...args),
-    deleteTheme: vi.fn(),
-    reorderThemes: appPreferenceMocks.reorderThemes,
-    applyTheme: vi.fn(),
-  };
+const click = async (target: HTMLElement) => {
+  await act(async () => target.click());
+  await app.settle();
+};
+
+const buttonWithText = (text: string) =>
+  requireValue(
+    Array.from(view.container.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent === text
+    ),
+    `expected the ${text} button`
+  );
+
+const unsavedPrompt = () => view.container.querySelector('.themes-unsaved-default');
+
+/** Lets the debounced preference saves run. */
+const flushDebouncedSaves = async () => {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(300);
+  });
+  await app.settle();
+};
+
+const showSection = async () => {
+  view = await app.render(null);
+  await view.show(<AppearanceSection />);
+};
+
+beforeEach(() => {
+  app.preferences({ appearanceMode: 'light', ...appearance });
+  themes = [theme({ id: 'default', name: 'default' })];
+  // Mirrors backend/preferences_settings.go UpdateAppPreferences: the next read
+  // returns what was saved.
+  app.backend.answer('UpdateAppPreferences', (request) => {
+    const changes = request.changes ?? [];
+    app.preferences(Object.fromEntries(changes.map(({ key, value }) => [key, value])));
+    return { settings: null, changedKeys: changes.map(({ key }) => key) };
+  });
+  // Mirrors the backend theme library: saved themes keep the default theme last,
+  // and applying a theme writes its values into the settings.
+  app.backend.answer('GetThemes', () => [...themes]);
+  app.backend.answer('SaveTheme', (next) => {
+    const others = themes.filter((existing) => existing.id !== next.id);
+    themes = themes.some((existing) => existing.id === next.id)
+      ? themes.map((existing) => (existing.id === next.id ? next : existing))
+      : [...others.filter((existing) => existing.id !== 'default'), next, ...themes.slice(-1)];
+  });
+  app.backend.answer('ReorderThemes', (ids) => {
+    themes = (ids ?? []).map((id) =>
+      requireValue(
+        themes.find((existing) => existing.id === id),
+        id
+      )
+    );
+  });
+  app.backend.answer('ApplyTheme', (id) => {
+    const {
+      id: _id,
+      name: _name,
+      clusterPattern: _pattern,
+      ...values
+    } = requireValue(
+      themes.find((existing) => existing.id === id),
+      `theme ${id}`
+    );
+    app.preferences(values);
+  });
+  app.backend.answer('ValidateThemeClusterPattern', () => ({ valid: true, message: '' }));
 });
 
-vi.mock('@/utils/appearanceMode', () => ({
-  changeAppearanceMode: (...args: unknown[]) => appearanceModeMocks.changeAppearanceMode(...args),
-}));
-
-vi.mock('@utils/paletteTint', () => ({
-  applyTintedPalette: vi.fn(),
-  isPaletteActive: vi.fn(() => false),
-  MAX_SATURATION: 20,
-  MAX_BRIGHTNESS_OFFSET: 10,
-}));
-
-vi.mock('@utils/accentColor', () => ({
-  applyAccentColor: vi.fn(),
-  applyAccentBg: vi.fn(),
-}));
-
-vi.mock('@utils/linkColor', () => ({
-  applyLinkColor: vi.fn(),
-}));
-
-vi.mock('@utils/errorHandler', () => ({
-  errorHandler: errorHandlerMocks,
-}));
-
-vi.mock('@shared/components/modals/ConfirmationModal', () => ({
-  __esModule: true,
-  default: vi.fn(() => null),
-}));
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('AppearanceSection', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
-
-  beforeEach(async () => {
-    appPreferenceMocks.getThemes.mockResolvedValue([
-      partialModelFixture<types.Theme>({ id: 'default', name: 'default', clusterPattern: '' }),
-    ]);
-    appPreferenceMocks.saveTheme.mockResolvedValue(undefined);
-    appPreferenceMocks.validateThemeClusterPattern.mockResolvedValue({ valid: true });
-    appPreferenceMocks.getPaletteTint.mockImplementation((mode: string) =>
-      mode === 'light'
-        ? { hue: 20, saturation: 0, brightness: 0 }
-        : { hue: 210, saturation: 12, brightness: -3 }
-    );
-    appPreferenceMocks.getAccentColor.mockImplementation((mode: string) =>
-      mode === 'light' ? '#123456' : '#abcdef'
-    );
-    appPreferenceMocks.getLinkColor.mockImplementation((mode: string) =>
-      mode === 'light' ? '#654321' : '#fedcba'
-    );
-
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    await act(async () => {
-      root.render(<AppearanceSection />);
-      await Promise.resolve();
-    });
-  });
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-    vi.clearAllMocks();
-  });
-
   // The tint and color value editors and the new-theme editor appear on
   // demand; their inputs are named too.
   it('gives every input a name, including the value and theme editors', async () => {
+    await showSection();
     const unnamedInputs = () =>
-      Array.from(container.querySelectorAll('input'))
+      Array.from(view.container.querySelectorAll('input'))
         .filter((input) => controlName(input) === '')
         .map((input) => input.className || input.type);
     expect(unnamedInputs()).toEqual([]);
 
-    const valueEditors = container.querySelectorAll('.palette-hex-clickable').length;
+    const valueEditors = view.container.querySelectorAll('.palette-hex-clickable').length;
     expect(valueEditors).toBeGreaterThan(3);
     for (let index = 0; index < valueEditors; index += 1) {
-      await act(async () => {
+      await click(
         requireValue(
-          container.querySelectorAll<HTMLButtonElement>('.palette-hex-clickable')[index],
+          view.container.querySelectorAll<HTMLButtonElement>('.palette-hex-clickable')[index],
           `expected value button ${index}`
-        ).click();
-      });
+        )
+      );
       const editor = requireValue(
-        container.querySelector<HTMLInputElement>('.palette-hex-input'),
+        view.container.querySelector<HTMLInputElement>('.palette-hex-input'),
         `expected value editor ${index}`
       );
       expect(unnamedInputs()).toEqual([]);
-      await act(async () => {
-        editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-      });
+      await press(editor, 'Escape');
     }
 
-    await act(async () => {
-      requireValue(
-        Array.from(container.querySelectorAll('button')).find(
-          (button) => button.textContent === 'Save new theme'
-        ),
-        'expected the Save new theme button'
-      ).click();
-      await Promise.resolve();
-    });
-    expect(container.querySelector('.theme-name-input')).not.toBeNull();
+    await click(buttonWithText('Save new theme'));
+    expect(view.container.querySelector('.theme-name-input')).not.toBeNull();
     expect(unnamedInputs()).toEqual([]);
   });
 
-  it('renders styled appearance mode buttons and changes modes', async () => {
-    const buttons = Array.from(
-      container.querySelectorAll<HTMLButtonElement>('.settings-choice-button')
-    );
-    expect(buttons.map((button) => button.textContent)).toEqual(['System', 'Light', 'Dark']);
+  it('saves the chosen appearance mode and applies it to the page', async () => {
+    await showSection();
+    const mode = (label: string) =>
+      requireValue(
+        Array.from(
+          view.container.querySelectorAll<HTMLButtonElement>(
+            'fieldset[aria-label="Appearance mode"] button'
+          )
+        ).find((button) => button.textContent === label),
+        `expected the ${label} mode`
+      );
+    expect(mode('Light').getAttribute('aria-pressed')).toBe('true');
 
-    const lightButton = buttons.find((button) => button.textContent === 'Light');
-    const darkButton = requireValue(
-      buttons.find((button) => button.textContent === 'Dark'),
-      'expected the Dark appearance button'
-    );
-    expect(lightButton?.getAttribute('aria-pressed')).toBe('true');
-    expect(darkButton?.getAttribute('aria-pressed')).toBe('false');
+    await click(mode('Dark'));
 
-    await act(async () => {
-      darkButton.click();
-      await Promise.resolve();
-    });
-
-    expect(appearanceModeMocks.changeAppearanceMode).toHaveBeenCalledWith('dark');
+    expect(saved()).toEqual([{ key: 'appearanceMode', value: 'dark' }]);
+    expect(document.documentElement.dataset.appearanceMode).toBe('dark');
+    expect(mode('Dark').getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('prompts to save live appearance changes as the default theme', async () => {
-    const hueInput = requireValue(
-      container.querySelector<HTMLInputElement>('[id$="-palette-hue"]'),
-      'expected the palette hue input'
-    );
-
+  it('offers to save a live tint change as the default theme, with both modes’ values', async () => {
+    await showSection();
     await act(async () => {
-      setInputValue(hueInput, '30');
+      setInputValue(
+        requireValue(
+          view.container.querySelector<HTMLInputElement>('[id$="-palette-hue"]'),
+          'expected the palette hue slider'
+        ),
+        '30'
+      );
     });
+    expect(unsavedPrompt()).not.toBeNull();
 
-    expect(container.textContent).toContain('There are unsaved changes. Save as default?');
+    await click(buttonWithText('Save'));
 
-    const saveButton = requireValue(
-      Array.from(container.querySelectorAll('button')).find(
-        (button) => button.textContent === 'Save'
-      ),
-      'expected the default-theme Save button'
-    );
-
-    await act(async () => {
-      saveButton.click();
-      await Promise.resolve();
-    });
-
-    expect(appPreferenceMocks.saveTheme).toHaveBeenCalledTimes(1);
-    expect(appPreferenceMocks.saveTheme.mock.calls[0][0]).toMatchObject({
-      id: 'default',
-      name: 'default',
-      clusterPattern: '',
-      paletteHueLight: 30,
-      paletteSaturationLight: 0,
-      paletteBrightnessLight: 0,
-      paletteHueDark: 210,
-      paletteSaturationDark: 12,
-      paletteBrightnessDark: -3,
-      accentColorLight: '#123456',
-      accentColorDark: '#abcdef',
-      linkColorLight: '#654321',
-      linkColorDark: '#fedcba',
-    });
+    expect(savedThemes()).toEqual([
+      expect.objectContaining({
+        id: 'default',
+        name: 'default',
+        clusterPattern: '',
+        ...appearance,
+        paletteHueLight: 30,
+      }),
+    ]);
+    expect(unsavedPrompt()).toBeNull();
   });
 
-  it('prompts when tint values are reset', async () => {
-    const hueReset = requireValue(
-      container.querySelector<HTMLButtonElement>('button[title="Reset Hue"]'),
-      'expected the Reset Hue button'
-    );
-    expect(hueReset.disabled).toBe(false);
+  it('offers to save the default theme again after a tint, accent, or link reset', async () => {
+    await showSection();
+    for (const reset of ['Reset Hue', 'Reset Accent color', 'Reset Link color']) {
+      await click(
+        requireValue(
+          view.container.querySelector<HTMLButtonElement>(`button[title="${reset}"]`),
+          `expected the ${reset} button`
+        )
+      );
+      expect(unsavedPrompt()).not.toBeNull();
+      await click(buttonWithText('Save'));
+      expect(unsavedPrompt()).toBeNull();
+    }
 
-    await act(async () => {
-      hueReset.click();
-      await Promise.resolve();
-    });
-
-    expect(container.textContent).toContain('There are unsaved changes. Save as default?');
-  });
-
-  it('prompts when color swatches are reset', async () => {
-    const accentReset = requireValue(
-      container.querySelector<HTMLButtonElement>('button[title="Reset Accent color"]'),
-      'expected the Reset Accent color button'
-    );
-    const linkReset = requireValue(
-      container.querySelector<HTMLButtonElement>('button[title="Reset Link color"]'),
-      'expected the Reset Link color button'
-    );
-
-    await act(async () => {
-      accentReset.click();
-      await Promise.resolve();
-    });
-
-    expect(container.textContent).toContain('There are unsaved changes. Save as default?');
-
-    const saveButton = requireValue(
-      Array.from(container.querySelectorAll('button')).find(
-        (button) => button.textContent === 'Save'
-      ),
-      'expected the default-theme Save button'
-    );
-
-    await act(async () => {
-      saveButton.click();
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      linkReset.click();
-      await Promise.resolve();
-    });
-
-    expect(container.textContent).toContain('There are unsaved changes. Save as default?');
+    expect(savedThemes().slice(-1)).toEqual([
+      expect.objectContaining({
+        id: 'default',
+        paletteHueLight: 0,
+        accentColorLight: '',
+        linkColorLight: '',
+        paletteHueDark: 210,
+        accentColorDark: '#abcdef',
+        linkColorDark: '#fedcba',
+      }),
+    ]);
   });
 
   it.each([
-    ['accent', 0, appPreferenceMocks.setAccentColor, appPreferenceMocks.setLinkColor],
-    ['link', 1, appPreferenceMocks.setLinkColor, appPreferenceMocks.setAccentColor],
+    ['accent', 0, 'accentColorLight'],
+    ['link', 1, 'linkColorLight'],
   ] as const)(
-    'normalizes valid %s hex drafts and discards invalid or canceled drafts',
-    async (_name, index, persist, otherPersist) => {
+    'saves a normalized %s hex draft and discards invalid or canceled drafts',
+    async (_name, index, key) => {
+      await showSection();
+      vi.useFakeTimers();
       const field = requireValue(
-        container.querySelectorAll('.palette-color-field')[index],
+        view.container.querySelectorAll('.palette-color-field')[index],
         'expected color control'
       );
       const edit = async (draft: string) => {
-        await act(async () => {
+        await click(
           requireValue(
             field.querySelector<HTMLButtonElement>('.palette-hex-clickable'),
             'expected hex edit button'
-          ).click();
-        });
+          )
+        );
         const input = requireValue(
           field.querySelector<HTMLInputElement>('.palette-hex-input'),
           'expected hex input'
@@ -365,35 +266,35 @@ describe('AppearanceSection', () => {
         await act(async () => setInputValue(input, draft));
         return input;
       };
-      const submit = async (input: HTMLInputElement, key: string) => {
-        await act(async () => {
-          input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
-        });
-      };
 
-      await submit(await edit('AbC'), 'Enter');
-      expect(persist).toHaveBeenLastCalledWith('light', '#aabbcc');
-      expect(otherPersist).not.toHaveBeenCalled();
-
-      await submit(await edit('xyz'), 'Enter');
-      await submit(await edit('#112233'), 'Escape');
+      await press(await edit('AbC'), 'Enter');
+      await press(await edit('xyz'), 'Enter');
+      await press(await edit('#112233'), 'Escape');
       const blurred = await edit('#445566');
       await act(async () => {
         blurred.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
       });
-      expect(persist).toHaveBeenCalledOnce();
-      expect(otherPersist).not.toHaveBeenCalled();
+      await flushDebouncedSaves();
+
+      expect(saved()).toEqual([{ key, value: '#aabbcc' }]);
       expect(field.querySelector('.palette-hex-input')).toBeNull();
       expect(field.querySelector<HTMLInputElement>('input[type="color"]')?.value).toBe('#aabbcc');
     }
   );
 
-  it('preserves the other palette fields when editing and resetting tint', async () => {
+  it('keeps the other tint fields when one is edited or reset', async () => {
+    await showSection();
+    vi.useFakeTimers();
+    /** The light tint the latest save wrote, as [hue, saturation, brightness]. */
+    const savedTint = () => {
+      const tint = Object.fromEntries(saved().map(({ key, value }) => [key, value]));
+      return [tint.paletteHueLight, tint.paletteSaturationLight, tint.paletteBrightnessLight];
+    };
     const change = async (field: string, value: string) => {
       await act(async () => {
         setInputValue(
           requireValue(
-            container.querySelector<HTMLInputElement>(`[id$="-palette-${field}"]`),
+            view.container.querySelector<HTMLInputElement>(`[id$="-palette-${field}"]`),
             'expected palette slider'
           ),
           value
@@ -403,162 +304,163 @@ describe('AppearanceSection', () => {
     await change('hue', '120');
     await change('saturation', '35');
     await change('brightness', '-10');
-    expect(appPreferenceMocks.setPaletteTint).toHaveBeenLastCalledWith('light', 120, 35, -10);
+    await flushDebouncedSaves();
+    expect(savedTint()).toEqual([120, 35, -10]);
 
     for (const [field, expected] of [
       ['Saturation', [120, 0, -10]],
       ['Brightness', [120, 0, 0]],
       ['Hue', [0, 0, 0]],
     ] as const) {
-      await act(async () => {
+      await click(
         requireValue(
-          container.querySelector<HTMLButtonElement>(`button[title="Reset ${field}"]`),
+          view.container.querySelector<HTMLButtonElement>(`button[title="Reset ${field}"]`),
           'expected palette reset'
-        ).click();
-      });
-      expect(appPreferenceMocks.setPaletteTint).toHaveBeenLastCalledWith('light', ...expected);
+        )
+      );
+      await flushDebouncedSaves();
+      expect(savedTint()).toEqual(expected);
     }
   });
 
-  it('commits bounded inline tint values while canceled and invalid edits leave the palette unchanged', async () => {
+  it('saves bounded inline tint values while canceled and invalid edits change nothing', async () => {
+    await showSection();
+    vi.useFakeTimers();
     const edit = async (index: number, value: string, key: string) => {
-      await act(async () => {
+      await click(
         requireValue(
-          container.querySelectorAll<HTMLButtonElement>('.palette-slider-value')[index],
+          view.container.querySelectorAll<HTMLButtonElement>('.palette-slider-value')[index],
           'expected editable tint'
-        ).click();
-      });
+        )
+      );
       const input = requireValue(
-        container.querySelector<HTMLInputElement>('.palette-tint-controls .palette-hex-input'),
+        view.container.querySelector<HTMLInputElement>('.palette-tint-controls .palette-hex-input'),
         'expected tint editor'
       );
       await act(async () => setInputValue(input, value));
-      await act(async () =>
-        input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
-      );
+      await press(input, key);
+      await flushDebouncedSaves();
     };
+
+    // Above the hue maximum (appPreferences.ts PALETTE_HUE_MAX).
     await edit(0, '500', 'Enter');
-    expect(appPreferenceMocks.setPaletteTint).toHaveBeenLastCalledWith('light', 360, 0, 0);
     await edit(1, '34', 'Enter');
-    expect(appPreferenceMocks.setPaletteTint).toHaveBeenLastCalledWith('light', 360, 34, 0);
     await edit(2, '25', 'Escape');
     await edit(2, 'bad', 'Enter');
-    expect(appPreferenceMocks.setPaletteTint).toHaveBeenCalledTimes(2);
-    expect(container.querySelector('.palette-tint-controls .palette-hex-input')).toBeNull();
+
+    expect(app.backend.calls('UpdateAppPreferences')).toHaveLength(2);
+    expect(saved().slice(-3)).toEqual([
+      { key: 'paletteHueLight', value: 360 },
+      { key: 'paletteSaturationLight', value: 34 },
+      { key: 'paletteBrightnessLight', value: 0 },
+    ]);
+    expect(view.container.querySelector('.palette-tint-controls .palette-hex-input')).toBeNull();
   });
 
-  it('persists keyboard theme priority changes and keeps the default theme last', async () => {
-    appPreferenceMocks.getThemes.mockResolvedValue([
-      partialModelFixture<types.Theme>({ id: 'one', name: 'One' }),
-      partialModelFixture<types.Theme>({ id: 'two', name: 'Two' }),
-      partialModelFixture<types.Theme>({ id: 'default', name: 'default' }),
-    ]);
-    await act(async () => root.render(null));
-    await act(async () => root.render(<AppearanceSection />));
-    const reorder = async (name: string, key: string) => {
-      await act(async () => {
-        requireValue(
-          container.querySelector<HTMLButtonElement>(`[aria-label^="Reorder ${name}."]`),
-          'expected theme reorder control'
-        ).dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
-      });
-    };
-    await reorder('One', 'ArrowDown');
-    expect(appPreferenceMocks.reorderThemes).toHaveBeenCalledExactlyOnceWith([
-      'two',
-      'one',
-      'default',
-    ]);
-    await reorder('Two', 'ArrowDown');
-    expect(appPreferenceMocks.reorderThemes).toHaveBeenCalledTimes(1);
-    expect(container.querySelector('[aria-label^="Reorder default."]')).toBeNull();
+  it('saves keyboard theme priority changes and keeps the default theme last', async () => {
+    themes = [
+      theme({ id: 'one', name: 'One' }),
+      theme({ id: 'two', name: 'Two' }),
+      theme({ id: 'default', name: 'default' }),
+    ];
+    await showSection();
+    const handle = (name: string) =>
+      requireValue(
+        view.container.querySelector<HTMLButtonElement>(`[aria-label^="Reorder ${name}."]`),
+        `expected the ${name} reorder control`
+      );
+
+    const order = () =>
+      Array.from(view.container.querySelectorAll('.themes-table-row .theme-name')).map(
+        (name) => name.textContent
+      );
+
+    await press(handle('One'), 'ArrowDown');
+    expect(app.backend.calls('ReorderThemes')).toEqual([[['two', 'one', 'default']]]);
+    expect(order()).toEqual(['Two', 'One', 'default']);
+
+    // Two is now first and One is the last custom theme, which cannot move below the default.
+    await press(handle('Two'), 'ArrowUp');
+    await press(handle('One'), 'ArrowDown');
+    expect(app.backend.calls('ReorderThemes')).toHaveLength(1);
+    expect(view.container.querySelector('[aria-label^="Reorder default."]')).toBeNull();
   });
 
   it.each(['new', 'existing'] as const)(
     'validates and saves %s theme fields from the keyboard, and cancels without saving',
     async (kind) => {
       if (kind === 'existing') {
-        appPreferenceMocks.getThemes.mockResolvedValue([
-          partialModelFixture<types.Theme>({ id: 'custom', name: 'Custom', clusterPattern: '*' }),
-        ]);
-        await act(async () => root.render(null));
-        await act(async () => root.render(<AppearanceSection />));
+        themes = [
+          theme({ id: 'custom', name: 'Custom', clusterPattern: '*' }),
+          theme({ id: 'default', name: 'default' }),
+        ];
       }
-      const openEditor = async () => {
-        const button = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
-          (candidate) =>
-            kind === 'new'
-              ? candidate.textContent === 'Save new theme'
-              : candidate.getAttribute('aria-label') === 'Edit theme'
+      await showSection();
+      const openEditor = async () =>
+        click(
+          requireValue(
+            Array.from(view.container.querySelectorAll<HTMLButtonElement>('button')).find(
+              (candidate) =>
+                kind === 'new'
+                  ? candidate.textContent === 'Save new theme'
+                  : candidate.getAttribute('aria-label') === 'Edit theme'
+            ),
+            'expected theme editor action'
+          )
         );
-        await act(async () => requireValue(button, 'expected theme editor action').click());
-      };
       const inputs = () => ({
         name: requireValue(
-          container.querySelector<HTMLInputElement>('.theme-name-input'),
+          view.container.querySelector<HTMLInputElement>('.theme-name-input'),
           'expected name'
         ),
         pattern: requireValue(
-          container.querySelector<HTMLInputElement>('.theme-pattern-input'),
+          view.container.querySelector<HTMLInputElement>('.theme-pattern-input'),
           'expected pattern'
         ),
       });
+
       await openEditor();
       const fields = inputs();
       await act(async () => {
         setInputValue(fields.name, 'Production');
         setInputValue(fields.pattern, 'prod-*');
       });
-      await act(async () => {
-        fields.pattern.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-      });
-      expect(appPreferenceMocks.validateThemeClusterPattern).toHaveBeenLastCalledWith('prod-*');
-      expect(appPreferenceMocks.saveTheme).toHaveBeenCalledExactlyOnceWith(
+      await press(fields.pattern, 'Enter');
+
+      expect(app.backend.calls('ValidateThemeClusterPattern').slice(-1)).toEqual([['prod-*']]);
+      expect(savedThemes()).toEqual([
         expect.objectContaining({
-          id: kind === 'existing' ? 'custom' : expect.any(String),
+          ...(kind === 'existing' ? { id: 'custom' } : {}),
           name: 'Production',
           clusterPattern: 'prod-*',
-          paletteHueLight: 20,
-          paletteHueDark: 210,
-        })
-      );
+          ...appearance,
+        }),
+      ]);
+
       await openEditor();
-      const cancelledFields = inputs();
-      await act(async () => setInputValue(cancelledFields.name, 'Do not save'));
-      await act(async () => {
-        cancelledFields.name.dispatchEvent(
-          new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
-        );
-      });
-      expect(appPreferenceMocks.saveTheme).toHaveBeenCalledTimes(1);
-      expect(container.querySelector('.theme-name-input')).toBeNull();
+      const cancelled = inputs();
+      await act(async () => setInputValue(cancelled.name, 'Do not save'));
+      await press(cancelled.name, 'Escape');
+
+      expect(savedThemes()).toHaveLength(1);
+      expect(view.container.querySelector('.theme-name-input')).toBeNull();
     }
   );
 
-  it('shows invalid theme pattern errors inline instead of using the global error handler', async () => {
-    appPreferenceMocks.validateThemeClusterPattern.mockResolvedValueOnce({
+  it('shows an invalid theme pattern inline instead of reporting it', async () => {
+    app.backend.answer('ValidateThemeClusterPattern', () => ({
       valid: false,
       message: 'Invalid cluster pattern: missing closing bracket.',
-    });
+    }));
+    await showSection();
 
-    const newThemeButton = requireValue(
-      Array.from(container.querySelectorAll('button')).find(
-        (button) => button.textContent === 'Save new theme'
-      ),
-      'expected the Save new theme button'
-    );
-
-    await act(async () => {
-      newThemeButton.click();
-      await Promise.resolve();
-    });
-
+    await click(buttonWithText('Save new theme'));
     const nameInput = requireValue(
-      container.querySelector<HTMLInputElement>('.theme-name-input'),
+      view.container.querySelector<HTMLInputElement>('.theme-name-input'),
       'expected the theme name input'
     );
     const patternInput = requireValue(
-      container.querySelector<HTMLInputElement>('.theme-pattern-input'),
+      view.container.querySelector<HTMLInputElement>('.theme-pattern-input'),
       'expected the theme cluster-pattern input'
     );
     expect(document.activeElement).toBe(nameInput);
@@ -567,28 +469,22 @@ describe('AppearanceSection', () => {
       setInputValue(nameInput, 'Prod');
       setInputValue(patternInput, 'prod-[');
     });
-
-    const saveButton = requireValue(
-      container.querySelector<HTMLButtonElement>('button[aria-label="Save new theme"]'),
-      'expected the open theme editor Save button'
+    await click(
+      requireValue(
+        view.container.querySelector<HTMLButtonElement>('button[aria-label="Save new theme"]'),
+        'expected the open theme editor Save button'
+      )
     );
 
-    await act(async () => {
-      saveButton.click();
-      await Promise.resolve();
-    });
-
-    expect(container.textContent).toContain('Invalid cluster pattern: missing closing bracket.');
+    expect(app.backend.calls('ValidateThemeClusterPattern')).toEqual([['prod-[']]);
+    expect(view.container.textContent).toContain('missing closing bracket');
     expect(patternInput.getAttribute('aria-invalid')).toBe('true');
-    expect(appPreferenceMocks.validateThemeClusterPattern).toHaveBeenCalledWith('prod-[');
-    expect(appPreferenceMocks.saveTheme).not.toHaveBeenCalled();
-    expect(errorHandlerMocks.handle).not.toHaveBeenCalled();
+    expect(savedThemes()).toEqual([]);
+    expect(app.errors.records()).toEqual([]);
 
-    await act(async () => {
-      setInputValue(patternInput, 'prod-*');
-    });
+    await act(async () => setInputValue(patternInput, 'prod-*'));
 
-    expect(container.textContent).not.toContain('Invalid cluster pattern');
+    expect(view.container.textContent).not.toContain('missing closing bracket');
     expect(patternInput.hasAttribute('aria-invalid')).toBe(false);
   });
 });

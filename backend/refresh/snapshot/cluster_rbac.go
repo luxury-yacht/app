@@ -2,18 +2,14 @@ package snapshot
 
 import (
 	"context"
-	"fmt"
 	"sort"
-
-	informers "k8s.io/client-go/informers"
-	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
-	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/clusterrole"
@@ -25,8 +21,8 @@ const clusterRBACDomainName = "cluster-rbac"
 // ClusterRBACBuilder produces cluster-level RBAC snapshots via the shared
 // typed-table domain skeleton (typed_table_domain.go).
 type ClusterRBACBuilder struct {
-	collectIndexer func(streamspec.Descriptor) cache.Indexer
-	// maintained, when set, is an informer-fed store the builder serves rows from
+	available kindAvailability
+	// maintained, when set, is a reflector-fed store the builder serves rows from
 	// instead of listing + re-projecting per request. nil falls back to the list path.
 	maintained *typedMaintainedStore[ClusterRBACEntry]
 }
@@ -71,6 +67,9 @@ func clusterRBACDomainSpec() typedTableDomainSpec[ClusterRBACEntry] {
 		schema:       clusterRBACQuerypageSchema(),
 		capabilities: clusterRBACQueryCapabilities(),
 		sortRows:     sortClusterRBACEntries,
+		payload: func(meta ClusterMeta, envelope ResourceQueryEnvelope, rows []ClusterRBACEntry) any {
+			return ClusterRBACSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: envelope, Rows: rows}
+		},
 	}
 }
 
@@ -87,30 +86,26 @@ func sortClusterRBACEntries(entries []ClusterRBACEntry) {
 // Only listers for permitted resources are wired; denied resources are left nil
 // so the builder skips them gracefully.
 //
-// ClusterRole and ClusterRoleBinding are owned-reflector ingest kinds (IngestOwned):
-// when ingestManager is non-nil their maintained-store feed comes from the ingest
-// reflectors' Table-half Sink and registerMaintainedHandlers skips them (the shared
-// factory no longer caches them). When ingestManager is nil (a unit test) the store has
-// no feed for the cut kinds.
+// ClusterRole and ClusterRoleBinding feed the maintained store from their owned
+// reflectors' Table-half sinks. When ingestManager is nil (a unit test) the store has
+// no feed.
 func RegisterClusterRBACDomain(
 	reg *domain.Registry,
-	factory informers.SharedInformerFactory,
 	allowed domainpermissions.AllowedResources,
 	clusterMeta ClusterMeta,
 	ingestManager *ingest.IngestManager,
+	bell doorbell.Bell,
 ) error {
-	if factory == nil {
-		return fmt.Errorf("shared informer factory is nil")
-	}
-	collectIndexer := sharedFactoryIndexers(factory, allowed, clusterRBACDomainName, ingestManager)
-	maintained, err := newRegisteredTypedTableStore(reg, clusterRBACDomainSpec(), clusterMeta, collectIndexer, factory, nil, ingestManager)
+	available := ingestAvailability(allowed, clusterRBACDomainName, ingestManager)
+	maintained, err := newRegisteredTypedTableStore(reg, clusterRBACDomainSpec(), clusterMeta,
+		ingestManager, bell)
 	if err != nil {
 		return err
 	}
 
 	builder := &ClusterRBACBuilder{
-		collectIndexer: collectIndexer,
-		maintained:     maintained,
+		available:  available,
+		maintained: maintained,
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          clusterRBACDomainName,
@@ -120,8 +115,5 @@ func RegisterClusterRBACDomain(
 
 // Build constructs a snapshot of cluster RBAC resources.
 func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	return buildTypedTableSnapshot(ctx, scope, clusterRBACDomainSpec(), b.collectIndexer, b.maintained,
-		func(meta ClusterMeta, envelope ResourceQueryEnvelope, rows []ClusterRBACEntry) any {
-			return ClusterRBACSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: envelope, Rows: rows}
-		})
+	return buildTypedTableSnapshot(ctx, scope, clusterRBACDomainSpec(), b.available, b.maintained)
 }

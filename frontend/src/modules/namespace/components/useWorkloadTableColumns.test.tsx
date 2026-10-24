@@ -1,205 +1,178 @@
 /**
  * frontend/src/modules/namespace/components/useWorkloadTableColumns.test.tsx
  *
- * Test suite for useWorkloadTableColumns.
- * Covers key behaviors and edge cases for useWorkloadTableColumns.
+ * The Workloads table's columns: Kind and Name open the workload, Namespace
+ * opens that namespace's Workloads view, status comes from the backend's
+ * presentation, restarts sort by count, and metric animations stay per
+ * object identity. Runs inside the production shell with the real kubeconfig,
+ * view-state, sidebar, and namespace owners over a faked backend
+ * (test-utils/appState); cells are rendered and clicked as the table would.
  */
 
+import type { WorkloadData } from '@modules/namespace/components/NsViewWorkloads.helpers';
+import useWorkloadTableColumns from '@modules/namespace/components/useWorkloadTableColumns';
+import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { getTextContent } from '@shared/components/tables/GridTable.utils';
-import React, { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
+import { act } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { makeResourceRef } from '@/test-utils/makeResourceRef';
 import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
 
-vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
-  useNamespaceColumnLink: () => ({
-    onClick: vi.fn(),
-    getClassName: () => 'object-panel-link',
-    isInteractive: () => true,
-  }),
-}));
+const app = installAppStateHarness();
 
-import type { WorkloadData } from '@modules/namespace/components/NsViewWorkloads.helpers';
-import useWorkloadTableColumns from '@modules/namespace/components/useWorkloadTableColumns';
+let columns: GridColumnDefinition<WorkloadData>[] = [];
 
-const renderHook = <T,>(hook: () => T) => {
-  const result: { current: T | undefined } = { current: undefined };
-
-  const TestComponent: React.FC = () => {
-    result.current = hook();
-    return null;
-  };
-
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = ReactDOM.createRoot(container);
-
-  act(() => {
-    root.render(<TestComponent />);
+/** Renders the listed cells of one row, as the table renders them. */
+function WorkloadCells({
+  row,
+  keys,
+  onWorkloadClick,
+}: Readonly<{ row: WorkloadData; keys: string[]; onWorkloadClick: (row: WorkloadData) => void }>) {
+  columns = useWorkloadTableColumns({
+    handleWorkloadClick: onWorkloadClick,
+    showNamespaceColumn: true,
+    useShortResourceNames: false,
+    metrics: null,
   });
+  return (
+    <>
+      {keys.map((key) => (
+        <div key={key} data-column={key}>
+          {requireValue(
+            columns.find((column) => column.key === key),
+            `expected the ${key} column`
+          ).render(row)}
+        </div>
+      ))}
+    </>
+  );
+}
 
-  return {
-    get() {
-      if (result.current === undefined) {
-        throw new Error('Hook result not set');
-      }
-      return result.current;
-    },
-    cleanup() {
-      act(() => {
-        root.unmount();
-      });
-      container.remove();
-    },
-  };
+const workloadIn = (cluster: TestCluster, overrides: Partial<WorkloadData> = {}): WorkloadData => ({
+  ref: makeResourceRef({
+    clusterId: cluster.clusterId,
+    group: 'apps',
+    kind: 'Deployment',
+    resource: 'deployments',
+    namespace: 'team-a',
+    name: 'api',
+  }),
+  status: 'Running',
+  statusState: '1/1',
+  statusPresentation: 'ready',
+  ready: '1/1',
+  restarts: 0,
+  cpuUsageMilli: 10,
+  memoryUsageBytes: 20 * 1024 ** 2,
+  age: '5m',
+  portForwardAvailable: false,
+  ...overrides,
+});
+
+const start = async () => {
+  const dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['team-a']);
+  const view = await app.render(null);
+  return { dev, view };
 };
 
+const show = (view: MountedApp, row: WorkloadData, keys: string[], onWorkloadClick = vi.fn()) =>
+  view.show(<WorkloadCells row={row} keys={keys} onWorkloadClick={onWorkloadClick} />);
+
+const cell = (view: MountedApp, key: string) =>
+  requireValue(
+    view.container.querySelector<HTMLElement>(`[data-column="${key}"]`),
+    `expected the ${key} cell`
+  );
+
+const clickCell = async (view: MountedApp, key: string) => {
+  const button = requireValue(
+    cell(view, key).querySelector<HTMLButtonElement>('button'),
+    `expected the ${key} cell to be a link`
+  );
+  await act(async () => button.click());
+  await app.settle();
+};
+
+const columnOf = (key: string) =>
+  requireValue(
+    columns.find((column) => column.key === key),
+    `expected the ${key} column`
+  );
+
 describe('useWorkloadTableColumns', () => {
-  const workload: WorkloadData = {
-    ref: {
-      ...makeResourceRef({
-        clusterId: 'cluster-a',
-        group: 'apps',
-        kind: 'Deployment',
-        resource: 'deployments',
-        namespace: 'team-a',
-        name: 'api',
-      }),
-      clusterId: 'cluster-a',
-      kind: 'Deployment',
-      name: 'api',
+  it('opens the workload from Kind and Name, and its namespace’s Workloads view from Namespace', async () => {
+    const { dev, view } = await start();
+    const workload = workloadIn(dev);
+    const onWorkloadClick = vi.fn();
+    await show(view, workload, ['kind', 'name', 'namespace'], onWorkloadClick);
+
+    await clickCell(view, 'kind');
+    await clickCell(view, 'name');
+    expect(onWorkloadClick.mock.calls).toEqual([[workload], [workload]]);
+
+    await clickCell(view, 'namespace');
+    const { namespace, viewState } = view.owners();
+    expect({
+      namespace: namespace.selectedNamespace,
+      clusterId: namespace.selectedNamespaceClusterId,
+      view: viewState?.viewType,
+      tab: viewState?.activeNamespaceTab,
+    }).toEqual({
       namespace: 'team-a',
-    },
+      clusterId: dev.clusterId,
+      view: 'namespace',
+      tab: 'workloads',
+    });
+  });
 
-    status: 'Running',
-    statusState: '1/1',
-    statusPresentation: 'ready',
-    ready: '1/1',
-    restarts: 0,
-    cpuUsageMilli: 10,
-    memoryUsageBytes: 20 * 1024 ** 2,
-    age: '5m',
-    portForwardAvailable: false,
-  };
+  it('keeps metric animation scopes distinct across clusters and workload kinds', async () => {
+    const { dev, view } = await start();
+    const workload = workloadIn(dev);
+    await show(view, workload, []);
 
-  it('keeps metric animation scopes distinct across clusters and workload kinds', () => {
-    const hook = renderHook(() =>
-      useWorkloadTableColumns({
-        handleWorkloadClick: vi.fn(),
-        showNamespaceColumn: false,
-        useShortResourceNames: false,
-      })
-    );
-    try {
-      for (const key of ['cpu', 'memory']) {
-        const column = requireValue(
-          hook.get().find((item) => item.key === key),
-          'expected metric column'
-        );
-        const keys = [
-          workload.ref,
-          { ...workload.ref, clusterId: 'other' },
-          { ...workload.ref, kind: 'StatefulSet' },
-        ].map(
-          (ref) =>
-            requireReactElement<{ animationScopeKey: string }>(
-              column.render({ ...workload, ref }),
-              'expected metric cell'
-            ).props.animationScopeKey
-        );
-        expect(new Set(keys).size).toBe(3);
-      }
-    } finally {
-      hook.cleanup();
+    for (const key of ['cpu', 'memory']) {
+      const animationKeys = [
+        workload.ref,
+        { ...workload.ref, clusterId: 'other' },
+        { ...workload.ref, kind: 'StatefulSet' },
+      ].map(
+        (ref) =>
+          requireReactElement<{ animationScopeKey: string }>(
+            columnOf(key).render({ ...workload, ref }),
+            'expected a metric cell'
+          ).props.animationScopeKey
+      );
+      expect(new Set(animationKeys).size).toBe(3);
     }
   });
 
-  it('returns columns with interactive kind and name handlers', () => {
-    const handleWorkloadClick = vi.fn();
-    const hook = renderHook(() =>
-      useWorkloadTableColumns({
-        handleWorkloadClick,
-        showNamespaceColumn: true,
-        useShortResourceNames: false,
-        metrics: null,
-      })
-    );
-    const columns = hook.get();
+  it('presents status from the backend’s statusPresentation, never from statusState', async () => {
+    const { dev, view } = await start();
 
-    const kindColumn = columns.find((column) => column.key === 'kind');
-    expect(kindColumn).toBeDefined();
-    kindColumn?.render(workload);
-    const nameColumn = columns.find((column) => column.key === 'name');
-    const nameElement = requireReactElement<{
-      onClick?: (event: { stopPropagation: () => void }) => void;
-    }>(nameColumn?.render(workload), 'expected workload name element');
-    nameElement.props.onClick?.({ stopPropagation: () => undefined });
-    expect(handleWorkloadClick).toHaveBeenCalledTimes(1);
-    hook.cleanup();
+    await show(view, workloadIn(dev, { statusPresentation: 'warning' }), ['status']);
+    expect(cell(view, 'status').querySelector('span')?.className).toBe('status-text warning');
+
+    await show(view, workloadIn(dev, { statusState: 'true', statusPresentation: undefined }), [
+      'status',
+    ]);
+    expect(cell(view, 'status').querySelector('span')?.className).toBe('status-text unknown');
   });
 
-  it('uses backend statusPresentation for the status class', () => {
-    const hook = renderHook(() =>
-      useWorkloadTableColumns({
-        handleWorkloadClick: vi.fn(),
-        showNamespaceColumn: false,
-        useShortResourceNames: false,
-        metrics: null,
-      })
-    );
-    const columns = hook.get();
-    const statusColumn = columns.find((column) => column.key === 'status');
-    const cell = statusColumn?.render({ ...workload, statusPresentation: 'warning' });
-    expect(React.isValidElement(cell)).toBe(true);
-    expect(
-      requireReactElement<{ className?: string }>(cell, 'expected status element').props.className
-    ).toBe('status-text warning');
-    hook.cleanup();
-  });
+  // The backend sorts restarts by count; the table shows zero as no value.
+  it('shows zero restarts as no value', async () => {
+    const { dev, view } = await start();
+    const workload = workloadIn(dev);
+    await show(view, workload, []);
+    const restarts = columnOf('restarts');
 
-  it('does not use statusState as the status class fallback', () => {
-    const hook = renderHook(() =>
-      useWorkloadTableColumns({
-        handleWorkloadClick: vi.fn(),
-        showNamespaceColumn: false,
-        useShortResourceNames: false,
-        metrics: null,
-      })
-    );
-    const columns = hook.get();
-    const statusColumn = columns.find((column) => column.key === 'status');
-    const cell = statusColumn?.render({
-      ...workload,
-      statusState: 'true',
-      statusPresentation: undefined,
-    });
-    expect(React.isValidElement(cell)).toBe(true);
-    expect(
-      requireReactElement<{ className?: string }>(cell, 'expected status element').props.className
-    ).toBe('status-text unknown');
-    hook.cleanup();
-  });
-
-  it('renders zero workload restarts as no value without changing numeric sorting', () => {
-    const hook = renderHook(() =>
-      useWorkloadTableColumns({
-        handleWorkloadClick: vi.fn(),
-        showNamespaceColumn: false,
-        useShortResourceNames: false,
-        metrics: null,
-      })
-    );
-    const column = requireValue(
-      hook.get().find(({ key }) => key === 'restarts'),
-      'expected workload restarts column'
-    );
-
-    expect(getTextContent(column.render(workload))).toBe('-');
-    expect(getTextContent(column.render({ ...workload, restarts: 3 }))).toBe('3');
-    expect(column.sortValue?.(workload)).toBe(0);
-    expect(column.sortValue?.({ ...workload, restarts: 3 })).toBe(3);
-    hook.cleanup();
+    expect(getTextContent(restarts.render(workload))).toBe('-');
+    expect(getTextContent(restarts.render({ ...workload, restarts: 3 }))).toBe('3');
   });
 });

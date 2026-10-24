@@ -16,12 +16,12 @@ type nativeWindowRegistry interface {
 	BeginPanelWindowOpen(panelwindow.GroupSnapshot) (panelwindow.WindowDescriptor, error)
 	AcknowledgePanelWindowReady(string, string) (panelwindow.WindowDescriptor, error)
 	BeginPanelWindowDock(string, string, panelwindow.GroupSnapshot) error
-	AcknowledgePanelWindowDock(string, string, string) error
+	AcknowledgePanelTransfer(string, string, bool) error
 	FailPanelWindowTransfer(string, string, string) error
 	AcknowledgePanelWindowClose(string) error
 	AcknowledgeWorkspaceWindowClose(string) error
 	RoutePanelWindowCommand(string, panelwindow.WorkspaceCommand) error
-	UpdatePanelWindowSnapshot(string, panelwindow.GroupSnapshot) error
+	PublishPanelWindowGroup(string, panelwindow.WorkspaceGroup) error
 	RequestPanelTabClose(string, string) error
 	RequestPanelTabTransfer(string, panelwindow.TabTransferRequest) error
 	AcceptPanelTabTransfer(string, string) error
@@ -114,14 +114,15 @@ func (bridge *Bridge) BeginPanelWindowDock(
 	return registry.BeginPanelWindowDock(windowName, targetPosition, snapshot)
 }
 
-func (bridge *Bridge) AcknowledgePanelDock(
-	callerWindowName, windowName, transferID string,
+func (bridge *Bridge) AcknowledgePanelTransfer(
+	callerWindowName, transferID string,
+	mounted bool,
 ) error {
 	registry, err := bridge.registryOrError()
 	if err != nil {
 		return err
 	}
-	return registry.AcknowledgePanelWindowDock(callerWindowName, windowName, transferID)
+	return registry.AcknowledgePanelTransfer(callerWindowName, transferID, mounted)
 }
 
 func (bridge *Bridge) FailPanelTransfer(
@@ -158,15 +159,15 @@ func (bridge *Bridge) RoutePanelCommand(windowName string, command panelwindow.W
 	return registry.RoutePanelWindowCommand(windowName, command)
 }
 
-func (bridge *Bridge) UpdatePanelSnapshot(
+func (bridge *Bridge) PublishPanelGroup(
 	windowName string,
-	snapshot panelwindow.GroupSnapshot,
+	group panelwindow.WorkspaceGroup,
 ) error {
 	registry, err := bridge.registryOrError()
 	if err != nil {
 		return err
 	}
-	return registry.UpdatePanelWindowSnapshot(windowName, snapshot)
+	return registry.PublishPanelWindowGroup(windowName, group)
 }
 
 func (bridge *Bridge) RequestPanelTabClose(windowName, panelID string) error {

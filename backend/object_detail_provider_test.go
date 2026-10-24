@@ -7,7 +7,6 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -86,9 +85,60 @@ func TestObjectDetailProviderFetchesKnownKinds(t *testing.T) {
 		if err != nil {
 			t.Fatalf("FetchObjectDetails(%s) returned error: %v", tt.gvk.Kind, err)
 		}
-		if detail == nil {
+		if detail.Details == nil {
 			t.Fatalf("FetchObjectDetails(%s) returned nil detail", tt.gvk.Kind)
 		}
+		// The frontend narrows on this tag to type the detail, so it must be the
+		// fetcher's dispatch key.
+		if want := strings.ToLower(tt.gvk.Kind); detail.Type != want {
+			t.Fatalf("FetchObjectDetails(%s) tagged %q, want %q", tt.gvk.Kind, detail.Type, want)
+		}
+	}
+}
+
+// A repeat read is served from the response cache and keeps its detail type, so
+// the panel still narrows the cached payload to the right DTO.
+func TestObjectDetailProviderServesCachedDetailsWithTheirType(t *testing.T) {
+	configMap := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "demo-cm", Namespace: "default"}}
+	clusterID := "config:ctx"
+	fakeClient := fake.NewClientset(configMap)
+	gateway := newObjectDetailResourceGateway(map[string]*clusterClients{
+		clusterID: {
+			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client:            fakeClient,
+		},
+	})
+	gateway.responseCache = newResponseCache(time.Minute, 10)
+	provider := gateway.objectDetailProvider()
+	ctx := snapshot.WithClusterMeta(context.Background(), snapshot.ClusterMeta{ClusterID: clusterID, ClusterName: "ctx"})
+	gvk := schema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"}
+	configMapReads := func() int {
+		reads := 0
+		for _, action := range fakeClient.Actions() {
+			if action.GetResource().Resource == "configmaps" {
+				reads++
+			}
+		}
+		return reads
+	}
+
+	first, err := provider.FetchObjectDetails(ctx, gvk, "default", "demo-cm")
+	if err != nil {
+		t.Fatalf("first fetch failed: %v", err)
+	}
+	readsAfterFirst := configMapReads()
+	second, err := provider.FetchObjectDetails(ctx, gvk, "default", "demo-cm")
+	if err != nil {
+		t.Fatalf("cached fetch failed: %v", err)
+	}
+
+	if configMapReads() != readsAfterFirst {
+		t.Fatal("expected the repeat read to come from the response cache")
+	}
+	if second.Type != "configmap" || second.Details != first.Details {
+		t.Fatalf("expected the cached tagged detail, got %q %v", second.Type, second.Details)
 	}
 }
 
@@ -207,7 +257,7 @@ func TestHPAStreamRowRefReachesTypedDetailFetcher(t *testing.T) {
 	row := hpa.BuildStreamSummary(streamrows.ClusterMeta{
 		ClusterID:   "cluster-a",
 		ClusterName: "Alpha",
-	}, &autoscalingv1.HorizontalPodAutoscaler{
+	}, &autoscalingv2.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
 	})
 
@@ -236,7 +286,7 @@ func TestObjectDetailProviderCacheKeyIncludesGVK(t *testing.T) {
 	gateway.seedResponseCache(selectionKey, coreKey, "core")
 	gateway.seedResponseCache(selectionKey, otherKey, "other")
 
-	gateway.invalidateResponseCache(selectionKey, "ConfigMap", "default", "demo")
+	gateway.invalidateResponseCacheForGVK(selectionKey, coreConfigMap, "default", "demo")
 
 	if _, ok := gateway.responseCacheLookup(selectionKey, coreKey); ok {
 		t.Fatalf("expected built-in GVK cache key to be invalidated")
@@ -275,8 +325,8 @@ func TestObjectDetailProviderUsesClusterContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FetchObjectDetails returned error: %v", err)
 	}
-	if detail == nil {
-		t.Fatal("FetchObjectDetails returned nil detail")
+	if detail.Details == nil || detail.Type != "node" {
+		t.Fatalf("FetchObjectDetails returned %q %v", detail.Type, detail.Details)
 	}
 
 	if _, err := provider.FetchObjectDetails(ctx, schema.GroupVersionKind{Version: "v1", Kind: "Node"}, "", "node-a"); err == nil {

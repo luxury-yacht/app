@@ -80,6 +80,8 @@ export interface DockablePanelContextValue {
   getClusterTabGroups: (clusterId: string) => TabGroupState;
   requestGroupMove?: (groupKey: GroupKey, targetPosition: DockPosition) => boolean;
   requestTabMove: (panelId: string, targetPosition: DockPosition) => void;
+  // Whether the panel can move to a native window; only object panels can.
+  canFloatPanel: (panelId: string) => boolean;
   nativeWindowMode: boolean;
 }
 

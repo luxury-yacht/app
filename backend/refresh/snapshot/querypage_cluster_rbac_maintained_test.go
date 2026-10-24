@@ -49,7 +49,7 @@ func clusterRBACDescriptor(t *testing.T, resource string) streamspec.Descriptor 
 	return streamspec.Descriptor{}
 }
 
-// TestClusterRBACMaintainedStoreIngestion proves the informer-fed store reflects
+// TestClusterRBACMaintainedStoreIngestion proves the reflector-fed store reflects
 // Add/Update/Delete (incl. tombstone), tracks the max resourceVersion, and projects
 // rows identically to a direct BuildStreamSummary. The domain is cluster-scoped, so
 // objects carry no namespace and the store is queried for all rows ("").
@@ -126,7 +126,7 @@ func TestClusterRBACMaintainedStoreMatchesListPath(t *testing.T) {
 
 // TestClusterRBACMaintainedStoreSinkMatchesListPath is the SAFETY GATE for the live
 // ingest cutover: fed the projected StreamRow through the ingest Sink (the live
-// reflector path ClusterRole/ClusterRoleBinding now take via IngestOwned), the
+// reflector path ClusterRole/ClusterRoleBinding now take), the
 // maintained store's rows must equal exactly what the list path produces.
 func TestClusterRBACMaintainedStoreSinkMatchesListPath(t *testing.T) {
 	meta := ClusterMeta{ClusterID: "c1", ClusterName: "cluster-one"}
@@ -145,7 +145,7 @@ func TestClusterRBACMaintainedStoreSinkMatchesListPath(t *testing.T) {
 	roleIdx := newNamespaceIndexer()
 	bindingIdx := newNamespaceIndexer()
 	store := newTypedMaintainedStore(meta, clusterRBACQuerypageSchema(), clusterRBACTableQueryAdapter())
-	sink := store.Sink()
+	sink := unpublishedSink(store, "")
 	for _, r := range roles {
 		require.NoError(t, roleIdx.Add(r))
 		sink.Upsert(roleDesc.StreamRow(meta, r))
@@ -198,8 +198,8 @@ func TestClusterRBACBuilderMaintainedMatchesListPath(t *testing.T) {
 	}
 
 	collect := clusterRBACCollectIndexer(roleIdx, bindingIdx)
-	listBuilder := &ClusterRBACBuilder{collectIndexer: collect}
-	maintainedBuilder := &ClusterRBACBuilder{collectIndexer: collect, maintained: maintained}
+	listBuilder := newTypedTableListOracle(clusterRBACDomainSpec(), collect)
+	maintainedBuilder := &ClusterRBACBuilder{available: availableFromIndexers(collect), maintained: maintained}
 
 	scopes := []string{
 		"",

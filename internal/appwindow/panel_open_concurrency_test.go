@@ -67,7 +67,7 @@ func TestPanelReadyDoesNotWaitForAnotherWindowsRetention(t *testing.T) {
 			}
 			ready := make(chan error, 1)
 			go func() {
-				_, err := registry.AcknowledgePanelWindowReady(first.WindowName, first.Snapshot.TransferID)
+				_, err := registry.AcknowledgePanelWindowReady(first.WindowName, first.TransferID)
 				ready <- err
 			}()
 			select {

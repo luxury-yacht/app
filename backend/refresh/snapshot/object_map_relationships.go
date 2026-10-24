@@ -22,81 +22,58 @@ const (
 	objectMapEdgeStorageClass  = objectmapspec.EdgeStorageClass
 )
 
-type objectMapReverseTraversalPolicy int
-
-const (
-	objectMapReverseNever objectMapReverseTraversalPolicy = iota
-	objectMapReverseAnyDepth
-	objectMapReverseSeedOnly
-	objectMapReverseDepthOne
-)
-
 type objectMapRelationship struct {
 	label           string
-	reversePolicy   objectMapReverseTraversalPolicy
 	defaultTracedBy string
 }
 
 var objectMapRelationships = map[string]objectMapRelationship{
 	objectMapEdgeOwner: {
-		label:         "owns",
-		reversePolicy: objectMapReverseAnyDepth,
+		label: "owns",
 	},
 	objectMapEdgeSelector: {
 		label:           "selects",
-		reversePolicy:   objectMapReverseAnyDepth,
 		defaultTracedBy: "spec.selector",
 	},
 	objectMapEdgeEndpoint: {
-		label:         "has endpoints",
-		reversePolicy: objectMapReverseAnyDepth,
+		label: "has endpoints",
 	},
 	objectMapEdgeRoutes: {
-		label:         "routes to",
-		reversePolicy: objectMapReverseAnyDepth,
+		label: "routes to",
 	},
 	objectMapEdgeScales: {
 		label:           "scales",
-		reversePolicy:   objectMapReverseAnyDepth,
 		defaultTracedBy: "spec.scaleTargetRef",
 	},
 	objectMapEdgeGrants: {
 		label:           "grants",
-		reversePolicy:   objectMapReverseAnyDepth,
 		defaultTracedBy: "roleRef",
 	},
 	objectMapEdgeBinds: {
 		label:           "binds",
-		reversePolicy:   objectMapReverseAnyDepth,
 		defaultTracedBy: "subjects",
 	},
 	objectMapEdgeAggregates: {
 		label:           "aggregates",
-		reversePolicy:   objectMapReverseAnyDepth,
 		defaultTracedBy: "aggregationRule.clusterRoleSelectors",
 	},
 	objectMapEdgeUses: {
-		label:         "uses",
-		reversePolicy: objectMapReverseSeedOnly,
+		label: "uses",
 	},
 	objectMapEdgeMounts: {
 		label:           "mounts",
-		reversePolicy:   objectMapReverseSeedOnly,
 		defaultTracedBy: "volumes",
 	},
 	objectMapEdgeSchedules: {
 		label:           "scheduled on",
-		reversePolicy:   objectMapReverseSeedOnly,
 		defaultTracedBy: "spec.nodeName",
 	},
 	objectMapEdgeVolumeBinding: {
 		label:           "binds volume",
-		reversePolicy:   objectMapReverseDepthOne,
 		defaultTracedBy: "spec.volumeName",
 	},
 	objectMapEdgeStorageClass: {
 		label:           "uses class",
-		reversePolicy:   objectMapReverseSeedOnly,
 		defaultTracedBy: "spec.storageClassName",
 	},
 }

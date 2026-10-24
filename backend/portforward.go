@@ -28,20 +28,11 @@ import (
 
 func (o *OperationsCoordinator) startPortForwardAction(targetRef ObjectActionTargetRef, options ObjectActionPortForwardOptions) (string, error) {
 	operationEpoch := o.clusterOperationEpoch(targetRef.ClusterID)
-	req := PortForwardRequest{
-		Namespace:     targetRef.Namespace,
-		TargetKind:    targetRef.Kind,
-		TargetGroup:   targetRef.Group,
-		TargetVersion: targetRef.Version,
-		TargetName:    targetRef.Name,
-		ContainerPort: options.ContainerPort,
-		LocalPort:     options.LocalPort,
-	}
-	target, err := portForwardTargetFromRequest(req)
+	target, err := portForwardTargetFromParts(targetRef.Namespace, targetRef.Kind, targetRef.Group, targetRef.Version, targetRef.Name)
 	if err != nil {
 		return "", err
 	}
-	if req.ContainerPort <= 0 {
+	if options.ContainerPort <= 0 {
 		return "", fmt.Errorf("container port must be positive")
 	}
 
@@ -63,7 +54,7 @@ func (o *OperationsCoordinator) startPortForwardAction(targetRef ObjectActionTar
 	ctx, cancel := context.WithTimeout(o.operationContext(), config.PortForwardResolveTimeout)
 	defer cancel()
 
-	resolved, err := resolvePortForwardDestination(ctx, deps.KubernetesClient, target, req.ContainerPort)
+	resolved, err := resolvePortForwardDestination(ctx, deps.KubernetesClient, target, options.ContainerPort)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve pod: %w", err)
 	}
@@ -88,14 +79,10 @@ func (o *OperationsCoordinator) startPortForwardAction(targetRef ObjectActionTar
 			ID:            sessionID,
 			ClusterID:     targetRef.ClusterID,
 			ClusterName:   deps.ClusterName,
-			Namespace:     target.Namespace,
+			Target:        *runtimeOperationTarget(targetRef.ClusterID, target.Group, target.Version, target.Kind, target.Namespace, target.Name),
 			PodName:       resolved.PodName,
-			ContainerPort: req.ContainerPort,
-			LocalPort:     req.LocalPort,
-			TargetKind:    target.Kind,
-			TargetGroup:   target.Group,
-			TargetVersion: target.Version,
-			TargetName:    target.Name,
+			ContainerPort: options.ContainerPort,
+			LocalPort:     options.LocalPort,
 			Status:        PortForwardStatusConnecting,
 			StartedAt:     time.Now().Format(time.RFC3339),
 		},
@@ -230,7 +217,7 @@ func (o *OperationsCoordinator) executePortForward(ctx context.Context, session 
 	}
 
 	snapshot := session.snapshot()
-	namespace := snapshot.Namespace
+	namespace := snapshot.Target.Namespace
 	localPort := snapshot.LocalPort
 	target := snapshot.targetRef()
 
@@ -323,7 +310,7 @@ func (o *OperationsCoordinator) shouldReconnect(session *portForwardSessionInter
 	session.mu.Lock()
 	defer session.mu.Unlock()
 
-	capability, ok := lookupPortForwardTargetCapability(session.TargetKind)
+	capability, ok := lookupPortForwardTargetCapability(session.Target.Kind)
 	return ok && capability.Reconnect
 }
 
@@ -369,23 +356,17 @@ func runtimeOperationFromPortForward(session *portForwardSessionInternal) Runtim
 		return RuntimeOperation{}
 	}
 	snapshot := session.snapshot()
+	target := snapshot.Target
 	return RuntimeOperation{
-		ID:          snapshot.ID,
-		Type:        RuntimeOperationPortForward,
-		ClusterID:   snapshot.ClusterID,
-		ClusterName: snapshot.ClusterName,
-		Target: runtimeOperationTarget(
-			snapshot.ClusterID,
-			snapshot.TargetGroup,
-			snapshot.TargetVersion,
-			snapshot.TargetKind,
-			snapshot.Namespace,
-			snapshot.TargetName,
-		),
+		ID:           snapshot.ID,
+		Type:         RuntimeOperationPortForward,
+		ClusterID:    snapshot.ClusterID,
+		ClusterName:  snapshot.ClusterName,
+		Target:       &target,
 		Status:       string(snapshot.Status),
 		StatusReason: snapshot.StatusReason,
 		StartedAt:    snapshot.StartedAt,
-		DisplayName:  fmt.Sprintf("Port forward %s/%s", snapshot.Namespace, snapshot.TargetName),
+		DisplayName:  fmt.Sprintf("Port forward %s/%s", target.Namespace, target.Name),
 		Summary: map[string]string{
 			"podName":       snapshot.PodName,
 			"containerPort": fmt.Sprintf("%d", snapshot.ContainerPort),

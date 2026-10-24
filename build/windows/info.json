@@ -1,10 +1,12 @@
 {
 	"fixed": {
-		"file_version": "__APP_VERSION__"
+		"file_version": "__WINDOWS_VERSION__",
+		"product_version": "__WINDOWS_VERSION__"
 	},
 	"info": {
 		"0000": {
 			"ProductVersion": "__APP_VERSION__",
+			"FileVersion": "__APP_VERSION__",
 			"CompanyName": "__APP_COMPANY__",
 			"FileDescription": "__APP_DESCRIPTION__",
 			"LegalCopyright": "__APP_COPYRIGHT__",

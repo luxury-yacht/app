@@ -3,6 +3,7 @@ package containerlogsstream
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -77,7 +78,7 @@ func startRunWith(t *testing.T, setup runSetup) *runHarness {
 	client := &stubClient{Clientset: baseClient, core: &logCore{
 		CoreV1Interface: baseClient.CoreV1(), overrides: map[string]*logPods{"default": harness.logs},
 	}}
-	streamer := NewStreamer(client, applog.Noop, nil)
+	streamer := NewStreamer(client, testLogTargets, applog.Noop, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	harness.cancel = cancel
 	resolution, err := streamer.resolve(ctx, setup.opts)
@@ -390,4 +391,53 @@ func TestPodDeletedBeforeTheInformerListReleasesItsCapacity(t *testing.T) {
 	})
 
 	harness.expectLine("b line")
+}
+
+// The informer's first list, and its re-list after an expired watch, re-deliver
+// every pod the session already holds. Re-running target selection for each one
+// made a session's start cost grow with the square of its pods, and a new pod
+// waited behind that work (TestTargetLimitWarningFollowsANewPod timed out under
+// full-suite load). Replaying unchanged pods must cost nearly nothing.
+func TestInformerReplayOfHeldPodsDoesNotReselectTargets(t *testing.T) {
+	var objects []runtime.Object
+	for i := range 50 {
+		pod := jobPod(fmt.Sprintf("migrate-%02d", i), "migrate", "app")
+		// Real pods carry a resource version; the fake tracker does not set one.
+		pod.ResourceVersion = fmt.Sprint(100 + i)
+		objects = append(objects, pod)
+	}
+	baseClient := fake.NewClientset(objects...)
+	logs := newLogPodsWithResponses(baseClient.CoreV1().Pods("default"), "default", nil)
+	logs.responder = func(*corev1.PodLogOptions) logResponse { return logResponse{holdOpen: true} }
+	client := &stubClient{Clientset: baseClient, core: &logCore{
+		CoreV1Interface: baseClient.CoreV1(), overrides: map[string]*logPods{"default": logs},
+	}}
+	streamer := NewStreamer(client, testLogTargets, applog.Noop, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	resolution, err := streamer.resolve(ctx, jobScope)
+	require.NoError(t, err)
+	require.Len(t, resolution.Pods, 50)
+	// This test drives the run's events itself, as its run loop would.
+	run := newContainerLogRun(streamer, containerLogRunConfig{
+		opts: jobScope, sink: channelSink(make(chan Entry, 64)), warnings: newWarningUpdates(),
+	}, resolution.Watch)
+	t.Cleanup(func() {
+		cancel()
+		run.shutdown()
+	})
+	run.setInitialPods(ctx, resolution.Pods)
+	require.Eventually(t, func() bool { return logs.requestCount("app") == 50 }, 5*time.Second, 5*time.Millisecond)
+
+	replayed := make([]*corev1.Pod, 0, len(resolution.Pods))
+	for _, pod := range resolution.Pods {
+		require.NotEmpty(t, pod.ResourceVersion)
+		replayed = append(replayed, pod.DeepCopy())
+	}
+	allocations := testing.AllocsPerRun(5, func() {
+		for _, pod := range replayed {
+			run.applyPodEvent(ctx, podEvent{pod: pod})
+		}
+	})
+	require.Less(t, allocations, float64(len(replayed)), "replaying held pods re-ran target selection")
+	require.Equal(t, 50, logs.requestCount("app"), "a replayed pod must not reopen its stream")
 }

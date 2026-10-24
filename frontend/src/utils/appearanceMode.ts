@@ -13,6 +13,7 @@ import {
   getAccentColor,
   getLinkColor,
   getPaletteTint,
+  isAppearanceMode,
   setAppearanceModePreference,
 } from '@/core/settings/appPreferences';
 
@@ -41,7 +42,7 @@ export const applyAppearanceOverrides = (mode: 'light' | 'dark'): void => {
  * AppearanceModeProvider observes the preference event and owns document updates.
  */
 export const changeAppearanceMode = async (mode: AppearanceMode): Promise<void> => {
-  if (mode !== 'light' && mode !== 'dark' && mode !== 'system') {
+  if (!isAppearanceMode(mode)) {
     throw new Error(`Invalid appearance mode: ${mode}`);
   }
 

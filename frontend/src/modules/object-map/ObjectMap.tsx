@@ -7,6 +7,7 @@
  */
 
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { usePreference } from '@/core/settings/usePreference';
 import './ObjectMap.css';
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
 import { hasCompleteObjectMapReference } from '@modules/object-panel/objectPanelRef';
@@ -28,7 +29,6 @@ import {
 import {
   AutoFitIcon,
   FitToViewIcon,
-  FocusModeIcon,
   LegendIcon,
   ObjectMapLegendSwatchIcon,
   ResetZoomIcon,
@@ -40,7 +40,6 @@ import Tooltip from '@shared/components/Tooltip';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import type { ObjectActionData } from '@shared/hooks/useObjectActions';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
-import { useShortNames } from '@/hooks/useShortNames';
 import { compareUtf16Strings } from '@/shared/utils/sort';
 import {
   createObjectMapDebugId,
@@ -131,8 +130,6 @@ type ObjectMapToolbarProps = {
   viewportControls: ObjectMapViewportControls | null;
   autoFit: boolean;
   onToggleAutoFit: () => void;
-  focusMode: boolean;
-  onToggleFocusMode: () => void;
   resetLayoutDisabled: boolean;
   onResetLayout: () => void;
   showLegend: boolean;
@@ -154,8 +151,6 @@ const ObjectMapToolbar: React.FC<ObjectMapToolbarProps> = ({
   viewportControls,
   autoFit,
   onToggleAutoFit,
-  focusMode,
-  onToggleFocusMode,
   resetLayoutDisabled,
   onResetLayout,
   showLegend,
@@ -268,16 +263,6 @@ const ObjectMapToolbar: React.FC<ObjectMapToolbarProps> = ({
         <AutoFitIcon width={18} height={18} />
       </button>
       <span className="object-map__toolbar-separator" aria-hidden="true" />
-      <button
-        type="button"
-        className={objectMapToolbarButtonClass(focusMode)}
-        onClick={onToggleFocusMode}
-        title={focusMode ? 'Focus mode on' : 'Focus mode off'}
-        aria-label="Toggle focus mode"
-        aria-pressed={focusMode}
-      >
-        <FocusModeIcon width={18} height={18} />
-      </button>
       <button
         type="button"
         className="object-map__toolbar-button"
@@ -413,12 +398,13 @@ const ObjectMapLegend: React.FC<ObjectMapLegendProps> = ({
 const ObjectMapMessages: React.FC<{
   truncated: boolean;
   nodeCount: number;
+  maxNodes: number;
   warnings?: string[];
-}> = ({ truncated, nodeCount, warnings }) => (
+}> = ({ truncated, nodeCount, maxNodes, warnings }) => (
   <>
     {!!truncated && (
       <div className="object-map__banner object-map__banner--truncated">
-        Showing {nodeCount} of many. Increase the depth/node limits to see more.
+        Showing {nodeCount} objects. This map is limited to {maxNodes} objects.
       </div>
     )}
     {!!warnings && warnings.length > 0 && (
@@ -438,20 +424,18 @@ const ObjectMapMessages: React.FC<{
 
 const selectPreservedViewportNodeId = ({
   autoFit,
-  focusMode,
   activeNodeId,
   seedNodeId,
   visibleNodeIds,
   fallbackNodeId,
 }: {
   autoFit: boolean;
-  focusMode: boolean;
   activeNodeId: string | null;
   seedNodeId: string;
   visibleNodeIds: Set<string>;
   fallbackNodeId: string | null;
 }): string | null => {
-  if (autoFit || focusMode) {
+  if (autoFit) {
     return null;
   }
   if (activeNodeId && visibleNodeIds.has(activeNodeId)) {
@@ -496,9 +480,8 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   const modelTimingStartedAt = objectMapTimingNow();
   const model = useObjectMapModel(payload);
   const modelTimingMs = objectMapTimingNow() - modelTimingStartedAt;
-  const useShortResourceNames = useShortNames();
+  const useShortResourceNames = usePreference('useShortResourceNames');
   const [showLegend, setShowLegend] = useState(true);
-  const [focusMode, setFocusMode] = useState(false);
   const [enabledEdgeTypes, setEnabledEdgeTypes] = useState<Set<string> | null>(null);
   const [selectedKinds, setSelectedKinds] =
     useState<MultiSelectFilterSelection>(ALL_MULTISELECT_FILTER);
@@ -519,18 +502,18 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
       layout: model.layout,
       seedNodeId: model.seedId,
       activeNodeId: model.activeNodeId,
-      focusMode,
       selectedKinds,
       enabledEdgeTypes,
       searchQuery,
       useShortResourceNames,
+      pinnedPositions: model.pinnedPositions,
     });
     return { state, durationMs: objectMapTimingNow() - startedAt };
   }, [
     enabledEdgeTypes,
-    focusMode,
     model.activeNodeId,
     model.layout,
+    model.pinnedPositions,
     model.seedId,
     searchQuery,
     selectedKinds,
@@ -641,11 +624,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     model.setAutoFit(false);
   }, [model]);
 
-  const resetMapLayout = useCallback(() => {
-    model.resetLayout();
-    setFocusMode(false);
-  }, [model]);
-
   const viewportControlsReady = Boolean(g6ViewportControls);
   const visibleNodeIds = useMemo(
     () => new Set(visibleState.visibleLayout.nodes.map((node) => node.id)),
@@ -653,7 +631,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   );
   const preserveViewportNodeId = selectPreservedViewportNodeId({
     autoFit: model.autoFit,
-    focusMode,
     activeNodeId: model.activeNodeId,
     seedNodeId: model.seedId,
     visibleNodeIds,
@@ -674,7 +651,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
       seedRef: payload.seed,
       seedNodeId: model.seedId,
       activeNodeId: model.activeNodeId,
-      focusMode,
       autoFit: model.autoFit,
       selectedKinds,
       enabledEdgeTypes: enabledEdgeTypes
@@ -684,7 +660,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
       payload: {
         nodes: payload.nodes.length,
         edges: payload.edges.length,
-        maxDepth: payload.maxDepth,
         maxNodes: payload.maxNodes,
         truncated: payload.truncated,
         warnings: payload.warnings?.length ?? 0,
@@ -713,7 +688,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   }, [
     debugMapId,
     enabledEdgeTypes,
-    focusMode,
     model.activeNodeId,
     model.autoFit,
     model.layout.bounds,
@@ -792,15 +766,10 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
       },
       { divider: true },
       {
-        label: focusMode ? 'Focus off' : 'Focus on',
-        icon: <FocusModeIcon />,
-        onClick: () => setFocusMode((prev) => !prev),
-      },
-      {
         label: 'Reset layout',
         icon: <ResetFiltersIcon />,
-        onClick: resetMapLayout,
-        disabled: !model.hasNodePositionOverrides && !focusMode,
+        onClick: model.resetLayout,
+        disabled: !model.hasNodePositionOverrides,
       },
       { divider: true },
     ];
@@ -810,7 +779,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
       onClick: () => setShowLegend((prev) => !prev),
     });
     return items;
-  }, [focusMode, g6ViewportControls, model, resetMapLayout, showLegend, viewportControlsReady]);
+  }, [g6ViewportControls, model, showLegend, viewportControlsReady]);
   const contextMenuItems = useMemo(() => {
     if (!contextMenu) {
       return [];
@@ -821,7 +790,8 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     const node = visibleState.visibleLayout.nodes.find(
       (item) => objectMapReferenceKey(item.ref) === objectMapReferenceKey(contextMenu.request.ref)
     );
-    if (!node) {
+    // A missing object has nothing to act on.
+    if (!node || node.missing) {
       return [];
     }
     return hasCompleteObjectMapReference({ ...node.ref })
@@ -848,7 +818,13 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   if (model.layout.nodes.length === 0) {
     return (
       <div className="object-map object-map--empty" data-testid="object-map-empty">
-        <p>No related objects found.</p>
+        <p className="object-map__empty-message">No related objects found.</p>
+        <ObjectMapMessages
+          truncated={payload.truncated}
+          nodeCount={0}
+          maxNodes={payload.maxNodes}
+          warnings={payload.warnings}
+        />
       </div>
     );
   }
@@ -871,10 +847,8 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
           viewportControls={g6ViewportControls}
           autoFit={model.autoFit}
           onToggleAutoFit={() => model.setAutoFit((previous) => !previous)}
-          focusMode={focusMode}
-          onToggleFocusMode={() => setFocusMode((previous) => !previous)}
-          resetLayoutDisabled={!model.hasNodePositionOverrides && !focusMode}
-          onResetLayout={resetMapLayout}
+          resetLayoutDisabled={!model.hasNodePositionOverrides}
+          onResetLayout={model.resetLayout}
           showLegend={showLegend}
           onToggleLegend={() => setShowLegend((previous) => !previous)}
         />
@@ -934,6 +908,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
       <ObjectMapMessages
         truncated={payload.truncated}
         nodeCount={model.layout.nodes.length}
+        maxNodes={payload.maxNodes}
         warnings={payload.warnings}
       />
     </div>

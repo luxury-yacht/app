@@ -11,8 +11,12 @@
 import type { daemonset, deployment, replicaset, statefulset } from '@core/backend-api/models';
 import type React from 'react';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { partialModelFixture } from '@/test-utils/partialModelFixture';
 import {
   daemonSetDescriptor,
@@ -23,16 +27,7 @@ import {
 import { OverviewRenderer } from './OverviewRenderer';
 import type { OverviewContext, OverviewDescriptor } from './schema';
 
-const openWithObjectMock = vi.fn();
-const defaultClusterId = 'alpha:ctx';
-const defaultClusterName = 'alpha';
-
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({
-    openWithObject: openWithObjectMock,
-    objectData: { clusterId: defaultClusterId, clusterName: defaultClusterName },
-  }),
-}));
+const app = installAppStateHarness();
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
@@ -68,28 +63,22 @@ vi.mock('@shared/components/kubernetes/ResourceMetadata', () => ({
   ResourceMetadata: () => <div data-testid="resource-metadata" />,
 }));
 
-vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: vi.fn() }),
-}));
-
 describe('WorkloadOverview', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  let view: MountedApp;
+  let dev: TestCluster;
+  let container: HTMLElement;
 
-  const defaultContext: OverviewContext = {
-    clusterId: defaultClusterId,
-    clusterName: defaultClusterName,
-  };
+  const defaultContext = (): OverviewContext => ({
+    clusterId: dev.clusterId,
+    clusterName: dev.clusterName,
+  });
 
   const renderDescriptor = async <T,>(
     descriptor: OverviewDescriptor<T>,
     data: T,
-    context: OverviewContext = defaultContext
+    context: OverviewContext = defaultContext()
   ) => {
-    await act(async () => {
-      root.render(<OverviewRenderer descriptor={descriptor} data={data} context={context} />);
-      await Promise.resolve();
-    });
+    await view.show(<OverviewRenderer descriptor={descriptor} data={data} context={context} />);
   };
 
   const getElementByText = (text: string) =>
@@ -102,18 +91,11 @@ describe('WorkloadOverview', () => {
       (el) => el.textContent?.trim() === text
     );
 
-  beforeEach(() => {
-    openWithObjectMock.mockReset();
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-  });
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
+  beforeEach(async () => {
+    dev = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, ['default', 'data']);
+    view = await app.render(null);
+    container = view.container;
   });
 
   it('renders deployment-specific status and configuration details', async () => {
@@ -293,18 +275,22 @@ describe('WorkloadOverview', () => {
 
     const saLink = getLinkByText('db-sa') ?? getElementByText('db-sa');
     expect(saLink).not.toBeUndefined();
-    act(() => {
+    await act(async () => {
       saLink?.click();
     });
+    await app.settle();
 
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
+    expect(view.openPanels()).toEqual([
+      {
+        clusterId: dev.clusterId,
+        clusterName: dev.clusterName,
+        group: '',
+        version: 'v1',
         kind: 'ServiceAccount',
-        name: 'db-sa',
         namespace: 'data',
-        clusterId: defaultClusterId,
-      })
-    );
+        name: 'db-sa',
+      },
+    ]);
     expect(container.textContent).toContain('Pod Mgmt');
     expect(container.textContent).toContain('Parallel');
     expect(container.textContent).toContain('Min Ready');

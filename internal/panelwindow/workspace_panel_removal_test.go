@@ -24,7 +24,7 @@ func TestWorkspaceReportsClosedPanelsButNotMovedOnes(t *testing.T) {
 	require.False(t, directory.HasPanel("staging", api.PanelID))
 
 	// The panel floats into a native window; the app window republishes without it.
-	require.NoError(t, directory.Move(api, docked, native))
+	require.NoError(t, moveTab(directory, "float-api", api, docked.WindowName, native))
 	require.NoError(t, directory.PublishWindow("app-a", PanelLocationDocked, []WorkspaceGroup{
 		{ClusterID: "production", GroupID: "right", Tabs: []TabSnapshot{worker}, ActivePanelID: worker.PanelID},
 	}))
@@ -39,7 +39,7 @@ func TestWorkspaceReportsClosedPanelsButNotMovedOnes(t *testing.T) {
 	require.False(t, directory.HasPanel("production", api.PanelID))
 }
 
-func TestWorkspaceReportsATabClosedByRepublishing(t *testing.T) {
+func TestWorkspaceReportsATabClosedByItsRenderer(t *testing.T) {
 	directory := NewWorkspaceDirectory()
 	var removed []PanelKey
 	directory.SetPanelRemovalHandler(func(keys []PanelKey) { removed = append(removed, keys...) })
@@ -48,12 +48,13 @@ func TestWorkspaceReportsATabClosedByRepublishing(t *testing.T) {
 	group := func(tabs ...TabSnapshot) []WorkspaceGroup {
 		return []WorkspaceGroup{{ClusterID: "production", GroupID: "right", Tabs: tabs, ActivePanelID: tabs[0].PanelID}}
 	}
-	require.NoError(t, directory.PublishWindow("app-a", PanelLocationDocked, group(api, worker)))
-	// Republishing the same panels (reordered) closes nothing.
+	openDocked(t, directory, "app-a", api, worker)
+	// Rearranging, or a snapshot that omits a tab, closes nothing.
 	require.NoError(t, directory.PublishWindow("app-a", PanelLocationDocked, group(worker, api)))
+	require.NoError(t, directory.PublishWindow("app-a", PanelLocationDocked, group(worker)))
 	require.Empty(t, removed)
 
-	require.NoError(t, directory.PublishWindow("app-a", PanelLocationDocked, group(worker)))
+	require.True(t, directory.ClosePanel("app-a", "production", api.PanelID))
 	require.Equal(t, []PanelKey{{ClusterID: "production", PanelID: api.PanelID}}, removed)
 }
 

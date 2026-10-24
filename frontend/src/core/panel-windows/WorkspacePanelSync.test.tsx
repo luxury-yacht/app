@@ -1,559 +1,782 @@
-import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { clusterWorkspaceStore } from '@/core/cluster-workspace/clusterWorkspaceStore';
-import type { ClusterClosePreflight } from '@/modules/kubernetes/config/KubeconfigContext';
-import { PanelLifecycleGuardProvider } from './panelLifecycleGuards';
-import { WorkspacePanelLifecycle } from './WorkspacePanelLifecycle';
-import { usePanelWorkspaceSync, WorkspacePanelSync } from './WorkspacePanelSync';
+/**
+ * frontend/src/core/panel-windows/WorkspacePanelSync.test.tsx
+ *
+ * The workspace window's panel synchronization: it reads, claims, and
+ * publishes panels only for admitted cluster tabs, pauses a closing cluster,
+ * follows the panel directory (retained panels, moves to native windows,
+ * dock-backs, view moves), and lands every close intent before reopening.
+ * Runs in the full app: its own WorkspacePanelSync, publication queue,
+ * object-panel state, dock, kubeconfig owner, and WorkspacePanelLifecycle, with
+ * open panels hosted by its layout. Only the backend boundary is faked
+ * (test-utils/appState): a test scripts what the directory answers and rings
+ * `panel-workspace:changed`, and `backend.hold` keeps a call in flight.
+ */
 
-const mocks = vi.hoisted(() => ({
-  selected: ['production'],
-  visible: null as string[] | null,
-  loading: false,
-  local: {
-    production: [
-      {
-        kind: 'object',
-        panelId: 'api',
-        activeView: 'yaml',
-        objectRef: {
-          clusterId: 'production',
-          group: '',
-          version: 'v1',
-          kind: 'Pod',
-          namespace: 'default',
-          name: 'api',
-        },
-      },
-    ],
-  },
-  layout: {
-    right: { tabs: ['api'], activeTab: 'api' },
-    bottom: { tabs: [], activeTab: null },
-    floating: [],
-  },
-  read: vi.fn(),
-  publish: vi.fn(async () => undefined),
-  ready: vi.fn(async () => undefined),
-  changed: null as null | ((event: { clusterId: string }) => void),
-  remove: vi.fn(),
-  detach: vi.fn(),
-  discard: vi.fn(),
-  upsert: vi.fn(),
-  dock: vi.fn(),
-  open: vi.fn(),
-  report: vi.fn(),
-  close: vi.fn(),
-  preflight: null as ClusterClosePreflight | null,
-}));
-vi.mock('@/core/app-state-access', () => ({ readPanelWorkspace: mocks.read }));
-vi.mock('@/core/backend-api', () => ({
-  GetClusterWorkspaceStateForWindow: async () => ({
-    selectedKubeconfigs: ['production'],
-    visibleClusterId: 'production',
-    clusters: {},
-  }),
-}));
-vi.mock('@/core/desktop-runtime', () => ({
-  getWindowIdentity: () => 'app-a',
-  onEvent: () => () => undefined,
-}));
-vi.mock('@/modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({
-    selectedClusterIds: mocks.visible ?? mocks.selected,
-    managedClusterIds: mocks.selected,
-    getClusterMeta: (selection: string) => ({ id: selection, name: selection }),
-    kubeconfigsLoading: mocks.loading,
-    registerClusterClosePreflight: (handler: typeof mocks.preflight) => {
-      mocks.preflight = handler;
-      return () => undefined;
-    },
-  }),
-}));
-vi.mock('@/modules/object-panel/contexts/ObjectPanelStateContext', () => ({
-  useLocalPanelSnapshots: () => mocks.local,
-  useObjectPanelState: () => ({
-    removeOwnedPanel: mocks.remove,
-    restorePanelTabs: mocks.upsert,
-    panelIdsForCluster: () => ['api'],
-    getOwnedPanel: () => ({ nativeLocation: null }),
-  }),
-}));
-vi.mock('@/ui/dockable', () => ({
-  useDockablePanelContext: () => ({
-    getClusterTabGroups: () => mocks.layout,
-    tabGroups: mocks.layout,
-    dockPanelGroup: mocks.dock,
-    detachPanelGroup: mocks.detach,
-    discardPanelLayouts: mocks.discard,
-    focusPanel: vi.fn(),
-  }),
-}));
-vi.mock('@/utils/errorHandler', () => ({ reportOperationalError: mocks.report }));
-vi.mock('./index', () => ({
-  acknowledgePanelWorkspaceReady: mocks.ready,
-  openPanelWorkspaceObject: mocks.open,
-  publishDockedPanels: mocks.publish,
-  closeClusterView: mocks.close,
-  onWorkspaceCloseRequested: () => () => undefined,
-  onApplicationQuitPreflightRequested: () => () => undefined,
-  onApplicationQuitPreflightSettled: () => () => undefined,
-  onPanelWorkspaceChanged: (handler: typeof mocks.changed) => {
-    mocks.changed = handler;
-    return () => {
-      mocks.changed = null;
-    };
-  },
-}));
-let root: ReactDOM.Root;
-let container: HTMLDivElement;
-let sync: ReturnType<typeof usePanelWorkspaceSync>;
-let releaseWorkspace: () => void;
+import { act } from 'react';
+import { describe, expect, it } from 'vitest';
+import { panelwindow } from '@/core/backend-api/models';
+import { makePodSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
+import { buildRefreshScope } from '@/core/refresh/scopeSelector';
+import { useObjectPanelState } from '@/modules/object-panel/contexts/ObjectPanelStateContext';
+import { objectPanelId } from '@/modules/object-panel/objectPanelRef';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { requireValue } from '@/test-utils/requireValue';
+import { useDockablePanelContext } from '@/ui/dockable';
+import { objectPanelTabSnapshot } from './tabTransfer';
+import {
+  type IncomingGroupTransfer,
+  useIncomingGroupTransfers,
+  usePanelWorkspaceOpen,
+  usePanelWorkspaceSync,
+} from './WorkspacePanelSync';
+
+const app = installAppStateHarness();
+let view: MountedApp;
+let production: TestCluster;
+let sync: ReturnType<typeof usePanelWorkspaceSync> | undefined;
+let incoming: readonly IncomingGroupTransfer[] = [];
+let dock: ReturnType<typeof useDockablePanelContext> | undefined;
+
+const pod = (name: string) => ({
+  group: '',
+  version: 'v1',
+  kind: 'Pod',
+  namespace: 'default',
+  name,
+});
+const podRef = (cluster: TestCluster, name: string) => ({
+  clusterId: cluster.clusterId,
+  ...pod(name),
+});
+
+/** Serves what the cluster's start screen and its pods' panels read. */
+const serveCluster = (cluster: TestCluster) => {
+  app.namespaces(cluster, ['default']);
+  app.startScreen(cluster);
+  for (const name of ['api', 'worker', 'second']) {
+    app.servePanel(cluster, pod(name));
+  }
+};
+const panelIdOf = (name: string, cluster = production) => objectPanelId(podRef(cluster, name));
+const tabOf = (name: string, cluster = production) =>
+  objectPanelTabSnapshot(panelIdOf(name, cluster), podRef(cluster, name), 'details');
+
 function Probe() {
   sync = usePanelWorkspaceSync();
+  incoming = useIncomingGroupTransfers();
+  dock = useDockablePanelContext();
   return null;
 }
-beforeEach(async () => {
-  clusterWorkspaceStore.resetForTests();
-  mocks.visible = null;
-  vi.clearAllMocks();
-  releaseWorkspace = clusterWorkspaceStore.acquire();
-  await clusterWorkspaceStore.hydrate();
-  mocks.selected = ['production'];
-  mocks.read.mockResolvedValue({ revision: 1, panels: [] });
-  container = document.createElement('div');
-  document.body.appendChild(container);
-  root = ReactDOM.createRoot(container);
-  await act(async () =>
-    root.render(
-      <WorkspacePanelSync>
-        <Probe />
-      </WorkspacePanelSync>
-    )
-  );
-});
 
-it('waits for confirmed tab membership before panel reads, opens, and publication, then resumes on admission', async () => {
-  await act(
-    async () =>
-      await clusterWorkspaceStore.reconcileCommand(
-        async () => ({
-          state: {
-            selectedKubeconfigs: [],
-            visibleClusterId: '',
-            clusters: {},
-          },
-        }),
-        () => true
-      )
-  );
-  mocks.read.mockClear();
-  mocks.open.mockClear();
-  mocks.publish.mockClear();
+const workspace = () => requireValue(sync, 'panel workspace sync');
+const isOpenHere = (name: string) => view.owners().objectPanels.openPanels.has(panelIdOf(name));
+const dockedIn = (groupId: 'right' | 'bottom') =>
+  requireValue(dock, 'dock').getClusterTabGroups(production.clusterId)[groupId].tabs;
+
+const openPod = async (name: string) => {
   await act(async () => {
-    root.render(
-      <WorkspacePanelSync key="pending-admission">
-        <Probe />
-      </WorkspacePanelSync>
-    );
+    view.owners().objectPanel.openWithObject(podRef(production, name));
   });
-  expect(await sync.readCluster('production')).toBeNull();
-  expect(await sync.openPanel(mocks.local.production[0] as never)).toBeNull();
-  expect(mocks.read).not.toHaveBeenCalled();
-  expect(mocks.open).not.toHaveBeenCalled();
-  expect(mocks.publish).not.toHaveBeenCalled();
-  await act(
-    async () =>
-      await clusterWorkspaceStore.reconcileCommand(
-        async () => ({
-          state: {
-            selectedKubeconfigs: ['production'],
-            visibleClusterId: 'production',
-            clusters: {},
-          },
-        }),
-        () => true
-      )
-  );
-  expect(mocks.read).toHaveBeenCalledWith('app-a', 'production');
-  expect(mocks.publish).toHaveBeenCalledWith('app-a', [
-    expect.objectContaining({ clusterId: 'production' }),
-  ]);
-  await sync.openPanel(mocks.local.production[0] as never);
-  expect(mocks.open).toHaveBeenCalledOnce();
-  expect(mocks.report).not.toHaveBeenCalled();
-});
+  await app.settle();
+};
 
-it.each([true, false])(
-  'pauses full-window publication until close settles (accepted: %s)',
-  async (accepted) => {
-    let settle: (closed: boolean) => void = () => undefined;
-    await act(async () => {
-      settle = await sync.quiesceCluster('production');
-    });
-    mocks.publish.mockClear();
-    mocks.read.mockClear();
-    mocks.visible = [];
-    await act(async () =>
-      root.render(
-        <WorkspacePanelSync>
-          <Probe />
-        </WorkspacePanelSync>
-      )
-    );
-    await act(async () => mocks.changed?.({ clusterId: 'production' }));
-    expect(mocks.publish).not.toHaveBeenCalled();
-    expect(mocks.read).not.toHaveBeenCalled();
-    if (!accepted) {
-      mocks.visible = null;
-    }
-    await act(async () => settle(accepted));
-    if (accepted) {
-      expect(mocks.publish).not.toHaveBeenCalled();
-      expect(mocks.read).not.toHaveBeenCalled();
-      mocks.selected = [];
-      await act(async () =>
-        root.render(
-          <WorkspacePanelSync>
-            <Probe />
-          </WorkspacePanelSync>
-        )
-      );
-      expect(mocks.publish).toHaveBeenLastCalledWith('app-a', []);
-    } else {
-      expect(mocks.publish).toHaveBeenLastCalledWith('app-a', [
-        expect.objectContaining({ clusterId: 'production' }),
-      ]);
-      expect(mocks.read).toHaveBeenCalledWith('app-a', 'production');
-    }
+const closePod = async (name: string) => {
+  await act(async () => {
+    view.owners().objectPanels.closePanel(production.clusterId, panelIdOf(name));
+  });
+  await app.settle();
+};
+
+const start = async ({ open = ['api'] }: { open?: string[] } = {}) => {
+  production = app.cluster({ name: 'dev', context: 'production' });
+  serveCluster(production);
+  view = await app.mountApp(<Probe />);
+  for (const name of open) {
+    await openPod(name);
   }
-);
+};
 
-it('resumes synchronization after a failed publication prevents cluster closure', async () => {
-  mocks.publish
-    .mockRejectedValueOnce(new Error('publication failed'))
-    .mockRejectedValueOnce(new Error('publication failed'));
-  await act(async () =>
-    root.render(
-      <WorkspacePanelSync key="failure">
-        <Probe />
-      </WorkspacePanelSync>
-    )
-  );
+/** The directory now answers `panels` for production; it rings its change. */
+const directorySays = async (revision: number, panels: panelwindow.WorkspacePanel[]) => {
+  app.backend.answer('GetPanelWorkspace', () => ({ revision, panels }));
+  await ringDirectory();
+};
+
+const ringDirectory = async () => {
   await act(async () => {
-    await expect(sync.quiesceCluster('production')).rejects.toThrow('publication failed');
+    app.events.emit('panel-workspace:changed', { clusterId: production.clusterId });
   });
-  await act(async () => undefined);
-  expect(await sync.readCluster('production')).toEqual({ revision: 1, panels: [] });
-  await expect(sync.flush()).resolves.toBeUndefined();
+  await app.settle();
+};
+
+const readsOf = (cluster: TestCluster) =>
+  app.backend.calls('GetPanelWorkspace').filter(([, clusterId]) => clusterId === cluster.clusterId);
+const publishedGroups = () => app.backend.calls('PublishDockedPanels').map(([, groups]) => groups);
+const last = <T,>(items: readonly T[]): T | undefined => items[items.length - 1];
+const lastPublication = () => last(publishedGroups());
+
+const location = (
+  kind: panelwindow.PanelLocationKind,
+  windowName: string,
+  groupId: string,
+  index = 0
+): panelwindow.PanelLocation => ({ kind, windowName, groupId, index, active: true });
+
+const retained = (name: string, index = 0): panelwindow.WorkspacePanel => ({
+  tab: tabOf(name),
+  location: location(panelwindow.PanelLocationKind.PanelLocationRetained, '', 'bottom', index),
 });
 
-it('rejects stale menu reads and object opens after the cluster selection commits', async () => {
-  mocks.selected = [];
-  await act(async () =>
-    root.render(
-      <WorkspacePanelSync>
-        <Probe />
-      </WorkspacePanelSync>
-    )
-  );
-  mocks.read.mockClear();
-  mocks.open.mockClear();
-  expect(await sync.readCluster('production')).toBeNull();
-  expect(await sync.openPanel(mocks.local.production[0] as never)).toBeNull();
-  expect(mocks.read).not.toHaveBeenCalled();
-  expect(mocks.open).not.toHaveBeenCalled();
-});
-afterEach(async () => {
-  await act(async () => root.unmount());
-  releaseWorkspace();
-  container.remove();
-});
-
-it('publishes local groups and removes a stale source after a directory change', async () => {
-  expect(mocks.publish).toHaveBeenCalledWith('app-a', [
-    expect.objectContaining({
-      clusterId: 'production',
-      tabs: mocks.local.production,
-      activePanelId: 'api',
-    }),
-  ]);
-  mocks.read.mockResolvedValue({
-    revision: 2,
-    panels: [
-      {
-        tab: mocks.local.production[0],
-        location: { kind: 'panel-window', windowName: 'panel-1', groupId: 'floating' },
+/** Answers claims of retained panels: each answer is `'claim'`, `'fail'`, or a held claim. */
+const claimAnswers = (...answers: Array<'claim' | 'fail' | { release?: () => void }>) => {
+  app.backend.answer('OpenPanelWorkspaceObject', (windowName, tab) => {
+    const answer = answers.shift() ?? 'claim';
+    const claimed = {
+      panel: {
+        tab,
+        location: location(panelwindow.PanelLocationKind.PanelLocationDocked, windowName, 'bottom'),
       },
-    ],
-  });
-  await act(async () => mocks.changed?.({ clusterId: 'production' }));
-  expect(mocks.remove).toHaveBeenCalledWith('production', 'api');
-  expect(mocks.detach).toHaveBeenCalledWith('production', ['api']);
-});
-
-it('drains an object open and prevents its late result from remounting a closing cluster', async () => {
-  let finish: (value: unknown) => void = () => undefined;
-  mocks.open.mockImplementationOnce(
-    () =>
-      new Promise((resolve) => {
-        finish = resolve;
-      })
-  );
-  const opening = sync.openPanel(mocks.local.production[0] as never);
-  let paused = false;
-  const closing = sync.quiesceCluster('production').then((resume) => {
-    paused = true;
-    return resume;
-  });
-  await act(async () => undefined);
-  const pausedBeforeOpenFinished = paused;
-  finish({ render: true, panel: { tab: mocks.local.production[0] } });
-  const result = await opening;
-  const settle = await closing;
-  await act(async () => settle(false));
-  expect(pausedBeforeOpenFinished).toBe(false);
-  expect(result).toBeNull();
-});
-
-it('preserves a provisional target while the directory still points to its source', async () => {
-  sync.stage('move-1', [
-    {
-      clusterId: 'production',
-      groupId: 'right',
-      tabs: mocks.local.production,
-      activePanelId: 'api',
-    },
-  ] as never);
-  mocks.read.mockResolvedValue({
-    revision: 2,
-    panels: [
-      {
-        tab: mocks.local.production[0],
-        location: { kind: 'docked', windowName: 'app-b', groupId: 'right' },
-      },
-    ],
-  });
-  await act(async () => mocks.changed?.({ clusterId: 'production' }));
-  expect(mocks.remove).not.toHaveBeenCalled();
-  sync.settle('move-1');
-  await act(async () => mocks.changed?.({ clusterId: 'production' }));
-  expect(mocks.remove).toHaveBeenCalledWith('production', 'api');
-});
-
-it('returns the latest source groups for a cluster-view handoff', async () => {
-  await sync.flush();
-  expect(sync.groupsForCluster('production')).toEqual([
-    expect.objectContaining({ tabs: mocks.local.production }),
-  ]);
-  expect(sync.groupsForCluster('staging')).toEqual([]);
-});
-
-it('keeps transferred panels when a pre-commit directory read returns after settlement', async () => {
-  sync.stage('move-1', [
-    {
-      clusterId: 'production',
-      groupId: 'right',
-      tabs: mocks.local.production,
-      activePanelId: 'api',
-    },
-  ] as never);
-  let finishRead: (value: unknown) => void = () => undefined;
-  mocks.read.mockImplementationOnce(
-    () =>
-      new Promise((resolve) => {
-        finishRead = resolve;
-      })
-  );
-  await act(async () => mocks.changed?.({ clusterId: 'production' }));
-  mocks.read.mockClear();
-  mocks.read.mockResolvedValue({
-    revision: 3,
-    panels: [
-      {
-        tab: mocks.local.production[0],
-        location: { kind: 'docked', windowName: 'app-a', groupId: 'right' },
-      },
-    ],
-  });
-  await act(async () => {
-    sync.settle('move-1');
-    finishRead({
-      revision: 2,
-      panels: [
-        {
-          tab: mocks.local.production[0],
-          location: { kind: 'docked', windowName: 'app-b', groupId: 'right' },
-        },
-      ],
+      render: true,
+    };
+    if (answer === 'fail') {
+      throw new Error('claim failed');
+    }
+    if (answer === 'claim') {
+      return claimed;
+    }
+    return new Promise((resolve) => {
+      answer.release = () => resolve(claimed);
     });
   });
-  expect(mocks.remove).not.toHaveBeenCalled();
-  expect(mocks.detach).not.toHaveBeenCalled();
-  expect(mocks.read).toHaveBeenCalledWith('app-a', 'production');
+};
 
-  // A later authoritative move must still remove the old renderer's copy.
-  mocks.read.mockResolvedValue({
-    revision: 4,
-    panels: [
-      {
-        tab: mocks.local.production[0],
-        location: { kind: 'docked', windowName: 'app-c', groupId: 'right' },
+/** Records ClosePanelWorkspaceObject and OpenPanelWorkspaceObject in one timeline. */
+const recordCloseAndOpen = (closeAnswers: Array<'land' | 'fail'>) => {
+  const timeline: string[] = [];
+  app.backend.answer('ClosePanelWorkspaceObject', (_windowName, _clusterId, panelId) => {
+    timeline.push(`close ${panelId}`);
+    if ((closeAnswers.shift() ?? 'land') === 'fail') {
+      throw new Error('ipc unavailable');
+    }
+  });
+  app.backend.answer('OpenPanelWorkspaceObject', (windowName, tab) => {
+    timeline.push(`open ${tab.panelId}`);
+    return {
+      panel: {
+        tab,
+        location: location(panelwindow.PanelLocationKind.PanelLocationDocked, windowName, 'right'),
       },
-    ],
+      render: true,
+    };
   });
-  await act(async () => mocks.changed?.({ clusterId: 'production' }));
-  expect(mocks.remove).toHaveBeenCalledWith('production', 'api');
-});
+  return timeline;
+};
 
-it('does not read a revoked cluster while the frontend still displays its closing tab', async () => {
-  await act(async () =>
-    root.render(
-      <PanelLifecycleGuardProvider>
-        <WorkspacePanelSync>
-          <WorkspacePanelLifecycle />
-          <Probe />
-        </WorkspacePanelSync>
-      </PanelLifecycleGuardProvider>
-    )
-  );
-  mocks.report.mockClear();
-  mocks.close.mockImplementationOnce(async () => {
-    mocks.read.mockRejectedValue(new Error('window "app-a" does not display cluster "production"'));
-    mocks.changed?.({ clusterId: 'production' });
-    return true;
-  });
-  await act(async () => {
-    await mocks.preflight?.('production', Promise.resolve());
-  });
-  expect(mocks.close).toHaveBeenCalledOnce();
-  expect(mocks.report).not.toHaveBeenCalled();
-});
+const takeReports = (action: string) =>
+  app.errors.take((record) => record.context?.action === action);
 
-it('finishes an in-flight directory read before revoking its cluster view', async () => {
-  await act(async () =>
-    root.render(
-      <PanelLifecycleGuardProvider>
-        <WorkspacePanelSync>
-          <WorkspacePanelLifecycle />
-          <Probe />
-        </WorkspacePanelSync>
-      </PanelLifecycleGuardProvider>
-    )
+describe('in the workspace window', () => {
+  it('waits for confirmed tab membership before panel reads and opens, then resumes on admission', async () => {
+    await start({ open: [] });
+    const staging = app.cluster({ name: 'dev', context: 'staging', open: false });
+    serveCluster(staging);
+    // The user opens a cluster tab; the backend has not admitted it yet.
+    const admit = app.backend.hold('ApplyClusterWorkspace');
+    act(() => {
+      void view.owners().kubeconfig.openKubeconfig(staging.selection);
+    });
+    await app.settle();
+    expect(view.owners().kubeconfig.selectedClusterIds).toContain(staging.clusterId);
+
+    expect(await workspace().readCluster(staging.clusterId)).toBeNull();
+    expect(await workspace().openPanel(tabOf('api', staging))).toBeNull();
+    expect(readsOf(staging)).toEqual([]);
+    expect(app.backend.calls('OpenPanelWorkspaceObject')).toEqual([]);
+
+    await act(async () => admit());
+    await app.settle();
+    await ringDirectory();
+
+    expect(await workspace().readCluster(staging.clusterId)).not.toBeNull();
+    await act(async () => {
+      await workspace().openPanel(tabOf('api', staging));
+    });
+    expect(app.backend.calls('OpenPanelWorkspaceObject')).toEqual([
+      [app.windowName, tabOf('api', staging)],
+    ]);
+  });
+
+  it.each([true, false])(
+    'leaves a closing cluster out of publications until its close settles (accepted: %s)',
+    async (accepted) => {
+      await start();
+      let settle: (closed: boolean) => void = () => undefined;
+      await act(async () => {
+        settle = await workspace().quiesceCluster(production.clusterId);
+      });
+      // Publications only arrange, so leaving the cluster out closes nothing.
+      expect(lastPublication()).toEqual([]);
+      const published = publishedGroups().length;
+      const read = readsOf(production).length;
+
+      await ringDirectory();
+      expect(publishedGroups()).toHaveLength(published);
+      expect(readsOf(production)).toHaveLength(read);
+
+      await act(async () => settle(accepted));
+      await ringDirectory();
+      if (accepted) {
+        expect(publishedGroups()).toHaveLength(published);
+        expect(readsOf(production)).toHaveLength(read);
+      } else {
+        expect(lastPublication()).toEqual([
+          expect.objectContaining({ clusterId: production.clusterId }),
+        ]);
+        expect(readsOf(production).length).toBeGreaterThan(read);
+      }
+    }
   );
-  let resolveRead: (value: unknown) => void = () => undefined;
-  mocks.read.mockImplementationOnce(
-    () =>
-      new Promise((resolve) => {
-        resolveRead = resolve;
+
+  it('resumes synchronization after a failed publication prevents cluster closure', async () => {
+    app.backend.answer('PublishDockedPanels', () => {
+      throw new Error('publication failed');
+    });
+    await start();
+
+    await act(async () => {
+      await expect(workspace().quiesceCluster(production.clusterId)).rejects.toThrow(
+        'publication failed'
+      );
+    });
+    app.backend.answer('PublishDockedPanels', () => undefined);
+    await app.settle();
+
+    expect(await workspace().readCluster(production.clusterId)).toEqual(
+      expect.objectContaining({
+        panels: [
+          expect.objectContaining({ tab: expect.objectContaining({ panelId: panelIdOf('api') }) }),
+        ],
       })
-  );
-  act(() => mocks.changed?.({ clusterId: 'production' }));
-  let closing: Promise<unknown> | undefined;
-  await act(async () => {
-    closing = mocks.preflight?.('production', Promise.resolve());
+    );
+    await expect(workspace().flush()).resolves.toBeUndefined();
+    expect(takeReports('publish-docked-panels').length).toBeGreaterThan(0);
   });
-  const calledBeforeRead = mocks.close.mock.calls.length;
-  await act(async () => {
-    resolveRead({ revision: 2, panels: [] });
-    await closing;
+
+  it('rejects stale menu reads and object opens after the cluster selection commits', async () => {
+    await start({ open: [] });
+    const staging = app.cluster({ name: 'dev', context: 'staging', open: false });
+    serveCluster(staging);
+    await act(async () => {
+      await view.owners().kubeconfig.openKubeconfig(staging.selection);
+    });
+    await act(async () => {
+      await view.owners().kubeconfig.closeKubeconfig(production.selection);
+    });
+    await app.settle();
+    expect(view.owners().kubeconfig.managedClusterIds).toEqual([staging.clusterId]);
+    const read = readsOf(production).length;
+    const opened = app.backend.calls('OpenPanelWorkspaceObject').length;
+
+    expect(await workspace().readCluster(production.clusterId)).toBeNull();
+    expect(await workspace().openPanel(tabOf('api'))).toBeNull();
+    expect(readsOf(production)).toHaveLength(read);
+    expect(app.backend.calls('OpenPanelWorkspaceObject')).toHaveLength(opened);
   });
-  expect(calledBeforeRead).toBe(0);
+
+  it('publishes local groups and removes a stale source after a directory change', async () => {
+    await start();
+    expect(lastPublication()).toEqual([
+      expect.objectContaining({
+        clusterId: production.clusterId,
+        tabs: [expect.objectContaining({ panelId: panelIdOf('api') })],
+        activePanelId: panelIdOf('api'),
+      }),
+    ]);
+
+    // Another window took the panel into a native window.
+    await directorySays(2, [
+      {
+        tab: tabOf('api'),
+        location: location(
+          panelwindow.PanelLocationKind.PanelLocationWindow,
+          'panel-1',
+          'floating'
+        ),
+      },
+    ]);
+
+    expect(isOpenHere('api')).toBe(false);
+    expect(dockedIn('right')).not.toContain(panelIdOf('api'));
+  });
+
+  it('drains an object open and prevents its late result from remounting a closing cluster', async () => {
+    await start();
+    const claim = app.backend.hold('OpenPanelWorkspaceObject');
+
+    const opening = workspace().openPanel(tabOf('worker'));
+    let paused = false;
+    const closing = workspace()
+      .quiesceCluster(production.clusterId)
+      .then((resume) => {
+        paused = true;
+        return resume;
+      });
+    await app.settle();
+    const pausedBeforeOpenFinished = paused;
+    await act(async () => claim());
+    const result = await opening;
+    const settle = await closing;
+    await act(async () => settle(false));
+
+    expect(pausedBeforeOpenFinished).toBe(false);
+    expect(result).toBeNull();
+  });
+
+  it('returns the latest source groups for a cluster-view handoff', async () => {
+    await start();
+    const staging = app.cluster({ name: 'dev', context: 'staging', open: false });
+
+    await workspace().flush();
+
+    expect(workspace().groupsForCluster(production.clusterId)).toEqual([
+      expect.objectContaining({ tabs: [expect.objectContaining({ panelId: panelIdOf('api') })] }),
+    ]);
+    expect(workspace().groupsForCluster(staging.clusterId)).toEqual([]);
+  });
+
+  it('does not read a revoked cluster while the frontend still displays its closing tab', async () => {
+    await start();
+    // The backend revokes the view, and its directory changes as it does.
+    app.backend.answer('CloseClusterView', (windowName, clusterId) => {
+      app.backend.answer('GetPanelWorkspace', () => {
+        throw new Error(`window "${windowName}" does not display cluster "${clusterId}"`);
+      });
+      app.events.emit('panel-workspace:changed', { clusterId });
+      return true;
+    });
+
+    await act(async () => {
+      await view.owners().kubeconfig.closeKubeconfig(production.selection);
+    });
+    await app.settle();
+
+    expect(app.backend.calls('CloseClusterView')).toHaveLength(1);
+    expect(app.errors.records()).toEqual([]);
+  });
+
+  it('finishes an in-flight directory read before revoking its cluster view', async () => {
+    await start();
+    const read = app.backend.hold('GetPanelWorkspace');
+    act(() => {
+      app.events.emit('panel-workspace:changed', { clusterId: production.clusterId });
+    });
+    let closing!: Promise<void>;
+    act(() => {
+      closing = view.owners().kubeconfig.closeKubeconfig(production.selection);
+    });
+    await app.settle();
+    const revokedBeforeRead = app.backend.calls('CloseClusterView').length;
+
+    await act(async () => read());
+    await act(async () => {
+      await closing;
+    });
+
+    expect(revokedBeforeRead).toBe(0);
+    expect(app.backend.calls('CloseClusterView')).toHaveLength(1);
+  });
+
+  it('does not announce the renderer until cluster hydration finishes', async () => {
+    const content = document.createElement('div');
+    content.className = 'content';
+    document.body.appendChild(content);
+    production = app.cluster({ name: 'dev', context: 'production' });
+    app.namespaces(production, ['default']);
+    const hydrate = app.backend.hold('GetKubeconfigs');
+    view = await app.render(null);
+
+    expect(app.backend.calls('AcknowledgePanelWorkspaceReady')).toEqual([]);
+    await act(async () => hydrate());
+    await app.settle();
+
+    expect(app.backend.calls('AcknowledgePanelWorkspaceReady')).toEqual([[app.windowName]]);
+  });
+
+  it('recovers an unchanged docked snapshot when close preparation flushes again', async () => {
+    let refusals = 1;
+    app.backend.answer('PublishDockedPanels', (_windowName, groups) => {
+      if ((groups ?? []).length > 0 && refusals > 0) {
+        refusals -= 1;
+        throw new Error('temporary failure');
+      }
+    });
+    await start();
+    const published = publishedGroups().length;
+
+    await expect(workspace().flush()).resolves.toBeUndefined();
+
+    expect(publishedGroups().slice(published)).toEqual([
+      [expect.objectContaining({ clusterId: production.clusterId })],
+    ]);
+    expect(takeReports('publish-docked-panels')).toHaveLength(1);
+  });
 });
 
-it('does not announce the renderer until cluster hydration finishes', async () => {
-  mocks.ready.mockClear();
-  mocks.loading = true;
-  await act(async () =>
-    root.render(
-      <WorkspacePanelSync key="loading">
-        <Probe />
-      </WorkspacePanelSync>
-    )
-  );
-  expect(mocks.ready).not.toHaveBeenCalled();
-  mocks.loading = false;
-  await act(async () =>
-    root.render(
-      <WorkspacePanelSync key="loading">
-        <Probe />
-      </WorkspacePanelSync>
-    )
-  );
-  expect(mocks.ready).toHaveBeenCalledWith('app-a');
+describe('retained panels', () => {
+  it('restores newly retained panels after an earlier empty read, and again after a claim failure', async () => {
+    await start({ open: [] });
+    claimAnswers('fail', 'claim');
+
+    await directorySays(2, [retained('api')]);
+    expect(app.backend.calls('OpenPanelWorkspaceObject')).toHaveLength(1);
+    expect(isOpenHere('api')).toBe(false);
+    await ringDirectory();
+
+    expect(app.backend.calls('OpenPanelWorkspaceObject')).toHaveLength(2);
+    expect(isOpenHere('api')).toBe(true);
+    expect(dockedIn('bottom')).toEqual([panelIdOf('api')]);
+    app.errors.take((record) => (record.error as Error).message === 'claim failed');
+  });
+
+  it('mounts an accepted retained panel even if the next claim fails', async () => {
+    await start({ open: [] });
+    claimAnswers('claim', 'fail');
+
+    await directorySays(2, [retained('api'), retained('second', 1)]);
+
+    expect(isOpenHere('api')).toBe(true);
+    expect(dockedIn('bottom')).toEqual([panelIdOf('api')]);
+    expect(isOpenHere('second')).toBe(false);
+    app.errors.take((record) => (record.error as Error).message === 'claim failed');
+  });
+
+  it('processes a retained-panel notification received while an earlier claim is pending', async () => {
+    await start({ open: [] });
+    const first: { release?: () => void } = {};
+    claimAnswers(first, 'claim');
+    let reads = 0;
+    app.backend.answer('GetPanelWorkspace', () => {
+      reads += 1;
+      return reads === 1
+        ? { revision: 2, panels: [retained('api')] }
+        : { revision: 3, panels: [retained('second')] };
+    });
+
+    await ringDirectory();
+    await ringDirectory();
+    await act(async () => requireValue(first.release, 'first claim')());
+    await app.settle();
+
+    expect(dockedIn('bottom')).toContain(panelIdOf('second'));
+  });
 });
 
-it('recovers an unchanged docked snapshot when close preparation flushes again', async () => {
-  mocks.publish.mockRejectedValueOnce(new Error('temporary failure'));
-  await act(async () =>
-    root.render(
-      <WorkspacePanelSync key="retry">
-        <Probe />
-      </WorkspacePanelSync>
-    )
-  );
-  mocks.publish.mockClear();
-  await expect(sync.flush()).resolves.toBeUndefined();
-  expect(mocks.publish).toHaveBeenCalledWith('app-a', [
-    expect.objectContaining({ clusterId: 'production' }),
-  ]);
-});
+describe('moves the directory targets at this view', () => {
+  // A native window docking its group into this view. The directory keeps
+  // the source placement until commit and records this view as the target.
+  const dockingPanel = (
+    overrides: Partial<panelwindow.WorkspacePanel> = {}
+  ): panelwindow.WorkspacePanel => ({
+    tab: tabOf('api'),
+    location: location(panelwindow.PanelLocationKind.PanelLocationWindow, 'panel-1', 'native'),
+    transfer: {
+      transferId: 'dock-1',
+      target: location(panelwindow.PanelLocationKind.PanelLocationDocked, app.windowName, 'bottom'),
+    },
+    ...overrides,
+  });
 
-it('restores newly retained panels after an earlier empty read, and again after a claim failure', async () => {
-  const tab = mocks.local.production[0];
-  const retained = {
-    tab,
-    location: { kind: 'retained', windowName: '', groupId: 'bottom', index: 0, active: true },
+  // The view acknowledges a move once its provisional copy is mounted; the
+  // directory's next read reflects the outcome.
+  const startTarget = async () => {
+    app.backend.answer('AcknowledgePanelTransfer', () => undefined);
+    await start();
   };
-  mocks.read.mockResolvedValue({ revision: 2, panels: [retained] });
-  mocks.open.mockRejectedValueOnce(new Error('temporary claim failure'));
-  await act(async () => mocks.changed?.({ clusterId: 'production' }));
-  expect(mocks.open).toHaveBeenCalledOnce();
-  mocks.open.mockResolvedValue({ render: true, panel: retained });
-  await act(async () => mocks.changed?.({ clusterId: 'production' }));
-  expect(mocks.open).toHaveBeenCalledTimes(2);
-  expect(mocks.dock).toHaveBeenCalledWith('production', ['api'], 'api', 'bottom', undefined);
+
+  it('lists a dock-back group the directory targets at this view and keeps its provisional copy', async () => {
+    await startTarget();
+
+    await directorySays(2, [dockingPanel()]);
+
+    expect(incoming).toEqual([
+      {
+        transferId: 'dock-1',
+        clusterId: production.clusterId,
+        sourceWindowName: 'panel-1',
+        groupId: 'bottom',
+        insertIndex: 0,
+        view: false,
+        tabs: [tabOf('api')],
+        activePanelId: panelIdOf('api'),
+      },
+    ]);
+    expect(isOpenHere('api')).toBe(true);
+    expect(app.backend.calls('AcknowledgePanelTransfer')).toEqual([
+      [app.windowName, 'dock-1', true],
+    ]);
+  });
+
+  it.each([
+    ['the directory cancels the move', () => [dockingPanel({ transfer: undefined })]],
+    ['the native source closes with its panels', () => []],
+  ])('drops the provisional copy when %s', async (_case, panels) => {
+    await startTarget();
+    await directorySays(2, [dockingPanel()]);
+
+    await directorySays(3, panels());
+
+    expect(incoming).toEqual([]);
+    expect(isOpenHere('api')).toBe(false);
+    expect(dockedIn('right')).not.toContain(panelIdOf('api'));
+  });
+
+  it('keeps the copy once the directory commits the dock to this view', async () => {
+    await startTarget();
+    await directorySays(2, [dockingPanel()]);
+
+    await directorySays(3, [
+      {
+        tab: tabOf('api'),
+        location: location(
+          panelwindow.PanelLocationKind.PanelLocationDocked,
+          app.windowName,
+          'bottom'
+        ),
+      },
+    ]);
+
+    expect(incoming).toEqual([]);
+    expect(isOpenHere('api')).toBe(true);
+  });
+
+  it('ignores an older directory read that predates the move', async () => {
+    await startTarget();
+    await directorySays(2, [dockingPanel()]);
+
+    await directorySays(1, [dockingPanel({ transfer: undefined })]);
+
+    expect(incoming).toHaveLength(1);
+    expect(isOpenHere('api')).toBe(true);
+  });
+
+  it('lists each group of a cluster view move as a view move', async () => {
+    app.backend.answer('AcknowledgePanelTransfer', () => undefined);
+    await start({ open: ['api', 'worker'] });
+    const viewPanel = (name: string, groupId: string): panelwindow.WorkspacePanel => ({
+      tab: tabOf(name),
+      location: location(panelwindow.PanelLocationKind.PanelLocationDocked, 'workspace-2', groupId),
+      transfer: {
+        transferId: 'view-1',
+        view: true,
+        target: location(
+          panelwindow.PanelLocationKind.PanelLocationDocked,
+          app.windowName,
+          groupId
+        ),
+      },
+    });
+
+    await directorySays(2, [viewPanel('api', 'right'), viewPanel('worker', 'bottom')]);
+
+    expect(incoming).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          transferId: 'view-1',
+          groupId: 'right',
+          view: true,
+          tabs: [tabOf('api')],
+        }),
+        expect.objectContaining({
+          transferId: 'view-1',
+          groupId: 'bottom',
+          view: true,
+          tabs: [tabOf('worker')],
+        }),
+      ])
+    );
+    expect(incoming).toHaveLength(2);
+  });
 });
 
-it('mounts an accepted retained panel even if the next claim fails', async () => {
-  const first = {
-    tab: mocks.local.production[0],
-    location: { kind: 'retained', groupId: 'bottom', index: 0 },
-  };
-  const second = {
-    ...first,
-    tab: { ...first.tab, panelId: 'second' },
-    location: { ...first.location, index: 1 },
-  };
-  mocks.read.mockResolvedValue({ revision: 2, panels: [first, second] });
-  mocks.open
-    .mockResolvedValueOnce({ render: true, panel: first })
-    .mockRejectedValueOnce(new Error('claim failed'));
-  await act(async () => mocks.changed?.({ clusterId: 'production' }));
-  expect(mocks.dock).toHaveBeenCalledWith('production', ['api'], 'api', 'bottom', undefined);
+describe('close intents', () => {
+  it('reopens an object only after this view retries its failed close', async () => {
+    await start();
+    const timeline = recordCloseAndOpen(['fail', 'land']);
+    await closePod('api');
+
+    await act(async () => {
+      await workspace().openPanel(tabOf('api'));
+    });
+
+    expect(timeline).toEqual([
+      `close ${panelIdOf('api')}`,
+      `close ${panelIdOf('api')}`,
+      `open ${panelIdOf('api')}`,
+    ]);
+    expect(takeReports('close-panel')).toHaveLength(1);
+  });
+
+  it('refuses to reopen an object while its close cannot land', async () => {
+    await start();
+    const timeline = recordCloseAndOpen(['fail', 'fail', 'land']);
+    await closePod('api');
+
+    await expect(workspace().openPanel(tabOf('api'))).rejects.toThrow('ipc unavailable');
+    expect(timeline.filter((entry) => entry.startsWith('open'))).toEqual([]);
+    await act(async () => workspace().flush());
+
+    expect(timeline).toEqual([
+      `close ${panelIdOf('api')}`,
+      `close ${panelIdOf('api')}`,
+      `close ${panelIdOf('api')}`,
+    ]);
+    // The failure is reported once, not again for each retry.
+    expect(takeReports('close-panel')).toHaveLength(1);
+  });
+
+  it("reopens an object while another object's close is still failing", async () => {
+    await start({ open: ['api', 'worker'] });
+    const timeline = recordCloseAndOpen(['fail', 'land']);
+    await closePod('worker');
+
+    await act(async () => {
+      await workspace().openPanel(tabOf('api'));
+    });
+
+    expect(timeline).toEqual([`close ${panelIdOf('worker')}`, `open ${panelIdOf('api')}`]);
+    await act(async () => workspace().flush());
+    expect(last(timeline)).toBe(`close ${panelIdOf('worker')}`);
+    expect(takeReports('close-panel')).toHaveLength(1);
+  });
+
+  it('reopens an object only after a close still in flight lands', async () => {
+    await start();
+    const timeline = recordCloseAndOpen([]);
+    const land = app.backend.hold('ClosePanelWorkspaceObject');
+    await closePod('api');
+
+    const opening = workspace().openPanel(tabOf('api'));
+    await app.settle();
+    expect(timeline).toEqual([]);
+    await act(async () => land());
+    await act(async () => {
+      await opening;
+    });
+
+    expect(timeline).toEqual([`close ${panelIdOf('api')}`, `open ${panelIdOf('api')}`]);
+  });
+
+  it('sends a close intent for each panel the user closes and drains it on flush', async () => {
+    await start({ open: ['api', 'worker'] });
+    const timeline = recordCloseAndOpen([]);
+    const land = app.backend.hold('ClosePanelWorkspaceObject');
+    await closePod('api');
+    await closePod('worker');
+
+    let flushed = false;
+    const flushing = workspace()
+      .flush()
+      .then(() => {
+        flushed = true;
+      });
+    await app.settle();
+    expect(app.backend.calls('ClosePanelWorkspaceObject')).toEqual([
+      [app.windowName, production.clusterId, panelIdOf('api')],
+    ]);
+    expect(flushed).toBe(false);
+    await act(async () => land());
+    await act(async () => flushing);
+
+    expect(last(app.backend.calls('ClosePanelWorkspaceObject'))).toEqual([
+      app.windowName,
+      production.clusterId,
+      panelIdOf('worker'),
+    ]);
+    expect(flushed).toBe(true);
+    expect(timeline).toEqual([`close ${panelIdOf('api')}`, `close ${panelIdOf('worker')}`]);
+  });
 });
 
-it('processes a retained-panel notification received while an earlier claim is pending', async () => {
-  const first = {
-    tab: mocks.local.production[0],
-    location: { kind: 'retained', groupId: 'bottom', index: 0 },
+describe('in a native panel window', () => {
+  let open: ReturnType<typeof usePanelWorkspaceOpen> | undefined;
+  let objects: ReturnType<typeof useObjectPanelState> | undefined;
+  function NativeProbe() {
+    open = usePanelWorkspaceOpen();
+    objects = useObjectPanelState();
+    return null;
+  }
+
+  const startPanelWindow = async () => {
+    production = app.cluster({ name: 'dev', context: 'production' });
+    app.namespaces(production, ['default']);
+    const api = app.object(production, {
+      group: '',
+      version: 'v1',
+      kind: 'Pod',
+      namespace: 'default',
+      name: 'api',
+    });
+    app.snapshots.serve('object-details', api.scopes.detailScope ?? '', {
+      detailType: 'pod',
+      details: { name: 'api', namespace: 'default' },
+    } as never);
+    // The window renders its pod panel, which reads the namespace's pods.
+    app.snapshots.serve(
+      'pods',
+      buildRefreshScope('pods', {
+        clusterId: production.clusterId,
+        selector: { kind: 'namespace', namespace: 'default' },
+      }),
+      makePodSnapshotPayload({
+        clusterId: production.clusterId,
+        clusterName: production.clusterName,
+      })
+    );
+    app.panelWindow(production, { tabs: [tabOf('api')] });
+    await app.render(<NativeProbe />);
+    await act(async () => {
+      requireValue(objects, 'panel window objects').closePanel(
+        production.clusterId,
+        panelIdOf('api')
+      );
+    });
+    await app.settle();
   };
-  const second = { ...first, tab: { ...first.tab, panelId: 'second' } };
-  let finish: (value: unknown) => void = () => undefined;
-  mocks.read
-    .mockResolvedValueOnce({ revision: 2, panels: [first] })
-    .mockResolvedValue({ revision: 3, panels: [second] });
-  mocks.open
-    .mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          finish = resolve;
-        })
-    )
-    .mockResolvedValue({ render: true, panel: second });
-  await act(async () => mocks.changed?.({ clusterId: 'production' }));
-  await act(async () => mocks.changed?.({ clusterId: 'production' }));
-  await act(async () => finish({ render: true, panel: first }));
-  expect(mocks.dock).toHaveBeenCalledWith('production', ['second'], 'second', 'bottom', undefined);
+
+  it('opens from a native window only after its failed close is retried', async () => {
+    const timeline = recordCloseAndOpen(['fail', 'land']);
+    await startPanelWindow();
+
+    await act(async () => {
+      await requireValue(open, 'native open')(tabOf('api'));
+    });
+
+    expect(last(app.backend.calls('ClosePanelWorkspaceObject'))).toEqual([
+      'panel-1',
+      production.clusterId,
+      panelIdOf('api'),
+    ]);
+    expect(timeline).toEqual([
+      `close ${panelIdOf('api')}`,
+      `close ${panelIdOf('api')}`,
+      `open ${panelIdOf('api')}`,
+    ]);
+    expect(takeReports('close-panel')).toHaveLength(1);
+  });
+
+  it('refuses to open from a native window while its close cannot land', async () => {
+    const timeline = recordCloseAndOpen(['fail', 'fail', 'land']);
+    await startPanelWindow();
+
+    await expect(requireValue(open, 'native open')(tabOf('api'))).rejects.toThrow(
+      'ipc unavailable'
+    );
+
+    expect(timeline.filter((entry) => entry.startsWith('open'))).toEqual([]);
+    expect(takeReports('close-panel')).toHaveLength(1);
+  });
 });

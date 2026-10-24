@@ -1,602 +1,236 @@
 /**
  * frontend/src/hooks/multiClusterIsolation.test.ts
  *
- * Tests for multi-cluster isolation in frontend hooks.
- * Verifies that auth errors, health status, and filter state are tracked
- * independently per cluster without leaking between clusters.
+ * Auth failures and health reported for one cluster stay with that cluster:
+ * the auth context and the health listener report each cluster's own state,
+ * the visible cluster's state as the active one (following a tab switch), and
+ * nothing active when no cluster is open. A health event without a cluster is
+ * ignored without logging its payload, and unmounting one menu-event consumer
+ * leaves the app's own handler for that event working. Runs inside the
+ * production shell over a faked backend (test-utils/appState): the backend
+ * changes an open cluster's state with `app.setClusterState`, which later
+ * workspace answers keep, and other runtime events arrive through
+ * `app.events`.
  */
 
-import React, { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, createElement } from 'react';
+import { describe, expect, it, vi } from 'vitest';
+import { backend } from '@/core/backend-api/models';
 import {
-  AuthErrorProvider,
   type ClusterAuthState,
   useActiveClusterAuthState,
   useAuthError,
 } from '@/core/contexts/AuthErrorContext';
-import { requireValue } from '@/test-utils/requireValue';
+import { useKubeconfig } from '@/modules/kubernetes/config/KubeconfigContext';
 import {
-  type ClusterHealthStatus,
-  useClusterHealthListener,
-  useWailsRuntimeEvents,
-} from './useWailsRuntimeEvents';
+  type ClusterFixture,
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { requireValue } from '@/test-utils/requireValue';
+import { useClusterHealthListener, useWailsRuntimeEvents } from './useWailsRuntimeEvents';
 
-vi.mock('@core/backend-api', () => ({
-  RetryClusterAuth: vi.fn(),
-  GetClusterWorkspaceStateForWindow: vi.fn().mockResolvedValue({
-    selectedKubeconfigs: [],
-    visibleClusterId: '',
-    clusters: {},
-  }),
-}));
+const app = installAppStateHarness();
 
-vi.mock('@/core/app-state-access', () => ({
-  readAllClusterAuthStates: vi.fn(),
-  requestAppState: vi.fn().mockResolvedValue(null),
-}));
-
-vi.mock('@/core/events', () => ({
-  eventBus: { emit: vi.fn() },
-}));
-
-const runtimeRef = vi.hoisted(() => ({ current: null as MockRuntime | null }));
-
-vi.mock('@/core/desktop-runtime', () => ({
-  onEvent: (event: string, handler: EventHandler) =>
-    runtimeRef.current?.onEvent(event, handler) ?? (() => undefined),
-}));
-
-/**
- * Type for capturing hook results for testing.
- */
-interface AuthHookResult {
-  clusterAuthErrors: Map<string, ClusterAuthState>;
-  getClusterAuthState: (clusterId: string) => ClusterAuthState;
-  getActiveClusterAuthState: () => ClusterAuthState;
-  handleRetry: (clusterId: string) => Promise<void>;
+interface ProbeState {
+  auth: ReturnType<typeof useAuthError>;
+  activeAuth: ClusterAuthState;
+  health: ReturnType<typeof useClusterHealthListener>;
 }
 
-interface HealthHookResult {
-  clusterHealth: Map<string, ClusterHealthStatus>;
-  getClusterHealth: (clusterId: string) => ClusterHealthStatus;
-  getActiveClusterHealth: () => ClusterHealthStatus;
-}
+let probed: ProbeState | null = null;
 
-/**
- * Type for event handlers registered through the desktop runtime adapter.
- */
-type EventHandler = (...args: unknown[]) => void;
-
-/**
- * Mock runtime interface matching Wails runtime structure.
- */
-interface MockRuntime {
-  onEvent: ReturnType<typeof vi.fn<(event: string, handler: EventHandler) => () => void>>;
-  handlers: Map<string, EventHandler>;
-  emit: (event: string, payload: unknown) => void;
-}
-
-/**
- * Create a mock Wails runtime that captures event handlers.
- * Allows tests to emit events and verify hook behavior.
- */
-function createMockRuntime(): MockRuntime {
-  const handlers = new Map<string, EventHandler>();
-  const onEvent = vi.fn<(event: string, handler: EventHandler) => () => void>((event, handler) => {
-    handlers.set(event, handler);
-    return () => {
-      if (handlers.get(event) === handler) {
-        handlers.delete(event);
-      }
-    };
-  });
-  return {
-    handlers,
-    onEvent,
-    emit: (event: string, payload: unknown) => {
-      const handler = handlers.get(event);
-      if (handler) {
-        handler(payload);
-      }
-    },
+// Reads the hooks the way their consumers do (ConnectivityStatus,
+// AuthFailureOverlay, ClusterOverview): the active cluster is the visible one.
+function Probe() {
+  const { selectedClusterId } = useKubeconfig();
+  probed = {
+    auth: useAuthError(),
+    activeAuth: useActiveClusterAuthState(selectedClusterId),
+    health: useClusterHealthListener(selectedClusterId),
   };
+  return null;
 }
 
-describe('Wails Runtime Event Listener Cleanup', () => {
-  let mockRuntime: MockRuntime;
+const state = () => requireValue(probed, 'expected the probe to render');
 
-  beforeEach(() => {
-    mockRuntime = createMockRuntime();
-    runtimeRef.current = mockRuntime;
+const openCluster = (name: string, auth?: ClusterFixture['auth']) => {
+  const cluster = app.cluster({ name, context: name, auth });
+  app.namespaces(cluster, ['default']);
+  return cluster;
+};
+
+const showProbe = async (): Promise<MountedApp> => {
+  const view = await app.render(null);
+  await view.show(createElement(Probe));
+  return view;
+};
+
+const emit = async (name: string, data: unknown) => {
+  await act(async () => {
+    app.events.emit(name, data);
   });
+  await app.settle();
+};
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-    runtimeRef.current = null;
-    document.body.textContent = '';
-  });
+const failAuth = (cluster: TestCluster, reason: string) =>
+  app.setClusterState(cluster, { auth: { state: 'invalid', reason } });
 
-  it('uses onEvent disposers instead of clearing whole runtime event names', async () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = ReactDOM.createRoot(container);
-    const handlers = {
-      onOpenSettings: vi.fn(),
-      onOpenAbout: vi.fn(),
-      onOpenCluster: vi.fn(),
-      onToggleSidebar: vi.fn(),
-      onToggleAppLogsPanel: vi.fn(),
-      onToggleDiagnostics: vi.fn(),
-      onToggleObjectDiff: vi.fn(),
-    };
+const { ClusterHealthDegraded: DEGRADED, ClusterHealthHealthy: HEALTHY } =
+  backend.ClusterHealthState;
 
-    await act(async () => {
-      root.render(
-        React.createElement(() => {
-          useWailsRuntimeEvents(handlers);
-          return null;
-        })
-      );
-      await Promise.resolve();
+describe('auth error isolation', () => {
+  it('keeps an auth failure, its retry, and its recovery to that cluster', async () => {
+    const dev = openCluster('dev');
+    const stg = openCluster('stg');
+    await showProbe();
+
+    await failAuth(dev, 'Token expired');
+    await failAuth(stg, 'Certificate invalid');
+    // The backend retries dev's credentials; the failure's diagnostic stays.
+    await app.setClusterState(dev, { auth: { state: 'recovering', reason: 'Token expired' } });
+
+    expect(state().auth.getClusterAuthState(dev.clusterId)).toMatchObject({
+      hasError: true,
+      isRecovering: true,
+      reason: 'Token expired',
+      clusterName: dev.clusterName,
+    });
+    expect(state().auth.getClusterAuthState(stg.clusterId)).toMatchObject({
+      hasError: true,
+      isRecovering: false,
+      reason: 'Certificate invalid',
     });
 
-    expect(mockRuntime.handlers.has('open-settings')).toBe(true);
-    expect(mockRuntime.handlers.has('open-cluster')).toBe(true);
+    await app.setClusterState(dev, { auth: { state: 'valid' } });
 
-    act(() => {
-      root.unmount();
-      container.remove();
+    expect(state().auth.getClusterAuthState(dev.clusterId).hasError).toBe(false);
+    expect(state().auth.getClusterAuthState(stg.clusterId)).toMatchObject({
+      hasError: true,
+      reason: 'Certificate invalid',
     });
+    expect([...state().auth.clusterAuthErrors.keys()]).toEqual([stg.clusterId]);
+  });
 
-    expect(mockRuntime.handlers.size).toBe(0);
+  it('reports the visible cluster’s auth state as the active one, following a tab switch', async () => {
+    // The backend's workspace state carries each cluster's auth state
+    // (backend/workspace_state.go), so it is seeded there, as a window opened
+    // after the failures would read it.
+    const dev = openCluster('dev');
+    const stg = openCluster('stg', { state: 'invalid', reason: 'Token expired for stg' });
+    const view = await showProbe();
+
+    expect(state().activeAuth.hasError).toBe(false);
+    expect(state().auth.getClusterAuthState(stg.clusterId).hasError).toBe(true);
+
+    await view.selectCluster(stg);
+
+    expect(state().activeAuth).toMatchObject({
+      hasError: true,
+      reason: 'Token expired for stg',
+      clusterName: stg.clusterName,
+    });
+    expect(state().auth.getClusterAuthState(dev.clusterId).hasError).toBe(false);
+  });
+
+  it('reports no active auth failure or health when no cluster is open', async () => {
+    await showProbe();
+
+    await emit('cluster:auth:failed', {
+      clusterId: 'background',
+      clusterName: 'background',
+      reason: 'Token expired',
+    });
+    await emit('cluster:health:degraded', { clusterId: 'background' });
+
+    expect(state().auth.getClusterAuthState('background').hasError).toBe(true);
+    expect(state().activeAuth.hasError).toBe(false);
+    expect(state().health.getActiveClusterHealth()).toBe('unknown');
   });
 });
 
-// Tests for auth error tracking per cluster
-describe('Auth Error Context Isolation', () => {
-  let mockRuntime: MockRuntime;
+describe('cluster health isolation', () => {
+  it('keeps each cluster’s health to that cluster through its transitions', async () => {
+    const dev = openCluster('dev');
+    const stg = openCluster('stg');
+    const prd = openCluster('prd');
+    await showProbe();
 
-  beforeEach(() => {
-    mockRuntime = createMockRuntime();
-    runtimeRef.current = mockRuntime;
+    await app.setClusterState(stg, { health: DEGRADED });
+
+    expect(state().health.getClusterHealth(dev.clusterId)).toBe('healthy');
+    expect(state().health.getClusterHealth(stg.clusterId)).toBe('degraded');
+    expect(state().health.getClusterHealth(prd.clusterId)).toBe('healthy');
+    expect(state().health.getClusterHealth('not-open')).toBe('unknown');
+
+    await app.setClusterState(stg, { health: HEALTHY });
+    await app.setClusterState(dev, { health: DEGRADED });
+
+    expect(state().health.getClusterHealth(dev.clusterId)).toBe('degraded');
+    expect(state().health.getClusterHealth(stg.clusterId)).toBe('healthy');
+    expect(state().health.clusterHealth.size).toBe(3);
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-    runtimeRef.current = null;
-    // Clear document body using textContent (safe DOM method)
-    document.body.textContent = '';
+  it('reports the visible cluster’s health as the active one, following a tab switch', async () => {
+    const dev = openCluster('dev');
+    const stg = openCluster('stg');
+    const view = await showProbe();
+
+    // A background cluster degrades while dev is visible.
+    await app.setClusterState(stg, { health: DEGRADED });
+    expect(state().health.getActiveClusterHealth()).toBe('healthy');
+
+    await view.selectCluster(stg);
+    expect(state().health.getActiveClusterHealth()).toBe('degraded');
+
+    await app.setClusterState(dev, { health: DEGRADED });
+    await app.setClusterState(stg, { health: HEALTHY });
+    expect(state().health.getActiveClusterHealth()).toBe('healthy');
   });
 
-  /**
-   * Helper to render the auth context hooks and capture their result.
-   */
-  const renderAuthHook = async (
-    activeClusterId: string = ''
-  ): Promise<{
-    getResult: () => AuthHookResult;
-    unmount: () => void;
-  }> => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = ReactDOM.createRoot(container);
-
-    let hookResult: AuthHookResult | null = null;
-
-    const HookHost = () => {
-      const result = useAuthError();
-      const activeState = useActiveClusterAuthState(activeClusterId);
-      hookResult = {
-        ...result,
-        getActiveClusterAuthState: () => activeState,
-      };
-      return null;
-    };
-
-    await act(async () => {
-      root.render(React.createElement(AuthErrorProvider, null, React.createElement(HookHost)));
-      await Promise.resolve();
-    });
-
-    return {
-      getResult: () => requireValue(hookResult, 'Expected the health hook result after render'),
-      unmount: () =>
-        act(() => {
-          root.unmount();
-          container.remove();
-        }),
-    };
-  };
-
-  it('tracks auth errors per cluster independently', async () => {
-    const { getResult, unmount } = await renderAuthHook();
-
-    // Simulate auth failure for cluster-a
-    await act(async () => {
-      mockRuntime.emit('cluster:auth:failed', {
-        clusterId: 'cluster-a',
-        clusterName: 'Cluster A',
-        reason: 'Token expired',
-      });
-      await Promise.resolve();
-    });
-
-    const result = getResult();
-
-    // cluster-a should have an error
-    const stateA = result.getClusterAuthState('cluster-a');
-    expect(stateA.hasError).toBe(true);
-    expect(stateA.reason).toBe('Token expired');
-    expect(stateA.clusterName).toBe('Cluster A');
-
-    // cluster-b should NOT have an error
-    const stateB = result.getClusterAuthState('cluster-b');
-    expect(stateB.hasError).toBe(false);
-    expect(stateB.reason).toBe('');
-
-    unmount();
-  });
-
-  it('clears auth error only for recovered cluster', async () => {
-    const { getResult, unmount } = await renderAuthHook();
-
-    // Simulate auth failure for both clusters
-    await act(async () => {
-      mockRuntime.emit('cluster:auth:failed', {
-        clusterId: 'cluster-a',
-        clusterName: 'Cluster A',
-        reason: 'Token expired',
-      });
-      mockRuntime.emit('cluster:auth:failed', {
-        clusterId: 'cluster-b',
-        clusterName: 'Cluster B',
-        reason: 'Certificate invalid',
-      });
-      await Promise.resolve();
-    });
-
-    // Both should have errors
-    let result = getResult();
-    expect(result.getClusterAuthState('cluster-a').hasError).toBe(true);
-    expect(result.getClusterAuthState('cluster-b').hasError).toBe(true);
-
-    // Simulate recovery for cluster-a only
-    await act(async () => {
-      mockRuntime.emit('cluster:auth:recovered', {
-        clusterId: 'cluster-a',
-      });
-      await Promise.resolve();
-    });
-
-    result = getResult();
-
-    // cluster-a should be cleared
-    expect(result.getClusterAuthState('cluster-a').hasError).toBe(false);
-
-    // cluster-b should still have an error
-    expect(result.getClusterAuthState('cluster-b').hasError).toBe(true);
-    expect(result.getClusterAuthState('cluster-b').reason).toBe('Certificate invalid');
-
-    unmount();
-  });
-
-  it('getActiveClusterAuthState returns state for active cluster only', async () => {
-    const { getResult, unmount } = await renderAuthHook('cluster-a');
-
-    // Simulate auth failure for both clusters
-    await act(async () => {
-      mockRuntime.emit('cluster:auth:failed', {
-        clusterId: 'cluster-a',
-        clusterName: 'Cluster A',
-        reason: 'Token expired for A',
-      });
-      mockRuntime.emit('cluster:auth:failed', {
-        clusterId: 'cluster-b',
-        clusterName: 'Cluster B',
-        reason: 'Token expired for B',
-      });
-      await Promise.resolve();
-    });
-
-    const result = getResult();
-
-    // getActiveClusterAuthState should return cluster-a's state
-    const activeState = result.getActiveClusterAuthState();
-    expect(activeState.hasError).toBe(true);
-    expect(activeState.reason).toBe('Token expired for A');
-    expect(activeState.clusterName).toBe('Cluster A');
-
-    unmount();
-  });
-
-  it('tracks recovering state per cluster', async () => {
-    const { getResult, unmount } = await renderAuthHook();
-
-    // Simulate auth failure for cluster-a
-    await act(async () => {
-      mockRuntime.emit('cluster:auth:failed', {
-        clusterId: 'cluster-a',
-        clusterName: 'Cluster A',
-        reason: 'Token expired',
-      });
-      await Promise.resolve();
-    });
-
-    // Simulate recovering state for cluster-a
-    await act(async () => {
-      mockRuntime.emit('cluster:auth:recovering', {
-        clusterId: 'cluster-a',
-        clusterName: 'Cluster A',
-      });
-      await Promise.resolve();
-    });
-
-    const result = getResult();
-
-    // cluster-a should be recovering
-    const stateA = result.getClusterAuthState('cluster-a');
-    expect(stateA.hasError).toBe(true);
-    expect(stateA.isRecovering).toBe(true);
-
-    // cluster-b should not be affected
-    const stateB = result.getClusterAuthState('cluster-b');
-    expect(stateB.hasError).toBe(false);
-    expect(stateB.isRecovering).toBe(false);
-
-    unmount();
-  });
-
-  it('returns default state when no active cluster is set', async () => {
-    const { getResult, unmount } = await renderAuthHook('');
-
-    // Simulate auth failure for cluster-a
-    await act(async () => {
-      mockRuntime.emit('cluster:auth:failed', {
-        clusterId: 'cluster-a',
-        clusterName: 'Cluster A',
-        reason: 'Token expired',
-      });
-      await Promise.resolve();
-    });
-
-    const result = getResult();
-
-    // getActiveClusterAuthState should return default state when no active cluster
-    const activeState = result.getActiveClusterAuthState();
-    expect(activeState.hasError).toBe(false);
-    expect(activeState.reason).toBe('');
-
-    unmount();
-  });
-});
-
-// Tests for cluster health tracking
-describe('Cluster Health Listener Isolation', () => {
-  let mockRuntime: MockRuntime;
-
-  beforeEach(() => {
-    mockRuntime = createMockRuntime();
-    runtimeRef.current = mockRuntime;
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-    runtimeRef.current = null;
-    // Clear document body using textContent (safe DOM method)
-    document.body.textContent = '';
-  });
-
-  /**
-   * Helper to render the useClusterHealthListener hook and capture its result.
-   */
-  const renderHealthHook = async (
-    activeClusterId: string = ''
-  ): Promise<{
-    getResult: () => HealthHookResult;
-    unmount: () => void;
-  }> => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = ReactDOM.createRoot(container);
-
-    let hookResult: HealthHookResult | null = null;
-
-    const HookHost = () => {
-      const result = useClusterHealthListener(activeClusterId);
-      hookResult = result;
-      return null;
-    };
-
-    await act(async () => {
-      root.render(React.createElement(HookHost));
-      await Promise.resolve();
-    });
-
-    return {
-      getResult: () => requireValue(hookResult, 'Expected the auth hook result after render'),
-      unmount: () =>
-        act(() => {
-          root.unmount();
-          container.remove();
-        }),
-    };
-  };
-
-  it('tracks health status per cluster independently', async () => {
-    const { getResult, unmount } = await renderHealthHook();
-
-    // Simulate healthy status for cluster-a
-    await act(async () => {
-      mockRuntime.emit('cluster:health:healthy', {
-        clusterId: 'cluster-a',
-      });
-      await Promise.resolve();
-    });
-
-    // Simulate degraded status for cluster-b
-    await act(async () => {
-      mockRuntime.emit('cluster:health:degraded', {
-        clusterId: 'cluster-b',
-      });
-      await Promise.resolve();
-    });
-
-    const result = getResult();
-
-    // cluster-a should be healthy
-    expect(result.getClusterHealth('cluster-a')).toBe('healthy');
-
-    // cluster-b should be degraded
-    expect(result.getClusterHealth('cluster-b')).toBe('degraded');
-
-    unmount();
-  });
-
-  it('getActiveClusterHealth returns health for active cluster only', async () => {
-    const { getResult, unmount } = await renderHealthHook('cluster-a');
-
-    // Set different health for each cluster
-    await act(async () => {
-      mockRuntime.emit('cluster:health:healthy', {
-        clusterId: 'cluster-a',
-      });
-      mockRuntime.emit('cluster:health:degraded', {
-        clusterId: 'cluster-b',
-      });
-      await Promise.resolve();
-    });
-
-    const result = getResult();
-
-    // getActiveClusterHealth should return cluster-a's health
-    expect(result.getActiveClusterHealth()).toBe('healthy');
-
-    unmount();
-  });
-
-  it('returns unknown for clusters not yet tracked', async () => {
-    const { getResult, unmount } = await renderHealthHook();
-
-    const result = getResult();
-
-    // Unknown cluster should return 'unknown'
-    expect(result.getClusterHealth('nonexistent-cluster')).toBe('unknown');
-
-    unmount();
-  });
-
-  it('returns unknown when no active cluster is set', async () => {
-    const { getResult, unmount } = await renderHealthHook('');
-
-    // Set health for cluster-a
-    await act(async () => {
-      mockRuntime.emit('cluster:health:healthy', {
-        clusterId: 'cluster-a',
-      });
-      await Promise.resolve();
-    });
-
-    const result = getResult();
-
-    // getActiveClusterHealth should return 'unknown' when no active cluster
-    expect(result.getActiveClusterHealth()).toBe('unknown');
-
-    unmount();
-  });
-
-  it('does not log raw health payloads when clusterId is missing', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const { getResult, unmount } = await renderHealthHook();
-
-    await act(async () => {
-      mockRuntime.emit('cluster:health:healthy', {
+  it('ignores a health event without a cluster and does not log its payload', async () => {
+    const dev = openCluster('dev');
+    await showProbe();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      await emit('cluster:health:degraded', {
         clusterName: 'private-cluster-name',
         token: 'private-token',
       });
-      await Promise.resolve();
-    });
 
-    expect(warnSpy).toHaveBeenCalledWith(
-      '[ClusterHealthListener] Received health:healthy without clusterId'
+      expect(warn).toHaveBeenCalledWith(
+        '[ClusterHealthListener] Received health:degraded without clusterId'
+      );
+      expect(warn).not.toHaveBeenCalledWith(expect.any(String), expect.anything());
+    } finally {
+      warn.mockRestore();
+    }
+    expect(state().health.getClusterHealth(dev.clusterId)).toBe('healthy');
+    expect([...state().health.clusterHealth.keys()]).toEqual([dev.clusterId]);
+  });
+});
+
+describe('menu events', () => {
+  it('leaves the app’s own handler working after another consumer of the event unmounts', async () => {
+    openCluster('dev');
+    const view = await app.render(null);
+    const executeCommand = vi.fn();
+    function MenuConsumer() {
+      useWailsRuntimeEvents(executeCommand);
+      return null;
+    }
+    await view.show(createElement(MenuConsumer));
+    await emit('toggle-sidebar', undefined);
+    expect(executeCommand).toHaveBeenCalledExactlyOnceWith(
+      backend.ApplicationMenuCommand.ApplicationMenuCommandToggleSidebar
     );
-    expect(warnSpy).not.toHaveBeenCalledWith(expect.any(String), expect.anything());
-    expect(getResult().clusterHealth.size).toBe(0);
+    expect(view.owners().viewState?.isSidebarVisible).toBe(false);
 
-    unmount();
-  });
+    view.clear();
+    await emit('toggle-sidebar', undefined);
 
-  it('cleans up health listeners with the onEvent disposers', async () => {
-    const { unmount } = await renderHealthHook();
-
-    expect(mockRuntime.handlers.has('cluster:health:healthy')).toBe(true);
-    expect(mockRuntime.handlers.has('cluster:health:degraded')).toBe(true);
-
-    unmount();
-
-    expect(mockRuntime.handlers.has('cluster:health:healthy')).toBe(false);
-    expect(mockRuntime.handlers.has('cluster:health:degraded')).toBe(false);
-  });
-
-  it('updates health status when cluster transitions between states', async () => {
-    const { getResult, unmount } = await renderHealthHook();
-
-    // Initially set cluster-a as healthy
-    await act(async () => {
-      mockRuntime.emit('cluster:health:healthy', {
-        clusterId: 'cluster-a',
-      });
-      await Promise.resolve();
-    });
-
-    let result = getResult();
-    expect(result.getClusterHealth('cluster-a')).toBe('healthy');
-
-    // Transition cluster-a to degraded
-    await act(async () => {
-      mockRuntime.emit('cluster:health:degraded', {
-        clusterId: 'cluster-a',
-      });
-      await Promise.resolve();
-    });
-
-    result = getResult();
-    expect(result.getClusterHealth('cluster-a')).toBe('degraded');
-
-    // Transition cluster-a back to healthy
-    await act(async () => {
-      mockRuntime.emit('cluster:health:healthy', {
-        clusterId: 'cluster-a',
-      });
-      await Promise.resolve();
-    });
-
-    result = getResult();
-    expect(result.getClusterHealth('cluster-a')).toBe('healthy');
-
-    unmount();
-  });
-
-  it('handles multiple clusters with different health states', async () => {
-    const { getResult, unmount } = await renderHealthHook();
-
-    // Set up three clusters with different states
-    await act(async () => {
-      mockRuntime.emit('cluster:health:healthy', { clusterId: 'cluster-1' });
-      mockRuntime.emit('cluster:health:degraded', { clusterId: 'cluster-2' });
-      mockRuntime.emit('cluster:health:healthy', { clusterId: 'cluster-3' });
-      await Promise.resolve();
-    });
-
-    const result = getResult();
-
-    expect(result.getClusterHealth('cluster-1')).toBe('healthy');
-    expect(result.getClusterHealth('cluster-2')).toBe('degraded');
-    expect(result.getClusterHealth('cluster-3')).toBe('healthy');
-
-    // Verify the map contains exactly three entries
-    expect(result.clusterHealth.size).toBe(3);
-
-    unmount();
+    expect(executeCommand).toHaveBeenCalledTimes(1);
+    expect(view.owners().viewState?.isSidebarVisible).toBe(true);
   });
 });

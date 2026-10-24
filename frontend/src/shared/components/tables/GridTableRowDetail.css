@@ -1,0 +1,101 @@
+/* Row detail: an open row's full-width content (for example a nested table).
+   Neither the open row nor its detail draws a rail of its own; the accent
+   rail stays reserved for selected, focused, and hovered rows, so a selected
+   row next to an open detail never reads as part of it. Like a row, the
+   detail keeps a transparent 3px rail so the highlight below never shifts
+   its content. */
+.gridtable-row-detail {
+  display: block;
+  width: 100%;
+  border-left: 3px solid transparent;
+  background-color: var(--grid-bg-primary);
+  z-index: 1;
+  transition:
+    background-color var(--duration-fast, 150ms) var(--ease-out, ease),
+    border-left-color var(--duration-fast, 150ms) var(--ease-out, ease);
+}
+
+/* An open row and its detail are tinted as one block with the row's kind
+   color (--kind-color, set by the hash-color-N group class; neutral without
+   one), mixed like the kind badge's own background but lighter. The tint
+   layers over each surface's background, so selection still shows through. */
+.gridtable-row.gridtable-row--detail-open,
+.gridtable-row-detail {
+  --row-detail-tint: color-mix(
+    in srgb,
+    var(--kind-color, var(--color-text-tertiary)) 14%,
+    transparent
+  );
+  background-image: linear-gradient(var(--row-detail-tint), var(--row-detail-tint));
+}
+
+/* No rule divides an open row from its detail; the rule closes the detail instead. */
+.gridtable-row.gridtable-row--detail-open {
+  border-bottom: none;
+}
+
+.gridtable-row-detail {
+  border-bottom: 1px solid var(--grid-border-color);
+}
+
+/* A detail always renders right after its own row, so it follows that row's
+   selected or focused highlight and accent rail, and the group stays one block. */
+.gridtable-row.gridtable-row--focused + .gridtable-row-detail,
+.gridtable-row.gridtable-row--selected + .gridtable-row-detail {
+  background-color: var(--color-bg-secondary);
+  border-left-color: var(--color-accent);
+}
+
+.gridtable-row-detail__cell {
+  display: block;
+  padding: 0;
+}
+
+/* Pinned to the visible width so a wide parent never slides the content sideways;
+   the inline width and max-height come from the parent's viewport. */
+.gridtable-row-detail__content {
+  position: sticky;
+  left: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  /* The tinted band shows around the nested table. */
+  padding: 0 0 0.7rem 1rem;
+  margin-bottom: 0;
+  overflow: hidden;
+}
+
+/* The count that opens a row's detail: "2/3 ›". */
+.gridtable-row-detail-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gridtable-row-detail-toggle__chevron {
+  flex: none;
+  transition: transform var(--transition-fast);
+}
+
+.gridtable-row-detail-toggle[aria-expanded="true"] .gridtable-row-detail-toggle__chevron {
+  transform: rotate(90deg);
+  color: var(--color-accent);
+}
+
+/* The parent table already makes room for docked panels; a nested table must not again. */
+.content-body .gridtable-row-detail .gridtable-filter-container,
+.content-body .gridtable-row-detail .gridtable-header-container,
+.content-body .gridtable-row-detail .gridtable-wrapper,
+.content-body .gridtable-row-detail .gridtable-pagination {
+  margin-right: 0;
+  margin-bottom: 0;
+}
+
+/* A nested table sizes to its rows up to the cap, then scrolls inside. */
+.gridtable-row-detail__content .gridtable-container.embedded {
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+}

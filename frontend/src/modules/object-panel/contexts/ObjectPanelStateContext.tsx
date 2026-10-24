@@ -15,6 +15,7 @@ import {
  */
 
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { clearHelmValuesView } from '@modules/object-panel/components/ObjectPanel/Helm/helmValuesViewCache';
 import { clearLogViewerPrefs } from '@modules/object-panel/components/ObjectPanel/Logs/logViewerPrefsCache';
 import type { ViewType } from '@modules/object-panel/components/ObjectPanel/types';
 import { getObjectPanelScopeEvictions } from '@modules/object-panel/objectPanelRef';
@@ -107,6 +108,7 @@ const evictRemovedPanelCaches = (
       if (!current[clusterId]?.openPanels.has(panelId)) {
         evictPanelScopes(ref);
         clearLogViewerPrefs(panelId);
+        clearHelmValuesView(panelId);
       }
     }
   }
@@ -171,7 +173,16 @@ interface ObjectPanelStateContextType {
   ) => string;
   removeOwnedPanel: (clusterId: string, panelId: string) => void;
   panelIdsForCluster: (clusterId: string) => string[];
+
+  /**
+   * Hears panels this renderer closed (`closePanel`, `onCloseObjectPanel`),
+   * never panels it gave up because they moved (`removeOwnedPanel`). The
+   * panel-window layer turns these into directory close intents.
+   */
+  subscribeClosedPanels: (listener: ClosedPanelsListener) => () => void;
 }
+
+export type ClosedPanelsListener = (clusterId: string, panelIds: string[]) => void;
 
 const ObjectPanelStateContext = createContext<ObjectPanelStateContextType | undefined>(undefined);
 
@@ -229,25 +240,26 @@ export const useObjectPanelActiveTabs = (): Map<string, ViewType> =>
 
 interface ObjectPanelStateProviderProps {
   children: React.ReactNode;
-  initialGroupSnapshot?: panelwindow.GroupSnapshot;
+  // A native window starts with the group the directory places in it.
+  initialGroup?: panelwindow.WorkspaceGroup;
 }
 
 const EMPTY_CLUSTER_IDS: string[] = [];
 
-const stateFromGroupSnapshot = (
-  snapshot: panelwindow.GroupSnapshot | undefined
+const stateFromGroup = (
+  group: panelwindow.WorkspaceGroup | undefined
 ): Record<string, ObjectPanelState> => {
-  if (!snapshot) {
+  if (!group) {
     return {};
   }
   const openPanels = new Map<string, PanelTarget>();
   const activeTabs = new Map<string, ViewType>();
-  for (const tab of snapshot.tabs ?? []) {
+  for (const tab of group.tabs ?? []) {
     openPanels.set(tab.panelId, panelTargetFromSnapshot(tab));
     activeTabs.set(tab.panelId, tab.activeView as ViewType);
   }
   return {
-    [snapshot.clusterId]: {
+    [group.clusterId]: {
       openPanels,
       activeTabs,
       pendingNativeOpenPanelIds: new Set(),
@@ -257,14 +269,15 @@ const stateFromGroupSnapshot = (
 
 export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> = ({
   children,
-  initialGroupSnapshot,
+  initialGroup,
 }) => {
-  const { selectedClusterId, selectedClusterName, managedClusterIds } = useKubeconfig();
+  const { selectedClusterId, managedClusterIds, selectedKubeconfigs, getClusterMeta } =
+    useKubeconfig();
   const activeClusterIds = managedClusterIds ?? EMPTY_CLUSTER_IDS;
   // Keep object panel state scoped per cluster tab to avoid cross-tab state leakage.
   const [objectPanelStateByCluster, setObjectPanelStateByCluster] = useState<
     Record<string, ObjectPanelState>
-  >(() => stateFromGroupSnapshot(initialGroupSnapshot));
+  >(() => stateFromGroup(initialGroup));
   const clusterKey = selectedClusterId || '__default__';
   const activeState = objectPanelStateByCluster[clusterKey] ?? DEFAULT_OBJECT_PANEL_STATE;
   const { openPanels } = activeState;
@@ -319,14 +332,26 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
     });
   }, [activeClusterIds]);
 
+  // A cluster's name comes from its id: a ref built in another cluster's view
+  // (a link to an object elsewhere) can carry that other cluster's name.
+  const clusterNamesById = useMemo(
+    () =>
+      new Map(
+        selectedKubeconfigs.map((selection) => {
+          const meta = getClusterMeta(selection);
+          return [meta.id, meta.name] as const;
+        })
+      ),
+    [selectedKubeconfigs, getClusterMeta]
+  );
+
   const hydrateClusterMeta = useCallback(
     (data: KubernetesObjectReference): KubernetesObjectReference => {
       const clusterId = data.clusterId?.trim() || undefined;
       const clusterName =
+        (clusterId && clusterNamesById.get(clusterId)?.trim()) ||
         data.clusterName?.trim() ||
-        (clusterId && clusterId === selectedClusterId?.trim()
-          ? selectedClusterName?.trim() || undefined
-          : undefined);
+        undefined;
       if (clusterId === data.clusterId && clusterName === data.clusterName) {
         return data;
       }
@@ -336,7 +361,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
         clusterName,
       };
     },
-    [selectedClusterId, selectedClusterName]
+    [clusterNamesById]
   );
 
   const onRowClick = useCallback(
@@ -376,21 +401,42 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
     [hydrateClusterMeta, updateClusterState]
   );
 
+  const closedListeners = useRef(new Set<ClosedPanelsListener>());
+  const subscribeClosedPanels = useCallback((listener: ClosedPanelsListener) => {
+    closedListeners.current.add(listener);
+    return () => {
+      closedListeners.current.delete(listener);
+    };
+  }, []);
+  // Announce outside the state updater, which React may replay.
+  const announceClosed = useCallback((clusterId: string, panelIds: string[]) => {
+    if (!panelIds.length) {
+      return;
+    }
+    for (const listener of closedListeners.current) {
+      listener(clusterId, panelIds);
+    }
+  }, []);
+
   const closePanel = useCallback(
     (targetClusterId: string, panelId: string) => {
+      const wasOpen = stateByClusterRef.current[targetClusterId]?.openPanels.has(panelId) ?? false;
       updateClusterState(targetClusterId, (prev) => {
         if (!prev.openPanels.has(panelId) && !prev.activeTabs.has(panelId)) {
           return prev;
         }
         return removePanelFromState(prev, panelId);
       });
+      announceClosed(targetClusterId, wasOpen ? [panelId] : []);
     },
-    [updateClusterState]
+    [updateClusterState, announceClosed]
   );
 
   const onCloseObjectPanel = useCallback(() => {
+    const closed = Array.from(stateByClusterRef.current[clusterKey]?.openPanels.keys() ?? []);
     updateClusterState(clusterKey, () => DEFAULT_OBJECT_PANEL_STATE);
-  }, [updateClusterState, clusterKey]);
+    announceClosed(clusterKey, closed);
+  }, [updateClusterState, clusterKey, announceClosed]);
 
   const setObjectPanelActiveTab = useCallback(
     (targetClusterId: string, panelId: string, tab: ViewType) => {
@@ -492,6 +538,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
       upsertOwnedPanel,
       removeOwnedPanel,
       panelIdsForCluster,
+      subscribeClosedPanels,
     }),
     [
       showObjectPanel,
@@ -507,6 +554,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
       upsertOwnedPanel,
       removeOwnedPanel,
       panelIdsForCluster,
+      subscribeClosedPanels,
     ]
   );
 

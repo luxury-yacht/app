@@ -1,7 +1,9 @@
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import type { ClusterObjectReference } from '@shared/utils/objectIdentity';
 import React, { useCallback, useMemo } from 'react';
+import { permissionDeniedFailure } from '@/core/refresh/refreshFailure';
 import NamespaceSummaryTable, {
   type NamespaceTableRow,
   projectNamespaceSummary,
@@ -28,13 +30,10 @@ const ClusterViewNamespaces: React.FC = () => {
       .map((namespace) => projectNamespaceSummary(namespace, namespaceMetricsState));
   }, [namespaceMetricsState, namespaceSummaries, selectedClusterId]);
 
-  const navigate = useCallback(
-    (row: NamespaceTableRow) => {
-      if (row.scopeStatus) {
-        return;
-      }
-      setSelectedNamespace(row.ref.name, row.ref.clusterId);
-      onNamespaceSelect(row.ref.name);
+  const goToNamespace = useCallback(
+    (namespace: ClusterObjectReference) => {
+      setSelectedNamespace(namespace.name, namespace.clusterId);
+      onNamespaceSelect(namespace.name);
     },
     [onNamespaceSelect, setSelectedNamespace]
   );
@@ -43,7 +42,7 @@ const ClusterViewNamespaces: React.FC = () => {
     <div className="cluster-namespaces">
       <NamespaceSummaryTable
         rows={rows}
-        navigate={navigate}
+        goToNamespace={goToNamespace}
         clusterIdentity={selectedClusterId ?? ''}
         persistenceEnabled={Boolean(selectedClusterId)}
         loading={namespaceLoading}
@@ -53,7 +52,7 @@ const ClusterViewNamespaces: React.FC = () => {
           (Boolean(selectedClusterId) && !namespaceLoading)
         }
         error={
-          namespacesPermissionDenied ? 'Insufficient permission to list namespaces' : namespaceError
+          namespacesPermissionDenied ? permissionDeniedFailure(namespaceError) : namespaceError
         }
         blocked={!selectedClusterId}
         tableMode="Local Complete"

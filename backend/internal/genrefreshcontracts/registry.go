@@ -4,6 +4,7 @@ import (
 	"reflect"
 
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/kind/objectmap"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
@@ -53,16 +54,15 @@ type domainSpec struct {
 	backendPermission         string
 	backendResourceStream     bool
 	backendBypassSingleflight bool
-	frontendRefresherName     string
 	frontendOrchestrator      string
 	frontendDiagnosticsStream string
 	frontendTimingInterval    int
-	frontendTimingCooldown    int
 	frontendTimingTimeout     int
 	frontendPriority          int
 	frontendHasPriority       bool
 	frontendRegistrationOrder int
-	frontendScheduled         bool
+	scopeSelectors            []string
+	scopeQuery                string
 }
 
 func typeOf[T any]() reflect.Type {
@@ -115,8 +115,10 @@ var contractTypes = []typeSpec{
 	{name: "KarpenterBudget", typeOf: typeOf[karpenter.Budget]()},
 	{name: "LimitUsage", typeOf: typeOf[resourcemodel.LimitUsage]()},
 	{name: "CustomResourceDetails", typeOf: typeOf[customresource.Details]()},
-	{name: "RefreshPermissionDeniedDetails", typeOf: typeOf[refresh.PermissionDeniedDetails]()},
-	{name: "RefreshPermissionDeniedStatus", typeOf: typeOf[refresh.PermissionDeniedStatus]()},
+	{name: "RefreshManualJob", typeOf: typeOf[refresh.ManualRefreshJob]()},
+	{name: "ErrorStatus", typeOf: typeOf[errorstatus.Status]()},
+	{name: "ErrorStatusDetails", typeOf: typeOf[errorstatus.Details]()},
+	{name: "ErrorStatusObjectRef", typeOf: typeOf[errorstatus.ObjectRef]()},
 	{name: "SnapshotStats", typeOf: typeOf[refresh.SnapshotStats]()},
 	{name: "ResourceRef", typeOf: typeOf[resourcemodel.ResourceRef]()},
 	{name: "DisplayRef", typeOf: typeOf[resourcemodel.DisplayRef]()},
@@ -187,6 +189,7 @@ var contractTypes = []typeSpec{
 	{name: "PodSnapshotPayload", typeOf: typeOf[snapshot.PodSnapshot]()},
 	{name: "ObjectDeletionMetadata", typeOf: typeOf[snapshot.ObjectDeletionMetadata]()},
 	{name: "ObjectDetailsSnapshotPayload", typeOf: typeOf[snapshot.ObjectDetailsSnapshotPayload]()},
+	{name: "GenericObjectDetails", typeOf: typeOf[snapshot.GenericObjectDetails]()},
 	{name: "ObjectEventSummary", typeOf: typeOf[snapshot.ObjectEventSummary]()},
 	{name: "ObjectEventsSnapshotPayload", typeOf: typeOf[snapshot.ObjectEventsSnapshotPayload]()},
 	{name: "ObjectMapReference", typeOf: typeOf[snapshot.ObjectMapReference]()},
@@ -257,6 +260,9 @@ var contractEnums = []enumSpec{
 	{name: "ContainerLogsWarningKind", typeOf: typeOf[containerlogs.WarningKind]()},
 	{name: "ContainerLogsLimitScope", typeOf: typeOf[containerlogs.LimitScope]()},
 	{name: "ContainerLogsIssueState", typeOf: typeOf[containerlogs.IssueState]()},
+	{name: "RefreshJobState", typeOf: typeOf[refresh.JobState]()},
+	{name: "ErrorStatusReason", typeOf: typeOf[errorstatus.Reason](), valuesName: "ERROR_STATUS_REASONS"},
+	{name: "ErrorStatusCategory", typeOf: typeOf[errorstatus.Category](), valuesName: "ERROR_STATUS_CATEGORIES"},
 }
 
 var contractAliases = []aliasSpec{

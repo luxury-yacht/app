@@ -75,10 +75,17 @@ export function useCursorPageSession() {
   return { ...page, resetPage, publishPage };
 }
 
-// Persisted search applies on mount; only subsequent typing is delayed.
+// Only typing into an enabled query is delayed. A search set while the query
+// is disabled, or held when it becomes enabled (a saved search that hydrated
+// meanwhile), applies at once, so the first read never goes out without it.
 // Browse can reseed the value when its structural scope changes before commit.
-export function useQuerySearch(search: string) {
+export function useQuerySearch(search: string, enabled: boolean) {
   const [debouncedSearch, setDebouncedSearch] = useState(search);
+  const [appliedEnabled, setAppliedEnabled] = useState(enabled);
+  if (appliedEnabled !== enabled || (!enabled && debouncedSearch !== search)) {
+    setAppliedEnabled(enabled);
+    setDebouncedSearch(search);
+  }
   useEffect(() => {
     if (search === debouncedSearch) {
       return;

@@ -47,7 +47,14 @@ const makeFavorite = (overrides: Partial<Favorite> = {}): Favorite => ({
   viewType: 'namespace',
   view: 'workloads',
   namespace: 'default',
-  panes: {},
+  filters: {
+    search: '',
+    kinds: { mode: 'all' },
+    namespaces: { mode: 'all' },
+    clusters: { mode: 'all' },
+    includeMetadata: false,
+  },
+  tableState: { sortColumn: 'name', sortDirection: 'asc', columnVisibility: {} },
   order: 0,
   ...overrides,
 });
@@ -78,58 +85,27 @@ describe('favorites persistence', () => {
 
   it('preserves explicit empty filter selections across the backend adapter', async () => {
     const favorite = makeFavorite({
-      panes: {
-        main: {
-          filters: {
-            search: '',
-            kinds: { mode: 'none' },
-            namespaces: { mode: 'all' },
-            clusters: { mode: 'some', values: ['cluster-a'] },
-            queryFacets: { apiGroups: { mode: 'none' } },
-            includeMetadata: false,
-          },
-          tableState: { sortColumn: 'name', sortDirection: 'asc', columnVisibility: {} },
-        },
+      filters: {
+        search: '',
+        kinds: { mode: 'none' },
+        namespaces: { mode: 'all' },
+        clusters: { mode: 'some', values: ['cluster-a'] },
+        queryFacets: { apiGroups: { mode: 'none' } },
+        includeMetadata: false,
+      },
+      tableState: {
+        sortColumn: 'name',
+        sortDirection: 'asc',
+        columnVisibility: { cpu: false },
+        columnOrder: ['name', 'kind'],
       },
     });
     mockApp.GetFavorites.mockResolvedValue([favorite]);
 
     const hydratedFavorites = await hydrateFavorites();
 
-    expect(hydratedFavorites[0]?.panes).toEqual(favorite.panes);
-  });
-
-  it('preserves both Workloads panes across the backend adapter', async () => {
-    const favorite = makeFavorite({
-      panes: {
-        workloads: {
-          filters: {
-            search: 'api',
-            kinds: { mode: 'some', values: ['Deployment'] },
-            namespaces: { mode: 'all' },
-            clusters: { mode: 'all' },
-            includeMetadata: false,
-          },
-          tableState: { sortColumn: 'name', sortDirection: 'asc', columnVisibility: {} },
-        },
-        pods: {
-          filters: {
-            search: '',
-            kinds: { mode: 'all' },
-            namespaces: { mode: 'all' },
-            clusters: { mode: 'all' },
-            queryFacets: { owners: { mode: 'none' } },
-            includeMetadata: false,
-          },
-          tableState: { sortColumn: 'node', sortDirection: 'desc', columnVisibility: {} },
-        },
-      },
-    });
-    mockApp.GetFavorites.mockResolvedValue([favorite]);
-
-    const hydratedFavorites = await hydrateFavorites();
-
-    expect(hydratedFavorites[0]?.panes).toEqual(favorite.panes);
+    expect(hydratedFavorites[0]?.filters).toEqual(favorite.filters);
+    expect(hydratedFavorites[0]?.tableState).toEqual(favorite.tableState);
   });
 
   // Test 2: second hydrateFavorites call returns cached data without re-fetching
@@ -234,23 +210,18 @@ describe('favorites persistence', () => {
 
   it('keeps case-distinct cluster identities and empty facet values when hydrating a favorite', async () => {
     const favorite = makeFavorite({
-      panes: {
-        main: {
-          filters: {
-            search: '',
-            kinds: { mode: 'all' },
-            namespaces: { mode: 'all' },
-            clusters: { mode: 'some', values: ['Prod:context', 'prod:context'] },
-            queryFacets: { team: { mode: 'some', values: ['', '__empty__'] } },
-            includeMetadata: false,
-          },
-          tableState: { sortColumn: 'name', sortDirection: 'asc', columnVisibility: {} },
-        },
+      filters: {
+        search: '',
+        kinds: { mode: 'all' },
+        namespaces: { mode: 'all' },
+        clusters: { mode: 'some', values: ['Prod:context', 'prod:context'] },
+        queryFacets: { team: { mode: 'some', values: ['', '__empty__'] } },
+        includeMetadata: false,
       },
     });
     mockApp.GetFavorites.mockResolvedValue([favorite]);
     const [hydrated] = await hydrateFavorites();
-    expect(hydrated.panes.main.filters).toEqual(favorite.panes.main.filters);
+    expect(hydrated.filters).toEqual(favorite.filters);
   });
 
   it('reorders each favorite once with contiguous positions when IDs repeat or are missing', async () => {

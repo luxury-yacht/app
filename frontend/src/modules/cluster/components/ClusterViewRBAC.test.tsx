@@ -1,197 +1,122 @@
 /**
  * frontend/src/modules/cluster/components/ClusterViewRBAC.test.tsx
  *
- * Test suite for ClusterViewRBAC.
- * Covers key behaviors and edge cases for ClusterViewRBAC.
+ * The cluster RBAC view lists the visible cluster's ClusterRoles and
+ * ClusterRoleBindings from the backend's cluster-rbac query, and a row's menu
+ * opens that object's Map (offered only for kinds the map supports) with
+ * complete identity. The aggregated table it shares with the other aggregated
+ * views is covered once by NsViewConfig.test.tsx. Runs in the full app,
+ * navigated through the sidebar, over a faked backend (test-utils/appState).
  */
 
-import ClusterViewRBAC from '@modules/cluster/components/ClusterViewRBAC';
-import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
-import type { GridTableProps } from '@shared/components/tables/GridTable';
+import { objectPanelId } from '@modules/object-panel/objectPanelRef';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import type { ClusterRBACEntry } from '@/core/refresh/types';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type ObjectIdentity,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
 
-type RBACRow = Record<string, unknown>;
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
 
-vi.mock('@core/contexts/FavoritesContext', () => ({
-  useFavorites: () => ({
-    favorites: [],
-
-    addFavorite: vi.fn(),
-    updateFavorite: vi.fn(),
-    deleteFavorite: vi.fn(),
-    reorderFavorites: vi.fn(),
-  }),
-  FavoritesProvider: ({ children }: { children: React.ReactNode }) => children,
-}));
-
-vi.mock('@ui/favorites/FavToggle', () => ({
-  useFavToggle: () => ({
-    type: 'toggle',
-    id: 'favorite',
-    icon: null,
-    active: false,
-    onClick: () => undefined,
-    title: 'Save as favorite',
-  }),
-}));
-
-const gridTablePropsRef: { current: GridTableProps<RBACRow> | null } = { current: null };
-const openWithObjectMock = vi.hoisted(() => vi.fn());
-
-vi.mock('@shared/components/tables/GridTable', async () => {
-  const actual = await vi.importActual<typeof import('@shared/components/tables/GridTable')>(
-    '@shared/components/tables/GridTable'
-  );
-  return {
-    ...actual,
-    default: (props: GridTableProps<RBACRow>) => {
-      gridTablePropsRef.current = props;
-      return <div data-testid="grid-table" />;
-    },
-  };
+const rbacObject = (kind: string, name: string): ObjectIdentity => ({
+  group: 'rbac.authorization.k8s.io',
+  version: 'v1',
+  kind,
+  namespace: '',
+  name,
 });
 
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: openWithObjectMock }),
-}));
+const clusterRole = rbacObject('ClusterRole', 'admin');
+const clusterRoleBinding = rbacObject('ClusterRoleBinding', 'admin-binding');
 
-vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: vi.fn() }),
-}));
-
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedKubeconfig: 'path:context' }),
-}));
-
-vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
-  __esModule: true,
-  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
-
-vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (data: unknown[]) => ({
-    sortedData: data,
-    sortConfig: { key: 'name', direction: 'asc' },
-    handleSort: vi.fn(),
-  }),
-}));
-
-vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
-  useGridTablePersistence: () => ({
-    sortConfig: { key: 'name', direction: 'asc' },
-    setSortConfig: vi.fn(),
-    columnWidths: null,
-    setColumnWidths: vi.fn(),
-    columnVisibility: null,
-    setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [] },
-    setFilters: vi.fn(),
-    resetState: vi.fn(),
-    hydrated: true,
-    storageKey: 'gridtable:v1:test',
-  }),
-}));
-
-vi.mock('@/hooks/useShortNames', () => ({
-  useShortNames: () => false,
-}));
-
-vi.mock('@core/backend-api', () => ({
-  RunObjectAction: vi.fn(),
-}));
-
-vi.mock('@/core/capabilities', () => ({
-  getPermissionKey: (kind: string, verb: string, ns?: string) => `${kind}:${verb}:${ns || ''}`,
-  useUserPermissions: () => new Map(),
-}));
-
-const baseRBAC = {
-  ref: {
-    clusterId: 'cluster-a',
-    group: 'rbac.authorization.k8s.io',
-    version: 'v1',
-    kind: 'ClusterRole',
-    resource: 'clusterroles',
-    namespace: '',
-    name: 'admin',
-  },
-  kind: 'ClusterRole',
-  name: 'admin',
-  clusterId: 'cluster-a',
-  details: 'All permissions',
+const rowFor = (identity: ObjectIdentity, resource: string): ClusterRBACEntry => ({
+  ref: { ...identity, clusterId: dev.clusterId, resource, uid: `${identity.name}-uid` },
+  details: '',
   age: '1d',
+});
+
+const start = async () => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['team-a']);
+  app.startScreen(dev);
+  app.serveTable(dev, 'cluster-rbac', {
+    rows: [rowFor(clusterRole, 'clusterroles'), rowFor(clusterRoleBinding, 'clusterrolebindings')],
+  });
+  view = await app.mountApp();
+  await view.goTo({ clusterView: 'rbac' });
 };
 
-const getGridTableProps = () =>
-  requireValue(gridTablePropsRef.current, 'expected GridTable props in ClusterViewRBAC.test.tsx');
-
-const getContextMenuItems = (row: RBACRow) =>
+const rowOf = (name: string) =>
   requireValue(
-    getGridTableProps().getCustomContextMenuItems,
-    'expected context-menu factory in ClusterViewRBAC.test.tsx'
-  )(row, 'name');
+    Array.from(view.container.querySelectorAll<HTMLElement>('.gridtable-row')).find(
+      (row) => row.querySelector('[data-column="name"]')?.textContent?.trim() === name
+    ),
+    `expected the ${name} row`
+  );
+
+const openRowMenu = async (name: string) => {
+  const cell = requireValue(
+    rowOf(name).querySelector<HTMLElement>('.grid-cell'),
+    `expected a cell in the ${name} row`
+  );
+  await act(async () => {
+    cell.dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 })
+    );
+  });
+  await app.settle();
+};
+
+const clickMenuItem = async (label: string) => {
+  const item = requireValue(
+    Array.from(
+      document.body.querySelectorAll<HTMLElement>('[role="menu"] .context-menu-item')
+    ).find(
+      (candidate) => candidate.querySelector('.context-menu-label')?.textContent?.trim() === label
+    ),
+    `expected the ${label} menu item`
+  );
+  await act(async () => item.click());
+  await app.settle();
+};
 
 describe('ClusterViewRBAC', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  it.each([clusterRole, clusterRoleBinding])(
+    'opens a $kind’s Map from its row menu with complete identity',
+    async (identity) => {
+      await start();
+      const panel = app.servePanel(dev, identity);
+      app.snapshots.serve(
+        'object-map',
+        requireValue(panel.scopes.mapScope, 'expected a map scope'),
+        {
+          clusterId: dev.clusterId,
+          clusterName: dev.clusterName,
+          seed: { clusterId: dev.clusterId, ...identity },
+          nodes: [],
+          edges: [],
+          maxNodes: 250,
+          truncated: false,
+        }
+      );
 
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    gridTablePropsRef.current = null;
-    openWithObjectMock.mockClear();
-  });
+      await openRowMenu(identity.name);
+      await clickMenuItem('Open Map');
 
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-  });
-
-  it.each([
-    ['ClusterRole', 'admin'],
-    ['ClusterRoleBinding', 'admin-binding'],
-  ])('opens the Map for %s rows', async (kind, name) => {
-    const row = {
-      ...baseRBAC,
-      ref: {
-        ...baseRBAC.ref,
-        kind,
-        resource: kind === 'ClusterRole' ? 'clusterroles' : 'clusterrolebindings',
-        name,
-      },
-      kind,
-      name,
-    };
-
-    await act(async () => {
-      root.render(<ClusterViewRBAC />);
-      await Promise.resolve();
-    });
-
-    const objectMapItem = getContextMenuItems(row).find(
-      (item) => item.actionId === OBJECT_ACTION_IDS.viewMap
-    );
-    expect(objectMapItem).toBeTruthy();
-
-    act(() => {
-      objectMapItem?.onClick?.();
-    });
-
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind,
-        name,
-        clusterId: 'cluster-a',
-        group: 'rbac.authorization.k8s.io',
-        version: 'v1',
-      }),
-      { initialTab: 'map' }
-    );
-  });
+      expect(view.openPanels()).toEqual([
+        { clusterId: dev.clusterId, clusterName: dev.clusterName, ...identity },
+      ]);
+      expect(
+        view.owners().objectPanels.getOwnedPanel(dev.clusterId, objectPanelId(panel.ref))
+          ?.activeView
+      ).toBe('map');
+    }
+  );
 });

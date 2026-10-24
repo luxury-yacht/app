@@ -43,8 +43,7 @@ stay out of the required gate. Re-evaluated 2026-10-05 on Biome 2.5.15
   spread copies (`[...xs].sort()`). `noUnnecessaryConditions` 178 (121
   production): 81 `??`, 68 `?.`, 29 constant or unreachable conditions. False
   positives include mutable class fields read as their literal initializer
-  (`RefreshManager.isGloballyPaused`,
-  `ResourceStreamConnection.closed`/`paused`) and `switch` cases over
+  (`ResourceStreamConnection.closed`/`paused`) and `switch` cases over
   `Extract<RefreshDomain, …>` reported unreachable; acting on them deletes
   live logic. Many `??`/`?.` findings guard wire or
   persisted data whose TypeScript types overstate the runtime guarantee.
@@ -163,11 +162,16 @@ or the architecture change:
   direct call and accepts the approved facade; real-project fixtures lint
   temporary files under `frontend/src` through `frontend/biome.jsonc` to guard
   the configured plugin globs and backend-binding import patterns.
-- The single disabled-rule scope is `style.noRestrictedImports` under
+- The permanent disabled-rule scope is `style.noRestrictedImports` under
   `src/core/backend-api/**`: that facade must import the generated Wails App
   binding it isolates. Boundary tests reject the import elsewhere and accept it
   in that directory. Remove the override when Biome can express an allowed entry
   point without disabling the rule.
+- Temporary: `correctness.noComponentHookFactories` is off for
+  `src/**/*.test.*`. Biome 2.6.2 made it recommended while test probes were
+  still defined inside test bodies. Remove the override when the cleanup in
+  `docs/todo.md` lands. `--only` runs a rule even where an override turns it
+  off, so check an override with a plain `biome lint` run.
 
 Before adding or expanding a config override:
 

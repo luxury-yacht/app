@@ -2,6 +2,7 @@ export const PERMISSION_FEATURES = {
   clusterOverview: 'cluster.overview',
   clusterNodes: 'cluster.nodes',
   nodeActions: 'cluster.nodeActions',
+  nodeShell: 'cluster.nodeShell',
   storageView: 'cluster.storageView',
   storageActions: 'cluster.storageActions',
   clusterConfig: 'cluster.config',
@@ -22,6 +23,7 @@ export const PERMISSION_FEATURES = {
   namespaceHelm: 'namespace.helm',
   namespaceEvents: 'namespace.events',
   objectMapResources: 'namespace.objectMap',
+  objectActions: 'object.actions',
   other: 'other',
 } as const;
 
@@ -31,6 +33,7 @@ export const PERMISSION_FEATURE_LABELS: Record<PermissionFeatureKey, string> = {
   [PERMISSION_FEATURES.clusterOverview]: 'Cluster overview',
   [PERMISSION_FEATURES.clusterNodes]: 'Nodes table',
   [PERMISSION_FEATURES.nodeActions]: 'Node actions',
+  [PERMISSION_FEATURES.nodeShell]: 'Node shell',
   [PERMISSION_FEATURES.storageView]: 'Storage view',
   [PERMISSION_FEATURES.storageActions]: 'Storage actions',
   [PERMISSION_FEATURES.clusterConfig]: 'Cluster config',
@@ -51,6 +54,7 @@ export const PERMISSION_FEATURE_LABELS: Record<PermissionFeatureKey, string> = {
   [PERMISSION_FEATURES.namespaceHelm]: 'Namespace helm',
   [PERMISSION_FEATURES.namespaceEvents]: 'Namespace events',
   [PERMISSION_FEATURES.objectMapResources]: 'Object map resources',
+  [PERMISSION_FEATURES.objectActions]: 'Object actions',
   [PERMISSION_FEATURES.other]: 'Other',
 };
 

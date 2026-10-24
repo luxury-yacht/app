@@ -1,14 +1,21 @@
 /**
  * frontend/src/utils/kindViewMap.ts
  *
- * Maps Kubernetes resource kinds to their corresponding view destination
- * (ViewType + tab). Used by useNavigateToView to determine where to
- * navigate when alt+clicking an object link.
- *
- * Returns null for unknown kinds — callers should fall back to browse.
+ * Maps an object's API group, kind, and scope to the view that lists it, for
+ * alt+click navigation (useNavigateToView). In order:
+ * - its resource family's view (Karpenter, Argo CD, and so on);
+ * - the view whose refresh domain is the kind's list domain (its kind facet);
+ * - Browse, for a built-in kind that no view lists;
+ * - the Custom view, for any other custom resource.
  */
 
 import { resourceFamilyForObject } from '@core/navigation/resourceFamilies';
+import {
+  CLUSTER_VIEW_DESCRIPTORS,
+  NAMESPACE_VIEW_DESCRIPTORS,
+} from '@core/navigation/viewRegistry';
+import { isBuiltinResource } from '@shared/constants/builtinGroupVersions';
+import { lookupKindMetadata } from '@shared/kinds/kindFacets';
 import type { ClusterViewType, NamespaceViewType, ViewType } from '@/types/navigation/views';
 
 export interface ViewDestination {
@@ -17,72 +24,40 @@ export interface ViewDestination {
   destinationViewId?: string;
 }
 
-// Namespace-scoped resource kind → view destination
-const NAMESPACE_SCOPED_MAP: Record<string, ViewDestination> = {
-  pod: { viewType: 'namespace', tab: 'workloads', destinationViewId: 'namespace-pods' },
-  deployment: { viewType: 'namespace', tab: 'workloads' },
-  statefulset: { viewType: 'namespace', tab: 'workloads' },
-  daemonset: { viewType: 'namespace', tab: 'workloads' },
-  job: { viewType: 'namespace', tab: 'workloads' },
-  cronjob: { viewType: 'namespace', tab: 'workloads' },
-  replicaset: { viewType: 'namespace', tab: 'workloads' },
-  configmap: { viewType: 'namespace', tab: 'config' },
-  secret: { viewType: 'namespace', tab: 'config' },
-  service: { viewType: 'namespace', tab: 'network' },
-  ingress: { viewType: 'namespace', tab: 'network' },
-  endpointslice: { viewType: 'namespace', tab: 'network' },
-  networkpolicy: { viewType: 'namespace', tab: 'network' },
-  gateway: { viewType: 'namespace', tab: 'network' },
-  httproute: { viewType: 'namespace', tab: 'network' },
-  grpcroute: { viewType: 'namespace', tab: 'network' },
-  tlsroute: { viewType: 'namespace', tab: 'network' },
-  listenerset: { viewType: 'namespace', tab: 'network' },
-  referencegrant: { viewType: 'namespace', tab: 'network' },
-  backendtlspolicy: { viewType: 'namespace', tab: 'network' },
-  role: { viewType: 'namespace', tab: 'rbac' },
-  rolebinding: { viewType: 'namespace', tab: 'rbac' },
-  serviceaccount: { viewType: 'namespace', tab: 'rbac' },
-  persistentvolumeclaim: { viewType: 'namespace', tab: 'storage' },
-  pvc: { viewType: 'namespace', tab: 'storage' },
-  horizontalpodautoscaler: { viewType: 'namespace', tab: 'autoscaling' },
-  hpa: { viewType: 'namespace', tab: 'autoscaling' },
-  verticalpodautoscaler: { viewType: 'namespace', tab: 'autoscaling' },
-  vpa: { viewType: 'namespace', tab: 'autoscaling' },
-  poddisruptionbudget: { viewType: 'namespace', tab: 'autoscaling' },
-  pdb: { viewType: 'namespace', tab: 'autoscaling' },
-  resourcequota: { viewType: 'namespace', tab: 'quotas' },
-  limitrange: { viewType: 'namespace', tab: 'quotas' },
-  helmrelease: { viewType: 'namespace', tab: 'helm' },
-  event: { viewType: 'namespace', tab: 'events' },
+// Views that list a refresh domain. kindViewMap.test.ts checks at compile time
+// that every kind's list domain has one.
+const LIST_VIEWS = [...NAMESPACE_VIEW_DESCRIPTORS, ...CLUSTER_VIEW_DESCRIPTORS].filter(
+  (view) => 'listDomain' in view
+);
+
+/** The view that lists a kind's list domain (its kind facet), if any view does. */
+const listViewFor = (group: string, kind: string): ViewDestination | null => {
+  const listDomain = lookupKindMetadata({ group, kind })?.listDomain ?? 'none';
+  const view = LIST_VIEWS.find((candidate) => candidate.listDomain === listDomain);
+  return view ? { viewType: view.scope, tab: view.id } : null;
 };
 
-// Cluster-scoped resource kind → view destination
-const CLUSTER_SCOPED_MAP: Record<string, ViewDestination> = {
-  node: { viewType: 'cluster', tab: 'nodes' },
-  clusterrole: { viewType: 'cluster', tab: 'rbac' },
-  clusterrolebinding: { viewType: 'cluster', tab: 'rbac' },
-  persistentvolume: { viewType: 'cluster', tab: 'storage' },
-  pv: { viewType: 'cluster', tab: 'storage' },
-  storageclass: { viewType: 'cluster', tab: 'storage' },
-  namespace: { viewType: 'cluster', tab: 'config' },
-  gatewayclass: { viewType: 'cluster', tab: 'config' },
-  customresourcedefinition: { viewType: 'cluster', tab: 'crds' },
-  crd: { viewType: 'cluster', tab: 'crds' },
-};
-
-/**
- * Look up the view destination for a Kubernetes resource kind.
- * Case-insensitive. Returns null for unknown kinds.
- */
+/** The view that lists an object of `kind` in `group`; the kind matches in any case. */
 export function getViewForKind(
   kind: string,
-  group?: string | null,
+  group: string,
   namespace?: string | null
-): ViewDestination | null {
-  const family = group ? resourceFamilyForObject(group, kind, Boolean(namespace)) : undefined;
+): ViewDestination {
+  const namespaced = Boolean(namespace);
+  const viewType = namespaced ? 'namespace' : 'cluster';
+  const family = resourceFamilyForObject(group, kind, namespaced);
   if (family) {
-    return { viewType: namespace ? 'namespace' : 'cluster', tab: family };
+    return { viewType, tab: family };
   }
-  const normalized = kind.toLowerCase();
-  return NAMESPACE_SCOPED_MAP[normalized] ?? CLUSTER_SCOPED_MAP[normalized] ?? null;
+  const listView = listViewFor(group, kind);
+  if (listView) {
+    return listView;
+  }
+  if (!isBuiltinResource(group, kind)) {
+    return { viewType, tab: 'custom' };
+  }
+  // The cluster Browse table's view id is "browse" (BrowseView.tsx).
+  return namespaced
+    ? { viewType, tab: 'browse' }
+    : { viewType, tab: 'browse', destinationViewId: 'browse' };
 }

@@ -20,20 +20,23 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// unhandledErrorSeenLimit bounds the dedup map: once it grows past this size,
+// sessionDedupSeenLimit bounds a dedup map: once it grows past this size,
 // the oldest entries are evicted. An evicted error would log again if it ever
 // recurs, which is acceptable; unbounded growth from churning error text is not.
-const unhandledErrorSeenLimit = 256
+const sessionDedupSeenLimit = 256
 
 var installUnhandledErrorDedupOnce sync.Once
 
-type unhandledErrorDeduper struct {
+// sessionDeduper lets the first occurrence of each key through and suppresses
+// repeats for the rest of the session. It backs both unhandled-error and stderr
+// log deduplication.
+type sessionDeduper struct {
 	mu   sync.Mutex
 	seen map[string]time.Time
 }
 
-func newUnhandledErrorDeduper() *unhandledErrorDeduper {
-	return &unhandledErrorDeduper{seen: make(map[string]time.Time)}
+func newSessionDeduper() *sessionDeduper {
+	return &sessionDeduper{seen: make(map[string]time.Time)}
 }
 
 // unhandledErrorKey builds the dedup key from the same parameters a logging
@@ -43,14 +46,14 @@ func unhandledErrorKey(err error, msg string, keysAndValues ...interface{}) stri
 	return utilruntime.ErrorToString(err, msg, keysAndValues...)
 }
 
-func (d *unhandledErrorDeduper) shouldLog(key string, now time.Time) bool {
+func (d *sessionDeduper) shouldLog(key string, now time.Time) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if _, ok := d.seen[key]; ok {
 		return false
 	}
 	d.seen[key] = now
-	for len(d.seen) > unhandledErrorSeenLimit {
+	for len(d.seen) > sessionDedupSeenLimit {
 		oldestKey := ""
 		var oldest time.Time
 		for k, at := range d.seen {
@@ -71,7 +74,7 @@ func (d *unhandledErrorDeduper) shouldLog(key string, now time.Time) bool {
 // startup, before clients are built.
 func InstallUnhandledErrorDedup() {
 	installUnhandledErrorDedupOnce.Do(func() {
-		deduper := newUnhandledErrorDeduper()
+		deduper := newSessionDeduper()
 		utilruntime.ErrorHandlers = []utilruntime.ErrorHandler{
 			func(ctx context.Context, err error, msg string, keysAndValues ...interface{}) {
 				if !deduper.shouldLog(unhandledErrorKey(err, msg, keysAndValues...), time.Now()) {

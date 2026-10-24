@@ -2,9 +2,6 @@ package ingest
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"runtime"
 	"sort"
 	"strings"
@@ -16,18 +13,16 @@ import (
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	apiruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-	clienttesting "k8s.io/client-go/testing"
 	gatewayversioned "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
 
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
+	"github.com/luxury-yacht/app/backend/refresh/ingest/ingesttest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -48,213 +43,6 @@ func TestProjectionForIncludesDescriptorAggregate(t *testing.T) {
 	require.Equal(t, aggregateRow{Key: "team-a/quota"}, bundle.Aggregate)
 }
 
-// trackerAPIServer is a minimal Kubernetes-shaped API server backed by a
-// client-go ObjectTracker. It serves LIST and WatchList (sendInitialEvents)
-// requests for every built-in streamed kind generically — there is no per-kind
-// code; the GVK for a path is looked up from the registry-derived route table.
-// It exists so the production ingest manager (NewListWatchFromClient over a real
-// rest.RESTClient, which negotiates WatchList) can be exercised end-to-end. A
-// fake.NewClientset cannot back this path: its RESTClient panics when used.
-type trackerAPIServer struct {
-	tracker clienttesting.ObjectTracker
-	// routes maps "group/version/resource" to the kind's list/item GVKs.
-	routes map[string]routeGVK
-}
-
-type routeGVK struct {
-	gvr     schema.GroupVersionResource
-	itemGVK schema.GroupVersionKind
-}
-
-// newTrackerAPIServer builds the route table from the same registry the manager
-// loops, restricted to the built-in kinds the manager's restClientFor can serve
-// without a Gateway/apiext client (the ones a (kube, nil, nil) manager builds).
-func newTrackerAPIServer(t *testing.T) *trackerAPIServer {
-	t.Helper()
-	tracker := clienttesting.NewObjectTracker(clientgoscheme.Scheme, clientgoscheme.Codecs.UniversalDecoder())
-	routes := make(map[string]routeGVK)
-	for _, d := range kindregistry.StreamDescriptors() {
-		gvk := schema.GroupVersionKind{Group: d.Group, Version: d.Version, Kind: d.Kind}
-		// Only routes the client-go scheme knows (the built-ins); Gateway kinds are
-		// served by a different client and are not built by a (kube, nil, nil)
-		// manager, so they never reach this server.
-		if _, err := clientgoscheme.Scheme.New(gvk); err != nil {
-			continue
-		}
-		key := d.Group + "/" + d.Version + "/" + d.Resource
-		routes[key] = routeGVK{
-			gvr:     schema.GroupVersionResource{Group: d.Group, Version: d.Version, Resource: d.Resource},
-			itemGVK: gvk,
-		}
-	}
-	return &trackerAPIServer{tracker: tracker, routes: routes}
-}
-
-// routeFor parses a REST path into its group/version/resource/namespace and
-// returns the matching route. Paths are the standard /api/v1/... (core) and
-// /apis/<group>/<version>/... shapes NewListWatchFromClient generates.
-func (s *trackerAPIServer) routeFor(path string) (routeGVK, string, bool) {
-	parts := strings.Split(strings.Trim(path, "/"), "/")
-	var group, version, resource, ns string
-	switch {
-	case len(parts) >= 3 && parts[0] == "api":
-		version = parts[1]
-		rest := parts[2:]
-		if len(rest) >= 3 && rest[0] == "namespaces" {
-			ns, resource = rest[1], rest[2]
-		} else {
-			resource = rest[0]
-		}
-	case len(parts) >= 4 && parts[0] == "apis":
-		group, version = parts[1], parts[2]
-		rest := parts[3:]
-		if len(rest) >= 3 && rest[0] == "namespaces" {
-			ns, resource = rest[1], rest[2]
-		} else {
-			resource = rest[0]
-		}
-	default:
-		return routeGVK{}, "", false
-	}
-	r, ok := s.routes[group+"/"+version+"/"+resource]
-	return r, ns, ok
-}
-
-func (s *trackerAPIServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	route, ns, ok := s.routeFor(r.URL.Path)
-	if !ok {
-		http.Error(w, "unknown resource: "+r.URL.Path, http.StatusNotFound)
-		return
-	}
-	enc := clientgoscheme.Codecs.LegacyCodec(route.itemGVK.GroupVersion())
-	if r.URL.Query().Get("watch") != "true" {
-		s.serveList(w, route, ns, enc)
-		return
-	}
-	s.serveWatch(w, r, route, ns, enc)
-}
-
-func (s *trackerAPIServer) serveList(w http.ResponseWriter, route routeGVK, ns string, enc apiruntime.Encoder) {
-	list, err := s.tracker.List(route.gvr, route.itemGVK, ns)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	data, err := apiruntime.Encode(enc, list)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write(data)
-}
-
-// serveWatch serves both a plain WATCH and a WatchList (sendInitialEvents=true).
-// For a WatchList it streams the current set as ADDED events followed by a
-// BOOKMARK carrying the k8s.io/initial-events-end annotation — the signal the
-// reflector waits for to mark its store synced — then streams live tracker
-// events. For application/json the watch frames are concatenated WatchEvent JSON
-// objects, exactly what the rest client's stream watcher decodes.
-func (s *trackerAPIServer) serveWatch(w http.ResponseWriter, r *http.Request, route routeGVK, ns string, enc apiruntime.Encoder) {
-	wi, err := s.tracker.Watch(route.gvr, ns)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer wi.Stop()
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	flusher, _ := w.(http.Flusher)
-	writeEvent := func(t watch.EventType, obj apiruntime.Object) bool {
-		raw, encErr := apiruntime.Encode(enc, obj)
-		if encErr != nil {
-			return false
-		}
-		event := metav1.WatchEvent{Type: string(t), Object: apiruntime.RawExtension{Raw: raw}}
-		b, mErr := json.Marshal(event)
-		if mErr != nil {
-			return false
-		}
-		if _, wErr := w.Write(b); wErr != nil {
-			return false
-		}
-		if flusher != nil {
-			flusher.Flush()
-		}
-		return true
-	}
-
-	if r.URL.Query().Get("sendInitialEvents") == "true" {
-		list, listErr := s.tracker.List(route.gvr, route.itemGVK, ns)
-		if listErr != nil {
-			return
-		}
-		items, _ := apimeta.ExtractList(list)
-		for _, item := range items {
-			if !writeEvent(watch.Added, item) {
-				return
-			}
-		}
-		if !writeEvent(watch.Bookmark, s.initialEventsEndBookmark(route, list)) {
-			return
-		}
-	}
-
-	for {
-		select {
-		case <-r.Context().Done():
-			return
-		case ev, open := <-wi.ResultChan():
-			if !open {
-				return
-			}
-			if !writeEvent(ev.Type, ev.Object) {
-				return
-			}
-		}
-	}
-}
-
-// initialEventsEndBookmark builds the terminal WatchList bookmark: an empty typed
-// object of the kind carrying the list's resourceVersion and the
-// k8s.io/initial-events-end annotation that tells the reflector the initial set
-// is complete.
-func (s *trackerAPIServer) initialEventsEndBookmark(route routeGVK, list apiruntime.Object) apiruntime.Object {
-	obj, err := clientgoscheme.Scheme.New(route.itemGVK)
-	if err != nil {
-		return nil
-	}
-	accessor, err := apimeta.Accessor(obj)
-	if err != nil {
-		return nil
-	}
-	if listMeta, lErr := apimeta.ListAccessor(list); lErr == nil {
-		accessor.SetResourceVersion(listMeta.GetResourceVersion())
-	}
-	accessor.SetAnnotations(map[string]string{"k8s.io/initial-events-end": "true"})
-	return obj
-}
-
-// add seeds (or live-creates) one object in the tracker, stamping the TypeMeta
-// the LIST/WATCH encoders rely on.
-func (s *trackerAPIServer) add(t *testing.T, obj apiruntime.Object, gvk schema.GroupVersionKind) {
-	t.Helper()
-	obj.GetObjectKind().SetGroupVersionKind(gvk)
-	if err := s.tracker.Add(obj); err != nil {
-		t.Fatalf("tracker.Add: %v", err)
-	}
-}
-
-func newKubeClientFor(t *testing.T, server *httptest.Server) kubernetes.Interface {
-	t.Helper()
-	kube, err := kubernetes.NewForConfig(&rest.Config{Host: server.URL})
-	if err != nil {
-		t.Fatalf("kubernetes.NewForConfig: %v", err)
-	}
-	return kube
-}
-
 // The manager builds reflectors only for kinds in kindregistry.StreamDescriptors().
 // That list is the directly-streamed "summary table" kinds (ConfigMap, RBAC,
 // quotas, storage, network, …); it deliberately excludes workload/topology kinds
@@ -264,10 +52,6 @@ var (
 	configMapGVR      = schema.GroupVersionResource{Version: "v1", Resource: "configmaps"}
 	serviceAccountGVR = schema.GroupVersionResource{Version: "v1", Resource: "serviceaccounts"}
 	roleGVR           = schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "roles"}
-
-	configMapGVK      = schema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"}
-	serviceAccountGVK = schema.GroupVersionKind{Version: "v1", Kind: "ServiceAccount"}
-	roleGVK           = schema.GroupVersionKind{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role"}
 
 	testMeta = streamrows.ClusterMeta{ClusterID: "c1", ClusterName: "cluster-one"}
 )
@@ -332,15 +116,13 @@ func waitForManagerSynced(t *testing.T, m *IngestManager) {
 // negotiation included) against a tracker-backed API server and proves each kind's
 // store converges to projected stream Summaries — never typed objects.
 func TestIngestManagerStoresHoldProjectedSummaries(t *testing.T) {
-	server := newTrackerAPIServer(t)
-	server.add(t, newCM("default", "seed-cm"), configMapGVK)
-	server.add(t, newCM("other", "second-cm"), configMapGVK)
-	server.add(t, newServiceAccount("default", "seed-sa"), serviceAccountGVK)
-	server.add(t, newRole("default", "seed-role"), roleGVK)
+	server := ingesttest.NewAPIServer(t)
+	server.Create(t, newCM("default", "seed-cm"))
+	server.Create(t, newCM("other", "second-cm"))
+	server.Create(t, newServiceAccount("default", "seed-sa"))
+	server.Create(t, newRole("default", "seed-role"))
 
-	httpSrv := httptest.NewServer(server)
-	defer httpSrv.Close()
-	kube := newKubeClientFor(t, httpSrv)
+	kube := server.Client(t)
 
 	mgr := NewIngestManager(testMeta, kube, nil, nil)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -402,12 +184,10 @@ func TestIngestManagerStoresHoldProjectedSummaries(t *testing.T) {
 // TestIngestManagerConvergesOnCreateAndDelete proves the watch path keeps the
 // projected store in sync: a create lands as a new summary and a delete evicts it.
 func TestIngestManagerConvergesOnCreateAndDelete(t *testing.T) {
-	server := newTrackerAPIServer(t)
-	server.add(t, newCM("default", "seed-cm"), configMapGVK)
+	server := ingesttest.NewAPIServer(t)
+	server.Create(t, newCM("default", "seed-cm"))
 
-	httpSrv := httptest.NewServer(server)
-	defer httpSrv.Close()
-	kube := newKubeClientFor(t, httpSrv)
+	kube := server.Client(t)
 
 	mgr := NewIngestManager(testMeta, kube, nil, nil)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -421,16 +201,14 @@ func TestIngestManagerConvergesOnCreateAndDelete(t *testing.T) {
 	}
 
 	// Create via the tracker; the watch must deliver it as a new projected row.
-	server.add(t, newCM("default", "added-cm"), configMapGVK)
+	server.Create(t, newCM("default", "added-cm"))
 	want := []string{"default/added-cm", "default/seed-cm"}
 	if got := waitForNames(t, cmStore, want); !equalStrings(got, want) {
 		t.Fatalf("after create, configmap names = %v, want %v", got, want)
 	}
 
 	// Delete via the tracker; the watch delete must evict the projected row.
-	if err := server.tracker.Delete(configMapGVR, "default", "seed-cm"); err != nil {
-		t.Fatalf("tracker.Delete: %v", err)
-	}
+	server.Delete(t, newCM("default", "seed-cm"))
 	want = []string{"default/added-cm"}
 	if got := waitForNames(t, cmStore, want); !equalStrings(got, want) {
 		t.Fatalf("after delete, configmap names = %v, want %v", got, want)
@@ -440,11 +218,9 @@ func TestIngestManagerConvergesOnCreateAndDelete(t *testing.T) {
 // TestIngestManagerStopHaltsReflectorsNoLeak proves Stop (and ctx cancel) wind the
 // reflectors down with no leaked goroutines.
 func TestIngestManagerStopHaltsReflectorsNoLeak(t *testing.T) {
-	server := newTrackerAPIServer(t)
-	server.add(t, newCM("default", "seed-cm"), configMapGVK)
-	httpSrv := httptest.NewServer(server)
-	defer httpSrv.Close()
-	kube := newKubeClientFor(t, httpSrv)
+	server := ingesttest.NewAPIServer(t)
+	server.Create(t, newCM("default", "seed-cm"))
+	kube := server.Client(t)
 
 	before := runtime.NumGoroutine()
 
@@ -471,10 +247,8 @@ func TestIngestManagerStopHaltsReflectorsNoLeak(t *testing.T) {
 // scheme knows) must resolve to a non-nil REST client, and a nil Gateway/apiext
 // client must make those groups resolve to (nil, false) so the kind is skipped.
 func TestRestClientForMapsEveryStreamedBuiltinGroup(t *testing.T) {
-	server := newTrackerAPIServer(t)
-	httpSrv := httptest.NewServer(server)
-	defer httpSrv.Close()
-	kube := newKubeClientFor(t, httpSrv)
+	server := ingesttest.NewAPIServer(t)
+	kube := server.Client(t)
 
 	mgr := NewIngestManager(testMeta, kube, nil, nil)
 	for _, d := range kindregistry.StreamDescriptors() {
@@ -495,9 +269,8 @@ func TestRestClientForMapsEveryStreamedBuiltinGroup(t *testing.T) {
 			if schemeKnows {
 				// Every built-in the manager builds must also be served by the test
 				// route table, otherwise its reflector could never sync.
-				key := d.Group + "/" + d.Version + "/" + d.Resource
-				if _, routed := server.routes[key]; !routed {
-					t.Fatalf("built-in kind %s has no route in the test server", key)
+				if gvr := (schema.GroupVersionResource{Group: d.Group, Version: d.Version, Resource: d.Resource}); !server.Serves(gvr) {
+					t.Fatalf("built-in kind %s has no route in the test server", gvr)
 				}
 			}
 		}
@@ -532,40 +305,36 @@ func TestExampleObjectForResolvesBuiltinsAndSkipsUnknown(t *testing.T) {
 // kinds. A kind whose StreamRow could not run would leave its store empty (the
 // projection error is logged and skipped) and fail the per-store assertion.
 func TestIngestManagerStreamRowRunsForEveryBuiltinKind(t *testing.T) {
-	server := newTrackerAPIServer(t)
+	server := ingesttest.NewAPIServer(t)
 	// Seed one object per routed built-in kind, derived from the same route table
 	// the manager's registry loop produces — no per-kind code.
 	seeded := make(map[schema.GroupVersionResource]string)
-	for _, route := range server.routes {
-		obj, err := clientgoscheme.Scheme.New(route.itemGVK)
+	for _, route := range server.Routes() {
+		obj, err := server.NewObject(route.ItemGVK)
 		if err != nil {
-			t.Fatalf("scheme.New(%s): %v", route.itemGVK, err)
+			t.Fatalf("new %s: %v", route.ItemGVK, err)
 		}
 		accessor, err := apimeta.Accessor(obj)
 		if err != nil {
-			t.Fatalf("accessor for %s: %v", route.itemGVK, err)
+			t.Fatalf("accessor for %s: %v", route.ItemGVK, err)
 		}
-		name := "seed-" + strings.ToLower(route.itemGVK.Kind)
+		name := "seed-" + strings.ToLower(route.ItemGVK.Kind)
 		accessor.SetName(name)
 		// Namespaced kinds need a namespace; cluster-scoped kinds must have none.
 		ns := ""
-		if isNamespacedRoute(route.gvr) {
+		if isNamespacedRoute(route.GVR) {
 			ns = "default"
 			accessor.SetNamespace(ns)
 		}
-		server.add(t, obj, route.itemGVK)
+		server.Create(t, obj)
 		identity := name
 		if ns != "" {
 			identity = ns + "/" + name
 		}
-		seeded[route.gvr] = identity
+		seeded[route.GVR] = identity
 	}
 
-	httpSrv := httptest.NewServer(server)
-	defer httpSrv.Close()
-	kube := newKubeClientFor(t, httpSrv)
-
-	mgr := NewIngestManager(testMeta, kube, nil, nil)
+	mgr := NewIngestManager(testMeta, server.Client(t), server.APIExtensionsClient(t), nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	mgr.Start(ctx)
@@ -598,10 +367,8 @@ func isNamespacedRoute(gvr schema.GroupVersionResource) bool {
 // an unknown group resolves to (nil, false); and the Gateway/apiext groups resolve
 // only when their client is supplied.
 func TestRestClientForHonoursVersionAndOptionalClients(t *testing.T) {
-	server := newTrackerAPIServer(t)
-	httpSrv := httptest.NewServer(server)
-	defer httpSrv.Close()
-	cfg := &rest.Config{Host: httpSrv.URL}
+	server := ingesttest.NewAPIServer(t)
+	cfg := server.Config()
 	kube, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		t.Fatalf("kube client: %v", err)
@@ -615,7 +382,7 @@ func TestRestClientForHonoursVersionAndOptionalClients(t *testing.T) {
 		t.Fatalf("gateway client: %v", err)
 	}
 
-	withClients := NewIngestManager(testMeta, kube, apiext, gateway)
+	withClients := NewIngestManager(testMeta, kube, apiext, &GatewaySource{Client: gateway, Presence: servedGatewayKinds{"Gateway": {}}})
 	v1Client, ok := withClients.restClientFor("autoscaling", "v1")
 	if !ok || v1Client == nil {
 		t.Fatal("autoscaling/v1 resolved no client")
@@ -646,6 +413,38 @@ func TestRestClientForHonoursVersionAndOptionalClients(t *testing.T) {
 	}
 }
 
+// servedGatewayKinds is the Gateway kinds discovery reported as served.
+type servedGatewayKinds map[string]struct{}
+
+func (s servedGatewayKinds) Has(kind string) bool {
+	_, ok := s[kind]
+	return ok
+}
+
+func (servedGatewayKinds) Absent(string) bool { return false }
+
+// A partial Gateway API install must not get a reflector for a kind the
+// server does not serve: it would LIST a 404 forever and report the kind as
+// unavailable instead of absent.
+func TestGatewayKindsGetSourcesOnlyWhenServed(t *testing.T) {
+	cfg := &rest.Config{Host: "http://127.0.0.1:1"}
+	kube, err := kubernetes.NewForConfig(cfg)
+	require.NoError(t, err)
+	gateway, err := gatewayversioned.NewForConfig(cfg)
+	require.NoError(t, err)
+
+	mgr := NewIngestManager(testMeta, kube, nil, &GatewaySource{
+		Client:   gateway,
+		Presence: servedGatewayKinds{"Gateway": {}, "HTTPRoute": {}},
+	})
+
+	served := schema.GroupVersionResource{Group: gatewayGroup, Version: "v1", Resource: "httproutes"}
+	unserved := schema.GroupVersionResource{Group: gatewayGroup, Version: "v1", Resource: "listenersets"}
+	require.True(t, mgr.Tracks(served), "a served Gateway kind gets a source")
+	require.False(t, mgr.Tracks(unserved), "an unserved Gateway kind gets no source")
+	require.Nil(t, mgr.StoreFor(unserved))
+}
+
 // TestExampleObjectForUsesGatewaySchemeFallback pins the Gateway-scheme fallback:
 // Gateway kinds the client-go scheme does not know are instantiated from the
 // Gateway API scheme instead.
@@ -665,12 +464,10 @@ func TestExampleObjectForUsesGatewaySchemeFallback(t *testing.T) {
 // relist took from Start — the measurement needed to name the kinds that dominate the
 // 10s+ first-connect window on real clusters.
 func TestInitialSyncDurationsRecordPerKindRelistTime(t *testing.T) {
-	server := newTrackerAPIServer(t)
-	server.add(t, newCM("default", "seed-cm"), configMapGVK)
+	server := ingesttest.NewAPIServer(t)
+	server.Create(t, newCM("default", "seed-cm"))
 
-	httpSrv := httptest.NewServer(server)
-	defer httpSrv.Close()
-	kube := newKubeClientFor(t, httpSrv)
+	kube := server.Client(t)
 
 	mgr := NewIngestManager(testMeta, kube, nil, nil)
 	ctx, cancel := context.WithCancel(context.Background())

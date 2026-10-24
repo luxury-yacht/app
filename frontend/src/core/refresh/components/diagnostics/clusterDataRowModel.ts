@@ -371,7 +371,7 @@ export const buildClusterDataRows = ({
           scope: scopeWithoutCluster(row.scope, clusterName),
           // The tooltip keeps the untrimmed scope so nothing is lost.
           scopeTooltip: row.scopeTooltip ?? row.scope,
-          ...(row.scopeEntries ? { scopeEntries: row.scopeEntries } : {}),
+          ...(row.scopeEntry ? { scopeEntry: row.scopeEntry } : {}),
           health: resolveHealth(row),
           feed,
           feedTooltip,

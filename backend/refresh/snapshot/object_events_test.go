@@ -11,30 +11,16 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
-	corelisters "k8s.io/client-go/listers/core/v1"
 	cgotesting "k8s.io/client-go/testing"
-	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 )
 
-func TestObjectEventsBuilderUsesCacheWhenSynced(t *testing.T) {
+func TestObjectEventsBuilderUsesTheEventsStoreWhenSynced(t *testing.T) {
 	client := fake.NewClientset()
 	client.PrependReactor("list", "events", func(cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("unexpected API list call")
 	})
-
-	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{
-		objectEventIndexName: objectEventIndex,
-	})
-	lister := corelisters.NewEventLister(indexer)
-
-	builder := &ObjectEventsBuilder{
-		client:       client,
-		eventLister:  lister,
-		eventIndexer: indexer,
-		eventSynced:  func() bool { return true },
-	}
 
 	evt := &corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
@@ -53,10 +39,7 @@ func TestObjectEventsBuilderUsesCacheWhenSynced(t *testing.T) {
 		Reason:  "Failed",
 		Message: "boom",
 	}
-
-	if err := indexer.Add(evt); err != nil {
-		t.Fatalf("failed to seed event indexer: %v", err)
-	}
+	builder := &ObjectEventsBuilder{client: client, events: newEventStore(t, ClusterMeta{}, evt)}
 
 	snap, err := builder.Build(context.Background(), "default:/v1:Pod:demo")
 	if err != nil {
@@ -133,12 +116,7 @@ func TestObjectEventsBuilderAPIFallbackFiltersKind(t *testing.T) {
 		}
 		return true, list, nil
 	})
-	builder := &ObjectEventsBuilder{
-		client:       client,
-		eventSynced:  func() bool { return false },
-		eventLister:  nil,
-		eventIndexer: nil,
-	}
+	builder := &ObjectEventsBuilder{client: client}
 
 	snap, err := builder.Build(context.Background(), "default:/v1:Pod:demo")
 	if err != nil {
@@ -219,12 +197,7 @@ func TestObjectEventsBuilderPayloadCarriesEventIdentityAndFullInvolvedObjectRef(
 		return true, list, nil
 	})
 
-	builder := &ObjectEventsBuilder{
-		client:       client,
-		eventSynced:  func() bool { return false },
-		eventLister:  nil,
-		eventIndexer: nil,
-	}
+	builder := &ObjectEventsBuilder{client: client}
 	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"}
 	scope := "default:apps/v1:Deployment:api"
 	snap, err := builder.Build(WithClusterMeta(context.Background(), meta), scope)
@@ -340,12 +313,7 @@ func TestObjectEventsBuilderDisambiguatesCollidingCRDsByAPIVersion(t *testing.T)
 			return true, list, nil
 		})
 
-		builder := &ObjectEventsBuilder{
-			client:       client,
-			eventSynced:  func() bool { return false },
-			eventLister:  nil,
-			eventIndexer: nil,
-		}
+		builder := &ObjectEventsBuilder{client: client}
 
 		// New GVK-form scope picks the ACK CRD specifically.
 		snap, err := builder.Build(context.Background(), "default:rds.services.k8s.aws/v1alpha1:DBInstance:primary")
@@ -380,34 +348,15 @@ func TestObjectEventsBuilderDisambiguatesCollidingCRDsByAPIVersion(t *testing.T)
 		}
 	})
 
-	t.Run("cache index post-filters by apiVersion", func(t *testing.T) {
+	t.Run("events store post-filters by apiVersion", func(t *testing.T) {
 		client := fake.NewClientset()
 		client.PrependReactor("list", "events", func(cgotesting.Action) (bool, runtime.Object, error) {
 			return true, nil, fmt.Errorf("unexpected API list call")
 		})
+		builder := &ObjectEventsBuilder{client: client, events: newEventStore(t, ClusterMeta{}, ackEvent, kindaEvent)}
 
-		indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{
-			objectEventIndexName: objectEventIndex,
-		})
-		lister := corelisters.NewEventLister(indexer)
-
-		if err := indexer.Add(ackEvent); err != nil {
-			t.Fatalf("failed to seed ACK event: %v", err)
-		}
-		if err := indexer.Add(kindaEvent); err != nil {
-			t.Fatalf("failed to seed kinda event: %v", err)
-		}
-
-		builder := &ObjectEventsBuilder{
-			client:       client,
-			eventLister:  lister,
-			eventIndexer: indexer,
-			eventSynced:  func() bool { return true },
-		}
-
-		// The index keys both events under the same namespace|kind|name
-		// bucket, so the index hit returns BOTH events. The post-filter
-		// in listEventsByIndex must drop the wrong-apiVersion one.
+		// Both events name the same namespace|kind|name; the group must
+		// drop the wrong-apiVersion one.
 		snap, err := builder.Build(context.Background(), "default:rds.services.k8s.aws/v1alpha1:DBInstance:primary")
 		if err != nil {
 			t.Fatalf("Build returned error: %v", err)
@@ -417,7 +366,7 @@ func TestObjectEventsBuilderDisambiguatesCollidingCRDsByAPIVersion(t *testing.T)
 			t.Fatalf("expected payload type ObjectEventsSnapshotPayload")
 		}
 		if len(payload.Events) != 1 {
-			t.Fatalf("expected exactly one event, got %d (cache post-filter missed?)", len(payload.Events))
+			t.Fatalf("expected exactly one event, got %d (group filter missed?)", len(payload.Events))
 		}
 		if got := payload.Events[0].Ref.Name; got != "evt-ack" {
 			t.Fatalf("expected ACK event, got %q", got)
@@ -430,7 +379,7 @@ func TestObjectEventsBuilderDisambiguatesCollidingCRDsByAPIVersion(t *testing.T)
 			return true, nil, fmt.Errorf("unexpected API list call for invalid scope: %T", action)
 		})
 
-		builder := &ObjectEventsBuilder{client: client, eventSynced: func() bool { return false }}
+		builder := &ObjectEventsBuilder{client: client}
 
 		if _, err := builder.Build(context.Background(), "default:DBInstance:primary"); err == nil {
 			t.Fatal("expected kind-only scope to be rejected")
@@ -439,20 +388,12 @@ func TestObjectEventsBuilderDisambiguatesCollidingCRDsByAPIVersion(t *testing.T)
 }
 
 // Truncation must keep the most recently observed events, as its warning
-// claims; an index lookup returns events in arbitrary order.
+// claims; the store returns events in arbitrary order.
 func TestObjectEventsBuilderKeepsTheMostRecentEventsWhenTruncating(t *testing.T) {
-	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{
-		objectEventIndexName: objectEventIndex,
-	})
-	builder := &ObjectEventsBuilder{
-		client:       fake.NewClientset(),
-		eventLister:  corelisters.NewEventLister(indexer),
-		eventIndexer: indexer,
-		eventSynced:  func() bool { return true },
-	}
 	limit := config.SnapshotObjectEventsLimit
 	base := time.Now().Add(-time.Hour)
 	newest := make(map[string]bool, limit)
+	events := make([]*corev1.Event, 0, 2*limit)
 	for i := 0; i < 2*limit; i++ {
 		name := fmt.Sprintf("evt-%04d", i)
 		evt := &corev1.Event{
@@ -463,10 +404,9 @@ func TestObjectEventsBuilderKeepsTheMostRecentEventsWhenTruncating(t *testing.T)
 		if i >= limit {
 			newest[name] = true
 		}
-		if err := indexer.Add(evt); err != nil {
-			t.Fatalf("seed event: %v", err)
-		}
+		events = append(events, evt)
 	}
+	builder := &ObjectEventsBuilder{client: fake.NewClientset(), events: newEventStore(t, ClusterMeta{}, events...)}
 
 	snap, err := builder.Build(context.Background(), "default:/v1:Pod:demo")
 	if err != nil {
@@ -524,37 +464,8 @@ func TestObjectEventsBuilderMatchesTheInvolvedObjectsGroupNotItsVersion(t *testi
 		}
 	}
 
-	t.Run("cache index", func(t *testing.T) {
-		indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{
-			objectEventIndexName: objectEventIndex,
-		})
-		for _, evt := range events {
-			if err := indexer.Add(evt); err != nil {
-				t.Fatalf("seed event: %v", err)
-			}
-		}
-		requireNames(t, &ObjectEventsBuilder{
-			client:       fake.NewClientset(),
-			eventLister:  corelisters.NewEventLister(indexer),
-			eventIndexer: indexer,
-			eventSynced:  func() bool { return true },
-		})
-	})
-
-	// Without the object index (AddIndexers failed after the informer started)
-	// the builder scans the cache and must match exactly the same events.
-	t.Run("cache scan", func(t *testing.T) {
-		indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
-		for _, evt := range events {
-			if err := indexer.Add(evt); err != nil {
-				t.Fatalf("seed event: %v", err)
-			}
-		}
-		requireNames(t, &ObjectEventsBuilder{
-			client:      fake.NewClientset(),
-			eventLister: corelisters.NewEventLister(indexer),
-			eventSynced: func() bool { return true },
-		})
+	t.Run("events store", func(t *testing.T) {
+		requireNames(t, &ObjectEventsBuilder{client: fake.NewClientset(), events: newEventStore(t, ClusterMeta{}, events...)})
 	})
 
 	t.Run("api fallback", func(t *testing.T) {
@@ -574,6 +485,6 @@ func TestObjectEventsBuilderMatchesTheInvolvedObjectsGroupNotItsVersion(t *testi
 			}
 			return true, list, nil
 		})
-		requireNames(t, &ObjectEventsBuilder{client: client, eventSynced: func() bool { return false }})
+		requireNames(t, &ObjectEventsBuilder{client: client})
 	})
 }

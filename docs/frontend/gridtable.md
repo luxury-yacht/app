@@ -45,7 +45,7 @@ Read the shared rules below, then only the matching reference sections.
 - Keep row keys, column keys, and persisted state compatible.
 - Verify virtualization, keyboard focus, hover, context menu, and empty states
   with enough rows and columns to exercise the shared path. Accessibility changes
-  also verify the wrapper's active descendant, row/cell roles, native sort
+  also verify the focused row's `aria-selected`, row/cell roles, native sort
   buttons, and separator value attributes.
 - Verify pagination placement, page size, visible range, total exactness, and
   reset/clamp behavior for the table's mode, plus partial copy and action limits

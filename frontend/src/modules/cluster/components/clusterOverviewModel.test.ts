@@ -28,23 +28,10 @@ describe('clusterOverviewModel', () => {
     expect(getClusterContextLabel(clusterContext)).toBe(expected);
   });
 
-  it('prefers the value keyed to the selected cluster', () => {
+  it('rejects data whose explicit or hydrated cluster does not match', () => {
     expect(
       selectClusterScopedValue({
-        byCluster: { 'cluster-1': 'one', 'cluster-2': 'two' },
-        legacyValue: 'legacy',
-        payloadClusterId: 'cluster-1',
-        selectedClusterId: 'cluster-2',
-        hydratedClusterId: 'cluster-1',
-      })
-    ).toBe('two');
-  });
-
-  it('rejects legacy data whose explicit or hydrated cluster does not match', () => {
-    expect(
-      selectClusterScopedValue({
-        byCluster: undefined,
-        legacyValue: 'legacy',
+        value: 'overview',
         payloadClusterId: 'cluster-1',
         selectedClusterId: 'cluster-2',
         hydratedClusterId: 'cluster-1',
@@ -52,8 +39,7 @@ describe('clusterOverviewModel', () => {
     ).toBeNull();
     expect(
       selectClusterScopedValue({
-        byCluster: undefined,
-        legacyValue: 'legacy',
+        value: 'overview',
         payloadClusterId: undefined,
         selectedClusterId: 'cluster-2',
         hydratedClusterId: 'cluster-1',

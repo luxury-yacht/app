@@ -57,7 +57,41 @@ The signed macOS build additionally reads:
 | `APPLE_APP_PASSWORD` | App-specific Apple password |
 | `APPLE_TEAM_ID` | Apple developer team identifier |
 
+The signed Windows build additionally reads:
+
+| Secret | Purpose |
+| --- | --- |
+| `SIGNPATH_API_TOKEN` | API token of the SignPath user that submits signing requests |
+| `SIGNPATH_ORGANIZATION_ID` | SignPath organization identifier |
+
+The [SignPath GitHub App](https://github.com/apps/signpath) must be installed
+on the `luxury-yacht` organization with access to this repository; the signing
+step fails with "Failed to retrieve GitHub App token" without it.
+The SignPath project `app` must have the `windows-exe` and
+`windows-installers` artifact configurations and the `test-signing` and
+`release-signing` policies. Dry runs use `test-signing`; tag pushes and checked
+release dispatches use `release-signing`, which needs approval in SignPath for
+each executable and installer signing request. See
+[CODE_SIGNING.md](CODE_SIGNING.md).
+
 `RELEASES_REPO_TOKEN` authorizes publishing the generated artifacts to the GitHub release.
+
+## Testing Release Workflow Changes
+
+A manual **Release** run is a dry run unless **Create GitHub release** is
+checked. For faster feedback, a dry run can skip the test job and uncheck any
+of the **Build macOS**, **Build Windows**, and **Build Linux** checkboxes. Each
+platform builds amd64 and arm64 side by side. Release preparation needs every
+platform, so a run with fewer platforms stops after building. A published
+release always runs the tests and builds every platform.
+
+The platform checkboxes default to checked, so from the command line pass
+`false` for the platforms to skip. This runs only the Windows builds:
+
+```bash
+gh workflow run release.yml --ref <branch> -f skip_tests=true \
+  -f build_macos=false -f build_linux=false
+```
 
 ## Publishing a Release
 

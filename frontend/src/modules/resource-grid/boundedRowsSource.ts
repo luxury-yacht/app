@@ -14,6 +14,8 @@
  *   truncated to an entry limit), so totals and filter facets are only as
  *   complete as the window. Completeness is `partial` and a label explains it.
  */
+
+import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 import type {
   ResourceInventoryCompleteness,
   ResourceInventorySourceState,
@@ -27,7 +29,7 @@ export interface BoundedRowsSourceInput<T> {
   loading?: boolean;
   /** The bounded array has been populated at least once (default true). */
   loaded?: boolean;
-  error?: string | null;
+  error?: RefreshFailure | null;
   /** The source cannot run yet (no cluster/owner identity). Not an error. */
   blocked?: boolean;
   mode?: BoundedRowsMode;

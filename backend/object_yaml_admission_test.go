@@ -8,10 +8,6 @@ import (
 
 func TestObjectYamlOperationsRejectInvalidOrDeniedRequestsBeforePatch(t *testing.T) {
 	operations := map[string]func(*ResourceGateway, string, ObjectYAMLMutationRequest) error{
-		"validate": func(g *ResourceGateway, clusterID string, req ObjectYAMLMutationRequest) error {
-			_, err := g.ValidateObjectYaml(clusterID, req)
-			return err
-		},
 		"apply": func(g *ResourceGateway, clusterID string, req ObjectYAMLMutationRequest) error {
 			_, err := g.ApplyObjectYaml(clusterID, req)
 			return err

@@ -37,12 +37,13 @@ export interface FavoriteTableState {
   columnOrder?: string[];
 }
 
-export interface FavoritePaneState {
+/** A view's saved table settings: its filters plus sort and columns. */
+export interface FavoriteTableSnapshot {
   filters: FavoriteFilters;
   tableState: FavoriteTableState;
 }
 
-export interface Favorite {
+export interface Favorite extends FavoriteTableSnapshot {
   id: string;
   name: string;
   clusterSelection: string;
@@ -51,7 +52,6 @@ export interface Favorite {
   viewType: string;
   view: string;
   namespace: string;
-  panes: Record<string, FavoritePaneState>;
   order: number;
 }
 
@@ -91,12 +91,15 @@ const fromBackendFilters = (
   };
 };
 
-const fromBackendPane = (pane: backend.FavoritePaneState): FavoritePaneState => {
+const fromBackendTableSnapshot = (
+  favorite: Pick<backend.Favorite, 'filters' | 'tableState'>
+): FavoriteTableSnapshot => {
+  const tableState = favorite.tableState ?? { sortColumn: '', sortDirection: 'asc' };
   const columnOrder = Array.from(
-    new Set((pane.tableState.columnOrder ?? []).filter((key) => typeof key === 'string' && key))
+    new Set((tableState.columnOrder ?? []).filter((key) => typeof key === 'string' && key))
   );
   return {
-    filters: fromBackendFilters(pane.filters) ?? {
+    filters: fromBackendFilters(favorite.filters) ?? {
       search: '',
       kinds: { mode: 'all' },
       namespaces: { mode: 'all' },
@@ -104,10 +107,10 @@ const fromBackendPane = (pane: backend.FavoritePaneState): FavoritePaneState => 
       includeMetadata: false,
     },
     tableState: {
-      sortColumn: pane.tableState.sortColumn,
-      sortDirection: pane.tableState.sortDirection,
+      sortColumn: tableState.sortColumn,
+      sortDirection: tableState.sortDirection,
       columnVisibility: Object.fromEntries(
-        Object.entries(pane.tableState.columnVisibility ?? {}).filter(
+        Object.entries(tableState.columnVisibility ?? {}).filter(
           (entry): entry is [string, boolean] => typeof entry[1] === 'boolean'
         )
       ),
@@ -125,11 +128,7 @@ const fromBackendFavorite = (favorite: backend.Favorite): Favorite => ({
   viewType: favorite.viewType,
   view: favorite.view,
   namespace: favorite.namespace,
-  panes: Object.fromEntries(
-    Object.entries(favorite.panes ?? {}).flatMap(([key, pane]) =>
-      pane ? [[key, fromBackendPane(pane)] as const] : []
-    )
-  ),
+  ...fromBackendTableSnapshot(favorite),
   order: favorite.order,
 });
 
@@ -142,28 +141,20 @@ const toBackendSelection = (
 
 const toBackendFavorite = (favorite: Favorite): backend.Favorite => ({
   ...favorite,
-  panes: Object.fromEntries(
-    Object.entries(favorite.panes).map(([key, pane]) => [
-      key,
-      {
-        filters: {
-          ...pane.filters,
-          kinds: toBackendSelection(pane.filters.kinds),
-          namespaces: toBackendSelection(pane.filters.namespaces),
-          clusters: toBackendSelection(pane.filters.clusters),
-          queryFacets: pane.filters.queryFacets
-            ? Object.fromEntries(
-                Object.entries(pane.filters.queryFacets).map(([facetKey, selection]) => [
-                  facetKey,
-                  toBackendSelection(selection),
-                ])
-              )
-            : undefined,
-        },
-        tableState: pane.tableState,
-      },
-    ])
-  ),
+  filters: {
+    ...favorite.filters,
+    kinds: toBackendSelection(favorite.filters.kinds),
+    namespaces: toBackendSelection(favorite.filters.namespaces),
+    clusters: toBackendSelection(favorite.filters.clusters),
+    queryFacets: favorite.filters.queryFacets
+      ? Object.fromEntries(
+          Object.entries(favorite.filters.queryFacets).map(([facetKey, selection]) => [
+            facetKey,
+            toBackendSelection(selection),
+          ])
+        )
+      : undefined,
+  },
 });
 
 // ---------- Internal state ----------

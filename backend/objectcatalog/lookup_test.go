@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -236,5 +237,102 @@ func TestResourceResolverFallsBackToCRDWhenDiscoveryFails(t *testing.T) {
 	}
 	if resolved.Resource != "widgets" || !resolved.Namespaced {
 		t.Fatalf("unexpected resolved resource: %+v", resolved)
+	}
+}
+
+var lookupCertificates = Descriptor{
+	Group: "cert-manager.io", Version: "v1", Kind: "Certificate",
+	Resource: "certificates", Namespaced: true, Scope: ScopeNamespace,
+}
+
+func lookupCertificate(name, uid string) Summary {
+	return Summary{Ref: resourcemodel.ResourceRef{
+		ClusterID: "cluster-a", Group: "cert-manager.io", Version: "v1", Kind: "Certificate",
+		Resource: "certificates", Namespace: "apps", Name: name, UID: uid,
+	}, Scope: ScopeNamespace}
+}
+
+// lookupSync is one catalog sync's collection results, ready to publish.
+func lookupSync(svc *Service, succeeded map[Descriptor][]Summary, failed ...Descriptor) *catalogSync {
+	run := &catalogSync{
+		service: svc, aggregator: newStreamingAggregator(svc),
+		newItems: map[string]Summary{}, newLastSeen: map[string]time.Time{},
+		succeeded: map[string][]Summary{}, failed: map[string]error{}, allowedSet: map[string]Descriptor{},
+	}
+	for desc, summaries := range succeeded {
+		run.allowedSet[desc.GVR().String()] = desc
+		run.succeeded[desc.GVR().String()] = summaries
+		for _, summary := range summaries {
+			run.newItems[catalogKey(desc, summary.Ref.Namespace, summary.Ref.Name)] = summary
+		}
+	}
+	for _, desc := range failed {
+		run.allowedSet[desc.GVR().String()] = desc
+		run.failed[desc.GVR().String()] = errors.New("list timed out")
+	}
+	return run
+}
+
+// A Helm manifest can name an object by any version the cluster serves, while
+// the catalog stores each resource under one. LookupObject finds the object
+// whatever version was asked for, and calls a miss absent only in a resource
+// the published sync listed completely.
+func TestLookupObjectMatchesAnyServedVersionAndVouchesForAbsence(t *testing.T) {
+	svc := NewService(Dependencies{}, nil)
+
+	// Before any publication, a miss proves nothing.
+	if early := svc.LookupObject("apps", "cert-manager.io", "Certificate", "api-tls"); early.Found || early.Absent {
+		t.Fatalf("a miss before the catalog has published must not be absent, got %+v", early)
+	}
+
+	lookupSync(svc, map[Descriptor][]Summary{lookupCertificates: {lookupCertificate("web-tls", "cert-uid")}}).
+		publish([]Descriptor{lookupCertificates}, nil)
+
+	found := svc.LookupObject("apps", "cert-manager.io", "Certificate", "web-tls")
+	if !found.Found || found.Summary.Ref.UID != "cert-uid" {
+		t.Fatalf("expected the stored certificate, got %+v", found)
+	}
+	if absent := svc.LookupObject("apps", "cert-manager.io", "Certificate", "api-tls"); absent.Found || !absent.Absent {
+		t.Fatalf("a miss in a completely listed resource must be absent, got %+v", absent)
+	}
+	// A kind the catalog has not listed is never absent.
+	if unlisted := svc.LookupObject("apps", "example.com", "Widget", "w"); unlisted.Found || unlisted.Absent {
+		t.Fatalf("an unlisted kind must not be absent, got %+v", unlisted)
+	}
+}
+
+// A sync publishes its rows, keeping a failed resource's previous rows, before
+// it records completion and marks health stale. Absence must come from that
+// one publication: right after it, a resource whose list failed or was
+// forbidden is never vouched for, while a completely listed one is.
+func TestLookupObjectJudgesAbsenceFromThePublishedSyncAlone(t *testing.T) {
+	svc := NewService(Dependencies{}, nil)
+	issuers := Descriptor{
+		Group: "cert-manager.io", Version: "v1", Kind: "Issuer",
+		Resource: "issuers", Namespaced: true, Scope: ScopeNamespace,
+	}
+	secrets := Descriptor{Version: "v1", Kind: "Secret", Resource: "secrets", Namespaced: true, Scope: ScopeNamespace}
+	run := lookupSync(svc, map[Descriptor][]Summary{issuers: nil, secrets: nil}, lookupCertificates)
+	svc.recordDeniedResource("secrets")
+
+	// recordCompletion has not run, so catalog health is not stale yet.
+	run.publish([]Descriptor{lookupCertificates, issuers, secrets}, errors.New("one descriptor failed"))
+
+	if failed := svc.LookupObject("apps", "cert-manager.io", "Certificate", "web-tls"); failed.Absent {
+		t.Fatalf("a resource whose list failed must not be absent, got %+v", failed)
+	}
+	if listed := svc.LookupObject("apps", "cert-manager.io", "Issuer", "letsencrypt"); !listed.Absent {
+		t.Fatalf("a completely listed resource must vouch for absence, got %+v", listed)
+	}
+	denied := svc.LookupObject("apps", "", "Secret", "tls")
+	if denied.Absent || denied.Denied != "secrets" {
+		t.Fatalf("a forbidden resource must report the denial instead of absence, got %+v", denied)
+	}
+
+	// The next sync clears the denial set before it lists again; the published
+	// answer stays the previous sync's until that sync publishes.
+	svc.resetDeniedResources()
+	if stillDenied := svc.LookupObject("apps", "", "Secret", "tls"); stillDenied.Absent || stillDenied.Denied != "secrets" {
+		t.Fatalf("a denial must last until the next publication, got %+v", stillDenied)
 	}
 }

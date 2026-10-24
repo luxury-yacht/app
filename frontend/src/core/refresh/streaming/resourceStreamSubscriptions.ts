@@ -1,6 +1,11 @@
-import { buildClusterScope, parseClusterScopeList } from '../clusterScope';
+import {
+  buildRefreshScope,
+  encodeScopeSelector,
+  hasOneShotQuery,
+  parseRefreshScope,
+} from '../scopeSelector';
 import type { ResourceStreamClientMessage } from './resourceStreamConnection';
-import { type DoorbellDomain, normalizeResourceScope } from './resourceStreamDomains';
+import type { DoorbellDomain } from './resourceStreamDomains';
 import {
   initialResourceStreamProtocolState,
   type ResourceStreamProtocolState,
@@ -10,8 +15,8 @@ export type StreamSubscription = {
   key: string;
   domain: DoorbellDomain;
   storeScope: string;
-  reportScope: string;
-  reportScopes: Set<string>;
+  /** Whether a consumer holds the subscription (cleared by release). */
+  leased: boolean;
   normalizedScope: string;
   clusterId: string;
   clusterName?: string;
@@ -28,44 +33,41 @@ export const resourceStreamSubscriptionKey = (
   scope: string
 ): string => `${clusterId}::${domain}::${scope}`;
 
-const catalogDoorbellSubscriptionScope = (
-  clusterId: string,
-  scope: string
-): { normalizedScope: string; reportScope: string } => {
-  const trimmed = scope.trim();
-  const reportTail =
-    !trimmed || trimmed.toLowerCase() === 'cluster' || trimmed.toLowerCase() === 'cluster:'
-      ? ''
-      : trimmed;
-  return {
-    normalizedScope: '',
-    reportScope: buildClusterScope(clusterId, reportTail),
-  };
+type ResolvedSubscriptionScope = {
+  clusterId: string;
+  normalizedScope: string;
+  storeScope: string;
 };
 
 export const resolveResourceStreamSubscriptionScope = (
   domain: DoorbellDomain,
   scope: string
-): { clusterIds: string[]; normalizedScope: string; reportScope: string } => {
-  const parsed = parseClusterScopeList(scope);
-  if (parsed.clusterIds.length === 0) {
-    throw new Error('Resource streaming requires a cluster scope');
+): ResolvedSubscriptionScope => {
+  const decoded = parseRefreshScope(domain, scope);
+  const { clusterId, selector } = decoded;
+  // Streams subscribe to their selector alone; a query scope is a one-shot
+  // read whose reader follows the base scope's stream.
+  if (hasOneShotQuery(decoded)) {
+    throw new Error(`${domain} streams do not accept a query scope`);
   }
-  if (parsed.isMultiCluster) {
-    throw new Error('Resource streaming requires a single cluster scope');
+  return {
+    clusterId,
+    normalizedScope: encodeScopeSelector(selector),
+    storeScope: buildRefreshScope(domain, { clusterId, selector }),
+  };
+};
+
+// Lookups and releases are evidence about existing subscriptions; a scope that
+// cannot subscribe simply has none.
+const tryResolveSubscriptionScope = (
+  domain: DoorbellDomain,
+  scope: string
+): ResolvedSubscriptionScope | null => {
+  try {
+    return resolveResourceStreamSubscriptionScope(domain, scope);
+  } catch (_err) {
+    return null;
   }
-  let normalizedScope: string;
-  let reportScope: string;
-  if (domain === 'catalog') {
-    ({ normalizedScope, reportScope } = catalogDoorbellSubscriptionScope(
-      parsed.clusterIds[0],
-      parsed.scope
-    ));
-  } else {
-    normalizedScope = normalizeResourceScope(domain, parsed.scope);
-    reportScope = buildClusterScope(parsed.clusterIds[0], normalizedScope);
-  }
-  return { clusterIds: parsed.clusterIds, normalizedScope, reportScope };
 };
 
 export class ResourceStreamSubscriptionStore {
@@ -95,61 +97,28 @@ export class ResourceStreamSubscriptionStore {
     return this.subscriptions.get(key);
   }
 
-  ensure(domain: DoorbellDomain, scope: string): StreamSubscription[] {
-    const { clusterIds, normalizedScope, reportScope } = resolveResourceStreamSubscriptionScope(
-      domain,
-      scope
-    );
-    return clusterIds.map((clusterId) =>
-      this.ensureForCluster(domain, clusterId, normalizedScope, reportScope)
-    );
+  ensure(domain: DoorbellDomain, scope: string): StreamSubscription {
+    return this.ensureResolved(domain, resolveResourceStreamSubscriptionScope(domain, scope));
   }
 
-  getForScope(domain: DoorbellDomain, scope: string): StreamSubscription[] {
-    let resolved: { clusterIds: string[]; normalizedScope: string; reportScope: string };
-    try {
-      resolved = resolveResourceStreamSubscriptionScope(domain, scope);
-    } catch (_err) {
-      return [];
+  getForScope(domain: DoorbellDomain, scope: string): StreamSubscription | undefined {
+    const resolved = tryResolveSubscriptionScope(domain, scope);
+    if (!resolved) {
+      return undefined;
     }
-
-    return resolved.clusterIds
-      .map((clusterId) =>
-        this.subscriptions.get(
-          resourceStreamSubscriptionKey(clusterId, domain, resolved.normalizedScope)
-        )
-      )
-      .filter(
-        (subscription): subscription is StreamSubscription =>
-          subscription?.reportScopes.has(resolved.reportScope) === true
-      );
+    const subscription = this.subscriptions.get(
+      resourceStreamSubscriptionKey(resolved.clusterId, domain, resolved.normalizedScope)
+    );
+    return subscription?.leased ? subscription : undefined;
   }
 
-  release(domain: DoorbellDomain, scope: string): StreamSubscription[] {
-    let resolved: { clusterIds: string[]; normalizedScope: string; reportScope: string };
-    try {
-      resolved = resolveResourceStreamSubscriptionScope(domain, scope);
-    } catch (_err) {
-      return [];
+  /** Releases a leased subscription and returns it; a second release returns nothing. */
+  release(domain: DoorbellDomain, scope: string): StreamSubscription | undefined {
+    const subscription = this.getForScope(domain, scope);
+    if (subscription) {
+      subscription.leased = false;
     }
-
-    return resolved.clusterIds
-      .map((clusterId) =>
-        this.subscriptions.get(
-          resourceStreamSubscriptionKey(clusterId, domain, resolved.normalizedScope)
-        )
-      )
-      .filter((subscription): subscription is StreamSubscription => {
-        if (!subscription?.reportScopes.has(resolved.reportScope)) {
-          return false;
-        }
-        subscription.reportScopes.delete(resolved.reportScope);
-        if (subscription.reportScope === resolved.reportScope) {
-          subscription.reportScope =
-            subscription.reportScopes.values().next().value ?? resolved.reportScope;
-        }
-        return subscription.reportScopes.size === 0;
-      });
+    return subscription;
   }
 
   hasPendingUnsubscribe(subscription: StreamSubscription): boolean {
@@ -231,11 +200,9 @@ export class ResourceStreamSubscriptionStore {
     };
   }
 
-  private ensureForCluster(
+  private ensureResolved(
     domain: DoorbellDomain,
-    clusterId: string,
-    normalizedScope: string,
-    reportScope: string
+    { clusterId, normalizedScope, storeScope }: ResolvedSubscriptionScope
   ): StreamSubscription {
     const key = resourceStreamSubscriptionKey(clusterId, domain, normalizedScope);
     const existing = this.subscriptions.get(key);
@@ -243,14 +210,13 @@ export class ResourceStreamSubscriptionStore {
       const replaceBlockedOwner =
         this.hasPendingUnsubscribe(existing) &&
         existing.protocol.phase.status === 'permission-blocked';
-      existing.reportScopes.add(reportScope);
+      existing.leased = true;
       this.cancelPendingUnsubscribe(existing);
       if (replaceBlockedOwner) {
         // Reclaim after a lifecycle stop is a new permission epoch. Install a
         // fresh owner so late callbacks keep the old terminal protocol object.
         const replacement = {
           ...existing,
-          reportScopes: new Set(existing.reportScopes),
           protocol: initialResourceStreamProtocolState(),
         };
         this.subscriptions.set(key, replacement);
@@ -259,13 +225,11 @@ export class ResourceStreamSubscriptionStore {
       return existing;
     }
 
-    const storeScope = buildClusterScope(clusterId, normalizedScope);
     const subscription: StreamSubscription = {
       key,
       domain,
       storeScope,
-      reportScope,
-      reportScopes: new Set([reportScope]),
+      leased: true,
       normalizedScope,
       clusterId,
       protocol: initialResourceStreamProtocolState(),

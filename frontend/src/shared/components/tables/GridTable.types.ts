@@ -138,13 +138,13 @@ export interface GridTableFilterOptions {
   clusterDropdownSearchable?: boolean;
   clusterDropdownBulkActions?: boolean;
   includeClusterScopedSyntheticNamespace?: boolean;
-  /** A pane's structural control (e.g. Collapse Pods), rendered immediately before Namespace. */
-  beforeNamespaceActions?: IconBarItem[];
   /**
    * IconBar items before Download: Include metadata, the view's own icons, a
    * separator, and Favorite, in that order.
    */
   preActions?: IconBarItem[];
+  /** IconBar items at the end of the bar, after Columns, such as an attached table's Close. */
+  trailingActions?: IconBarItem[];
   /** Override the total item count shown in the filter bar (e.g. server-side total for paginated views). */
   totalCount?: number;
   /**
@@ -194,6 +194,24 @@ export interface GridTableFilteredEmptyState {
   };
 }
 
+/**
+ * Each open row shows `render(row)` in a full-width detail directly under it,
+ * for example a nested table. The detail is a labelled region whose id is
+ * getGridTableRowDetailId(rowKey), for the opening control's aria-controls.
+ */
+export interface GridTableRowDetail<T> {
+  /** keyExtractor keys of the open rows; empty when no row is open. */
+  openRowKeys: readonly string[];
+  render: (item: T) => React.ReactNode;
+  /** Accessible name of the detail region. */
+  getLabel: (item: T) => string;
+  /**
+   * Classes shared by an open row and its detail; a kind color slot
+   * (getKindColorClass) tints them as one group.
+   */
+  getGroupClassName?: (item: T) => string;
+}
+
 export interface GridTableProps<T> {
   data: T[];
   columns: GridColumnDefinition<T>[];
@@ -215,8 +233,11 @@ export interface GridTableProps<T> {
   onRowClick?: (item: T) => void;
   /** Called for pointer row activation after interactive descendants are excluded. */
   onRowPointerClick?: (item: T) => void;
-  /** When supplied, Space applies this selection action to the focused row. */
-  onRowSelectionToggle?: (item: T) => void;
+  /**
+   * Expands or collapses a row (its row detail, or the row in place). Space
+   * runs it for the focused row; in a table without it, Space does nothing.
+   */
+  onRowExpandToggle?: (item: T) => void;
   /** Called when unused space in the scrollable table body is clicked. */
   onRowSelectionClear?: () => void;
   onSort?: (key: string, targetDirection?: 'asc' | 'desc' | null) => void;
@@ -253,6 +274,7 @@ export interface GridTableProps<T> {
   /** Gates the next-page shortcut (e.g. last page, request in flight). */
   canPageNext?: boolean;
   virtualization?: GridTableVirtualizationOptions;
+  rowDetail?: GridTableRowDetail<T>;
   loadingOverlay?: {
     show: boolean;
     message?: string;
@@ -278,8 +300,8 @@ export interface InternalFilterOptions {
   namespaceDropdownBulkActions?: boolean;
   clusterDropdownSearchable?: boolean;
   clusterDropdownBulkActions?: boolean;
-  beforeNamespaceActions?: IconBarItem[];
   preActions?: IconBarItem[];
+  trailingActions?: IconBarItem[];
   totalIsExact?: boolean;
   partialDataLabel?: string;
 }

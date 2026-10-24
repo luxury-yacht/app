@@ -138,13 +138,12 @@ describe('eventGridModel', () => {
           namespace: 'events',
           objectNamespace: 'databases',
         },
-        { selectedClusterId: 'cluster-a', selectedClusterName: 'alpha' }
+        { selectedClusterId: 'cluster-a' }
       )
     ).toEqual({
       involvedObject,
       objectUid: 'db-uid',
       clusterId: 'cluster-a',
-      clusterName: 'alpha',
     });
   });
 

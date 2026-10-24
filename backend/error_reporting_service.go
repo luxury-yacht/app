@@ -18,12 +18,23 @@ type ErrorReportingService struct {
 	suppressTelemetrySchedule atomic.Bool
 	context                   func() context.Context
 	telemetryRepository       installationTelemetryRepository
+	currentVersion            string
 	logger                    *Logger
 }
 
+// installationTelemetryState is the persisted installation telemetry for the
+// current anonymizedId.
+type installationTelemetryState struct {
+	anonymizedID    string
+	registered      bool
+	reportedVersion string
+}
+
 type installationTelemetryRepository interface {
-	prepareInstallationTelemetry() (string, bool, error)
-	acknowledgeInstallationTelemetry(string) error
+	prepareInstallationTelemetry() (installationTelemetryState, error)
+	// acknowledgeInstallationTelemetry records a delivered metric: the
+	// installation is registered and version is the last reported release.
+	acknowledgeInstallationTelemetry(anonymizedID, version string) error
 }
 
 type installationTelemetryPort struct {
@@ -31,24 +42,24 @@ type installationTelemetryPort struct {
 	target installationTelemetryRepository
 }
 
-func (p *installationTelemetryPort) prepareInstallationTelemetry() (string, bool, error) {
+func (p *installationTelemetryPort) prepareInstallationTelemetry() (installationTelemetryState, error) {
 	p.mu.RLock()
 	target := p.target
 	p.mu.RUnlock()
 	if target == nil {
-		return "", false, fmt.Errorf("installation telemetry repository is not available")
+		return installationTelemetryState{}, fmt.Errorf("installation telemetry repository is not available")
 	}
 	return target.prepareInstallationTelemetry()
 }
 
-func (p *installationTelemetryPort) acknowledgeInstallationTelemetry(id string) error {
+func (p *installationTelemetryPort) acknowledgeInstallationTelemetry(id, version string) error {
 	p.mu.RLock()
 	target := p.target
 	p.mu.RUnlock()
 	if target == nil {
 		return fmt.Errorf("installation telemetry repository is not available")
 	}
-	return target.acknowledgeInstallationTelemetry(id)
+	return target.acknowledgeInstallationTelemetry(id, version)
 }
 
 func (p *installationTelemetryPort) bind(target installationTelemetryRepository) {
@@ -71,12 +82,14 @@ func NewErrorReportingService(
 	reporter sentryreporting.Reporter,
 	contextProvider func() context.Context,
 	logger *Logger,
+	currentVersion string,
 	repositories ...installationTelemetryRepository,
 ) *ErrorReportingService {
 	service := &ErrorReportingService{
-		reporter: reporter,
-		context:  contextProvider,
-		logger:   logger,
+		reporter:       reporter,
+		context:        contextProvider,
+		currentVersion: currentVersion,
+		logger:         logger,
 	}
 	if len(repositories) > 0 {
 		service.telemetryRepository = repositories[0]

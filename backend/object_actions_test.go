@@ -12,6 +12,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/runtime"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
+	cgofake "k8s.io/client-go/kubernetes/fake"
+
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/internal/genobjectactions"
 )
 
@@ -68,6 +74,28 @@ func TestRunObjectActionRequiresFullTargetIdentity(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A HelmRelease delete must run the Helm uninstall path, which rejects a
+// missing release namespace before touching the cluster. The generic dynamic
+// delete has no namespace gate, and helm.sh/v3 is not a served API.
+func TestRunObjectActionDeletesHelmReleaseThroughHelmPath(t *testing.T) {
+	const clusterID = "cluster-a"
+	fixture := newResourceGatewayFixture()
+	fixture.setCluster(clusterID, &clusterClients{
+		meta:          ClusterMeta{ID: clusterID, Name: "Alpha"},
+		client:        cgofake.NewClientset(),
+		dynamicClient: dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
+	})
+
+	_, err := fixture.gateway.RunObjectAction(ObjectActionRequest{
+		Action: ObjectActionDelete,
+		Target: objectActionTarget(clusterID, "helm.sh", "v3", "helmrelease", "", "shop"),
+	})
+
+	status := errorstatus.Classify(err)
+	require.Equal(t, errorstatus.ReasonBadRequest, status.Reason)
+	require.Contains(t, status.Message, "namespace is required")
 }
 
 func TestRunObjectActionValidatesActionSpecificRequirements(t *testing.T) {

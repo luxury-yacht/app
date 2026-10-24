@@ -1,63 +1,50 @@
+/**
+ * frontend/src/shared/hooks/useObjectLink.test.tsx
+ *
+ * The paired click / Alt+click handlers object links in tables use. In a
+ * native panel window, which has no workspace navigation, a link offers no
+ * Alt+click handler and a click still opens the object. Runs the hook inside
+ * the production panel-window shell with the real object-panel state over a
+ * faked backend (test-utils/appState).
+ */
+
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-const mocks = vi.hoisted(() => ({
-  available: true,
-  navigateToView: vi.fn(),
-  openWithObject: vi.fn(),
-}));
-
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: mocks.openWithObject }),
-}));
-vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({
-    available: mocks.available,
-    navigateToView: mocks.navigateToView,
-  }),
-}));
-
+import { describe, expect, it } from 'vitest';
+import { installAppStateHarness } from '@/test-utils/appState/harness';
+import { requireValue } from '@/test-utils/requireValue';
 import { useObjectLink } from './useObjectLink';
 
+const app = installAppStateHarness();
+let objectLink: ReturnType<typeof useObjectLink> | undefined;
+
+function Probe() {
+  objectLink = useObjectLink();
+  return null;
+}
+
 describe('useObjectLink', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
-  let objectLink!: ReturnType<typeof useObjectLink>;
-
-  function Harness() {
-    objectLink = useObjectLink();
-    return null;
-  }
-
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    mocks.available = true;
-    vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    act(() => root.unmount());
-    container.remove();
-  });
-
-  it('omits the navigation-only handler when workspace navigation is unavailable', () => {
-    mocks.available = false;
-    act(() => root.render(<Harness />));
-    const objectRef = {
-      clusterId: 'cluster-a',
+  it('offers no Alt+click navigation in a panel window, and a click still opens the object', async () => {
+    const dev = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, ['default']);
+    // A panel window renders every panel it opens; the pod panel reads its own data.
+    const pod = app.servePanel(dev, {
       group: '',
       version: 'v1',
       kind: 'Pod',
       namespace: 'default',
       name: 'api',
-    };
-    const handlers = objectLink(() => objectRef);
+    });
+    app.panelWindow(dev);
+    const view = await app.render(null);
+    await view.show(<Probe />);
+    const handlers = requireValue(objectLink, 'mounted object link')(() => pod.ref);
+
+    await act(async () => {
+      handlers.onClick(pod.ref);
+    });
+    await app.settle();
 
     expect(handlers.onAltClick).toBeUndefined();
-    handlers.onClick(objectRef);
-    expect(mocks.openWithObject).toHaveBeenCalledWith(objectRef);
+    expect(view.openPanels()).toEqual([pod.ref]);
   });
 });

@@ -1,10 +1,12 @@
 import type {
   CanonicalResourceRef,
   CatalogSnapshotPayload,
+  ClusterAttentionSnapshot,
   ClusterConfigSnapshotPayload,
   ClusterEventsSnapshotPayload,
   ClusterNodeSnapshotEntry,
   ClusterNodeSnapshotPayload,
+  ClusterOverviewSnapshotPayload,
   NamespaceAutoscalingSnapshotPayload,
   NamespaceConfigSnapshotPayload,
   NamespaceWorkloadSnapshotPayload,
@@ -162,6 +164,76 @@ export const makeCatalogSnapshotPayload = (
   batchSize: 0,
   totalBatches: 1,
   isFinal: true,
+  ...overrides,
+});
+
+const emptyWorkloadUsage = () => ({ cpuUsageMilli: 0, memoryUsageBytes: 0 });
+
+export const makeClusterOverviewSnapshotPayload = (
+  overrides: Partial<ClusterOverviewSnapshotPayload> = {}
+): ClusterOverviewSnapshotPayload => ({
+  clusterId: 'cluster-a',
+  clusterName: 'Cluster A',
+  overview: {
+    clusterType: '',
+    clusterVersion: '',
+    cpuUsageMilli: 0,
+    cpuRequestsMilli: 0,
+    cpuLimitsMilli: 0,
+    cpuAllocatableMilli: 0,
+    memoryUsageBytes: 0,
+    memoryRequestsBytes: 0,
+    memoryLimitsBytes: 0,
+    memoryAllocatableBytes: 0,
+    totalNodes: 0,
+    fargateNodes: 0,
+    regularNodes: 0,
+    ec2Nodes: 0,
+    virtualNodes: 0,
+    vmNodes: 0,
+    readyNodes: 0,
+    notReadyNodes: 0,
+    cordonedNodes: 0,
+    totalPods: 0,
+    totalContainers: 0,
+    totalInitContainers: 0,
+    runningPods: 0,
+    succeededPods: 0,
+    pendingPods: 0,
+    failedPods: 0,
+    readyPods: 0,
+    startingPods: 0,
+    failingPods: 0,
+    terminatingPods: 0,
+    restartedPods: 0,
+    notReadyPods: 0,
+    totalNamespaces: 0,
+    totalDeployments: 0,
+    totalStatefulSets: 0,
+    totalDaemonSets: 0,
+    totalCronJobs: 0,
+    workloadResourceUsage: {
+      deployments: emptyWorkloadUsage(),
+      daemonSets: emptyWorkloadUsage(),
+      statefulSets: emptyWorkloadUsage(),
+      jobs: emptyWorkloadUsage(),
+    },
+    recentEvents: [],
+  },
+  metrics: { stale: false, successCount: 1, failureCount: 0 },
+  ...overrides,
+});
+
+export const makeClusterAttentionSnapshot = (
+  overrides: Partial<ClusterAttentionSnapshot> = {}
+): ClusterAttentionSnapshot => ({
+  clusterId: 'cluster-a',
+  clusterName: 'Cluster A',
+  ...queryEnvelope('cluster-attention'),
+  severityCounts: { info: 0, warning: 0, error: 0 },
+  ignoreRules: { objectFindings: [], clusterFindingTypes: [], globalFindingTypes: [] },
+  findingTypes: [],
+  rows: [],
   ...overrides,
 });
 

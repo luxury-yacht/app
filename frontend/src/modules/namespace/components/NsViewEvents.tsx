@@ -22,8 +22,6 @@ import { eventGridObjectNamespace, namespaceEventRowIdentity } from '@shared/eve
 import React, { useCallback, useMemo } from 'react';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 
-export type EventData = EventGridRow;
-
 interface EventViewProps {
   namespace: string;
   showNamespaceColumn?: boolean;

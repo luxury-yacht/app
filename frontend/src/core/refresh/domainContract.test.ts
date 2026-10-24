@@ -1,8 +1,22 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+/**
+ * frontend/src/core/refresh/domainContract.test.ts
+ *
+ * The authored refresh-domain contract against the frontend's descriptors,
+ * generated registrations, stream domains, and diagnostics. The routing test
+ * leases scopes through the real orchestrator and stream managers over the
+ * app-state harness's fake sockets (test-utils/appState) and checks which
+ * stream each orchestrator kind lands on.
+ */
+
+import { describe, expect, it, vi } from 'vitest';
+import { compareUtf16Strings } from '@/shared/utils/sort';
+import { installAppStateHarness, markClusterReady } from '@/test-utils/appState/harness';
+import { snapshotResponse, streamKey } from '@/test-utils/appState/transport';
+import { testScope } from '@/test-utils/refreshScope';
 import { requireValue } from '@/test-utils/requireValue';
 
+import { registerDefaultRefreshDomains } from './domainRegistrations';
 import {
-  DOMAIN_REFRESHER_MAP,
   DOMAIN_STREAM_MAP,
   frontendRefreshDomainPolicies,
   getRefreshDomainDescriptor,
@@ -11,57 +25,13 @@ import {
   refreshDomainDescriptors,
 } from './domainRegistry';
 import { refreshOrchestrator } from './orchestrator';
+import type { DomainRegistration } from './refreshRegistration';
+import { getScopedDomainState } from './store';
+import { containerLogsStreamManager } from './streaming/containerLogsStreamManager';
 import { RESOURCE_STREAM_DOMAINS } from './streaming/resourceStreamDomains';
 import type { RefreshDomain } from './types';
 
-const refreshManagerMocks = vi.hoisted(() => ({
-  subscribeMock: vi.fn(() => vi.fn()),
-  disableMock: vi.fn(),
-  enableMock: vi.fn(),
-  registerMock: vi.fn(),
-  updateContextMock: vi.fn(),
-  triggerManualRefreshForContextMock: vi.fn(),
-}));
-
-const streamManagerMocks = vi.hoisted(() => ({
-  resourceStart: vi.fn(),
-  resourceStop: vi.fn(),
-  resourceRefreshOnce: vi.fn(),
-  containerStart: vi.fn(),
-  containerStop: vi.fn(),
-}));
-
-vi.mock('./RefreshManager', () => ({
-  refreshManager: {
-    subscribe: refreshManagerMocks.subscribeMock,
-    disable: refreshManagerMocks.disableMock,
-    enable: refreshManagerMocks.enableMock,
-    register: refreshManagerMocks.registerMock,
-    updateContext: refreshManagerMocks.updateContextMock,
-    triggerManualRefreshForContext: refreshManagerMocks.triggerManualRefreshForContextMock,
-  },
-}));
-
-vi.mock('./client', () => ({
-  fetchSnapshot: vi.fn(),
-  setMetricsActive: vi.fn().mockResolvedValue(undefined),
-}));
-
-vi.mock('./streaming/containerLogsStreamManager', () => ({
-  containerLogsStreamManager: {
-    startStream: streamManagerMocks.containerStart,
-    stop: streamManagerMocks.containerStop,
-  },
-}));
-
-vi.mock('./streaming/resourceStreamManager', () => ({
-  resourceStreamManager: {
-    start: streamManagerMocks.resourceStart,
-    stop: streamManagerMocks.resourceStop,
-    refreshOnce: streamManagerMocks.resourceRefreshOnce,
-    isHealthy: vi.fn(() => true),
-  },
-}));
+const app = installAppStateHarness();
 
 type DomainCategory = 'system' | 'cluster' | 'namespace';
 type DiagnosticsStream = 'resources' | 'container-logs';
@@ -80,33 +50,28 @@ type ContractDomain = {
     resourceStream: boolean;
   };
   frontend: {
-    refresherName: string;
     orchestrator: OrchestratorKind;
     diagnosticsStream: DiagnosticsStream | null;
     timing: {
       interval: number;
-      cooldown: number;
       timeout: number;
     };
     priority?: number;
     registrationOrder: number;
-    scheduled?: boolean;
   };
 };
 
-type RegisteredDomain = {
-  category: DomainCategory;
-  refresherName: string;
-  scheduled?: boolean;
-  streaming?: {
-    start?: (scope: string) => Promise<(() => void) | undefined> | (() => void);
-    stop?: (scope: string, options?: { reset?: boolean }) => void;
-    refreshOnce?: (scope: string) => Promise<void> | void;
-  };
+// What the generated registrations give the orchestrator, in registration
+// order (orchestrator.ts registers them at construction).
+const registeredDomains = (): Map<RefreshDomain, DomainRegistration<RefreshDomain>> => {
+  const registered = new Map<RefreshDomain, DomainRegistration<RefreshDomain>>();
+  registerDefaultRefreshDomains({
+    registerDomain: (config) => {
+      registered.set(config.domain, config as DomainRegistration<RefreshDomain>);
+    },
+  });
+  return registered;
 };
-
-const registeredDomains = (): Map<RefreshDomain, RegisteredDomain> =>
-  (refreshOrchestrator as unknown as { configs: Map<RefreshDomain, RegisteredDomain> }).configs;
 
 const EVENT_DOORBELL_DOMAINS = new Set<RefreshDomain>([
   'object-events',
@@ -126,18 +91,6 @@ const BEHAVIOR_CLASSES = new Set([
   'helm-content-payload',
   'graph-payload',
   'operation-state',
-]);
-const SCOPE_KINDS = new Set([
-  'cluster',
-  'optional-namespace',
-  'catalog-query',
-  'resource-stream-selector',
-  'namespace-scope',
-  'object-ref',
-  'helm-release',
-  'object-map',
-  'node-maintenance',
-  'log-stream-selector',
 ]);
 const CACHE_POLICIES = new Set([
   'snapshot-cache',
@@ -231,11 +184,14 @@ const enforcedCoverageProofs = (): Record<string, Set<RefreshDomain>> => {
   return proofs;
 };
 
-describe('refresh domain contract', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+// Doorbell-snapshot domains whose payload is not a snapshot table.
+const DOORBELL_BEHAVIOR_CLASSES: Partial<Record<string, string>> = {
+  'object-events': 'event-snapshot',
+  'object-details': 'detail-payload',
+  'cluster-overview': 'aggregate-snapshot',
+};
 
+describe('refresh domain contract', () => {
   it('keeps the authored contract within supported frontend values', () => {
     const categories = new Set<DomainCategory>(['system', 'cluster', 'namespace']);
     const orchestrators = new Set<OrchestratorKind>([
@@ -263,9 +219,7 @@ describe('refresh domain contract', () => {
       if (entry.frontend.diagnosticsStream !== null) {
         expect(diagnosticsStreams.has(entry.frontend.diagnosticsStream)).toBe(true);
       }
-      expect(entry.frontend.refresherName).toEqual(expect.any(String));
       expect(entry.frontend.timing.interval).toBeGreaterThan(0);
-      expect(entry.frontend.timing.cooldown).toBeGreaterThan(0);
       expect(entry.frontend.timing.timeout).toBeGreaterThan(0);
     }
   });
@@ -298,8 +252,9 @@ describe('refresh domain contract', () => {
       new Set(contractDomains)
     );
     expect(new Set(Object.keys(REFRESH_DOMAIN_DESCRIPTORS))).toEqual(new Set(contractDomains));
-    expect(new Set(registeredDomains().keys())).toEqual(new Set(contractDomains));
-    expect([...registeredDomains().keys()]).toEqual(
+    const registered = registeredDomains();
+    expect(new Set(registered.keys())).toEqual(new Set(contractDomains));
+    expect([...registered.keys()]).toEqual(
       frontendRefreshDomainPolicies.map((policy) => policy.domain)
     );
 
@@ -307,18 +262,18 @@ describe('refresh domain contract', () => {
 
     for (const entry of contract.domains) {
       const descriptor = getRefreshDomainDescriptor(entry.domain);
-      const registration = registeredDomains().get(entry.domain);
+      const registration = registered.get(entry.domain);
       expect(registration).toBeDefined();
+      // The orchestrator singleton carries the same streaming wiring.
+      expect(refreshOrchestrator.isStreamingDomain(entry.domain)).toBe(
+        entry.frontend.orchestrator !== 'snapshot'
+      );
       expect(descriptor.category).toBe(entry.category);
       expect(registration?.category).toBe(entry.category);
-      expect(descriptor.refresherName).toBe(entry.frontend.refresherName);
-      expect(registration?.refresherName).toBe(entry.frontend.refresherName);
-      expect(DOMAIN_REFRESHER_MAP[entry.domain]).toBe(entry.frontend.refresherName);
       expect(DOMAIN_STREAM_MAP[entry.domain]).toBe(entry.frontend.diagnosticsStream ?? undefined);
       expect(descriptor.diagnosticsStream).toBe(entry.frontend.diagnosticsStream ?? undefined);
       expect(descriptor.timing).toEqual(entry.frontend.timing);
       expect(descriptor.priority).toBe(entry.frontend.priority);
-      expect(registration?.scheduled).toBe(entry.frontend.scheduled === false ? false : undefined);
 
       switch (entry.frontend.orchestrator) {
         case 'snapshot':
@@ -375,54 +330,66 @@ describe('refresh domain contract', () => {
     }
   });
 
-  it('routes catalog and events through the unified resource stream manager', async () => {
-    await registeredDomains().get('catalog')?.streaming?.start?.('cluster-a|cluster');
-    await registeredDomains().get('cluster-events')?.streaming?.start?.('cluster-a|cluster');
-    await registeredDomains()
-      .get('namespace-events')
-      ?.streaming?.start?.('cluster-a|namespace:prod');
+  // Every streamed kind except container logs multiplexes onto the one
+  // resource stream; container logs run on their own named stream with no
+  // one-shot mode. A lease's lifecycle reaches the manager it is routed to.
+  it('routes each streaming orchestrator kind to its stream manager', async () => {
+    markClusterReady('route-a');
+    let version = 0;
+    app.snapshots.respond(({ domain, scope }) => {
+      version += 1;
+      return snapshotResponse({ domain, scope, version, payload: {} });
+    });
+    const streamed = [
+      { domain: 'catalog', scope: testScope('route-a', '') },
+      { domain: 'cluster-events', scope: testScope('route-a', '') },
+      { domain: 'namespace-events', scope: testScope('route-a', 'namespace:prod') },
+      { domain: 'pods', scope: testScope('route-a', 'namespace:prod') },
+    ] as const;
+    const logs = testScope('route-a', 'prod:/v1:Pod:web');
 
-    expect(streamManagerMocks.resourceStart).toHaveBeenCalledWith('catalog', 'cluster-a|cluster');
-    expect(streamManagerMocks.resourceStart).toHaveBeenCalledWith(
-      'cluster-events',
-      'cluster-a|cluster'
-    );
-    expect(streamManagerMocks.resourceStart).toHaveBeenCalledWith(
-      'namespace-events',
-      'cluster-a|namespace:prod'
-    );
-  });
+    streamed.forEach(({ domain, scope }) => {
+      refreshOrchestrator.acquireScopedDomainLease(domain, scope);
+    });
+    refreshOrchestrator.acquireScopedDomainLease('container-logs', logs);
+    await app.settle();
 
-  it('routes generated streaming lifecycle callbacks to their managers', async () => {
-    const catalog = registeredDomains().get('catalog')?.streaming;
-    await catalog?.start?.('cluster-a|cluster');
-    catalog?.stop?.('cluster-a|cluster', { reset: true });
-    await catalog?.refreshOnce?.('cluster-a|cluster');
+    expect(app.streams.active()).toEqual(
+      streamed.map(({ domain, scope }) => streamKey(domain, scope)).sort(compareUtf16Strings)
+    );
+    expect(getScopedDomainState('container-logs', logs).data?.phase.status).not.toBe('stopping');
+    expect(
+      requireValue(registeredDomains().get('container-logs'), 'container-logs registration')
+        .streaming?.refreshOnce
+    ).toBeUndefined();
 
-    expect(streamManagerMocks.resourceStart).toHaveBeenCalledWith('catalog', 'cluster-a|cluster');
-    expect(streamManagerMocks.resourceStop).toHaveBeenCalledWith(
-      'catalog',
-      'cluster-a|cluster',
-      true
-    );
-    expect(streamManagerMocks.resourceRefreshOnce).toHaveBeenCalledWith(
-      'catalog',
-      'cluster-a|cluster'
-    );
+    // A one-shot refresh of a resource-stream scope resynchronizes its subscription.
+    const requestsBefore = app.streams.requests().length;
+    await refreshOrchestrator.refreshStreamingDomainOnce('catalog', streamed[0].scope);
+    await app.settle();
+    expect(app.streams.requests().slice(requestsBefore)).toEqual([
+      expect.objectContaining({ type: 'REQUEST', domain: 'catalog', clusterId: 'route-a' }),
+    ]);
+    // Container logs have no one-shot mode: the stream is their only source,
+    // so a one-shot refresh restarts it.
+    const startStream = vi.spyOn(containerLogsStreamManager, 'startStream');
+    try {
+      await refreshOrchestrator.refreshStreamingDomainOnce('container-logs', logs);
+      await app.settle();
+      expect(startStream.mock.calls).toEqual([[logs]]);
+      expect(getScopedDomainState('container-logs', logs).data?.phase.status).not.toBe('stopping');
+    } finally {
+      startStream.mockRestore();
+    }
 
-    const logs = registeredDomains().get('container-logs')?.streaming;
-    await logs?.start?.('cluster-a|pod:default/demo:container:app');
-    logs?.stop?.('cluster-a|pod:default/demo:container:app', { reset: true });
-    // Container logs have no one-shot mode: the stream is their only source.
-    expect(logs?.refreshOnce).toBeUndefined();
-
-    expect(streamManagerMocks.containerStart).toHaveBeenCalledWith(
-      'cluster-a|pod:default/demo:container:app'
-    );
-    expect(streamManagerMocks.containerStop).toHaveBeenCalledWith(
-      'cluster-a|pod:default/demo:container:app',
-      true
-    );
+    // Releasing the last lease stops each stream and drops what it kept.
+    streamed.forEach(({ domain, scope }) => {
+      refreshOrchestrator.releaseScopedDomainLease(domain, scope);
+    });
+    refreshOrchestrator.releaseScopedDomainLease('container-logs', logs);
+    await app.settle();
+    expect(app.streams.active()).toEqual([]);
+    expect(getScopedDomainState('container-logs', logs).data).toBeNull();
   });
 
   it('covers every domain with inventory metadata and known enum values', () => {
@@ -433,15 +400,6 @@ describe('refresh domain contract', () => {
 
     for (const [domain, inventory] of Object.entries(refreshDomainContract.domainInventory)) {
       expect(BEHAVIOR_CLASSES.has(inventory.behaviorClass), `${domain} behaviorClass`).toBe(true);
-      expect(SCOPE_KINDS.has(inventory.scopeContract.kind), `${domain} scope kind`).toBe(true);
-      expect(inventory.scopeContract.clusterPrefix).toBe('required');
-      expect(inventory.scopeContract.parser, `${domain} parser`).toEqual(expect.any(String));
-      expect(inventory.scopeContract.parser).not.toHaveLength(0);
-      expect(inventory.scopeContract.frontendBuilder, `${domain} frontendBuilder`).toEqual(
-        expect.any(String)
-      );
-      expect(inventory.scopeContract.frontendBuilder).not.toHaveLength(0);
-      expect(inventory.scopeContract.acceptedEncodings.length).toBeGreaterThan(0);
       expect(inventory.singleCluster).toBe(true);
       expect(inventory.payloadOwner, `${domain} payloadOwner`).toEqual(expect.any(String));
       expect(inventory.payloadOwner).not.toHaveLength(0);
@@ -473,7 +431,6 @@ describe('refresh domain contract', () => {
         expect(['resource-stream-table', 'complete-resync-stream']).toContain(
           inventory.behaviorClass
         );
-        expect(inventory.scopeContract.kind).toBe('resource-stream-selector');
         const streamContract = refreshDomainContract.resourceStream.domains[entry.domain];
         if (inventory.behaviorClass === 'complete-resync-stream') {
           expect(streamContract.rowProjection).toBe('scope-level-complete-only');
@@ -501,7 +458,6 @@ describe('refresh domain contract', () => {
           expect(inventory.behaviorClass).toBe('catalog-stream');
           expect(entry.domain).toBe('catalog');
           expect(entry.frontend.diagnosticsStream).toBe('resources');
-          expect(inventory.scopeContract.kind).toBe('catalog-query');
           expect(inventory.payloadOwner).toBe('backend/objectcatalog.Service');
           expect(inventory.cachePolicy).toBe('external-catalog-cache');
           expect(inventory.streamSemantics).toEqual(
@@ -513,7 +469,6 @@ describe('refresh domain contract', () => {
           expect(inventory.behaviorClass).toBe('log-stream');
           expect(entry.domain).toBe('container-logs');
           expect(entry.frontend.diagnosticsStream).toBe('container-logs');
-          expect(inventory.scopeContract.kind).toBe('log-stream-selector');
           expect(inventory.payloadOwner).toBe('backend/refresh/containerlogsstream');
           expect(inventory.cachePolicy).toBe('stream-only');
           expect(inventory.streamSemantics).toEqual(['line-stream']);
@@ -525,12 +480,15 @@ describe('refresh domain contract', () => {
           // namespace-metrics (snapshot-table, metric doorbell),
           // object-events (event-snapshot, per-object event doorbell),
           // cluster/namespace events (snapshot-table, event doorbell rung by
-          // the table's maintained store), and cluster-overview
-          // (aggregate-snapshot, metric doorbell with polls kept on).
+          // the table's maintained store), cluster-overview
+          // (aggregate-snapshot, metric doorbell with polls kept on), and
+          // object-details (detail-payload, per-object doorbell rung after
+          // eviction, polls kept on).
           expect([
             'namespaces',
             'namespace-metrics',
             'object-events',
+            'object-details',
             'cluster-events',
             'namespace-events',
             'cluster-overview',
@@ -538,11 +496,7 @@ describe('refresh domain contract', () => {
             'cluster-identities',
           ]).toContain(entry.domain);
           expect(inventory.behaviorClass).toBe(
-            entry.domain === 'object-events'
-              ? 'event-snapshot'
-              : entry.domain === 'cluster-overview'
-                ? 'aggregate-snapshot'
-                : 'snapshot-table'
+            DOORBELL_BEHAVIOR_CLASSES[entry.domain] ?? 'snapshot-table'
           );
           expect(inventory.streamSemantics).toEqual(
             expect.arrayContaining(['snapshot-replace', 'change-signal'])
@@ -556,7 +510,6 @@ describe('refresh domain contract', () => {
             expect(entry.domain).toBe('catalog-diff');
             expect(entry.frontend.orchestrator).toBe('snapshot');
             expect(entry.frontend.diagnosticsStream).toBeNull();
-            expect(inventory.scopeContract.kind).toBe('catalog-query');
             expect(inventory.payloadOwner).toBe('backend/objectcatalog.Service');
             expect(inventory.cachePolicy).toBe('external-catalog-cache-with-merge');
             expect(inventory.streamSemantics).toEqual(['snapshot-replace']);
@@ -566,41 +519,32 @@ describe('refresh domain contract', () => {
             expect(entry.domain).toBe('object-events');
             expect(entry.frontend.orchestrator).toBe('snapshot');
             expect(entry.frontend.diagnosticsStream).toBeNull();
-            expect(inventory.scopeContract.kind).toBe('object-ref');
             expect(inventory.payloadOwner).toBe('backend/refresh/snapshot.ObjectEventsBuilder');
             expect(inventory.cachePolicy).toBe('snapshot-cache');
             expect(inventory.streamSemantics).toEqual(['snapshot-replace']);
             expect(inventory.coverageContract).toBe('event-snapshot-payload');
           }
           if (inventory.behaviorClass === 'detail-payload') {
-            expect(['object-details', 'object-yaml']).toContain(entry.domain);
-            expect(inventory.scopeContract.kind).toBe('object-ref');
-            expect(inventory.cachePolicy).toBe(
-              entry.domain === 'object-details'
-                ? 'provider-cache'
-                : 'snapshot-cache-plus-provider-cache'
-            );
+            expect(entry.domain).toBe('object-yaml');
+            expect(inventory.cachePolicy).toBe('snapshot-cache-plus-provider-cache');
             expect(inventory.streamSemantics).toEqual(['snapshot-replace']);
             expect(inventory.coverageContract).toBe('detail-payload-shape');
           }
           if (inventory.behaviorClass === 'helm-content-payload') {
             expect(['object-helm-manifest', 'object-helm-values']).toContain(entry.domain);
-            expect(inventory.scopeContract.kind).toBe('helm-release');
             expect(inventory.cachePolicy).toBe('snapshot-cache-plus-provider-cache');
             expect(inventory.streamSemantics).toEqual(['snapshot-replace']);
             expect(inventory.coverageContract).toBe('helm-content-shape');
           }
           if (inventory.behaviorClass === 'graph-payload') {
             expect(entry.domain).toBe('object-map');
-            expect(inventory.scopeContract.kind).toBe('object-map');
-            expect(inventory.payloadOwner).toBe('backend/refresh/snapshot.ObjectMapBuilder');
+            expect(inventory.payloadOwner).toBe('backend/refresh/snapshot.objectMapBuilder');
             expect(inventory.cachePolicy).toBe('snapshot-cache');
             expect(inventory.streamSemantics).toEqual(['snapshot-replace']);
             expect(inventory.coverageContract).toBe('graph-payload-identity');
           }
           if (inventory.behaviorClass === 'operation-state') {
             expect(entry.domain).toBe('object-maintenance');
-            expect(inventory.scopeContract.kind).toBe('node-maintenance');
             expect(inventory.payloadOwner).toBe('backend/refresh/snapshot.NodeMaintenanceBuilder');
             expect(inventory.cachePolicy).toBe('snapshot-cache-bypass');
             expect(inventory.streamSemantics).toEqual(['snapshot-replace']);

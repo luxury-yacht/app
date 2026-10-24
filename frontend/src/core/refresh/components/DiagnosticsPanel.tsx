@@ -19,14 +19,15 @@ import { useShortcut } from '@ui/shortcuts';
 import { useCapabilityDiagnostics, useUserPermissions } from '@/core/capabilities';
 import { useViewState } from '@/core/contexts/ViewStateContext';
 import { useBrokerReadDiagnostics } from '@/core/read-diagnostics';
-import { parseClusterScopeList, stripClusterScope } from '@/core/refresh/clusterScope';
+import { parseClusterScope } from '@/core/refresh/clusterScope';
+import { type ScopeSelector, tryParseRefreshScope } from '@/core/refresh/scopeSelector';
 import { useKubeconfig } from '@/modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@/modules/namespace/contexts/NamespaceContext';
 import type { NormalizedTelemetrySummary } from '../client';
 import { refreshOrchestrator } from '../orchestrator';
-import { refreshManager } from '../RefreshManager';
-import { isResourceStreamDomain as isResourceTableDomain } from '../resourceStreamViews';
+import { failureMessage, isPermissionDenied, type RefreshFailure } from '../refreshFailure';
 import { type DomainSnapshotState, useRefreshState } from '../store';
+import { isResourceStreamDomain as isResourceTableDomain } from '../streaming/resourceStreamDomains';
 import { resourceStreamManager } from '../streaming/resourceStreamManager';
 import type {
   ContainerLogsSnapshotPayload,
@@ -35,7 +36,6 @@ import type {
   RefreshDomain,
   TelemetryStreamStatus,
 } from '../types';
-
 // Import from extracted modules
 import {
   buildBrokerReadRows,
@@ -49,10 +49,8 @@ import {
   buildOrchestratorSummary,
   buildPermissionRows,
   type CapabilityBatchRow,
-  CLUSTER_SCOPE,
   type DiagnosticsPanelProps,
   type DiagnosticsRow,
-  DOMAIN_REFRESHER_MAP,
   DOMAIN_STREAM_MAP,
   dedupeDiagnosticsRows,
   formatInterval,
@@ -88,9 +86,6 @@ import { EffectivePermissionsTable } from './diagnostics/TableEffectivePermissio
 import { KubernetesAPIClientsTable } from './diagnostics/TableKubernetesAPIClients';
 import { useDiagnosticsPolling } from './diagnostics/useDiagnosticsPolling';
 
-// Re-export for backwards compatibility
-export { resolveDomainNamespace } from './diagnostics';
-
 // 'inactive' is its own state, NOT a degree of failure. A scope with no stream
 // is usually just unleased; folding that into 'degraded' told the user
 // something was wrong with a domain they simply were not using.
@@ -104,15 +99,10 @@ type StreamHealthSummary = {
   lastDeliveryAt?: number;
 };
 
-const PERMISSION_ERROR_HINTS = ['forbidden', 'permission', 'unauthorized', 'access denied', 'rbac'];
-
-// diagnosticsRowClusterId resolves the single cluster owning a scope. A scope
-// naming several clusters has no single owner, so it groups at the app level
-// rather than being attributed to an arbitrary member.
-const diagnosticsRowClusterId = (scope?: string | null): string => {
-  const parsed = parseClusterScopeList(scope);
-  return parsed.isMultiCluster ? '' : (parsed.clusterIds[0] ?? '');
-};
+// diagnosticsRowClusterId resolves the cluster owning a scope; an unprefixed
+// scope groups at the app level.
+const diagnosticsRowClusterId = (scope?: string | null): string =>
+  parseClusterScope(scope).clusterId;
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : null;
@@ -178,8 +168,7 @@ const formatScopeQuery = (query: string): string => {
 
 const formatScopeTail = (scope: string): string => {
   const trimmed = scope.trim();
-  const normalized = trimmed.toLowerCase();
-  if (!trimmed || normalized === CLUSTER_SCOPE || normalized === 'cluster') {
+  if (!trimmed) {
     return '';
   }
   const queryIndex = trimmed.indexOf('?');
@@ -198,66 +187,36 @@ const resolveScopeDetails = (
   scope: string | undefined,
   activeClusterId: string,
   getClusterMeta: (config: string) => { id: string; name: string }
-): { display: string; tooltip?: string; entries?: ScopeEntry[] } => {
+): { display: string; tooltip?: string; entry?: ScopeEntry } => {
   const trimmed = (scope ?? '').trim();
   if (!trimmed) {
     return { display: '-', tooltip: 'No active scope' };
   }
-  const { clusterIds, scope: scopeTail } = parseClusterScopeList(trimmed);
-  if (clusterIds.length === 0) {
+  const { clusterId, scope: scopeTail } = parseClusterScope(trimmed);
+  if (!clusterId) {
     return { display: trimmed, tooltip: trimmed };
   }
+  const clusterName = getClusterMeta(clusterId).name || clusterId;
+  const isActive = clusterId === activeClusterId;
+  const display = isActive ? `${clusterName} (active)` : clusterName;
   const tailDisplay = formatScopeTail(scopeTail);
-  // Build structured entries sorted with active cluster first.
-  const entries: ScopeEntry[] = clusterIds
-    .map((id) => {
-      const meta = getClusterMeta(id);
-      const name = meta.name || id;
-      const isActive = id === activeClusterId;
-      return {
-        label: (isActive ? 'Active' : 'Background') as ScopeEntry['label'],
-        clusterName: name,
-      };
-    })
-    .sort((a, b) => {
-      if (a.label === 'Active' && b.label !== 'Active') {
-        return -1;
-      }
-      if (b.label === 'Active' && a.label !== 'Active') {
-        return 1;
-      }
-      return a.clusterName.localeCompare(b.clusterName);
-    });
-  // Format as "cluster-A (active), cluster-B, cluster-C".
-  const display = entries
-    .map((e) => (e.label === 'Active' ? `${e.clusterName} (active)` : e.clusterName))
-    .join(', ');
   if (tailDisplay) {
     return { display: `${display} - ${tailDisplay}`, tooltip: trimmed };
   }
-  return { display, tooltip: trimmed, entries };
+  return {
+    display,
+    tooltip: trimmed,
+    entry: { label: isActive ? 'Active' : 'Background', clusterName },
+  };
 };
 
-const parseScopeQueryParams = (scopeTail: string): URLSearchParams => {
-  const trimmed = scopeTail.trim();
-  const queryIndex = trimmed.indexOf('?');
-  const query = queryIndex >= 0 ? trimmed.slice(queryIndex + 1) : trimmed;
-  return new URLSearchParams(query);
-};
-
-const scopeTailHasQuery = (scopeTail: string): boolean =>
-  scopeTail.includes('?') || scopeTail.includes('=') || scopeTail.includes('&');
+const scopeQuery = (domain: RefreshDomain, scope: string | undefined): string =>
+  (scope ? tryParseRefreshScope(domain, scope)?.query : undefined) ?? '';
 
 const isTransientResourceTableQueryScope = (
   domain: RefreshDomain,
   scope: string | undefined
-): boolean => {
-  if (!isResourceTableDomain(domain)) {
-    return false;
-  }
-  const { scope: scopeTail } = parseClusterScopeList((scope ?? '').trim());
-  return scopeTailHasQuery(scopeTail);
-};
+): boolean => isResourceTableDomain(domain) && scopeQuery(domain, scope) !== '';
 
 const FIXED_SCOPE_ROLES: Partial<Record<RefreshDomain, { label: string; tooltip: string }>> = {
   'catalog-diff': { label: 'Object Diff', tooltip: 'Object diff modal catalog query' },
@@ -273,8 +232,14 @@ const FIXED_SCOPE_ROLES: Partial<Record<RefreshDomain, { label: string; tooltip:
   'cluster-overview': { label: 'System', tooltip: 'System refresh scope' },
 };
 
-const resolveCatalogScopeRole = (scopeTail: string): { label: string; tooltip: string } => {
-  const params = parseScopeQueryParams(scopeTail);
+const resolveCatalogScopeRole = (query: string): { label: string; tooltip: string } => {
+  if (!query) {
+    return {
+      label: 'Live Scope',
+      tooltip: 'Cluster catalog stream scope; Browse and resource discovery re-read on its changes',
+    };
+  }
+  const params = new URLSearchParams(query);
   return params.get('limit') === '1'
     ? {
         label: 'Metadata',
@@ -283,18 +248,21 @@ const resolveCatalogScopeRole = (scopeTail: string): { label: string; tooltip: s
     : { label: 'Page Query', tooltip: 'Current Browse table page query' };
 };
 
-const resolveResourceStreamScopeRole = (scopeTail: string): { label: string; tooltip: string } => {
-  if (scopeTailHasQuery(scopeTail)) {
+const resolveResourceStreamScopeRole = (
+  domain: RefreshDomain,
+  scope: string
+): { label: string; tooltip: string } => {
+  const parsed = tryParseRefreshScope(domain, scope);
+  if (parsed?.query) {
     return {
       label: 'Table Query',
       tooltip: 'Query-backed GridTable snapshot for filters, sorting, or pagination',
     };
   }
-  const normalizedTail = scopeTail.trim().toLowerCase();
   return {
     label: 'Live Scope',
     tooltip:
-      !normalizedTail || normalizedTail === 'cluster'
+      parsed?.selector.kind === 'cluster'
         ? 'Base resource-stream scope retained for live data and metrics'
         : 'Resource-stream scope retained for live data and metrics',
   };
@@ -305,29 +273,20 @@ const resolveScopeRole = (
   scope: string | undefined
 ): { label: string; tooltip?: string } => {
   const trimmed = (scope ?? '').trim();
-  const { scope: scopeTail } = parseClusterScopeList(trimmed);
   if (domain === 'catalog') {
-    return resolveCatalogScopeRole(scopeTail);
+    return resolveCatalogScopeRole(scopeQuery(domain, trimmed));
   }
   if (DOMAIN_STREAM_MAP[domain] === 'resources') {
-    return resolveResourceStreamScopeRole(scopeTail);
+    return resolveResourceStreamScopeRole(domain, trimmed);
   }
   return FIXED_SCOPE_ROLES[domain] ?? { label: 'Snapshot', tooltip: 'Snapshot refresh scope' };
 };
 
-const resolveErrorReason = (error?: string | null): string | null => {
-  if (!error) {
-    return null;
-  }
-  const trimmed = error.trim();
-  if (!trimmed) {
-    return null;
-  }
-  const normalized = trimmed.toLowerCase();
-  if (PERMISSION_ERROR_HINTS.some((token) => normalized.includes(token))) {
+const resolveErrorReason = (failure?: RefreshFailure | null): string | null => {
+  if (isPermissionDenied(failure)) {
     return 'permissions';
   }
-  return trimmed;
+  return failureMessage(failure)?.trim() || null;
 };
 
 const resolveStreamTelemetryHealth = (
@@ -396,12 +355,12 @@ const entryMatchesCluster = (
   clusterId: string
 ): boolean => {
   const [scopeKey, state] = entry;
-  return parseClusterScopeList(state.scope ?? scopeKey).clusterIds.includes(clusterId);
+  return parseClusterScope(state.scope ?? scopeKey).clusterId === clusterId;
 };
 
 const entryHasClusterScope = (entry: [string, DomainSnapshotState<unknown>]): boolean => {
   const [scopeKey, state] = entry;
-  return parseClusterScopeList(state.scope ?? scopeKey).clusterIds.length > 0;
+  return parseClusterScope(state.scope ?? scopeKey).clusterId !== '';
 };
 
 const pickPreferredScopeState = (
@@ -493,7 +452,7 @@ const resolveStreamHealthDetails = (
 const resolveHealthDetails = (params: {
   domain: RefreshDomain;
   status: DiagnosticsRow['status'];
-  error?: string | null;
+  error?: RefreshFailure | null;
   scope?: string;
   streamHealth?: StreamHealthSummary | null;
 }): HealthDetails => {
@@ -510,7 +469,7 @@ const resolveHealthDetails = (params: {
     const reason = resolveErrorReason(error) ?? 'error';
     return {
       label: formatHealthLabel('unhealthy', reason),
-      tooltip: error ?? reason,
+      tooltip: failureMessage(error) ?? reason,
       status: 'unhealthy',
     };
   }
@@ -556,27 +515,22 @@ const resolveDisabledPollingDetails = (
   return { label: 'disabled', tooltip: 'Polling disabled for this domain', enabled: false };
 };
 
+// Each leased scope polls on its own schedule; a scope nobody leases does not.
 const resolvePollingDetails = (params: {
   domain: RefreshDomain;
-  refresherName?: (typeof DOMAIN_REFRESHER_MAP)[RefreshDomain];
+  scope: string | undefined;
   streamActive: boolean;
   streamHealthy: boolean;
 }): PollingDetails => {
-  const { domain, refresherName, streamActive, streamHealthy } = params;
-  if (!refresherName) {
-    return { label: '—', tooltip: 'No polling refresher', enabled: false };
-  }
-  const refresherState = refreshManager.getState(refresherName);
-  if (!refresherState) {
-    return { label: '—', tooltip: 'Polling not registered', enabled: false };
-  }
-  if (refresherState.status === 'paused') {
+  const { domain, scope, streamActive, streamHealthy } = params;
+  const polling = refreshOrchestrator.getPollingStatus(domain, scope);
+  if (polling.state === 'paused') {
     return { label: 'paused', tooltip: 'Polling paused by auto-refresh', enabled: false };
   }
-  if (refresherState.status === 'disabled') {
+  if (polling.state === 'off') {
     return resolveDisabledPollingDetails(domain, streamActive, streamHealthy);
   }
-  return { label: 'enabled', tooltip: `State: ${refresherState.status}`, enabled: true };
+  return { label: 'enabled', tooltip: 'Polling while leased', enabled: true };
 };
 
 const ROW_COUNT_DOMAINS = new Set<RefreshDomain>([
@@ -847,7 +801,7 @@ const buildDomainTelemetryDetails = (params: {
     streamMode,
     lastUpdated: combinedLastUpdated > 0 ? combinedLastUpdated : undefined,
     telemetryLastUpdatedInfo: resolveTelemetryLastUpdated(streamLastEvent, telemetryInfo),
-    combinedError: resolveTelemetryError(telemetryLastError, state.error),
+    combinedError: resolveTelemetryError(telemetryLastError, failureMessage(state.error)),
     telemetryTooltip: buildTelemetryTooltip({
       telemetryLastError,
       isResourceStreamDomain,
@@ -859,7 +813,7 @@ const buildDomainTelemetryDetails = (params: {
     telemetrySuccess: telemetryInfo?.successCount,
     telemetryFailure: telemetryInfo?.failureCount,
     durationLabel: formatTelemetryMilliseconds(telemetryInfo?.lastDurationMs),
-    syncWaitLabel: formatTelemetryMilliseconds(telemetryInfo?.maxInformerSyncWaitMs),
+    syncWaitLabel: formatTelemetryMilliseconds(telemetryInfo?.maxSyncWaitMs),
     streamHealth,
     streamActive: resolveStreamActive(isResourceStreamDomain, streamTelemetry, streamHealth),
     streamHealthy: streamHealth?.status === 'healthy',
@@ -938,22 +892,19 @@ const stateLastUpdated = (state: DomainSnapshotState<unknown>): number | undefin
 const stateVersion = (state: DomainSnapshotState<unknown>): string =>
   state.version !== null && state.version !== undefined ? String(state.version) : '—';
 
+const POD_SELECTOR_LABELS: Partial<
+  Record<ScopeSelector['kind'], (selector: ScopeSelector) => string>
+> = {
+  'all-namespaces': () => 'All namespaces',
+  namespace: (selector) => (selector.kind === 'namespace' ? selector.namespace : ''),
+  node: (selector) => (selector.kind === 'node' ? selector.node : ''),
+  workload: (selector) => (selector.kind === 'workload' ? selector.object.name : ''),
+};
+
 const resolvePodLabel = (scope: string): string => {
-  const displayScope = stripClusterScope(scope);
-  if (displayScope.startsWith('namespace:')) {
-    const namespace = displayScope.slice('namespace:'.length) || 'all';
-    return namespace === 'all'
-      ? 'ObjPanel - Pods - All namespaces'
-      : `ObjPanel - Pods - ${namespace}`;
-  }
-  if (displayScope.startsWith('node:')) {
-    return `ObjPanel - Pods - ${displayScope.slice('node:'.length)}`;
-  }
-  if (displayScope.startsWith('workload:')) {
-    const parts = displayScope.split(':');
-    return `ObjPanel - Pods - ${parts[parts.length - 1]}`;
-  }
-  return 'ObjPanel - Pods';
+  const selector = tryParseRefreshScope('pods', scope)?.selector;
+  const target = selector ? POD_SELECTOR_LABELS[selector.kind]?.(selector) : undefined;
+  return target ? `ObjPanel - Pods - ${target}` : 'ObjPanel - Pods';
 };
 
 const buildPodTelemetryTooltip = (
@@ -977,7 +928,6 @@ const buildPodDiagnosticsRow = (
   const payload = state.data as PodSnapshotPayload | null;
   const lastUpdated = stateLastUpdated(state);
   const lastUpdatedInfo = formatLastUpdated(lastUpdated);
-  const refresherName = DOMAIN_REFRESHER_MAP.pods;
   const streamHealth = toStreamHealthSummary(
     resourceStreamManager.getHealthSnapshot('pods', scope)
   );
@@ -985,7 +935,7 @@ const buildPodDiagnosticsRow = (
   const streamHealthy = streamHealth?.status === 'healthy';
   const pollingDetails = resolvePollingDetails({
     domain: 'pods',
-    refresherName,
+    scope,
     streamActive,
     streamHealthy,
   });
@@ -1018,17 +968,16 @@ const buildPodDiagnosticsRow = (
     domain: 'pods',
     label: resolvePodLabel(scope),
     status: state.status,
+    streamActive,
     version: stateVersion(state),
-    interval: formatInterval(
-      refresherName ? refreshManager.getRefresherInterval(refresherName) : null
-    ),
+    interval: formatInterval(refreshOrchestrator.getPollingStatus('pods', scope).intervalMs),
     lastUpdated: lastUpdatedInfo.display,
     lastUpdatedTooltip: lastUpdatedInfo.tooltip,
     duration: '—',
     dropped: state.droppedAutoRefreshes,
     stale: lastUpdated ? Date.now() - lastUpdated > STALE_THRESHOLD_MS : false,
-    error: state.error ?? '—',
-    telemetryTooltip: buildPodTelemetryTooltip(state.error, streamHealth),
+    error: failureMessage(state.error) ?? '—',
+    telemetryTooltip: buildPodTelemetryTooltip(failureMessage(state.error), streamHealth),
     metricsStatus: 'N/A',
     metricsTooltip: 'Pod usage is joined onto the pods rows at serve',
 
@@ -1038,7 +987,7 @@ const buildPodDiagnosticsRow = (
     scopeTooltip: scopeDetails.tooltip,
     role: roleDetails.label,
     roleTooltip: roleDetails.tooltip,
-    scopeEntries: scopeDetails.entries,
+    scopeEntry: scopeDetails.entry,
     mode: modeDetails.label,
     modeTooltip: modeDetails.tooltip,
     healthStatus: healthDetails.label,
@@ -1048,15 +997,25 @@ const buildPodDiagnosticsRow = (
   };
 };
 
+// Object and Helm-release selectors name the panel's object; other selectors do not.
+const scopeSelectorIdentity = (
+  selector: ScopeSelector | undefined
+): { namespace: string; name: string } => {
+  if (selector?.kind === 'object') {
+    return selector.object;
+  }
+  if (selector?.kind === 'helm-release') {
+    return selector;
+  }
+  return { namespace: '', name: '' };
+};
+
 const resolveObjectPanelScopeIdentity = (
+  domain: RefreshDomain,
   scope: string
 ): { namespaceLabel: string; name: string } => {
-  const parts = stripClusterScope(scope).split(':');
-  const namespace = parts[0] ?? '';
-  return {
-    namespaceLabel: namespace && namespace !== CLUSTER_SCOPE ? namespace : '-',
-    name: parts.slice(2).join(':'),
-  };
+  const identity = scopeSelectorIdentity(tryParseRefreshScope(domain, scope)?.selector);
+  return { namespaceLabel: identity.namespace || '-', name: identity.name };
 };
 
 interface ContainerLogsRowContext extends ScopedRowContext {
@@ -1080,7 +1039,7 @@ const resolveContainerLogsRowContext = (
   const streamHealthy = streamHealth?.status === 'healthy';
   const pollingDetails = resolvePollingDetails({
     domain: 'container-logs',
-    refresherName: DOMAIN_REFRESHER_MAP['container-logs'],
+    scope,
     streamActive,
     streamHealthy,
   });
@@ -1106,7 +1065,7 @@ const buildContainerLogsDiagnosticsRow = (
 ): DiagnosticsRow => {
   const payload = state.data as ContainerLogsSnapshotPayload | null;
   const lastUpdatedInfo = formatLastUpdated(stateLastUpdated(state));
-  const identity = resolveObjectPanelScopeIdentity(scope);
+  const identity = resolveObjectPanelScopeIdentity('container-logs', scope);
   const roleDetails = resolveScopeRole('container-logs', scope);
   const countDetails = buildDiagnosticsCountDetails(
     payload?.entries?.length ?? 0,
@@ -1139,9 +1098,9 @@ const buildContainerLogsDiagnosticsRow = (
     duration: '—',
     dropped: state.droppedAutoRefreshes,
     stale: false,
-    error: state.error ?? '—',
+    error: failureMessage(state.error) ?? '—',
 
-    telemetryTooltip: state.error ?? undefined,
+    telemetryTooltip: failureMessage(state.error) ?? undefined,
     metricsStatus: '—',
     metricsTooltip: 'Streaming domain',
 
@@ -1154,7 +1113,7 @@ const buildContainerLogsDiagnosticsRow = (
     scopeTooltip: scopeDetails.tooltip,
     role: roleDetails.label,
     roleTooltip: roleDetails.tooltip,
-    scopeEntries: scopeDetails.entries,
+    scopeEntry: scopeDetails.entry,
     mode: context.modeDetails.label,
     modeTooltip: context.modeDetails.tooltip,
     healthStatus: healthDetails.label,
@@ -1171,7 +1130,7 @@ const buildObjectPanelDiagnosticsRow = (
   context: ScopedRowContext
 ): DiagnosticsRow => {
   const lastUpdatedInfo = formatLastUpdated(stateLastUpdated(state));
-  const identity = resolveObjectPanelScopeIdentity(scope);
+  const identity = resolveObjectPanelScopeIdentity(domain, scope);
   const scopeDetails = resolveScopeDetails(
     scope,
     context.selectedClusterId,
@@ -1197,9 +1156,9 @@ const buildObjectPanelDiagnosticsRow = (
     duration: '—',
     dropped: state.droppedAutoRefreshes,
     stale: false,
-    error: state.error ?? '—',
+    error: failureMessage(state.error) ?? '—',
 
-    telemetryTooltip: state.error ?? undefined,
+    telemetryTooltip: failureMessage(state.error) ?? undefined,
     metricsStatus: '—',
     metricsTooltip: 'Polling domain',
 
@@ -1212,7 +1171,7 @@ const buildObjectPanelDiagnosticsRow = (
     scopeTooltip: scopeDetails.tooltip,
     role: roleDetails.label,
     roleTooltip: roleDetails.tooltip,
-    scopeEntries: scopeDetails.entries,
+    scopeEntry: scopeDetails.entry,
     mode: 'polling',
     modeTooltip: 'Polling via object panel refresher',
     healthStatus: healthDetails.label,
@@ -1373,15 +1332,14 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         const data = asRecord(state.data);
         const countDetails = resolveDiagnosticsCountDetails(domain, state, data);
         const lastUpdatedInfo = formatLastUpdated(telemetryDetails.lastUpdated);
-        const refresherName = DOMAIN_REFRESHER_MAP[domain];
         const intervalLabel = formatInterval(
-          refresherName ? refreshManager.getRefresherInterval(refresherName) : null
+          refreshOrchestrator.getPollingStatus(domain, effectiveScope).intervalMs
         );
         const namespaceLabel = resolveDomainNamespace(domain, effectiveScope);
 
         const pollingDetails = resolvePollingDetails({
           domain,
-          refresherName,
+          scope: effectiveScope,
           streamActive: telemetryDetails.streamActive,
           streamHealthy: telemetryDetails.streamHealthy,
         });
@@ -1408,6 +1366,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           domain,
           label,
           status: state.status,
+          streamActive: telemetryDetails.streamActive,
           version: stateVersion(state),
           interval: intervalLabel,
           lastUpdated:
@@ -1433,7 +1392,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           scopeTooltip: scopeDetails.tooltip,
           role: roleDetails.label,
           roleTooltip: roleDetails.tooltip,
-          scopeEntries: scopeDetails.entries,
+          scopeEntry: scopeDetails.entry,
           mode: modeDetails.label,
           modeTooltip: modeDetails.tooltip,
           healthStatus: healthDetails.label,
@@ -1519,7 +1478,11 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     getClusterMeta,
   ]);
 
-  const filteredRows = useMemo(() => rows.filter((row) => row.status !== 'idle'), [rows]);
+  // Idle scopes nobody uses are noise; an idle scope a live stream serves is in use.
+  const filteredRows = useMemo(
+    () => rows.filter((row) => row.status !== 'idle' || row.streamActive),
+    [rows]
+  );
 
   // Cluster names for the tree's cluster group rows, keyed by cluster id.
   const clusterNamesById = useMemo(() => {

@@ -17,7 +17,7 @@
  *                 pod descriptor's collector + edges).
  *
  * The Table and Aggregate halves both resolve the pod's ReplicaSet->Deployment owner
- * via the SAME rsLister, so the owner KIND/name and the metrics-bucketing WorkloadKind
+ * via the SAME ReplicaSet owner lookup, so the owner KIND/name and the metrics-bucketing WorkloadKind
  * match the typed-pod paths byte-for-byte (proven in pod_ingest_projector_test.go and
  * pod_aggregate_test.go).
  */
@@ -46,7 +46,7 @@ var (
 // NewPodIngestProjector returns the ingest.ProjectFunc that projects a reflector-
 // decoded Pod into the four-half Bundle every pod consumer reads. meta stamps the
 // PodSummary's cluster identity and the catalog Summary / object-map node cluster id;
-// rsLister resolves the ReplicaSet->Deployment owner for the Table half's OwnerKind
+// sources.ReplicaSetOwner resolves the ReplicaSet->Deployment owner for the Table half's OwnerKind
 // and the Aggregate half's WorkloadKind (the metrics-bucketing kind). The Table half
 // carries no-data metrics so base pod rows do not depend on the metrics provider.
 func NewPodIngestProjector(meta ClusterMeta, sources PodOwnerSources) ingest.ProjectFunc {
@@ -66,7 +66,7 @@ func NewPodIngestProjector(meta ClusterMeta, sources PodOwnerSources) ingest.Pro
 		var metaObj metav1.Object = pod
 		table := podres.BuildStreamSummary(
 			streamMeta, pod,
-			sources.ReplicaSets,
+			sources.ReplicaSetOwner,
 			jobOwnerLookupAdapter(sources.JobControllerOwner),
 		)
 		aggregate := projectPodAggregateFromSummary(pod, sources, table)
@@ -75,16 +75,20 @@ func NewPodIngestProjector(meta ClusterMeta, sources PodOwnerSources) ingest.Pro
 			Aggregate: aggregate,
 			Catalog:   catalogProject(metaObj),
 			ObjectMap: nodeProject(meta.ClusterID, metaObj),
-			Indexes:   podAggregateBundleIndexes(aggregate),
 		}, nil
 	}
 }
 
-func podAggregateBundleIndexes(aggregate streamrows.PodAggregate) map[string][]string {
-	if aggregate.OwnerKey == "" {
+// PodOwnerKeyIndexValues is the pod store's PodOwnerKeyIndexName index: a pod
+// bundle is reachable through its Aggregate half's owner-workload key. Standalone
+// pods (no owner key) are not indexed. The store derives the values from each
+// stored bundle, so a rewrite that changes OwnerKey moves the pod in the index.
+func PodOwnerKeyIndexValues(bundle ingest.Bundle) []string {
+	aggregate, ok := bundle.Aggregate.(streamrows.PodAggregate)
+	if !ok || aggregate.OwnerKey == "" {
 		return nil
 	}
-	return map[string][]string{podOwnerKeyIndexName: []string{aggregate.OwnerKey}}
+	return []string{aggregate.OwnerKey}
 }
 
 // errNotPodObject is returned when the reflector decodes a non-Pod into the pod store;

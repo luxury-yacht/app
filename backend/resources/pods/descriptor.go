@@ -8,19 +8,19 @@ import "github.com/luxury-yacht/app/backend/kind/kindspec"
 
 var Descriptor = kindspec.Descriptor{
 	Identity:        Identity,
-	CatalogSource:   kindspec.CatalogShared,
+	ListDomain:      "pods",
+	Display:         kindspec.Display{ShortName: "pod", SearchAliases: []string{"po"}},
 	DetailCacheable: true,
-	// IngestOwned: the pod typed informer is never instantiated. A bespoke pod
-	// reflector (snapshot.NewPodIngestProjector, wired via IngestManager.RegisterReflector)
-	// projects each Pod at intake into a four-half Bundle, and every subsystem that
-	// would otherwise read pods from the shared informer (the catalog, the object map,
-	// the response-cache invalidator, the pods maintained store) reads the ingest
-	// projections instead. Pods has no Stream descriptor, so the generic ingest loop
-	// does not build it; the system wires the bespoke reflector explicitly.
-	IngestOwned: true,
+	// A bespoke pod reflector (snapshot.NewPodIngestProjector, wired via
+	// IngestManager.RegisterReflector) projects each Pod at intake into a four-half
+	// Bundle that every pod consumer reads (the catalog, the object map, the
+	// response-cache invalidator, the pods maintained store). Pods has no Stream
+	// descriptor, so the generic ingest loop does not build it; the system wires the
+	// bespoke reflector explicitly.
 	Collector:   &ObjectMapNode,
 	Edges:       ObjectMapEdges,
-	Graph:       kindspec.ObjectMapGraph{DirectionalTraversal: true},
 	PortForward: &kindspec.PortForwardTarget{ResolvePod: ForwardPodName},
-	Actions:     kindspec.ObjectActions{Aliases: []string{"pod"}},
+	Panel:       kindspec.ObjectPanel{Shell: kindspec.PanelShellExec, DebugContainer: true},
+	Logs:        &LogsTarget,
+	Metrics:     kindspec.MetricsPods,
 }

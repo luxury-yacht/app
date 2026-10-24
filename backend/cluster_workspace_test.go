@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/stretchr/testify/require"
 )
@@ -454,4 +455,22 @@ func requireWorkspaceResult(t *testing.T, result <-chan ClusterWorkspaceResult) 
 	case <-time.After(time.Second):
 		t.Fatal("workspace command did not complete after releasing the selection mutation boundary")
 	}
+}
+
+// A rejected selection comes back with its status, so the frontend shows the
+// reason instead of an unclassified failure; the state still comes back too.
+func TestApplyClusterWorkspaceReportsARejectedSelectionWithItsStatus(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
+	app.Workspace.GetClusterWorkspaceStateForWindow("workspace-1")
+
+	result := app.Workspace.ApplyClusterWorkspace(ClusterWorkspaceCommand{
+		WindowID:                  "workspace-1",
+		SelectedKubeconfigs:       []string{":prod"},
+		UpdateSelectedKubeconfigs: true,
+	})
+
+	require.NotNil(t, result.Error)
+	require.Equal(t, errorstatus.ReasonBadRequest, result.Error.Reason)
+	require.Empty(t, result.State.SelectedKubeconfigs)
 }

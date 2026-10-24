@@ -25,7 +25,7 @@ func TestOpenClusterWindowPreservesSourceAndSharedPanels(t *testing.T) {
 			backend.windowClusters[source] = clusters
 			tab := validPanelGroupSnapshot().Tabs[0]
 			groups := []panelwindow.WorkspaceGroup{{ClusterID: "cluster-1", GroupID: "right", Tabs: []panelwindow.TabSnapshot{tab}, ActivePanelID: tab.PanelID}}
-			require.NoError(t, registry.PublishDockedPanels(source, groups))
+			seedPanels(t, registry.workspace, source, panelwindow.PanelLocationDocked, groups)
 			before := registry.workspace.Snapshot("cluster-1")
 			create := registry.newWindow
 			var target string
@@ -181,7 +181,7 @@ func TestOpenClusterWindowKeepsRealWorkspaceSelectionAndPanelOwnership(t *testin
 	tab := validPanelGroupSnapshot().Tabs[0]
 	tab.ObjectRef.ClusterID = clusterID
 	groups := []panelwindow.WorkspaceGroup{{ClusterID: clusterID, GroupID: "right", Tabs: []panelwindow.TabSnapshot{tab}, ActivePanelID: tab.PanelID}}
-	require.NoError(t, registry.PublishDockedPanels(source, groups))
+	seedPanels(t, registry.workspace, source, panelwindow.PanelLocationDocked, groups)
 	before := runtime.Workspace.PanelWorkspaceDirectory().Snapshot(clusterID)
 	create := registry.newWindow
 	var target string

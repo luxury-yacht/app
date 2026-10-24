@@ -6,7 +6,8 @@
  * events and frames in and applies the returned effects.
  */
 
-import { isPermissionDeniedStatus, resolvePermissionDeniedMessage } from '../permissionErrors';
+import { isErrorStatus } from '@utils/errorStatus';
+import { resolvePermissionDeniedMessage } from '../permissionErrors';
 import type {
   ContainerLogsIssueState,
   ContainerLogsLimitScope,
@@ -87,8 +88,8 @@ const hasValidFlags = (value: Record<string, unknown>): boolean =>
   isOptional(value.snapshotComplete, 'boolean') &&
   isOptional(value.trimmed, 'number') &&
   isOptional(value.error, 'string') &&
-  isOptional(value.retryable, 'boolean') &&
-  (value.errorDetails === undefined || isPermissionDeniedStatus(value.errorDetails));
+  isOptional(value.reconnect, 'boolean') &&
+  (value.errorDetails === undefined || isErrorStatus(value.errorDetails));
 
 const isString = (value: unknown): value is string => typeof value === 'string';
 
@@ -183,18 +184,13 @@ const receiveError = (
 ): ContainerLogsProtocolTransition => {
   const reason =
     resolvePermissionDeniedMessage(frame.error, frame.errorDetails) || 'Log stream failed';
-  if (frame.retryable) {
+  if (frame.reconnect) {
     return reconnect(state, reason);
   }
   return {
     state: {
       ...state,
-      phase: {
-        status: 'failed',
-        reason,
-        permissionDenied: isPermissionDeniedStatus(frame.errorDetails),
-        retryable: false,
-      },
+      phase: { status: 'failed', reason, failure: frame.errorDetails ?? null },
       staged: null,
     },
     effects: [{ type: 'close-connection' }],

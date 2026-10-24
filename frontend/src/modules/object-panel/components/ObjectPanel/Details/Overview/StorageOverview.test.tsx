@@ -2,7 +2,8 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/StorageOverview.test.tsx
  *
  * Exercises the storage descriptors (PVC / PV / StorageClass) through the descriptor-driven
- * OverviewRenderer. Each case renders the matching descriptor with a DTO-shaped fixture.
+ * OverviewRenderer inside the real app shell: related-object links open panels through the real
+ * panel owners. Only the backend boundary is faked (test-utils/appState).
  */
 
 import type {
@@ -12,31 +13,18 @@ import type {
 } from '@core/backend-api/models';
 import type React from 'react';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { partialModelFixture } from '@/test-utils/partialModelFixture';
 import { pvcDescriptor, pvDescriptor, storageClassDescriptor } from './descriptors/storage';
 import { OverviewRenderer } from './OverviewRenderer';
+import type { OverviewDescriptor } from './schema';
 
-const openWithObjectMock = vi.fn();
-const defaultClusterId = 'alpha:ctx';
-const context = { clusterId: defaultClusterId, clusterName: 'alpha' };
-const podRef = (name: string, namespace: string) => ({
-  clusterId: defaultClusterId,
-  group: '',
-  version: 'v1',
-  kind: 'Pod',
-  resource: 'pods',
-  namespace,
-  name,
-});
-
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({
-    openWithObject: openWithObjectMock,
-    objectData: { clusterId: defaultClusterId, clusterName: 'alpha' },
-  }),
-}));
+const app = installAppStateHarness();
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
@@ -74,10 +62,6 @@ vi.mock('@shared/components/kubernetes/ResourceStatus', () => ({
     ) : null,
 }));
 
-vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: vi.fn() }),
-}));
-
 const getValueForLabel = (container: HTMLElement, label: string) => {
   const labelElement = Array.from(container.querySelectorAll<HTMLElement>('.overview-label')).find(
     (el) => el.textContent?.trim() === label
@@ -91,49 +75,67 @@ const getLinkByText = (container: HTMLElement, text: string) =>
   );
 
 describe('StorageOverview', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  let view: MountedApp;
+  let dev: TestCluster;
+  let container: HTMLElement;
 
-  const renderPvc = async (
-    fixture: Partial<persistentvolumeclaim.PersistentVolumeClaimDetails>
-  ) => {
-    const data = partialModelFixture<persistentvolumeclaim.PersistentVolumeClaimDetails>(fixture);
-    await act(async () => {
-      root.render(<OverviewRenderer descriptor={pvcDescriptor} data={data} context={context} />);
-      await Promise.resolve();
-    });
-  };
-
-  const renderPv = async (fixture: Partial<persistentvolume.PersistentVolumeDetails>) => {
-    const data = partialModelFixture<persistentvolume.PersistentVolumeDetails>(fixture);
-    await act(async () => {
-      root.render(<OverviewRenderer descriptor={pvDescriptor} data={data} context={context} />);
-      await Promise.resolve();
-    });
-  };
-
-  const renderStorageClass = async (fixture: Partial<storageclass.StorageClassDetails>) => {
-    const data = partialModelFixture<storageclass.StorageClassDetails>(fixture);
-    await act(async () => {
-      root.render(
-        <OverviewRenderer descriptor={storageClassDescriptor} data={data} context={context} />
-      );
-      await Promise.resolve();
-    });
-  };
-
-  beforeEach(() => {
-    openWithObjectMock.mockReset();
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
+  const podRef = (name: string, namespace: string) => ({
+    clusterId: dev.clusterId,
+    group: '',
+    version: 'v1',
+    kind: 'Pod',
+    resource: 'pods',
+    namespace,
+    name,
   });
 
-  afterEach(() => {
-    act(() => {
-      root.unmount();
+  // A panel the real panel state holds, in the overview's cluster.
+  const panel = (identity: {
+    group: string;
+    version: string;
+    kind: string;
+    namespace: string;
+    name: string;
+  }) => ({ clusterId: dev.clusterId, clusterName: dev.clusterName, ...identity });
+
+  const renderDescriptor = async <T,>(descriptor: OverviewDescriptor<T>, data: T) => {
+    await view.show(
+      <OverviewRenderer
+        descriptor={descriptor}
+        data={data}
+        context={{ clusterId: dev.clusterId, clusterName: dev.clusterName }}
+      />
+    );
+  };
+
+  const renderPvc = (fixture: Partial<persistentvolumeclaim.PersistentVolumeClaimDetails>) =>
+    renderDescriptor(
+      pvcDescriptor,
+      partialModelFixture<persistentvolumeclaim.PersistentVolumeClaimDetails>(fixture)
+    );
+  const renderPv = (fixture: Partial<persistentvolume.PersistentVolumeDetails>) =>
+    renderDescriptor(
+      pvDescriptor,
+      partialModelFixture<persistentvolume.PersistentVolumeDetails>(fixture)
+    );
+  const renderStorageClass = (fixture: Partial<storageclass.StorageClassDetails>) =>
+    renderDescriptor(
+      storageClassDescriptor,
+      partialModelFixture<storageclass.StorageClassDetails>(fixture)
+    );
+
+  const click = async (element: HTMLElement | undefined) => {
+    await act(async () => {
+      element?.click();
     });
-    container.remove();
+    await app.settle();
+  };
+
+  beforeEach(async () => {
+    dev = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, ['storage', 'claims', 'backups', 'default']);
+    view = await app.render(null);
+    container = view.container;
   });
 
   it('renders PVC-specific fields', async () => {
@@ -162,47 +164,29 @@ describe('StorageOverview', () => {
     const accessModes = getValueForLabel(container, 'Access Modes');
     expect(accessModes?.textContent).toBe('ReadWriteOnce');
     expect(accessModes?.querySelector('.status-chip--info')).toBeTruthy();
+
     const volumeLink = getLinkByText(container, 'pv-123');
     expect(volumeLink).not.toBeUndefined();
-    act(() => {
-      volumeLink?.click();
-    });
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'persistentvolume',
-        name: 'pv-123',
-        clusterId: defaultClusterId,
-      })
-    );
-
+    await click(volumeLink);
     const storageClassLink = getLinkByText(container, 'standard');
     expect(storageClassLink).not.toBeUndefined();
-    act(() => {
-      storageClassLink?.click();
-    });
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'storageclass',
-        name: 'standard',
-        clusterId: defaultClusterId,
-      })
-    );
-
+    await click(storageClassLink);
     const mountedByLink = getLinkByText(container, 'pod-a');
     expect(mountedByLink).not.toBeUndefined();
-    act(() => {
-      mountedByLink?.click();
-    });
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'Pod',
-        name: 'pod-a',
-        namespace: 'storage',
-        clusterId: defaultClusterId,
-        group: '',
+    await click(mountedByLink);
+
+    // Built-in kinds resolve their group/version and take the registry's kind spelling.
+    expect(view.openPanels()).toEqual([
+      panel({ group: '', version: 'v1', kind: 'PersistentVolume', namespace: '', name: 'pv-123' }),
+      panel({
+        group: 'storage.k8s.io',
         version: 'v1',
-      })
-    );
+        kind: 'StorageClass',
+        namespace: '',
+        name: 'standard',
+      }),
+      panel({ group: '', version: 'v1', kind: 'Pod', namespace: 'storage', name: 'pod-a' }),
+    ]);
 
     expect(container.textContent).toContain('Labels');
     expect(container.textContent).toContain('team:');
@@ -224,7 +208,7 @@ describe('StorageOverview', () => {
       accessModes: ['ReadWriteOnce'],
       dataSource: {
         display: {
-          clusterId: defaultClusterId,
+          clusterId: dev.clusterId,
           group: 'snapshot.storage.k8s.io',
           kind: 'VolumeSnapshot',
           namespace: 'storage',
@@ -241,7 +225,7 @@ describe('StorageOverview', () => {
 
   it('opens a cross-namespace clone source and keeps unresolved custom sources unlinked', async () => {
     const ref = {
-      clusterId: 'Cluster-A',
+      clusterId: dev.clusterId,
       group: '',
       version: 'v1',
       kind: 'PersistentVolumeClaim',
@@ -251,8 +235,16 @@ describe('StorageOverview', () => {
     await renderPvc({ name: 'clone', namespace: 'claims', dataSource: { ref } });
     const link = getLinkByText(container, 'PersistentVolumeClaim/original');
     expect(link).toBeDefined();
-    await act(async () => link?.click());
-    expect(openWithObjectMock).toHaveBeenCalledWith(expect.objectContaining(ref));
+    await click(link);
+    expect(view.openPanels()).toEqual([
+      panel({
+        group: '',
+        version: 'v1',
+        kind: 'PersistentVolumeClaim',
+        namespace: 'backups',
+        name: 'original',
+      }),
+    ]);
 
     await renderPvc({
       name: 'clone',
@@ -286,32 +278,30 @@ describe('StorageOverview', () => {
     const accessModes = getValueForLabel(container, 'Access Modes');
     expect(accessModes?.textContent).toBe('ReadWriteMany');
     expect(accessModes?.querySelector('.status-chip--info')).toBeTruthy();
+
     const storageClassLink = getLinkByText(container, 'nfs');
     expect(storageClassLink).not.toBeUndefined();
-    act(() => {
-      storageClassLink?.click();
-    });
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'storageclass',
-        name: 'nfs',
-        clusterId: defaultClusterId,
-      })
-    );
-
+    await click(storageClassLink);
     const claimLink = getLinkByText(container, 'default/cache');
     expect(claimLink).not.toBeUndefined();
-    act(() => {
-      claimLink?.click();
-    });
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'persistentvolumeclaim',
-        name: 'cache',
+    await click(claimLink);
+
+    expect(view.openPanels()).toEqual([
+      panel({
+        group: 'storage.k8s.io',
+        version: 'v1',
+        kind: 'StorageClass',
+        namespace: '',
+        name: 'nfs',
+      }),
+      panel({
+        group: '',
+        version: 'v1',
+        kind: 'PersistentVolumeClaim',
         namespace: 'default',
-        clusterId: defaultClusterId,
-      })
-    );
+        name: 'cache',
+      }),
+    ]);
 
     expect(container.textContent).toContain('Labels');
     expect(container.textContent).toContain('env:');

@@ -20,23 +20,8 @@ export interface AppPreferenceChange {
 }
 
 /**
- * AppPreferenceSchema describes one persisted/runtime app preference the
- * frontend can edit through the settings contract.
- */
-export interface AppPreferenceSchema {
-    "key": string;
-    "type": string;
-    "defaultValue": any;
-    "currentValue": any;
-    "min"?: number | null;
-    "max"?: number | null;
-    "enumOptions"?: string[] | null;
-    "validation"?: string;
-    "runtimeSideEffect": boolean;
-}
-
-/**
- * AppSettings represents the application settings
+ * AppSettings represents the application settings. Each preference's default,
+ * bounds, and allowed values are declared in backend/internal/preferenceschema.
  */
 export interface AppSettings {
     "sidebarClusterResourcesExpanded": boolean;
@@ -85,11 +70,6 @@ export interface AppSettings {
     "autoRefreshEnabled": boolean;
 
     /**
-     * Refresh inactive clusters in the background
-     */
-    "refreshBackgroundClustersEnabled": boolean;
-
-    /**
      * Metrics refresh interval (ms)
      */
     "metricsRefreshIntervalMs": number;
@@ -110,17 +90,17 @@ export interface AppSettings {
     "permissionSSRRFetchConcurrency": number;
 
     /**
-     * Max container log entries kept in memory per Object Panel Logs Tab (100-10000)
+     * Max container log entries kept in memory per Object Panel Logs Tab
      */
     "objPanelLogsBufferMaxSize": number;
 
     /**
-     * Max pod/container Object Panel Logs Tab targets per Logs tab (1-1000)
+     * Max pod/container Object Panel Logs Tab targets per Logs tab
      */
     "objPanelLogsTargetPerScopeLimit": number;
 
     /**
-     * Max pod/container Object Panel Logs Tab targets across all log tabs (1-1000)
+     * Max pod/container Object Panel Logs Tab targets across all log tabs
      */
     "objPanelLogsTargetGlobalLimit": number;
 
@@ -170,32 +150,32 @@ export interface AppSettings {
     "objectPanelFloatingHeight": number;
 
     /**
-     * Hue for gray palette tint in light mode (0-360)
+     * Hue for gray palette tint in light mode
      */
     "paletteHueLight": number;
 
     /**
-     * Saturation intensity for gray palette tint in light mode (0-100)
+     * Saturation intensity for gray palette tint in light mode
      */
     "paletteSaturationLight": number;
 
     /**
-     * Brightness offset for gray palette in light mode (-50 to +50)
+     * Brightness offset for gray palette in light mode
      */
     "paletteBrightnessLight": number;
 
     /**
-     * Hue for gray palette tint in dark mode (0-360)
+     * Hue for gray palette tint in dark mode
      */
     "paletteHueDark": number;
 
     /**
-     * Saturation intensity for gray palette tint in dark mode (0-100)
+     * Saturation intensity for gray palette tint in dark mode
      */
     "paletteSaturationDark": number;
 
     /**
-     * Brightness offset for gray palette in dark mode (-50 to +50)
+     * Brightness offset for gray palette in dark mode
      */
     "paletteBrightnessDark": number;
 
@@ -223,14 +203,6 @@ export interface AppSettings {
      * Saved theme library
      */
     "themes": Theme[] | null;
-}
-
-/**
- * AppSettingsSchema describes the persisted/runtime settings contract.
- */
-export interface AppSettingsSchema {
-    "anonymizedId": string;
-    "preferences": AppPreferenceSchema[] | null;
 }
 
 export interface ConditionState {
@@ -290,15 +262,10 @@ export interface ContainerLogsFetchResponse {
     "warnings"?: containerlogs$0.Warning[] | null;
 
     /**
-     * Issues lists each container whose logs could not be read.
+     * Issues lists each container whose logs could not be read. When none
+     * could be read because of a real failure, the request fails instead.
      */
     "issues"?: containerlogs$0.TargetIssue[] | null;
-
-    /**
-     * Error is set when the request failed as a whole, including when no
-     * container could be read.
-     */
-    "error"?: string;
 }
 
 /**
@@ -447,7 +414,6 @@ export interface NodeLogFetchRequest {
 export interface NodeLogFetchResponse {
     "content"?: string;
     "source": NodeLogSource;
-    "error"?: string;
     "sourcePath"?: string;
     "truncated"?: boolean;
 }
@@ -460,6 +426,23 @@ export interface NodeLogSource {
     "label": string;
     "kind": string;
     "path": string;
+}
+
+/**
+ * NodeShellSessionRequest describes a node shell: the equivalent of
+ * `kubectl debug node/<name> --profile=sysadmin -it --image=<image> -- <command>`.
+ */
+export interface NodeShellSessionRequest {
+    /**
+     * Target is the complete identity of the Node, including its cluster.
+     */
+    "target": ObjectRef;
+    "image": string;
+
+    /**
+     * Command replaces the image entrypoint; empty runs the image default.
+     */
+    "command"?: string[] | null;
 }
 
 /**
@@ -761,8 +744,17 @@ export interface ShellOutputEvent {
  */
 export interface ShellSession {
     "sessionId": string;
-    "namespace": string;
-    "podName": string;
+
+    /**
+     * Target is the complete identity of the object the shell was opened for.
+     */
+    "target": ObjectRef;
+
+    /**
+     * DebugPod is the pod a node shell created and attached to; the app deletes
+     * it when the session ends. Pod shells leave it unset.
+     */
+    "debugPod"?: ObjectRef | null;
     "container": string;
     "command": string[] | null;
     "containers": string[] | null;
@@ -775,22 +767,71 @@ export interface ShellSessionInfo {
     "sessionId": string;
     "clusterId": string;
     "clusterName": string;
-    "namespace": string;
-    "podName": string;
+
+    /**
+     * Target is the complete identity of the object the shell was opened for.
+     */
+    "target": ObjectRef;
+
+    /**
+     * DebugPod is the pod a node shell created and attached to.
+     */
+    "debugPod"?: ObjectRef | null;
     "container": string;
     "command": string[] | null;
     "startedAt": v1$0.Time;
+
+    /**
+     * Status is cleanup-failed while the session's stream has ended but its
+     * debug pod could not be deleted; empty while the session is open.
+     */
+    "status"?: ShellSessionStatus;
+    "statusReason"?: string;
 }
 
 /**
- * ShellSessionRequest describes the namespace/pod/container to exec into.
+ * ShellSessionRequest describes the pod and container to exec into.
  */
 export interface ShellSessionRequest {
-    "namespace": string;
-    "podName": string;
+    /**
+     * Target is the complete identity of the Pod, including its cluster.
+     */
+    "target": ObjectRef;
     "container"?: string;
     "command"?: string[] | null;
 }
+
+/**
+ * ShellSessionStatus is the lifecycle status a shell session reports. It is a
+ * closed set so every emitter and the generated frontend enum agree.
+ */
+export enum ShellSessionStatus {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    ShellSessionStatusOpen = "open",
+
+    /**
+     * ShellSessionStatusClosed means the shell exited or the app tore it down.
+     */
+    ShellSessionStatusClosed = "closed",
+
+    /**
+     * ShellSessionStatusEnded means a user asked to end the session, from any window.
+     */
+    ShellSessionStatusEnded = "ended",
+    ShellSessionStatusTimeout = "timeout",
+    ShellSessionStatusError = "error",
+
+    /**
+     * ShellSessionStatusCleanupFailed means the stream ended but the debug pod
+     * a node shell created could not be deleted; the session stays listed so
+     * ending it again retries the delete.
+     */
+    ShellSessionStatusCleanupFailed = "cleanup-failed",
+};
 
 /**
  * ShellStatusEvent reports lifecycle changes for a shell session.
@@ -798,7 +839,7 @@ export interface ShellSessionRequest {
 export interface ShellStatusEvent {
     "sessionId": string;
     "clusterId": string;
-    "status": string;
+    "status": ShellSessionStatus;
     "reason"?: string;
 }
 

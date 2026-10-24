@@ -1,5 +1,8 @@
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import type { GridTableFilterOptions } from '@shared/components/tables/GridTable';
+import type {
+  GridTableFilterOptions,
+  GridTableFilterState,
+} from '@shared/components/tables/GridTable';
 import {
   type GridTableFocusRequest,
   matchesGridTableFocusRequest,
@@ -20,17 +23,24 @@ import { errorHandler } from '@utils/errorHandler';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
 import { useRefreshScopedDomain } from '@/core/refresh';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
-import { useQueryStreamSignal } from '@/core/refresh/hooks/useStreamSignalRefetch';
+import { useQueryStreamSignal } from '@/core/refresh/hooks/useQueryStreamSignal';
+import type { RefreshFailure } from '@/core/refresh/refreshFailure';
+import {
+  buildRefreshScope,
+  CLUSTER_SELECTOR,
+  type ScopeSelector,
+  selectorForNamespaceSelection,
+} from '@/core/refresh/scopeSelector';
 import type { RefreshDomain } from '@/core/refresh/types';
-import { useDefaultTablePageSize } from '@/hooks/useDefaultTablePageSize';
+import { usePreference } from '@/core/settings/usePreference';
 import type { SortConfig } from '@/hooks/useTableSort';
 import { backendQuerySource } from './backendQuerySource';
 import type { QueryBackedTableState } from './queryBackedTableState';
 import {
   excludeQueryFacetsFromFilterOptions,
-  excludeQueryFacetsFromTableState,
+  removeHiddenFilters,
   useQueryBackedTableState,
+  withSelectionQueryFacets,
 } from './queryBackedTableState';
 import type {
   ClusterResourceGridTableParams,
@@ -47,11 +57,17 @@ import {
   useTypedResourceQuery,
 } from './useTypedResourceQuery';
 
-// The namespace prop is the raw name for a single namespace but the `namespace:all` sentinel for
-// all-namespaces; the backend scope key is always `namespace:<value>` (see pods.go collectPods,
-// which splits the scope on ':' and rejects a bare name). Normalize before building any scope.
-const namespaceScopeKey = (namespace: string): string =>
-  namespace.startsWith('namespace:') ? namespace : `namespace:${namespace}`;
+// The revisit replay cache's identity. A row selection narrows the rows, so it
+// is part of it: another parent's rows must never replay while this one loads.
+// The cluster stays its own '|' segment (from liveScope) for cluster eviction.
+const replayCacheKey = (
+  viewId: string,
+  liveScope: string,
+  selectionQueryFacets: GridTableFilterState['queryFacets']
+): string =>
+  selectionQueryFacets
+    ? `${viewId}|${liveScope}|${JSON.stringify(selectionQueryFacets)}`
+    : `${viewId}|${liveScope}`;
 
 // A view's persisted page size wins when it is a real option; otherwise the
 // fallback applies (the app-wide Default Page Size preference).
@@ -81,8 +97,8 @@ export function deriveQueryBackedData<TRow>({
   queryEnabled: boolean;
   queryRows: TRow[];
   queryLoaded: boolean;
-  queryError: string | null;
-}): { data: TRow[]; loading: boolean; loaded: boolean; error: string | null } {
+  queryError: RefreshFailure | null;
+}): { data: TRow[]; loading: boolean; loaded: boolean; error: RefreshFailure | null } {
   if (!queryEnabled) {
     // Gating (awaiting cluster/persistence/live-domain readiness): hold loading so the
     // controller replays the cached page or shows a spinner — never the live snapshot.
@@ -146,12 +162,26 @@ interface QueryBackedGridParamsCommon<
   enabled?: boolean;
   domain: RefreshDomain;
   label: string;
-  baseScope?: string;
+  /**
+   * The query's selector; memoize it, since its identity keys the request. The
+   * namespace wrapper defaults it from `namespace`, the cluster wrapper to the
+   * cluster.
+   */
+  baseSelector?: ScopeSelector;
   queryTableMode?: Extract<ResourceGridTableMode, 'Query Backed Static' | 'Query Backed Dynamic'>;
   selectRows: (payload: TPayload) => TRow[];
   predicates?: Record<string, string | null | undefined>;
   filterOptionOverrides?: Partial<GridTableFilterOptions>;
   excludedQueryFacetKeys?: readonly string[];
+  /**
+   * Facets owned by the view's row selection. They narrow the request only and
+   * never enter table state, persistence, favorites, or the filter bar; their
+   * keys belong in `excludedQueryFacetKeys` so the user cannot also hold them.
+   * Memoize the object: a new identity re-derives the request.
+   */
+  selectionQueryFacets?: NonNullable<GridTableFilterState['queryFacets']>;
+  /** Keep sort, filters, and columns in memory only; they start fresh on every mount. */
+  transientTableState?: boolean;
 }
 
 interface TypedQueryLifecycle<
@@ -161,7 +191,7 @@ interface TypedQueryLifecycle<
   data: TRow[];
   loading: boolean;
   loaded: boolean;
-  error: string | null;
+  error: RefreshFailure | null;
   tableMode: ResourceGridTableMode;
   effectiveFilterOptionOverrides?: Partial<GridTableFilterOptions>;
   onTableStateChange?: (next: QueryBackedTableState) => void;
@@ -183,12 +213,14 @@ function useTypedQueryLifecycle<
   domain,
   viewId,
   label,
-  baseScope,
+  baseSelector,
   queryTableMode,
   selectRows,
   predicates,
   filterOptionOverrides,
   excludedQueryFacetKeys,
+  selectionQueryFacets,
+  namespaceFilterHidden = false,
   defaultSort,
   persistence,
   liveScope,
@@ -198,29 +230,31 @@ function useTypedQueryLifecycle<
   domain: RefreshDomain;
   viewId: string;
   label: string;
-  baseScope?: string;
+  baseSelector: ScopeSelector;
   queryTableMode: Extract<ResourceGridTableMode, 'Query Backed Static' | 'Query Backed Dynamic'>;
   selectRows: (payload: TPayload) => TRow[];
   predicates?: Record<string, string | null | undefined>;
   filterOptionOverrides?: Partial<GridTableFilterOptions>;
   excludedQueryFacetKeys?: readonly string[];
+  selectionQueryFacets?: NonNullable<GridTableFilterState['queryFacets']>;
+  namespaceFilterHidden?: boolean;
   defaultSort: SortConfig;
   persistence: UseGridTablePersistenceResult;
   liveScope: string;
 }): TypedQueryLifecycle<TPayload, TRow> {
   const { tableState, handleTableStateChange } = useQueryBackedTableState(defaultSort);
   const [tableStateReady, setTableStateReady] = useState(false);
-  const defaultPageSize = useDefaultTablePageSize();
+  const defaultPageSize = usePreference('defaultTablePageSize');
   const pageLimit = typedQueryPageLimitOrDefault(persistence.pageSize, defaultPageSize);
   useEffect(() => {
-    const sanitized = excludeQueryFacetsFromTableState(
+    const sanitized = removeHiddenFilters(
       { filters: persistence.filters, sortConfig: null },
-      excludedQueryFacetKeys
+      { excludedQueryFacetKeys, namespaceFilterHidden }
     );
     if (sanitized.filters !== persistence.filters) {
       persistence.setFilters(sanitized.filters);
     }
-  }, [excludedQueryFacetKeys, persistence.filters, persistence.setFilters]);
+  }, [excludedQueryFacetKeys, namespaceFilterHidden, persistence.filters, persistence.setFilters]);
   useScopedRefreshDomainLifecycle({
     domain,
     scope: liveScope || null,
@@ -244,9 +278,11 @@ function useTypedQueryLifecycle<
       if (hydratedRef.current) {
         setTableStateReady(true);
       }
-      handleTableStateChange(excludeQueryFacetsFromTableState(next, excludedQueryFacetKeys));
+      handleTableStateChange(
+        removeHiddenFilters(next, { excludedQueryFacetKeys, namespaceFilterHidden })
+      );
     },
-    [excludedQueryFacetKeys, handleTableStateChange]
+    [excludedQueryFacetKeys, handleTableStateChange, namespaceFilterHidden]
   );
   // clusterId is required: without it buildTypedResourceQueryScope returns null and no fetch is
   // ever issued, so the query path could never settle. Gating here holds the table in its gating
@@ -261,13 +297,21 @@ function useTypedQueryLifecycle<
   // One query serves every sort, including cpu/memory: the backend joins live
   // usage onto the rows at serve and sorts by it, so there is no separate
   // metric-domain query and no row-key hydration leg.
+  const queryFilters = useMemo(
+    () =>
+      withSelectionQueryFacets(
+        removeHiddenFilters(tableState, { excludedQueryFacetKeys, namespaceFilterHidden }).filters,
+        selectionQueryFacets
+      ),
+    [excludedQueryFacetKeys, namespaceFilterHidden, selectionQueryFacets, tableState]
+  );
   const query = useTypedResourceQuery<TPayload, TRow>({
     enabled: queryEnabled,
     clusterId,
     domain,
     label,
-    baseScope,
-    filters: excludeQueryFacetsFromTableState(tableState, excludedQueryFacetKeys).filters,
+    baseSelector,
+    filters: queryFilters,
     sortConfig: tableState.sortConfig,
     pageLimit,
     predicates,
@@ -326,7 +370,7 @@ const anchorDecisionKeyExtractor = () => '';
 // row, turn it into a backend anchor jump — the landing page then contains
 // the row and the normal buffer match takes over. A missing anchor
 // (filtered/not-found) is reported through the app's notification channel.
-export function useAnchorOnUnmatchedFocusRequest<TRow>({
+function useAnchorOnUnmatchedFocusRequest<TRow>({
   clusterId,
   enabled = true,
   domain,
@@ -446,7 +490,7 @@ function useQueryBackedGridResult<
   data: TRow[];
   loading: boolean;
   loaded: boolean;
-  error: string | null;
+  error: RefreshFailure | null;
 }): QueryBackedNamespaceGridResult<TRow, TPayload> {
   // Fetches every matching row by walking the query's pages. Threaded onto gridTableProps so
   // the GridTable filter bar's Download button copies or saves all of them (no per-view
@@ -539,12 +583,6 @@ export interface QueryBackedNamespaceGridParams<
     QueryBackedGridParamsCommon<TPayload, TRow> {
   /** Optional: the wrapper resolves a canonical default when omitted. */
   keyExtractor?: (item: TRow, index: number) => string;
-  /**
-   * All Namespaces tables that show the Namespaces filter share one selection
-   * per cluster. Set false for a pane whose Namespaces filter another table's
-   * selection drives.
-   */
-  sharesAllNamespacesFilter?: boolean;
 }
 
 export function useQueryBackedNamespaceResourceGridTable<
@@ -555,16 +593,17 @@ export function useQueryBackedNamespaceResourceGridTable<
   enabled = true,
   domain,
   label,
-  baseScope,
+  baseSelector,
   queryTableMode = 'Query Backed Dynamic',
   selectRows,
   predicates,
   filterOptionOverrides,
   excludedQueryFacetKeys,
+  selectionQueryFacets,
+  transientTableState = false,
   defaultSort = { key: 'name', direction: 'asc' },
   namespace,
   supportsCustomMetadataColumns,
-  sharesAllNamespacesFilter = true,
   ...tableParams
 }: QueryBackedNamespaceGridParams<TPayload, TRow>): QueryBackedNamespaceGridResult<TRow, TPayload> {
   const resolvedKeyExtractor = useResolvedQueryKeyExtractor(
@@ -585,13 +624,17 @@ export function useQueryBackedNamespaceResourceGridTable<
       isNamespaceScoped: !allNamespaces,
     },
     pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
-    shareNamespaceFilter:
-      allNamespaces && Boolean(tableParams.showNamespaceFilters) && sharesAllNamespacesFilter,
+    // All Namespaces tables showing the Namespaces filter share one selection per cluster.
+    shareNamespaceFilter: allNamespaces && Boolean(tableParams.showNamespaceFilters),
+    transient: transientTableState,
   });
+  const namespaceSelector = useMemo(
+    () => baseSelector ?? selectorForNamespaceSelection(namespace),
+    [baseSelector, namespace]
+  );
   const liveScope = useMemo(
-    () =>
-      clusterId ? buildClusterScope(clusterId, baseScope ?? namespaceScopeKey(namespace)) : '',
-    [baseScope, clusterId, namespace]
+    () => (clusterId ? buildRefreshScope(domain, { clusterId, selector: namespaceSelector }) : ''),
+    [clusterId, domain, namespaceSelector]
   );
   const lifecycle = useTypedQueryLifecycle<TPayload, TRow>({
     clusterId,
@@ -599,15 +642,16 @@ export function useQueryBackedNamespaceResourceGridTable<
     domain,
     viewId: tableParams.viewId,
     label,
-    // Scope the typed query to the selected namespace, reusing the exact base the live
-    // subscription above already uses. namespaceScopeKey normalizes the raw namespace name to the
-    // backend scope key `namespace:<name>`; all-namespaces stays `namespace:all` (cluster-wide).
-    baseScope: baseScope ?? namespaceScopeKey(namespace),
+    // Scope the typed query to the selected namespace, reusing the exact selector the
+    // live subscription above already uses.
+    baseSelector: namespaceSelector,
     queryTableMode,
     selectRows,
     predicates,
     filterOptionOverrides,
     excludedQueryFacetKeys,
+    selectionQueryFacets,
+    namespaceFilterHidden: allNamespaces && !tableParams.showNamespaceFilters,
     defaultSort,
     persistence,
     liveScope,
@@ -631,7 +675,7 @@ export function useQueryBackedNamespaceResourceGridTable<
   });
   return useQueryBackedGridResult<TPayload, TRow>({
     viewId: tableParams.viewId,
-    cacheKey: `${tableParams.viewId}|${liveScope}`,
+    cacheKey: replayCacheKey(tableParams.viewId, liveScope, selectionQueryFacets),
     table,
     query: lifecycle.query,
     persistence,
@@ -668,12 +712,14 @@ export function useQueryBackedClusterResourceGridTable<
   enabled = true,
   domain,
   label,
-  baseScope = '',
+  baseSelector = CLUSTER_SELECTOR,
   queryTableMode = 'Query Backed Static',
   selectRows,
   predicates,
   filterOptionOverrides,
   excludedQueryFacetKeys,
+  selectionQueryFacets,
+  transientTableState = false,
   defaultSortKey = 'name',
   defaultSortDirection = 'asc',
   supportsCustomMetadataColumns,
@@ -697,10 +743,11 @@ export function useQueryBackedClusterResourceGridTable<
 
     filterOptions: { ...tableParams.filterOptions, isNamespaceScoped: false },
     pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
+    transient: transientTableState,
   });
   const liveScope = useMemo(
-    () => (clusterId ? buildClusterScope(clusterId, baseScope) : ''),
-    [baseScope, clusterId]
+    () => (clusterId ? buildRefreshScope(domain, { clusterId, selector: baseSelector }) : ''),
+    [baseSelector, clusterId, domain]
   );
   const lifecycle = useTypedQueryLifecycle<TPayload, TRow>({
     clusterId,
@@ -708,12 +755,13 @@ export function useQueryBackedClusterResourceGridTable<
     domain,
     viewId: tableParams.viewId,
     label,
-    baseScope,
+    baseSelector,
     queryTableMode,
     selectRows,
     predicates,
     filterOptionOverrides,
     excludedQueryFacetKeys,
+    selectionQueryFacets,
     defaultSort,
     persistence,
     liveScope,
@@ -735,7 +783,7 @@ export function useQueryBackedClusterResourceGridTable<
   });
   return useQueryBackedGridResult<TPayload, TRow>({
     viewId: tableParams.viewId,
-    cacheKey: `${tableParams.viewId}|${liveScope}`,
+    cacheKey: replayCacheKey(tableParams.viewId, liveScope, selectionQueryFacets),
     table,
     query: lifecycle.query,
     persistence,

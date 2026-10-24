@@ -32,8 +32,6 @@ import {
   useState,
 } from 'react';
 import { eventBus } from '@/core/events';
-import { shouldSyncClusterNavigationTarget } from '@/core/navigation/workspace';
-import { refreshOrchestrator } from '@/core/refresh';
 import { setActiveViewContext } from '@/core/telemetry/sentry';
 import type {
   ClusterViewType,
@@ -64,7 +62,7 @@ interface NavigationStateContextType {
   setActiveClusterView: (tab: ClusterViewType | null) => void;
   setClusterNavigationTarget: (clusterId: string, target: ClusterNavigationTarget) => void;
   navigateToGlobal: (view?: GlobalViewType) => void;
-  activateClusterWorkspace: (clusterId?: string) => void;
+  activateClusterWorkspace: () => void;
 
   // Complex navigation actions
   navigateToClusterView: (viewType: ViewType) => void;
@@ -223,23 +221,16 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
     setWorkspace(retainedWorkspace);
   }, [managedClusterIds.length, workspace]);
 
-  // Enhanced setViewType that notifies RefreshManager
   const setViewType = useCallback(
     (view: ViewType) => {
       if (view === 'global') {
         if (selectedClusterIds.length > 1) {
           setWorkspace('global');
-          refreshOrchestrator.updateContext({
-            currentView: 'global',
-            activeClusterView: undefined,
-          });
         }
         return;
       }
       setWorkspace('cluster');
       updateActiveState((prev) => ({ ...prev, viewType: view }));
-
-      refreshOrchestrator.updateContext({ currentView: view });
     },
     [selectedClusterIds.length, updateActiveState]
   );
@@ -253,41 +244,18 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
         setActiveGlobalViewState(view);
       }
       setWorkspace('global');
-      refreshOrchestrator.updateContext({
-        currentView: 'global',
-        activeClusterView: undefined,
-      });
     },
     [selectedClusterIds.length]
   );
 
-  const activateClusterWorkspace = useCallback(
-    (clusterId?: string) => {
-      const targetClusterId = clusterId?.trim() || selectedClusterId || clusterKey;
-      const targetState =
-        navigationStateByClusterRef.current[targetClusterId] ?? DEFAULT_NAVIGATION_STATE;
-      setWorkspace('cluster');
-      // When activating a different cluster, KubeconfigContext owns the
-      // subsequent selectedClusterId transition and refresh. Writing the
-      // target route into the still-current cluster context would briefly
-      // pair one cluster's identity with another cluster's navigation.
-      if (targetClusterId === selectedClusterId) {
-        refreshOrchestrator.updateContext({
-          currentView: targetState.viewType,
-          activeNamespaceView: targetState.activeNamespaceView,
-          activeClusterView: targetState.activeClusterView ?? undefined,
-        });
-      }
-    },
-    [clusterKey, selectedClusterId]
-  );
+  // Each cluster's route already lives in its own navigation state.
+  const activateClusterWorkspace = useCallback(() => {
+    setWorkspace('cluster');
+  }, []);
 
   const setActiveClusterView = useCallback(
     (tab: ClusterViewType | null) => {
       updateActiveState((prev) => ({ ...prev, activeClusterView: tab }));
-      refreshOrchestrator.updateContext({
-        activeClusterView: tab ?? undefined,
-      });
     },
     [updateActiveState]
   );
@@ -301,23 +269,8 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
       setNavigationStateByCluster((previous) =>
         applyClusterNavigationTarget(previous, targetClusterId, target)
       );
-      if (
-        shouldSyncClusterNavigationTarget(targetClusterId, selectedClusterId, resolvedWorkspace)
-      ) {
-        refreshOrchestrator.updateContext(
-          target.viewType === 'namespace'
-            ? {
-                currentView: target.viewType,
-                activeNamespaceView: target.activeNamespaceView,
-              }
-            : {
-                currentView: target.viewType,
-                activeClusterView: target.activeClusterView ?? undefined,
-              }
-        );
-      }
     },
-    [resolvedWorkspace, selectedClusterId]
+    []
   );
 
   const setPreviousView = useCallback(
@@ -333,10 +286,6 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
   const setActiveNamespaceView = useCallback(
     (tab: NamespaceViewType) => {
       updateActiveState((prev) => ({ ...prev, activeNamespaceView: tab }));
-      // Keep refresh context aligned so streaming targets follow the active tab.
-      refreshOrchestrator.updateContext({
-        activeNamespaceView: tab,
-      });
     },
     [updateActiveState]
   );
@@ -433,25 +382,12 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
 };
 
 /**
- * Sync context - synchronizes object panel state with RefreshManager
+ * Publishes the active view and object-panel state to the active view context.
  */
-const RefreshSyncProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const ActiveViewSyncProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { selectedClusterId } = useKubeconfig();
   const { viewType, activeNamespaceTab, activeClusterTab, activeGlobalTab } = useNavigationState();
   const { showObjectPanel } = useObjectPanelState();
-
-  // Single writer for view/object-panel refresh context updates.
-  // Individual object panel refresh is managed per-instance via useObjectPanelRefresh.
-  useEffect(() => {
-    refreshOrchestrator.updateContext({
-      currentView: viewType,
-      activeNamespaceView: activeNamespaceTab,
-      activeClusterView: viewType === 'cluster' ? (activeClusterTab ?? undefined) : undefined,
-      objectPanel: {
-        isOpen: showObjectPanel,
-      },
-    });
-  }, [viewType, activeNamespaceTab, activeClusterTab, showObjectPanel]);
 
   useEffect(() => {
     let tab: string | undefined;
@@ -544,9 +480,9 @@ export const ViewStateProvider: React.FC<ViewStateProviderProps> = ({ children }
       <ObjectPanelStateProvider>
         <ModalStateProvider>
           <NavigationStateProvider>
-            <RefreshSyncProvider>
+            <ActiveViewSyncProvider>
               <CombinedViewStateProvider>{children}</CombinedViewStateProvider>
-            </RefreshSyncProvider>
+            </ActiveViewSyncProvider>
           </NavigationStateProvider>
         </ModalStateProvider>
       </ObjectPanelStateProvider>

@@ -1,210 +1,158 @@
 /**
  * frontend/src/modules/namespace/components/NsViewAutoscaling.test.tsx
  *
- * Focused coverage for autoscaling context-menu actions.
+ * What the namespace Autoscaling view shows beyond the aggregated namespace
+ * table it shares with Config (covered in NsViewConfig.test.tsx): each
+ * HorizontalPodAutoscaler's scale target, replica range, and current replicas
+ * from the backend's namespace-autoscaling query, a scale target that opens
+ * its workload in a panel with full identity, and the row menu's Map, which
+ * opens the autoscaler's panel on its map. Runs in the full app, navigated
+ * through the sidebar, over a faked backend (test-utils/appState).
  */
 
-import NsViewAutoscaling, {
-  type AutoscalingData,
-} from '@modules/namespace/components/NsViewAutoscaling';
-import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
-import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { makeResourceRef } from '@/test-utils/makeResourceRef';
+import { beforeEach, describe, expect, it } from 'vitest';
+import type { NamespaceAutoscalingSummary } from '@/core/refresh/types';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type ObjectIdentity,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
 
-vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
-  useNamespaceColumnLink: () => ({
-    onClick: vi.fn(),
-    getClassName: () => 'object-panel-link',
-    isInteractive: () => true,
-  }),
-}));
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
 
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedKubeconfig: 'path:context', selectedClusterId: 'cluster-a' }),
-}));
+const hpaIdentity: ObjectIdentity = {
+  group: 'autoscaling',
+  version: 'v2',
+  kind: 'HorizontalPodAutoscaler',
+  namespace: 'team-a',
+  name: 'web',
+};
 
-const { gridTablePropsRef, openWithObjectMock } = vi.hoisted(() => ({
-  gridTablePropsRef: { current: null as GridTableProps<AutoscalingData> | null },
-  openWithObjectMock: vi.fn(),
-}));
-
-vi.mock('@core/contexts/FavoritesContext', () => ({
-  useFavorites: () => ({
-    favorites: [],
-    addFavorite: vi.fn(),
-    updateFavorite: vi.fn(),
-    deleteFavorite: vi.fn(),
-    reorderFavorites: vi.fn(),
-  }),
-  FavoritesProvider: ({ children }: { children: React.ReactNode }) => children,
-}));
-
-vi.mock('@ui/favorites/FavToggle', () => ({
-  useFavToggle: () => ({
-    type: 'toggle',
-    id: 'favorite',
-    icon: null,
-    active: false,
-    onClick: () => undefined,
-    title: 'Save as favorite',
-  }),
-}));
-
-vi.mock('@shared/components/tables/GridTable', async () => {
-  const actual = await vi.importActual<typeof import('@shared/components/tables/GridTable')>(
-    '@shared/components/tables/GridTable'
-  );
-  return {
-    ...actual,
-    default: (props: GridTableProps<AutoscalingData>) => {
-      gridTablePropsRef.current = props;
-      return <div data-testid="grid-table" />;
-    },
-  };
+// As backend/resources/hpa/streamsummary.go builds the row.
+const hpa: () => NamespaceAutoscalingSummary = () => ({
+  ref: {
+    ...hpaIdentity,
+    clusterId: dev.clusterId,
+    resource: 'horizontalpodautoscalers',
+    uid: 'web-uid',
+  },
+  target: 'Deployment/web',
+  targetApiVersion: 'apps/v1',
+  min: 1,
+  max: 5,
+  current: 2,
+  age: '10m',
 });
 
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: openWithObjectMock }),
-}));
+const start = async () => {
+  app.startScreen(dev);
+  app.serveTable(dev, 'namespace-autoscaling', { rows: [hpa()] });
+  view = await app.mountApp();
+  await view.goTo({ namespace: 'team-a', view: 'autoscaling' });
+};
 
-vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: vi.fn() }),
-}));
+const rowOf = (name: string) =>
+  requireValue(
+    Array.from(view.container.querySelectorAll<HTMLElement>('.gridtable-row')).find((row) =>
+      row.textContent?.includes(name)
+    ),
+    `expected the ${name} row`
+  );
 
-vi.mock('@shared/components/modals/ConfirmationModal', () => ({
-  default: () => null,
-}));
+const cellOf = (name: string, column: string) =>
+  requireValue(
+    rowOf(name).querySelector<HTMLElement>(`.grid-cell[data-column="${column}"]`),
+    `expected the ${column} cell of ${name}`
+  );
 
-vi.mock('@core/backend-api', () => ({
-  RunObjectAction: vi.fn(),
-}));
+const inCluster = (identity: ObjectIdentity) => ({
+  ...identity,
+  clusterId: dev.clusterId,
+  clusterName: dev.clusterName,
+});
 
-vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (data: unknown[]) => ({
-    sortedData: data,
-    sortConfig: { key: 'name', direction: 'asc' },
-    handleSort: vi.fn(),
-  }),
-}));
-
-vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
-  useNamespaceGridTablePersistence: () => ({
-    sortConfig: { key: 'name', direction: 'asc' },
-    onSortChange: vi.fn(),
-    columnWidths: null,
-    setColumnWidths: vi.fn(),
-    columnVisibility: null,
-    setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [] },
-    setFilters: vi.fn(),
-    isNamespaceScoped: true,
-    resetState: vi.fn(),
-  }),
-}));
-
-vi.mock('@/hooks/useShortNames', () => ({
-  useShortNames: () => false,
-}));
-
-vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
-  default: ({ children }: { children: React.ReactNode }) => children,
-}));
-
-vi.mock('@shared/components/icons/SharedIcons', () => ({
-  DiffIcon: () => <span>diff</span>,
-  OpenIcon: () => <span>open</span>,
-  ObjectMapIcon: () => <span>map</span>,
-  DeleteIcon: () => <span>delete</span>,
-  MetadataIcon: () => <span>metadata</span>,
-}));
-
-vi.mock('@/core/capabilities', () => ({
-  useUserPermissions: () => new Map(),
-  getPermissionKey: (kind: string, action: string) => `${kind}:${action}`,
-}));
+beforeEach(() => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['team-a']);
+});
 
 describe('NsViewAutoscaling', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  it('shows each autoscaler’s scale target, replica range, and current replicas', async () => {
+    await start();
 
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    gridTablePropsRef.current = null;
-    openWithObjectMock.mockReset();
+    expect(
+      ['scaleTarget', 'replicas', 'current'].map((column) =>
+        cellOf('web', column).textContent?.trim()
+      )
+    ).toEqual(['Deployment/web', '1/5', '2']);
   });
 
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-  });
-
-  const baseHpa = (overrides: Partial<AutoscalingData> = {}): AutoscalingData => ({
-    ref: {
-      ...makeResourceRef({
-        group: 'autoscaling',
-        version: 'v2',
-        kind: 'HorizontalPodAutoscaler',
-        resource: 'horizontalpodautoscalers',
-        namespace: 'team-a',
-        name: 'web',
-      }),
-      kind: 'HorizontalPodAutoscaler',
-      name: 'web',
+  it('opens an autoscaler’s scale target in its panel with full identity', async () => {
+    const deployment: ObjectIdentity = {
+      group: 'apps',
+      version: 'v1',
+      kind: 'Deployment',
       namespace: 'team-a',
-      clusterId: 'alpha:ctx',
-    },
-    target: 'Deployment/web',
-    min: 1,
-    max: 5,
-    current: 2,
-    minReplicas: 1,
-    maxReplicas: 5,
-    currentReplicas: 2,
-    age: '10m',
-    ...overrides,
+      name: 'web',
+    };
+    app.servePanel(dev, deployment);
+    // The workload's panel asks whether an autoscaler scales it
+    // (backend/autoscaling_details.go IsWorkloadHPAManaged); this one does.
+    app.backend.answer('IsWorkloadHPAManaged', () => true);
+    await start();
+    const targetLink = requireValue(
+      cellOf('web', 'scaleTarget').querySelector<HTMLButtonElement>('button'),
+      'expected the scale target link'
+    );
+
+    await act(async () => targetLink.click());
+    await app.settle();
+
+    expect(view.openPanels()).toEqual([inCluster(deployment)]);
   });
 
-  const getContextMenuItems = (row: AutoscalingData) =>
-    requireValue(
-      requireValue(gridTablePropsRef.current, 'expected GridTable props').getCustomContextMenuItems,
-      'expected context-menu factory'
-    )(row, 'name');
-
-  it('opens the Map for HorizontalPodAutoscaler rows', async () => {
-    const entry = baseHpa();
-
+  it('opens an autoscaler’s panel on its map from the row menu', async () => {
+    const object = app.servePanel(dev, hpaIdentity);
+    const mapScope = requireValue(object.scopes.mapScope, 'expected the autoscaler map scope');
+    app.snapshots.serve('object-map', mapScope, {
+      clusterId: dev.clusterId,
+      clusterName: dev.clusterName,
+      seed: { ...hpaIdentity, clusterId: dev.clusterId },
+      nodes: [],
+      edges: [],
+      maxNodes: 250,
+      truncated: false,
+    });
+    await start();
+    const cell = requireValue(
+      rowOf('web').querySelector<HTMLElement>('.grid-cell'),
+      'expected a cell in the web row'
+    );
     await act(async () => {
-      root.render(<NsViewAutoscaling namespace="team-a" showNamespaceColumn={true} />);
-      await Promise.resolve();
+      cell.dispatchEvent(
+        new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 })
+      );
     });
-
-    const objectMapItem = getContextMenuItems(entry).find(
-      (item) => item.actionId === OBJECT_ACTION_IDS.viewMap
+    await app.settle();
+    const openMap = requireValue(
+      Array.from(
+        document.body.querySelectorAll<HTMLElement>('[role="menu"] .context-menu-item')
+      ).find(
+        (item) => item.querySelector('.context-menu-label')?.textContent?.trim() === 'Open Map'
+      ),
+      'expected the Open Map menu item'
     );
-    expect(objectMapItem).toBeTruthy();
 
-    act(() => {
-      objectMapItem?.onClick?.();
-    });
+    await act(async () => openMap.click());
+    await app.settle();
 
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'HorizontalPodAutoscaler',
-        name: 'web',
-        namespace: 'team-a',
-        clusterId: 'alpha:ctx',
-        group: 'autoscaling',
-        version: 'v2',
-      }),
-      { initialTab: 'map' }
-    );
+    expect(view.openPanels()).toEqual([inCluster(hpaIdentity)]);
+    expect(app.snapshots.reads('object-map').map((read) => read.scope)).toContain(mapScope);
+    expect(document.querySelector('[data-testid="map-tab"]')).not.toBeNull();
   });
 });

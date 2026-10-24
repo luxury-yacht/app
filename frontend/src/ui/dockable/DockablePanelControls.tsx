@@ -30,6 +30,7 @@ interface DockablePanelControlsProps {
   onDock: (position: DockPosition) => void;
   onToggleMaximize: () => void;
   onClose: () => void;
+  canFloat?: boolean;
   nativeWindowMode?: boolean;
 }
 
@@ -73,9 +74,12 @@ export const DockablePanelControls: React.FC<DockablePanelControlsProps> = ({
   onDock,
   onToggleMaximize,
   onClose,
+  canFloat = false,
   nativeWindowMode = false,
 }) => {
-  const dockActions = nativeWindowMode ? nativeDockActions : dockActionsByPosition[position];
+  const dockActions = nativeWindowMode
+    ? nativeDockActions
+    : dockActionsByPosition[position].filter((action) => canFloat || action !== floatAction);
 
   return (
     <div className="dockable-panel__controls">

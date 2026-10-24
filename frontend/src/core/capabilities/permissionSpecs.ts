@@ -54,7 +54,24 @@ export const POD_PERMISSIONS: PermissionSpecList = {
   ],
 };
 
-export const CONFIG_PERMISSIONS: PermissionSpecList = {
+/**
+ * Node shell debug pods, checked only in the debug pod namespace (backend
+ * `nodes.DebugPodNamespace`) by Node panels: the pod is created, polled, and
+ * deleted, and attached to over a websocket (get) or SPDY (create). Kept out of
+ * ALL_NAMESPACE_PERMISSIONS so ordinary namespace queries do not grow.
+ */
+export const NODE_SHELL_PERMISSIONS: PermissionSpecList = {
+  feature: PERMISSION_FEATURES.nodeShell,
+  specs: [
+    { kind: 'Pod', verb: 'create' },
+    { kind: 'Pod', verb: 'get' },
+    { kind: 'Pod', verb: 'delete' },
+    { kind: 'Pod', verb: 'get', subresource: 'attach' },
+    { kind: 'Pod', verb: 'create', subresource: 'attach' },
+  ],
+};
+
+const CONFIG_PERMISSIONS: PermissionSpecList = {
   feature: PERMISSION_FEATURES.namespaceConfig,
   specs: [
     { kind: 'ConfigMap', verb: 'list' },
@@ -64,7 +81,7 @@ export const CONFIG_PERMISSIONS: PermissionSpecList = {
   ],
 };
 
-export const NETWORK_PERMISSIONS: PermissionSpecList = {
+const NETWORK_PERMISSIONS: PermissionSpecList = {
   feature: PERMISSION_FEATURES.namespaceNetwork,
   specs: [
     { kind: 'Service', verb: 'list' },
@@ -92,7 +109,7 @@ export const NETWORK_PERMISSIONS: PermissionSpecList = {
   ],
 };
 
-export const RBAC_PERMISSIONS: PermissionSpecList = {
+const RBAC_PERMISSIONS: PermissionSpecList = {
   feature: PERMISSION_FEATURES.namespaceRBAC,
   specs: [
     { kind: 'Role', verb: 'list' },
@@ -104,7 +121,7 @@ export const RBAC_PERMISSIONS: PermissionSpecList = {
   ],
 };
 
-export const STORAGE_PERMISSIONS: PermissionSpecList = {
+const STORAGE_PERMISSIONS: PermissionSpecList = {
   feature: PERMISSION_FEATURES.namespaceStorage,
   specs: [
     { kind: 'PersistentVolumeClaim', verb: 'list' },
@@ -112,7 +129,7 @@ export const STORAGE_PERMISSIONS: PermissionSpecList = {
   ],
 };
 
-export const AUTOSCALING_PERMISSIONS: PermissionSpecList = {
+const AUTOSCALING_PERMISSIONS: PermissionSpecList = {
   feature: PERMISSION_FEATURES.namespaceAutoscaling,
   specs: [
     { kind: 'HorizontalPodAutoscaler', verb: 'list' },
@@ -120,7 +137,7 @@ export const AUTOSCALING_PERMISSIONS: PermissionSpecList = {
   ],
 };
 
-export const QUOTA_PERMISSIONS: PermissionSpecList = {
+const QUOTA_PERMISSIONS: PermissionSpecList = {
   feature: PERMISSION_FEATURES.namespaceQuotas,
   specs: [
     { kind: 'ResourceQuota', verb: 'list' },
@@ -132,7 +149,7 @@ export const QUOTA_PERMISSIONS: PermissionSpecList = {
   ],
 };
 
-export const EVENT_PERMISSIONS: PermissionSpecList = {
+const EVENT_PERMISSIONS: PermissionSpecList = {
   feature: PERMISSION_FEATURES.namespaceEvents,
   specs: [{ kind: 'Event', verb: 'list' }],
 };

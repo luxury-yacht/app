@@ -12,7 +12,7 @@ import (
 // StartPermissionRevalidation delegates permission changes to the generation owner.
 // The owner publishes replacement routing before retiring this subsystem.
 func (s *Subsystem) StartPermissionRevalidation(ctx context.Context, onChanged func(context.Context)) {
-	if s == nil || s.RuntimePerms == nil || s.InformerFactory == nil || s.Manager == nil || onChanged == nil {
+	if s == nil || s.RuntimePerms == nil || s.PermissionGrants == nil || s.Manager == nil || onChanged == nil {
 		return
 	}
 	interval := config.PermissionCacheTTL
@@ -41,7 +41,7 @@ func (s *Subsystem) runPermissionRevalidation(ctx context.Context, interval time
 
 // permissionsChanged compares access with the decisions used to build this generation.
 func (s *Subsystem) permissionsChanged(ctx context.Context) bool {
-	grants := s.InformerFactory.PermissionSnapshot()
+	grants := s.PermissionGrants.Snapshot()
 	if len(grants) == 0 {
 		return false
 	}

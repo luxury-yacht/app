@@ -6,32 +6,45 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import type { RefreshFailure } from '@/core/refresh/refreshFailure';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { resolveEmptyStateMessage } from './emptyState';
 
+const backendFailure = (status: ReturnType<typeof makeErrorStatus>): RefreshFailure => ({
+  kind: 'backend',
+  status,
+});
+
 describe('resolveEmptyStateMessage', () => {
-  it('returns fallback when no error is provided', () => {
+  it('returns fallback when no failure is provided', () => {
     expect(resolveEmptyStateMessage(undefined, 'fallback')).toBe('fallback');
     expect(resolveEmptyStateMessage(null)).toBe('No data available');
   });
 
-  it('returns fallback for non-permission errors', () => {
-    expect(resolveEmptyStateMessage('internal server error', 'fallback')).toBe('fallback');
-    expect(resolveEmptyStateMessage('network timeout')).toBe('No data available');
+  it('says a denied read is a permission problem', () => {
+    const denial = backendFailure(
+      makeErrorStatus('Forbidden', 'permission denied for domain roles')
+    );
+    expect(resolveEmptyStateMessage(denial, 'fallback')).toBe('Insufficient permissions');
   });
 
-  it('normalizes permission related errors', () => {
-    const permissionErrors = [
-      'Forbidden',
-      'access denied to resource',
-      'unauthorized operation',
-      'cannot list resource',
-      'RBAC: cannot get resource',
-      '403 response',
-      'not authorized',
-    ];
+  // The reason decides, not words such as "rbac" in the message.
+  it('does not call a timeout on an RBAC resource a permission problem', () => {
+    const timeout = backendFailure(
+      makeErrorStatus(
+        'DeadlineExceeded',
+        'listing rbac.authorization.k8s.io/v1 roles: context deadline exceeded'
+      )
+    );
+    expect(resolveEmptyStateMessage(timeout, 'fallback')).toBe('fallback');
+  });
 
-    permissionErrors.forEach((message) => {
-      expect(resolveEmptyStateMessage(message, 'fallback')).toBe('Insufficient permissions');
-    });
+  it('shows the fallback for a failure the browser raised', () => {
+    const local: RefreshFailure = {
+      kind: 'local',
+      message: 'Failed to fetch',
+      errorName: 'TypeError',
+    };
+    expect(resolveEmptyStateMessage(local, 'fallback')).toBe('fallback');
   });
 });

@@ -15,6 +15,12 @@ export interface ClusterPanelCloseEvent {
 export interface ClusterTabTransferEvent {
     "request": ClusterTabTransferRequest;
     "snapshot": ClusterViewSnapshot;
+
+    /**
+     * Groups are the panels the directory is moving with the view, which the
+     * target reconstructs before it acknowledges.
+     */
+    "groups": WorkspaceGroup[] | null;
     "targetAlreadyOpen": boolean;
 }
 
@@ -27,10 +33,13 @@ export interface ClusterTabTransferRequest {
     "dropPosition"?: WindowPoint | null;
 }
 
+/**
+ * ClusterViewSnapshot is the source view's navigation state. Its docked panels
+ * are not part of it: the directory moves the panels it places in that view.
+ */
 export interface ClusterViewSnapshot {
     "schemaVersion": number;
     "viewState": string;
-    "groups": WorkspaceGroup[] | null;
 }
 
 export interface GroupSnapshot {
@@ -111,6 +120,22 @@ export enum PanelLocationKind {
 export interface PanelOpenResult {
     "panel": WorkspacePanel;
     "render": boolean;
+}
+
+/**
+ * PanelTransfer marks a panel whose whole group is moving to another renderer.
+ * Only the directory commits or cancels it. Renderers project it from reads: the
+ * source keeps rendering the panel and the target mounts a provisional copy.
+ */
+export interface PanelTransfer {
+    "transferId": string;
+    "target": PanelLocation;
+
+    /**
+     * View marks a panel moving with its cluster view; the view handoff, not
+     * the panel's target, settles the move.
+     */
+    "view"?: boolean;
 }
 
 export interface TabCloseAuthorizedEvent {
@@ -200,14 +225,17 @@ export interface WindowDescriptor {
     "clusterId": string;
     "groupId": string;
     "state": WindowState;
-    "snapshot": GroupSnapshot;
-}
 
-export interface WindowDockRequestedEvent {
-    "windowName": string;
+    /**
+     * TransferID names the window's pending open or dock; empty while live.
+     */
     "transferId": string;
-    "targetPosition": string;
-    "snapshot": GroupSnapshot;
+
+    /**
+     * Group is the directory's placement for the window: the tabs it holds, or
+     * while it opens, the tabs moving into it.
+     */
+    "group": WorkspaceGroup;
 }
 
 export interface WindowFocusRequestedEvent {
@@ -217,9 +245,10 @@ export interface WindowFocusRequestedEvent {
 export interface WindowOpenedEvent {
     "windowName": string;
     "transferId": string;
+    "sourceWindowName": string;
     "clusterId": string;
     "groupId": string;
-    "snapshot": GroupSnapshot;
+    "tabs": TabSnapshot[] | null;
 }
 
 export interface WindowPoint {
@@ -272,6 +301,7 @@ export interface WorkspaceGroup {
 export interface WorkspacePanel {
     "tab": TabSnapshot;
     "location": PanelLocation;
+    "transfer"?: PanelTransfer;
 }
 
 export interface WorkspaceSnapshot {

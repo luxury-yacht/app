@@ -12,8 +12,9 @@ import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { StatusChip } from '@shared/components/StatusChip';
 import { useMemo } from 'react';
-import { useAutoRefreshEnabled } from '@/core/refresh/hooks/useRefreshPreferences';
+import type { ObjectDetail } from '@/core/refresh/types';
 import { type ResourceMetricValues, useResourceMetrics } from '@/core/resource-metrics';
+import { usePreference } from '@/core/settings/usePreference';
 import { MetricChart } from './MetricChart';
 import { liveTimeline, type MetricGraph, peakUsage } from './metricsTabModel';
 import { usePanelMetricSeries } from './panelMetricSamples';
@@ -24,7 +25,7 @@ import './MetricsTab.css';
 interface MetricsTabProps {
   objectData: ObjectPanelRef | null;
   /** The panel's object details: utilization values until live metrics arrive. */
-  detail: unknown;
+  detail: ObjectDetail | null | undefined;
   /** The panel is visible (any of its tabs); the tab reads and leases only while it is. */
   isPanelOpen: boolean;
   /** Whose collected samples to chart (the backend panel metrics buffer). */
@@ -129,7 +130,7 @@ function MetricsContent({
   isPanelOpen,
   panelId,
 }: Readonly<Omit<MetricsTabProps, 'objectData'> & { objectData: ObjectPanelRef }>) {
-  const autoRefresh = useAutoRefreshEnabled();
+  const autoRefresh = usePreference('autoRefreshEnabled');
   const utilization = useUtilizationData({ objectData, detail });
   const series = usePanelMetricSeries(objectData.clusterId, panelId, isPanelOpen);
   // The panel's collector (ObjectPanel) holds the metrics lease and refetches on signals; the tab

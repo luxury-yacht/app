@@ -151,7 +151,7 @@
   gap: 0.35rem;
   min-width: 0;
   max-width: 60%;
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
 
@@ -210,7 +210,7 @@
   border: 0;
   padding: 0;
   background: transparent;
-  color: var(--color-link);
+  color: var(--color-object-panel-link);
   cursor: pointer;
 }
 
@@ -369,7 +369,7 @@
 }
 
 .pod-status-card--terminating {
-  --pod-status-card-color: var(--color-info, #60a5fa);
+  --pod-status-card-color: var(--color-info);
 }
 
 .pod-status-card--failing {
@@ -564,7 +564,7 @@
   font-size: 0.83rem;
   font-weight: 600;
   line-height: 1.3;
-  color: var(--color-text-primary);
+  color: var(--color-text);
 }
 
 .overview-restriction__detail {
@@ -624,7 +624,7 @@
   flex-direction: column;
   gap: 0.4rem;
   margin-top: 0.6rem;
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
 
@@ -658,7 +658,7 @@
 
 .utilization-legend__footnote {
   color: var(--color-text-tertiary);
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
   margin-bottom: 0.5rem;
 }
 

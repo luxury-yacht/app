@@ -3,12 +3,12 @@ package ingest
 import (
 	"context"
 	"fmt"
-	"net/http/httptest"
 	"sort"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/refresh/ingest/ingesttest"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -250,11 +250,9 @@ func TestProjectingStoreReplaceUsesBulkSinkWhenAvailable(t *testing.T) {
 // half live as the reflector syncs. This is exactly how the quotas cutover wires a
 // maintained store + the catalog onto one ingestion.
 func TestIngestManagerBuildsBundleAndFeedsSink(t *testing.T) {
-	server := newTrackerAPIServer(t)
-	server.add(t, newCM("default", "seed-cm"), configMapGVK)
-	httpSrv := httptest.NewServer(server)
-	defer httpSrv.Close()
-	kube := newKubeClientFor(t, httpSrv)
+	server := ingesttest.NewAPIServer(t)
+	server.Create(t, newCM("default", "seed-cm"))
+	kube := server.Client(t)
 
 	mgr := NewIngestManager(testMeta, kube, nil, nil)
 
@@ -350,21 +348,26 @@ func TestProjectingStoreAggregateRowsSplitsHalf(t *testing.T) {
 	}
 }
 
-func TestProjectingStoreRowsByIndexTracksBundleIndexKeys(t *testing.T) {
+// TestProjectingStoreRowsByIndexTracksDerivedIndexValues proves a registered index
+// reaches each row through the values its func derives from the stored bundle, and
+// that Update, Delete, and Replace move or drop those entries.
+func TestProjectingStoreRowsByIndexTracksDerivedIndexValues(t *testing.T) {
 	project := func(obj interface{}) (interface{}, error) {
 		cmObj, ok := obj.(*corev1.ConfigMap)
 		if !ok {
 			return nil, fmt.Errorf("unexpected type %T", obj)
 		}
 		return Bundle{
-			Table: tableRow{NS: cmObj.Namespace, Name: cmObj.Name},
-			Indexes: map[string][]string{
-				"owner": []string{cmObj.Labels["owner"]},
-			},
+			Table:     tableRow{NS: cmObj.Namespace, Name: cmObj.Name},
+			Aggregate: cmObj.Labels["owner"],
 		}, nil
 	}
 	store := NewProjectingStore(project)
 	store.SetRetainTable(true)
+	store.AddIndex("owner", func(b Bundle) []string {
+		owner, _ := b.Aggregate.(string)
+		return []string{owner}
+	})
 	alphaA := cm("default", "a")
 	alphaA.Labels = map[string]string{"owner": "alpha"}
 	betaB := cm("default", "b")
@@ -411,6 +414,27 @@ func TestProjectingStoreRowsByIndexTracksBundleIndexKeys(t *testing.T) {
 	}
 }
 
+// TestProjectingStoreAddIndexCoversRowsAlreadyStored proves an index registered
+// after rows landed (a restore or relist that ran first) still reaches them.
+func TestProjectingStoreAddIndexCoversRowsAlreadyStored(t *testing.T) {
+	store := NewProjectingStore(func(obj interface{}) (interface{}, error) {
+		cmObj := obj.(*corev1.ConfigMap)
+		return Bundle{Table: tableRow{NS: cmObj.Namespace, Name: cmObj.Name}}, nil
+	})
+	store.SetRetainTable(true)
+	if err := store.Replace([]interface{}{cm("default", "a"), cm("other", "b")}, "1"); err != nil {
+		t.Fatalf("Replace: %v", err)
+	}
+
+	store.AddIndex("namespace", func(b Bundle) []string {
+		return []string{b.Table.(tableRow).NS}
+	})
+
+	if got := bundleNames(store.RowsByIndex("namespace", []string{"default"})); got != "a" {
+		t.Fatalf("RowsByIndex namespace=default names = %q, want a", got)
+	}
+}
+
 // objectMapRow is the third bundle half a test projects: a distinct type so the test
 // proves ObjectMapRows pulls the ObjectMap half, not the Table or Catalog half.
 type objectMapRow struct {
@@ -421,11 +445,9 @@ type objectMapRow struct {
 // registered object-map projector makes ObjectMapRows populate alongside TableRows
 // from one reflector ingestion — exactly how the quotas cutover feeds the object map.
 func TestIngestManagerBuildsObjectMapHalf(t *testing.T) {
-	server := newTrackerAPIServer(t)
-	server.add(t, newCM("default", "seed-cm"), configMapGVK)
-	httpSrv := httptest.NewServer(server)
-	defer httpSrv.Close()
-	kube := newKubeClientFor(t, httpSrv)
+	server := ingesttest.NewAPIServer(t)
+	server.Create(t, newCM("default", "seed-cm"))
+	kube := server.Client(t)
 
 	mgr := NewIngestManager(testMeta, kube, nil, nil)
 	if ok := mgr.RegisterObjectMapProjector(configMapGVR, func(o metav1.Object) interface{} {

@@ -70,6 +70,13 @@ features; Node Logs passes neither.
   source and previous-logs chips.
 - `hooks/useLogKeyboardShortcuts.ts`: shared shortcuts; `T` (timestamps) and
   `V` (previous logs) exist only when the viewer passes those features.
+- Shared with Application Logs: `@shared/hooks/useLogScrollRestoration.ts`
+  (tail-following and scroll restore) and `@shared/components/logs/`: `LogTable`
+  (log lines in a GridTable, the Table format; `LogTable.css` rows, cells, and
+  expansion), `LogResumeScrollingButton` (Resume scrolling), and
+  `buildLogAutoRefreshItem` (the Stop/Start auto-refresh button, first in the
+  icon bar; `R` toggles it). The Table format's log-tinted header stays
+  container-only (`.parsed-logs-table` in `LogViewer.css`).
 - `@shared/hooks/useLogDownloadMenu.tsx`: the Download button of every log view,
   App Logs included, on the `useDownloadMenu` tables use (busy while a choice
   runs, then success/error feedback). Both choices take the same text: CSV in
@@ -87,7 +94,11 @@ work must scale with new lines, not the buffer. Container Logs formats each
 entry once per display-option set (`useContainerLogDisplay`), JSON views reuse
 the cached parse (`jsonOf`), and copy text and table CSV are built only when
 copying. Check with `mise exec -- wails3 task qc:benchmark-logs` (1,000 and
-10,000 lines).
+10,000 lines; raw, Pretty, and Table views). Besides a batch's own time it
+reports the first full render and the follow-up a batch triggers: GridTable
+re-measures auto-width columns from a debounced timer, so an auto-width Table
+column without `measurementSampleKey` shows up there as measured cells per batch,
+not in the batch time.
 
 ## Shared raw-log layout
 

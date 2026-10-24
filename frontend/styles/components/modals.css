@@ -100,7 +100,7 @@
   align-items: center;
   min-width: 0;
   gap: 0.5rem;
-  font-family: var(--font-family-display, var(--font-family-base));
+  font-family: var(--font-family-base);
   font-size: 1rem;
   color: var(--color-text-secondary);
 }
@@ -112,7 +112,7 @@
 
 .modal-header h2 {
   margin: 0;
-  font-family: var(--font-family-display, var(--font-family-base));
+  font-family: var(--font-family-base);
   font-size: 1rem;
   font-weight: 700;
   color: var(--color-text);
@@ -239,11 +239,11 @@
 .modal-sidebar-item--active,
 .modal-sidebar-item--active:hover {
   background: var(--color-accent);
-  color: var(--color-accent-text, var(--color-bg));
+  color: var(--color-text-inverse);
 }
 
 .modal-sidebar-item--active svg {
-  color: var(--color-accent-text, var(--color-bg));
+  color: var(--color-text-inverse);
 }
 
 /* Optional item count, pushed to the trailing edge. */
@@ -282,7 +282,7 @@
 
 .modal-form-section h3 {
   margin: 0;
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -351,17 +351,17 @@
 }
 
 .modal-input-error {
-  border-color: var(--status-error-text);
-  outline: 1px solid var(--status-error-text);
+  border-color: var(--status-text-error);
+  outline: 1px solid var(--status-text-error);
 }
 
 .modal-field-message {
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
   margin-top: var(--spacing-xs);
 }
 
 .modal-field-error {
-  color: var(--status-error-text);
+  color: var(--status-text-error);
 }
 
 [data-appearance-mode="dark"] .modal-input,

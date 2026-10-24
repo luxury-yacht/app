@@ -14,11 +14,11 @@ import (
 	"strings"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	jsonmergepatch "k8s.io/apimachinery/pkg/util/jsonmergepatch"
 	"k8s.io/apimachinery/pkg/util/mergepatch"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	yamlutil "k8s.io/apimachinery/pkg/util/yaml"
@@ -47,6 +47,9 @@ type ObjectYAMLReloadMergeResponse struct {
 	MergedYAML      string `json:"mergedYAML"`
 	CurrentYAML     string `json:"currentYAML"`
 	ResourceVersion string `json:"resourceVersion"`
+	// YAMLConflict is set when the merge cannot be completed automatically;
+	// it carries the live YAML for manual review.
+	YAMLConflict *ObjectYAMLConflict `json:"yamlConflict,omitempty"`
 }
 
 // MergeObjectYamlWithLatest reloads the live object from the target cluster and
@@ -54,6 +57,17 @@ type ObjectYAMLReloadMergeResponse struct {
 // edit uses: strategic merge for registered built-ins, JSON merge patch
 // fallback otherwise.
 func (g *ResourceGateway) MergeObjectYamlWithLatest(
+	clusterID string,
+	req ObjectYAMLReloadMergeRequest,
+) (*ObjectYAMLReloadMergeResponse, error) {
+	response, err := g.mergeObjectYamlWithLatest(clusterID, req)
+	if conflict, ok := yamlConflictOf(err); ok {
+		return &ObjectYAMLReloadMergeResponse{YAMLConflict: conflict}, nil
+	}
+	return response, err
+}
+
+func (g *ResourceGateway) mergeObjectYamlWithLatest(
 	clusterID string,
 	req ObjectYAMLReloadMergeRequest,
 ) (*ObjectYAMLReloadMergeResponse, error) {
@@ -83,22 +97,22 @@ func (g *ResourceGateway) MergeObjectYamlWithLatest(
 	patch, patchMeta, err := buildReloadMergePatch(gvk, baseObj, draftObj, currentObj)
 	if err != nil {
 		if mergepatch.IsConflict(err) {
-			return nil, &objectYAMLError{
+			return nil, &yamlConflictError{conflict: ObjectYAMLConflict{
 				Code:                   objectYAMLMergeConflictCode,
 				Message:                "Kubernetes-aware merge found conflicting live changes. Reload the latest object and re-apply the conflicting edits manually.",
 				CurrentYAML:            currentYAML,
 				CurrentResourceVersion: currentObj.GetResourceVersion(),
 				Causes:                 []string{err.Error()},
-			}
+			}}
 		}
 		if mergepatch.IsPreconditionFailed(err) {
-			return nil, &objectYAMLError{
+			return nil, &yamlConflictError{conflict: ObjectYAMLConflict{
 				Code:                   "MergePreconditionFailed",
 				Message:                "Reload merge rejected changes to object identity fields. Keep apiVersion, kind, name, and namespace aligned with the selected object.",
 				CurrentYAML:            currentYAML,
 				CurrentResourceVersion: currentObj.GetResourceVersion(),
 				Causes:                 []string{err.Error()},
-			}
+			}}
 		}
 		return nil, fmt.Errorf("failed to build reload merge patch: %w", err)
 	}
@@ -142,7 +156,7 @@ func prepareReloadMergeContext(
 	}
 	baseObj, draftObj, err := parseReloadMergeObjects(req)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, errorstatus.BadRequest(err)
 	}
 
 	gvk := schema.FromAPIVersionAndKind(req.APIVersion, req.Kind)
@@ -204,12 +218,12 @@ func validateReloadMergeUID(current *unstructured.Unstructured, req ObjectYAMLRe
 	if err != nil {
 		return err
 	}
-	return &objectYAMLError{
+	return &yamlConflictError{conflict: ObjectYAMLConflict{
 		Code:                   "ObjectUIDMismatch",
 		Message:                fmt.Sprintf("object identity changed since editing began: current uid is %s, editor tracked %s", current.GetUID(), req.UID),
 		CurrentYAML:            currentYAML,
 		CurrentResourceVersion: current.GetResourceVersion(),
-	}
+	}}
 }
 
 func validateReloadMergeObject(
@@ -252,6 +266,12 @@ func sanitizeForMerge(obj *unstructured.Unstructured) *unstructured.Unstructured
 	return sanitized
 }
 
+// buildReloadMergePatch returns the draft's own edits (baseline → draft, the
+// same two-way patch family Save sends) for applyReloadMergePatch to apply to
+// the live object, so a field someone else changed that the draft did not edit
+// keeps its live value. It fails with a mergepatch conflict when an edit
+// changes a field the live object also changed since the baseline, to a
+// different value.
 func buildReloadMergePatch(
 	gvk schema.GroupVersionKind,
 	baseObj, draftObj, currentObj *unstructured.Unstructured,
@@ -261,37 +281,106 @@ func buildReloadMergePatch(
 		return nil, nil, err
 	}
 
-	preconditions := []mergepatch.PreconditionFunc{
+	typedObj, err := kubescheme.Scheme.New(gvk)
+	if err != nil {
+		patch, patchErr := buildJSONReloadMergePatch(baseJSON, draftJSON, currentJSON)
+		return patch, nil, patchErr
+	}
+	patchMeta, err := strategicpatch.NewPatchMetaFromStruct(typedObj)
+	if err != nil {
+		return nil, nil, err
+	}
+	patch, err := buildStrategicReloadMergePatch(baseJSON, draftJSON, currentJSON, patchMeta)
+	return patch, patchMeta, err
+}
+
+func buildStrategicReloadMergePatch(
+	baseJSON, draftJSON, currentJSON []byte,
+	patchMeta strategicpatch.LookupPatchMeta,
+) ([]byte, error) {
+	edits, err := strategicpatch.CreateTwoWayMergePatchUsingLookupPatchMeta(baseJSON, draftJSON, patchMeta)
+	if err != nil {
+		return nil, err
+	}
+	changed, err := strategicpatch.CreateTwoWayMergePatchUsingLookupPatchMeta(baseJSON, currentJSON, patchMeta)
+	if err != nil {
+		return nil, err
+	}
+	return edits, requireReloadMergeEditsApply(edits, changed, func(editsMap, changedMap map[string]interface{}) (bool, error) {
+		dropListDirectives(editsMap)
+		dropListDirectives(changedMap)
+		return strategicpatch.MergingMapsHaveConflicts(editsMap, changedMap, patchMeta)
+	})
+}
+
+func buildJSONReloadMergePatch(baseJSON, draftJSON, currentJSON []byte) ([]byte, error) {
+	edits, err := jsonpatch.CreateMergePatch(baseJSON, draftJSON)
+	if err != nil {
+		return nil, err
+	}
+	changed, err := jsonpatch.CreateMergePatch(baseJSON, currentJSON)
+	if err != nil {
+		return nil, err
+	}
+	return edits, requireReloadMergeEditsApply(edits, changed, func(editsMap, changedMap map[string]interface{}) (bool, error) {
+		return mergepatch.HasConflicts(editsMap, changedMap)
+	})
+}
+
+// requireReloadMergeEditsApply fails when the draft's edits change the
+// object's identity, or overlap a live change (baseline → current) with a
+// different value.
+func requireReloadMergeEditsApply(
+	edits, changed []byte,
+	hasConflicts func(editsMap, changedMap map[string]interface{}) (bool, error),
+) error {
+	var editsMap, changedMap map[string]interface{}
+	if err := json.Unmarshal(edits, &editsMap); err != nil {
+		return fmt.Errorf("failed to decode draft edits: %w", err)
+	}
+	if err := json.Unmarshal(changed, &changedMap); err != nil {
+		return fmt.Errorf("failed to decode live changes: %w", err)
+	}
+	for _, precondition := range []mergepatch.PreconditionFunc{
 		mergepatch.RequireKeyUnchanged("apiVersion"),
 		mergepatch.RequireKeyUnchanged("kind"),
 		mergepatch.RequireMetadataKeyUnchanged("name"),
 		mergepatch.RequireMetadataKeyUnchanged("namespace"),
-	}
-
-	typedObj, err := kubescheme.Scheme.New(gvk)
-	if err == nil {
-		patchMeta, patchMetaErr := strategicpatch.NewPatchMetaFromStruct(typedObj)
-		if patchMetaErr != nil {
-			return nil, nil, patchMetaErr
+	} {
+		if !precondition(editsMap) {
+			return mergepatch.NewErrPreconditionFailed(editsMap)
 		}
-		patch, patchErr := strategicpatch.CreateThreeWayMergePatch(
-			baseJSON,
-			draftJSON,
-			currentJSON,
-			patchMeta,
-			false,
-			preconditions...,
-		)
-		return patch, patchMeta, patchErr
 	}
+	conflict, err := hasConflicts(editsMap, changedMap)
+	if err != nil {
+		return err
+	}
+	if conflict {
+		return mergepatch.NewErrConflict(mergepatch.ToYAMLOrError(editsMap), mergepatch.ToYAMLOrError(changedMap))
+	}
+	return nil
+}
 
-	patch, patchErr := jsonmergepatch.CreateThreeWayJSONMergePatch(
-		baseJSON,
-		draftJSON,
-		currentJSON,
-		preconditions...,
-	)
-	return patch, nil, patchErr
+// dropListDirectives removes the strategic merge patch keys that only order a
+// list ($setElementOrder) or remove items from a list of scalars
+// ($deleteFromPrimitiveList). Both sides carry them for any list they touched,
+// merging scalar lists has no conflicts by definition, and the conflict check's
+// schema lookup cannot resolve these keys.
+func dropListDirectives(value interface{}) {
+	switch typed := value.(type) {
+	case map[string]interface{}:
+		for key, child := range typed {
+			if strings.HasPrefix(key, "$setElementOrder/") || strings.HasPrefix(key, "$deleteFromPrimitiveList/") {
+				delete(typed, key)
+				continue
+			}
+			dropListDirectives(child)
+		}
+	case []interface{}:
+		for _, child := range typed {
+			dropListDirectives(child)
+		}
+	}
 }
 
 func marshalMergeDocuments(

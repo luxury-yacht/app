@@ -1,172 +1,87 @@
 /**
  * frontend/src/ui/modals/SettingsModal.test.tsx
  *
- * Test suite for SettingsModal — tabbed shell behavior + section switching.
+ * The Settings modal as the app opens it: the dialog is named by its visible
+ * title, its categories are one Tab stop moved with the arrow keys, choosing a
+ * category shows that section and Settings reopens on it, Escape closes it,
+ * and the page cannot scroll behind it while it is open. Runs in the full app
+ * with the real settings sections over the faked backend (test-utils/appState);
+ * Settings opens from its menu accelerator.
  */
 
-import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { installAppStateHarness, type MountedApp } from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
-import SettingsModal from './SettingsModal';
 
-const runtimeMocks = vi.hoisted(() => ({
-  eventsOn: vi.fn(() => () => undefined),
-}));
+const app = installAppStateHarness();
+let view: MountedApp;
 
-vi.mock('@core/desktop-runtime', () => ({
-  desktopRuntimeAvailable: () => false,
-  onEvent: runtimeMocks.eventsOn,
-}));
+const keydown = (key: string, init: KeyboardEventInit = {}) =>
+  new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init });
 
-vi.mock('@ui/settings/sections/AppearanceSection', () => ({
-  __esModule: true,
-  default: vi.fn(() => (
-    <div data-testid="section-appearance">
-      <input aria-label="Appearance setting" />
-    </div>
-  )),
-}));
+/** Presses a key where focus is; returns the event to read whether it was claimed. */
+const press = async (key: string, init: KeyboardEventInit = {}) => {
+  const event = keydown(key, init);
+  await act(async () => {
+    (document.activeElement ?? document.body).dispatchEvent(event);
+  });
+  return event;
+};
 
-vi.mock('@ui/settings/sections/KubeconfigsSection', () => ({
-  __esModule: true,
-  default: vi.fn(() => <div data-testid="section-kubeconfigs" />),
-}));
+/** Settings > Ctrl+, outside macOS. */
+const openSettings = async () => {
+  await act(async () => {
+    document.body.dispatchEvent(keydown(',', { ctrlKey: true }));
+  });
+  await app.settle();
+};
 
-vi.mock('@ui/settings/sections/DisplaySection', () => ({
-  __esModule: true,
-  default: vi.fn(() => <div data-testid="section-display" />),
-}));
+const settingsOpen = () => view.owners().viewState?.isSettingsOpen;
 
-vi.mock('@ui/settings/sections/ObjectPanelSection', () => ({
-  __esModule: true,
-  default: vi.fn(() => <div data-testid="section-object-panel" />),
-}));
+const category = (label: string) =>
+  requireValue(
+    Array.from(document.querySelectorAll<HTMLButtonElement>('.modal-sidebar-item')).find(
+      (button) => button.textContent === label
+    ),
+    `expected the ${label} category`
+  );
 
-vi.mock('@ui/settings/sections/LogsSection', () => ({
-  __esModule: true,
-  default: vi.fn(() => <div data-testid="section-logs" />),
-}));
+const categoryTabStops = () =>
+  Array.from(document.querySelectorAll<HTMLButtonElement>('.modal-sidebar-item')).filter(
+    (button) => button.tabIndex === 0
+  );
 
-vi.mock('@ui/settings/sections/DataManagementSection', () => ({
-  __esModule: true,
-  default: vi.fn(() => <div data-testid="section-data-management" />),
-}));
+const shownSection = () =>
+  document.querySelector('.settings-modal-content .settings-panel-title')?.textContent;
 
-vi.mock('@ui/settings/sections/AdvancedSection', () => ({
-  __esModule: true,
-  default: vi.fn(() => <div data-testid="section-advanced" />),
-}));
+const closeButton = () =>
+  requireValue(
+    document.querySelector<HTMLButtonElement>('button[aria-label="Close Settings"]'),
+    'expected the Settings close button'
+  );
 
-vi.mock('@core/backend-api', () => ({
-  GetAppSettings: vi.fn().mockResolvedValue({ useShortResourceNames: false }),
-  GetAppInfo: vi.fn().mockResolvedValue({ version: '4.2.1' }),
-}));
-
-vi.mock('@/core/app-state-access', () => ({
-  readAppInfo: vi.fn().mockResolvedValue({ version: '4.2.1' }),
-  requestAppState: vi.fn(({ read }: { read: () => Promise<unknown> }) => read()),
-}));
-
-vi.mock('@/utils/appearanceMode', () => ({
-  changeAppearanceMode: vi.fn().mockResolvedValue(undefined),
-}));
-
-vi.mock('@/core/refresh/RefreshManager', () => ({
-  refreshManager: {
-    register: vi.fn(),
-    unregister: vi.fn(),
-    subscribe: vi.fn(() => () => undefined),
-    enable: vi.fn(),
-    disable: vi.fn(),
-    pause: vi.fn(),
-    resume: vi.fn(),
-  },
-}));
+beforeEach(async () => {
+  const dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['default']);
+  app.startScreen(dev);
+  // The Appearance section lists the saved themes.
+  app.backend.answer('GetThemes', () => []);
+  view = await app.mountApp();
+  await openSettings();
+});
 
 describe('SettingsModal', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
-
-  beforeEach(async () => {
-    runtimeMocks.eventsOn.mockReset().mockReturnValue(() => undefined);
-    // Reset persisted-tab so each test starts on the default tab.
-    try {
-      localStorage.removeItem('app-settings-last-tab');
-    } catch {
-      /* ignore */
-    }
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-
-    await act(async () => {
-      root.render(
-        <KeyboardProvider>
-          <SettingsModal isOpen onClose={vi.fn()} />
-        </KeyboardProvider>
-      );
-      await Promise.resolve();
-    });
-  });
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-  });
-
-  it('keeps categories at one Tab stop and moves their focus with arrows', async () => {
-    const category = (label: string) =>
-      requireValue(
-        Array.from(document.querySelectorAll<HTMLButtonElement>('.modal-sidebar-item')).find(
-          (button) => button.textContent === label
-        ),
-        `expected ${label} category`
-      );
-    const close = requireValue(
-      document.querySelector<HTMLButtonElement>('[aria-label="Close Settings"]'),
-      'close'
-    );
-    const setting = requireValue(
-      document.querySelector<HTMLInputElement>('[aria-label="Appearance setting"]'),
-      'setting'
-    );
-    const press = async (key: string, modifiers: KeyboardEventInit = {}) => {
-      const event = new KeyboardEvent('keydown', {
-        key,
-        bubbles: true,
-        cancelable: true,
-        ...modifiers,
-      });
-      await act(async () => {
-        document.activeElement?.dispatchEvent(event);
-      });
-      return event;
-    };
-    const expectFocusStop = (label: string) => {
-      const stops = Array.from(
-        document.querySelectorAll<HTMLButtonElement>('.modal-sidebar-item')
-      ).filter((button) => button.tabIndex === 0);
-      expect(stops).toEqual([category(label)]);
-    };
-
-    expect(document.activeElement).toBe(close);
-    expectFocusStop('Appearance');
+  it('keeps the categories at one Tab stop and moves their focus with the arrow keys', async () => {
+    expect(document.activeElement).toBe(closeButton());
+    expect(categoryTabStops()).toEqual([category('Appearance')]);
     await press('Tab');
     expect(document.activeElement).toBe(category('Appearance'));
     await press('ArrowDown');
     expect(document.activeElement).toBe(category('Kubeconfigs'));
-    expectFocusStop('Kubeconfigs');
+    expect(categoryTabStops()).toEqual([category('Kubeconfigs')]);
+    // Moving focus does not choose the category.
     expect(category('Appearance').getAttribute('aria-current')).toBe('page');
-    await press('Tab');
-    expect(document.activeElement).toBe(setting);
-    expect((await press('ArrowDown')).defaultPrevented).toBe(false);
-    expect(document.activeElement).toBe(setting);
-    await press('Tab', { shiftKey: true });
-    expect(document.activeElement).toBe(category('Kubeconfigs'));
     await press('ArrowUp');
     await press('ArrowUp');
     expect(document.activeElement).toBe(category('Advanced'));
@@ -178,210 +93,68 @@ describe('SettingsModal', () => {
     expect(document.activeElement).toBe(category('Appearance'));
     expect((await press('ArrowDown', { altKey: true })).defaultPrevented).toBe(false);
     expect(document.activeElement).toBe(category('Appearance'));
+    // Enter and Space keep their native button activation.
     expect((await press('Enter')).defaultPrevented).toBe(false);
     expect((await press(' ')).defaultPrevented).toBe(false);
+  });
+
+  it('passes Tab between the categories and the shown section', async () => {
+    const firstAppearanceControl = requireValue(
+      document.querySelector<HTMLButtonElement>('fieldset[aria-label="Appearance mode"] button'),
+      'expected the appearance mode choices'
+    );
+    await press('Tab');
+    await press('ArrowDown');
+    await press('Tab');
+    expect(document.activeElement).toBe(firstAppearanceControl);
+    // Arrows inside a section belong to its controls.
+    expect((await press('ArrowDown')).defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(firstAppearanceControl);
+    await press('Tab', { shiftKey: true });
+    expect(document.activeElement).toBe(category('Kubeconfigs'));
 
     await act(async () => category('Display').click());
-    expectFocusStop('Display');
-    expect(document.querySelector('[data-testid="section-display"]')).not.toBeNull();
+    await app.settle();
+    expect(categoryTabStops()).toEqual([category('Display')]);
+    expect(shownSection()).toBe('Display');
     await press('Tab', { shiftKey: true });
-    expect(document.activeElement).toBe(close);
+    expect(document.activeElement).toBe(closeButton());
     await press('Tab');
     expect(document.activeElement).toBe(category('Display'));
   });
 
-  it('exposes the visible settings title as the dialog accessible name', () => {
+  it('names the dialog by its visible title', () => {
     const dialog = requireValue(document.querySelector('[role="dialog"]'), 'settings dialog');
     const titleId = requireValue(dialog.getAttribute('aria-labelledby'), 'dialog label reference');
     const title = requireValue(document.getElementById(titleId), 'referenced dialog title');
+
     expect(dialog.contains(title)).toBe(true);
     expect(title.textContent).toContain('Settings');
   });
 
-  it('closes on Escape through the shared modal surface', () => {
-    const onClose = vi.fn();
-    act(() => {
-      root.render(
-        <KeyboardProvider>
-          <SettingsModal isOpen onClose={onClose} />
-        </KeyboardProvider>
-      );
-    });
-
-    act(() => {
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    });
-    expect(onClose).toHaveBeenCalled();
-  });
-
-  it('ignores overlay and modal-content clicks', () => {
-    const onClose = vi.fn();
-    act(() => {
-      root.render(
-        <KeyboardProvider>
-          <SettingsModal isOpen onClose={onClose} />
-        </KeyboardProvider>
-      );
-    });
-
-    const overlay = document.querySelector('.settings-modal-overlay') as HTMLDivElement | null;
-    expect(overlay).toBeTruthy();
-    const modal = document.querySelector('.settings-modal') as HTMLDivElement | null;
-    expect(modal).toBeTruthy();
-
-    act(() => {
-      modal?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    expect(onClose).not.toHaveBeenCalled();
-
-    act(() => {
-      overlay?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    expect(onClose).not.toHaveBeenCalled();
-  });
-
-  it('maintains closing animation before unmounting and restores scroll lock', () => {
-    vi.useFakeTimers();
-    const onClose = vi.fn();
-    act(() => {
-      root.render(
-        <KeyboardProvider>
-          <SettingsModal isOpen onClose={onClose} />
-        </KeyboardProvider>
-      );
-    });
+  it('closes on Escape and lets the page scroll again', async () => {
     expect(document.body.style.overflow).toBe('hidden');
 
-    act(() => {
-      root.render(
-        <KeyboardProvider>
-          <SettingsModal isOpen={false} onClose={onClose} />
-        </KeyboardProvider>
-      );
-    });
+    await press('Escape');
+    await app.settle();
 
-    expect(document.querySelector('.settings-modal')?.classList.contains('closing')).toBe(true);
-
-    act(() => {
-      vi.advanceTimersByTime(200);
-    });
-
-    expect(document.querySelector('.settings-modal')).toBeNull();
+    expect(settingsOpen()).toBe(false);
     expect(document.body.style.overflow).toBe('');
-
-    vi.useRealTimers();
   });
 
-  it('renders Appearance section by default and switches to Kubeconfigs on tab click', async () => {
-    expect(document.querySelector('[data-testid="section-appearance"]')).toBeTruthy();
-    expect(document.querySelector('[data-testid="section-kubeconfigs"]')).toBeNull();
+  it('shows the chosen category’s section and reopens on it', async () => {
+    expect(shownSection()).toBe('Appearance');
 
-    const tabs = Array.from(
-      document.querySelectorAll('.modal-sidebar-item')
-    ) as HTMLButtonElement[];
-    const kubeconfigTab = tabs.find((t) => t.textContent?.includes('Kubeconfigs'));
-    expect(kubeconfigTab).toBeTruthy();
+    await act(async () => category('Display').click());
+    await app.settle();
+    expect(shownSection()).toBe('Display');
 
-    await act(async () => {
-      requireValue(kubeconfigTab, 'expected test value in SettingsModal.test.tsx').click();
-      await Promise.resolve();
-    });
+    await press('Escape');
+    await app.settle();
+    expect(settingsOpen()).toBe(false);
+    await openSettings();
 
-    expect(document.querySelector('[data-testid="section-appearance"]')).toBeNull();
-    expect(document.querySelector('[data-testid="section-kubeconfigs"]')).toBeTruthy();
-  });
-
-  it('places Logs after Object Panel and Data Management before Advanced in the sidebar', () => {
-    const labels = Array.from(document.querySelectorAll('.modal-sidebar-item')).map((tab) =>
-      tab.textContent?.trim()
-    );
-
-    expect(labels).toEqual([
-      'Appearance',
-      'Kubeconfigs',
-      'Display',
-      'Object Panel',
-      'Logs',
-      'Data Management',
-      'Advanced',
-    ]);
-  });
-
-  it('opens the Logs section from its sidebar category', async () => {
-    const logsTab = Array.from(
-      document.querySelectorAll<HTMLButtonElement>('.modal-sidebar-item')
-    ).find((tab) => tab.textContent?.trim() === 'Logs');
-
-    await act(async () => {
-      requireValue(logsTab, 'expected Logs settings tab').click();
-      await Promise.resolve();
-    });
-
-    expect(document.querySelector('[data-testid="section-logs"]')).toBeTruthy();
-    expect(localStorage.getItem('app-settings-last-tab')).toBe('logs');
-  });
-
-  it('opens the Data Management section from its sidebar category', async () => {
-    const dataManagementTab = Array.from(
-      document.querySelectorAll<HTMLButtonElement>('.modal-sidebar-item')
-    ).find((tab) => tab.textContent?.includes('Data Management'));
-
-    await act(async () => {
-      requireValue(dataManagementTab, 'expected Data Management settings tab').click();
-      await Promise.resolve();
-    });
-
-    expect(document.querySelector('[data-testid="section-data-management"]')).toBeTruthy();
-    expect(localStorage.getItem('app-settings-last-tab')).toBe('data-management');
-  });
-
-  it('honors initialTab prop on open', async () => {
-    const onClose = vi.fn();
-    await act(async () => {
-      root.render(
-        <KeyboardProvider>
-          <SettingsModal isOpen onClose={onClose} initialTab="advanced" />
-        </KeyboardProvider>
-      );
-      await Promise.resolve();
-    });
-    expect(document.querySelector('[data-testid="section-advanced"]')).toBeTruthy();
-    expect(document.querySelector('.modal-sidebar-item[tabindex="0"]')?.textContent).toBe(
-      'Advanced'
-    );
-  });
-
-  it('persists the active tab across opens via localStorage', async () => {
-    const tabs = Array.from(
-      document.querySelectorAll('.modal-sidebar-item')
-    ) as HTMLButtonElement[];
-    const displayTab = tabs.find((t) => t.textContent?.includes('Display'));
-    await act(async () => {
-      requireValue(displayTab, 'expected test value in SettingsModal.test.tsx').click();
-      await Promise.resolve();
-    });
-    expect(localStorage.getItem('app-settings-last-tab')).toBe('display');
-
-    // Re-open the modal with no initialTab and verify it restores 'display'.
-    await act(async () => {
-      root.render(
-        <KeyboardProvider>
-          <SettingsModal isOpen={false} onClose={vi.fn()} />
-        </KeyboardProvider>
-      );
-      await Promise.resolve();
-    });
-    await act(async () => {
-      root.render(
-        <KeyboardProvider>
-          <SettingsModal isOpen onClose={vi.fn()} />
-        </KeyboardProvider>
-      );
-      await Promise.resolve();
-    });
-    expect(document.querySelector('[data-testid="section-display"]')).toBeTruthy();
-    expect(document.querySelector('.modal-sidebar-item[tabindex="0"]')?.textContent).toBe(
-      'Display'
-    );
+    expect(shownSection()).toBe('Display');
+    expect(categoryTabStops()).toEqual([category('Display')]);
   });
 });

@@ -6,7 +6,8 @@
  */
 
 import { captureUserVisibleError } from '@/core/telemetry/sentry';
-import { ErrorCategory, isExpectedClusterErrorCategory } from '@/shared/constants/errorCategories';
+import { ErrorCategory } from '@/shared/constants/errorCategories';
+import { errorStatusOf, isBrowserFetchFailure } from './errorStatus';
 
 export { ErrorCategory };
 
@@ -18,16 +19,6 @@ export const ErrorSeverity = {
 } as const;
 
 export type ErrorSeverity = (typeof ErrorSeverity)[keyof typeof ErrorSeverity];
-
-// Word-boundary matching avoids resource-name false positives
-// (e.g. "authorization" in "rbac.authorization.k8s.io" is not an auth error).
-const authWordPattern = /\bauth\b/;
-const authTokenPattern = /\btokens?\b/;
-const httpForbiddenPattern = /\bhttp(?:\/\d(?:\.\d)?)?\s+403\b/;
-const statusForbiddenPattern = /\bstatus(?:\s+(?:code|of))?(?:\s*[:=]\s*|\s+)403\b/;
-const connectivityPattern =
-  /\b(?:network|[a-z0-9_-]*fetch[a-z0-9_-]*|cors|connections?|disconnected|dial tcp|no such host|tls handshake|x509|offline|econnrefused)\b/;
-const timeoutPattern = /\b(?:timeout|timed out)\b/;
 
 export interface ErrorDetails {
   message: string;
@@ -101,6 +92,10 @@ const categoryPresentation: Record<ErrorCategory, ErrorPresentation> = {
     message: 'Invalid request. Please check your input and try again.',
     severity: ErrorSeverity.WARNING,
   },
+  CONFLICT: {
+    message: 'This object changed or already exists. Refresh and try again.',
+    severity: ErrorSeverity.WARNING,
+  },
   TIMEOUT: {
     message: 'The operation timed out. Please try again.',
     retryable: true,
@@ -135,93 +130,26 @@ class ErrorHandler {
   }
 
   /**
-   * Categorizes an error based on its content and type
+   * The backend status decides the category; an error without one is a
+   * network failure only when the browser could not reach the backend.
    */
   private categorizeError(error: unknown): ErrorCategory {
-    const errorString = this.getErrorString(error);
-    const lowerError = errorString.toLowerCase();
-    const isTimeout = timeoutPattern.test(lowerError);
-
-    // Permission and authentication markers are more specific than API group
-    // or resource names containing broad words such as "network".
-    if (
-      lowerError.includes('forbidden') ||
-      lowerError.includes('permission') ||
-      lowerError.includes('access denied') ||
-      httpForbiddenPattern.test(lowerError) ||
-      statusForbiddenPattern.test(lowerError)
-    ) {
-      return ErrorCategory.PERMISSION;
+    const status = errorStatusOf(error);
+    if (status) {
+      return status.category;
     }
-
-    // Authentication errors
-    if (
-      lowerError.includes('unauthorized') ||
-      lowerError.includes('authentication') ||
-      authWordPattern.test(lowerError) ||
-      authTokenPattern.test(lowerError) ||
-      lowerError.includes('expired') ||
-      lowerError.includes('401')
-    ) {
-      return ErrorCategory.AUTHENTICATION;
-    }
-
-    // Network errors
-    if (!isTimeout && connectivityPattern.test(lowerError)) {
-      return ErrorCategory.NETWORK;
-    }
-
-    // Not found errors
-    if (
-      lowerError.includes('not found') ||
-      lowerError.includes('404') ||
-      lowerError.includes('missing')
-    ) {
-      return ErrorCategory.NOT_FOUND;
-    }
-
-    // Validation errors
-    if (
-      lowerError.includes('invalid') ||
-      lowerError.includes('validation') ||
-      lowerError.includes('bad request') ||
-      lowerError.includes('400')
-    ) {
-      return ErrorCategory.VALIDATION;
-    }
-
-    // Server errors (check before timeout to catch "Gateway Timeout")
-    if (
-      lowerError.includes('500') ||
-      lowerError.includes('502') ||
-      lowerError.includes('503') ||
-      (lowerError.includes('504') && lowerError.includes('gateway')) ||
-      lowerError.includes('server error') ||
-      lowerError.includes('internal server')
-    ) {
-      return ErrorCategory.SERVER_ERROR;
-    }
-
-    // Timeout errors
-    if (isTimeout) {
-      return ErrorCategory.TIMEOUT;
-    }
-
-    // Rate limit errors
-    if (
-      lowerError.includes('rate limit') ||
-      lowerError.includes('too many requests') ||
-      lowerError.includes('429')
-    ) {
-      return ErrorCategory.RATE_LIMIT;
-    }
-
-    return ErrorCategory.UNKNOWN;
+    return isBrowserFetchFailure(error) ? ErrorCategory.NETWORK : ErrorCategory.UNKNOWN;
   }
 
+  // These categories are only useful with their own message: which
+  // credentials, which argument, or what failed.
   private getUserMessage(category: ErrorCategory, originalMessage: string): string {
     const { message } = categoryPresentation[category];
-    if (category === ErrorCategory.AUTHENTICATION || category === ErrorCategory.UNKNOWN) {
+    if (
+      category === ErrorCategory.AUTHENTICATION ||
+      category === ErrorCategory.VALIDATION ||
+      category === ErrorCategory.UNKNOWN
+    ) {
       return originalMessage || message;
     }
     return message;
@@ -248,35 +176,21 @@ class ErrorHandler {
     context?: Record<string, unknown>,
     customMessage?: string
   ): ErrorDetails {
-    let errorContext = context;
     const errorString = this.getErrorString(error);
     const category = this.categorizeError(error);
     const presentation = categoryPresentation[category];
     const severity = presentation.severity || this.options.defaultSeverity || ErrorSeverity.ERROR;
-    let userMsg = customMessage || this.getUserMessage(category, errorString);
-    let technicalMsg = errorString;
-
-    if (errorString.includes('STDERR:')) {
-      const parts = errorString.split('STDERR:');
-      userMsg = customMessage || this.getUserMessage(category, parts[0].trim());
-      technicalMsg = parts[1]?.trim() || errorString;
-      errorContext = {
-        ...errorContext,
-        originalError: parts[0].trim(),
-        stderr: parts[1]?.trim(),
-      };
-    }
 
     return {
       message: errorString,
       category,
       severity,
       originalError: error,
-      context: errorContext,
+      context,
       timestamp: new Date(),
       retryable: presentation.retryable ?? false,
-      userMessage: userMsg,
-      technicalMessage: technicalMsg,
+      userMessage: customMessage || this.getUserMessage(category, errorString),
+      technicalMessage: errorString,
       suggestions: [...(presentation.suggestions ?? [])],
     };
   }
@@ -284,8 +198,7 @@ class ErrorHandler {
   private reportError(
     error: unknown,
     details: ErrorDetails,
-    surface: 'operational' | 'user-visible' = 'user-visible',
-    expectedCondition = false
+    surface: 'operational' | 'user-visible' = 'user-visible'
   ): void {
     const reactRootAlreadyCaptured =
       details.context?.source === 'ErrorBoundary' || details.context?.action === 'componentError';
@@ -294,7 +207,6 @@ class ErrorHandler {
         category: details.category,
         severity: details.severity,
         surface,
-        expectedCondition,
         context: details.context,
       });
     }
@@ -317,33 +229,19 @@ class ErrorHandler {
     customMessage?: string
   ): ErrorDetails {
     const errorDetails = this.describe(error, context, customMessage);
-    const { category, message: errorString } = errorDetails;
+    const { category } = errorDetails;
 
-    // Suppress notifications for auth-related errors that are handled by the AuthFailureOverlay.
-    // All AUTHENTICATION-category errors (token expired, SSO failures, 401s, etc.) are
-    // surfaced via the overlay, so we suppress their toast notifications entirely.
-    const isAuthOverlayError =
-      errorString.includes('no active clusters available') ||
-      errorString.includes('Error loading SSO Token') ||
-      errorString.includes('auth failed:') ||
-      errorString.includes('getting credentials: exec:') ||
-      errorString.includes('refresh subsystem not initialised') ||
-      (errorString.includes('executable') && errorString.includes('failed with exit code'));
-
+    // An expected denial or credential failure is already shown where it
+    // belongs (the view's permission state; the auth overlay), so it gets no
+    // toast. A denial of an offered action is not expected and is shown.
     const suppressNotification =
-      category === ErrorCategory.PERMISSION ||
-      category === ErrorCategory.AUTHENTICATION ||
-      isAuthOverlayError;
+      errorStatusOf(error)?.expected === true &&
+      (category === ErrorCategory.PERMISSION || category === ErrorCategory.AUTHENTICATION);
 
     if (suppressNotification) {
       this.logExpectedCondition(errorDetails);
     } else {
-      this.reportError(
-        error,
-        errorDetails,
-        'user-visible',
-        isExpectedClusterErrorCategory(category)
-      );
+      this.reportError(error, errorDetails, 'user-visible');
       // Store in history
       this.addToHistory(errorDetails);
 

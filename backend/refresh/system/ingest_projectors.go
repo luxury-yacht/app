@@ -1,18 +1,17 @@
 /*
  * backend/refresh/system/ingest_projectors.go
  *
- * Registers each ingest-owned (cut) kind's Catalog-half and ObjectMap-half
+ * Registers each streamed kind's Catalog-half and ObjectMap-half
  * projectors with the IngestManager before it starts, so one reflector intake feeds
  * the maintained store (Table half, the descriptor's StreamRow — already wired by the
  * manager), the object catalog (Catalog half, the kind's catalog Summary), and the
  * object map (ObjectMap half, the kind's graph node). The loop is generic over the
- * registry's IngestOwned facet; it names no kind.
+ * kind registry; it names no kind.
  */
 
 package system
 
 import (
-	"context"
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,22 +20,22 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/kindspec"
 	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
-	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/resourcekind"
 )
 
 // registerIngestProjectors wires the Catalog and ObjectMap projectors for every
-// ingest-owned kind onto the manager (the Table half is the descriptor's StreamRow,
+// streamed kind onto the manager (the Table half is the descriptor's StreamRow,
 // already built by the manager's projection). It must be called before the manager
 // starts so every intake — including the initial relist — carries all three halves.
 func registerIngestProjectors(mgr *ingest.IngestManager, clusterID string) {
-	for _, d := range kindregistry.IngestOwnedDescriptors() {
-		// A bespoke-reflector kind (Stream == nil — only Pod) carries its OWN full
-		// ProjectFunc that builds all four bundle halves, so the generic Catalog/
-		// ObjectMap projectors here do not apply: the manager has no generic StreamRow
-		// entry to attach them to. The system wires the bespoke reflector separately.
+	for _, d := range kindregistry.All {
+		// A bespoke-reflector kind (Stream == nil: Pod, the workload kinds,
+		// ReplicaSet, Service, EndpointSlice, Node, Namespace, Event) carries its own
+		// ProjectFunc that builds every bundle half, so the generic Catalog/ObjectMap
+		// projectors here do not apply: the manager has no generic StreamRow entry
+		// to attach them to. The system wires each bespoke reflector separately.
 		if d.Stream == nil {
 			continue
 		}
@@ -70,31 +69,40 @@ func ingestObjectMapProjector(clusterID string, d kindspec.Descriptor) ingest.Ob
 // it; this registers a reflector + projecting store whose ProjectFunc is the four-half
 // pod bundle projector (Table = zeroed-metrics PodSummary, Aggregate = PodAggregate,
 // Catalog = catalog Summary, ObjectMap = pod graph node). The projector resolves the
-// pod's ReplicaSet->Deployment owner from the shared factory's RS lister (the RS
-// informer stays registered — only pods is cut). It must run before the hub starts so
-// the pod reflector launches with the rest and its initial relist is sync-gated.
+// pod's ReplicaSet->Deployment and Job->CronJob owners through owner indexes fed by
+// those kinds' reflectors. It must run before the hub starts so the pod reflector
+// launches with the rest and its initial relist is sync-gated.
 func registerPodReflector(
 	mgr *ingest.IngestManager,
-	factory *informer.Factory,
 	meta snapshot.ClusterMeta,
+	rsOwnerLookup func(namespace, name string) (metav1.OwnerReference, bool),
 	jobOwnerLookup func(namespace, jobName string) (snapshot.JobControllerOwner, bool),
 ) {
-	if mgr == nil || factory == nil {
+	if mgr == nil {
 		return
 	}
-	shared := factory.SharedInformerFactory()
-	if shared == nil {
-		return
-	}
-	rsLister := shared.Apps().V1().ReplicaSets().Lister()
-	// retainTable=true: the pod standalone-synthesis (pod_aggregate_source) and live-notify
-	// (ingest_notify_pods) paths read the STORED Table half (PodSummary), so it must not be
-	// dropped. Every other reflector below passes false — its Table half lives only in the
+	// retainTable=true: the pod standalone-synthesis (pod_aggregate_source) and the owner
+	// heals (resourcestream/owner_heals.go) read the STORED Table half (PodSummary), so it
+	// must not be dropped. Every other reflector below passes false — its Table half lives only in the
 	// columnar maintained store after being fanned to the BundleSink.
 	mgr.RegisterReflector(snapshot.PodGVR, snapshot.PodGVK, snapshot.NewPodIngestProjector(meta, snapshot.PodOwnerSources{
-		ReplicaSets:        rsLister,
+		ReplicaSetOwner:    rsOwnerLookup,
 		JobControllerOwner: jobOwnerLookup,
 	}), true)
+	// The owner-key index serves the all-namespaces workload pod join
+	// (pod_aggregate_source.go) and the owner heals (resourcestream/owner_heals.go).
+	// It is a no-op when the cluster cannot serve pods.
+	mgr.AddIndex(snapshot.PodGVR, snapshot.PodOwnerKeyIndexName, snapshot.PodOwnerKeyIndexValues)
+}
+
+// registerReplicaSetReflector wires the bespoke ReplicaSet reflector onto the
+// manager. ReplicaSets have no table, so the bundle carries the catalog
+// summary, the graph node, and the controlling owner the Pod projector reads.
+func registerReplicaSetReflector(mgr *ingest.IngestManager, meta snapshot.ClusterMeta) error {
+	if !mgr.RegisterReflector(snapshot.ReplicaSetGVR, snapshot.ReplicaSetGVK, snapshot.NewReplicaSetIngestProjector(meta), false) {
+		return fmt.Errorf("register workload reflector: ReplicaSet")
+	}
+	return nil
 }
 
 // registerWorkloadReflectors wires the five bespoke workload reflectors onto the manager.
@@ -143,6 +151,27 @@ func registerNodeReflector(mgr *ingest.IngestManager, meta snapshot.ClusterMeta)
 	mgr.RegisterReflector(snapshot.NodeGVR, snapshot.NodeGVK, snapshot.NewNodeIngestProjector(meta), false)
 }
 
+// registerNamespaceReflector wires the bespoke namespace reflector onto the
+// manager. Namespace has no streamspec.Descriptor: the namespaces table joins
+// each namespace with workload presence, warning events, and quota pressure at
+// serve, so the bundle keeps the namespace itself plus its catalog Summary.
+func registerNamespaceReflector(mgr *ingest.IngestManager, meta snapshot.ClusterMeta) error {
+	if !mgr.RegisterReflector(snapshot.NamespaceGVR, snapshot.NamespaceGVK, snapshot.NewNamespaceIngestProjector(meta), false) {
+		return fmt.Errorf("register namespace reflector: Namespace")
+	}
+	return nil
+}
+
+// registerEventReflector wires the bespoke events reflector onto the manager: the
+// Events table row (fanned to the table sinks, not stored), the catalog Summary, and the
+// slim event fact every other Events reader uses.
+func registerEventReflector(mgr *ingest.IngestManager, meta snapshot.ClusterMeta) error {
+	if !mgr.RegisterReflector(snapshot.EventGVR, snapshot.EventGVK, snapshot.NewEventIngestProjector(meta), false) {
+		return fmt.Errorf("register event reflector: Event")
+	}
+	return nil
+}
+
 // registerNetworkReflectors wires the two bespoke network reflectors onto the manager.
 // Service and EndpointSlice have no streamspec.Descriptor (a Service's namespace-network row
 // is built JOINED with its EndpointSlices, and EndpointSlice is both its own table row and
@@ -161,17 +190,12 @@ func registerNetworkReflectors(mgr *ingest.IngestManager, meta snapshot.ClusterM
 	mgr.RegisterReflector(snapshot.EndpointSliceGVR, snapshot.EndpointSliceGVK, snapshot.NewEndpointSliceIngestProjector(meta), false)
 }
 
-// Use the already permission-gated CRD informer as lifecycle input. Dynamic
-// rows use the same metadata projection as catalog LIST, without retaining it.
-func registerCustomResourceIngest(ctx context.Context, mgr *ingest.IngestManager, factory *informer.Factory, clusterID string) {
-	if !factory.CanListWatchWithContext(ctx, "apiextensions.k8s.io", "customresourcedefinitions") {
-		return
-	}
-	extensions := factory.APIExtensionsInformerFactory()
-	if extensions == nil {
-		return
-	}
-	mgr.SetCustomResourceDefinitions(extensions.Apiextensions().V1().CustomResourceDefinitions().Informer(), func(spec ingest.DynamicCatalogSpec) ingest.CatalogProjector {
+// registerCustomResourceIngest feeds the dynamic custom-resource sources from
+// the CRD reflector. Dynamic rows use the same metadata projection as catalog
+// LIST, without retaining it. A denied CRD reflector leaves the definitions
+// table empty, so discovery keeps the dynamic LIST/promotion policy.
+func registerCustomResourceIngest(mgr *ingest.IngestManager, clusterID string) {
+	mgr.SetCustomResourceDefinitions(func(spec ingest.DynamicCatalogSpec) ingest.CatalogProjector {
 		return objectcatalog.SummaryProjector(clusterID, resourcekind.Identity{Group: spec.GVR.Group, Version: spec.GVR.Version, Resource: spec.GVR.Resource, Kind: spec.GVK.Kind, Namespaced: spec.Namespaced})
 	})
 }

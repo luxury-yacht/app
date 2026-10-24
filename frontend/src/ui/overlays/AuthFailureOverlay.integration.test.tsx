@@ -1,98 +1,68 @@
-import {
-  ClusterHealthState,
-  ClusterLifecycleState,
-} from '@bindings/github.com/luxury-yacht/app/backend/models';
+/**
+ * frontend/src/ui/overlays/AuthFailureOverlay.integration.test.tsx
+ *
+ * A window that opens on a workspace whose cluster credentials the backend
+ * already reports as failing blocks that cluster's view with the auth failure
+ * overlay, retries that cluster when asked, and leaves a healthy sibling
+ * cluster's view usable. Runs in the full app over the faked backend
+ * (test-utils/appState): the backend's restored workspace state carries the
+ * failure, as it does for a window opened while a cluster's SSO session has
+ * expired.
+ */
+
 import { act } from 'react';
-import { createRoot } from 'react-dom/client';
-import { expect, it, vi } from 'vitest';
-import { GetClusterWorkspaceStateForWindow, RetryClusterAuth } from '@/core/backend-api';
-import { clusterWorkspaceStore } from '@/core/cluster-workspace/clusterWorkspaceStore';
-import { AuthErrorProvider } from '@/core/contexts/AuthErrorContext';
+import { expect, it } from 'vitest';
+import { backend } from '@/core/backend-api/models';
+import { installAppStateHarness } from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
-import { AuthFailureOverlay } from './AuthFailureOverlay';
 
-const selection = vi.hoisted(() => ({ clusterId: 'expired' }));
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedClusterId: selection.clusterId }),
-}));
-vi.mock('@/core/desktop-runtime', () => ({ onEvent: () => () => undefined }));
-vi.mock('@/core/backend-api', () => ({
-  GetClusterWorkspaceStateForWindow: vi.fn(),
-  RetryClusterAuth: vi.fn().mockResolvedValue(undefined),
-}));
+const app = installAppStateHarness();
 
-it('hydrates a restored auth failure, retries its cluster, and leaves the healthy sibling accessible', async () => {
-  clusterWorkspaceStore.resetForTests();
-  vi.mocked(GetClusterWorkspaceStateForWindow).mockResolvedValue({
-    selectedKubeconfigs: ['expired', 'healthy'],
-    visibleClusterId: 'expired',
-    clusters: {
-      expired: {
-        clusterId: 'expired',
-        clusterName: 'SSO cluster',
-        lifecycle: ClusterLifecycleState.ClusterStateConnecting,
-        health: ClusterHealthState.ClusterHealthUnknown,
-        scopeRevision: 0,
-        auth: {
-          state: 'recovering',
-          errorClass: 'auth',
-          secondsUntilRetry: 6,
-          class: 'auth',
-          kind: 'expired-credentials',
-          summary: 'The authentication token or SSO session has expired.',
-          execCommand: 'aws',
-          reason: 'exec plugin failed with exit code 255',
-        },
-      },
-      healthy: {
-        clusterId: 'healthy',
-        clusterName: 'Healthy cluster',
-        lifecycle: ClusterLifecycleState.ClusterStateReady,
-        health: ClusterHealthState.ClusterHealthHealthy,
-        scopeRevision: 0,
-        auth: {
-          state: 'valid',
-          reason: '',
-          errorClass: '',
-          secondsUntilRetry: 0,
-          class: '',
-          kind: '',
-          summary: '',
-          execCommand: '',
-        },
-      },
-    },
+// What backend/workspace_state.go reports for a cluster whose exec credential
+// plugin failed and whose auth recovery is retrying.
+const expiredSsoAuth = {
+  state: 'recovering',
+  errorClass: 'auth',
+  secondsUntilRetry: 6,
+  class: 'auth',
+  kind: 'expired-credentials',
+  summary: 'The authentication token or SSO session has expired.',
+  execCommand: 'aws',
+  reason: 'exec plugin failed with exit code 255',
+};
+
+it('blocks the failing cluster’s view with its restored auth failure, retries it, and leaves the healthy sibling usable', async () => {
+  const sso = app.cluster({
+    name: 'sso',
+    context: 'prod',
+    lifecycle: backend.ClusterLifecycleState.ClusterStateConnecting,
+    auth: expiredSsoAuth,
   });
-  const container = document.createElement('div');
-  document.body.append(container);
-  const root = createRoot(container);
-  const render = async () => {
-    await act(async () => {
-      root.render(
-        <AuthErrorProvider>
-          <AuthFailureOverlay />
-        </AuthErrorProvider>
-      );
-    });
-  };
-  try {
-    await render();
-    expect(container.querySelector('[role="alertdialog"]')).not.toBeNull();
-    expect(container.textContent).toContain('SSO cluster');
-    expect(container.textContent).toContain('SSO session has expired');
-    expect(container.textContent).not.toContain('Install that command');
-    await act(async () => {
-      requireValue(container.querySelector('button'), 'auth retry button').click();
-    });
-    expect(RetryClusterAuth).toHaveBeenCalledExactlyOnceWith('expired');
-    selection.clusterId = 'healthy';
-    await render();
-    expect(container.querySelector('[role="alertdialog"]')).toBeNull();
-    selection.clusterId = 'expired';
-    await render();
-    expect(container.querySelector('[role="alertdialog"]')).not.toBeNull();
-  } finally {
-    act(() => root.unmount());
-    container.remove();
-  }
+  const healthy = app.cluster({ name: 'healthy', context: 'dev', auth: { state: 'valid' } });
+  app.namespaces(healthy, ['default']);
+  app.startScreen(healthy);
+  app.backend.answer('RetryClusterAuth', () => undefined);
+  // The window opens on its first cluster, the failing one.
+  const view = await app.mountApp();
+  const overlay = () => view.container.querySelector<HTMLElement>('[role="alertdialog"]');
+
+  const blocking = requireValue(overlay(), 'expected the auth failure overlay');
+  expect(blocking.textContent).toContain(sso.clusterName);
+  expect(blocking.textContent).toContain(expiredSsoAuth.summary);
+  await act(async () => {
+    requireValue(
+      Array.from(blocking.querySelectorAll('button')).find(
+        (button) => button.textContent === 'Retry Now'
+      ),
+      'expected the retry button'
+    ).click();
+  });
+  await app.settle();
+  expect(app.backend.calls('RetryClusterAuth')).toEqual([[sso.clusterId]]);
+
+  await view.selectCluster(healthy);
+  expect(overlay()).toBeNull();
+
+  await view.selectCluster(sso);
+  expect(overlay()).not.toBeNull();
 });

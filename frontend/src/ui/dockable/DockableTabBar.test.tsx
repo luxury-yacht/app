@@ -8,62 +8,33 @@
  * here — this suite only exercises the dockable-specific glue.
  */
 
+import { TabDragProvider } from '@shared/components/tabs/dragCoordinator';
 import type React from 'react';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: vi.fn(() => ({
-    selectedClusterId: 'cluster-a',
-    selectedClusterIds: ['cluster-a'],
-  })),
-}));
-
-import { TabDragProvider } from '@shared/components/tabs/dragCoordinator';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { installAppStateHarness, type MountedApp } from '@/test-utils/appState/harness';
 import { DockablePanelProvider } from './DockablePanelProvider';
 import { DockableTabBar, type TabInfo } from './DockableTabBar';
 
-/** Helper to render a React element into a fresh DOM host. */
+// Real cluster selection and app shell around the tab bar (test-utils/appState).
+const app = installAppStateHarness();
+let view: MountedApp;
+
+/** Renders the tab bar inside its own dockable provider, within the app shell. */
 const renderTabBar = async (ui: React.ReactElement) => {
-  const host = document.createElement('div');
-  document.body.appendChild(host);
-  const root = ReactDOM.createRoot(host);
-
-  await act(async () => {
-    root.render(
-      <TabDragProvider>
-        <DockablePanelProvider>{ui}</DockablePanelProvider>
-      </TabDragProvider>
-    );
-    await Promise.resolve();
-  });
-
-  return {
-    host,
-    root,
-    rerender: async (newUi: React.ReactElement) => {
-      await act(async () => {
-        root.render(
-          <TabDragProvider>
-            <DockablePanelProvider>{newUi}</DockablePanelProvider>
-          </TabDragProvider>
-        );
-        await Promise.resolve();
-      });
-    },
-    unmount: async () => {
-      await act(async () => {
-        root.unmount();
-      });
-      host.remove();
-    },
-  };
+  await view.show(
+    <TabDragProvider>
+      <DockablePanelProvider>{ui}</DockablePanelProvider>
+    </TabDragProvider>
+  );
+  return { host: view.container };
 };
 
 describe('DockableTabBar', () => {
-  afterEach(() => {
-    document.body.replaceChildren();
+  beforeEach(async () => {
+    const dev = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, ['default']);
+    view = await app.render(null);
   });
 
   it('marks the active tab via aria-selected and .tab-item--active', async () => {
@@ -72,7 +43,7 @@ describe('DockableTabBar', () => {
       { panelId: 'p2', title: 'Events' },
     ];
 
-    const { host, unmount } = await renderTabBar(
+    const { host } = await renderTabBar(
       <DockableTabBar tabs={tabs} activeTab="p2" onTabClick={vi.fn()} groupKey="bottom" />
     );
 
@@ -86,8 +57,6 @@ describe('DockableTabBar', () => {
     // Second tab should be active.
     expect(tabElements[1].classList.contains('tab-item--active')).toBe(true);
     expect(tabElements[1].getAttribute('aria-selected')).toBe('true');
-
-    await unmount();
   });
 
   it('calls onTabClick when a tab is clicked', async () => {
@@ -97,7 +66,7 @@ describe('DockableTabBar', () => {
       { panelId: 'p2', title: 'Events' },
     ];
 
-    const { host, unmount } = await renderTabBar(
+    const { host } = await renderTabBar(
       <DockableTabBar tabs={tabs} activeTab="p1" onTabClick={onTabClick} groupKey="bottom" />
     );
 
@@ -110,8 +79,6 @@ describe('DockableTabBar', () => {
 
     expect(onTabClick).toHaveBeenCalledTimes(1);
     expect(onTabClick).toHaveBeenCalledWith('p2');
-
-    await unmount();
   });
 
   it('renders close buttons on each tab with per-tab aria-labels', async () => {
@@ -120,7 +87,7 @@ describe('DockableTabBar', () => {
       { panelId: 'p2', title: 'Events' },
     ];
 
-    const { host, unmount } = await renderTabBar(
+    const { host } = await renderTabBar(
       <DockableTabBar tabs={tabs} activeTab="p1" onTabClick={vi.fn()} groupKey="bottom" />
     );
 
@@ -129,8 +96,6 @@ describe('DockableTabBar', () => {
     expect(closeButtons).toHaveLength(2);
     expect(closeButtons[0].getAttribute('aria-label')).toBe('Close Logs');
     expect(closeButtons[1].getAttribute('aria-label')).toBe('Close Events');
-
-    await unmount();
   });
 
   it('sets data-panel-id on each tab for DOM lookup', async () => {
@@ -139,7 +104,7 @@ describe('DockableTabBar', () => {
       { panelId: 'p2', title: 'Events' },
     ];
 
-    const { host, unmount } = await renderTabBar(
+    const { host } = await renderTabBar(
       <DockableTabBar tabs={tabs} activeTab="p1" onTabClick={vi.fn()} groupKey="bottom" />
     );
 
@@ -147,7 +112,5 @@ describe('DockableTabBar', () => {
     expect(tabEls).toHaveLength(2);
     expect((tabEls[0] as HTMLElement).getAttribute('data-panel-id')).toBe('p1');
     expect((tabEls[1] as HTMLElement).getAttribute('data-panel-id')).toBe('p2');
-
-    await unmount();
   });
 });

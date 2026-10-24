@@ -249,11 +249,11 @@
 }
 
 .dropdown-option:hover:not(.disabled) {
-  background-color: var(--color-bg-hover, rgba(255, 255, 255, 0.08));
+  background-color: var(--color-bg-tertiary);
 }
 
 .dropdown-option:active:not(.disabled) {
-  background-color: var(--color-bg-active, rgba(255, 255, 255, 0.12));
+  background-color: var(--color-bg-tertiary);
 }
 
 .dropdown-option.highlighted:not(.disabled) {
@@ -275,7 +275,6 @@
 .dropdown-option.disabled {
   opacity: 0.5;
   cursor: not-allowed;
-  color: var(--color-text-disabled);
 }
 
 /* The row's actions slot supplies the trailing space here, so the option button

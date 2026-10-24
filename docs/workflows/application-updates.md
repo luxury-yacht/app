@@ -71,11 +71,13 @@ requires the platform/architecture payload to be enabled.
   preservation, side-by-side refusal, and cleanup after partial failure. The
   premerge gate cross-vets both architectures. Wails refuses a download unless
   its SHA-512 digest and Ed25519ph signature match the embedded public key.
-- Known gap: no Authenticode signing, so Smart App Control or enterprise App
-  Control may block the app. Authenticode is future hardening, not the payload
-  integrity boundary. With a certificate, sign the executable before the raw
-  copy and NSIS packaging, then sign the installer; artifact format and
-  eligibility stay unchanged.
+- Release CI Authenticode-signs through SignPath in two requests per
+  architecture: the built executable before the raw updater copy and NSIS
+  packaging (`windows:package:from-built` must not rebuild it), then both
+  installers after the drill. Authenticode is distribution trust, not the
+  payload integrity boundary; artifact format and eligibility are unchanged.
+  The NSIS-generated `uninstall.exe` is written at install time and stays
+  unsigned.
 
 ### Linux distributions
 
@@ -143,6 +145,10 @@ requires the platform/architecture payload to be enabled.
   update does not run. The checked input or a matching version tag lets the
   separately permissioned publication job consume that artifact, reject an
   existing release, and create it.
+- For faster feedback, a dry-run dispatch can skip the test job and build only
+  some platforms. The `plan` job rejects either choice for a published release.
+  Release preparation needs every updater target, so it only runs when all
+  three platform jobs succeed.
 - Local check with a complete `artifacts/`:
   `RELEASE_DRY_RUN=true mise exec -- wails3 task release:app`.
 - Never overwrite a release automatically. A failed upload or publish leaves an

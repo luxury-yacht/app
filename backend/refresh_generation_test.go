@@ -71,12 +71,12 @@ func TestRebuildFailureReportingResetsOnlyTheRecoveredStage(t *testing.T) {
 		failures: &clusterRebuildFailures{},
 	}
 	err := errors.New("construction failed")
-	r.reportBuildError("clients", "client rebuild failed", err)
-	r.reportBuildError("subsystem", "subsystem rebuild failed", err)
+	r.reportBuildError("clients", err)
+	r.reportBuildError("subsystem", err)
 	_, ok := r.rebuildClients(context.Background())
 	require.True(t, ok)
-	r.reportBuildError("clients", "client rebuild failed", err)
-	r.reportBuildError("subsystem", "subsystem rebuild failed", err)
+	r.reportBuildError("clients", err)
+	r.reportBuildError("subsystem", err)
 	require.Len(t, app.Refresh.logger.GetEntries(), 3,
 		"client recovery must rearm its report while leaving the unrecovered subsystem failure suppressed")
 }

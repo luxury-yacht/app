@@ -6,36 +6,29 @@ import (
 	"sort"
 	"strings"
 
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	informers "k8s.io/client-go/informers"
-	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
-	eventres "github.com/luxury-yacht/app/backend/resources/events"
 )
 
 const (
 	clusterEventsDomainName = "cluster-events"
 )
 
-// ClusterEventsBuilder aggregates Kubernetes Events for the cluster tab. In production it
-// serves from an informer-fed maintained store (projected at intake by the same
-// projectClusterEventEntry the list path uses); the eventLister path is the list fallback
-// (and the direct-builder unit tests).
+// ClusterEventsBuilder aggregates Kubernetes Events for the cluster tab. It serves from
+// a maintained store fed by the owned events reflector (rows projected at intake and
+// kept by clusterEventEntry).
 type ClusterEventsBuilder struct {
-	eventLister corelisters.EventLister
-	maintained  *typedMaintainedStore[ClusterEventEntry]
-	// eventsSynced reports whether the maintained store's handler has applied
-	// the Events informer's initial list (the informer's own HasSynced turns true
-	// before its handlers catch up). Events are the highest-cardinality resource
-	// in a cluster; serving an unfilled store would publish a confident "zero
-	// events" or partial page during the post-connect window.
+	maintained *typedMaintainedStore[ClusterEventEntry]
+	// eventsSynced reports whether the events store has applied its initial list
+	// (and so fed this table). Events are the highest-cardinality resource in a
+	// cluster; serving an unfilled store would publish a confident "zero events" or
+	// partial page during the post-connect window.
 	eventsSynced cache.InformerSynced
 }
 
@@ -43,18 +36,13 @@ type ClusterEventsBuilder struct {
 // filters by: every cluster-event row's Kind is the literal "Event".
 var clusterEventsAvailableKinds = map[string]bool{"Event": true}
 
-// projectClusterEventEntry projects a Kubernetes Event into a ClusterEventEntry, or
-// reports ok=false to skip it. Cluster events involve cluster-scoped objects only, so an
-// event whose involved object carries a namespace is skipped — the same gate the list path
-// applies. The Event resource itself remains namespaced even when its involved object is
-// cluster-scoped, so Ref.Namespace comes from Event metadata while ObjectNamespace comes
-// from the involved object. Shared by the list path and the maintained-store handler so both
-// project byte-identically.
-func projectClusterEventEntry(meta ClusterMeta, evt *corev1.Event) (ClusterEventEntry, bool) {
-	if evt == nil || strings.TrimSpace(evt.InvolvedObject.Namespace) != "" {
-		return ClusterEventEntry{}, false
-	}
-	return ClusterEventEntry(projectEventRow(meta, evt)), true
+// clusterEventEntry keeps an Events row for the Cluster Events table, or reports ok=false
+// to skip it. Cluster events involve cluster-scoped objects only, so an event whose
+// involved object carries a namespace is skipped. The Event resource itself remains
+// namespaced even when its involved object is cluster-scoped, so Ref.Namespace comes from
+// Event metadata while ObjectNamespace comes from the involved object.
+func clusterEventEntry(row EventSummary) (ClusterEventEntry, bool) {
+	return ClusterEventEntry(row), strings.TrimSpace(row.ObjectNamespace) == ""
 }
 
 // ClusterEventsSnapshot is the payload returned to the UI. It embeds the
@@ -96,40 +84,28 @@ func clusterEventsQuerypageSchema() querypage.Schema[ClusterEventEntry] {
 type ClusterEventEntry EventSummary
 
 // RegisterClusterEventsDomain registers the cluster events domain. It serves from a
-// maintained store fed by the shared Events informer (projected at intake by the same
-// projectClusterEventEntry the list path uses); the handler is registered before the
-// factory starts so the sync gate guarantees the store is populated before serve.
+// maintained store fed by the owned events reflector: the reflector's table sink keeps
+// the rows clusterEventEntry keeps, and the builder waits for the events store's
+// initial list. ingestManager is nil in unit tests, where the store has no feed.
 //
-// The returned notifier rings the table's doorbell after the store applies each change;
-// the subsystem wires its broadcast once the resource-stream manager exists.
-func RegisterClusterEventsDomain(reg *domain.Registry, factory informers.SharedInformerFactory, clusterMeta ClusterMeta) (*EventTableChangeNotifier, error) {
-	if factory == nil {
-		return nil, fmt.Errorf("shared informer factory is nil")
-	}
-	eventInformer := factory.Core().V1().Events()
-
-	notifier := newEventTableChangeNotifier(clusterEventsDomainName, "ce")
+// The returned notifier rings the table's doorbell on bell after the store applies each
+// change.
+func RegisterClusterEventsDomain(reg *domain.Registry, ingestManager *ingest.IngestManager, clusterMeta ClusterMeta, bell doorbell.Bell) (*EventTableChangeNotifier, error) {
+	notifier := newEventTableChangeNotifier(bell, clusterEventsDomainName, "ce")
 	maintained := newTypedMaintainedStore(clusterMeta, clusterEventsQuerypageSchema(), clusterEventTableQueryAdapter())
-	reg.RegisterMaintainedStore(clusterEventsDomainName, maintained) // spill/restore/reconcile across Cold/re-warm
-	storeSynced, err := registerMaintainedInformerHandler(maintained, eventInformer.Informer(),
-		func(obj interface{}) (ClusterEventEntry, metav1.Object, bool) {
-			evt, ok := obj.(*corev1.Event)
-			if !ok {
-				return ClusterEventEntry{}, nil, false
-			}
-			entry, keep := projectClusterEventEntry(clusterMeta, evt)
-			return entry, evt, keep
-		},
-		func(entry ClusterEventEntry) { notifier.changed(entry.ObjectNamespace) },
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	builder := &ClusterEventsBuilder{
-		eventLister:  eventInformer.Lister(),
-		maintained:   maintained,
-		eventsSynced: storeSynced,
+	reg.RegisterMaintainedStore(clusterEventsDomainName, maintained) // spill/restore across Cold/re-warm
+	builder := &ClusterEventsBuilder{maintained: maintained}
+	if ingestManager != nil {
+		sink := &eventTableSink[ClusterEventEntry]{
+			store:    maintained,
+			row:      clusterEventEntry,
+			summary:  func(row ClusterEventEntry) EventSummary { return EventSummary(row) },
+			notifier: notifier,
+		}
+		if !ingestManager.AddBundleSink(EventGVR, sink) {
+			return nil, fmt.Errorf("%s: events ingest store is unavailable", clusterEventsDomainName)
+		}
+		builder.eventsSynced = func() bool { return ingestManager.RawHasSyncedFor(EventGVR) }
 	}
 	if err := reg.Register(refresh.DomainConfig{
 		Name:          clusterEventsDomainName,
@@ -148,15 +124,15 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 	if err != nil {
 		return nil, err
 	}
-	// Wait out the informer's initial sync (bounded by the request context)
-	// instead of listing an unsynced cache: the first request after connect is
+	// Wait out the events store's initial list (bounded by the request context)
+	// instead of serving an unfilled table: the first request after connect is
 	// slower, never wrong. A sync that cannot complete within the request
 	// deadline is a real failure.
 	if b.eventsSynced != nil && !cache.WaitForCacheSync(ctx.Done(), b.eventsSynced) {
 		return nil, fmt.Errorf("cluster events cache has not finished syncing")
 	}
 
-	entries, version, err := b.clusterEventEntries(meta)
+	entries, version, err := b.clusterEventEntries()
 	if err != nil {
 		return nil, err
 	}
@@ -205,73 +181,11 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 	}, nil
 }
 
-func (b *ClusterEventsBuilder) clusterEventEntries(meta ClusterMeta) ([]ClusterEventEntry, uint64, error) {
-	if b.maintained != nil {
-		// Serve from the informer-fed store (rows already projected + cluster-scope
-		// filtered at intake by projectClusterEventEntry) instead of listing + re-projecting.
-		return b.maintained.rows("", clusterEventsAvailableKinds), b.maintained.snapshotVersion(), nil
+func (b *ClusterEventsBuilder) clusterEventEntries() ([]ClusterEventEntry, uint64, error) {
+	if b.maintained == nil {
+		return nil, 0, fmt.Errorf("%s: maintained store is not wired", clusterEventsDomainName)
 	}
-	events, err := b.eventLister.List(labels.Everything())
-	if err != nil {
-		return nil, 0, err
-	}
-	entries := make([]ClusterEventEntry, 0, len(events))
-	var version uint64
-	for _, event := range events {
-		// projectClusterEventEntry skips namespaced events (cluster events involve
-		// cluster-scoped objects only) BEFORE building the expensive resource model.
-		entry, keep := projectClusterEventEntry(meta, event)
-		if !keep {
-			continue
-		}
-		entries = append(entries, entry)
-		if eventVersion := resourceVersionOrTimestamp(event); eventVersion > version {
-			version = eventVersion
-		}
-	}
-	return entries, version, nil
-}
-
-// compareEventOrder orders events most-recently-observed first, using the same
-// latest-observation time the rows display, with deterministic tie-breaks.
-func compareEventOrder(left, right *corev1.Event) int {
-	leftTimestamp := eventres.EventTimestamp(left).Time
-	rightTimestamp := eventres.EventTimestamp(right).Time
-	if !leftTimestamp.Equal(rightTimestamp) {
-		if leftTimestamp.After(rightTimestamp) {
-			return -1
-		}
-		return 1
-	}
-
-	leftResourceVersion := strings.TrimSpace(left.GetResourceVersion())
-	rightResourceVersion := strings.TrimSpace(right.GetResourceVersion())
-	if leftResourceVersion != rightResourceVersion {
-		if compareNumericStrings(leftResourceVersion, rightResourceVersion) > 0 {
-			return -1
-		}
-		return 1
-	}
-
-	leftUID := string(left.GetUID())
-	rightUID := string(right.GetUID())
-	if leftUID != rightUID {
-		if leftUID < rightUID {
-			return -1
-		}
-		return 1
-	}
-
-	leftName := strings.TrimSpace(left.GetName())
-	rightName := strings.TrimSpace(right.GetName())
-	if leftName != rightName {
-		if leftName < rightName {
-			return -1
-		}
-		return 1
-	}
-
-	return 0
+	return b.maintained.rows("", clusterEventsAvailableKinds), b.maintained.snapshotVersion(), nil
 }
 
 func compareNumericStrings(left, right string) int {

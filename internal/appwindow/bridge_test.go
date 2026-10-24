@@ -62,8 +62,8 @@ func (registry *recordingNativeWindowRegistry) BeginPanelWindowDock(
 	return nil
 }
 
-func (registry *recordingNativeWindowRegistry) AcknowledgePanelWindowDock(string, string, string) error {
-	registry.record("acknowledge-dock")
+func (registry *recordingNativeWindowRegistry) AcknowledgePanelTransfer(string, string, bool) error {
+	registry.record("acknowledge-transfer")
 	return nil
 }
 
@@ -87,11 +87,11 @@ func (registry *recordingNativeWindowRegistry) RoutePanelWindowCommand(string, p
 	return nil
 }
 
-func (registry *recordingNativeWindowRegistry) UpdatePanelWindowSnapshot(
+func (registry *recordingNativeWindowRegistry) PublishPanelWindowGroup(
 	string,
-	panelwindow.GroupSnapshot,
+	panelwindow.WorkspaceGroup,
 ) error {
-	registry.record("update-snapshot")
+	registry.record("publish-group")
 	return nil
 }
 
@@ -142,7 +142,7 @@ func TestWindowRegistryBridgePreservesUnboundStartupSemantics(t *testing.T) {
 	require.ErrorContains(t, err, "native window registry is not available")
 	err = options.BeginPanelWindowDock("panel-1", "right", panelwindow.GroupSnapshot{})
 	require.ErrorContains(t, err, "native window registry is not available")
-	err = options.AcknowledgePanelDock("workspace-1", "panel-1", "transfer-1")
+	err = options.AcknowledgePanelTransfer("workspace-1", "transfer-1", true)
 	require.ErrorContains(t, err, "native window registry is not available")
 	err = options.FailPanelTransfer("workspace-1", "panel-1", "transfer-1")
 	require.ErrorContains(t, err, "native window registry is not available")
@@ -152,7 +152,7 @@ func TestWindowRegistryBridgePreservesUnboundStartupSemantics(t *testing.T) {
 	require.ErrorContains(t, err, "native window registry is not available")
 	err = options.RoutePanelCommand("panel-1", "command")
 	require.ErrorContains(t, err, "native window registry is not available")
-	err = options.UpdatePanelSnapshot("panel-1", panelwindow.GroupSnapshot{})
+	err = options.PublishPanelGroup("panel-1", panelwindow.WorkspaceGroup{})
 	require.ErrorContains(t, err, "native window registry is not available")
 	err = options.RequestPanelTabClose("panel-1", "tab-1")
 	require.ErrorContains(t, err, "native window registry is not available")
@@ -184,12 +184,12 @@ func TestWindowRegistryBridgeForwardsEveryRuntimeOperationAfterBinding(t *testin
 	_, err = options.AcknowledgePanelReady("panel-1", "transfer-1")
 	require.NoError(t, err)
 	require.NoError(t, options.BeginPanelWindowDock("panel-1", "right", snapshot))
-	require.NoError(t, options.AcknowledgePanelDock("workspace-1", "panel-1", "transfer-1"))
+	require.NoError(t, options.AcknowledgePanelTransfer("workspace-1", "transfer-1", true))
 	require.NoError(t, options.FailPanelTransfer("workspace-1", "panel-1", "transfer-1"))
 	require.NoError(t, options.AcknowledgePanelClose("panel-1"))
 	require.NoError(t, options.AcknowledgeWorkspaceClose("workspace-1"))
 	require.NoError(t, options.RoutePanelCommand("panel-1", "command"))
-	require.NoError(t, options.UpdatePanelSnapshot("panel-1", snapshot))
+	require.NoError(t, options.PublishPanelGroup("panel-1", panelwindow.WorkspaceGroup{}))
 	require.NoError(t, options.RequestPanelTabClose("panel-1", "tab-1"))
 	require.NoError(t, options.RequestPanelTabTransfer("panel-1", panelwindow.TabTransferRequest{}))
 	require.NoError(t, options.AcceptPanelTabTransfer("workspace-1", "tab-transfer-1"))
@@ -205,12 +205,12 @@ func TestWindowRegistryBridgeForwardsEveryRuntimeOperationAfterBinding(t *testin
 		"begin-open",
 		"acknowledge-ready",
 		"begin-dock",
-		"acknowledge-dock",
+		"acknowledge-transfer",
 		"fail-transfer",
 		"acknowledge-close",
 		"acknowledge-workspace-close",
 		"route-command",
-		"update-snapshot",
+		"publish-group",
 		"request-tab-close",
 		"request-tab-transfer",
 		"accept-tab-transfer",

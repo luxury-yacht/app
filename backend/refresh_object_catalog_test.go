@@ -12,7 +12,6 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
-	refreshinformer "github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	refreshpermissions "github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
@@ -37,13 +36,14 @@ import (
 
 func TestCatalogFinalizerBridgeProjectsArbitraryKindsIntoAttention(t *testing.T) {
 	registry := domain.New()
+	stream := resourcestream.NewManager(nil, nil, snapshot.ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, nil)
+	t.Cleanup(stream.Stop)
 	index, err := snapshot.RegisterClusterAttentionDomain(
-		registry, nil, snapshot.ClusterAttentionPermissions{},
+		registry, snapshot.ClusterAttentionPermissions{},
 		snapshot.ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, nil,
-		snapshot.ClusterAttentionOptions{},
+		snapshot.ClusterAttentionOptions{}, stream,
 	)
 	require.NoError(t, err)
-	t.Cleanup(index.Stop)
 
 	updates := make(chan objectcatalog.SubsetUpdate, 1)
 	blockers := []objectcatalog.FinalizerBlocker{{
@@ -77,13 +77,14 @@ func TestCatalogFinalizerBridgeProjectsArbitraryKindsIntoAttention(t *testing.T)
 
 func TestCatalogFinalizerBridgeStopsForUnavailableInputs(t *testing.T) {
 	registry := domain.New()
+	stream := resourcestream.NewManager(nil, nil, snapshot.ClusterMeta{ClusterID: "cluster-a"}, nil)
+	t.Cleanup(stream.Stop)
 	index, err := snapshot.RegisterClusterAttentionDomain(
-		registry, nil, snapshot.ClusterAttentionPermissions{},
+		registry, snapshot.ClusterAttentionPermissions{},
 		snapshot.ClusterMeta{ClusterID: "cluster-a"}, nil,
-		snapshot.ClusterAttentionOptions{},
+		snapshot.ClusterAttentionOptions{}, stream,
 	)
 	require.NoError(t, err)
-	t.Cleanup(index.Stop)
 
 	closedUpdates := make(chan objectcatalog.SubsetUpdate)
 	close(closedUpdates)
@@ -108,7 +109,7 @@ func catalogLifecycleTestApp(t *testing.T, tier system.ResourceTier, cooled bool
 	checker := refreshpermissions.NewCheckerWithReview(clusterID, time.Minute, func(context.Context, string, string, string, string) (bool, error) {
 		return true, nil
 	})
-	factory := refreshinformer.New(context.Background(), kubeClient, apiExtensionsClient, time.Minute, checker)
+	grants := refreshpermissions.NewGrants(checker)
 	app.ClusterRuntime.clusterClients = make(map[string]*clusterClients)
 	app.ClusterRuntime.clusterClients[clusterID] = &clusterClients{
 		meta:                ClusterMeta{ID: clusterID, Name: "Cluster A"},
@@ -119,8 +120,8 @@ func catalogLifecycleTestApp(t *testing.T, tier system.ResourceTier, cooled bool
 		dynamicClient:       fake.NewSimpleDynamicClient(runtime.NewScheme()),
 	}
 	app.Refresh.setRefreshSubsystem(clusterID, &system.Subsystem{
-		Cooled:          cooled,
-		InformerFactory: factory,
+		Cooled:           cooled,
+		PermissionGrants: grants,
 		IngestManager: ingest.NewIngestManager(
 			streamrows.ClusterMeta{ClusterID: clusterID, ClusterName: "Cluster A"},
 			kubeClient,
@@ -206,22 +207,22 @@ func TestCatalogWaitsForRebuiltIngestStoreBeforeFirstCollection(t *testing.T) {
 		"catalog should complete its first collection after the ingest store syncs")
 }
 
-// The shared factory always starts cluster-wide ReplicaSet, HPA and Event
-// informers. A namespace-only identity is forbidden from all three, so those
-// informers never sync. Catalog startup must still publish the rows the identity
-// can read instead of waiting forever for caches that can never fill.
-func TestCatalogStartsForNamespaceScopedIdentityDeniedClusterWideInformers(t *testing.T) {
+// A namespace-only identity is forbidden from the cluster-wide ReplicaSet, HPA
+// and Event lists. Catalog startup must still publish the rows the identity can
+// read instead of waiting forever for stores that can never fill.
+func TestCatalogStartsForNamespaceScopedIdentityDeniedClusterWideReflectors(t *testing.T) {
 	const namespace = "team-a"
 	app, target := catalogLifecycleTestApp(t, system.TierForeground, false)
-	app.Refresh.allowedNamespaces = func(string) []string { return []string{namespace} }
+	app.Refresh.allowedNamespaces = func(string) ([]string, error) { return []string{namespace}, nil }
 	clients := app.ClusterRuntime.clusterClientsForID(target.meta.ID)
 	kube := clients.client.(*cgofake.Clientset)
-	// Only ReplicaSets in the scope namespace are granted. Denying the other kinds
-	// keeps ingest reflectors, which fake typed REST clients cannot run, skipped.
+	// Only a custom resource in the scope namespace is granted. Denying every
+	// registry kind keeps ingest reflectors, which fake typed REST clients cannot
+	// run, skipped.
 	kube.PrependReactor("create", "selfsubjectaccessreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {
 		review := action.(cgotesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
 		attributes := review.Spec.ResourceAttributes
-		review.Status.Allowed = attributes != nil && attributes.Namespace == namespace && attributes.Resource == "replicasets"
+		review.Status.Allowed = attributes != nil && attributes.Namespace == namespace && attributes.Resource == "widgets"
 		return true, review, nil
 	})
 	kube.PrependReactor("list", "*", func(action cgotesting.Action) (bool, runtime.Object, error) {
@@ -231,25 +232,25 @@ func TestCatalogStartsForNamespaceScopedIdentityDeniedClusterWideInformers(t *te
 		return true, nil, apierrors.NewForbidden(action.GetResource().GroupResource(), "", errors.New("namespace-only identity"))
 	})
 	kube.Discovery().(*fakediscovery.FakeDiscovery).Resources = []*metav1.APIResourceList{{
-		GroupVersion: "apps/v1",
+		GroupVersion: "example.com/v1",
 		APIResources: []metav1.APIResource{{
-			Name: "replicasets", Kind: "ReplicaSet", Namespaced: true, Verbs: []string{"list", "watch"},
+			Name: "widgets", Kind: "Widget", Namespaced: true, Verbs: []string{"list", "watch"},
 		}},
 	}}
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	replicaSetGVR := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "replicasets"}
-	replicaSet := &unstructured.Unstructured{}
-	replicaSet.SetGroupVersionKind(schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "ReplicaSet"})
-	replicaSet.SetNamespace(namespace)
-	replicaSet.SetName("web-5d9f")
-	replicaSet.SetUID("replicaset-uid")
+	widgetGVR := schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"}
+	widget := &unstructured.Unstructured{}
+	widget.SetGroupVersionKind(schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Widget"})
+	widget.SetNamespace(namespace)
+	widget.SetName("web-5d9f")
+	widget.SetUID("widget-uid")
 	clients.dynamicClient = fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
-		map[schema.GroupVersionResource]string{replicaSetGVR: "ReplicaSetList"}, replicaSet)
+		map[schema.GroupVersionResource]string{widgetGVR: "WidgetList"}, widget)
 
 	subsystem, err := system.NewSubsystemWithServices(context.Background(), system.Config{
 		KubernetesClient: kube, APIExtensionsClient: clients.apiextensionsClient, DynamicClient: clients.dynamicClient,
-		ClusterID: target.meta.ID, ClusterName: target.meta.Name, Logger: app.AppLogs.Logger(), ResyncInterval: time.Minute,
+		ClusterID: target.meta.ID, ClusterName: target.meta.Name, Logger: app.AppLogs.Logger(),
 		AllowedNamespaces:     []string{namespace},
 		ObjectDetailsProvider: app.Resources.objectDetailProvider(), NodeMaintenanceStore: app.NodeMaintenanceStore,
 	})
@@ -258,13 +259,10 @@ func TestCatalogStartsForNamespaceScopedIdentityDeniedClusterWideInformers(t *te
 	t.Cleanup(func() {
 		app.Refresh.stopObjectCatalogForCluster(target.meta.ID)
 		cancel()
-		subsystem.StopDoorbellNotifiers()
 		subsystem.ResourceStream.Stop()
 		subsystem.IngestManager.Stop()
-		_ = subsystem.InformerFactory.Shutdown()
 	})
 	subsystem.IngestManager.Start(ctx)
-	require.NoError(t, subsystem.InformerFactory.Start(ctx))
 
 	require.NoError(t, app.Refresh.startObjectCatalogForTarget(target))
 	service := app.Refresh.objectCatalogServiceForCluster(target.meta.ID)
@@ -273,10 +271,10 @@ func TestCatalogStartsForNamespaceScopedIdentityDeniedClusterWideInformers(t *te
 	require.Eventuallyf(t, func() bool {
 		return service.Health().Status == objectcatalog.HealthStateOK && service.Query(query).TotalItems == 1
 	}, 3*time.Second, 10*time.Millisecond,
-		"catalog must publish the namespace's ReplicaSet; health %+v", service.Health())
+		"catalog must publish the namespace's Widget; health %+v", service.Health())
 	ref := service.Query(query).Items[0].Ref
 	require.Equal(t, target.meta.ID, ref.ClusterID)
-	require.Equal(t, "ReplicaSet", ref.Kind)
+	require.Equal(t, "Widget", ref.Kind)
 	require.Equal(t, namespace, ref.Namespace)
 	require.Equal(t, "web-5d9f", ref.Name)
 }
@@ -391,7 +389,7 @@ func TestCatalogStopsOnlyWithOwningGeneration(t *testing.T) {
 	select {
 	case <-entry.done:
 	default:
-		t.Fatal("catalog survived retirement of its informer generation")
+		t.Fatal("catalog survived retirement of its feed generation")
 	}
 }
 
@@ -426,14 +424,7 @@ func TestStopObjectCatalogDoesNotBlockForeverWaitingForDone(t *testing.T) {
 }
 
 func TestCatalogDoorbellBridgeBroadcastsCatalogSource(t *testing.T) {
-	manager := resourcestream.NewManager(
-		nil,
-		nil,
-		nil,
-		snapshot.ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"},
-
-		nil,
-	)
+	manager := resourcestream.NewManager(nil, nil, snapshot.ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"}, nil)
 	selector, err := resourcestream.ParseStreamSelector("cluster-a", "catalog", "")
 	require.NoError(t, err)
 	sub, err := manager.SubscribeSelector(selector)
@@ -627,6 +618,33 @@ func TestGetCatalogDiagnosticsFromTelemetryRecorder(t *testing.T) {
 	require.Equal(t, "pods", diag.Domains[0].Domain)
 }
 
+// A catalog lookup needs the object's complete identity; an incomplete
+// reference is rejected before any cluster's catalog is consulted.
+func TestFindCatalogObjectMatchRequiresCompleteIdentity(t *testing.T) {
+	app := newWorkspaceCoordinatorTestFixture(t)
+	complete := resourcemodel.ResourceRef{ClusterID: "cluster-b", Group: "apps", Version: "v1", Kind: "Deployment", Namespace: "apps", Name: "alpha"}
+	for _, tc := range []struct {
+		name    string
+		edit    func(*resourcemodel.ResourceRef)
+		wantErr string
+	}{
+		{"cluster", func(r *resourcemodel.ResourceRef) { r.ClusterID = "" }, "cluster ID is required"},
+		{"version", func(r *resourcemodel.ResourceRef) { r.Version = "" }, "version is required"},
+		{"kind", func(r *resourcemodel.ResourceRef) { r.Kind = "" }, "kind is required"},
+		{"name", func(r *resourcemodel.ResourceRef) { r.Name = "" }, "name is required"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ref := complete
+			tc.edit(&ref)
+			_, err := app.Resources.FindCatalogObjectMatch(ref)
+			require.EqualError(t, err, tc.wantErr)
+		})
+	}
+	// A complete reference for a cluster with no catalog reports that, not a match.
+	_, err := app.Resources.FindCatalogObjectMatch(complete)
+	require.EqualError(t, err, `object catalog service unavailable for cluster "cluster-b"`)
+}
+
 func TestFindCatalogObjectMatchUsesExactCatalogIdentity(t *testing.T) {
 	app := newWorkspaceCoordinatorTestFixture(t)
 	svc := objectcatalog.NewService(objectcatalog.Dependencies{}, nil)
@@ -636,12 +654,12 @@ func TestFindCatalogObjectMatchUsesExactCatalogIdentity(t *testing.T) {
 	})
 	app.Refresh.storeObjectCatalogEntry("cluster-b", &objectCatalogEntry{service: svc})
 
-	match, err := app.Resources.FindCatalogObjectMatch("cluster-b", "apps", "apps", "v1", "Deployment", "alpha")
+	match, err := app.Resources.FindCatalogObjectMatch(resourcemodel.ResourceRef{ClusterID: "cluster-b", Group: "apps", Version: "v1", Kind: "Deployment", Namespace: "apps", Name: "alpha"})
 	require.NoError(t, err)
 	require.NotNil(t, match)
 	require.Equal(t, "alpha-uid", match.Ref.UID)
 
-	noMatch, err := app.Resources.FindCatalogObjectMatch("cluster-b", "apps", "apps", "v1", "Deployment", "alp")
+	noMatch, err := app.Resources.FindCatalogObjectMatch(resourcemodel.ResourceRef{ClusterID: "cluster-b", Group: "apps", Version: "v1", Kind: "Deployment", Namespace: "apps", Name: "alp"})
 	require.NoError(t, err)
 	require.Nil(t, noMatch)
 }

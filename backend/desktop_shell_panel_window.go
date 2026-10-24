@@ -53,11 +53,11 @@ func (s *DesktopShell) BeginPanelWindowDock(windowName, targetPosition string, s
 	return s.beginPanelWindowDock(windowName, targetPosition, snapshot)
 }
 
-func (s *DesktopShell) AcknowledgePanelWindowDock(callerWindowName, windowName, transferID string) error {
-	if s == nil || s.acknowledgePanelDock == nil {
+func (s *DesktopShell) AcknowledgePanelTransfer(callerWindowName, transferID string, mounted bool) error {
+	if s == nil || s.acknowledgePanelTransfer == nil {
 		return fmt.Errorf("panel-window registry is not available")
 	}
-	return s.acknowledgePanelDock(callerWindowName, windowName, transferID)
+	return s.acknowledgePanelTransfer(callerWindowName, transferID, mounted)
 }
 
 func (s *DesktopShell) FailPanelWindowTransfer(callerWindowName, windowName, transferID string) error {
@@ -88,11 +88,11 @@ func (s *DesktopShell) RoutePanelWindowCommand(windowName string, command panelw
 	return s.routePanelCommand(windowName, command)
 }
 
-func (s *DesktopShell) UpdatePanelWindowSnapshot(windowName string, snapshot panelwindow.GroupSnapshot) error {
-	if s == nil || s.updatePanelSnapshot == nil {
+func (s *DesktopShell) PublishPanelWindowGroup(windowName string, group panelwindow.WorkspaceGroup) error {
+	if s == nil || s.publishPanelGroup == nil {
 		return fmt.Errorf("panel-window registry is not available")
 	}
-	return s.updatePanelSnapshot(windowName, snapshot)
+	return s.publishPanelGroup(windowName, group)
 }
 
 func (s *DesktopShell) RequestPanelTabClose(windowName, panelID string) error {

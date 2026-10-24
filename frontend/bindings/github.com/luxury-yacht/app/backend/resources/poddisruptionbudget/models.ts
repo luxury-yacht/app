@@ -3,7 +3,33 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as resourcemodel$0 from "../../resourcemodel/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as types$0 from "../types/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as v1$0 from "../../../../../../k8s.io/apimachinery/pkg/apis/meta/v1/models.js";
+
+/**
+ * DisruptedPod is a pod whose eviction the API server processed but the
+ * disruption controller has not yet seen deleted.
+ */
+export interface DisruptedPod {
+    "pod": resourcemodel$0.ResourceLink;
+    "disruptionTime": v1$0.Time;
+}
+
+export interface LabelSelector {
+    "matchLabels"?: { [_ in string]?: string } | null;
+    "matchExpressions"?: LabelSelectorRequirement[] | null;
+}
+
+export interface LabelSelectorRequirement {
+    "key": string;
+    "operator": string;
+    "values"?: string[] | null;
+}
 
 /**
  * PodDisruptionBudgetDetails represents comprehensive PDB information.
@@ -15,14 +41,24 @@ export interface PodDisruptionBudgetDetails {
     "details": string;
     "minAvailable"?: string | null;
     "maxUnavailable"?: string | null;
-    "selector"?: { [_ in string]?: string } | null;
+
+    /**
+     * Selector is omitted when the spec has none (it matches no pods); an empty
+     * selector ({}) matches every pod in the namespace.
+     */
+    "selector"?: LabelSelector | null;
+
+    /**
+     * UnhealthyPodEvictionPolicy is omitted when unset (Kubernetes then applies IfHealthyBudget).
+     */
+    "unhealthyPodEvictionPolicy"?: string;
     "currentHealthy": number;
     "desiredHealthy": number;
     "disruptionsAllowed": number;
     "expectedPods": number;
     "observedGeneration": number;
-    "disruptedPods"?: { [_ in string]?: v1$0.Time } | null;
-    "conditions"?: string[] | null;
+    "disruptedPods"?: DisruptedPod[] | null;
+    "conditions"?: types$0.ConditionState[] | null;
     "labels"?: { [_ in string]?: string } | null;
     "annotations"?: { [_ in string]?: string } | null;
 }

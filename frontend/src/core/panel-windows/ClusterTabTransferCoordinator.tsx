@@ -25,7 +25,6 @@ import {
 import { usePanelLifecycleGuardRegistry } from './panelLifecycleGuards';
 import { samePanelTab } from './tabTransfer';
 import { useRemoveWorkspacePanels } from './useRemoveWorkspacePanels';
-import { useRestoreWorkspacePanels } from './useRestoreWorkspacePanels';
 import { usePanelWorkspaceSync } from './WorkspacePanelSync';
 
 type PendingTarget = {
@@ -52,7 +51,6 @@ export function ClusterTabTransferCoordinator() {
   const { getClusterNavigationState, restoreClusterNavigationState } = useViewState();
   const { getClusterSidebarSelection, setSidebarSelectionForCluster } = useSidebarState();
   const { getClusterNamespace, setSelectedNamespace } = useNamespace();
-  const restoreWorkspacePanels = useRestoreWorkspacePanels();
   const { tabGroups } = useDockablePanelContext();
   const removeWorkspacePanels = useRemoveWorkspacePanels();
   const pending = useRef(new Map<string, PendingTarget>());
@@ -93,6 +91,8 @@ export function ClusterTabTransferCoordinator() {
         }
         guards.freeze(request.transferId, ids);
         const accept = async () => {
+          // Close intents queue with publications; land them before the
+          // directory decides which docked panels travel with the view.
           await sync.flush();
           const viewState: ClusterViewState = {
             clusterId: request.clusterId,
@@ -104,7 +104,6 @@ export function ClusterTabTransferCoordinator() {
           await acceptClusterTabTransfer(windowName, request.transferId, {
             schemaVersion: 1,
             viewState: JSON.stringify(viewState),
-            groups: sync.groupsForCluster(request.clusterId),
           });
         };
         void accept().catch((error) => fail(request.transferId, error));
@@ -132,16 +131,8 @@ export function ClusterTabTransferCoordinator() {
           void fail(request.transferId);
           return;
         }
-        const groups = snapshot.groups ?? [];
-        // Empty cluster views still need a staged marker to avoid claiming retained
-        // panels while this destination's selected-cluster projection is loading.
-        sync.stage(
-          request.transferId,
-          groups.length
-            ? groups
-            : [{ clusterId: request.clusterId, groupId: 'right', tabs: [], activePanelId: '' }]
-        );
-        guards.freeze(request.transferId, panelIds(groups));
+        // The panel projection mounts these groups from directory reads.
+        guards.freeze(request.transferId, panelIds(event.groups ?? []));
         const prepare = async () => {
           const state = decodeClusterViewState(snapshot.viewState, request.clusterId);
           if (!event.targetAlreadyOpen) {
@@ -161,7 +152,7 @@ export function ClusterTabTransferCoordinator() {
         };
         void prepare().catch((error) => fail(request.transferId, error));
       }),
-    [windowName, sync, guards, loadKubeconfigs, fail]
+    [windowName, guards, loadKubeconfigs, fail]
   );
 
   const restoreTargetView = useCallback(
@@ -192,18 +183,13 @@ export function ClusterTabTransferCoordinator() {
 
   const mountTarget = useCallback(
     (target: PendingTarget) => {
-      const { snapshot, targetAlreadyOpen } = target.event;
-      if (!targetAlreadyOpen) {
+      if (!target.event.targetAlreadyOpen) {
         restoreTargetView(target);
-      }
-      for (const group of snapshot.groups ?? []) {
-        const edge = group.groupId === 'bottom' ? 'bottom' : 'right';
-        restoreWorkspacePanels(group, edge);
       }
       target.mounted = true;
       setRevision((value) => value + 1);
     },
-    [restoreWorkspacePanels, restoreTargetView]
+    [restoreTargetView]
   );
 
   const activateTargetCluster = useCallback(
@@ -218,7 +204,7 @@ export function ClusterTabTransferCoordinator() {
 
   const advanceTarget = useCallback(
     (target: PendingTarget) => {
-      const { request, snapshot } = target.event;
+      const { request, groups } = target.event;
       if (!selectedClusterIds.includes(request.clusterId) || target.acknowledging) {
         return;
       }
@@ -230,7 +216,7 @@ export function ClusterTabTransferCoordinator() {
         mountTarget(target);
         return;
       }
-      if (!clusterGroupsMounted(snapshot.groups ?? [], sync.groupsForCluster(request.clusterId))) {
+      if (!clusterGroupsMounted(groups ?? [], sync.groupsForCluster(request.clusterId))) {
         return;
       }
       target.acknowledging = true;
@@ -262,22 +248,21 @@ export function ClusterTabTransferCoordinator() {
 
   const settle = useCallback(
     (event: panelwindow.ClusterTabTransferEvent, committed: boolean) => {
-      const { request, snapshot } = event;
+      const { request, groups } = event;
       if (request.sourceWindowName !== windowName && request.targetWindowName !== windowName) {
         return;
       }
       const wasTarget = pending.current.delete(request.transferId);
       cancelled.current.add(request.transferId);
-      sync.settle(request.transferId);
       if ((committed && request.sourceWindowName === windowName) || (!committed && wasTarget)) {
-        removeWorkspacePanels(request.clusterId, panelIds(snapshot.groups ?? []));
+        removeWorkspacePanels(request.clusterId, panelIds(groups ?? []));
       }
       void loadKubeconfigs(true)
         .catch((error) => report(error, 'refresh-cluster-views'))
         .finally(() => guards.releaseTransfer(request.transferId));
       setRevision((value) => value + 1);
     },
-    [windowName, sync, removeWorkspacePanels, loadKubeconfigs, report, guards]
+    [windowName, removeWorkspacePanels, loadKubeconfigs, report, guards]
   );
   useEffect(() => onClusterTabTransferCommitted((event) => settle(event, true)), [settle]);
   useEffect(() => onClusterTabTransferFailed((event) => settle(event, false)), [settle]);

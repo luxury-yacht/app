@@ -81,13 +81,11 @@ export const validateResourceLink = (link?: ResourceLink | null): boolean => {
   return false;
 };
 
-const resourceRefToObjectReference = (
-  ref: ResourceRef,
-  clusterName?: string | null
-): ResolvedObjectReference => {
+// A link names its object's cluster by id only; panels name the cluster from
+// that id when they open it (ObjectPanelStateContext hydrateClusterMeta).
+const resourceRefToObjectReference = (ref: ResourceRef): ResolvedObjectReference => {
   return buildRequiredObjectReference({
     clusterId: ref.clusterId,
-    clusterName,
     group: ref.group,
     version: ref.version,
     kind: ref.kind,
@@ -99,13 +97,12 @@ const resourceRefToObjectReference = (
 };
 
 export const resourceLinkToObjectReference = (
-  link?: ResourceLink | null,
-  clusterName?: string | null
+  link?: ResourceLink | null
 ): ResolvedObjectReference | undefined => {
   if (!link || link.display || !link.ref || !validateResourceRef(link.ref)) {
     return undefined;
   }
-  return resourceRefToObjectReference(link.ref, clusterName);
+  return resourceRefToObjectReference(link.ref);
 };
 
 export const resourceLinkDisplayKind = (link?: ResourceLink | null): string | undefined =>

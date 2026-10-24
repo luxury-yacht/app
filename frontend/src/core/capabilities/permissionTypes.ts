@@ -10,7 +10,7 @@ import type { PermissionFeatureKey } from './permissionFeatures';
  * for the kind. Static permission spec lists for built-in resources can
  * leave them undefined — the backend resolves built-in kinds correctly
  * because they don't collide. CRD-targeted spec entries (or lazy
- * `queryKindPermissions` calls) MUST populate them so the backend can
+ * `queryPermissionChecks` calls) MUST populate them so the backend can
  * disambiguate colliding kinds.
  */
 export interface PermissionSpec {

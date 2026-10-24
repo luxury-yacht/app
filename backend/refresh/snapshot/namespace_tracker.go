@@ -95,7 +95,7 @@ func (t *NamespaceWorkloadTracker) Synced() bool {
 }
 
 // Readiness reports the aggregate startup state without blocking. Pending dominates degraded,
-// and Ready latches because an informer that completed its initial sync remains authoritative
+// and Ready latches because a reflector that completed its initial sync remains authoritative
 // through transient watch reconnects.
 func (t *NamespaceWorkloadTracker) Readiness() NamespaceWorkloadReadiness {
 	if t == nil {

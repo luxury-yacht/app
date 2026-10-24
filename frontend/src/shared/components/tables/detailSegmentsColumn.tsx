@@ -49,8 +49,6 @@ export interface CreateDetailSegmentsColumnOptions<T> {
   openReference?: (reference: ResolvedObjectReference) => void;
   /** Alt+click handler — navigates to the linked object's view. */
   navigateReference?: (reference: ResolvedObjectReference) => void;
-  /** Cluster display name attached to resolved references. */
-  clusterName?: string | null;
   sortable?: boolean;
   autoSizeMaxWidth?: ColumnWidthInput;
 }
@@ -62,9 +60,7 @@ export function createDetailSegmentsColumn<T>(
     options.getSegments ?? ((item: T) => (item as { details?: DetailSegment[] }).details);
 
   const renderSegmentValue = (segment: DetailSegment, segmentKey: string): React.ReactNode => {
-    const reference = segment.link
-      ? resourceLinkToObjectReference(segment.link, options.clusterName)
-      : undefined;
+    const reference = segment.link ? resourceLinkToObjectReference(segment.link) : undefined;
     const presentationClassName = segment.presentation
       ? backendStatusTextClass(segment.presentation)
       : undefined;

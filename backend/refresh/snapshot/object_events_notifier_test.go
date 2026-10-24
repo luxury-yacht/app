@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 )
 
 type objectEventsBroadcastRecorder struct {
@@ -62,23 +64,41 @@ func podEvent(namespace, name string) *corev1.Event {
 	}
 }
 
-func newObjectEventsNotifierForTest(recorder *objectEventsBroadcastRecorder) *ObjectEventsChangeNotifier {
-	notifier := NewObjectEventsChangeNotifier()
-	notifier.debounce = 20 * time.Millisecond
-	if recorder != nil {
-		notifier.SetBroadcast(recorder.record)
+// matcherBell is a real generation that hands each per-object ring's version
+// and scope matcher to the test.
+type matcherBell struct {
+	doorbell.Generation
+	record func(version string, matches func(scope string) bool)
+}
+
+func (b *matcherBell) Ring(change doorbell.Change) {
+	b.Run(func() {
+		matches, _ := change.Target.Matcher()
+		b.record(change.Version, matches)
+	})
+}
+
+// stopForTest stops the notifier's test generation, cancelling its timer.
+func (d *changeKeyDebouncer) stopForTest() {
+	if bell, ok := d.bell.(interface{ Stop() }); ok {
+		bell.Stop()
 	}
+}
+
+func newObjectEventsNotifierForTest(recorder *objectEventsBroadcastRecorder) *ObjectEventsChangeNotifier {
+	notifier := NewObjectEventsChangeNotifier(&matcherBell{record: recorder.record})
+	notifier.debounce = 20 * time.Millisecond
 	return notifier
 }
 
-// An event delivery must ring the doorbell for exactly the involved object's
+// An events-store change must ring the doorbell for exactly the involved object's
 // scope: same identity matches, sibling objects and other namespaces do not.
 func TestObjectEventsNotifierBroadcastsToMatchingScope(t *testing.T) {
 	recorder := &objectEventsBroadcastRecorder{}
 	notifier := newObjectEventsNotifierForTest(recorder)
-	defer notifier.Stop()
+	defer notifier.stopForTest()
 
-	notifier.EventChanged(podEvent("team-a", "web-1"))
+	notifier.UpsertBundle(eventBundleOf(t, ClusterMeta{}, podEvent("team-a", "web-1")))
 	waitForObjectEventsBroadcasts(t, recorder, 1)
 
 	matches := recorder.lastMatcher()
@@ -90,20 +110,20 @@ func TestObjectEventsNotifierBroadcastsToMatchingScope(t *testing.T) {
 
 // Cluster-scoped objects: the scope carries the __cluster__ sentinel, the
 // event's involved object carries an empty namespace — they must meet on the
-// same index key.
+// same key. A deleted Event rings like a changed one.
 func TestObjectEventsNotifierMatchesClusterScopedObjects(t *testing.T) {
 	recorder := &objectEventsBroadcastRecorder{}
 	notifier := newObjectEventsNotifierForTest(recorder)
-	defer notifier.Stop()
+	defer notifier.stopForTest()
 
-	notifier.EventChanged(&corev1.Event{
+	notifier.DeleteBundle(eventBundleOf(t, ClusterMeta{}, &corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "node.evt"},
 		InvolvedObject: corev1.ObjectReference{
 			APIVersion: "v1",
 			Kind:       "Node",
 			Name:       "node-1",
 		},
-	})
+	}))
 	waitForObjectEventsBroadcasts(t, recorder, 1)
 
 	matches := recorder.lastMatcher()
@@ -116,11 +136,11 @@ func TestObjectEventsNotifierMatchesClusterScopedObjects(t *testing.T) {
 func TestObjectEventsNotifierCoalescesBursts(t *testing.T) {
 	recorder := &objectEventsBroadcastRecorder{}
 	notifier := newObjectEventsNotifierForTest(recorder)
-	defer notifier.Stop()
+	defer notifier.stopForTest()
 
-	notifier.EventChanged(podEvent("team-a", "web-1"))
-	notifier.EventChanged(podEvent("team-a", "web-2"))
-	notifier.EventChanged(podEvent("team-a", "web-1"))
+	notifier.UpsertBundle(eventBundleOf(t, ClusterMeta{}, podEvent("team-a", "web-1")))
+	notifier.UpsertBundle(eventBundleOf(t, ClusterMeta{}, podEvent("team-a", "web-2")))
+	notifier.UpsertBundle(eventBundleOf(t, ClusterMeta{}, podEvent("team-a", "web-1")))
 	waitForObjectEventsBroadcasts(t, recorder, 1)
 	time.Sleep(120 * time.Millisecond)
 	require.Equal(t, 1, recorder.count(), "burst must coalesce into one broadcast")
@@ -130,29 +150,13 @@ func TestObjectEventsNotifierCoalescesBursts(t *testing.T) {
 	require.True(t, matches("team-a:/v1:Pod:web-2"))
 }
 
-// Stop cancels any pending flush; nothing broadcasts afterwards.
+// Stopping the generation cancels a pending flush; nothing rings afterwards.
 func TestObjectEventsNotifierStopSilencesBroadcasts(t *testing.T) {
 	recorder := &objectEventsBroadcastRecorder{}
 	notifier := newObjectEventsNotifierForTest(recorder)
 
-	notifier.EventChanged(podEvent("team-a", "web-1"))
-	notifier.Stop()
+	notifier.UpsertBundle(eventBundleOf(t, ClusterMeta{}, podEvent("team-a", "web-1")))
+	notifier.stopForTest()
 	time.Sleep(120 * time.Millisecond)
 	require.Equal(t, 0, recorder.count())
-}
-
-// Events recorded before the broadcast sink is wired (the stream manager is
-// built after domain registration) are retained and flushed once wired.
-func TestObjectEventsNotifierRetainsEventsUntilBroadcastWired(t *testing.T) {
-	notifier := NewObjectEventsChangeNotifier()
-	notifier.debounce = 20 * time.Millisecond
-	defer notifier.Stop()
-
-	notifier.EventChanged(podEvent("team-a", "web-1"))
-	time.Sleep(80 * time.Millisecond)
-
-	recorder := &objectEventsBroadcastRecorder{}
-	notifier.SetBroadcast(recorder.record)
-	waitForObjectEventsBroadcasts(t, recorder, 1)
-	require.True(t, recorder.lastMatcher()("team-a:/v1:Pod:web-1"))
 }

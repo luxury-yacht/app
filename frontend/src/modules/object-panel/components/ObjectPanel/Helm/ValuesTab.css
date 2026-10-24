@@ -1,14 +1,94 @@
-.values-display {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  position: relative;
+/* Override markers in the Merged and Overrides views (helmValuesOverrideGutter.ts). */
+.helm-values-override-summary {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
 }
 
-/* Floating control panel like YAML tab */
-/* Ensure proper scrolling */
-.object-panel-tab-content .values-display {
-  height: 100%;
-  min-height: 0;
+/* Fixed width so the text does not shift as marked lines scroll into view. */
+.codemirror-shell .helm-values-override-gutter {
+  min-width: 1.5ch;
+}
+
+.codemirror-shell .helm-values-override-gutter .cm-gutterElement {
+  padding: 0 4px 0 2px;
+  text-align: center;
+}
+
+.helm-values-override-marker {
+  font-weight: 600;
+}
+
+.helm-values-override-marker--changed,
+.helm-values-override-marker--global {
+  color: var(--color-modified-text);
+}
+
+.helm-values-override-marker--same {
+  color: var(--color-info);
+}
+
+.helm-values-override-marker--added {
+  color: var(--color-success-text);
+}
+
+.helm-values-override-marker--removed {
+  color: var(--color-error-text);
+}
+
+/*
+ * Each overridden key takes its marker's color; values keep syntax colors, and
+ * `same` keys stay unchanged because they change nothing. Changed keys use a
+ * hue apart from the syntax key blue. `.cm-line` raises specificity above
+ * CodeMirror's injected highlight classes.
+ */
+.codemirror-shell .cm-line .helm-values-override-label--changed,
+.codemirror-shell .cm-line .helm-values-override-label--changed *,
+.codemirror-shell .cm-line .helm-values-override-label--global,
+.codemirror-shell .cm-line .helm-values-override-label--global * {
+  color: var(--color-modified-text);
+}
+
+.codemirror-shell .cm-line .helm-values-override-label--added,
+.codemirror-shell .cm-line .helm-values-override-label--added * {
+  color: var(--color-success-text);
+}
+
+.codemirror-shell .cm-line .helm-values-override-label--removed,
+.codemirror-shell .cm-line .helm-values-override-label--removed * {
+  color: var(--color-error-text);
+}
+
+.codemirror-shell .helm-values-removed-key {
+  padding: 0 2px 0 6px;
+  color: var(--color-error-text);
+  font-style: italic;
+  white-space: pre;
+}
+
+.helm-values-removed-key__name {
+  text-decoration: line-through;
+}
+
+.helm-values-override-tooltip {
+  max-width: 360px;
+  padding: 6px 8px;
+  font-size: var(--font-size-sm);
+}
+
+.helm-values-override-tooltip__title {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.helm-values-override-tooltip__label {
+  margin-top: 4px;
+  color: var(--color-text-secondary);
+}
+
+.helm-values-override-tooltip__value {
+  margin: 2px 0 0;
+  font-family: var(--font-family-mono);
+  white-space: pre;
+  color: var(--color-text-secondary);
 }

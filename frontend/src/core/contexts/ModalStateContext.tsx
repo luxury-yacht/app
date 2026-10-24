@@ -27,7 +27,6 @@ interface ModalStateContextType {
   setIsSettingsOpen: (open: boolean) => void;
   setIsAboutOpen: (open: boolean) => void;
   setIsObjectDiffOpen: (open: boolean) => void;
-  openObjectDiff: (request?: Pick<ObjectDiffOpenRequest, 'left'>) => void;
   setShowAppLogsPanel: (open: boolean) => void;
   toggleAppLogsPanel: () => void;
 }
@@ -59,14 +58,6 @@ export const ModalStateProvider: React.FC<ModalStateProviderProps> = ({ children
     setShowAppLogsPanel((prev) => !prev);
   }, []);
 
-  const openObjectDiff = useCallback((request?: Pick<ObjectDiffOpenRequest, 'left'>) => {
-    setObjectDiffOpenRequest((prev) => ({
-      requestId: (prev?.requestId ?? 0) + 1,
-      left: request?.left ?? null,
-    }));
-    setIsObjectDiffOpen(true);
-  }, []);
-
   React.useEffect(() => {
     return eventBus.on('view:open-object-diff', (request) => {
       setObjectDiffOpenRequest(request);
@@ -84,7 +75,6 @@ export const ModalStateProvider: React.FC<ModalStateProviderProps> = ({ children
       setIsSettingsOpen,
       setIsAboutOpen,
       setIsObjectDiffOpen,
-      openObjectDiff,
       setShowAppLogsPanel,
       toggleAppLogsPanel,
     }),
@@ -94,7 +84,6 @@ export const ModalStateProvider: React.FC<ModalStateProviderProps> = ({ children
       isObjectDiffOpen,
       objectDiffOpenRequest,
       showAppLogsPanel,
-      openObjectDiff,
       toggleAppLogsPanel,
     ]
   );

@@ -1,12 +1,12 @@
 import type { AppEvents } from '@/core/events';
+import type { RefreshIntent } from './refreshIntent';
 import type { RefreshDomain } from './types';
 
 export type InFlightRequest = {
   controller: AbortController;
-  isManual: boolean;
-  // Preserve the originating request intent if foreground activation aborts
-  // this fetch and replays it after the cluster becomes serviceable.
-  streamSignal?: boolean;
+  // Kept so a foreground activation that aborts this fetch can replay it with
+  // its original intent once the cluster serves again.
+  intent: RefreshIntent;
   coalesce?: boolean;
   requestId: number;
   cleanup?: () => void;
@@ -65,28 +65,26 @@ export type RefreshDemand = 'query' | 'snapshot';
 
 type ScopedDemandCounts = Record<RefreshDemand, number>;
 
+// A scope is enabled only while leases hold it. A reset requested while a
+// holder still shows the scope's data waits for the last release
+// (`resetOnRelease`) instead of wiping rows another consumer is rendering.
 export type ScopedActivationState =
   | { status: 'untracked' }
   | { status: 'disabled' }
-  | { status: 'enabled'; demands: ScopedDemandCounts }
-  | { status: 'superseded'; demands: ScopedDemandCounts };
+  | { status: 'enabled'; demands: ScopedDemandCounts; resetOnRelease: boolean };
 
 export type ScopedActivationEvent =
-  | { type: 'enabled' }
   | { type: 'disabled' }
-  | { type: 'superseded' }
   | { type: 'lease-acquired'; demand: RefreshDemand }
-  | { type: 'lease-released'; demand: RefreshDemand };
+  | { type: 'lease-released'; demand: RefreshDemand }
+  | { type: 'reset-requested' };
 
 const NO_SCOPED_DEMAND: ScopedDemandCounts = { query: 0, snapshot: 0 };
 
 const totalDemand = (demands: ScopedDemandCounts): number => demands.query + demands.snapshot;
 
 const demandsFor = (state: ScopedActivationState): ScopedDemandCounts =>
-  state.status === 'enabled' || state.status === 'superseded' ? state.demands : NO_SCOPED_DEMAND;
-
-const enableScope = (state: ScopedActivationState): ScopedActivationState =>
-  state.status === 'enabled' ? state : { status: 'enabled', demands: { ...demandsFor(state) } };
+  state.status === 'enabled' ? state.demands : NO_SCOPED_DEMAND;
 
 const disableScope = (state: ScopedActivationState): ScopedActivationState => {
   if (state.status === 'disabled') {
@@ -98,15 +96,6 @@ const disableScope = (state: ScopedActivationState): ScopedActivationState => {
   return { status: 'disabled' };
 };
 
-const supersedeScope = (state: ScopedActivationState): ScopedActivationState => {
-  if (state.status !== 'enabled') {
-    return state;
-  }
-  return totalDemand(state.demands) > 0
-    ? { status: 'superseded', demands: state.demands }
-    : { status: 'disabled' };
-};
-
 const acquireScopeLease = (
   state: ScopedActivationState,
   event: Extract<ScopedActivationEvent, { type: 'lease-acquired' }>
@@ -116,55 +105,55 @@ const acquireScopeLease = (
     ...demands,
     [event.demand]: demands[event.demand] + 1,
   };
-  return state.status === 'superseded'
-    ? { status: 'superseded', demands: nextDemands }
-    : { status: 'enabled', demands: nextDemands };
+  return {
+    status: 'enabled',
+    demands: nextDemands,
+    resetOnRelease: state.status === 'enabled' && state.resetOnRelease,
+  };
 };
 
 const releaseScopeLease = (
   state: ScopedActivationState,
   event: Extract<ScopedActivationEvent, { type: 'lease-released' }>
 ): ScopedActivationState => {
-  if (
-    (state.status !== 'enabled' && state.status !== 'superseded') ||
-    state.demands[event.demand] === 0
-  ) {
+  if (state.status !== 'enabled' || state.demands[event.demand] === 0) {
     return state;
   }
   const nextDemands = {
     ...state.demands,
     [event.demand]: state.demands[event.demand] - 1,
   };
-  if (state.status === 'superseded' && totalDemand(nextDemands) === 0) {
-    return { status: 'disabled' };
-  }
   return { ...state, demands: nextDemands };
 };
+
+const requestResetOnRelease = (state: ScopedActivationState): ScopedActivationState =>
+  state.status === 'enabled' && totalDemand(state.demands) > 0 && !state.resetOnRelease
+    ? { ...state, resetOnRelease: true }
+    : state;
 
 export const transitionScopedActivationState = (
   state: ScopedActivationState,
   event: ScopedActivationEvent
 ): ScopedActivationState => {
   switch (event.type) {
-    case 'enabled':
-      return enableScope(state);
     case 'disabled':
       return disableScope(state);
-    case 'superseded':
-      return supersedeScope(state);
     case 'lease-acquired':
       return acquireScopeLease(state, event);
     case 'lease-released':
       return releaseScopeLease(state, event);
+    case 'reset-requested':
+      return requestResetOnRelease(state);
   }
 };
 
+// Reads held until the scope's cluster serves. Merged requests keep every
+// intent, so the replay can apply the pause rule to each.
 export type PendingClusterReadinessRequest = {
   coalesce?: boolean;
   domain: RefreshDomain;
   scope: string;
-  isManual: boolean;
-  streamSignal: boolean;
+  intents: readonly RefreshIntent[];
   queryReconcile: boolean;
 };
 
@@ -190,8 +179,7 @@ export const transitionScopedReadinessState = (
         request: {
           ...state.request,
           ...(state.request.coalesce || event.request.coalesce ? { coalesce: true } : {}),
-          isManual: state.request.isManual || event.request.isManual,
-          streamSignal: state.request.streamSignal || event.request.streamSignal,
+          intents: Array.from(new Set([...state.request.intents, ...event.request.intents])),
           queryReconcile: state.request.queryReconcile || event.request.queryReconcile,
         },
       };
@@ -238,21 +226,28 @@ export const transitionClusterAuthState = (
   return state.status === status ? state : { status };
 };
 
-type StreamStartTask = Promise<(() => void) | undefined>;
+type StreamStartTask = Promise<void>;
 type StreamInitializationState = { status: 'idle' } | { status: 'scheduled'; task: Promise<void> };
 type StreamConnectionState =
   | { status: 'inactive' }
   | { status: 'starting'; task: StreamStartTask; cancellationRequested: boolean }
-  | { status: 'active'; cleanup: () => void; cancellationRequested: boolean };
+  | { status: 'active'; cancellationRequested: boolean };
 type StreamHealthState =
   | { status: 'unknown' }
   | { status: 'known'; payload: AppEvents['refresh:resource-stream-health'] };
+// A failed start waits for its backed-off retry here. `failures` counts
+// consecutive failed starts, so each retry waits longer; a start that
+// succeeds, or a stop, resets it. The orchestrator owns the timer.
+type StreamStartRetryState =
+  | { status: 'idle'; failures: number }
+  | { status: 'scheduled'; failures: number; timer: ReturnType<typeof setTimeout> };
 
 export type ScopedStreamState = {
   policy: 'allowed' | 'blocked';
   initialization: StreamInitializationState;
   connection: StreamConnectionState;
   health: StreamHealthState;
+  startRetry: StreamStartRetryState;
 };
 
 export type ScopedStreamEvent =
@@ -263,20 +258,24 @@ export type ScopedStreamEvent =
   | { type: 'start-began'; task: StreamStartTask }
   | { type: 'start-cancelled' }
   | { type: 'start-cancellation-cleared' }
-  | { type: 'start-finished'; task: StreamStartTask; cleanup: () => void }
+  | { type: 'start-finished'; task: StreamStartTask }
   | { type: 'start-failed'; task: StreamStartTask }
-  | { type: 'cleanup-removed' }
+  | { type: 'stream-stopped' }
   | { type: 'health-received'; payload: AppEvents['refresh:resource-stream-health'] }
   | { type: 'health-cleared' }
   | { type: 'async-cleared' }
   | { type: 'all-cleared'; reset: boolean }
-  | { type: 'transient-reset' };
+  | { type: 'transient-reset' }
+  | { type: 'start-retry-scheduled'; timer: ReturnType<typeof setTimeout> }
+  | { type: 'start-retry-taken' }
+  | { type: 'start-retry-reset' };
 
 const inactiveStreamState = (): ScopedStreamState => ({
   policy: 'allowed',
   initialization: { status: 'idle' },
   connection: { status: 'inactive' },
   health: { status: 'unknown' },
+  startRetry: { status: 'idle', failures: 0 },
 });
 
 const blockStream = (state: ScopedStreamState): ScopedStreamState =>
@@ -362,11 +361,7 @@ const finishStreamStart = (
   }
   return {
     ...state,
-    connection: {
-      status: 'active',
-      cleanup: event.cleanup,
-      cancellationRequested: false,
-    },
+    connection: { status: 'active', cancellationRequested: false },
   };
 };
 
@@ -380,7 +375,7 @@ const failStreamStart = (
   return { ...state, connection: { status: 'inactive' } };
 };
 
-const removeStreamCleanup = (state: ScopedStreamState): ScopedStreamState =>
+const stopActiveStream = (state: ScopedStreamState): ScopedStreamState =>
   state.connection.status === 'active' ? { ...state, connection: { status: 'inactive' } } : state;
 
 const receiveStreamHealth = (
@@ -427,7 +422,26 @@ const resetTransientStreamState = (state: ScopedStreamState): ScopedStreamState 
       ? { ...state.connection, cancellationRequested: false }
       : { status: 'inactive' },
   health: { status: 'unknown' },
+  startRetry: state.startRetry,
 });
+
+const scheduleStartRetry = (
+  state: ScopedStreamState,
+  event: Extract<ScopedStreamEvent, { type: 'start-retry-scheduled' }>
+): ScopedStreamState => ({
+  ...state,
+  startRetry: { status: 'scheduled', failures: state.startRetry.failures + 1, timer: event.timer },
+});
+
+const takeStartRetry = (state: ScopedStreamState): ScopedStreamState =>
+  state.startRetry.status === 'idle'
+    ? state
+    : { ...state, startRetry: { status: 'idle', failures: state.startRetry.failures } };
+
+const resetStartRetry = (state: ScopedStreamState): ScopedStreamState =>
+  state.startRetry.status === 'idle' && state.startRetry.failures === 0
+    ? state
+    : { ...state, startRetry: { status: 'idle', failures: 0 } };
 
 export const transitionScopedStreamState = (
   state: ScopedStreamState,
@@ -452,8 +466,8 @@ export const transitionScopedStreamState = (
       return finishStreamStart(state, event);
     case 'start-failed':
       return failStreamStart(state, event);
-    case 'cleanup-removed':
-      return removeStreamCleanup(state);
+    case 'stream-stopped':
+      return stopActiveStream(state);
     case 'health-received':
       return receiveStreamHealth(state, event);
     case 'health-cleared':
@@ -464,14 +478,27 @@ export const transitionScopedStreamState = (
       return clearAllStreamState(state, event);
     case 'transient-reset':
       return resetTransientStreamState(state);
+    case 'start-retry-scheduled':
+      return scheduleStartRetry(state, event);
+    case 'start-retry-taken':
+      return takeStartRetry(state);
+    case 'start-retry-reset':
+      return resetStartRetry(state);
   }
 };
+
+// The scope's next scheduled poll. The orchestrator owns the timer; the record
+// holds its handle so release, pause, and teardown can cancel it.
+export type ScopedPollingState =
+  | { status: 'idle' }
+  | { status: 'scheduled'; timer: ReturnType<typeof setTimeout> };
 
 type ScopedRefreshState = {
   domain: RefreshDomain;
   scope?: string;
   reconciliation: { status: 'clean' } | { status: 'pending'; failures: number; retryAt: number };
   activation: ScopedActivationState;
+  polling: ScopedPollingState;
   fetch: ScopedFetchState;
   readiness: ScopedReadinessState;
   permission: ScopedPermissionState;
@@ -516,44 +543,6 @@ export type RuntimeScopeStateChange = {
   changed: boolean;
 };
 
-export type RuntimeScopeEnableResult = RuntimeScopeStateChange & {
-  staleScopes: string[];
-};
-
-// Most domains should only keep one enabled scope per cluster runtime. Domains
-// listed here have real concurrent consumers, such as browse data plus
-// metadata, object-diff panes, or namespace table plus object-panel pod lists.
-const MULTI_ACTIVE_SCOPE_DOMAINS = new Set<RefreshDomain>([
-  'catalog',
-  'catalog-diff',
-  'cluster-attention',
-  'cluster-identities',
-  'cluster-config',
-  'cluster-crds',
-  'cluster-events',
-  'cluster-rbac',
-  'cluster-storage',
-  'container-logs',
-  'namespace-autoscaling',
-  'namespace-config',
-  'namespace-events',
-  'namespace-helm',
-  'namespace-network',
-  'namespace-quotas',
-  'namespace-rbac',
-  'namespace-storage',
-  'namespace-workloads',
-  'nodes',
-  'object-details',
-  'object-events',
-  'object-helm-manifest',
-  'object-helm-values',
-  'object-maintenance',
-  'object-map',
-  'object-yaml',
-  'pods',
-]);
-
 export class ClusterRefreshRuntime {
   readonly clusterId: string;
   private readonly scopedStates = new Map<string, ScopedRefreshState>();
@@ -569,6 +558,7 @@ export class ClusterRefreshRuntime {
         scope,
         reconciliation: { status: 'clean' },
         activation: { status: 'untracked' },
+        polling: { status: 'idle' },
         fetch: { status: 'idle' },
         readiness: { status: 'ready' },
         permission: { status: 'unknown' },
@@ -582,6 +572,7 @@ export class ClusterRefreshRuntime {
     if (
       state.reconciliation.status === 'clean' &&
       state.activation.status === 'untracked' &&
+      state.polling.status === 'idle' &&
       state.fetch.status === 'idle' &&
       state.readiness.status === 'ready' &&
       state.permission.status === 'unknown' &&
@@ -650,49 +641,13 @@ export class ClusterRefreshRuntime {
     return status === 'untracked' || status === 'enabled';
   }
 
-  setScopedDomainEnabled(
-    domain: RefreshDomain,
-    scope: string,
-    enabled: boolean
-  ): RuntimeScopeStateChange {
-    const { previous, next } = this.applyActivationEvent(domain, scope, {
-      type: enabled ? 'enabled' : 'disabled',
-    });
+  // Disables a scope no lease holds; a held scope stays enabled.
+  disableScopedDomain(domain: RefreshDomain, scope: string): RuntimeScopeStateChange {
+    const { previous, next } = this.applyActivationEvent(domain, scope, { type: 'disabled' });
     const previousEnabled =
       previous.status === 'untracked' ? undefined : previous.status === 'enabled';
     const nextEnabled = next.status === 'enabled';
     return { previous: previousEnabled, changed: previousEnabled !== nextEnabled };
-  }
-
-  applyScopedDomainEnabled(
-    domain: RefreshDomain,
-    scope: string,
-    enabled: boolean
-  ): RuntimeScopeEnableResult {
-    const staleScopes =
-      enabled && !MULTI_ACTIVE_SCOPE_DOMAINS.has(domain)
-        ? this.disableOtherEnabledScopes(domain, scope)
-        : [];
-    const change = this.setScopedDomainEnabled(domain, scope, enabled);
-    return { ...change, staleScopes };
-  }
-
-  private disableOtherEnabledScopes(domain: RefreshDomain, activeScope: string): string[] {
-    const staleScopes: string[] = [];
-    this.scopedStates.forEach((state) => {
-      if (
-        state.domain === domain &&
-        state.scope !== undefined &&
-        state.scope !== activeScope &&
-        state.activation.status === 'enabled'
-      ) {
-        staleScopes.push(state.scope);
-      }
-    });
-    staleScopes.forEach((scope) => {
-      this.applyActivationEvent(domain, scope, { type: 'superseded' });
-    });
-    return staleScopes;
   }
 
   getScopedLeaseCount(domain: RefreshDomain, scope: string, demand?: RefreshDemand): number {
@@ -735,11 +690,11 @@ export class ClusterRefreshRuntime {
     domain: RefreshDomain,
     scope: string,
     demand: RefreshDemand = 'snapshot'
-  ): { count: number; lastLease: boolean; hadLease: boolean } {
+  ): { count: number; lastLease: boolean; hadLease: boolean; resetOnRelease: boolean } {
     const before = this.getScopeState(domain, scope).activation;
     const counts = demandsFor(before);
     if (counts[demand] <= 0) {
-      return { count: 0, lastLease: false, hadLease: false };
+      return { count: 0, lastLease: false, hadLease: false, resetOnRelease: false };
     }
     const previousTotal = totalDemand(counts);
     const { next } = this.applyActivationEvent(domain, scope, {
@@ -747,10 +702,61 @@ export class ClusterRefreshRuntime {
       demand,
     });
     const nextTotal = totalDemand(demandsFor(next));
+    const resetOnRelease = before.status === 'enabled' && before.resetOnRelease;
     if (nextTotal === 0) {
-      return { count: 0, lastLease: previousTotal === 1, hadLease: true };
+      return { count: 0, lastLease: previousTotal === 1, hadLease: true, resetOnRelease };
     }
-    return { count: nextTotal, lastLease: false, hadLease: true };
+    return { count: nextTotal, lastLease: false, hadLease: true, resetOnRelease: false };
+  }
+
+  // Defers a reset of a scope some holder still shows until its last release.
+  // Returns false when no lease holds the scope, so the caller resets now.
+  deferResetUntilReleased(domain: RefreshDomain, scope: string): boolean {
+    if (!this.hasScopedLease(domain, scope)) {
+      return false;
+    }
+    this.applyActivationEvent(domain, scope, { type: 'reset-requested' });
+    return true;
+  }
+
+  // Scopes some consumer leases right now, across domains.
+  getLeasedScopes(): Array<{ domain: RefreshDomain; scope: string }> {
+    return Array.from(this.scopedStates.values()).flatMap((state) =>
+      state.scope !== undefined && totalDemand(demandsFor(state.activation)) > 0
+        ? [{ domain: state.domain, scope: state.scope }]
+        : []
+    );
+  }
+
+  setPollTimer(domain: RefreshDomain, scope: string, timer: ReturnType<typeof setTimeout>): void {
+    const state = this.getScopeState(domain, scope);
+    this.storeScopeState({ ...state, polling: { status: 'scheduled', timer } });
+  }
+
+  // Forgets the scope's scheduled poll and hands back its timer to cancel.
+  takePollTimer(domain: RefreshDomain, scope: string): ReturnType<typeof setTimeout> | undefined {
+    const state = this.getScopeState(domain, scope);
+    if (state.polling.status !== 'scheduled') {
+      return undefined;
+    }
+    this.storeScopeState({ ...state, polling: { status: 'idle' } });
+    return state.polling.timer;
+  }
+
+  isPollScheduled(domain: RefreshDomain, scope: string): boolean {
+    return this.getScopeState(domain, scope).polling.status === 'scheduled';
+  }
+
+  // Forgets every scheduled poll and hands back the timers to cancel.
+  takeAllPollTimers(): Array<ReturnType<typeof setTimeout>> {
+    const timers: Array<ReturnType<typeof setTimeout>> = [];
+    Array.from(this.scopedStates.values()).forEach((state) => {
+      if (state.polling.status === 'scheduled' && state.scope !== undefined) {
+        timers.push(state.polling.timer);
+        this.storeScopeState({ ...state, polling: { status: 'idle' } });
+      }
+    });
+    return timers;
   }
 
   forEachEnabledScope(domain: RefreshDomain, callback: (scope: string) => void): void {
@@ -812,6 +818,19 @@ export class ClusterRefreshRuntime {
     this.storeScopeState({
       ...state,
       reconciliation: { status: 'pending', failures, retryAt: Date.now() + delay },
+    });
+  }
+
+  // A signal held back while auto-refresh was off: the next allowed read
+  // reconciles the scope, with no failure backoff.
+  markReconciliationPending(domain: RefreshDomain, scope: string): void {
+    const state = this.getScopeState(domain, scope);
+    if (state.reconciliation.status === 'pending') {
+      return;
+    }
+    this.storeScopeState({
+      ...state,
+      reconciliation: { status: 'pending', failures: 0, retryAt: Date.now() },
     });
   }
 
@@ -1024,25 +1043,19 @@ export class ClusterRefreshRuntime {
     this.applyStreamEvent(domain, scope, { type: 'initialization-cleared', task });
   }
 
-  beginStreamingStart(
-    domain: RefreshDomain,
-    scope: string,
-    startPromise: Promise<(() => void) | undefined>
-  ): void {
+  beginStreamingStart(domain: RefreshDomain, scope: string, startPromise: StreamStartTask): void {
     this.applyStreamEvent(domain, scope, { type: 'start-began', task: startPromise });
   }
 
   finishStreamingStart(
     domain: RefreshDomain,
     scope: string,
-    startPromise: StreamStartTask,
-    cleanup: (() => void) | undefined
+    startPromise: StreamStartTask
   ): boolean {
     const previous = this.getScopeState(domain, scope).stream;
     const next = this.applyStreamEvent(domain, scope, {
       type: 'start-finished',
       task: startPromise,
-      cleanup: cleanup ?? (() => undefined),
     });
     return next !== previous;
   }
@@ -1051,10 +1064,7 @@ export class ClusterRefreshRuntime {
     this.applyStreamEvent(domain, scope, { type: 'start-failed', task: startPromise });
   }
 
-  cancelStreamingStart(
-    domain: RefreshDomain,
-    scope: string
-  ): Promise<(() => void) | undefined> | null {
+  cancelStreamingStart(domain: RefreshDomain, scope: string): StreamStartTask | null {
     const state = this.getScopeState(domain, scope);
     const pending =
       state.stream.connection.status === 'starting' ? state.stream.connection.task : null;
@@ -1072,13 +1082,10 @@ export class ClusterRefreshRuntime {
     this.applyStreamEvent(domain, scope, { type: 'start-cancellation-cleared' });
   }
 
-  getStreamingCleanup(domain: RefreshDomain, scope: string): (() => void) | undefined {
-    const connection = this.getScopeState(domain, scope).stream.connection;
-    return connection.status === 'active' ? connection.cleanup : undefined;
-  }
-
-  deleteStreamingCleanup(domain: RefreshDomain, scope: string): void {
-    this.applyStreamEvent(domain, scope, { type: 'cleanup-removed' });
+  // The orchestrator stopped the scope's stream; a start still in flight is
+  // cancelled separately (cancelStreamingStart).
+  markStreamingStopped(domain: RefreshDomain, scope: string): void {
+    this.applyStreamEvent(domain, scope, { type: 'stream-stopped' });
   }
 
   clearStreamHealth(domain: RefreshDomain, scope: string): void {
@@ -1119,6 +1126,52 @@ export class ClusterRefreshRuntime {
     this.forEachStreamState((state) => {
       this.applyStreamEvent(state.domain, state.scope, { type: 'all-cleared', reset });
     });
+  }
+
+  // Consecutive failed starts, which set the next retry's backoff.
+  getStreamStartFailures(domain: RefreshDomain, scope: string): number {
+    return this.getScopeState(domain, scope).stream.startRetry.failures;
+  }
+
+  setStreamStartRetry(
+    domain: RefreshDomain,
+    scope: string,
+    timer: ReturnType<typeof setTimeout>
+  ): void {
+    this.applyStreamEvent(domain, scope, { type: 'start-retry-scheduled', timer });
+  }
+
+  // Forgets the scope's pending retry, keeping its failure count, and hands
+  // back the timer to cancel.
+  takeStreamStartRetry(
+    domain: RefreshDomain,
+    scope: string
+  ): ReturnType<typeof setTimeout> | undefined {
+    const retry = this.getScopeState(domain, scope).stream.startRetry;
+    this.applyStreamEvent(domain, scope, { type: 'start-retry-taken' });
+    return retry.status === 'scheduled' ? retry.timer : undefined;
+  }
+
+  // Clears the failure count and any pending retry, handing back its timer.
+  resetStreamStartRetry(
+    domain: RefreshDomain,
+    scope: string
+  ): ReturnType<typeof setTimeout> | undefined {
+    const retry = this.getScopeState(domain, scope).stream.startRetry;
+    this.applyStreamEvent(domain, scope, { type: 'start-retry-reset' });
+    return retry.status === 'scheduled' ? retry.timer : undefined;
+  }
+
+  // Clears every scope's failure count and pending retry, handing back the timers.
+  resetAllStreamStartRetries(): Array<ReturnType<typeof setTimeout>> {
+    const timers: Array<ReturnType<typeof setTimeout>> = [];
+    this.forEachStreamState((state) => {
+      const timer = this.resetStreamStartRetry(state.domain, state.scope);
+      if (timer !== undefined) {
+        timers.push(timer);
+      }
+    });
+    return timers;
   }
 
   private forEachStreamState(

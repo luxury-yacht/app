@@ -6,7 +6,6 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 
 	"github.com/stretchr/testify/require"
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -61,14 +60,14 @@ func TestBuildResourceModelFactsStatusAndScaleTarget(t *testing.T) {
 
 func TestStreamRetainsTargetAPIVersionAndPrimaryIdentity(t *testing.T) {
 	min := int32(1)
-	h := &autoscalingv1.HorizontalPodAutoscaler{
+	h := &autoscalingv2.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{Name: "rollout-hpa", Namespace: "default"},
-		Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
-			ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{APIVersion: "argoproj.io/v1alpha1", Kind: "Rollout", Name: "web"},
+		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{APIVersion: "argoproj.io/v1alpha1", Kind: "Rollout", Name: "web"},
 			MinReplicas:    &min,
 			MaxReplicas:    4,
 		},
-		Status: autoscalingv1.HorizontalPodAutoscalerStatus{CurrentReplicas: 2, DesiredReplicas: 2},
+		Status: autoscalingv2.HorizontalPodAutoscalerStatus{CurrentReplicas: 2, DesiredReplicas: 2},
 	}
 
 	row := BuildStreamSummary(streamrows.ClusterMeta{ClusterID: "cluster-a"}, h)

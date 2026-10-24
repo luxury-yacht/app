@@ -52,6 +52,14 @@ func (a *ClusterRuntimeManager) validateKubeconfigSelection(selection kubeconfig
 	return fmt.Errorf("kubeconfig context not found: %s in %s", selection.Context, selection.Path)
 }
 
+// clusterMetaForKubeconfig is the identity of a discovered kubeconfig context.
+func clusterMetaForKubeconfig(kc KubeconfigInfo) ClusterMeta {
+	return ClusterMeta{
+		ID:   fmt.Sprintf("%s:%s", kc.Name, kc.Context),
+		Name: kc.Context,
+	}
+}
+
 // clusterMetaForSelection returns the cluster identity derived from a selection.
 func (a *ClusterRuntimeManager) clusterMetaForSelection(selection kubeconfigSelection) ClusterMeta {
 	if selection.Path == "" {
@@ -63,10 +71,7 @@ func (a *ClusterRuntimeManager) clusterMetaForSelection(selection kubeconfigSele
 		for _, kc := range a.availableKubeconfigs {
 			if kc.Path == selection.Path && kc.Context == selection.Context {
 				a.discoveryMu.RUnlock()
-				return ClusterMeta{
-					ID:   fmt.Sprintf("%s:%s", kc.Name, kc.Context),
-					Name: kc.Context,
-				}
+				return clusterMetaForKubeconfig(kc)
 			}
 		}
 		a.discoveryMu.RUnlock()

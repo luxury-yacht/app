@@ -17,7 +17,6 @@ import (
 
 	"github.com/luxury-yacht/app/backend/capabilities"
 	"github.com/luxury-yacht/app/backend/internal/config"
-	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"golang.org/x/sync/errgroup"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -333,7 +332,7 @@ func (s *Service) startWatchNotifier(ctx context.Context, notifier *watchNotifie
 	go func() {
 		defer close(watchDone)
 		defer notifier.removeHandlers()
-		registerWatchHandlers(s.deps.InformerFactory, s.deps.APIExtensionsInformerFactory, notifier, s)
+		registerWatchHandlers(notifier, s)
 		s.logInfo("catalog reactive updates enabled")
 		notifier.run(ctx)
 	}()
@@ -529,95 +528,59 @@ func (run *catalogSync) evaluateCapabilities(ctx context.Context) {
 	}
 }
 
-// waitForCaches waits until the informers and tracked ingest stores collection
-// reads from have settled. A settled informer can still be unsynced (forbidden
-// watch, missed sync deadline); collection lists those kinds from the API.
+// waitForCaches waits until the tracked ingest stores collection reads from
+// have settled.
 func (run *catalogSync) waitForCaches(ctx context.Context) error {
-	informerKeys := catalogInformerResourceKeys(run.descriptors)
 	ingestGVRs := catalogStaticIngestGVRs(run.descriptors)
-	if run.sourcesSettled(informerKeys, ingestGVRs) {
+	if run.sourcesSettled(ingestGVRs) {
 		return nil
 	}
 	waitTimer := time.NewTimer(run.service.opts.SourceSyncWaitTimeout)
 	defer waitTimer.Stop()
-	ticker := time.NewTicker(config.RefreshInformerSyncPollInterval)
+	ticker := time.NewTicker(config.RefreshSyncPollInterval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("waiting for catalog sources: %w", ctx.Err())
 		case <-waitTimer.C:
-			// A factory or manager that never started cannot arm its per-resource
-			// degrade deadline. That deadline is measured from its start and normally
-			// settles first; this independent timer starts at catalog entry so the
+			// A manager that never started cannot arm its per-resource degrade
+			// deadline. That deadline is measured from its start and normally settles
+			// first; this independent timer starts at catalog entry so the
 			// never-started case remains bounded even though both use the same
-			// configured duration. Continue into collection so synced resources remain
-			// usable: unsynced informer kinds are listed from the API, and unsynced
-			// ingest stores report partial health and recover through the fast retry.
+			// configured duration. Continue into collection so synced stores remain
+			// usable: unsynced ingest stores report partial health and recover
+			// through the fast retry.
 			run.service.sourceSyncTimeoutWarnOnce.Do(func() {
-				run.service.logWarn("catalog informers or ingest stores did not settle before the startup deadline; continuing collection")
+				run.service.logWarn("catalog ingest stores did not settle before the startup deadline; continuing collection")
 			})
 			return nil
 		case <-ticker.C:
-			if run.sourcesSettled(informerKeys, ingestGVRs) {
+			if run.sourcesSettled(ingestGVRs) {
 				return nil
 			}
 		}
 	}
 }
 
-func (run *catalogSync) sourcesSettled(informerKeys []string, ingestGVRs []schema.GroupVersionResource) bool {
-	deps := run.service.deps
-	if deps.InformerReadiness != nil && len(informerKeys) > 0 && !deps.InformerReadiness.ResourcesSettled(informerKeys) {
-		return false
-	}
-	if deps.IngestSource == nil {
+func (run *catalogSync) sourcesSettled(ingestGVRs []schema.GroupVersionResource) bool {
+	source := run.service.deps.IngestSource
+	if source == nil {
 		return true
 	}
 	for _, gvr := range ingestGVRs {
-		if deps.IngestSource.Tracks(gvr) && !deps.IngestSource.HasSyncedFor(gvr) {
+		if source.Tracks(gvr) && !source.HasSyncedFor(gvr) {
 			return false
 		}
 	}
 	return true
 }
 
-// catalogInformerResourceKeys returns the factory readiness keys for the kinds
-// collection reads from shared, Gateway API or CRD informers.
-func catalogInformerResourceKeys(descriptors []Descriptor) []string {
-	keys := make([]string, 0, len(descriptors))
-	seen := make(map[string]struct{})
-	for _, desc := range descriptors {
-		if !readsInformerCache(desc) {
-			continue
-		}
-		key := permissions.ResourceKey(desc.Group, desc.Resource)
-		if _, exists := seen[key]; exists {
-			continue
-		}
-		seen[key] = struct{}{}
-		keys = append(keys, key)
-	}
-	return keys
-}
-
-func readsInformerCache(desc Descriptor) bool {
-	if _, owned := catalogIngestOwnedGVRs[desc.GVR()]; owned {
-		return false
-	}
-	switch planCollectionSource(desc).source {
-	case collectionSourceSharedInformer, collectionSourceGatewayInformer, collectionSourceAPIExtensionsInformer:
-		return true
-	default:
-		return false
-	}
-}
-
 func catalogStaticIngestGVRs(descriptors []Descriptor) []schema.GroupVersionResource {
 	gvrs := make([]schema.GroupVersionResource, 0, len(descriptors))
 	seen := make(map[schema.GroupVersionResource]struct{})
 	for _, desc := range descriptors {
-		if _, owned := catalogIngestOwnedGVRs[desc.GVR()]; !owned {
+		if _, owned := catalogIngestGVRs[desc.GVR()]; !owned {
 			continue
 		}
 		if _, exists := seen[desc.GVR()]; exists {
@@ -793,14 +756,31 @@ func (run *catalogSync) restoreFailedDescriptors() {
 	}
 }
 
+// completeResources are the resources this sync listed completely: collected
+// without error and without a forbidden page. A failed resource keeps its
+// previous rows, so a miss there proves nothing.
+func (run *catalogSync) completeResources(denied map[string]struct{}) map[string]struct{} {
+	complete := make(map[string]struct{}, len(run.succeeded))
+	for gvr := range run.succeeded {
+		if _, forbidden := denied[deniedResourceName(run.allowedSet[gvr])]; !forbidden {
+			complete[gvr] = struct{}{}
+		}
+	}
+	return complete
+}
+
 func (run *catalogSync) publish(descriptors []Descriptor, collectErr error) {
 	s := run.service
 	s.pruneMissing(run.newLastSeen)
+	denied := s.deniedResourceSet()
+	complete := run.completeResources(denied)
 	// Collection owns these maps until the complete replacement is ready. Swap
-	// rows, identities and query state together under the reader's lock.
+	// rows, identities, list outcome and query state together under the
+	// reader's lock.
 	s.mu.Lock()
 	s.items, s.lastSeen = run.newItems, run.newLastSeen
 	s.catalogIndex.replaceResources(run.allowedSet)
+	s.catalogIndex.replaceListOutcome(complete, denied)
 	s.cacheRebuilds.Add(1)
 	s.catalogIndex.rebuildCacheFromItems(run.newItems, descriptors)
 	s.mu.Unlock()

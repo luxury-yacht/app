@@ -7,10 +7,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/luxury-yacht/app/backend/refresh"
-	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 )
 
@@ -21,13 +19,13 @@ func TestPermissionRevalidationUsesRecordedNamespace(t *testing.T) {
 	// Discovery-backed CRDs are intentionally absent from the static scope
 	// predicate, so a generic Can call would check them cluster-wide.
 	checker.SetScope([]string{"team-a"}, func(_, _ string) bool { return false })
-	factory := informer.New(context.Background(), fake.NewClientset(), nil, 0, checker)
+	grants := permissions.NewGrants(checker)
 
-	require.True(t, factory.CanListWatchInNamespace(context.Background(), "example.com", "widgets", "team-a"))
+	require.True(t, grants.CanListWatchInNamespace(context.Background(), "example.com", "widgets", "team-a"))
 
 	subsystem := &Subsystem{
-		RuntimePerms:    checker,
-		InformerFactory: factory,
+		RuntimePerms:     checker,
+		PermissionGrants: grants,
 	}
 	require.False(t, subsystem.permissionsChanged(context.Background()),
 		"a namespace-scoped grant must not be rechecked cluster-wide")
@@ -40,13 +38,13 @@ func TestPermissionRevalidationPreservesDefaultScopeEvaluation(t *testing.T) {
 	checker.SetScope([]string{"team-a"}, func(group, resource string) bool {
 		return group == "apps" && resource == "deployments"
 	})
-	factory := informer.New(context.Background(), fake.NewClientset(), nil, 0, checker)
+	grants := permissions.NewGrants(checker)
 
-	require.True(t, factory.CanListWatchWithContext(context.Background(), "apps", "deployments"))
+	require.True(t, grants.CanListWatchWithContext(context.Background(), "apps", "deployments"))
 
 	subsystem := &Subsystem{
-		RuntimePerms:    checker,
-		InformerFactory: factory,
+		RuntimePerms:     checker,
+		PermissionGrants: grants,
 	}
 	require.False(t, subsystem.permissionsChanged(context.Background()),
 		"a default permission grant must retain the checker's configured scope fan-out")
@@ -56,8 +54,8 @@ func TestPermissionRevalidationDetectsRevocationAtRecordedNamespace(t *testing.T
 	initialChecker := permissions.NewCheckerWithReview("cluster-a", time.Minute, func(_ context.Context, _, _, _, namespace string) (bool, error) {
 		return namespace == "team-a", nil
 	})
-	factory := informer.New(context.Background(), fake.NewClientset(), nil, 0, initialChecker)
-	require.True(t, factory.CanListWatchInNamespace(context.Background(), "example.com", "widgets", "team-a"))
+	grants := permissions.NewGrants(initialChecker)
+	require.True(t, grants.CanListWatchInNamespace(context.Background(), "example.com", "widgets", "team-a"))
 
 	var checkedNamespaces []string
 	revalidationChecker := permissions.NewCheckerWithReview("cluster-a", time.Minute, func(_ context.Context, group, resource, _, namespace string) (bool, error) {
@@ -67,33 +65,33 @@ func TestPermissionRevalidationDetectsRevocationAtRecordedNamespace(t *testing.T
 		return false, nil
 	})
 	subsystem := &Subsystem{
-		RuntimePerms:    revalidationChecker,
-		InformerFactory: factory,
+		RuntimePerms:     revalidationChecker,
+		PermissionGrants: grants,
 	}
 
 	require.True(t, subsystem.permissionsChanged(context.Background()))
 	require.NotEmpty(t, checkedNamespaces)
 	for _, namespace := range checkedNamespaces {
-		require.Equal(t, "team-a", namespace, "revocation must be checked at the recorded informer namespace")
+		require.Equal(t, "team-a", namespace, "revocation must be checked at the recorded namespace")
 	}
 }
 
 func TestPermissionRevalidationDetectsRestoredGrant(t *testing.T) {
 	denied := permissions.NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string, string) (bool, error) { return false, nil })
-	factory := informer.New(context.Background(), fake.NewClientset(), nil, 0, denied)
-	require.False(t, factory.CanListWatchInNamespace(context.Background(), "example.com", "widgets", "team-a"))
+	grants := permissions.NewGrants(denied)
+	require.False(t, grants.CanListWatchInNamespace(context.Background(), "example.com", "widgets", "team-a"))
 	allowed := permissions.NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string, string) (bool, error) { return true, nil })
-	subsystem := &Subsystem{RuntimePerms: allowed, InformerFactory: factory}
+	subsystem := &Subsystem{RuntimePerms: allowed, PermissionGrants: grants}
 	require.True(t, subsystem.permissionsChanged(context.Background()), "restoring a denied scope must trigger reconstruction too")
 }
 
 func TestDeniedPermissionRevalidationReviewsEachScopeOncePerCacheWindow(t *testing.T) {
 	denied := permissions.NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string, string) (bool, error) { return false, nil })
-	factory := informer.New(context.Background(), fake.NewClientset(), nil, 0, denied)
+	grants := permissions.NewGrants(denied)
 	const namespaces = 100
 	for range 5 {
 		for i := range namespaces {
-			require.False(t, factory.CanListWatchInNamespace(context.Background(), "example.com", "widgets", fmt.Sprintf("team-%d", i)))
+			require.False(t, grants.CanListWatchInNamespace(context.Background(), "example.com", "widgets", fmt.Sprintf("team-%d", i)))
 		}
 	}
 	for window := range 2 {
@@ -107,7 +105,7 @@ func TestDeniedPermissionRevalidationReviewsEachScopeOncePerCacheWindow(t *testi
 			}
 			return false, nil
 		})
-		subsystem := &Subsystem{RuntimePerms: checker, InformerFactory: factory}
+		subsystem := &Subsystem{RuntimePerms: checker, PermissionGrants: grants}
 		require.False(t, subsystem.permissionsChanged(context.Background()))
 		require.Equal(t, namespaces, reviews)
 		require.False(t, subsystem.permissionsChanged(context.Background()))
@@ -116,8 +114,20 @@ func TestDeniedPermissionRevalidationReviewsEachScopeOncePerCacheWindow(t *testi
 	}
 }
 
+type fakeFeedHub struct {
+	synced bool
+}
+
+func (h fakeFeedHub) Start(context.Context) error { return nil }
+
+func (h fakeFeedHub) HasSynced(context.Context) bool { return h.synced }
+
+func (h fakeFeedHub) ResourcesSettled([]string) bool { return h.synced }
+
+func (fakeFeedHub) Shutdown() error { return nil }
+
 type permissionRevalidationHub struct {
-	fakeInformerHub
+	fakeFeedHub
 	stopped chan struct{}
 }
 
@@ -125,14 +135,14 @@ func (h *permissionRevalidationHub) Shutdown() error { close(h.stopped); return 
 
 func TestPermissionChangesDelegateReplacementBeforeStoppingProducers(t *testing.T) {
 	allowed := permissions.NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string, string) (bool, error) { return true, nil })
-	factory := informer.New(context.Background(), fake.NewClientset(), nil, 0, allowed)
-	require.True(t, factory.CanListWatchWithContext(context.Background(), "", "pods"))
+	grants := permissions.NewGrants(allowed)
+	require.True(t, grants.CanListWatchWithContext(context.Background(), "", "pods"))
 	denied := permissions.NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string, string) (bool, error) { return false, nil })
 	hub := &permissionRevalidationHub{stopped: make(chan struct{})}
 	manager := refresh.NewManager(nil, hub, nil, nil, nil)
 	require.NoError(t, manager.Start(context.Background()))
 	defer manager.Shutdown(context.Background())
-	s := &Subsystem{RuntimePerms: denied, InformerFactory: factory, Manager: manager}
+	s := &Subsystem{RuntimePerms: denied, PermissionGrants: grants, Manager: manager}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	notified := make(chan struct{}, 1)

@@ -1,11 +1,9 @@
 /*
  * backend/refresh/system/ingest_hub.go
  *
- * ingestInformerHub composes the shared informer factory with the owned-reflector
- * IngestManager behind one refresh.InformerHub, so the refresh manager's single
- * Start/HasSynced/ResourcesSettled/Shutdown lifecycle drives both. Ingest-owned
- * (cut) kinds are no longer registered with the factory, so their readiness comes
- * from the ingest manager; every other kind's readiness comes from the factory.
+ * ingestHub is the refresh.FeedHub over the owned reflectors: it starts
+ * them with the refresh manager and answers readiness per declared resource
+ * from the ingest manager.
  */
 
 package system
@@ -13,153 +11,119 @@ package system
 import (
 	"context"
 
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
-
-type ingestHubFactory interface {
-	Start(context.Context) error
-	HasSynced(context.Context) bool
-	ResourcesSettled([]string) bool
-	Shutdown() error
-}
 
 type ingestHubManager interface {
 	Start(context.Context)
 	Stop()
+	HasSynced() bool
 	StoreFor(schema.GroupVersionResource) *ingest.ProjectingStore
 	HasSyncedFor(schema.GroupVersionResource) bool
 	ResourceReadinessFor(schema.GroupVersionResource) refresh.ResourceReadiness
 }
 
-// ingestInformerHub adapts a *informer.Factory plus a *ingest.IngestManager to the
-// refresh.InformerHub interface. The factory remains the readiness source for every
-// uncut kind; the ingest manager is the readiness source for the cut kinds (whose
-// informers the factory no longer registers).
-type ingestInformerHub struct {
-	factory ingestHubFactory
-	ingest  ingestHubManager
+// ingestHub adapts the ingest manager to refresh.FeedHub.
+type ingestHub struct {
+	ingest ingestHubManager
 
-	// ingestResources routes canonical permission keys to the owned GVR for both
-	// settlement and data readiness. Built once from the registry's IngestOwned facet.
-	ingestResources map[string]schema.GroupVersionResource
+	// ownedResources routes canonical permission keys to the owned GVR for both
+	// settlement and data readiness. Built once from the kind registry.
+	ownedResources map[string]schema.GroupVersionResource
 }
 
-// newIngestInformerHub builds the composite hub. Without an ingest manager,
-// ingest-owned keys are settled but report their data as unavailable.
-func newIngestInformerHub(factory ingestHubFactory, ingestManager ingestHubManager) *ingestInformerHub {
+// newIngestHub builds the hub. Without an ingest manager, owned keys are
+// settled but report their data as unavailable.
+func newIngestHub(ingestManager ingestHubManager) *ingestHub {
 	resources := make(map[string]schema.GroupVersionResource)
-	for _, d := range kindregistry.IngestOwnedDescriptors() {
+	for _, d := range kindregistry.All {
 		resources[permissions.ResourceKey(d.Identity.Group, d.Identity.Resource)] = d.Identity.GVR()
 	}
-	return &ingestInformerHub{factory: factory, ingest: ingestManager, ingestResources: resources}
+	return &ingestHub{ingest: ingestManager, ownedResources: resources}
 }
 
-var _ refresh.InformerHub = (*ingestInformerHub)(nil)
+var _ refresh.FeedHub = (*ingestHub)(nil)
 
-// Start launches ingest-owned reflectors before waiting on the factory sync gate,
-// so cut-kind relists warm in parallel with the remaining shared informers. It
-// does not wait for every ingest-owned kind: domains that read cut resources
-// declare those keys and wait through ResourcesSettled, while global manager
-// startup and metrics polling match the factory-scoped startup gate.
-func (h *ingestInformerHub) Start(ctx context.Context) error {
+// Start launches the owned reflectors and returns without waiting for them:
+// a domain waits on the resources it declares through ResourcesSettled, so one
+// slow kind never holds the refresh manager, metrics polling, or unrelated
+// domains.
+func (h *ingestHub) Start(ctx context.Context) error {
 	if h.ingest != nil {
 		h.ingest.Start(ctx)
-	}
-	if err := h.factory.Start(ctx); err != nil {
-		if h.ingest != nil {
-			h.ingest.Stop()
-		}
-		return err
 	}
 	return nil
 }
 
-// HasSynced reports the global manager readiness gate. Ingest-owned resources are
-// intentionally excluded here; callers that need them must use ResourcesSettled
-// with concrete resource keys so one slow unrelated cut kind does not hold global
-// refresh health or metrics polling.
-func (h *ingestInformerHub) HasSynced(ctx context.Context) bool {
-	return h.factory.HasSynced(ctx)
+// HasSynced reports whether every tracked store has settled (synced,
+// permission-skipped, or past its sync deadline). Only a domain that declares
+// no readiness resources waits on it.
+func (h *ingestHub) HasSynced(context.Context) bool {
+	return h.ingest != nil && h.ingest.HasSynced()
 }
 
-// ResourcesSettled routes each requested key to its readiness source: ingest-owned
-// keys are settled when the ingest store for that GVR has synced; every other key is
-// delegated to the factory. A key the ingest manager has no entry for (skipped kind)
-// is treated as settled, matching the factory's "no informer = settled" rule.
-func (h *ingestInformerHub) ResourcesSettled(keys []string) bool {
-	if len(keys) == 0 {
+// ResourcesSettled reports whether the store behind each owned key has
+// settled. A key with no store (a skipped kind) or no owned reflector has
+// nothing to wait for.
+func (h *ingestHub) ResourcesSettled(keys []string) bool {
+	if h.ingest == nil {
 		return true
 	}
-	factoryKeys := make([]string, 0, len(keys))
 	for _, key := range keys {
-		if gvr, owned := h.ingestResources[key]; owned {
-			if h.ingest != nil && h.ingest.StoreFor(gvr) != nil && !h.ingest.HasSyncedFor(gvr) {
-				return false
-			}
-			continue
+		gvr, owned := h.ownedResources[key]
+		if owned && h.ingest.StoreFor(gvr) != nil && !h.ingest.HasSyncedFor(gvr) {
+			return false
 		}
-		factoryKeys = append(factoryKeys, key)
 	}
-	if len(factoryKeys) == 0 {
-		return true
-	}
-	return h.factory.ResourcesSettled(factoryKeys)
+	return true
 }
 
 // ResourceReadiness preserves the per-resource data state that the boolean
-// settlement gate intentionally collapses for liveness. Ingest-owned keys read
-// the owned reflector state; all remaining keys delegate to the shared
-// informer factory when it exposes the optional reporter contract.
-func (h *ingestInformerHub) ResourceReadiness(keys []string) map[string]refresh.ResourceReadiness {
+// settlement gate collapses for liveness. A key no owned reflector feeds has
+// no readiness detail.
+func (h *ingestHub) ResourceReadiness(keys []string) map[string]refresh.ResourceReadiness {
 	result := make(map[string]refresh.ResourceReadiness, len(keys))
-	factoryKeys := make([]string, 0, len(keys))
 	for _, key := range keys {
-		result[key] = refresh.ResourceReadinessUnknown
-		gvr, owned := h.ingestResources[key]
-		if !owned {
-			factoryKeys = append(factoryKeys, key)
-			continue
-		}
-		if h.ingest == nil {
+		gvr, owned := h.ownedResources[key]
+		switch {
+		case !owned:
+			result[key] = refresh.ResourceReadinessUnknown
+		case h.ingest == nil:
 			result[key] = refresh.ResourceReadinessUnavailable
-			continue
-		}
-		result[key] = h.ingest.ResourceReadinessFor(gvr)
-	}
-	if reporter, ok := h.factory.(refresh.ResourceReadinessReporter); ok {
-		for key, readiness := range reporter.ResourceReadiness(factoryKeys) {
-			result[key] = readiness
+		default:
+			result[key] = h.ingest.ResourceReadinessFor(gvr)
 		}
 	}
 	return result
 }
 
-// Shutdown stops the ingest reflectors and the factory.
-func (h *ingestInformerHub) Shutdown() error {
+// Shutdown stops the owned reflectors.
+func (h *ingestHub) Shutdown() error {
 	if h.ingest != nil {
 		h.ingest.Stop()
 	}
-	return h.factory.Shutdown()
+	return nil
 }
 
-// cooledInformerHub is the readiness gate a cooled (Cold-tier serving) subsystem installs on
-// its SnapshotService. Cooling shuts the manager + informer factory, after which the live hub
-// reports NOT synced (factory.Shutdown clears its synced flag), which would block every cooled
-// Build until the sync-deadline. A cooled cluster's data is frozen and resident in its
+// cooledFeedHub is the readiness gate a cooled (Cold-tier serving) subsystem installs on
+// its SnapshotService. Cooling stops the manager and the owned reflectors, so the frozen
+// stores must no longer wait on the live hub's sync gate (installCooledStores,
+// backend/refresh_governor.go). A cooled cluster's data is frozen and resident in its
 // mmap-backed maintained stores, so its sync gate must report settled immediately. Its
 // lifecycle methods are no-ops: there is nothing to start or shut down.
-type cooledInformerHub struct{}
+type cooledFeedHub struct{}
 
-// NewCooledInformerHub returns the always-settled readiness gate for a cooled subsystem.
-func NewCooledInformerHub() refresh.InformerHub { return cooledInformerHub{} }
+// NewCooledFeedHub returns the always-settled readiness gate for a cooled subsystem.
+func NewCooledFeedHub() refresh.FeedHub { return cooledFeedHub{} }
 
-var _ refresh.InformerHub = cooledInformerHub{}
+var _ refresh.FeedHub = cooledFeedHub{}
 
-func (cooledInformerHub) Start(context.Context) error    { return nil }
-func (cooledInformerHub) HasSynced(context.Context) bool { return true }
-func (cooledInformerHub) ResourcesSettled([]string) bool { return true }
-func (cooledInformerHub) Shutdown() error                { return nil }
+func (cooledFeedHub) Start(context.Context) error    { return nil }
+func (cooledFeedHub) HasSynced(context.Context) bool { return true }
+func (cooledFeedHub) ResourcesSettled([]string) bool { return true }
+func (cooledFeedHub) Shutdown() error                { return nil }

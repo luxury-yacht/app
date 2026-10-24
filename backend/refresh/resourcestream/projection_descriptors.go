@@ -24,8 +24,6 @@ import (
 // registration stays behavior-specific so Kubernetes edge cases remain visible.
 type ProjectionDescriptor struct {
 	Domain               string
-	ScopeKind            string
-	SelectorShape        string
 	RowIdentity          string
 	UpdateIdentity       string
 	PrimaryResources     []ResourceDescriptor
@@ -50,10 +48,7 @@ type ResourceDescriptor struct {
 	Resource string
 }
 
-const (
-	fullResourceRefUpdateIdentity = "ref (full ResourceRef)"
-	namespaceSelectorShape        = "clusterId + namespace"
-)
+const fullResourceRefUpdateIdentity = "ref (full ResourceRef)"
 
 // ProjectionDescriptors returns a defensive copy of the authored projection
 // metadata. Its consumers are the cross-package contract guards that lock the
@@ -72,8 +67,6 @@ func ProjectionDescriptors() map[string]ProjectionDescriptor {
 var projectionDescriptors = map[string]ProjectionDescriptor{
 	domainPods: {
 		Domain:           domainPods,
-		ScopeKind:        "pod",
-		SelectorShape:    "clusterId + namespace/name or namespace:*",
 		RowIdentity:      "clusterId + /v1 Pod namespace/name",
 		UpdateIdentity:   fullResourceRefUpdateIdentity,
 		PrimaryResources: []ResourceDescriptor{fromIdentity(podspkg.Identity)},
@@ -82,14 +75,12 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 		// query path); stream row pushes stay object-clocked.
 		SourceClocks:         []Source{SourceObject, SourceMetric},
 		Projection:           "pods.BuildStreamSummaryFromRSMap (ingest projection)",
-		AffectedRowResolver:  "ingest pod bundle sink -> pod row, workload row, node row",
-		StaleScopeResolver:   "ingest DeleteBundle rings the old bundle's scopes (scopesForPod)",
+		AffectedRowResolver:  "pods store publication -> pod scopes, namespace workloads, node",
+		StaleScopeResolver:   "pods store publication rings the previous row's scopes (podDoorbellScopes)",
 		CompleteIsScopeLevel: true,
 	},
 	domainWorkloads: {
 		Domain:         domainWorkloads,
-		ScopeKind:      "namespace",
-		SelectorShape:  namespaceSelectorShape,
 		RowIdentity:    "clusterId + full workload GVK namespace/name",
 		UpdateIdentity: fullResourceRefUpdateIdentity,
 		PrimaryResources: []ResourceDescriptor{
@@ -103,12 +94,12 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 		RelatedResources: []ResourceDescriptor{
 			fromIdentity(podspkg.Identity),
 			fromIdentity(replicasetpkg.Identity),
-			fromIdentity(hpapkg.IdentityV1),
+			fromIdentity(hpapkg.Identity),
 		},
 		SourceClocks:         []Source{SourceObject, SourceMetric},
 		Projection:           "snapshot namespace-workloads builder (row-less stream signal)",
-		AffectedRowResolver:  "workload, pod, HPA, ReplicaSet event resolvers",
-		StaleScopeResolver:   "ReplicaSet heal + ingest bundle delete fan-out",
+		AffectedRowResolver:  "workloads store publication + pod and HPA derived changes",
+		StaleScopeResolver:   "store publication rings the previous row's namespace",
 		CompleteIsScopeLevel: true,
 	},
 	domainNamespaceConfig: namespaceDescriptor(
@@ -119,16 +110,14 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 	),
 	domainNamespaceNetwork: {
 		Domain:               domainNamespaceNetwork,
-		ScopeKind:            "namespace",
-		SelectorShape:        namespaceSelectorShape,
 		RowIdentity:          "clusterId + full network GVK namespace/name",
 		UpdateIdentity:       fullResourceRefUpdateIdentity,
 		PrimaryResources:     streamResourceDescriptors(domainNamespaceNetwork),
 		RelatedResources:     []ResourceDescriptor{fromIdentity(endpointslicepkg.Identity)},
 		SourceClocks:         []Source{SourceObject},
 		Projection:           "service/ingress/networkpolicy/endpointslice/gatewayapi BuildStreamSummary",
-		AffectedRowResolver:  "ingest network bundle sink",
-		StaleScopeResolver:   "ingest bundle delete fan-out",
+		AffectedRowResolver:  "network store publication",
+		StaleScopeResolver:   "store publication rings the previous row's namespace",
 		CompleteIsScopeLevel: true,
 	},
 	domainNamespaceRBAC: namespaceDescriptor(
@@ -139,15 +128,13 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 	),
 	domainNamespaceHelm: {
 		Domain:               domainNamespaceHelm,
-		ScopeKind:            "namespace",
-		SelectorShape:        namespaceSelectorShape,
 		RowIdentity:          "clusterId + helm.sh/v3 HelmRelease namespace/name",
 		UpdateIdentity:       fullResourceRefUpdateIdentity,
 		PrimaryResources:     streamResourceDescriptors(domainNamespaceHelm),
 		RelatedResources:     streamResourceDescriptors(domainNamespaceHelm),
 		SourceClocks:         []Source{SourceObject},
-		Projection:           "snapshot.mapHelmReleases",
-		AffectedRowResolver:  "Secret/ConfigMap old/new Helm release identity resolver",
+		Projection:           "snapshot.mapHelmRelease",
+		AffectedRowResolver:  "Secret Helm revision index (helm.StorageRecord) old/new release",
 		StaleScopeResolver:   "scope-level COMPLETE for affected namespaces",
 		CompleteIsScopeLevel: true,
 	},
@@ -191,16 +178,14 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 	),
 	domainNodes: {
 		Domain:               domainNodes,
-		ScopeKind:            "cluster",
-		SelectorShape:        "clusterId",
 		RowIdentity:          "clusterId + /v1 Node name",
 		UpdateIdentity:       fullResourceRefUpdateIdentity,
 		PrimaryResources:     []ResourceDescriptor{fromIdentity(nodespkg.Identity)},
 		RelatedResources:     []ResourceDescriptor{fromIdentity(podspkg.Identity)},
 		SourceClocks:         []Source{SourceObject, SourceMetric},
 		Projection:           "snapshot nodes builder (row-less stream signal)",
-		AffectedRowResolver:  "node and pod->node resolvers",
-		StaleScopeResolver:   "ingest bundle delete fan-out",
+		AffectedRowResolver:  "nodes store publication + pod derived changes",
+		StaleScopeResolver:   "cluster scope",
 		CompleteIsScopeLevel: true,
 	},
 }
@@ -208,16 +193,14 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 func namespaceDescriptor(domain, projection string, primary, related []ResourceDescriptor) ProjectionDescriptor {
 	return ProjectionDescriptor{
 		Domain:               domain,
-		ScopeKind:            "namespace",
-		SelectorShape:        namespaceSelectorShape,
 		RowIdentity:          "clusterId + full GVK namespace/name",
 		UpdateIdentity:       fullResourceRefUpdateIdentity,
 		PrimaryResources:     primary,
 		RelatedResources:     related,
 		SourceClocks:         []Source{SourceObject},
 		Projection:           projection,
-		AffectedRowResolver:  "direct object event resolver",
-		StaleScopeResolver:   "none",
+		AffectedRowResolver:  "store publication",
+		StaleScopeResolver:   "store publication rings the previous object's scope",
 		CompleteIsScopeLevel: true,
 	}
 }
@@ -225,15 +208,13 @@ func namespaceDescriptor(domain, projection string, primary, related []ResourceD
 func clusterDescriptor(domain, projection string, primary []ResourceDescriptor) ProjectionDescriptor {
 	return ProjectionDescriptor{
 		Domain:               domain,
-		ScopeKind:            "cluster",
-		SelectorShape:        "clusterId",
 		RowIdentity:          "clusterId + full GVK name",
 		UpdateIdentity:       fullResourceRefUpdateIdentity,
 		PrimaryResources:     primary,
 		SourceClocks:         []Source{SourceObject},
 		Projection:           projection,
-		AffectedRowResolver:  "direct object event resolver",
-		StaleScopeResolver:   "none",
+		AffectedRowResolver:  "store publication",
+		StaleScopeResolver:   "store publication rings the previous object's scope",
 		CompleteIsScopeLevel: true,
 	}
 }

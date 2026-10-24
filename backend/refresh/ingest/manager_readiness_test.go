@@ -8,6 +8,8 @@ import (
 
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -30,8 +32,7 @@ func unreachableKube(t *testing.T) kubernetes.Interface {
 // TestIngestManagerDegradesUnsyncedStoreAfterDeadline pins the readiness contract that
 // keeps a single never-syncing cut kind from blocking the whole subsystem: HasSynced()
 // must report settled once the sync deadline passes, even though no store ever synced,
-// so refresh.Manager.Start stops blocking on waitForIngestSynced (and the metrics
-// poller it gates can start). Mirrors the informer factory's stateSettled (issue #225).
+// so the whole-feed readiness gate opens (issue #225).
 func TestIngestManagerDegradesUnsyncedStoreAfterDeadline(t *testing.T) {
 	mgr := NewIngestManager(testMeta, unreachableKube(t), nil, nil)
 	if len(mgr.entries) == 0 {
@@ -62,8 +63,7 @@ func TestIngestManagerDegradesUnsyncedStoreAfterDeadline(t *testing.T) {
 // permission filter denies must be skipped at Start — its reflector is never launched,
 // and it is excluded from the readiness gate IMMEDIATELY (settled-as-skipped), not after
 // the sync deadline. Without this, a denied kind's reflector 403-retries forever and the
-// whole subsystem waits out the deadline before it can come up. Mirrors the informer
-// factory's permission-skip (factory.go CanListWatch gate). The deadline here is set very
+// whole subsystem waits out the deadline before it can come up. The deadline here is set very
 // long so the only way the denied kind can be settled is via the skip, not a degrade.
 func TestIngestManagerSkipsDeniedKindsAtStart(t *testing.T) {
 	mgr := NewIngestManager(testMeta, unreachableKube(t), nil, nil)
@@ -228,5 +228,33 @@ func TestIngestManagerResourceReadinessClassifiesConcreteStoreStates(t *testing.
 	require.Equal(t, []PartitionReadiness{{State: refresh.ResourceReadinessReady}}, mgr.PartitionReadinessFor(gvr))
 	if got := mgr.ResourceReadinessFor(gvr); got != refresh.ResourceReadinessReady {
 		t.Fatalf("synced readiness = %s, want ready", got)
+	}
+}
+
+// A store restored from spill is marked synced before Start applies the
+// permission filter. If its source is then denied, the store still reports
+// raw sync, so only partition readiness can tell a consumer that its rows are
+// not an authoritative set.
+func TestRestoredStoreDeniedAtStartReportsUnavailablePartitions(t *testing.T) {
+	spill := t.TempDir()
+	before := NewIngestManager(testMeta, unreachableKube(t), nil, nil)
+	configMaps := schema.GroupVersionResource{Version: "v1", Resource: "configmaps"}
+	store := before.StoreFor(configMaps)
+	require.NotNil(t, store)
+	require.NoError(t, store.Replace([]interface{}{&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "app", Namespace: "default", ResourceVersion: "7"}}}, "7"))
+	require.NoError(t, before.SpillStores(spill))
+
+	after := NewIngestManager(testMeta, unreachableKube(t), nil, nil)
+	after.RestoreStores(spill)
+	after.SetPermissionFilter(func(string, string, string) bool { return false })
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	after.Start(ctx)
+
+	require.True(t, after.RawHasSyncedFor(configMaps), "restore marks the store synced")
+	parts := after.PartitionReadinessFor(configMaps)
+	require.NotEmpty(t, parts)
+	for _, part := range parts {
+		require.Equal(t, refresh.ResourceReadinessUnavailable, part.State)
 	}
 }

@@ -1,79 +1,83 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Pods/objectPanelPodsScope.test.ts
+ *
+ * The Pods tab's selector comes from the kind's pods facet, matched by the
+ * object's complete identity.
  */
 
 import { describe, expect, it } from 'vitest';
 import type { PanelObjectData } from '../types';
-import { buildObjectPanelPodsScope } from './objectPanelPodsScope';
+import { buildObjectPanelPodsSelector } from './objectPanelPodsScope';
 
-describe('buildObjectPanelPodsScope', () => {
-  it('returns null when the object name is missing', () => {
+const workload = (overrides: Partial<PanelObjectData> = {}): PanelObjectData => ({
+  kind: 'Deployment',
+  name: 'api',
+  namespace: 'team-a',
+  group: 'apps',
+  version: 'v1',
+  ...overrides,
+});
+
+describe('buildObjectPanelPodsSelector', () => {
+  it('selects a node’s pods by node name', () => {
     expect(
-      buildObjectPanelPodsScope({ kind: 'Deployment', namespace: 'team-a' }, 'deployment')
+      buildObjectPanelPodsSelector({ kind: 'Node', name: 'worker-a', group: '', version: 'v1' })
+    ).toEqual({ kind: 'node', node: 'worker-a' });
+  });
+
+  it('selects a workload’s pods by its complete identity', () => {
+    expect(buildObjectPanelPodsSelector(workload())).toEqual({
+      kind: 'workload',
+      object: {
+        namespace: 'team-a',
+        group: 'apps',
+        version: 'v1',
+        kind: 'Deployment',
+        name: 'api',
+      },
+    });
+    expect(
+      buildObjectPanelPodsSelector(workload({ kind: 'Job', name: 'backup', group: 'batch' }))
+    ).toEqual({
+      kind: 'workload',
+      object: { namespace: 'team-a', group: 'batch', version: 'v1', kind: 'Job', name: 'backup' },
+    });
+  });
+
+  // The backend matches the owner's kind exactly, so a panel opened from a
+  // lowercase link (a Deployment's current ReplicaSet) must send the canonical kind.
+  it('sends the canonical kind for a ref spelled in lowercase', () => {
+    expect(buildObjectPanelPodsSelector(workload({ kind: 'replicaset' }))).toEqual({
+      kind: 'workload',
+      object: {
+        namespace: 'team-a',
+        group: 'apps',
+        version: 'v1',
+        kind: 'ReplicaSet',
+        name: 'api',
+      },
+    });
+  });
+
+  it('selects nothing for a kind without a Pods tab', () => {
+    expect(
+      buildObjectPanelPodsSelector(workload({ kind: 'ServiceAccount', group: '' }))
     ).toBeNull();
-  });
-
-  it('returns null when the kind is missing', () => {
-    expect(buildObjectPanelPodsScope({ name: 'api', namespace: 'team-a' }, null)).toBeNull();
-  });
-
-  it('builds a node scope for Node panels', () => {
-    expect(buildObjectPanelPodsScope({ kind: 'Node', name: 'worker-a' }, 'node')).toBe(
-      'node:worker-a'
-    );
-  });
-
-  it('builds a workload scope from the object GVK', () => {
-    const objectData: PanelObjectData = {
-      kind: 'Deployment',
-      name: 'api',
-      namespace: 'team-a',
-      group: 'apps',
-      version: 'v1',
-    };
-    expect(buildObjectPanelPodsScope(objectData, 'deployment')).toBe(
-      'workload:team-a:apps:v1:Deployment:api'
-    );
-  });
-
-  it('returns null when a workload object omits group/version/kind segments', () => {
+    // A CronJob lists its pods per Job in the Jobs tab.
+    expect(buildObjectPanelPodsSelector(workload({ kind: 'CronJob', group: 'batch' }))).toBeNull();
+    // A custom resource named like a built-in kind is not that kind.
     expect(
-      buildObjectPanelPodsScope({ name: 'api', namespace: 'team-a' }, 'statefulset')
-    ).toBeNull();
-  });
-
-  it('returns null when a workload object has kind and version but omits group', () => {
-    expect(
-      buildObjectPanelPodsScope(
-        { kind: 'Deployment', name: 'api', namespace: 'team-a', version: 'v1' },
-        'deployment'
+      buildObjectPanelPodsSelector(
+        workload({ kind: 'Job', group: 'batch.volcano.sh', version: 'v1alpha1' })
       )
     ).toBeNull();
   });
 
-  it('uses the batch group for jobs', () => {
-    expect(
-      buildObjectPanelPodsScope(
-        { kind: 'Job', name: 'backup', namespace: 'team-a', group: 'batch', version: 'v1' },
-        'job'
-      )
-    ).toBe('workload:team-a:batch:v1:Job:backup');
-  });
-
-  it('returns null for a workload without a namespace', () => {
-    expect(buildObjectPanelPodsScope({ kind: 'Deployment', name: 'api' }, 'deployment')).toBeNull();
-  });
-
-  it('returns null for unsupported kinds', () => {
-    expect(
-      buildObjectPanelPodsScope(
-        { kind: 'ServiceAccount', name: 'builder', namespace: 'team-a' },
-        'serviceaccount'
-      )
-    ).toBeNull();
-  });
-
-  it('returns null when the object data is null', () => {
-    expect(buildObjectPanelPodsScope(null, 'deployment')).toBeNull();
+  it('selects nothing without a complete identity, a name, or a workload namespace', () => {
+    expect(buildObjectPanelPodsSelector(null)).toBeNull();
+    expect(buildObjectPanelPodsSelector(workload({ group: undefined }))).toBeNull();
+    expect(buildObjectPanelPodsSelector(workload({ version: undefined }))).toBeNull();
+    expect(buildObjectPanelPodsSelector(workload({ name: ' ' }))).toBeNull();
+    expect(buildObjectPanelPodsSelector(workload({ namespace: undefined }))).toBeNull();
   });
 });

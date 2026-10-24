@@ -110,7 +110,7 @@
 }
 
 .drain-progress-pod-table .pod-name {
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-family-mono);
 }
 
 .drain-progress-pod-table .pod-name .namespace {
@@ -156,7 +156,7 @@
 }
 
 .drain-progress-event.error {
-  color: var(--color-danger, #f87171);
+  color: var(--color-error);
 }
 
 .drain-progress-event-time {
@@ -168,11 +168,11 @@
 }
 
 .drain-progress-error {
-  border: 1px solid var(--color-danger, #f87171);
-  background-color: var(--color-bg-danger, rgba(248, 113, 113, 0.1));
-  color: var(--color-danger, #f87171);
+  border: 1px solid var(--color-error);
+  background-color: var(--color-error-bg);
+  color: var(--color-error);
   padding: var(--spacing-sm);
-  border-radius: var(--border-radius);
+  border-radius: var(--border-radius-sm);
   font-size: var(--font-size-sm);
 }
 

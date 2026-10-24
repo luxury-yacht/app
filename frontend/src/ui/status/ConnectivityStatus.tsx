@@ -15,12 +15,13 @@ import { buildConnectivityPresentation } from '@/core/connection/connectivityPre
 import { useActiveClusterAuthState, useAuthError } from '@/core/contexts/AuthErrorContext';
 import { requestContextRefresh } from '@/core/data-access';
 import { eventBus } from '@/core/events';
-import { getAutoRefreshEnabled, setAutoRefreshEnabled } from '@/core/settings/appPreferences';
+import { setAutoRefreshEnabled } from '@/core/settings/appPreferences';
+import { usePreference } from '@/core/settings/usePreference';
 import { useClusterHealthListener } from '@/hooks/useWailsRuntimeEvents';
 
 const ConnectivityStatus: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
+  const isPaused = !usePreference('autoRefreshEnabled');
 
   const { selectedClusterId, selectedClusterName } = useKubeconfig();
   const { getActiveClusterHealth } = useClusterHealthListener(selectedClusterId);
@@ -31,18 +32,12 @@ const ConnectivityStatus: React.FC = () => {
   const lifecycleState = selectedClusterId ? getClusterState(selectedClusterId) : undefined;
 
   useEffect(() => {
-    setIsPaused(!getAutoRefreshEnabled());
-
     const unsubStart = eventBus.on('refresh:start', () => setIsRefreshing(true));
     const unsubComplete = eventBus.on('refresh:complete', () => setIsRefreshing(false));
-    const unsubAutoRefresh = eventBus.on('settings:auto-refresh', (enabled) => {
-      setIsPaused(!enabled);
-    });
 
     return () => {
       unsubStart();
       unsubComplete();
-      unsubAutoRefresh();
     };
   }, []);
 
@@ -65,7 +60,9 @@ const ConnectivityStatus: React.FC = () => {
       void handleRetry(selectedClusterId);
       return;
     }
-    void requestContextRefresh({ reason: 'user' });
+    if (selectedClusterId) {
+      void requestContextRefresh({ reason: 'user', clusterId: selectedClusterId });
+    }
   }, [authState, selectedClusterId, handleRetry]);
 
   const handleToggleAutoRefresh = useCallback(() => {

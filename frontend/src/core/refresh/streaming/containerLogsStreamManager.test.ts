@@ -16,7 +16,13 @@ const errorHandlerMock = vi.hoisted(() => ({ handle: vi.fn() }));
 
 vi.mock('@utils/errorHandler', () => ({ errorHandler: errorHandlerMock }));
 
+import { errorStatusOf } from '@utils/errorStatus';
 import { eventBus } from '@/core/events';
+import {
+  resetAppPreferencesCacheForTesting,
+  setAppPreferencesForTesting,
+} from '@/core/settings/appPreferences';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { getScopedDomainState, resetScopedDomainState } from '../store';
 import type { ContainerLogsStreamEventPayload, ContainerLogsWireEntry } from '../types';
 import { CONTAINER_LOGS_MAX_BYTES, ContainerLogsStreamManager } from './containerLogsStreamManager';
@@ -103,6 +109,7 @@ beforeEach(() => {
   ).__wailsJSONStreamFactory = () => new FakeStream();
   resetContainerLogsStreamScopeParamsCacheForTesting();
   resetScopedDomainState('container-logs', SCOPE);
+  resetAppPreferencesCacheForTesting();
 });
 
 afterEach(() => {
@@ -252,24 +259,31 @@ describe('ContainerLogsStreamManager', () => {
     const manager = new ContainerLogsStreamManager();
     await startLive(manager, [entry('2024-01-01T00:00:01Z', 'kept')]);
 
-    FakeStream.latest().receive({ error: 'deployments.apps "web" not found', retryable: false });
+    const missing = makeErrorStatus('NotFound', 'deployments.apps "web" not found');
+    FakeStream.latest().receive({ error: missing.message, errorDetails: missing });
 
     expect(state().status).toBe('error');
-    expect(state().error).toBe('deployments.apps "web" not found');
-    expect(state().data?.phase).toMatchObject({ status: 'failed', retryable: false });
+    expect(state().error).toEqual({ kind: 'backend', status: missing });
+    expect(state().data?.phase).toMatchObject({ status: 'failed', failure: missing });
     expect(lines()).toEqual(['kept']);
+    // The failure reaches the error handler with its status, not as bare text.
     expect(errorHandlerMock.handle).toHaveBeenCalledTimes(1);
+    expect(errorStatusOf(errorHandlerMock.handle.mock.calls[0][0])).toEqual(missing);
     await vi.advanceTimersByTimeAsync(60_000);
     expect(FakeStream.instances).toHaveLength(1);
     manager.stopAll(true);
   });
 
-  test('reconnects after a failure the backend marks retryable', async () => {
+  test('reconnects after a failure the backend says to reconnect after', async () => {
     vi.useFakeTimers();
     const manager = new ContainerLogsStreamManager();
     await startLive(manager);
 
-    FakeStream.latest().receive({ error: 'apiserver is restarting', retryable: true });
+    FakeStream.latest().receive({
+      error: 'apiserver is restarting',
+      errorDetails: makeErrorStatus('ServiceUnavailable', 'apiserver is restarting'),
+      reconnect: true,
+    });
     expect(state().data?.phase).toMatchObject({
       status: 'reconnecting',
       reason: 'apiserver is restarting',
@@ -413,12 +427,12 @@ describe('ContainerLogsStreamManager', () => {
     const manager = new ContainerLogsStreamManager();
     await startLive(manager, resumeBuffer);
 
-    eventBus.emit('settings:obj-panel-logs-buffer-size', 50);
+    setAppPreferencesForTesting({ objPanelLogsBufferMaxSize: 50 });
     manager.startStream(SCOPE);
     await flushOpen();
     expect(sentResume()).toBeDefined();
 
-    eventBus.emit('settings:obj-panel-logs-buffer-size', 9000);
+    setAppPreferencesForTesting({ objPanelLogsBufferMaxSize: 9000 });
     manager.startStream(SCOPE);
     await flushOpen();
     expect(sentResume()).toBeUndefined();
@@ -433,14 +447,14 @@ describe('ContainerLogsStreamManager', () => {
     manager.startStream(SCOPE);
     await flushOpen();
 
-    eventBus.emit('settings:obj-panel-logs-buffer-size', 100);
+    setAppPreferencesForTesting({ objPanelLogsBufferMaxSize: 100 });
     FakeStream.latest().receive({
       reset: true,
       resumed: true,
       snapshotComplete: true,
       entries: [],
     });
-    eventBus.emit('settings:obj-panel-logs-buffer-size', 5000);
+    setAppPreferencesForTesting({ objPanelLogsBufferMaxSize: 5000 });
     manager.startStream(SCOPE);
     await flushOpen();
 
@@ -620,7 +634,7 @@ describe('ContainerLogsStreamManager', () => {
       )
     );
 
-    eventBus.emit('settings:obj-panel-logs-buffer-size', 100);
+    setAppPreferencesForTesting({ objPanelLogsBufferMaxSize: 100 });
 
     expect(state().data?.entries).toHaveLength(100);
     expect(state().data?.truncation).toEqual({ shown: 100, received: 150 });

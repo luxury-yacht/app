@@ -27,6 +27,7 @@ import {
 } from '@shared/events/eventGridModel';
 import { EVENT_LABELS } from '@shared/events/eventPresentation';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
+import { kindDisplayName } from '@shared/kinds/kindDisplay';
 import {
   canResolveEventObjectReference,
   resolveEventObjectReference,
@@ -35,21 +36,21 @@ import { formatAge } from '@utils/ageFormatter';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useClusterNameResolver } from '@/core/cluster-workspace/useClusterWorkspace';
-import { type DataRequestReason, requestRefreshDomain } from '@/core/data-access';
-import { refreshManager } from '@/core/refresh';
+import {
+  type DataRequestReason,
+  requestRefreshDomain,
+  useScopedRefreshDomainLifecycle,
+} from '@/core/data-access';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
-import { useRefreshWatcher } from '@/core/refresh/hooks/useRefreshWatcher';
-import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
 import type { CanonicalResourceRef, ObjectEventSummary, ResourceLink } from '@/core/refresh/types';
-import { useShortNames } from '@/hooks/useShortNames';
 import { errorHandler } from '@/utils/errorHandler';
-import { getDisplayKind } from '@/utils/kindAliasMap';
-import { CLUSTER_SCOPE, getObjectEventsRefresherName, INACTIVE_SCOPE } from '../constants';
-import { useObjectPanelScopedDomainLifecycle } from '../hooks/useObjectPanelScopedDomainLifecycle';
+import { CLUSTER_SCOPE, INACTIVE_SCOPE } from '../constants';
 import type { PanelObjectData } from '../types';
 import './EventsTab.css';
+import { failureMessage } from '@/core/refresh/refreshFailure';
+import { usePreference } from '@/core/settings/usePreference';
 
 interface EventsTabProps {
   objectData?: PanelObjectData | null;
@@ -59,10 +60,6 @@ interface EventsTabProps {
   // ObjectPanelContent (which handles full-cleanup on panel close)
   // cannot drift apart on the same scope key.
   eventsScope: string | null;
-  // The panel's canonical identity (objectPanelId), scoping the events
-  // refresher name to THIS panel so simultaneously-open same-kind panels
-  // register distinct refreshers (see getObjectEventsRefresherName).
-  panelId: string | null;
 }
 
 interface EventDisplay {
@@ -119,11 +116,11 @@ const toEventDisplay = (
   };
 };
 
-const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope, panelId }) => {
+const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope }) => {
   const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
   const { openWithObject } = useObjectPanel();
   const { available: navigationAvailable, navigateToView } = useNavigateToView();
-  const useShortResourceNames = useShortNames();
+  const useShortResourceNames = usePreference('useShortResourceNames');
   const resolveClusterName = useClusterNameResolver();
   const openWithObjectRef = useRef(openWithObject);
   useEffect(() => {
@@ -132,20 +129,13 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
 
   const eventsSnapshot = useRefreshScopedDomain('object-events', eventsScope ?? INACTIVE_SCOPE);
 
-  useObjectPanelScopedDomainLifecycle({
+  // preserveState repaints the retained events when the tab is shown again.
+  useScopedRefreshDomainLifecycle({
     domain: 'object-events',
     scope: eventsScope,
     enabled: Boolean(isActive && objectData),
+    preserveState: true,
   });
-
-  // The per-object events doorbell only advances the scoped event clock; the
-  // poll that used to refresh this scope skips while the stream is healthy.
-  // Without this refetch-on-signal the tab freezes at its first load.
-  const eventSignalScopes = useMemo(
-    () => (isActive && eventsScope ? [eventsScope] : []),
-    [isActive, eventsScope]
-  );
-  useStreamSignalRefetch('object-events', eventSignalScopes);
 
   const fetchEvents = useCallback(
     async (reason: DataRequestReason = 'startup') => {
@@ -173,37 +163,6 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
     }
   }, [fetchEvents, isActive, objectData, eventsScope]);
 
-  const eventsRefresherName = useMemo(
-    () => getObjectEventsRefresherName(objectData?.kind, panelId),
-    [objectData?.kind, panelId]
-  );
-
-  useEffect(() => {
-    if (!eventsRefresherName || !isActive || !objectData) {
-      return;
-    }
-    refreshManager.register({
-      name: eventsRefresherName,
-      interval: 3000,
-      cooldown: 1000,
-      timeout: 10,
-    });
-    return () => {
-      refreshManager.unregister(eventsRefresherName);
-    };
-  }, [eventsRefresherName, isActive, objectData]);
-
-  useRefreshWatcher({
-    refresherName: eventsRefresherName,
-    onRefresh: useCallback(
-      async (isManual: boolean) => {
-        await fetchEvents(isManual ? 'user' : 'background');
-      },
-      [fetchEvents]
-    ),
-    enabled: Boolean(isActive && objectData && eventsRefresherName && eventsScope),
-  });
-
   const rawEvents = useMemo(() => {
     if (!eventsScope) {
       return [] as ObjectEventSummary[];
@@ -212,12 +171,11 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
   }, [eventsScope, eventsSnapshot.data]);
 
   const buildEventObjectRefInput = useCallback(
-    (event: Pick<EventDisplay, 'objectUid' | 'involvedObject' | 'clusterId' | 'clusterName'>) =>
+    (event: Pick<EventDisplay, 'objectUid' | 'involvedObject' | 'clusterId'>) =>
       eventGridRelatedObjectInput(event, {
         selectedClusterId: objectData?.clusterId,
-        selectedClusterName: objectData?.clusterName,
       }),
-    [objectData?.clusterId, objectData?.clusterName]
+    [objectData?.clusterId]
   );
 
   const events = useMemo<EventDisplay[]>(
@@ -297,7 +255,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
       // The Event's own link, as in the Cluster and Namespace Events tables.
       createKindColumn<EventDisplay>({
         getKind: () => 'Event',
-        getDisplayText: () => getDisplayKind('Event', useShortResourceNames),
+        getDisplayText: () => kindDisplayName({ group: '', kind: 'Event' }, useShortResourceNames),
         onClick: openEvent,
         onAltClick: navigationAvailable ? navigateToEvent : undefined,
       }),
@@ -433,7 +391,8 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
       <div className="object-panel-tab-content">
         <div className="object-panel-placeholder error">
           <p>
-            Error loading events: <ErrorSurface kind="reported" message={eventsRender.error} />
+            Error loading events:{' '}
+            <ErrorSurface kind="reported" message={failureMessage(eventsRender.error)} />
           </p>
         </div>
       </div>

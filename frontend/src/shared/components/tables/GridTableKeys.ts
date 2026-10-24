@@ -16,14 +16,30 @@ interface GridTableKeyboardOptions {
   filtersContainerRef: RefObject<HTMLDivElement | null>;
   filterFocusIndexRef: RefObject<number | null>;
   wrapperRef: RefObject<HTMLDivElement | null>;
+  gridRef: RefObject<HTMLTableElement | null>;
+  /** Whether Space expands rows here; without a toggle the table claims Space. */
+  hasRowExpandToggle: boolean;
   suppressFocusedRowHighlight: () => void;
 }
+
+// Esc in a filter bar returns to the table's rows and keeps the filter, instead
+// of the search box clearing itself. A control with an open menu keeps its Esc.
+const returnToRowsOnEscape = (event: KeyboardEvent, grid: HTMLTableElement | null): boolean => {
+  const target = event.target instanceof HTMLElement ? event.target : null;
+  if (!grid || !target || target.getAttribute('aria-expanded') === 'true') {
+    return false;
+  }
+  grid.focus({ preventScroll: true });
+  return true;
+};
 
 export const useGridTableKeyboardScopes = ({
   filteringEnabled,
   filtersContainerRef,
   filterFocusIndexRef,
   wrapperRef,
+  gridRef,
+  hasRowExpandToggle,
   suppressFocusedRowHighlight,
 }: GridTableKeyboardOptions) => {
   const getFilterTargets = useCallback((): HTMLElement[] => {
@@ -70,19 +86,29 @@ export const useGridTableKeyboardScopes = ({
   );
 
   const handleTableKeyDown = useCallback(
-    (event: KeyboardEvent): undefined => {
+    (event: KeyboardEvent): true | undefined => {
       if (event.key === 'Tab') {
         suppressFocusedRowHighlight();
         filterFocusIndexRef.current = null;
       }
+      // Space only expands rows. On this table itself (not a row control, nor
+      // a nested table) when its rows do not expand, claim it so it neither
+      // acts nor scrolls the body.
+      if (event.key === ' ' && !hasRowExpandToggle && event.target === gridRef.current) {
+        return true;
+      }
       // The header is a separate sibling between filters and body. Leave the
       // event unclaimed so the containing region can visit controls in DOM order.
+      return undefined;
     },
-    [filterFocusIndexRef, suppressFocusedRowHighlight]
+    [filterFocusIndexRef, gridRef, hasRowExpandToggle, suppressFocusedRowHighlight]
   );
 
   const handleFilterKeyDown = useCallback(
     (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        return returnToRowsOnEscape(event, gridRef.current);
+      }
       if (event.key !== 'Tab') {
         return false;
       }
@@ -93,7 +119,7 @@ export const useGridTableKeyboardScopes = ({
       }
       return false;
     },
-    [filterTabNavigationHandler]
+    [filterTabNavigationHandler, gridRef]
   );
 
   useKeyboardSurface({

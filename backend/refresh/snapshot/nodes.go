@@ -12,8 +12,10 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/internal/timeutil"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
+	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
@@ -26,7 +28,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// nodeDomainIngestSource is everything the informer-backed nodes domain still reads from the
+// nodeDomainIngestSource is everything the feed-backed nodes domain still reads from the
 // ingest manager AFTER the node OWN-rows moved to the maintained store: the cut pod kind's
 // projected aggregation rows (podAggregateIngestSource) and the node store RV for the version
 // watermark (nodeIngestSource — only StoreResourceVersion is still read here; the node-sync
@@ -127,11 +129,14 @@ type NodeTaint = streamrows.NodeTaint
 // store is populated before the first Build serves from it. The per-node pod aggregation still
 // comes from the ingest manager. ingestManager may be nil in a unit test, in which case the
 // store has no feed and no pods are read.
-func RegisterNodeDomain(reg *domain.Registry, provider metrics.Provider, clusterMeta ClusterMeta, ingestManager *ingest.IngestManager) error {
+// nodeDomainName is the Nodes table's refresh domain.
+const nodeDomainName = "nodes"
+
+func RegisterNodeDomain(reg *domain.Registry, provider metrics.Provider, clusterMeta ClusterMeta, ingestManager *ingest.IngestManager, bell doorbell.Bell) error {
 	maintained := newTypedMaintainedStore(clusterMeta, nodesQuerypageSchema(), nodeTableQueryAdapter())
-	reg.RegisterMaintainedStore("nodes", maintained) // spill/restore/reconcile across Cold/re-warm
+	reg.RegisterMaintainedStore(nodeDomainName, maintained) // spill/restore across Cold/re-warm
 	if ingestManager != nil {
-		ingestManager.AddBundleSink(NodeGVR, maintained.BundleSink())
+		ingestManager.AddBundleSink(NodeGVR, maintained.sinkFor("", clusterRowPublication(maintained, nodeDomainName, bell)))
 	}
 
 	builder := &NodeBuilder{
@@ -146,10 +151,23 @@ func RegisterNodeDomain(reg *domain.Registry, provider metrics.Provider, cluster
 	})
 }
 
-// RegisterNodeDomainList registers a list-based fallback node domain.
-func RegisterNodeDomainList(reg *domain.Registry, client kubernetes.Interface, provider metrics.Provider) error {
+// RegisterNodeDomainList registers a list-based fallback node domain, used when
+// pods cannot be read. It lists nodes from the API server and has no maintained
+// store to ring for it, so the node ingest store does: its reflector runs
+// whenever nodes can be listed and watched. ingestManager may be nil in a unit
+// test.
+func RegisterNodeDomainList(
+	reg *domain.Registry,
+	client kubernetes.Interface,
+	provider metrics.Provider,
+	ingestManager *ingest.IngestManager,
+	bell doorbell.Bell,
+) error {
 	if client == nil {
 		return fmt.Errorf("nodes: kubernetes client is nil")
+	}
+	if ingestManager != nil {
+		ingestManager.AddBundleSink(NodeGVR, nodeListChangeSink{bell: bell})
 	}
 	builder := &NodeListBuilder{
 		client:  client,
@@ -159,6 +177,43 @@ func RegisterNodeDomainList(reg *domain.Registry, client kubernetes.Interface, p
 		Name:          "nodes",
 		BuildSnapshot: builder.Build,
 	})
+}
+
+// nodeListChangeSink rings the Nodes table after the node ingest store applies
+// a change, for the LIST fallback. The API server already holds any change the
+// watch delivered, so the fallback's next LIST sees it. Nodes are
+// cluster-scoped, so a relist is one bulk ReplaceBundles and rings once.
+type nodeListChangeSink struct {
+	bell doorbell.Bell
+}
+
+func (s nodeListChangeSink) UpsertBundle(bundle ingest.Bundle) {
+	s.bell.Ring(nodeListChange(bundle, doorbell.MessageTypeModified))
+}
+
+func (s nodeListChangeSink) DeleteBundle(bundle ingest.Bundle) {
+	s.bell.Ring(nodeListChange(bundle, doorbell.MessageTypeDeleted))
+}
+
+func (s nodeListChangeSink) ReplaceBundles([]ingest.Bundle) {
+	s.bell.Ring(nodeListChange(ingest.Bundle{}, doorbell.MessageTypeModified))
+}
+
+// nodeListChange is the Nodes ring for one node bundle; a bundle without a
+// catalog half (a relist) rings without an object Ref.
+func nodeListChange(bundle ingest.Bundle, kind doorbell.MessageType) doorbell.Change {
+	change := doorbell.Change{
+		Domain: nodeDomainName,
+		Source: doorbell.SourceObject,
+		Target: doorbell.Scopes(clusterDoorbellScopes()...),
+		Type:   kind,
+	}
+	if catalog, ok := bundle.Catalog.(objectcatalog.Summary); ok {
+		ref := catalog.Ref
+		change.Ref = &ref
+		change.ResourceVersion = catalog.ResourceVersion
+	}
+	return change
 }
 
 // Build returns the node snapshot payload. The node OWN-rows and the per-node pod aggregation
@@ -239,7 +294,7 @@ func (b *NodeListBuilder) Build(ctx context.Context, scope string) (*refresh.Sna
 	}
 
 	// The list fallback projects its typed pods to the same PodAggregate rows the
-	// informer path reads from ingest, so the shared aggregation stays byte-equivalent.
+	// feed path reads from ingest, so the shared aggregation stays byte-equivalent.
 	// WorkloadKind is unused by the nodes domain, so a nil RS lister is correct here.
 	// Pod RVs fold into the version watermark for the same reason the ingest path
 	// folds the pod store RV: pod changes alter served aggregates and must

@@ -11,7 +11,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -23,7 +22,6 @@ import (
 	"k8s.io/klog/v2"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 	gatewayversioned "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
-	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
@@ -34,7 +32,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
-	"github.com/luxury-yacht/app/backend/refresh/informer"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
@@ -59,11 +57,9 @@ type Config struct {
 	KubernetesClient             kubernetes.Interface                     // Kubernetes client for API interactions.
 	MetricsClient                *metricsclient.Clientset                 // Metrics client for collecting cluster metrics.
 	RestConfig                   *rest.Config                             // REST configuration for Kubernetes client.
-	ResyncInterval               time.Duration                            // Interval for resyncing informers.
 	MetricsInterval              time.Duration                            // Interval for collecting metrics.
 	APIExtensionsClient          apiextensionsclientset.Interface         // Client for API extensions.
 	GatewayClient                gatewayversioned.Interface               // Gateway API client for direct Gateway API resource access.
-	GatewayInformerFactory       gatewayinformers.SharedInformerFactory   // Informers for Gateway API resources.
 	GatewayAPIPresence           common.GatewayAPIPresence                // Installed Gateway API kind set.
 	DynamicClient                dynamic.Interface                        // Dynamic client for interacting with Kubernetes resources.
 	ObjectDetailsProvider        snapshot.ObjectDetailProvider            // Provider for detailed object information.
@@ -87,10 +83,9 @@ type Config struct {
 // Subsystem bundles the refresh manager and supporting services.
 type Subsystem struct {
 	Manager          *refresh.Manager        // Refresh manager for coordinating resource updates.
-	Handler          http.Handler            // HTTP handler for serving refresh-related endpoints.
 	Telemetry        *telemetry.Recorder     // Telemetry recorder for capturing metrics and events.
 	PermissionIssues []PermissionIssue       // List of permission issues encountered during refresh.
-	InformerFactory  *informer.Factory       // Factory for creating informers.
+	PermissionGrants *permissions.Grants     // List/watch decisions this generation was built with.
 	IngestManager    *ingest.IngestManager   // Owned-reflector ingestion manager for cut kinds.
 	RuntimePerms     *permissions.Checker    // Checker for runtime permissions.
 	Registry         *domain.Registry        // Registry for managing domain information.
@@ -99,24 +94,24 @@ type Subsystem struct {
 	ResourceStream   *resourcestream.Manager // Manager for resource streams.
 	ContainerLogs    *containerlogsstream.Handler
 	ClusterMeta      snapshot.ClusterMeta // Metadata about the cluster.
-	// NamespaceNotifier, ObjectEventsNotifier, and EventTableNotifiers drive the
-	// namespaces, object-events, cluster-events, and namespace-events doorbells.
-	// Teardown/cooling MUST Stop() them (via StopDoorbellNotifiers) or their
-	// debounce/rearm timers keep broadcasting into the torn-down stream manager.
-	NamespaceNotifier    *snapshot.NamespaceChangeNotifier
-	ObjectEventsNotifier *snapshot.ObjectEventsChangeNotifier
-	EventTableNotifiers  []*snapshot.EventTableChangeNotifier
-	AttentionIndex       *snapshot.ClusterAttentionIndex
-	// NamespacesDoorbell is the post-broadcast observer slot on the namespaces
+	// Every doorbell producer rings ResourceStream and schedules its timers
+	// through it, so ResourceStream.Stop is the generation's one shutdown
+	// barrier. NamespaceNotifier gates cooling on workload readiness, Refresh's
+	// response-cache eviction handlers record into ObjectDetailsNotifier, and
+	// the attention service targets AttentionIndex.
+	NamespaceNotifier     *snapshot.NamespaceChangeNotifier
+	ObjectDetailsNotifier *snapshot.ObjectDetailsChangeNotifier
+	AttentionIndex        *snapshot.ClusterAttentionIndex
+	// NamespacesDoorbell is the post-ring observer slot on the namespaces
 	// doorbell; the app attaches the cluster-Ready self-build hook here (see
 	// app_refresh_setup) once the aggregate service exists.
 	NamespacesDoorbell *NamespacesDoorbellObserver
 
-	// Cooled marks a subsystem in the governor's Cold-tier SERVING state: its informers,
+	// Cooled marks a subsystem in the governor's Cold-tier SERVING state: its reflectors,
 	// metrics poller, and permission revalidation are stopped (heap reclaimed) and its
 	// maintained stores have been swapped to off-heap mmap-backed columns, but it stays
 	// registered and serves Build queries from those stores (its SnapshotService runs a
-	// cooled, always-settled informer hub). A cooled subsystem is non-nil but NOT live:
+	// cooled, always-settled feed hub). A cooled subsystem is non-nil but NOT live:
 	// the governor re-warm path detects this and rebuilds a fresh, live subsystem.
 	Cooled bool
 
@@ -220,13 +215,13 @@ func (s *Subsystem) ColdPreparationAge(now time.Time) (time.Duration, bool) {
 
 // scopedResourcePredicate reports which resources' permission checks fan out
 // over a configured namespace scope (docs/architecture/namespace-scope.md): exactly
-// the namespaced, ingest-owned kinds, because only their data path runs
-// per-namespace. A check's scope must match its data source's scope — scoping
-// the check for a cluster-wide source (events, HPA, replicasets, gateway,
-// helm storage) would register domains that then serve silently-empty data.
+// the namespaced built-in kinds, because their owned reflectors partition per
+// namespace. A check's scope must match its data source's scope — scoping
+// the check for a cluster-wide source would register domains that then serve
+// silently-empty data.
 func scopedResourcePredicate() func(group, resource string) bool {
 	scoped := make(map[string]struct{})
-	for _, d := range kindregistry.IngestOwnedDescriptors() {
+	for _, d := range kindregistry.All {
 		if d.Identity.Namespaced {
 			scoped[d.Identity.Group+"/"+d.Identity.Resource] = struct{}{}
 		}
@@ -237,42 +232,53 @@ func scopedResourcePredicate() func(group, resource string) bool {
 	}
 }
 
-func newInformerInfrastructure(ctx context.Context, cfg Config) (*permissions.Checker, *informer.Factory, error) {
+func newPermissionInfrastructure(cfg Config) (*permissions.Checker, *permissions.Grants, error) {
 	runtimePerms := permissions.NewChecker(cfg.KubernetesClient, cfg.ClusterID, 0)
 	if len(cfg.AllowedNamespaces) > 0 {
 		runtimePerms.SetScope(cfg.AllowedNamespaces, scopedResourcePredicate())
 	}
-	if err := informer.DisableWatchList(); err != nil {
-		return nil, nil, fmt.Errorf("configure informer startup transport: %w", err)
+	if err := ingest.DisableWatchList(); err != nil {
+		return nil, nil, fmt.Errorf("configure reflector startup transport: %w", err)
 	}
-	factory := informer.New(ctx, cfg.KubernetesClient, cfg.APIExtensionsClient, cfg.ResyncInterval, runtimePerms).
-		WithGatewayFactory(ctx, cfg.GatewayInformerFactory, cfg.GatewayAPIPresence)
-	return runtimePerms, factory, nil
+	return runtimePerms, permissions.NewGrants(runtimePerms), nil
 }
 
-func newIngestInfrastructure(ctx context.Context, cfg Config, factory *informer.Factory, runtimePerms *permissions.Checker) (*ingest.IngestManager, error) {
+func newIngestInfrastructure(cfg Config, runtimePerms *permissions.Checker) (*ingest.IngestManager, error) {
 	clusterMeta := snapshot.ClusterMeta{ClusterID: cfg.ClusterID, ClusterName: cfg.ClusterName}
 	manager := ingest.NewIngestManager(
 		streamrows.ClusterMeta{ClusterID: cfg.ClusterID, ClusterName: cfg.ClusterName},
 		cfg.KubernetesClient,
 		cfg.APIExtensionsClient,
-		cfg.GatewayClient,
+		&ingest.GatewaySource{Client: cfg.GatewayClient, Presence: cfg.GatewayAPIPresence},
 		cfg.AllowedNamespaces...,
 	)
 	manager.SetDynamicClient(cfg.DynamicClient)
 	registerIngestProjectors(manager, cfg.ClusterID)
 	jobControllerOwners := snapshot.NewJobControllerOwnerIndex()
-	registerPodReflector(manager, factory, clusterMeta, jobControllerOwners.Lookup)
+	replicaSetOwners := snapshot.NewReplicaSetOwnerIndex()
+	registerPodReflector(manager, clusterMeta, replicaSetOwners.Lookup, jobControllerOwners.Lookup)
 	if err := registerWorkloadReflectors(manager, clusterMeta); err != nil {
+		return nil, err
+	}
+	if err := registerReplicaSetReflector(manager, clusterMeta); err != nil {
 		return nil, err
 	}
 	if !manager.AddBundleSink(snapshot.JobGVR, jobControllerOwners) {
 		return nil, fmt.Errorf("register Job owner sink: Job ingest store is unavailable")
 	}
+	if !manager.AddBundleSink(snapshot.ReplicaSetGVR, replicaSetOwners) {
+		return nil, fmt.Errorf("register ReplicaSet owner sink: ReplicaSet ingest store is unavailable")
+	}
 	registerNetworkReflectors(manager, clusterMeta)
 	registerNodeReflector(manager, clusterMeta)
+	if err := registerNamespaceReflector(manager, clusterMeta); err != nil {
+		return nil, err
+	}
+	if err := registerEventReflector(manager, clusterMeta); err != nil {
+		return nil, err
+	}
 	manager.SetPermissionFilter(ingestPermissionFilter(runtimePerms))
-	registerCustomResourceIngest(ctx, manager, factory, cfg.ClusterID)
+	registerCustomResourceIngest(manager, cfg.ClusterID)
 	return manager, nil
 }
 
@@ -292,7 +298,7 @@ func logPermissionSkip(domainName, group, resource string) {
 	klog.V(2).Infof("Skipping registration for domain %s: insufficient permission to list %s/%s", domainName, group, resource)
 }
 
-func newMetricsServices(ctx context.Context, cfg Config, gate *permissionGate, recorder *telemetry.Recorder, issues *permissionIssueRecorder) (refresh.MetricsPoller, metrics.Provider) {
+func newMetricsServices(ctx context.Context, cfg Config, gate *permissionGate, recorder *telemetry.Recorder, issues *permissionIssueRecorder, bell doorbell.Bell) (refresh.MetricsPoller, metrics.Provider) {
 	checks := []listCheck{
 		{group: metricsAPIGroup, resource: "nodes"},
 		{group: metricsAPIGroup, resource: "pods"},
@@ -301,16 +307,17 @@ func newMetricsServices(ctx context.Context, cfg Config, gate *permissionGate, r
 	metricErrors := gate.listErrors(results)
 	issues.append("metrics-poller", metricsAPIGroup+"/nodes,pods", metricErrors...)
 	if len(metricErrors) == 0 && gate.allListAllowed(results) {
-		return newEnabledMetricsServices(cfg, recorder)
+		return newEnabledMetricsServices(cfg, recorder, bell)
 	}
 	logPermissionSkip("metrics-poller", metricsAPIGroup, "nodes/pods")
 	return newDisabledMetricsServices(cfg, gate, results)
 }
 
-func newEnabledMetricsServices(cfg Config, recorder *telemetry.Recorder) (refresh.MetricsPoller, metrics.Provider) {
+func newEnabledMetricsServices(cfg Config, recorder *telemetry.Recorder, bell doorbell.Bell) (refresh.MetricsPoller, metrics.Provider) {
 	poller := metrics.NewPoller(cfg.MetricsClient, cfg.RestConfig, cfg.MetricsInterval, recorder)
 	poller.SetLogger(applog.ClusterScoped(cfg.Logger, cfg.ClusterID, cfg.ClusterName))
 	poller.SetAllowedNamespaces(cfg.AllowedNamespaces)
+	poller.SetCollectionObserver(metricsSignalObserver(bell))
 	demandPoller := metrics.NewDemandPoller(poller, poller, cfg.MetricsInterval*3)
 	return demandPoller, demandPoller
 }
@@ -347,15 +354,15 @@ func restServerHost(cfg *rest.Config) string {
 	return cfg.Host
 }
 
-func registerSubsystemDomains(ctx context.Context, factory *informer.Factory, gate *permissionGate, runtimePerms *permissions.Checker, registrations []domainRegistration) error {
-	preflight := preflightRequests(registrations, []informer.PermissionRequest{
+func registerSubsystemDomains(ctx context.Context, grants *permissions.Grants, gate *permissionGate, runtimePerms *permissions.Checker, registrations []domainRegistration) error {
+	preflight := preflightRequests(registrations, []permissions.Request{
 		{Group: metricsAPIGroup, Resource: "nodes", Verb: "list"},
 		{Group: metricsAPIGroup, Resource: "pods", Verb: "list"},
 	})
 	// The preflight budget bounds only priming. Reviews it leaves uncached are
 	// retried by the gate checks, so only caller cancellation aborts the build.
 	preflightCtx, cancel := context.WithTimeout(ctx, config.PermissionPreflightTimeout)
-	_ = factory.PrimePermissions(preflightCtx, preflight)
+	_ = grants.Prime(preflightCtx, preflight)
 	cancel()
 	if err := ctx.Err(); err != nil {
 		return err
@@ -363,86 +370,67 @@ func registerSubsystemDomains(ctx context.Context, factory *informer.Factory, ga
 	return registerDomains(ctx, gate, runtimePerms, registrations)
 }
 
-func wireStreamObservers(
-	resourceManager *resourcestream.Manager,
-	metricsPoller refresh.MetricsPoller,
-	snapshotService *snapshot.Service,
-	namespaceNotifier *snapshot.NamespaceChangeNotifier,
-	objectEventsNotifier *snapshot.ObjectEventsChangeNotifier,
-	eventTableNotifiers []*snapshot.EventTableChangeNotifier,
-	attentionIndex *snapshot.ClusterAttentionIndex,
-) *NamespacesDoorbellObserver {
-	if resourceManager != nil {
-		resourceManager.SetSnapshotDomainInvalidator(snapshotService.InvalidateDomainCache)
-		wireMetricsObserver(metricsPoller, resourceManager)
-	}
-	observer := &NamespacesDoorbellObserver{}
-	if resourceManager == nil {
-		return observer
-	}
-	if namespaceNotifier != nil {
-		wireNamespacesDoorbell(namespaceNotifier, resourceManager, observer)
-	}
-	if objectEventsNotifier != nil {
-		wireObjectEventsDoorbell(objectEventsNotifier, resourceManager)
-	}
-	for _, notifier := range eventTableNotifiers {
-		wireEventTableDoorbell(notifier, resourceManager)
-	}
-	if attentionIndex != nil {
-		wireClusterAttentionDoorbell(attentionIndex, resourceManager)
-	}
-	return observer
-}
-
-func wireMetricsObserver(metricsPoller refresh.MetricsPoller, resourceManager *resourcestream.Manager) {
-	if observable, ok := metricsPoller.(interface {
-		SetCollectionObserver(func(metrics.Metadata))
-	}); ok {
-		observable.SetCollectionObserver(metricsSignalObserver(resourceManager))
-	}
-}
-
-// NewSubsystemWithServices returns a fully wired refresh subsystem.
+// NewSubsystemWithServices returns a fully wired refresh subsystem. The
+// snapshot service and the resource stream (the generation's doorbell) are
+// built before any domain registers, so every producer receives its doorbell
+// at construction.
 func NewSubsystemWithServices(ctx context.Context, cfg Config) (*Subsystem, error) {
 	registry := domain.New()
-	runtimePerms, informerFactory, err := newInformerInfrastructure(ctx, cfg)
+	runtimePerms, grants, err := newPermissionInfrastructure(cfg)
 	if err != nil {
 		return nil, err
 	}
-	ingestManager, err := newIngestInfrastructure(ctx, cfg, informerFactory, runtimePerms)
+	ingestManager, err := newIngestInfrastructure(cfg, runtimePerms)
 	if err != nil {
 		return nil, err
 	}
-	informerHub := newIngestInformerHub(informerFactory, ingestManager)
+	hub := newIngestHub(ingestManager)
 	issues := &permissionIssueRecorder{}
-	gate := newPermissionGate(registry, informerFactory, issues.append, logPermissionSkip)
+	gate := newPermissionGate(registry, grants, issues.append, logPermissionSkip)
 
 	telemetryRecorder := telemetry.NewRecorder()
 	telemetryRecorder.SetClusterMeta(cfg.ClusterID, cfg.ClusterName)
 
 	clusterMeta := snapshot.ClusterMeta{ClusterID: cfg.ClusterID, ClusterName: cfg.ClusterName}
-	metricsPoller, metricsProvider := newMetricsServices(ctx, cfg, gate, telemetryRecorder, issues)
+	snapshotService := snapshot.NewServiceWithPermissions(
+		registry,
+		telemetryRecorder,
+		clusterMeta,
+		runtimePerms,
+	).WithLogger(applog.ClusterScoped(cfg.Logger, cfg.ClusterID, cfg.ClusterName)).
+		WithFeedHub(hub)
+	containerLogsHandler, resourceManager, err := registerStreamHandlers(streamDeps{
+		cfg:         cfg,
+		telemetry:   telemetryRecorder,
+		clusterMeta: clusterMeta,
+		invalidator: snapshotService.InvalidateDomainCache,
+	})
+	if err != nil {
+		return nil, err
+	}
+	built := false
+	defer func() {
+		if !built {
+			resourceManager.Stop()
+			containerLogsHandler.Stop()
+		}
+	}()
+	metricsPoller, metricsProvider := newMetricsServices(ctx, cfg, gate, telemetryRecorder, issues, resourceManager)
 
 	var namespaceNotifier *snapshot.NamespaceChangeNotifier
-	var objectEventsNotifier *snapshot.ObjectEventsChangeNotifier
-	var eventTableNotifiers []*snapshot.EventTableChangeNotifier
 	var attentionIndex *snapshot.ClusterAttentionIndex
+	namespacesDoorbell := &NamespacesDoorbellObserver{}
 	deps := registrationDeps{
-		registry:        registry,
-		informerFactory: informerFactory,
-		ingestManager:   ingestManager,
-		metricsProvider: metricsProvider,
-		cfg:             cfg,
-		serverHost:      restServerHost(cfg.RestConfig),
+		registry:            registry,
+		permissionGrants:    grants,
+		ingestManager:       ingestManager,
+		metricsProvider:     metricsProvider,
+		cfg:                 cfg,
+		serverHost:          restServerHost(cfg.RestConfig),
+		bell:                resourceManager,
+		afterNamespacesRing: namespacesDoorbell.Invoke,
 		noteNamespaceNotifier: func(notifier *snapshot.NamespaceChangeNotifier) {
 			namespaceNotifier = notifier
-		},
-		noteObjectEventsNotifier: func(notifier *snapshot.ObjectEventsChangeNotifier) {
-			objectEventsNotifier = notifier
-		},
-		noteEventTableNotifier: func(notifier *snapshot.EventTableChangeNotifier) {
-			eventTableNotifiers = append(eventTableNotifiers, notifier)
 		},
 		noteAttentionIndex: func(index *snapshot.ClusterAttentionIndex) {
 			attentionIndex = index
@@ -450,95 +438,34 @@ func NewSubsystemWithServices(ctx context.Context, cfg Config) (*Subsystem, erro
 	}
 
 	registrations := domainRegistrations(ctx, deps)
-	if err := registerSubsystemDomains(ctx, informerFactory, gate, runtimePerms, registrations); err != nil {
+	snapshotService.WithDomainReadiness(domainReadinessResources(registrations))
+	if err := registerSubsystemDomains(ctx, grants, gate, runtimePerms, registrations); err != nil {
 		return nil, err
 	}
-
-	snapshotService := snapshot.NewServiceWithPermissions(
-		registry,
-		telemetryRecorder,
-		clusterMeta,
-		runtimePerms,
-	).WithInformerHub(informerHub).
-		WithDomainReadiness(domainReadinessResources(registrations))
+	resourceManager.RegisterSources(grants, ingestManager)
 	queue := refresh.NewInMemoryQueue()
 
-	manager := refresh.NewManager(registry, informerHub, snapshotService, metricsPoller, queue)
+	manager := refresh.NewManager(registry, hub, snapshotService, metricsPoller, queue)
 
-	// Build the core refresh routes once so all server configurations stay consistent.
-	mux := BuildRefreshMux(MuxConfig{
-		SnapshotService: snapshotService,
-		ManualQueue:     queue,
-		Telemetry:       telemetryRecorder,
-		Metrics: singleClusterMetricsDemandController{
-			clusterID: clusterMeta.ClusterID,
-			manager:   manager,
-		},
-		HealthHub: informerHub,
-	})
-
-	containerLogsHandler, resourceManager, err := registerStreamHandlers(streamDeps{
-		informerFactory: informerFactory,
-		ingestManager:   ingestManager,
-		cfg:             cfg,
-		telemetry:       telemetryRecorder,
-		clusterMeta:     clusterMeta,
-	})
-	if err != nil {
-		return nil, err
-	}
-	namespacesDoorbellObserver := wireStreamObservers(
-		resourceManager,
-		metricsPoller,
-		snapshotService,
-		namespaceNotifier,
-		objectEventsNotifier,
-		eventTableNotifiers,
-		attentionIndex,
-	)
-
+	built = true
 	return &Subsystem{
-		Manager:              manager,
-		Handler:              mux,
-		Telemetry:            telemetryRecorder,
-		PermissionIssues:     issues.issues,
-		InformerFactory:      informerFactory,
-		IngestManager:        ingestManager,
-		RuntimePerms:         runtimePerms,
-		Registry:             registry,
-		SnapshotService:      snapshotService,
-		ManualQueue:          queue,
-		ResourceStream:       resourceManager,
-		ContainerLogs:        containerLogsHandler,
-		ClusterMeta:          clusterMeta,
-		NamespaceNotifier:    namespaceNotifier,
-		ObjectEventsNotifier: objectEventsNotifier,
-		EventTableNotifiers:  eventTableNotifiers,
-		AttentionIndex:       attentionIndex,
-		NamespacesDoorbell:   namespacesDoorbellObserver,
+		Manager:               manager,
+		Telemetry:             telemetryRecorder,
+		PermissionIssues:      issues.issues,
+		PermissionGrants:      grants,
+		IngestManager:         ingestManager,
+		RuntimePerms:          runtimePerms,
+		Registry:              registry,
+		SnapshotService:       snapshotService,
+		ManualQueue:           queue,
+		ResourceStream:        resourceManager,
+		ContainerLogs:         containerLogsHandler,
+		ClusterMeta:           clusterMeta,
+		NamespaceNotifier:     namespaceNotifier,
+		ObjectDetailsNotifier: snapshot.NewObjectDetailsChangeNotifier(resourceManager),
+		AttentionIndex:        attentionIndex,
+		NamespacesDoorbell:    namespacesDoorbell,
 	}, nil
-}
-
-// StopDoorbellNotifiers silences every doorbell notifier (namespaces,
-// object-events, cluster/namespace events, cluster-attention); nil-safe for subsystems built without them (tests, failed
-// registration). Every teardown/cool path must call this or the notifiers'
-// debounce/rearm timers keep broadcasting into the dead stream manager.
-func (s *Subsystem) StopDoorbellNotifiers() {
-	if s == nil {
-		return
-	}
-	if s.NamespaceNotifier != nil {
-		s.NamespaceNotifier.Stop()
-	}
-	if s.ObjectEventsNotifier != nil {
-		s.ObjectEventsNotifier.Stop()
-	}
-	for _, notifier := range s.EventTableNotifiers {
-		notifier.Stop()
-	}
-	if s.AttentionIndex != nil {
-		s.AttentionIndex.Stop()
-	}
 }
 
 // CancelInFlightSnapshots stops work tied to the current live generation
@@ -553,21 +480,7 @@ func (s *Subsystem) CancelInFlightSnapshots() {
 	}
 }
 
-// metricsSignalObserver sends every completed attempt to the namespace health
-// notifier, while only successful samples ring the shared SourceMetric
-// doorbell. This preserves polling for poll-augmented domains while allowing a
-// first failure to move Namespaces out of loading. An empty revision means no
-// attempt has completed yet.
-// Resource-stream Manager.broadcast owns the ordering contract every doorbell
-// must honor: invalidate the domain's snapshot cache first, then deliver the
-// signal. The doorbell-triggered
-// refetch arrives ~500ms after the change — inside the snapshot cache TTL —
-// and served from cache it would apply the PRE-change snapshot permanently,
-// because doorbells fire once per change and polling skips while the stream
-// is healthy (observed live: created namespaces missing, deleted namespaces
-// lingering, while every doorbell log line was perfect). The doorbell tests
-// wire through these same helpers so the contract is pinned, not copied.
-// NamespacesDoorbellObserver lets the app attach a post-broadcast hook to the
+// NamespacesDoorbellObserver lets the app attach a post-ring hook to the
 // namespaces doorbell AFTER the subsystem is constructed — the aggregate
 // snapshot service and cluster lifecycle (which the hook needs) exist only
 // once every subsystem does. The doorbell path reads it lock-free; unset is
@@ -592,62 +505,29 @@ func (o *NamespacesDoorbellObserver) Invoke(version, reason string) {
 	}
 }
 
-func wireNamespacesDoorbell(
-	notifier *snapshot.NamespaceChangeNotifier,
-	resourceManager *resourcestream.Manager,
-	observer *NamespacesDoorbellObserver,
-) {
-	notifier.SetBroadcast(func(version, reason string) {
-		resourceManager.BroadcastNamespacesRefresh(version, reason)
-		// After invalidate+broadcast: a self-build triggered here always sees
-		// post-change data (the cluster-Ready hook rides this).
-		observer.Invoke(version, reason)
-	})
-}
-
-func wireObjectEventsDoorbell(
-	notifier *snapshot.ObjectEventsChangeNotifier,
-	resourceManager *resourcestream.Manager,
-) {
-	notifier.SetBroadcast(func(version string, matches func(scope string) bool) {
-		resourceManager.BroadcastObjectEventsRefresh(version, matches)
-	})
-}
-
-func wireEventTableDoorbell(
-	notifier *snapshot.EventTableChangeNotifier,
-	resourceManager *resourcestream.Manager,
-) {
-	domain := notifier.Domain()
-	notifier.SetBroadcast(func(version string, namespaces []string) {
-		resourceManager.BroadcastEventTableRefresh(domain, version, namespaces)
-	})
-}
-
-type attentionDoorbellNotifier interface {
-	SetBroadcast(func(version string))
-}
-
-func wireClusterAttentionDoorbell(
-	notifier attentionDoorbellNotifier,
-	resourceManager *resourcestream.Manager,
-) {
-	notifier.SetBroadcast(func(version string) {
-		resourceManager.BroadcastClusterAttentionRefresh(version)
-	})
-}
-
-func metricsSignalObserver(resourceManager *resourcestream.Manager) func(metrics.Metadata) {
+// metricsSignalObserver sends every completed attempt to the namespace health
+// doorbell, while only successful samples ring every metric-clock domain.
+// This preserves polling for poll-augmented domains while allowing a first
+// failure to move Namespaces out of loading. An empty revision means no
+// attempt has completed yet.
+func metricsSignalObserver(bell doorbell.Bell) func(metrics.Metadata) {
 	return func(metadata metrics.Metadata) {
 		revision := metrics.Revision(metadata)
-		if revision == "" || resourceManager == nil {
+		if revision == "" {
 			return
 		}
+		domains := resourcestream.MetricDoorbellDomains()
 		if metadata.CollectedAt.IsZero() || metadata.ConsecutiveFailures > 0 || metadata.LastError != "" {
-			resourceManager.BroadcastNamespaceMetricsRefresh(revision)
-			return
+			domains = []string{resourcestream.NamespaceMetricsDomain}
 		}
-		resourceManager.BroadcastMetricsRefresh(revision)
+		for _, domainName := range domains {
+			bell.Ring(doorbell.Change{
+				Domain:  domainName,
+				Source:  doorbell.SourceMetric,
+				Target:  doorbell.Subscribed(),
+				Version: revision,
+			})
+		}
 	}
 }
 
@@ -671,19 +551,6 @@ func ingestPermissionFilter(checker *permissions.Checker) func(group, resource, 
 			return false
 		}
 		return true
-	}
-}
-
-// HealthHandler returns an HTTP handler compatible with /healthz/refresh.
-func HealthHandler(hub refresh.InformerHub) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if hub == nil || !hub.HasSynced(r.Context()) {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte("informers not yet synced"))
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
 	}
 }
 

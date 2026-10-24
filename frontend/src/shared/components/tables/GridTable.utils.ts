@@ -11,6 +11,7 @@ import type {
   GridColumnDefinition,
 } from '@shared/components/tables/GridTable.types';
 import { isTableNoValueText } from '@shared/components/tables/tableNoValue';
+import { getAppZoomFactor } from '@shared/utils/appZoom';
 import React from 'react';
 
 export const DEFAULT_COLUMN_WIDTH = 150;
@@ -114,10 +115,10 @@ export const buildClusterScopedKey = (row: unknown, baseKey: string): string => 
   );
 };
 
-// Deterministic, collision-free DOM id from a row key.
+// Deterministic, collision-free DOM id base from a row key.
 // Hex-encodes characters outside [a-zA-Z0-9_-] so distinct keys always
 // produce distinct IDs — unlike the old lossy replace-with-underscore approach.
-export const getStableRowId = (rowKey: string): string => {
+const rowKeyDomId = (rowKey: string): string => {
   // The pattern has no `u` flag, so each match is a single UTF-16 code unit and
   // codePointAt(0) yields the same number charCodeAt(0) did — lone surrogates
   // included — keeping previously generated ids stable.
@@ -128,6 +129,35 @@ export const getStableRowId = (rowKey: string): string => {
   return `gridtable-row-${safe}`;
 };
 
+/** Id of an open row's detail region, for the opening control's aria-controls. */
+export const getGridTableRowDetailId = (rowKey: string): string => `${rowKeyDomId(rowKey)}-detail`;
+
+const GRIDTABLE_ROW_DETAIL_SELECTOR = '[data-gridtable-row-detail]';
+
+/**
+ * Whether `element` sits in a row detail inside `root`, so it belongs to a
+ * table nested there rather than to root's own table.
+ */
+export const isInNestedRowDetail = (root: Element, element: EventTarget | null): boolean => {
+  const detail = element instanceof Element ? element.closest(GRIDTABLE_ROW_DETAIL_SELECTOR) : null;
+  return detail !== null && root.contains(detail);
+};
+
+/** Root's own row details (not the details of a table nested in one of them). */
+export const queryOwnRowDetails = (root: Element): HTMLElement[] =>
+  Array.from(root.querySelectorAll<HTMLElement>(GRIDTABLE_ROW_DETAIL_SELECTOR)).filter(
+    (detail) => !isInNestedRowDetail(root, detail.parentElement)
+  );
+
+/** Elements under `root` that match `selector` and belong to root's own table. */
+export const queryOwnGridTableElements = <E extends Element = HTMLElement>(
+  root: Element,
+  selector: string
+): E[] =>
+  Array.from(root.querySelectorAll<E>(selector)).filter(
+    (element) => !isInNestedRowDetail(root, element)
+  );
+
 export const findGridTableRowByKey = (
   wrapper: HTMLElement | null | undefined,
   rowKey: string
@@ -135,13 +165,49 @@ export const findGridTableRowByKey = (
   if (!wrapper) {
     return null;
   }
-  const rows = wrapper.querySelectorAll<HTMLDivElement>('.gridtable-row[data-row-key]');
+  const rows = queryOwnGridTableElements<HTMLDivElement>(wrapper, '.gridtable-row[data-row-key]');
   for (const row of rows) {
     if (row.dataset.rowKey === rowKey) {
       return row;
     }
   }
   return null;
+};
+
+// How far `container` must scroll down (negative: up) to show `rect`, by the
+// nearest edge: none when it is fully visible or already spans the viewport,
+// and its start when it is taller than the viewport. Under the app's page zoom,
+// bounding rects are in zoomed pixels while clientHeight and scrollTop are CSS
+// pixels, so rect values are divided by `zoom`.
+const nearestScrollDelta = (container: HTMLElement, rect: DOMRect, zoom: number): number => {
+  const top = container.getBoundingClientRect().top / zoom + container.clientTop;
+  const aboveBy = top - rect.top / zoom;
+  const belowBy = rect.bottom / zoom - (top + container.clientHeight);
+  if (aboveBy > 0 === belowBy > 0) {
+    return 0;
+  }
+  const taller = rect.height / zoom > container.clientHeight;
+  return aboveBy > 0 === taller ? belowBy : -aboveBy;
+};
+
+/**
+ * Scrolls `element` into view vertically, like scrollIntoView({ block:
+ * 'nearest' }), without ever scrolling sideways. WebKit's scrollIntoView also
+ * lines up a row nested in an expanded table (wider than the parent and starting
+ * inside it) with the parent's left edge, shifting the parent table on every
+ * keyboard move; rows start at the table's left, so the horizontal position stays
+ * the user's.
+ */
+export const revealVertically = (element: HTMLElement): void => {
+  const zoom = getAppZoomFactor();
+  for (let container = element.parentElement; container; container = container.parentElement) {
+    if (container.scrollHeight > container.clientHeight) {
+      const delta = nearestScrollDelta(container, element.getBoundingClientRect(), zoom);
+      // Scroll positions are whole pixels while zoomed rows sit at fractional
+      // ones, so round outward (ignoring float noise) to show the edge fully.
+      container.scrollTop += delta > 0 ? Math.ceil(delta - 0.01) : Math.floor(delta + 0.01);
+    }
+  }
 };
 
 export const findGridTableCellByColumnKey = (

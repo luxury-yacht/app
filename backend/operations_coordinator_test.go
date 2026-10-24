@@ -19,14 +19,11 @@ func TestOperationsCoordinatorStopClusterIsIdempotentAndPreventsLatePortForwardR
 	})
 	session := &portForwardSessionInternal{
 		PortForwardSession: PortForwardSession{
-			ID:            "forward-a",
-			ClusterID:     "cluster-a",
-			Namespace:     "default",
-			TargetKind:    "Pod",
-			TargetVersion: "v1",
-			TargetName:    "pod-a",
-			Status:        PortForwardStatusConnecting,
-			StartedAt:     time.Now().Format(time.RFC3339),
+			ID:        "forward-a",
+			ClusterID: "cluster-a",
+			Target:    *runtimeOperationTarget("cluster-a", "", "v1", "Pod", "default", "pod-a"),
+			Status:    PortForwardStatusConnecting,
+			StartedAt: time.Now().Format(time.RFC3339),
 		},
 		stopChan: make(chan struct{}),
 		cancel:   func() {},

@@ -14,6 +14,7 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
@@ -22,6 +23,8 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcekind"
 	admission "github.com/luxury-yacht/app/backend/resources/admission"
+	"github.com/luxury-yacht/app/backend/resources/apiextensions"
+	backendtlspolicypkg "github.com/luxury-yacht/app/backend/resources/backendtlspolicy"
 	clusterrole "github.com/luxury-yacht/app/backend/resources/clusterrole"
 	clusterrolebinding "github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
 	configmap "github.com/luxury-yacht/app/backend/resources/configmap"
@@ -29,15 +32,23 @@ import (
 	daemonset "github.com/luxury-yacht/app/backend/resources/daemonset"
 	deployment "github.com/luxury-yacht/app/backend/resources/deployment"
 	endpointslice "github.com/luxury-yacht/app/backend/resources/endpointslice"
+	eventres "github.com/luxury-yacht/app/backend/resources/events"
+	gatewaypkg "github.com/luxury-yacht/app/backend/resources/gateway"
+	gatewayclasspkg "github.com/luxury-yacht/app/backend/resources/gatewayclass"
+	grpcroutepkg "github.com/luxury-yacht/app/backend/resources/grpcroute"
+	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
+	httproutepkg "github.com/luxury-yacht/app/backend/resources/httproute"
 	ingress "github.com/luxury-yacht/app/backend/resources/ingress"
 	ingressclass "github.com/luxury-yacht/app/backend/resources/ingressclass"
 	jobres "github.com/luxury-yacht/app/backend/resources/job"
 	limitrange "github.com/luxury-yacht/app/backend/resources/limitrange"
+	listenersetpkg "github.com/luxury-yacht/app/backend/resources/listenerset"
 	networkpolicy "github.com/luxury-yacht/app/backend/resources/networkpolicy"
 	nodespkg "github.com/luxury-yacht/app/backend/resources/nodes"
 	pv "github.com/luxury-yacht/app/backend/resources/persistentvolume"
 	pvc "github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
 	pdb "github.com/luxury-yacht/app/backend/resources/poddisruptionbudget"
+	referencegrantpkg "github.com/luxury-yacht/app/backend/resources/referencegrant"
 	resourcequota "github.com/luxury-yacht/app/backend/resources/resourcequota"
 	rolepkg "github.com/luxury-yacht/app/backend/resources/role"
 	rolebinding "github.com/luxury-yacht/app/backend/resources/rolebinding"
@@ -46,6 +57,9 @@ import (
 	serviceaccount "github.com/luxury-yacht/app/backend/resources/serviceaccount"
 	statefulset "github.com/luxury-yacht/app/backend/resources/statefulset"
 	storageclass "github.com/luxury-yacht/app/backend/resources/storageclass"
+	tlsroutepkg "github.com/luxury-yacht/app/backend/resources/tlsroute"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // maintainedKeyCase pins one ingest-fed maintained-store kind: a representative object,
@@ -152,6 +166,10 @@ func TestKeyFromCatalogMatchesAdapterKeyForEveryMaintainedKind(t *testing.T) {
 			func(t *testing.T, meta ClusterMeta, obj metav1.Object) string {
 				return descriptorTableKey(t, meta, namespaceNetworkDomainName, "networkpolicies", obj, networkTableQueryAdapter().Key)
 			}},
+		{"HorizontalPodAutoscaler", hpapkg.Identity, &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: ns("hpa1")},
+			func(t *testing.T, meta ClusterMeta, obj metav1.Object) string {
+				return descriptorTableKey(t, meta, namespaceAutoscalingDomainName, "horizontalpodautoscalers", obj, autoscalingTableQueryAdapter().Key)
+			}},
 		{"PodDisruptionBudget", pdb.Identity, &policyv1.PodDisruptionBudget{ObjectMeta: ns("pdb1")},
 			func(t *testing.T, meta ClusterMeta, obj metav1.Object) string {
 				return descriptorTableKey(t, meta, namespaceQuotasDomainName, "poddisruptionbudgets", obj, quotaTableQueryAdapter().Key)
@@ -178,6 +196,10 @@ func TestKeyFromCatalogMatchesAdapterKeyForEveryMaintainedKind(t *testing.T) {
 			func(t *testing.T, meta ClusterMeta, obj metav1.Object) string {
 				return descriptorTableKey(t, meta, clusterStorageDomainName, "persistentvolumes", obj, clusterStorageTableQueryAdapter().Key)
 			}},
+		{"CustomResourceDefinition", apiextensions.Identity, &apiextv1.CustomResourceDefinition{ObjectMeta: cl("widgets.example.com")},
+			func(t *testing.T, meta ClusterMeta, obj metav1.Object) string {
+				return descriptorTableKey(t, meta, clusterCRDDomainName, "customresourcedefinitions", obj, clusterCRDTableQueryAdapter().Key)
+			}},
 		{"ClusterRole", clusterrole.Identity, &rbacv1.ClusterRole{ObjectMeta: cl("cr1")},
 			func(t *testing.T, meta ClusterMeta, obj metav1.Object) string {
 				return descriptorTableKey(t, meta, clusterRBACDomainName, "clusterroles", obj, clusterRBACTableQueryAdapter().Key)
@@ -185,6 +207,40 @@ func TestKeyFromCatalogMatchesAdapterKeyForEveryMaintainedKind(t *testing.T) {
 		{"ClusterRoleBinding", clusterrolebinding.Identity, &rbacv1.ClusterRoleBinding{ObjectMeta: cl("crb1")},
 			func(t *testing.T, meta ClusterMeta, obj metav1.Object) string {
 				return descriptorTableKey(t, meta, clusterRBACDomainName, "clusterrolebindings", obj, clusterRBACTableQueryAdapter().Key)
+			}},
+
+		// --- Gateway API kinds ---
+		{"GatewayClass", gatewayclasspkg.Identity, &gatewayv1.GatewayClass{ObjectMeta: cl("gwc1")},
+			func(t *testing.T, meta ClusterMeta, obj metav1.Object) string {
+				return descriptorTableKey(t, meta, clusterConfigDomainName, "gatewayclasses", obj, clusterConfigTableQueryAdapter().Key)
+			}},
+		{"Gateway", gatewaypkg.Identity, &gatewayv1.Gateway{ObjectMeta: ns("gw1")},
+			func(t *testing.T, meta ClusterMeta, obj metav1.Object) string {
+				return descriptorTableKey(t, meta, namespaceNetworkDomainName, "gateways", obj, networkTableQueryAdapter().Key)
+			}},
+		{"HTTPRoute", httproutepkg.Identity, &gatewayv1.HTTPRoute{ObjectMeta: ns("hr1")},
+			func(t *testing.T, meta ClusterMeta, obj metav1.Object) string {
+				return descriptorTableKey(t, meta, namespaceNetworkDomainName, "httproutes", obj, networkTableQueryAdapter().Key)
+			}},
+		{"GRPCRoute", grpcroutepkg.Identity, &gatewayv1.GRPCRoute{ObjectMeta: ns("gr1")},
+			func(t *testing.T, meta ClusterMeta, obj metav1.Object) string {
+				return descriptorTableKey(t, meta, namespaceNetworkDomainName, "grpcroutes", obj, networkTableQueryAdapter().Key)
+			}},
+		{"TLSRoute", tlsroutepkg.Identity, &gatewayv1.TLSRoute{ObjectMeta: ns("tr1")},
+			func(t *testing.T, meta ClusterMeta, obj metav1.Object) string {
+				return descriptorTableKey(t, meta, namespaceNetworkDomainName, "tlsroutes", obj, networkTableQueryAdapter().Key)
+			}},
+		{"ListenerSet", listenersetpkg.Identity, &gatewayv1.ListenerSet{ObjectMeta: ns("ls1")},
+			func(t *testing.T, meta ClusterMeta, obj metav1.Object) string {
+				return descriptorTableKey(t, meta, namespaceNetworkDomainName, "listenersets", obj, networkTableQueryAdapter().Key)
+			}},
+		{"ReferenceGrant", referencegrantpkg.Identity, &gatewayv1.ReferenceGrant{ObjectMeta: ns("rg1")},
+			func(t *testing.T, meta ClusterMeta, obj metav1.Object) string {
+				return descriptorTableKey(t, meta, namespaceNetworkDomainName, "referencegrants", obj, networkTableQueryAdapter().Key)
+			}},
+		{"BackendTLSPolicy", backendtlspolicypkg.Identity, &gatewayv1.BackendTLSPolicy{ObjectMeta: ns("btp1")},
+			func(t *testing.T, meta ClusterMeta, obj metav1.Object) string {
+				return descriptorTableKey(t, meta, namespaceNetworkDomainName, "backendtlspolicies", obj, networkTableQueryAdapter().Key)
 			}},
 
 		// --- bespoke-projector kinds (workloads, nodes, network service/endpointslice) ---
@@ -220,6 +276,17 @@ func TestKeyFromCatalogMatchesAdapterKeyForEveryMaintainedKind(t *testing.T) {
 			func(t *testing.T, meta ClusterMeta, obj metav1.Object) string {
 				return projectorTableKey(t, NewEndpointSliceIngestProjector(meta), obj, networkTableQueryAdapter().Key)
 			}},
+		// Both Events tables key the shared Events row the same way; the cluster table
+		// stores it under its own row type.
+		{"Event", eventres.Identity, &corev1.Event{ObjectMeta: ns("evt1")},
+			func(t *testing.T, meta ClusterMeta, obj metav1.Object) string {
+				namespaced := projectorTableKey(t, NewEventIngestProjector(meta), obj, namespacedEventTableQueryAdapter().Key)
+				cluster := projectorTableKey(t, NewEventIngestProjector(meta), obj, func(row EventSummary) string {
+					return clusterEventTableQueryAdapter().Key(ClusterEventEntry(row))
+				})
+				require.Equal(t, namespaced, cluster, "both Events tables must key a row alike")
+				return namespaced
+			}},
 	}
 
 	// Guard: the case table must cover EVERY ingest-fed maintained-store kind. Pods is the
@@ -229,8 +296,10 @@ func TestKeyFromCatalogMatchesAdapterKeyForEveryMaintainedKind(t *testing.T) {
 	for _, tc := range cases {
 		covered[tc.name] = true
 	}
-	for _, d := range kindregistry.IngestOwnedDescriptors() {
-		if d.Identity.Kind == "Pod" {
+	for _, d := range kindregistry.All {
+		// ReplicaSets have no table, and the namespaces table is built at serve
+		// from the namespace store, so neither feeds a maintained store.
+		if d.Identity.Kind == "Pod" || d.Identity.Kind == "ReplicaSet" || d.Identity.Kind == "Namespace" {
 			continue
 		}
 		require.Truef(t, covered[d.Identity.Kind],
@@ -290,7 +359,7 @@ func TestMaintainedStoreNoGhostOnDeleteWithTableHalfDropped(t *testing.T) {
 	maintained := newTypedMaintainedStore(meta, clusterConfigQuerypageSchema(), clusterConfigTableQueryAdapter())
 
 	src := ingest.NewProjectingStore(scClusterConfigProjection(t, meta))
-	src.AddBundleSink(maintained.BundleSink()) // the production wiring
+	src.AddBundleSink(unpublishedSink(maintained, "")) // the production wiring
 
 	sc := storageClassObj("standard", "1", "ebs.csi.aws.com")
 

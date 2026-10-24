@@ -154,7 +154,7 @@
   min-width: 18px;
   height: 18px;
   border-radius: 999px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--color-border);
   color: var(--color-text-secondary);
   font-size: 11px;
   display: inline-flex;
@@ -170,7 +170,7 @@
 }
 
 .sessions-status-message .as-section-empty {
-  border: 1px dashed var(--border-color);
+  border: 1px dashed var(--color-border);
   border-radius: 6px;
   padding: 8px;
   font-size: 12px;
@@ -178,7 +178,7 @@
 }
 
 .sessions-status-message .ss-session-item {
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   padding: 6px;
   display: flex;
@@ -231,10 +231,22 @@
   align-items: flex-start;
 }
 
+/* The open button fills the row and carries its padding; the end action sits beside it. */
+.sessions-status-message .as-shell-session {
+  padding: 0;
+}
+
 .sessions-status-message .as-shell-session-jump {
   appearance: none;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   padding: 6px 8px;
+  border: none;
+  border-radius: inherit;
+  background: transparent;
   font: inherit;
   color: inherit;
   text-align: left;
@@ -315,8 +327,15 @@
     opacity 0.12s ease;
 }
 
+.sessions-status-message .as-shell-session .as-pf-actions {
+  /* Line the stop icon up with port-forward stop icons despite the unpadded row. */
+  margin-right: -3px;
+}
+
 .sessions-status-message .as-pf-session:hover .as-pf-actions,
-.sessions-status-message .as-pf-session:focus-within .as-pf-actions {
+.sessions-status-message .as-pf-session:focus-within .as-pf-actions,
+.sessions-status-message .as-shell-session .as-pf-actions:hover,
+.sessions-status-message .as-shell-session .as-pf-actions:focus-within {
   opacity: 1;
   filter: drop-shadow(0 0 5px color-mix(in srgb, var(--color-error) 70%, transparent));
 }

@@ -5,9 +5,9 @@
  * dimensions before the SVG overlay renders them.
  */
 
+import { kindDisplayName } from '@shared/kinds/kindDisplay';
 import type { KindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
 import { resolveKindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
-import { getDisplayKind } from '@/utils/kindAliasMap';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
 import type { ObjectMapHoverEdge } from './objectMapRendererTypes';
 
@@ -106,7 +106,11 @@ export type ObjectMapKindBadgeStyleResolver = (
 
 const buildObjectMapTooltipRows = (
   hoverEdge: ObjectMapHoverEdge,
-  endpoint: (name: string, kind: string, filtered?: boolean) => ObjectMapTooltipEndpoint,
+  endpoint: (
+    name: string,
+    ref: { group: string; kind: string },
+    filtered?: boolean
+  ) => ObjectMapTooltipEndpoint,
   relationshipRow: (text: string, edgeType: string) => ObjectMapTooltipRow
 ): ObjectMapTooltipRow[] => {
   const rows: ObjectMapTooltipRow[] = [];
@@ -116,7 +120,7 @@ const buildObjectMapTooltipRows = (
     pathNodes.forEach((node, index) => {
       rows.push({
         type: 'object',
-        endpoint: endpoint(node.ref.name, node.ref.kind, node.filtered),
+        endpoint: endpoint(node.ref.name, node.ref, node.filtered),
       });
       if (index < pathNodes.length - 1) {
         const relationship = filteredPath.relationships[index];
@@ -142,12 +146,18 @@ const buildObjectMapTooltipRows = (
     rows.push(
       {
         type: 'object',
-        endpoint: endpoint(hoverEdge.sourceLabel, hoverEdge.sourceKind),
+        endpoint: endpoint(hoverEdge.sourceLabel, {
+          group: hoverEdge.sourceGroup,
+          kind: hoverEdge.sourceKind,
+        }),
       },
       relationshipRow(hoverEdge.label, hoverEdge.type),
       {
         type: 'object',
-        endpoint: endpoint(hoverEdge.targetLabel, hoverEdge.targetKind),
+        endpoint: endpoint(hoverEdge.targetLabel, {
+          group: hoverEdge.targetGroup,
+          kind: hoverEdge.targetKind,
+        }),
       }
     );
   }
@@ -182,9 +192,13 @@ export const computeObjectMapTooltipLayout = ({
     palette.tooltipRelationshipFontSize,
     palette.fontFamily
   );
-  const endpoint = (name: string, kind: string, filtered = false): ObjectMapTooltipEndpoint => {
-    const badgeStyle = resolveKindBadgeStyle(kind, container ?? null);
-    const rawBadgeText = getDisplayKind(kind, useShortResourceNames).toUpperCase();
+  const endpoint = (
+    name: string,
+    ref: { group: string; kind: string },
+    filtered = false
+  ): ObjectMapTooltipEndpoint => {
+    const badgeStyle = resolveKindBadgeStyle(ref.kind, container ?? null);
+    const rawBadgeText = kindDisplayName(ref, useShortResourceNames).toUpperCase();
     const badgeFontSize = Math.min(badgeStyle.fontSize, palette.tooltipBadgeMaxFontSize);
     const badgeFont = objectMapTooltipFont(
       badgeStyle.fontWeight,

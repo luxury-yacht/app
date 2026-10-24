@@ -11,6 +11,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/kind/kindspec"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 var (
@@ -65,10 +66,10 @@ type RevisionEntry struct {
 // Supports Deployment, StatefulSet, and DaemonSet. Other kinds return an error.
 // Results are sorted descending by revision number (newest first).
 //
-// Multi-cluster safety: all Kubernetes requests are scoped to the cluster
-// identified by clusterID, preventing cross-cluster data leakage.
-func (g *ResourceGateway) GetRevisionHistory(clusterID, namespace, group, version, workloadKind, name string) ([]RevisionEntry, error) {
-	workloadKind, err := normalizeAppsV1WorkloadKind(group, version, workloadKind, revisionHistoryWorkloadKinds)
+// Multi-cluster safety: all Kubernetes requests are scoped to the target's
+// cluster, preventing cross-cluster data leakage.
+func (g *ResourceGateway) GetRevisionHistory(target resourcemodel.ResourceRef) ([]RevisionEntry, error) {
+	workloadKind, err := normalizeAppsV1WorkloadKind(target.Group, target.Version, target.Kind, revisionHistoryWorkloadKinds)
 	if err != nil {
 		return nil, fmt.Errorf("revision history not supported: %w", err)
 	}
@@ -78,7 +79,7 @@ func (g *ResourceGateway) GetRevisionHistory(clusterID, namespace, group, versio
 		return nil, fmt.Errorf("revision history not supported for workload kind %q", workloadKind)
 	}
 
-	deps, _, err := g.resolveClusterDependencies(clusterID)
+	deps, _, err := g.resolveClusterDependencies(target.ClusterID)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +89,7 @@ func (g *ResourceGateway) GetRevisionHistory(clusterID, namespace, group, versio
 
 	ctx := g.CtxOrBackground()
 
-	revisions, err := ops.RevisionHistory(ctx, deps.KubernetesClient, namespace, name)
+	revisions, err := ops.RevisionHistory(ctx, deps.KubernetesClient, target.Namespace, target.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +126,7 @@ func (g *ResourceGateway) rollbackWorkloadAction(target ObjectActionTargetRef, t
 	ctx := g.CtxOrBackground()
 
 	// Fetch the full revision history to locate the target revision's pod template.
-	entries, err := g.GetRevisionHistory(target.ClusterID, target.Namespace, target.Group, target.Version, workloadKind, target.Name)
+	entries, err := g.GetRevisionHistory(target)
 	if err != nil {
 		return fmt.Errorf("failed to get revision history for %s %s/%s: %w", workloadKind, target.Namespace, target.Name, err)
 	}
@@ -169,6 +170,6 @@ func (g *ResourceGateway) rollbackWorkloadAction(target ObjectActionTargetRef, t
 		fmt.Sprintf("Rolled back %s %s/%s to revision %d", workloadKind, target.Namespace, target.Name, toRevision),
 		"rollbackWorkload",
 	)
-	g.invalidateResponseCache(selectionKey, workloadKind, target.Namespace, target.Name)
+	g.invalidateResponseCacheForGVK(selectionKey, objectActionTargetGVK(target), target.Namespace, target.Name)
 	return nil
 }

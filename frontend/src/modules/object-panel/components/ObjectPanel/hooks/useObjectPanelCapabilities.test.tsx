@@ -1,723 +1,377 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelCapabilities.test.tsx
+ *
+ * Object panel capability gating through the real capability hook, permission
+ * store, and node log discovery client, inside the app shell. Only the backend
+ * boundary is faked (test-utils/appState); each test decides the cluster's
+ * permission answers (`app.permissions`) and states the queries the backend
+ * receives and how the panel gates on the answers.
  */
 
-import type React from 'react';
-import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { requireValue } from '@/test-utils/requireValue';
-
+import { describe, expect, it } from 'vitest';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type ObjectIdentity,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import type { FeatureSupport, PanelObjectData } from '../types';
 import { useObjectPanelCapabilities } from './useObjectPanelCapabilities';
 
-const mockUseCapabilities = vi.fn();
-const mockDiscoverNodeLogs = vi.fn();
-const mockGetCachedNodeLogDiscovery = vi.fn();
+type CapabilitiesResult = ReturnType<typeof useObjectPanelCapabilities>;
 
-vi.mock('@/core/capabilities', () => ({
-  useCapabilities: (...args: unknown[]) => mockUseCapabilities(...args),
-}));
+const app = installAppStateHarness();
 
-vi.mock('../NodeLogs/nodeLogsApi', () => ({
-  discoverNodeLogs: (...args: unknown[]) => mockDiscoverNodeLogs(...args),
-  getCachedNodeLogDiscovery: (...args: unknown[]) => mockGetCachedNodeLogDiscovery(...args),
-}));
+/** The queries the backend received, as their identity and verb. */
+const queriedChecks = () =>
+  app.backend
+    .calls('QueryPermissions')
+    .flatMap(([queries]) => queries ?? [])
+    .map(({ id: _id, ...check }) => check);
 
-type HookProps = Parameters<typeof useObjectPanelCapabilities>[0];
-type HookResult = ReturnType<typeof useObjectPanelCapabilities>;
+const noFeatures: FeatureSupport = { logs: 'none', shell: 'none', debug: false, edit: false };
+
+const workloadFeatures: FeatureSupport = { ...noFeatures, logs: 'owned-pods', edit: true };
+const podFeatures: FeatureSupport = { ...noFeatures, logs: 'pod', shell: 'exec', edit: true };
+
+let result: CapabilitiesResult | null = null;
+
+function CapabilitiesProbe({
+  objectData,
+  featureSupport,
+  detailScope = null,
+}: Readonly<{
+  objectData: PanelObjectData | null;
+  featureSupport: FeatureSupport;
+  detailScope?: string | null;
+}>) {
+  result = useObjectPanelCapabilities({
+    objectData,
+    detailScope,
+    featureSupport,
+  });
+  return null;
+}
+
+const capabilities = () => {
+  if (!result) {
+    throw new Error('expected the capabilities hook to render');
+  }
+  return result;
+};
 
 describe('useObjectPanelCapabilities', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
-  const resultRef: { current: HookResult | null } = { current: null };
+  let dev: TestCluster;
+  let view: MountedApp;
 
-  const renderHook = async (props: HookProps) => {
-    const HookHarness: React.FC = () => {
-      resultRef.current = useObjectPanelCapabilities(props);
-      return null;
-    };
+  const start = async () => {
+    result = null;
+    dev = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, ['team-a']);
+    view = await app.render(null);
+  };
 
-    await act(async () => {
-      root.render(<HookHarness />);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    return requireValue(
-      resultRef.current,
-      'expected test value in useObjectPanelCapabilities.test.tsx'
+  const showPanel = async (identity: ObjectIdentity, featureSupport: FeatureSupport) => {
+    const panel = app.object(dev, identity);
+    await view.show(
+      <CapabilitiesProbe
+        objectData={panel.ref}
+        featureSupport={featureSupport}
+        detailScope={panel.scopes.detailScope}
+      />
     );
+    return panel;
   };
 
-  const baseFeatureSupport: FeatureSupport = {
-    objPanelLogs: true,
-    nodeLogs: false,
-    manifest: false,
-    values: false,
-    delete: true,
-    restart: true,
-    scale: true,
-    edit: true,
-    shell: false,
-    debug: false,
-    trigger: false,
-    suspend: false,
-  };
-
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    resultRef.current = null;
-    mockUseCapabilities.mockReset();
-    mockDiscoverNodeLogs.mockReset();
-    mockGetCachedNodeLogDiscovery.mockReset();
-    mockGetCachedNodeLogDiscovery.mockReturnValue(null);
+  const pod = (name: string): ObjectIdentity => ({
+    group: '',
+    version: 'v1',
+    kind: 'Pod',
+    namespace: 'team-a',
+    name,
   });
 
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-  });
+  // Object actions (delete, scale, restart, ...) are gated by the shared action
+  // controller, which queries its own checks; the panel queries only what it gates.
+  it('queries the object’s YAML and finalizer permissions and gates editing on its answer', async () => {
+    app.permissions((query) => (query.verb === 'patch' ? { reason: 'locked' } : true));
+    await start();
 
-  it('computes capability flags and reasons using descriptor responses', async () => {
-    const capabilityStateMap: Record<
-      string,
-      { allowed: boolean; pending: boolean; reason?: string }
-    > = {
-      delete: { allowed: true, pending: false },
-      restart: { allowed: true, pending: false },
-      scale: { allowed: false, pending: false, reason: 'forbidden' },
-      'edit-yaml': { allowed: false, pending: false, reason: 'locked' },
-      'view-logs': { allowed: true, pending: false },
-      'view-yaml': { allowed: true, pending: false },
-      'view-manifest': { allowed: false, pending: false },
-      'view-values': { allowed: false, pending: false },
-      'remove-finalizer': { allowed: true, pending: false },
-    };
+    await showPanel(
+      { group: 'apps', version: 'v1', kind: 'Deployment', namespace: 'team-a', name: 'api' },
+      workloadFeatures
+    );
 
-    mockUseCapabilities.mockImplementation(() => ({
-      getState: (id: string) => capabilityStateMap[id] ?? { allowed: false, pending: false },
-    }));
-
-    const objectData: PanelObjectData = {
-      kind: 'Deployment',
-      name: 'api',
-      namespace: 'team-a',
-      clusterId: 'cluster-a',
+    const deployment = {
+      clusterId: dev.clusterId,
       group: 'apps',
       version: 'v1',
+      resourceKind: 'Deployment',
+      namespace: 'team-a',
+      name: 'api',
     };
-
-    const result = await renderHook({
-      objectData,
-      objectKind: 'deployment',
-      detailScope: 'cluster-a|team-a:apps/v1:deployment:api',
-      featureSupport: baseFeatureSupport,
-    });
-
-    expect(mockUseCapabilities).toHaveBeenCalled();
-    const [descriptors] = mockUseCapabilities.mock.calls[0];
-    const descriptorIds = (descriptors as Array<{ id: string }>).map((d) => d.id);
-    expect(descriptorIds).toEqual(
+    expect(queriedChecks()).toEqual(
       expect.arrayContaining([
-        'view-yaml',
-        'edit-yaml',
-        'view-logs',
-        'delete',
-        'restart',
-        'scale',
-        'remove-finalizer',
+        expect.objectContaining({ ...deployment, verb: 'get' }),
+        expect.objectContaining({ ...deployment, verb: 'patch' }),
       ])
     );
-    expect(descriptors).toContainEqual(
-      expect.objectContaining({
-        id: 'edit-yaml',
-        verb: 'patch',
-      })
-    );
-    expect(descriptors).toContainEqual(
-      expect.objectContaining({
-        id: 'scale',
-        clusterId: 'cluster-a',
-        verb: 'update',
-        group: 'apps',
-        version: 'v1',
-        resourceKind: 'Deployment',
-        namespace: 'team-a',
-        name: 'api',
-        subresource: 'scale',
-      })
-    );
-
-    expect(result.capabilities.canDelete).toBe(true);
-    expect(result.capabilities.canScale).toBe(false);
-    expect(result.capabilityReasons.scale).toBe('forbidden');
-    expect(result.capabilityReasons.editYaml).toBe('locked');
-    expect(result.capabilityStates.removeFinalizer.allowed).toBe(true);
+    const { capabilities: flags, capabilityReasons, capabilityStates } = capabilities();
+    expect(flags.canEditYaml).toBe(false);
+    expect(capabilityReasons.editYaml).toBe('locked');
+    expect(capabilityStates.removeFinalizer.allowed).toBe(false);
   });
 
-  it('checks CronJob trigger and suspend permissions independently in the object cluster', async () => {
-    let allowedAction = 'trigger';
-    mockUseCapabilities.mockImplementation(() => ({
-      getState: (id: string) => ({ allowed: id === allowedAction, pending: false }),
-    }));
-    const props: HookProps = {
-      objectData: {
-        kind: 'CronJob',
-        name: 'backup',
-        namespace: 'team-a',
-        clusterId: 'cluster-a',
-        group: 'batch',
-        version: 'v1',
-      },
-      objectKind: 'cronjob',
-      detailScope: 'cluster-a|team-a:batch/v1:cronjob:backup',
-      featureSupport: { ...baseFeatureSupport, trigger: true, suspend: true },
-    };
+  it('checks Namespace finalizer removal on metadata and on the finalize subresource separately', async () => {
+    app.permissions((query) => (query.subresource === 'finalize' ? { reason: 'forbidden' } : true));
+    await start();
 
-    const first = await renderHook(props);
-    const [descriptors] = mockUseCapabilities.mock.calls[0];
-    expect(descriptors).toContainEqual({
-      id: 'trigger',
-      clusterId: 'cluster-a',
-      verb: 'create',
-      group: 'batch',
-      version: 'v1',
-      resourceKind: 'Job',
-      namespace: 'team-a',
-    });
-    expect(descriptors).toContainEqual({
-      id: 'suspend',
-      clusterId: 'cluster-a',
-      verb: 'patch',
-      group: 'batch',
-      version: 'v1',
-      resourceKind: 'CronJob',
-      namespace: 'team-a',
-      name: 'backup',
-    });
-    expect(first.capabilities.canTrigger).toBe(true);
-    expect(first.capabilities.canSuspend).toBe(false);
-
-    allowedAction = 'suspend';
-    const second = await renderHook(props);
-    expect(second.capabilities.canTrigger).toBe(false);
-    expect(second.capabilities.canSuspend).toBe(true);
-  });
-
-  it('requests exact metadata and Namespace finalize permissions for a Namespace', async () => {
-    mockUseCapabilities.mockImplementation(() => ({
-      getState: () => ({ allowed: true, pending: false }),
-    }));
-
-    const result = await renderHook({
-      objectData: {
-        kind: 'Namespace',
-        name: 'terminating',
-        namespace: '',
-        clusterId: 'cluster-a',
-        group: '',
-        version: 'v1',
-      },
-      objectKind: 'namespace',
-      detailScope: 'cluster-a|_:core/v1:namespace:terminating',
-      featureSupport: { ...baseFeatureSupport, delete: false, restart: false, scale: false },
-    });
-
-    const [descriptors] = mockUseCapabilities.mock.calls[0];
-    expect(descriptors).toContainEqual(
-      expect.objectContaining({
-        id: 'remove-finalizer',
-        clusterId: 'cluster-a',
-        verb: 'patch',
-        group: '',
-        version: 'v1',
-        resourceKind: 'Namespace',
-        name: 'terminating',
-      })
+    await showPanel(
+      { group: '', version: 'v1', kind: 'Namespace', namespace: '', name: 'terminating' },
+      noFeatures
     );
-    expect(descriptors).toContainEqual({
-      id: 'remove-namespace-finalizer',
-      clusterId: 'cluster-a',
-      verb: 'update',
+
+    const namespaceObject = {
+      clusterId: dev.clusterId,
       group: '',
       version: 'v1',
       resourceKind: 'Namespace',
       name: 'terminating',
-      subresource: 'finalize',
-    });
-    expect(result.capabilityStates.removeFinalizer.allowed).toBe(true);
-    expect(result.capabilityStates.removeNamespaceFinalizer.allowed).toBe(true);
-  });
-
-  it('disables logs when the user lacks log permissions', async () => {
-    mockUseCapabilities.mockImplementation(() => ({
-      getState: (id: string) => ({ allowed: id !== 'view-logs', pending: false }),
-    }));
-
-    const result = await renderHook({
-      objectData: {
-        kind: 'Deployment',
-        name: 'api',
-        namespace: 'team-a',
-        clusterId: 'cluster-a',
-        group: 'apps',
-        version: 'v1',
-      },
-      objectKind: 'deployment',
-      detailScope: 'cluster-a|team-a:apps/v1:deployment:api',
-      featureSupport: baseFeatureSupport,
-    });
-
-    expect(result.capabilities.hasObjPanelLogs).toBe(false);
+    };
+    expect(queriedChecks()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ ...namespaceObject, verb: 'patch', subresource: '' }),
+        expect.objectContaining({ ...namespaceObject, verb: 'update', subresource: 'finalize' }),
+      ])
+    );
+    expect(capabilities().capabilityStates.removeFinalizer.allowed).toBe(true);
+    expect(capabilities().capabilityStates.removeNamespaceFinalizer.allowed).toBe(false);
   });
 
   it.each(['clusterId', 'group', 'version', 'kind', 'name'] as const)(
     'withholds permission queries until the object carries %s',
     async (missingField) => {
-      mockUseCapabilities.mockReturnValue({
-        getState: () => ({ allowed: true, pending: false }),
-      });
-      const complete: PanelObjectData = {
-        clusterId: 'config:Production',
-        group: '',
-        version: 'v1',
-        kind: 'Pod',
-        namespace: 'team-a',
-        name: 'api',
-      };
-      const Harness = ({ objectData }: { objectData: PanelObjectData }) => {
-        resultRef.current = useObjectPanelCapabilities({
-          objectData,
-          objectKind: 'pod',
-          detailScope: null,
-          featureSupport: { ...baseFeatureSupport, shell: true },
-        });
-        return null;
-      };
-      await act(async () => {
-        root.render(<Harness objectData={{ ...complete, [missingField]: undefined }} />);
-      });
-      expect(mockUseCapabilities).toHaveBeenLastCalledWith(
-        [],
-        expect.objectContaining({ enabled: false })
-      );
-      expect(resultRef.current?.capabilities.canDelete).toBe(false);
-      expect(resultRef.current?.capabilities.hasShell).toBe(false);
+      await start();
+      const complete = app.object(dev, pod('api')).ref;
+      const features = podFeatures;
+      const queriesBefore = queriedChecks().length;
 
-      await act(async () => {
-        root.render(<Harness objectData={complete} />);
-      });
-      const [descriptors, options] = requireValue(
-        mockUseCapabilities.mock.calls[mockUseCapabilities.mock.calls.length - 1],
-        'capability descriptors after identity becomes ready'
+      await view.show(
+        <CapabilitiesProbe
+          objectData={{ ...complete, [missingField]: undefined }}
+          featureSupport={features}
+        />
       );
-      expect(options.enabled).toBe(true);
-      expect(descriptors).toContainEqual(
+
+      expect(queriedChecks()).toHaveLength(queriesBefore);
+      expect(capabilities().capabilities.canEditYaml).toBe(false);
+      expect(capabilities().capabilities.hasShell).toBe(false);
+
+      await view.show(<CapabilitiesProbe objectData={complete} featureSupport={features} />);
+
+      expect(queriedChecks()).toContainEqual(
         expect.objectContaining({
-          id: 'view-yaml',
-          clusterId: 'config:Production',
+          clusterId: dev.clusterId,
           group: '',
           version: 'v1',
           resourceKind: 'Pod',
           namespace: 'team-a',
           name: 'api',
+          verb: 'get',
+          subresource: '',
         })
       );
-      expect(resultRef.current?.capabilities.canDelete).toBe(true);
-      expect(resultRef.current?.capabilities.hasShell).toBe(true);
+      expect(capabilities().capabilities.canEditYaml).toBe(true);
+      expect(capabilities().capabilities.hasShell).toBe(true);
     }
   );
 
-  it('returns default states when descriptors are unavailable', async () => {
-    mockUseCapabilities.mockImplementation(() => ({
-      getState: () => ({ allowed: false, pending: false }),
-    }));
+  it('returns default states when there is no object', async () => {
+    await start();
 
-    const result = await renderHook({
-      objectData: null,
-      objectKind: null,
-      detailScope: null,
-      featureSupport: {
-        objPanelLogs: false,
-        nodeLogs: false,
-        manifest: false,
-        values: false,
-        delete: false,
-        restart: false,
-        scale: false,
-        edit: false,
-        shell: false,
-        debug: false,
-        trigger: false,
-        suspend: false,
-      },
-    });
+    await view.show(<CapabilitiesProbe objectData={null} featureSupport={noFeatures} />);
 
-    expect(result.capabilities).toEqual({
+    expect(capabilities().capabilities).toEqual({
       hasObjPanelLogs: false,
-      hasNodeLogs: false,
       hasShell: false,
-      hasManifest: false,
-      hasValues: false,
-      canDelete: false,
-      canRestart: false,
-      canScale: false,
       canEditYaml: false,
-      canTrigger: false,
-      canSuspend: false,
     });
-    expect(result.capabilityReasons).toEqual({
-      nodeLogs: undefined,
-      delete: undefined,
-      restart: undefined,
-      scale: undefined,
-      editYaml: undefined,
-      shell: undefined,
-      debug: undefined,
-    });
+    expect(Object.values(capabilities().capabilityReasons).every((reason) => !reason)).toBe(true);
   });
 
-  it('enables shell capability when descriptors allow access', async () => {
-    const capabilityStateMap: Record<string, { allowed: boolean; pending: boolean }> = {
-      'shell-exec-create': { allowed: true, pending: false },
-    };
+  // Websocket exec upgrades a GET and SPDY exec a POST; either verb suffices.
+  it.each(['get', 'create'])(
+    'offers the pod shell when only %s pods/exec is allowed',
+    async (allowedVerb) => {
+      app.permissions((query) =>
+        query.subresource === 'exec' && query.verb !== allowedVerb
+          ? { reason: `EKS Access Policy: denied ${query.verb} pods/exec` }
+          : true
+      );
+      await start();
 
-    mockUseCapabilities.mockImplementation(() => ({
-      getState: (id: string) => capabilityStateMap[id] ?? { allowed: false, pending: false },
-    }));
+      await showPanel(pod('api-123'), podFeatures);
 
-    const result = await renderHook({
-      objectData: {
-        kind: 'Pod',
-        name: 'api-123',
+      expect(capabilities().capabilities.hasShell).toBe(true);
+      expect(capabilities().capabilityStates.shell.allowed).toBe(true);
+      expect(capabilities().capabilityReasons.shell).toBeUndefined();
+    }
+  );
+
+  it('surfaces the shell denial only when both exec verbs are denied', async () => {
+    app.permissions((query) =>
+      query.subresource === 'exec' ? { reason: `Forbidden: ${query.verb} pods/exec` } : true
+    );
+    await start();
+
+    await showPanel(pod('api-123'), podFeatures);
+
+    expect(capabilities().capabilities.hasShell).toBe(false);
+    expect(capabilities().capabilityReasons.shell).toBe('Forbidden: get pods/exec');
+  });
+
+  it('surfaces the debug denial when ephemeral containers may not be updated', async () => {
+    app.permissions((query) =>
+      query.subresource === 'ephemeralcontainers'
+        ? { reason: 'Forbidden: pods/ephemeralcontainers' }
+        : true
+    );
+    await start();
+
+    await showPanel(pod('demo'), { ...podFeatures, debug: true });
+
+    expect(queriedChecks()).toContainEqual(
+      expect.objectContaining({
+        clusterId: dev.clusterId,
+        resourceKind: 'Pod',
         namespace: 'team-a',
-        clusterId: 'cluster-a',
-        group: '',
-        version: 'v1',
-      },
-      objectKind: 'pod',
-      detailScope: 'cluster-a|team-a:/v1:pod:api-123',
-      featureSupport: { ...baseFeatureSupport, shell: true },
-    });
-
-    expect(result.capabilities.hasShell).toBe(true);
-  });
-
-  it('enables shell capability when websocket exec GET is allowed but create is denied', async () => {
-    const capabilityStateMap: Record<
-      string,
-      { allowed: boolean; pending: boolean; reason?: string }
-    > = {
-      'shell-exec-get': { allowed: true, pending: false },
-      'shell-exec-create': {
-        allowed: false,
-        pending: false,
-        reason: 'EKS Access Policy: denied create pods/exec',
-      },
-    };
-
-    mockUseCapabilities.mockImplementation(() => ({
-      getState: (id: string) => capabilityStateMap[id] ?? { allowed: false, pending: false },
-    }));
-
-    const result = await renderHook({
-      objectData: {
-        kind: 'Pod',
-        name: 'api-123',
-        namespace: 'team-a',
-        clusterId: 'c1',
-        group: '',
-        version: 'v1',
-      },
-      objectKind: 'pod',
-      detailScope: 'cluster-a|team-a:/v1:pod:api-123',
-      featureSupport: { ...baseFeatureSupport, shell: true },
-    });
-
-    expect(result.capabilities.hasShell).toBe(true);
-    expect(result.capabilityStates.shell.allowed).toBe(true);
-    expect(result.capabilityReasons.shell).toBeUndefined();
-  });
-
-  it('surfaces shell denial only when both exec verbs are denied', async () => {
-    const capabilityStateMap: Record<
-      string,
-      { allowed: boolean; pending: boolean; reason?: string }
-    > = {
-      'shell-exec-get': {
-        allowed: false,
-        pending: false,
-        reason: 'Forbidden: get pods/exec',
-      },
-      'shell-exec-create': {
-        allowed: false,
-        pending: false,
-        reason: 'Forbidden: create pods/exec',
-      },
-    };
-
-    mockUseCapabilities.mockImplementation(() => ({
-      getState: (id: string) => capabilityStateMap[id] ?? { allowed: false, pending: false },
-    }));
-
-    const result = await renderHook({
-      objectData: {
-        kind: 'Pod',
-        name: 'api-123',
-        namespace: 'team-a',
-        clusterId: 'c1',
-        group: '',
-        version: 'v1',
-      },
-      objectKind: 'pod',
-      detailScope: 'cluster-a|team-a:/v1:pod:api-123',
-      featureSupport: { ...baseFeatureSupport, shell: true },
-    });
-
-    expect(result.capabilities.hasShell).toBe(false);
-    expect(result.capabilityReasons.shell).toBe('Forbidden: get pods/exec');
-  });
-
-  it('surfaces debug-denied reason when ephemeralcontainers permission is denied', async () => {
-    const capabilityStateMap: Record<
-      string,
-      { allowed: boolean; pending: boolean; reason?: string }
-    > = {
-      'debug-ephemeral': {
-        allowed: false,
-        pending: false,
-        reason: 'Forbidden: pods/ephemeralcontainers',
-      },
-    };
-
-    mockUseCapabilities.mockImplementation(() => ({
-      getState: (id: string) => capabilityStateMap[id] ?? { allowed: false, pending: false },
-    }));
-
-    const result = await renderHook({
-      objectData: {
-        kind: 'Pod',
         name: 'demo',
-        namespace: 'team-a',
-        clusterId: 'c1',
-        group: '',
-        version: 'v1',
-      },
-      objectKind: 'pod',
-      detailScope: 'cluster-a|team-a:/v1:pod:demo',
-      featureSupport: { ...baseFeatureSupport, shell: true, debug: true },
-    });
-
-    expect(result.capabilityStates.debug.allowed).toBe(false);
-    expect(result.capabilityReasons.debug).toBe('Forbidden: pods/ephemeralcontainers');
+        verb: 'update',
+        subresource: 'ephemeralcontainers',
+      })
+    );
+    expect(capabilities().capabilityStates.debug.allowed).toBe(false);
+    expect(capabilities().capabilityReasons.debug).toBe('Forbidden: pods/ephemeralcontainers');
   });
 
-  it('allows debug when ephemeralcontainers permission is granted', async () => {
-    const capabilityStateMap: Record<string, { allowed: boolean; pending: boolean }> = {
-      'debug-ephemeral': { allowed: true, pending: false },
-    };
+  it('allows debug without a disabled reason when the review allows it with a reason', async () => {
+    app.permissions((query) =>
+      query.subresource === 'ephemeralcontainers'
+        ? { allowed: true, reason: 'EKS Access Policy: allowed by ClusterRoleBinding "example"' }
+        : true
+    );
+    await start();
 
-    mockUseCapabilities.mockImplementation(() => ({
-      getState: (id: string) => capabilityStateMap[id] ?? { allowed: false, pending: false },
-    }));
+    await showPanel(pod('demo'), { ...podFeatures, debug: true });
 
-    const result = await renderHook({
-      objectData: {
-        kind: 'Pod',
-        name: 'demo',
-        namespace: 'team-a',
-        clusterId: 'c1',
-        group: '',
-        version: 'v1',
-      },
-      objectKind: 'pod',
-      detailScope: 'cluster-a|team-a:/v1:pod:demo',
-      featureSupport: { ...baseFeatureSupport, shell: true, debug: true },
-    });
-
-    expect(result.capabilityStates.debug.allowed).toBe(true);
-    expect(result.capabilityReasons.debug).toBeUndefined();
+    expect(capabilities().capabilityStates.debug.allowed).toBe(true);
+    expect(capabilities().capabilityReasons.debug).toBeUndefined();
   });
 
-  it('does not surface a debug disabled reason when permission is allowed with an EKS reason', async () => {
-    const capabilityStateMap: Record<
-      string,
-      { allowed: boolean; pending: boolean; reason?: string }
-    > = {
-      'debug-ephemeral': {
-        allowed: true,
-        pending: false,
-        reason: 'EKS Access Policy: allowed by ClusterRoleBinding "example"',
-      },
-    };
-
-    mockUseCapabilities.mockImplementation(() => ({
-      getState: (id: string) => capabilityStateMap[id] ?? { allowed: false, pending: false },
-    }));
-
-    const result = await renderHook({
-      objectData: {
-        kind: 'Pod',
-        name: 'demo',
-        namespace: 'team-a',
-        clusterId: 'c1',
-        group: '',
-        version: 'v1',
-      },
-      objectKind: 'pod',
-      detailScope: 'cluster-a|team-a:/v1:pod:demo',
-      featureSupport: { ...baseFeatureSupport, shell: true, debug: true },
+  describe('node logs', () => {
+    const nodeFeatures: FeatureSupport = { ...noFeatures, logs: 'node' };
+    const journal = (unit: string) => ({
+      id: `journal/${unit}`,
+      label: `journal / ${unit}`,
+      kind: 'journal',
+      path: `journal/${unit}`,
     });
+    // Node log discovery is cached per cluster and node for the session, so each
+    // test names its own node.
+    const node = (name: string): ObjectIdentity => ({
+      group: '',
+      version: 'v1',
+      kind: 'Node',
+      namespace: '',
+      name,
+    });
+    const discoveryTargets = () => app.backend.calls('DiscoverNodeLogs').map(([target]) => target);
 
-    expect(result.capabilityStates.debug.allowed).toBe(true);
-    expect(result.capabilityReasons.debug).toBeUndefined();
-  });
+    it('enables node logs when discovery returns readable sources', async () => {
+      // backend/node_logs.go DiscoverNodeLogs for a node with a kubelet journal.
+      app.backend.answer('DiscoverNodeLogs', () => ({
+        supported: true,
+        sources: [journal('kubelet')],
+      }));
+      await start();
 
-  it('enables node logs when discovery returns readable sources', async () => {
-    mockUseCapabilities.mockImplementation(() => ({
-      getState: () => ({ allowed: false, pending: false }),
-    }));
-    mockDiscoverNodeLogs.mockResolvedValue({
-      supported: true,
-      sources: [
+      await showPanel(node('node-sources'), nodeFeatures);
+
+      expect(discoveryTargets()).toEqual([
         {
-          id: 'journal/kubelet',
-          label: 'journal / kubelet',
-          kind: 'journal',
-          path: 'journal/kubelet',
+          clusterId: dev.clusterId,
+          group: '',
+          version: 'v1',
+          kind: 'Node',
+          namespace: '',
+          name: 'node-sources',
         },
-      ],
+      ]);
+      expect(capabilities().nodeLogsState.allowed).toBe(true);
+      expect(capabilities().capabilities.hasObjPanelLogs).toBe(true);
+      expect(capabilities().nodeLogSources).toEqual([journal('kubelet')]);
+      expect(capabilities().capabilityReasons.nodeLogs).toBeUndefined();
     });
 
-    const result = await renderHook({
-      objectData: { kind: 'Node', name: 'node-a', clusterId: 'c1', group: '', version: 'v1' },
-      objectKind: 'node',
-      detailScope: 'node:node-a',
-      featureSupport: { ...baseFeatureSupport, objPanelLogs: false, nodeLogs: true },
+    it('reuses discovery for the same node instead of asking the backend again', async () => {
+      app.backend.answer('DiscoverNodeLogs', () => ({
+        supported: true,
+        sources: [journal('kubelet')],
+      }));
+      await start();
+      await showPanel(node('node-cached'), nodeFeatures);
+      view.clear();
+
+      await showPanel(node('node-cached'), nodeFeatures);
+
+      expect(discoveryTargets()).toHaveLength(1);
+      expect(capabilities().nodeLogsState.allowed).toBe(true);
+      expect(capabilities().nodeLogSources).toHaveLength(1);
     });
 
-    expect(mockDiscoverNodeLogs).toHaveBeenCalledWith('c1', 'node-a');
-    expect(result.capabilities.hasNodeLogs).toBe(true);
-    expect(result.capabilities.hasObjPanelLogs).toBe(true);
-    expect(result.nodeLogSources).toEqual([
-      {
-        id: 'journal/kubelet',
-        label: 'journal / kubelet',
-        kind: 'journal',
-        path: 'journal/kubelet',
-      },
-    ]);
-    expect(result.capabilityReasons.nodeLogs).toBeUndefined();
-  });
+    it('discovers a same-named node again in another cluster', async () => {
+      result = null;
+      dev = app.cluster({ name: 'dev', context: 'alpha' });
+      const other = app.cluster({ name: 'dev', context: 'beta' });
+      app.namespaces(dev, ['team-a']);
+      app.namespaces(other, ['team-a']);
+      app.backend.answer('DiscoverNodeLogs', (target) => ({
+        supported: true,
+        sources: [journal(target.clusterId === dev.clusterId ? 'kubelet' : 'containerd')],
+      }));
+      view = await app.render(null);
+      await showPanel(node('node-switch'), nodeFeatures);
+      expect(capabilities().nodeLogSources[0]?.path).toBe('journal/kubelet');
 
-  it('reuses cached node log discovery results for the same node', async () => {
-    mockUseCapabilities.mockImplementation(() => ({
-      getState: () => ({ allowed: false, pending: false }),
-    }));
-    mockGetCachedNodeLogDiscovery.mockReturnValue({
-      supported: true,
-      sources: [
-        {
-          id: 'journal/kubelet',
-          label: 'journal / kubelet',
-          kind: 'journal',
-          path: 'journal/kubelet',
-        },
-      ],
+      await view.show(
+        <CapabilitiesProbe
+          objectData={app.object(other, node('node-switch')).ref}
+          featureSupport={nodeFeatures}
+        />
+      );
+
+      expect(discoveryTargets().map((target) => target.clusterId)).toEqual([
+        dev.clusterId,
+        other.clusterId,
+      ]);
+      expect(capabilities().nodeLogSources[0]?.path).toBe('journal/containerd');
     });
 
-    const result = await renderHook({
-      objectData: { kind: 'Node', name: 'node-a', clusterId: 'c1', group: '', version: 'v1' },
-      objectKind: 'node',
-      detailScope: 'node:node-a',
-      featureSupport: { ...baseFeatureSupport, objPanelLogs: false, nodeLogs: true },
+    it('surfaces a node logs reason when discovery finds no readable sources', async () => {
+      app.backend.answer('DiscoverNodeLogs', () => ({
+        supported: false,
+        reason: 'node logs are not supported on this cluster',
+      }));
+      await start();
+
+      await showPanel(node('node-unsupported'), nodeFeatures);
+
+      expect(capabilities().nodeLogsState.allowed).toBe(false);
+      expect(capabilities().capabilities.hasObjPanelLogs).toBe(true);
+      expect(capabilities().nodeLogSources).toEqual([]);
+      expect(capabilities().capabilityReasons.nodeLogs).toBe(
+        'node logs are not supported on this cluster'
+      );
     });
-
-    expect(mockGetCachedNodeLogDiscovery).toHaveBeenCalledWith('c1', 'node-a');
-    expect(mockDiscoverNodeLogs).not.toHaveBeenCalled();
-    expect(result.capabilities.hasNodeLogs).toBe(true);
-    expect(result.nodeLogSources).toHaveLength(1);
-  });
-
-  it('does not leak cached node log discovery across cluster switches', async () => {
-    mockUseCapabilities.mockImplementation(() => ({
-      getState: () => ({ allowed: false, pending: false }),
-    }));
-    mockGetCachedNodeLogDiscovery.mockImplementation((clusterId: string, nodeName: string) => {
-      if (clusterId === 'c1' && nodeName === 'node-a') {
-        return {
-          supported: true,
-          sources: [
-            {
-              id: 'journal/kubelet',
-              label: 'journal / kubelet',
-              kind: 'journal',
-              path: 'journal/kubelet',
-            },
-          ],
-        };
-      }
-      return null;
-    });
-    mockDiscoverNodeLogs.mockResolvedValue({
-      supported: true,
-      sources: [
-        {
-          id: 'journal/containerd',
-          label: 'journal / containerd',
-          kind: 'journal',
-          path: 'journal/containerd',
-        },
-      ],
-    });
-
-    const first = await renderHook({
-      objectData: { kind: 'Node', name: 'node-a', clusterId: 'c1', group: '', version: 'v1' },
-      objectKind: 'node',
-      detailScope: 'node:node-a:c1',
-      featureSupport: { ...baseFeatureSupport, objPanelLogs: false, nodeLogs: true },
-    });
-
-    expect(first.nodeLogSources[0]?.path).toBe('journal/kubelet');
-    expect(mockDiscoverNodeLogs).not.toHaveBeenCalled();
-
-    const second = await renderHook({
-      objectData: { kind: 'Node', name: 'node-a', clusterId: 'c2', group: '', version: 'v1' },
-      objectKind: 'node',
-      detailScope: 'node:node-a:c2',
-      featureSupport: { ...baseFeatureSupport, objPanelLogs: false, nodeLogs: true },
-    });
-
-    expect(mockGetCachedNodeLogDiscovery).toHaveBeenCalledWith('c2', 'node-a');
-    expect(mockDiscoverNodeLogs).toHaveBeenCalledWith('c2', 'node-a');
-    expect(second.nodeLogSources[0]?.path).toBe('journal/containerd');
-  });
-
-  it('surfaces a node logs reason when discovery finds no readable sources', async () => {
-    mockUseCapabilities.mockImplementation(() => ({
-      getState: () => ({ allowed: false, pending: false }),
-    }));
-    mockDiscoverNodeLogs.mockResolvedValue({
-      supported: false,
-      sources: [],
-      reason: 'node logs are not supported on this cluster',
-    });
-
-    const result = await renderHook({
-      objectData: { kind: 'Node', name: 'node-a', clusterId: 'c1', group: '', version: 'v1' },
-      objectKind: 'node',
-      detailScope: 'node:node-a',
-      featureSupport: { ...baseFeatureSupport, objPanelLogs: false, nodeLogs: true },
-    });
-
-    expect(result.capabilities.hasNodeLogs).toBe(false);
-    expect(result.capabilities.hasObjPanelLogs).toBe(true);
-    expect(result.nodeLogSources).toEqual([]);
-    expect(result.capabilityReasons.nodeLogs).toBe('node logs are not supported on this cluster');
   });
 });

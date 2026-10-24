@@ -2,21 +2,17 @@ package snapshot
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	informers "k8s.io/client-go/informers"
-	"k8s.io/client-go/tools/cache"
-	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
-	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/backendtlspolicy"
@@ -47,22 +43,18 @@ const (
 // (scope + allowed-kind filtered) instead of pulling + re-projecting per request. Service rows
 // are OWN-fields (built with nil slices); the serve path re-joins the endpoint count from the
 // projected EndpointSlice store's join facts (a SERVE-time cross-kind join read from the ingest
-// source, like the workloads pod-aggregate overlay), byte-identical to the typed path. The
-// Gateway-API kinds are NOT cut and stay descriptor-driven via the stream registry
-// (registerMaintainedHandlers feeds their rows into the SAME store). The include* flags record
-// whether the request is permitted to read each cut kind (the gate the typed listers' presence
-// used to imply).
+// source, like the workloads pod-aggregate overlay). The Gateway API kinds are
+// descriptor-driven via the stream registry and feed their rows into the SAME store. The
+// include* flags record whether the request is permitted to read each kind.
 type NamespaceNetworkBuilder struct {
 	networkIngest          networkIngestSource
 	includeServices        bool
 	includeEndpointSlices  bool
 	includeIngresses       bool
 	includeNetworkPolicies bool
-	collectIndexer         func(streamspec.Descriptor) cache.Indexer
-	// maintained holds ALL the domain's OWN-rows (NetworkSummary): the four cut kinds'
-	// (Service/EndpointSlice/Ingress/NetworkPolicy) Table halves fed by each GVR's ingest
-	// Sink, AND the uncut Gateway-API kinds' rows fed from the Gateway-API informers
-	// (registerMaintainedHandlers). Build reads every own-row from it (scope + allowed-kind
+	available              kindAvailability
+	// maintained holds ALL the domain's OWN-rows (NetworkSummary), each kind's Table half
+	// fed by its GVR's ingest Sink. Build reads every own-row from it (scope + allowed-kind
 	// filtered) and re-joins the EndpointSlice endpoint count onto Service rows at serve. nil in
 	// a unit test with no store wired, in which case no own-rows are served (the SAME no-fallback
 	// contract nodes/workloads use; tests seed the store via the Sink).
@@ -96,62 +88,46 @@ func networkQuerypageSchema() querypage.Schema[NetworkSummary] {
 // this alias keeps the snapshot-side name and wire JSON unchanged.
 type NetworkSummary = streamrows.NetworkSummary
 
-// RegisterNamespaceNetworkDomainWithGatewayAPI registers the network domain,
-// wiring Gateway-API kinds from the Gateway-API factory when it is available.
+// RegisterNamespaceNetworkDomain registers the network domain.
 //
-// Service, EndpointSlice, Ingress, and NetworkPolicy are owned-reflector ingest kinds
-// (IngestOwned): the shared factory no longer caches them, so their projected OWN-rows (each
-// kind's Table-half NetworkSummary) are fed into the maintained store from each GVR's ingest
-// Sink — the SAME mechanism nodes/workloads use. Service and EndpointSlice are bespoke (no
-// streamspec.Descriptor), so feedMaintainedFromIngest (which loops StreamDescriptors) cannot
-// reach them; the four cut GVRs are wired explicitly here. The uncut Gateway-API kinds are fed
-// into the SAME store from the Gateway-API informers (registerMaintainedHandlers skips the
-// ingest-owned cut kinds, so it adds only the Gateway-API handlers). Build serves every own-row
-// from the one store and re-joins the EndpointSlice endpoint count onto Service rows at serve
-// (read from the ingest source, unchanged). The per-kind include flags gate which cut kinds the
-// request is permitted to read (the gate the typed listers' presence used to imply). When
-// ingestManager is nil (a unit test) the cut kinds have no Sink feed.
-func RegisterNamespaceNetworkDomainWithGatewayAPI(
+// Every network kind is an owned-reflector ingest kind, so each kind's projected
+// OWN-row (its Table-half NetworkSummary) is fed into one maintained store from
+// its ingest Sink. Service and EndpointSlice are bespoke (no
+// streamspec.Descriptor), so feedMaintainedFromIngest (which loops
+// StreamDescriptors) cannot reach them and they are wired explicitly here;
+// Ingress, NetworkPolicy, and the Gateway API kinds are stream-backed and fed by
+// feedMaintainedFromIngest. Build serves every own-row from the one store and
+// re-joins the EndpointSlice endpoint count onto Service rows at serve. The
+// per-kind include flags gate which kinds the request may read. When
+// ingestManager is nil (a unit test) the store has no feed.
+func RegisterNamespaceNetworkDomain(
 	reg *domain.Registry,
-	factory informers.SharedInformerFactory,
-	gatewayFactory gatewayinformers.SharedInformerFactory,
 	allowed domainpermissions.AllowedResources,
 	clusterMeta ClusterMeta,
 	ingestManager *ingest.IngestManager,
+	bell doorbell.Bell,
 ) error {
-	if factory == nil {
-		return fmt.Errorf("shared informer factory is nil")
-	}
-	collectIndexer := factoryIndexers(factory, gatewayFactory, allowed, namespaceNetworkDomainName, ingestManager)
+	available := ingestAvailability(allowed, namespaceNetworkDomainName, ingestManager)
 
-	// One store holds ALL the domain's own-rows. Feed the four cut kinds' Table halves from
-	// each GVR's whole-bundle ingest Sink (Service/EndpointSlice are bespoke, so they need an
-	// explicit Sink each; Ingress/NetworkPolicy are stream-backed cut kinds, also wired explicitly
-	// here for a single, uniform feed point), then feed the uncut Gateway-API kinds from their
-	// informers (registerMaintainedHandlers skips the ingest-owned cut kinds). The Sinks/handlers
-	// are registered BEFORE the ingest manager / informer factory start (this runs during
-	// registration), so the snapshot sync gate guarantees the store is populated before the
-	// first Build serves from it. nil ingestManager (a unit test) leaves the cut kinds unfed.
+	// One store holds ALL the domain's own-rows. Each kind's bundle sink is scoped
+	// to its kind, so one kind's relist replaces only that kind's rows. The sinks
+	// are registered BEFORE the ingest manager starts (this runs during
+	// registration), so the snapshot sync gate guarantees the store is populated
+	// before the first Build serves from it.
 	maintained := newTypedMaintainedStore(clusterMeta, networkQuerypageSchema(), networkTableQueryAdapter())
 	if ingestManager != nil {
-		// Each GVR's bundle sink is scoped to its kind so a relist of one cut kind's reflector
-		// replaces only that kind's rows and cannot sweep the other three from the shared store.
 		for _, nk := range []struct {
 			GVR  schema.GroupVersionResource
 			Kind string
 		}{
 			{ServiceGVR, service.Identity.Kind},
 			{EndpointSliceGVR, endpointslice.Identity.Kind},
-			{IngressGVR, ingress.Identity.Kind},
-			{NetworkPolicyGVR, networkpolicy.Identity.Kind},
 		} {
-			ingestManager.AddBundleSink(nk.GVR, maintained.bundleSinkForKind(nk.Kind))
+			ingestManager.AddBundleSink(nk.GVR, maintained.sinkFor(nk.Kind, namespacedRowPublication(maintained, namespaceNetworkDomainName, bell)))
 		}
 	}
-	if err := registerMaintainedHandlers(maintained, namespaceNetworkDomainName, collectIndexer, factory, gatewayFactory); err != nil {
-		return err
-	}
-	reg.RegisterMaintainedStore(namespaceNetworkDomainName, maintained) // spill/restore/reconcile across Cold/re-warm
+	feedMaintainedFromIngest(maintained, namespaceNetworkDomainName, ingestManager, bell, rowDerivation[NetworkSummary]{})
+	reg.RegisterMaintainedStore(namespaceNetworkDomainName, maintained) // spill/restore across Cold/re-warm
 
 	builder := &NamespaceNetworkBuilder{
 		networkIngest:          ingestManager,
@@ -159,7 +135,7 @@ func RegisterNamespaceNetworkDomainWithGatewayAPI(
 		includeEndpointSlices:  allowed.Allows(namespaceNetworkDiscoveryGroup, "endpointslices"),
 		includeIngresses:       allowed.Allows(namespaceNetworkNetworkingGroup, "ingresses"),
 		includeNetworkPolicies: allowed.Allows(namespaceNetworkNetworkingGroup, "networkpolicies"),
-		collectIndexer:         collectIndexer,
+		available:              available,
 		maintained:             maintained,
 	}
 	return reg.Register(refresh.DomainConfig{
@@ -177,7 +153,7 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 	if err != nil {
 		return nil, err
 	}
-	parsedScope, err := parseNamespaceSnapshotScope(refresh.JoinClusterScope(clusterID, baseScope), errNamespaceNetworkScopeRequired)
+	parsedScope, err := parseNamespaceSnapshotScope(namespaceNetworkDomainName, clusterID, baseScope, errNamespaceNetworkScopeRequired)
 	if err != nil {
 		return nil, err
 	}
@@ -200,12 +176,12 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 	// a permitted source row, matching the typed path.
 	readyCounts := namespaceEndpointSliceReadyCounts(b.networkIngest, namespace)
 
-	descriptorSources := collectDescriptorSources(ctx, namespaceNetworkDomainName, b.collectIndexer)
+	descriptorSources := collectDescriptorSources(ctx, namespaceNetworkDomainName, b.available)
 
-	// All own-rows come from the one Sink/informer-fed store: the four cut kinds' Table halves
+	// All own-rows come from the one Sink-fed store: the four cut kinds' Table halves
 	// (gated by their per-request availability) plus Gateway-API rows whose descriptor source
 	// still permits serving. Retained rows must follow current permission/readiness decisions,
-	// even when their informer was allowed at registration. A nil store (a unit test
+	// even when their reflector was allowed at registration. A nil store (a unit test
 	// with no store wired) yields no own-rows — the SAME no-fallback contract nodes/workloads use;
 	// the network tests seed the store via the Sink (seedNetworkMaintained).
 	var ownRows []NetworkSummary

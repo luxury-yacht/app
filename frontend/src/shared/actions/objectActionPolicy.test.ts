@@ -188,6 +188,22 @@ describe('resolveObjectActionPolicy', () => {
     ).toBe(OBJECT_ACTION_IDS.uncordon);
   });
 
+  // A Pod's Overview links its node as kind "node" (descriptors/pod.tsx), and
+  // object refs keep the kind as given, so the Node panel opened from that link
+  // must offer the same actions as one opened from the Nodes table.
+  it('offers node actions whatever the case of the node kind', () => {
+    const policy = resolveObjectActionPolicy({
+      object: { kind: 'node', group: '', version: 'v1', name: 'worker-1', clusterId: 'cluster-a' },
+      context: 'object-panel',
+      handlers: { cordon: true, drain: true },
+      permissions: { cordon: allowed, drain: allowed },
+    });
+
+    expect(policy.normalizedKind).toBe('Node');
+    expect(policy.cordonActionId).toBe(OBJECT_ACTION_IDS.cordon);
+    expect(policy.drainEnabled).toBe(true);
+  });
+
   it('keeps suspended CronJob trigger visible but disabled', () => {
     const policy = resolveObjectActionPolicy({
       object: {

@@ -12,40 +12,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestCollectFromNamespacedLister(t *testing.T) {
-	svc := &Service{now: time.Now}
-	desc := Descriptor{
-
-		Namespaced: true,
-		Kind:       "ConfigMap",
-		Group:      "",
-		Version:    "v1",
-		Resource:   "configmaps",
-		Scope:      ScopeNamespace,
-	}
-
-	var calls []string
-	list := func(ns string) ([]metav1.Object, error) {
-		calls = append(calls, ns)
-		obj := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm-" + ns, Namespace: ns, ResourceVersion: "1"}}
-		return []metav1.Object{obj}, nil
-	}
-
-	summaries, err := svc.collectFromNamespacedLister(desc, []string{"b", "a", "Cluster", "a"}, list)
-	if err != nil {
-		t.Fatalf("collectFromNamespacedLister returned error: %v", err)
-	}
-
-	expectedCalls := []string{"a", "b"}
-	if !reflect.DeepEqual(calls, expectedCalls) {
-		t.Fatalf("expected calls %v, got %v", expectedCalls, calls)
-	}
-
-	if len(summaries) != 2 || summaries[0].Ref.Name != "cm-a" || summaries[1].Ref.Name != "cm-b" {
-		t.Fatalf("unexpected summaries: %+v", summaries)
-	}
-}
-
 func TestListTargets(t *testing.T) {
 	namespaced := listTargets(Descriptor{Namespaced: true}, []string{})
 	if !reflect.DeepEqual(namespaced, []string{metav1.NamespaceAll}) {
@@ -58,7 +24,7 @@ func TestListTargets(t *testing.T) {
 	}
 }
 
-func TestSummariesFromObjects(t *testing.T) {
+func TestBuildSummaryCarriesObjectIdentity(t *testing.T) {
 	svc := &Service{now: time.Now}
 	desc := Descriptor{
 		Kind:       "ConfigMap",
@@ -69,40 +35,18 @@ func TestSummariesFromObjects(t *testing.T) {
 		Namespaced: true,
 	}
 	creation := metav1.NewTime(time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC))
-	objs := []metav1.Object{
-		&corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:              "cm",
-				Namespace:         "ns",
-				UID:               "uid-1",
-				ResourceVersion:   "42",
-				CreationTimestamp: creation,
-				Labels:            map[string]string{"key": "val"},
-			},
+	summary := svc.buildSummary(desc, &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "cm",
+			Namespace:         "ns",
+			UID:               "uid-1",
+			ResourceVersion:   "42",
+			CreationTimestamp: creation,
+			Labels:            map[string]string{"key": "val"},
 		},
-		nil,
-	}
-
-	summaries := svc.summariesFromObjects(desc, objs)
-	if len(summaries) != 1 {
-		t.Fatalf("expected 1 summary, got %d", len(summaries))
-	}
-
-	summary := summaries[0]
+	})
 	if summary.Ref.Name != "cm" || summary.Ref.Namespace != "ns" || summary.CreationTimestamp != creation.UTC().Format(time.RFC3339) || summary.LabelsDigest == "" {
 		t.Fatalf("unexpected summary: %+v", summary)
-	}
-}
-
-func TestToMetaObjects(t *testing.T) {
-	items := []*corev1.Secret{
-		{ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "ns"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "ns"}},
-	}
-
-	objs := toMetaObjects(items)
-	if len(objs) != 2 || objs[0].GetName() != "a" || objs[1].GetName() != "b" {
-		t.Fatalf("unexpected meta objects: %+v", objs)
 	}
 }
 

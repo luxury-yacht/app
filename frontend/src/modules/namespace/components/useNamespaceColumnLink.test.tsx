@@ -1,127 +1,105 @@
+/**
+ * frontend/src/modules/namespace/components/useNamespaceColumnLink.test.tsx
+ *
+ * The Namespace column link shared by resource tables: clicking a row's
+ * namespace selects that namespace in the row's cluster and opens the
+ * consumer's namespace view, with the sidebar following. Runs inside the
+ * production shell with the real kubeconfig, view-state, sidebar, and
+ * namespace owners over a faked backend (test-utils/appState).
+ */
+
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
-import type React from 'react';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { makeResourceRef } from '@/test-utils/makeResourceRef';
+import { requireValue } from '@/test-utils/requireValue';
 
-const viewStateMock = vi.hoisted(() => ({
-  setViewType: vi.fn(),
-  setActiveNamespaceTab: vi.fn(),
-}));
+const app = installAppStateHarness();
 
-const sidebarStateMock = vi.hoisted(() => ({
-  setSidebarSelection: vi.fn(),
-}));
+type Row = { ref: ReturnType<typeof makeResourceRef>; objectNamespace?: string };
 
-const namespaceMock = vi.hoisted(() => ({
-  setSelectedNamespace: vi.fn(),
-}));
+let link: ReturnType<typeof useNamespaceColumnLink<Row>> | undefined;
 
-vi.mock('@/core/contexts/ViewStateContext', () => ({
-  useViewState: () => viewStateMock,
-}));
+function DefaultLink() {
+  link = useNamespaceColumnLink<Row>('autoscaling');
+  return null;
+}
 
-vi.mock('@/core/contexts/SidebarStateContext', () => ({
-  useSidebarState: () => sidebarStateMock,
-}));
+// The accessor NsViewEvents passes: an event links to its involved object's namespace.
+const involvedObjectNamespace = (row: Row) => row.objectNamespace || row.ref.namespace;
+function EventsLink() {
+  link = useNamespaceColumnLink<Row>('events', involvedObjectNamespace);
+  return null;
+}
 
-vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
-  useNamespace: () => namespaceMock,
-}));
+const rowIn = (cluster: TestCluster, namespace: string, objectNamespace?: string): Row => ({
+  ref: makeResourceRef({
+    clusterId: cluster.clusterId,
+    kind: 'Event',
+    resource: 'events',
+    namespace,
+    name: 'event-1',
+  }),
+  objectNamespace,
+});
 
-const renderHook = <T,>(hook: () => T) => {
-  const result: { current: T | undefined } = { current: undefined };
+const start = async (probe: React.ReactNode) => {
+  const dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['team-a', 'team-b']);
+  const view = await app.render(null);
+  await view.show(probe);
+  return { dev, view };
+};
 
-  const TestComponent: React.FC = () => {
-    result.current = hook();
-    return null;
-  };
-
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = ReactDOM.createRoot(container);
-
-  act(() => {
-    root.render(<TestComponent />);
+const click = async (row: Row) => {
+  await act(async () => {
+    requireValue(link, 'mounted namespace link').onClick(row);
   });
+  await app.settle();
+};
 
+const navigation = (view: MountedApp) => {
+  const { namespace, viewState } = view.owners();
   return {
-    get() {
-      if (result.current === undefined) {
-        throw new Error('Hook result not set');
-      }
-      return result.current;
-    },
-    cleanup() {
-      act(() => {
-        root.unmount();
-      });
-      container.remove();
-    },
+    namespace: namespace.selectedNamespace,
+    clusterId: namespace.selectedNamespaceClusterId,
+    view: viewState?.viewType,
+    tab: viewState?.activeNamespaceTab,
+    sidebar: viewState?.sidebarSelection,
   };
 };
 
 describe('useNamespaceColumnLink', () => {
-  beforeEach(() => {
-    viewStateMock.setViewType.mockReset();
-    viewStateMock.setActiveNamespaceTab.mockReset();
-    sidebarStateMock.setSidebarSelection.mockReset();
-    namespaceMock.setSelectedNamespace.mockReset();
+  it('opens the consumer’s view of the clicked row’s namespace in the row’s cluster', async () => {
+    const { dev, view } = await start(<DefaultLink />);
+
+    await click(rowIn(dev, 'team-a'));
+
+    expect(navigation(view)).toEqual({
+      namespace: 'team-a',
+      clusterId: dev.clusterId,
+      view: 'namespace',
+      tab: 'autoscaling',
+      sidebar: { type: 'namespace', value: 'team-a' },
+    });
   });
 
-  it('navigates to the requested namespace tab for the clicked namespace', () => {
-    const hook = renderHook(() =>
-      useNamespaceColumnLink<{ ref: ReturnType<typeof makeResourceRef> }>('autoscaling')
-    );
-    const options = hook.get();
+  it('opens the namespace the consumer’s accessor names instead of the row’s own', async () => {
+    const { dev, view } = await start(<EventsLink />);
 
-    options.onClick({
-      ref: makeResourceRef({
-        clusterId: 'alpha:ctx',
-        kind: 'Pod',
-        resource: 'pods',
-        namespace: 'team-a',
-        name: 'api-1',
-      }),
+    await click(rowIn(dev, 'team-a', 'team-b'));
+
+    expect(navigation(view)).toEqual({
+      namespace: 'team-b',
+      clusterId: dev.clusterId,
+      view: 'namespace',
+      tab: 'events',
+      sidebar: { type: 'namespace', value: 'team-b' },
     });
-
-    expect(namespaceMock.setSelectedNamespace).toHaveBeenCalledWith('team-a', 'alpha:ctx');
-    expect(viewStateMock.setViewType).toHaveBeenCalledWith('namespace');
-    expect(sidebarStateMock.setSidebarSelection).toHaveBeenCalledWith({
-      type: 'namespace',
-      value: 'team-a',
-    });
-    expect(viewStateMock.setActiveNamespaceTab).toHaveBeenCalledWith('autoscaling');
-
-    hook.cleanup();
-  });
-
-  it('supports a custom namespace accessor', () => {
-    const hook = renderHook(() =>
-      useNamespaceColumnLink<{
-        ref: ReturnType<typeof makeResourceRef>;
-        namespace?: string;
-        objectNamespace?: string;
-      }>('events', (item) => item.objectNamespace ?? item.namespace)
-    );
-    const options = hook.get();
-
-    options.onClick({
-      ref: makeResourceRef({
-        clusterId: 'alpha:ctx',
-        kind: 'Event',
-        resource: 'events',
-        namespace: 'ignored',
-        name: 'event-1',
-      }),
-      namespace: 'ignored',
-      objectNamespace: 'team-b',
-    });
-
-    expect(namespaceMock.setSelectedNamespace).toHaveBeenCalledWith('team-b', 'alpha:ctx');
-    expect(viewStateMock.setActiveNamespaceTab).toHaveBeenCalledWith('events');
-
-    hook.cleanup();
   });
 });

@@ -53,6 +53,8 @@ export interface ObjectActionHandlers {
   onSuspendToggle?: () => void;
   // Event actions - view the involved object
   onViewInvolvedObject?: () => void;
+  // Namespace actions - open the namespace's own views
+  onGoToNamespace?: () => void;
   // Object map - kind-agnostic so any view can opt in. v1 only wires
   // this from NsViewWorkloads; the menu item is hidden when no handler
   // is provided so other views are unaffected until they pass it.
@@ -61,7 +63,6 @@ export interface ObjectActionHandlers {
 
 let nextObjectDiffRequestId = 1;
 
-export { normalizeKind, SCALABLE_KINDS } from '@shared/actions/objectActionPolicy';
 export type { ObjectActionData, PermissionStatus };
 
 // Options for building action items
@@ -128,9 +129,15 @@ const buildTableNavigationItem = ({
   };
 };
 
+// The core Event and Namespace kinds name their own menu items: the kind is the
+// data. A custom resource that shares the name is not either.
+const isCoreKind = (object: ObjectActionData, kind: 'Event' | 'Namespace'): boolean =>
+  object.group === '' && object.kind === kind;
+
 const buildDiffItem = (object: ObjectActionData): ContextMenuItem | null => {
+  // An event row's menu acts on its involved object, which the row cannot diff.
   const selection =
-    object.kind === 'Event' && object.involvedObject ? null : buildObjectDiffSelection(object);
+    isCoreKind(object, 'Event') && object.involvedObject ? null : buildObjectDiffSelection(object);
   if (!selection) {
     return null;
   }
@@ -152,7 +159,7 @@ const buildInvolvedObjectItem = (
   handlers: ObjectActionHandlers
 ): ContextMenuItem | null => {
   const hasInvolvedObject = Boolean(object.involvedObject || object.involvedObjectRef);
-  if (object.kind !== 'Event' || !hasInvolvedObject || !handlers.onViewInvolvedObject) {
+  if (!isCoreKind(object, 'Event') || !hasInvolvedObject || !handlers.onViewInvolvedObject) {
     return null;
   }
   // The label names the kind from the backend's involved-object link.
@@ -168,6 +175,21 @@ const buildInvolvedObjectItem = (
   };
 };
 
+const buildGoToNamespaceItem = (
+  object: ObjectActionData,
+  handlers: ObjectActionHandlers
+): ContextMenuItem | null => {
+  if (!isCoreKind(object, 'Namespace') || !handlers.onGoToNamespace) {
+    return null;
+  }
+  return {
+    actionId: OBJECT_ACTION_IDS.goToNamespace,
+    label: objectActionLabel(OBJECT_ACTION_IDS.goToNamespace),
+    icon: <OpenIcon />,
+    onClick: handlers.onGoToNamespace,
+  };
+};
+
 const buildNavigationItems = ({
   object,
   context,
@@ -177,6 +199,7 @@ const buildNavigationItems = ({
     buildOpenItem({ context, handlers }),
     buildObjectMapItem(handlers),
     buildTableNavigationItem({ context, handlers }),
+    buildGoToNamespaceItem(object, handlers),
     buildDiffItem(object),
     buildInvolvedObjectItem(object, handlers),
   ]);
@@ -186,9 +209,7 @@ const buildCronJobItems = (
   handlers: ObjectActionHandlers,
   actionLoading: boolean
 ): ContextMenuItem[] => {
-  if (policy.normalizedKind !== 'CronJob') {
-    return [];
-  }
+  // The policy enables these only for kinds whose trigger/suspend facets allow them.
   const triggerItem = policy.triggerEnabled
     ? {
         actionId: OBJECT_ACTION_IDS.triggerNow,

@@ -4,35 +4,31 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/labels"
-	informers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
-	corelisters "k8s.io/client-go/listers/core/v1"
-	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
-	"github.com/luxury-yacht/app/backend/kind/streamrows"
+	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	eventres "github.com/luxury-yacht/app/backend/resources/events"
 )
 
 const objectEventsDomain = "object-events"
-const objectEventIndexName = "events:object"
 
-// ObjectEventsBuilder gathers events for a specific object.
+// ObjectEventsBuilder gathers events for a specific object. It reads the owned
+// events reflector's store once it has synced, and lists from the API before.
 type ObjectEventsBuilder struct {
-	client       kubernetes.Interface
-	eventLister  corelisters.EventLister
-	eventIndexer cache.Indexer
-	eventSynced  cache.InformerSynced
+	client kubernetes.Interface
+	events eventStore
 }
 
 // ObjectEventSummary captures the fields the frontend needs for object events.
@@ -63,68 +59,33 @@ type ObjectEventsSnapshotPayload struct {
 // RegisterObjectEventsDomain registers the object-events domain.
 //
 // It returns the change notifier that replaces the Object Panel Events tab's
-// poll: the SAME shared events informer the builder reads feeds it (handler
-// registered HERE, before the informer factory starts), and the subsystem
-// wires its broadcast to the resource-stream doorbell once the stream manager
-// exists. The notifier is nil when no informer factory is available (the
-// API-list fallback path has no push source; the poll covers it).
+// poll: the events store the builder reads feeds it (the sink is added here,
+// before the reflectors start), and it rings bell. The notifier is nil when
+// there is no ingest manager (unit tests; the API-list path has no push
+// source, and the poll covers it).
 func RegisterObjectEventsDomain(
 	reg *domain.Registry,
 	client kubernetes.Interface,
-	factory informers.SharedInformerFactory,
+	ingestManager *ingest.IngestManager,
+	bell doorbell.Bell,
 ) (*ObjectEventsChangeNotifier, error) {
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client is required for object events domain")
 	}
 	builder := &ObjectEventsBuilder{client: client}
-	notifier, err := configureObjectEventsInformer(factory, builder)
-	if err != nil {
-		return nil, err
+	var notifier *ObjectEventsChangeNotifier
+	if ingestManager != nil {
+		notifier = NewObjectEventsChangeNotifier(bell)
+		if !ingestManager.AddBundleSink(EventGVR, notifier) {
+			return nil, fmt.Errorf("%s: events ingest store is unavailable", objectEventsDomain)
+		}
+		builder.events = ingestManager
 	}
 	if err := reg.Register(refresh.DomainConfig{
 		Name:          objectEventsDomain,
 		BuildSnapshot: builder.Build,
 	}); err != nil {
 		return nil, err
-	}
-	return notifier, nil
-}
-
-func configureObjectEventsInformer(factory informers.SharedInformerFactory, builder *ObjectEventsBuilder) (*ObjectEventsChangeNotifier, error) {
-	if factory == nil {
-		return nil, nil
-	}
-	eventInformer := factory.Core().V1().Events()
-	if eventInformer == nil {
-		return nil, nil
-	}
-	_ = eventInformer.Informer().AddIndexers(cache.Indexers{
-		objectEventIndexName: objectEventIndex,
-	})
-	builder.eventLister = eventInformer.Lister()
-	builder.eventIndexer = eventInformer.Informer().GetIndexer()
-	builder.eventSynced = eventInformer.Informer().HasSynced
-
-	notifier := NewObjectEventsChangeNotifier()
-	record := func(obj interface{}) {
-		if evt, ok := maintainedUnwrap(obj).(*corev1.Event); ok {
-			notifier.EventChanged(evt)
-		}
-	}
-	_, err := eventInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: record,
-		UpdateFunc: func(oldObj, newObj interface{}) {
-			// Informer resyncs re-deliver every event with an unchanged
-			// ResourceVersion; only real changes ring the doorbell.
-			if informerUpdateIsEcho(oldObj, newObj) {
-				return
-			}
-			record(newObj)
-		},
-		DeleteFunc: record,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("object-events: register event handler: %w", err)
 	}
 	return notifier, nil
 }
@@ -144,41 +105,22 @@ func (b *ObjectEventsBuilder) Build(ctx context.Context, scope string) (*refresh
 	group := identity.GVK.Group
 	meta := ClusterMetaFromContext(ctx)
 
-	// Prefer informer cache once synced; fall back to API list to preserve pre-sync/error behavior.
-	if b.eventLister != nil && b.eventSynced != nil && b.eventSynced() {
-		events, version, cacheErr := b.listEventsFromCache(namespace, group, kind, name)
-		if cacheErr == nil {
-			return b.buildSnapshot(meta, scope, events, version), nil
-		}
+	// Prefer the events store once synced; list from the API before then.
+	if eventsStoreSynced(b.events) {
+		records := storedEventRecords(b.events, func(fact *EventFact) bool {
+			return fact.involves(namespace, group, kind, name)
+		})
+		return buildObjectEventsSnapshot(meta, scope, records, maxEventRecordVersion(records)), nil
 	}
 
-	events, version, err := b.listEventsFromAPI(ctx, namespace, group, kind, name)
+	records, version, err := b.listEventsFromAPI(ctx, meta, namespace, group, kind, name)
 	if err != nil {
 		return nil, err
 	}
-
-	return b.buildSnapshot(meta, scope, events, version), nil
+	return buildObjectEventsSnapshot(meta, scope, records, version), nil
 }
 
-func (b *ObjectEventsBuilder) listEventsFromCache(namespace, group, kind, name string) ([]*corev1.Event, uint64, error) {
-	if b.eventLister == nil {
-		return nil, 0, fmt.Errorf("event cache not configured")
-	}
-	events, err := b.listEventsByIndex(namespace, group, kind, name)
-	if err != nil {
-		return nil, 0, err
-	}
-	if events == nil {
-		events, err = b.listEventsByScan(namespace, group, kind, name)
-		if err != nil {
-			return nil, 0, err
-		}
-	}
-	version := maxEventVersion(events)
-	return events, version, nil
-}
-
-func (b *ObjectEventsBuilder) listEventsFromAPI(ctx context.Context, namespace, group, kind, name string) ([]*corev1.Event, uint64, error) {
+func (b *ObjectEventsBuilder) listEventsFromAPI(ctx context.Context, meta ClusterMeta, namespace, group, kind, name string) ([]eventRecord, uint64, error) {
 	selectors := []fields.Selector{
 		fields.OneTermEqualSelector("involvedObject.name", name),
 	}
@@ -202,80 +144,38 @@ func (b *ObjectEventsBuilder) listEventsFromAPI(ctx context.Context, namespace, 
 		return nil, 0, err
 	}
 
-	events := make([]*corev1.Event, 0, len(list.Items))
+	project := newEventRecordProjector(meta.ClusterID)
+	records := make([]eventRecord, 0, len(list.Items))
 	for i := range list.Items {
-		if involvedObjectMatchesGroup(&list.Items[i], group) {
-			events = append(events, &list.Items[i])
+		if involvedAPIGroupMatches(list.Items[i].InvolvedObject.APIVersion, group) {
+			records = append(records, project(&list.Items[i]))
 		}
 	}
 	version := parseSnapshotResourceVersion(list.ResourceVersion)
-	return events, version, nil
+	return records, version, nil
 }
 
-func (b *ObjectEventsBuilder) listEventsByIndex(namespace, group, kind, name string) ([]*corev1.Event, error) {
-	if b.eventIndexer == nil {
-		return nil, nil
-	}
-	if _, ok := b.eventIndexer.GetIndexers()[objectEventIndexName]; !ok {
-		return nil, nil
-	}
-	// The index is keyed by namespace|kind|name (group-agnostic). The group
-	// post-filter drops events for sibling CRDs that share kind/name in the
-	// same namespace.
-	key := buildObjectEventIndexKey(namespace, kind, name)
-	items, err := b.eventIndexer.ByIndex(objectEventIndexName, key)
-	if err != nil {
-		return nil, err
-	}
-	events := make([]*corev1.Event, 0, len(items))
-	for _, item := range items {
-		evt, ok := item.(*corev1.Event)
-		if !ok || evt == nil {
-			continue
-		}
-		if !involvedObjectMatchesGroup(evt, group) {
-			continue
-		}
-		events = append(events, evt)
-	}
-	return events, nil
-}
-
-func (b *ObjectEventsBuilder) listEventsByScan(namespace, group, kind, name string) ([]*corev1.Event, error) {
-	events, err := b.eventLister.List(labels.Everything())
-	if err != nil {
-		return nil, err
-	}
-	filtered := make([]*corev1.Event, 0, len(events))
-	for _, evt := range events {
-		if eventInvolvesObject(evt, namespace, group, kind, name) {
-			filtered = append(filtered, evt)
-		}
-	}
-	return filtered, nil
-}
-
-// eventInvolvesObject applies the index's namespace|kind|name match plus the
-// group post-filter to one event, for the cache-scan path.
-func eventInvolvesObject(evt *corev1.Event, namespace, group, kind, name string) bool {
-	if evt == nil || evt.InvolvedObject.Name == "" || evt.InvolvedObject.Name != name {
+// involves reports whether the Event is about the object: namespace, kind, and
+// name match the way the object's event key does (case-insensitive namespace
+// and kind, trimmed), then the group.
+func (f *EventFact) involves(namespace, group, kind, name string) bool {
+	involvedName := strings.TrimSpace(f.InvolvedName)
+	if involvedName == "" || involvedName != strings.TrimSpace(name) {
 		return false
 	}
-	if namespace != "" && evt.InvolvedObject.Namespace != namespace {
+	if !strings.EqualFold(strings.TrimSpace(f.InvolvedNamespace), strings.TrimSpace(namespace)) ||
+		!strings.EqualFold(strings.TrimSpace(f.InvolvedKind), strings.TrimSpace(kind)) {
 		return false
 	}
-	if kind != "" && !strings.EqualFold(evt.InvolvedObject.Kind, kind) {
-		return false
-	}
-	return involvedObjectMatchesGroup(evt, group)
+	return involvedAPIGroupMatches(f.InvolvedAPIVersion, group)
 }
 
-// involvedObjectMatchesGroup reports whether the event's involved object
-// belongs to the requested API group. An event recorded without an apiVersion
-// cannot name a group, so it matches; kind, namespace, and name already did.
-// API group names are case-sensitive per RFC 1123.
-func involvedObjectMatchesGroup(evt *corev1.Event, group string) bool {
-	apiVersion := strings.TrimSpace(evt.InvolvedObject.APIVersion)
+// involvedAPIGroupMatches reports whether an event's involved object belongs
+// to the requested API group. An event recorded without an apiVersion cannot
+// name a group, so it matches; kind, namespace, and name already did. API
+// group names are case-sensitive per RFC 1123.
+func involvedAPIGroupMatches(apiVersion, group string) bool {
+	apiVersion = strings.TrimSpace(apiVersion)
 	if apiVersion == "" {
 		return true
 	}
@@ -283,19 +183,19 @@ func involvedObjectMatchesGroup(evt *corev1.Event, group string) bool {
 	return eventGroup == group
 }
 
-func (b *ObjectEventsBuilder) buildSnapshot(meta ClusterMeta, scope string, events []*corev1.Event, version uint64) *refresh.Snapshot {
-	kept := make([]*corev1.Event, 0, len(events))
-	for _, evt := range events {
-		if evt != nil && evt.InvolvedObject.Name != "" {
-			kept = append(kept, evt)
+func buildObjectEventsSnapshot(meta ClusterMeta, scope string, records []eventRecord, version uint64) *refresh.Snapshot {
+	kept := make([]eventRecord, 0, len(records))
+	for _, record := range records {
+		if record.fact.InvolvedName != "" {
+			kept = append(kept, record)
 		}
 	}
 	// Truncation keeps the most recently observed events.
-	sort.SliceStable(kept, func(i, j int) bool { return compareEventOrder(kept[i], kept[j]) < 0 })
+	sort.SliceStable(kept, func(i, j int) bool { return compareEventRecordOrder(kept[i], kept[j]) < 0 })
 	totalItems := len(kept)
 	summaries := make([]ObjectEventSummary, 0, min(totalItems, config.SnapshotObjectEventsLimit))
-	for _, evt := range kept[:min(totalItems, config.SnapshotObjectEventsLimit)] {
-		summaries = append(summaries, convertObjectEvent(meta, *evt))
+	for _, record := range kept[:min(totalItems, config.SnapshotObjectEventsLimit)] {
+		summaries = append(summaries, convertObjectEvent(meta, record))
 	}
 
 	payload := ObjectEventsSnapshotPayload{ClusterMeta: meta, Events: summaries}
@@ -318,19 +218,6 @@ func (b *ObjectEventsBuilder) buildSnapshot(meta ClusterMeta, scope string, even
 	}
 }
 
-func objectEventIndex(obj interface{}) ([]string, error) {
-	evt, ok := obj.(*corev1.Event)
-	if !ok || evt == nil {
-		return nil, nil
-	}
-	name := strings.TrimSpace(evt.InvolvedObject.Name)
-	if name == "" {
-		return nil, nil
-	}
-	key := buildObjectEventIndexKey(evt.InvolvedObject.Namespace, evt.InvolvedObject.Kind, name)
-	return []string{key}, nil
-}
-
 func buildObjectEventIndexKey(namespace, kind, name string) string {
 	return strings.ToLower(strings.TrimSpace(namespace)) +
 		"|" +
@@ -339,37 +226,46 @@ func buildObjectEventIndexKey(namespace, kind, name string) string {
 		strings.TrimSpace(name)
 }
 
-func maxEventVersion(events []*corev1.Event) uint64 {
+// maxEventRecordVersion is the newest resourceVersion among the records, or
+// their newest creation time when none has a numeric resourceVersion.
+func maxEventRecordVersion(records []eventRecord) uint64 {
 	var version uint64
-	for _, evt := range events {
-		if evt == nil {
-			continue
-		}
-		if v := resourceVersionOrTimestamp(evt); v > version {
+	for _, record := range records {
+		if v := eventRecordVersion(record.summary); v > version {
 			version = v
 		}
 	}
 	return version
 }
 
-func convertObjectEvent(meta ClusterMeta, evt corev1.Event) ObjectEventSummary {
-	facts := eventres.BuildFacts(meta.ClusterID, &evt)
+func eventRecordVersion(summary objectcatalog.Summary) uint64 {
+	if parsed, err := strconv.ParseUint(summary.ResourceVersion, 10, 64); err == nil {
+		return parsed
+	}
+	created, err := time.Parse(time.RFC3339, summary.CreationTimestamp)
+	if err != nil {
+		return 0
+	}
+	return uint64(created.UnixNano())
+}
 
+func convertObjectEvent(meta ClusterMeta, record eventRecord) ObjectEventSummary {
+	fact := record.fact
 	return ObjectEventSummary{
-		Ref:                     streamrows.NewResourceRef(meta, eventres.Identity, &evt),
-		Metadata:                streamrows.NewResourceMetadata(&evt),
-		ResourceVersion:         evt.ResourceVersion,
-		EventType:               facts.EventType,
-		Reason:                  facts.Reason,
-		Message:                 facts.Message,
-		Count:                   facts.Count,
-		FirstTimestamp:          facts.FirstTimestamp.Time,
-		LastTimestamp:           facts.LastTimestamp.Time,
-		Source:                  facts.Source,
-		InvolvedObjectName:      evt.InvolvedObject.Name,
-		InvolvedObjectKind:      evt.InvolvedObject.Kind,
-		InvolvedObjectNamespace: evt.InvolvedObject.Namespace,
-		InvolvedObjectUID:       string(evt.InvolvedObject.UID),
-		InvolvedObject:          facts.InvolvedObject,
+		Ref:                     record.summary.Ref,
+		Metadata:                record.summary.Metadata,
+		ResourceVersion:         record.summary.ResourceVersion,
+		EventType:               fact.Type,
+		Reason:                  strings.TrimSpace(fact.Reason),
+		Message:                 strings.TrimSpace(fact.Message),
+		Count:                   fact.Count,
+		FirstTimestamp:          timeFromUnixNanos(fact.FirstObserved),
+		LastTimestamp:           timeFromUnixNanos(fact.LastObserved),
+		Source:                  fact.Source,
+		InvolvedObjectName:      fact.InvolvedName,
+		InvolvedObjectKind:      fact.InvolvedKind,
+		InvolvedObjectNamespace: fact.InvolvedNamespace,
+		InvolvedObjectUID:       fact.InvolvedUID,
+		InvolvedObject:          eventres.ObjectLink(meta.ClusterID, fact.involvedObject()),
 	}
 }

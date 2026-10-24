@@ -10,7 +10,6 @@ import { operatorColumns } from '@modules/browse/components/operatorColumns';
  * Handles rendering and interactions for the cluster feature.
  */
 
-import './ClusterViewCustom.css';
 import {
   CustomResourceGridFrame,
   type CustomResourceGridRow,
@@ -21,6 +20,7 @@ import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGri
 import { TABLE_PAGE_SIZE_OPTIONS } from '@shared/components/tables/pageSizeOptions';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import React, { useMemo } from 'react';
+import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 import { karpenterColumns } from './karpenterColumns';
 
 // The binding's header arrow and the catalog query must agree on the default
@@ -44,7 +44,7 @@ interface ClusterCustomViewProps {
   resourceFamily?: ClusterResourceFamily;
   loading?: boolean;
   loaded?: boolean;
-  error?: string | null;
+  error?: RefreshFailure | null;
 }
 
 /**

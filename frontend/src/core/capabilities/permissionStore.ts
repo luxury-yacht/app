@@ -167,7 +167,7 @@ let unsubClusterLifecycle: UnsubscribeFn | null = null;
  * source "error" maps to entry.status 'error' with error populated;
  * all other sources map to 'ready'.
  */
-export const makePermissionStatus = (key: string, entry: PermissionEntry): PermissionStatus => {
+const makePermissionStatus = (key: string, entry: PermissionEntry): PermissionStatus => {
   const isError = entry.source === 'error';
   return {
     id: key,
@@ -774,112 +774,142 @@ export const queryClusterPermissions = (clusterId: string): void => {
     });
 };
 
-/**
- * Lazy-query permissions for a specific resource kind. Used for CRD custom
- * objects whose kinds aren't in the static permission spec lists. Queries
- * delete and patch verbs for the given kind. Results are cached under the
- * standard permission key format and reused by all objects of the same kind
- * in the same namespace.
- *
- * Designed for lazy/on-demand use (e.g., first context menu open on a CRD
- * object). The first call fires the query; subsequent calls for the same
- * kind+namespace within TTL are no-ops.
- *
- * `group` and `version` MUST be supplied by callers when known so the
- * backend can disambiguate colliding CRDs (e.g. two `DBInstance` kinds
- * from different operators). Unknown kinds without an explicit version are
- * rejected by the backend's GVK guard.
- */
-export const queryKindPermissions = (
-  kind: string,
-  namespace: string | null,
-  clusterId: string | null,
-  group?: string | null,
-  version?: string | null
-): void => {
-  const cid = clusterId || currentClusterId;
-  if (!cid || !kind) {
-    return;
+/** One permission check an object's action needs. */
+export interface PermissionCheck {
+  clusterId: string;
+  resourceKind: string;
+  verb: string;
+  namespace?: string | null;
+  subresource?: string | null;
+  // Required for custom kinds: two kinds can share a name across API groups.
+  group?: string | null;
+  version?: string | null;
+}
+
+interface PendingCheck {
+  queryKey: string;
+  payload: QueryPayloadItem;
+  pending: PendingSpecItem;
+}
+
+// A check with its cluster, API group/version, and key resolved; null when it
+// names no cluster or kind.
+const normalizeCheck = (check: PermissionCheck) => {
+  const clusterId = check.clusterId || currentClusterId;
+  if (!clusterId || !check.resourceKind) {
+    return null;
   }
-
-  // Resolve GVK once: honour caller-supplied group/version (required for
-  // CRDs) or fall back to the built-in lookup. The backend rejects
-  // queries with missing Version, so every payload item must carry a
-  // resolved version before we fire the RPC.
-  const { group: groupVal, version: versionVal } = resolvePermissionGVK(kind, group, version);
-
-  // Include group/version in the query key so per-CRD TTL skip works.
-  // Two DBInstance CRDs from different groups must NOT share a query key.
-  const ns = namespace ?? '';
-  const gvSegment = `${groupVal}/${versionVal}`;
-  const queryKey = `${cid}|${ns}|kind:${gvSegment}/${kind.toLowerCase()}`;
-  if (inFlightQueries.has(queryKey)) {
-    return;
-  }
-
-  const lastQuery = lastQueryTimestamps.get(queryKey);
-  if (lastQuery && Date.now() - lastQuery < PERMISSION_REFRESH_INTERVAL_MS) {
-    return;
-  }
-
-  const verbs = ['delete', 'patch'];
-  const payload: QueryPayloadItem[] = verbs.map((verb) => ({
-    id: getPermissionKey(kind, verb, namespace, null, cid, groupVal, versionVal),
-    clusterId: cid,
-    group: groupVal,
-    version: versionVal || undefined,
-    resourceKind: kind,
-    verb,
-    namespace: ns,
-    subresource: '',
-    name: '',
-  }));
-
-  const feature = namespace
-    ? PERMISSION_FEATURES.namespaceCustom
-    : PERMISSION_FEATURES.clusterCustom;
-
-  // Register pending specs so the permission map immediately contains
-  // pending entries. This lets the context menu show "Awaiting permissions"
-  // on the first open rather than an empty action list.
-  pendingSpecs.set(
-    queryKey,
-    verbs.map((verb) => ({
-      spec: {
-        kind,
-        verb,
-        group: groupVal,
-        version: versionVal || undefined,
-      },
-      feature,
-      clusterId: cid,
+  const { group, version } = resolvePermissionGVK(check.resourceKind, check.group, check.version);
+  const namespace = check.namespace || null;
+  const subresource = check.subresource || null;
+  return {
+    id: getPermissionKey(
+      check.resourceKind,
+      check.verb,
       namespace,
-    }))
+      subresource,
+      clusterId,
+      group,
+      version
+    ),
+    clusterId,
+    resourceKind: check.resourceKind,
+    verb: check.verb,
+    group,
+    version,
+    namespace,
+    subresource,
+  };
+};
+
+const askedRecently = (queryKey: string): boolean => {
+  const lastQuery = lastQueryTimestamps.get(queryKey);
+  return (
+    inFlightQueries.has(queryKey) ||
+    (lastQuery !== undefined && Date.now() - lastQuery < PERMISSION_REFRESH_INTERVAL_MS)
   );
+};
+
+// A check the map should learn, unless it is already in flight or was asked
+// within the refresh interval.
+const pendingCheckFor = (check: PermissionCheck): PendingCheck | null => {
+  const normalized = normalizeCheck(check);
+  const queryKey = normalized ? `check:${normalized.id}` : '';
+  if (!normalized || askedRecently(queryKey)) {
+    return null;
+  }
+  const { id, clusterId, resourceKind, verb, group, namespace, subresource } = normalized;
+  const version = normalized.version || undefined;
+  return {
+    queryKey,
+    payload: {
+      id,
+      clusterId,
+      group,
+      version,
+      resourceKind,
+      verb,
+      namespace: namespace ?? '',
+      subresource: subresource ?? '',
+      name: '',
+    },
+    pending: {
+      spec: { kind: resourceKind, verb, subresource: subresource ?? undefined, group, version },
+      feature: PERMISSION_FEATURES.objectActions,
+      clusterId,
+      namespace,
+    },
+  };
+};
+
+/**
+ * Asks the cluster for the given checks the permission map does not hold yet,
+ * in one batch. Each check shows as pending at once, and is not asked again
+ * while in flight or within the refresh interval. Object actions use it so
+ * every action a menu offers is checked, whatever kind or namespace the object
+ * has.
+ */
+export const queryPermissionChecks = (checks: readonly PermissionCheck[]): void => {
+  const byKey = new Map<string, PendingCheck>();
+  for (const check of checks) {
+    const pendingCheck = pendingCheckFor(check);
+    if (pendingCheck) {
+      byKey.set(pendingCheck.queryKey, pendingCheck);
+    }
+  }
+  const batch = [...byKey.values()];
+  if (batch.length === 0) {
+    return;
+  }
+  for (const { queryKey, pending } of batch) {
+    pendingSpecs.set(queryKey, [pending]);
+    inFlightQueries.add(queryKey);
+  }
   notify();
 
-  inFlightQueries.add(queryKey);
-
   const generation = permissionStoreGeneration;
-  queryPermissions(payload)
+  queryPermissions(batch.map(({ payload }) => payload))
     .then((response) => {
       if (generation !== permissionStoreGeneration) {
         return;
       }
-      for (const r of response.results) {
-        recordPermissionResult(r, feature);
+      for (const result of response.results) {
+        recordPermissionResult(result, PERMISSION_FEATURES.objectActions);
       }
     })
     .catch(() => {
-      // Silently fail — the permission just won't appear in the context menu.
+      // A failed batch leaves the checks unanswered; the menu offers none of
+      // their actions until the next attempt after the refresh interval.
     })
     .finally(() => {
       if (generation !== permissionStoreGeneration) {
         return;
       }
-      inFlightQueries.delete(queryKey);
-      pendingSpecs.delete(queryKey);
-      recordQueryTimestamp(queryKey);
+      for (const { queryKey } of batch) {
+        inFlightQueries.delete(queryKey);
+        pendingSpecs.delete(queryKey);
+        recordQueryTimestamp(queryKey);
+      }
       notify();
     });
 };

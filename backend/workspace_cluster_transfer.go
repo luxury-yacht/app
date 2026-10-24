@@ -2,7 +2,6 @@ package backend
 
 import (
 	"fmt"
-	"github.com/luxury-yacht/app/internal/panelwindow"
 	"slices"
 )
 
@@ -30,7 +29,9 @@ func (a *WorkspaceCoordinator) StageClusterViewTransfer(source, target, clusterI
 	return alreadyOpen, err
 }
 
-func (a *WorkspaceCoordinator) CommitClusterViewTransfer(source, target, clusterID string, groups []panelwindow.WorkspaceGroup) error {
+// CommitClusterViewTransfer commits the directory move begun when the source
+// accepted, together with the source's loss of the view.
+func (a *WorkspaceCoordinator) CommitClusterViewTransfer(source, target, clusterID, transferID string) error {
 	return a.runOrderedSelectionMutation("commit-cluster-view-transfer", func(_ *selectionMutation) error {
 		selection := a.selectionForOpenCluster(clusterID)
 		a.workspaceSelectionsMu.Lock()
@@ -38,7 +39,7 @@ func (a *WorkspaceCoordinator) CommitClusterViewTransfer(source, target, cluster
 		if selection == "" || !slices.Contains(a.workspaceSelections[source], selection) || !slices.Contains(a.workspaceSelections[target], selection) {
 			return fmt.Errorf("cluster view transfer participant no longer displays the cluster")
 		}
-		if err := a.PanelWorkspaceDirectory().TransferClusterView(source, target, clusterID, groups); err != nil {
+		if err := a.PanelWorkspaceDirectory().CommitGroupTransfer(transferID); err != nil {
 			return err
 		}
 		remaining := slices.DeleteFunc(slices.Clone(a.workspaceSelections[source]), func(value string) bool { return value == selection })

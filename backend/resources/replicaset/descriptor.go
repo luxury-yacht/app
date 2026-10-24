@@ -8,7 +8,7 @@ import "github.com/luxury-yacht/app/backend/kind/kindspec"
 
 var Descriptor = kindspec.Descriptor{
 	Identity:        Identity,
-	CatalogSource:   kindspec.CatalogShared,
+	Display:         kindspec.Display{ShortName: "rs"},
 	DetailCacheable: true,
 	DetailListsPods: true,
 	Collector:       &ObjectMapNode,
@@ -16,5 +16,7 @@ var Descriptor = kindspec.Descriptor{
 	Binding:         &DetailBinding,
 	Graph:           kindspec.ObjectMapGraph{ScalableWorkload: true},
 	Workload:        &kindspec.WorkloadOperations{Scale: workloadScale, CurrentReplicas: workloadCurrentReplicas},
-	Actions:         kindspec.ObjectActions{Aliases: []string{"replicaset"}},
+	// No panel metrics and no list view: namespace-workloads has no ReplicaSet rows.
+	Panel: kindspec.ObjectPanel{Pods: kindspec.PanelPodsByOwner},
+	Logs:  &LogsTarget,
 }

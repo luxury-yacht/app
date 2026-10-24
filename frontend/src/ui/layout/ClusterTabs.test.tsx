@@ -1,151 +1,91 @@
-import { PanelLayoutTestProvider } from '@/test-utils/PanelLayoutTestProvider';
 /**
  * frontend/src/ui/layout/ClusterTabs.test.tsx
  *
- * Test suite for ClusterTabs.
- * Covers tab rendering, ordering, and close/select behaviors.
+ * The cluster tab strip: it lists the window's open clusters in their saved
+ * drag order (persisting the order only once both the clusters and the saved
+ * order have loaded), labels same-named contexts by file, switches, closes,
+ * reorders, and opens clusters elsewhere from a tab and its menu, enters and
+ * leaves Global without changing the foreground cluster, offers Open Cluster
+ * once the saved clusters have loaded, moves a tab dropped from another
+ * window, and is traversed by keyboard without activating a tab until Enter
+ * or Space. Runs in the full app over a faked backend (test-utils/appState).
  */
 
-import {
-  resetClusterTabOrderCacheForTesting,
-  setClusterTabOrder,
-} from '@core/persistence/clusterTabOrder';
-import { TabDragProvider } from '@shared/components/tabs/dragCoordinator';
-import { AppRegionNavigation } from '@ui/layout/AppRegionNavigation';
-import ClusterTabs, { toClusterInsertIndex } from '@ui/layout/ClusterTabs';
-import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
+import { toClusterInsertIndex } from './ClusterTabs';
 
-vi.mock('@/core/contexts/ZoomContext', () => ({ useZoom: () => ({ zoomLevel: 100 }) }));
-vi.mock('@/ui/shortcuts', async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
-  useKeyboardSurface: vi.fn(),
-}));
+const app = installAppStateHarness();
+let view: MountedApp;
 
-const clusterTransferBridge = vi.hoisted(() => ({
-  request: vi.fn(async (..._args: unknown[]) => undefined),
-  open: vi.fn(async (..._args: unknown[]) => undefined),
-}));
-vi.mock('@/core/panel-windows', () => ({
-  requestClusterTabTransfer: clusterTransferBridge.request,
-  openClusterWindow: clusterTransferBridge.open,
-}));
+/** Opens a cluster per context in the startup workspace, serving its start screen. */
+const openClusters = (...contexts: string[]): TestCluster[] =>
+  contexts.map((context) => {
+    const cluster = app.cluster({ name: 'kube', context });
+    app.namespaces(cluster, ['default']);
+    app.startScreen(cluster);
+    return cluster;
+  });
 
-const persistenceBridge = vi.hoisted(() => ({
-  get: vi.fn<() => Promise<string[]>>().mockResolvedValue([]),
-  set: vi.fn<(order: string[]) => Promise<void>>().mockResolvedValue(undefined),
-}));
+const tabs = () =>
+  Array.from(view.container.querySelectorAll<HTMLElement>('.cluster-tabs [role="tab"]'));
+const labels = () => tabs().map((tab) => tab.textContent?.trim());
+const tabNamed = (label: string) =>
+  requireValue(
+    tabs().find((tab) => tab.textContent?.trim() === label),
+    `expected the ${label} tab`
+  );
+const buttonNamed = (label: string) =>
+  requireValue(
+    view.container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`),
+    `expected the ${label} button`
+  );
+const menuItems = () =>
+  Array.from(document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]'));
+const menu = () => document.querySelector('[role="menu"]');
 
-const installClusterTabPersistence = (
-  get: () => Promise<string[]>,
-  set: (order: string[]) => Promise<void>
-) => {
-  const previousGet = persistenceBridge.get;
-  const previousSet = persistenceBridge.set;
-  persistenceBridge.get = vi.fn(get);
-  persistenceBridge.set = vi.fn(set);
-  return () => {
-    persistenceBridge.get = previousGet;
-    persistenceBridge.set = previousSet;
-  };
+const click = async (element: HTMLElement) => {
+  await act(async () => element.click());
+  await app.settle();
 };
 
-vi.mock('@core/backend-api', () => ({
-  GetClusterTabOrder: () => persistenceBridge.get(),
-  SetClusterTabOrder: (order: string[]) => persistenceBridge.set(order),
-}));
-
-vi.mock('@core/desktop-runtime', () => ({
-  desktopRuntimeAvailable: () => true,
-  getWindowIdentity: () => 'app-a',
-  onEvent: () => () => undefined,
-}));
-
-type MockState = {
-  selectedKubeconfigs: string[];
-  selectedKubeconfig: string;
-  kubeconfigsLoading: boolean;
-  setSelectedKubeconfigs: (next: string[]) => Promise<void>;
-  closeKubeconfig: (selectionOrClusterId: string) => Promise<void>;
-  setActiveKubeconfig: ReturnType<typeof vi.fn<(config: string) => void>>;
-  getClusterMeta: (config: string) => { id: string; name: string };
-  loadKubeconfigs: () => Promise<void>;
+/** Right-clicks a tab, as the user opens its menu, and returns the menu's items. */
+const openMenu = async (label: string) => {
+  await act(async () => {
+    tabNamed(label).dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 })
+    );
+  });
+  await app.settle();
+  return menuItems().map((item) => item.textContent);
 };
 
-const mockState: MockState = {
-  selectedKubeconfigs: [],
-  selectedKubeconfig: '',
-  kubeconfigsLoading: false,
-  setSelectedKubeconfigs: vi.fn().mockResolvedValue(undefined),
-  closeKubeconfig: vi.fn().mockResolvedValue(undefined),
-  setActiveKubeconfig: vi.fn(),
-  getClusterMeta: (config: string) => ({ id: config, name: config }),
-  loadKubeconfigs: vi.fn().mockResolvedValue(undefined),
+const choose = async (label: string) =>
+  click(
+    requireValue(
+      menuItems().find((item) => item.textContent === label),
+      `expected the ${label} menu item`
+    )
+  );
+
+const owners = () => view.owners();
+
+const press = async (key: string, modifiers: KeyboardEventInit = {}) => {
+  await act(async () => {
+    requireValue(document.activeElement, 'expected a focused control').dispatchEvent(
+      new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...modifiers })
+    );
+  });
 };
-
-const viewState = {
-  viewType: 'overview',
-  navigateToGlobal: vi.fn(),
-  activateClusterWorkspace: vi.fn(),
-};
-
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({
-    ...mockState,
-    managedKubeconfigs: mockState.selectedKubeconfigs,
-    selectedClusterIds: mockState.selectedKubeconfigs.map(
-      (selection) => mockState.getClusterMeta(selection).id
-    ),
-  }),
-}));
-
-vi.mock('@core/contexts/ViewStateContext', () => ({
-  useViewState: () => viewState,
-}));
+const savedOrders = () => app.backend.calls('SetClusterTabOrder').map(([order]) => order);
 
 describe('ClusterTabs', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
-
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    resetClusterTabOrderCacheForTesting();
-    mockState.selectedKubeconfigs = [];
-    mockState.selectedKubeconfig = '';
-    mockState.kubeconfigsLoading = false;
-    mockState.setSelectedKubeconfigs = vi.fn().mockResolvedValue(undefined);
-    mockState.closeKubeconfig = vi.fn().mockResolvedValue(undefined);
-    mockState.setActiveKubeconfig = vi.fn();
-    mockState.getClusterMeta = (config: string) => ({ id: config, name: config });
-    mockState.loadKubeconfigs = vi.fn().mockResolvedValue(undefined);
-    viewState.viewType = 'overview';
-    viewState.navigateToGlobal.mockReset();
-    viewState.activateClusterWorkspace.mockReset();
-    vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-  });
-
-  const renderTabs = async (props: { onOpenCluster?: () => void } = {}) => {
-    await act(async () => {
-      root.render(
-        <TabDragProvider>
-          <ClusterTabs {...props} />
-        </TabDragProvider>
-      );
-    });
-  };
-
   it('excludes the synthetic Global tab from persisted drag positions', () => {
     expect(toClusterInsertIndex(0, true)).toBe(0);
     expect(toClusterInsertIndex(1, true)).toBe(0);
@@ -153,585 +93,289 @@ describe('ClusterTabs', () => {
     expect(toClusterInsertIndex(2, false)).toBe(2);
   });
 
-  it.each(['Enter', ' '])(
-    'visits every cluster with Tab and arrows, activating only on %s',
-    async (activationKey) => {
-      mockState.selectedKubeconfigs = ['a', 'b', 'c'];
-      mockState.selectedKubeconfig = 'b';
-      await act(async () => {
-        root.render(
-          <PanelLayoutTestProvider>
-            <KeyboardProvider>
-              <AppRegionNavigation />
-              <TabDragProvider>
-                <ClusterTabs />
-              </TabDragProvider>
-              <aside data-app-region="sidebar">
-                <button type="button">Overview</button>
-              </aside>
-            </KeyboardProvider>
-          </PanelLayoutTestProvider>
-        );
-      });
-      const [globalTab, firstTab, activeTab, lastTab] =
-        container.querySelectorAll<HTMLElement>('[role="tab"]');
-      const button = (label: string) =>
-        requireValue(container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`), label);
-      const pressKey = async (key: string, modifiers: KeyboardEventInit = {}) => {
-        await act(async () => {
-          requireValue(document.activeElement, 'focused control').dispatchEvent(
-            new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...modifiers })
-          );
-        });
-      };
-      const order = [
-        globalTab,
-        firstTab,
-        button('Close a'),
-        activeTab,
-        button('Close b'),
-        lastTab,
-        button('Close c'),
-        button('Open Cluster'),
-      ];
-      act(() => globalTab.focus());
-      for (const control of order.slice(1)) {
-        await pressKey('Tab');
-        expect(document.activeElement).toBe(control);
-      }
-      for (const control of order.slice(0, -1).reverse()) {
-        await pressKey('Tab', { shiftKey: true });
-        expect(document.activeElement).toBe(control);
-      }
-      await pressKey('ArrowRight');
-      expect(document.activeElement).toBe(firstTab);
-      await pressKey('Tab');
-      expect(document.activeElement).toBe(button('Close a'));
-      await pressKey('Tab');
-      expect(document.activeElement).toBe(activeTab);
-      await pressKey('ArrowRight');
-      expect(document.activeElement).toBe(lastTab);
-      await pressKey('ArrowLeft');
-      expect(document.activeElement).toBe(activeTab);
-      await pressKey('ArrowRight');
-      await pressKey('Tab', { ctrlKey: true });
-      expect(document.activeElement).toBe(container.querySelector('aside button'));
-      await pressKey('Tab', { ctrlKey: true, shiftKey: true });
-      expect(document.activeElement).toBe(lastTab);
-      expect(activeTab.getAttribute('aria-selected')).toBe('true');
-      expect(mockState.setActiveKubeconfig).not.toHaveBeenCalled();
-      expect(viewState.activateClusterWorkspace).not.toHaveBeenCalled();
-      expect(viewState.navigateToGlobal).not.toHaveBeenCalled();
-      await pressKey(activationKey);
-      expect(mockState.setActiveKubeconfig).toHaveBeenCalledExactlyOnceWith('c');
-      expect(viewState.activateClusterWorkspace).toHaveBeenCalledExactlyOnceWith('c');
+  it('lists clusters in the saved drag order, then newly opened ones, and persists that once', async () => {
+    const [a, b, c] = openClusters('a', 'b', 'c');
+    app.backend.answer('GetClusterTabOrder', () => [b.selection]);
+
+    view = await app.mountApp();
+
+    expect(labels()).toEqual(['Global', 'b', 'a', 'c']);
+    expect(savedOrders()).toEqual([[b.selection, a.selection, c.selection]]);
+  });
+
+  it.each(['the saved clusters', 'the saved order'])(
+    'persists no order when %s load before the other',
+    async (loadedFirst) => {
+      const [a, b] = openClusters('a', 'b');
+      app.backend.answer('GetClusterTabOrder', () => [b.selection, a.selection]);
+      const releaseOrder = app.backend.hold('GetClusterTabOrder');
+      const releaseClusters = app.backend.hold('GetKubeconfigs');
+      const [first, second] =
+        loadedFirst === 'the saved clusters'
+          ? [releaseClusters, releaseOrder]
+          : [releaseOrder, releaseClusters];
+      view = await app.mountApp();
+
+      await act(async () => first());
+      await app.settle();
+      expect(savedOrders()).toEqual([]);
+      await act(async () => second());
+      await app.settle();
+
+      expect(labels()).toEqual(['Global', 'b', 'a']);
+      expect(savedOrders()).toEqual([]);
     }
   );
 
-  it('dismisses actions when their cluster closes and does not revive them on reopen', async () => {
-    mockState.selectedKubeconfigs = ['a', 'b'];
-    mockState.selectedKubeconfig = 'a';
-    await renderTabs({ onOpenCluster: vi.fn() });
-    const tab = Array.from(container.querySelectorAll<HTMLElement>('[role="tab"]')).find(
-      (el) => el.querySelector('.tab-item__label')?.textContent === 'b'
-    );
-    await act(async () =>
-      tab?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
-    );
-    expect(document.querySelector('[role="menu"]')).toBeTruthy();
-    mockState.selectedKubeconfigs = ['a'];
-    await renderTabs({ onOpenCluster: vi.fn() });
-    expect(document.querySelector('[role="menu"]')).toBeNull();
-    mockState.selectedKubeconfigs = ['a', 'b'];
-    await renderTabs({ onOpenCluster: vi.fn() });
-    expect(document.querySelector('[role="menu"]')).toBeNull();
+  it('labels contexts that share a name by their file', async () => {
+    for (const [name, context] of [
+      ['alpha', 'dev'],
+      ['beta', 'dev'],
+      ['gamma', 'prod'],
+    ]) {
+      const cluster = app.cluster({ name, context });
+      app.namespaces(cluster, ['default']);
+      app.startScreen(cluster);
+    }
+
+    view = await app.mountApp();
+
+    expect(labels()).toEqual(['Global', 'alpha:dev', 'beta:dev', 'prod']);
   });
 
-  it('opens an inactive tab context menu and reorders the intended cluster', async () => {
-    mockState.selectedKubeconfigs = ['a', 'b', 'c'];
-    mockState.selectedKubeconfig = 'a';
-    await renderTabs();
-    const tab = Array.from(container.querySelectorAll<HTMLElement>('[role="tab"]')).find(
-      (el) => el.querySelector('.tab-item__label')?.textContent === 'b'
-    );
-    expect(tab).toBeTruthy();
-    await act(async () =>
-      tab?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
-    );
-    const move = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
-      (el) => el.textContent === 'Move tab right'
-    );
-    expect(move).toBeTruthy();
-    await act(async () => move?.click());
-    expect(
-      Array.from(container.querySelectorAll('.tab-item__label')).map((el) => el.textContent)
-    ).toEqual(['Global', 'a', 'c', 'b']);
-    expect(persistenceBridge.set).toHaveBeenLastCalledWith(['a', 'c', 'b']);
-    expect(mockState.setActiveKubeconfig).not.toHaveBeenCalled();
+  it('switches to a clicked cluster, and enters and leaves Global without changing it', async () => {
+    const [a, b] = openClusters('a', 'b');
+    view = await app.mountApp();
+    expect(tabNamed('a').getAttribute('aria-selected')).toBe('true');
+
+    await click(tabNamed('Global'));
+    expect(owners().viewState?.viewType).toBe('global');
+    expect(owners().kubeconfig.selectedClusterId).toBe(a.clusterId);
+    expect(tabNamed('Global').getAttribute('aria-selected')).toBe('true');
+    expect(tabNamed('a').getAttribute('aria-selected')).toBe('false');
+
+    await click(tabNamed('b'));
+    expect(owners().kubeconfig.selectedClusterId).toBe(b.clusterId);
+    expect(owners().viewState?.viewType).not.toBe('global');
+    expect(tabNamed('b').getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('closes a cluster from its tab without reloading the saved clusters, and drops Global with it', async () => {
+    const [a, b] = openClusters('a', 'b');
+    view = await app.mountApp();
+    const discoveries = app.backend.calls('GetKubeconfigs').length;
+    expect(tabNamed('Global').parentElement?.querySelector('[aria-label^="Close"]')).toBeNull();
+
+    await click(buttonNamed('Close b'));
+
+    expect(app.backend.calls('CloseClusterView')).toEqual([[app.windowName, b.clusterId]]);
+    expect(owners().kubeconfig.selectedClusterIds).toEqual([a.clusterId]);
+    expect(labels()).toEqual(['a']);
+    expect(app.backend.calls('GetKubeconfigs')).toHaveLength(discoveries);
+  });
+
+  it('dispatches a second close while the first is still with the backend', async () => {
+    const [a, b, c] = openClusters('a', 'b', 'c');
+    view = await app.mountApp();
+    const release = app.backend.hold('CloseClusterView');
+
+    await act(async () => {
+      buttonNamed('Close b').click();
+      buttonNamed('Close c').click();
+    });
+    await app.settle();
+
+    expect(app.backend.calls('CloseClusterView')).toEqual([
+      [app.windowName, b.clusterId],
+      [app.windowName, c.clusterId],
+    ]);
+    await act(async () => release());
+    await app.settle();
+    expect(owners().kubeconfig.selectedClusterIds).toEqual([a.clusterId]);
   });
 
   it.each([
-    { ids: ['a'], target: 'a', moves: [] },
-    { ids: ['a', 'b', 'c'], target: 'a', moves: ['Move tab right'] },
-    { ids: ['a', 'b', 'c'], target: 'b', moves: ['Move tab left', 'Move tab right'] },
-    { ids: ['a', 'b', 'c'], target: 'c', moves: ['Move tab left'] },
+    { contexts: ['a'], target: 'a', moves: [] },
+    { contexts: ['a', 'b', 'c'], target: 'a', moves: ['Move tab right'] },
+    { contexts: ['a', 'b', 'c'], target: 'b', moves: ['Move tab left', 'Move tab right'] },
+    { contexts: ['a', 'b', 'c'], target: 'c', moves: ['Move tab left'] },
   ])(
-    'shows only usable move commands with icons at the bottom for $target in $ids',
-    async ({ ids, target, moves }) => {
-      mockState.selectedKubeconfigs = ids;
-      mockState.selectedKubeconfig = 'a';
-      await renderTabs();
-      const tab = Array.from(container.querySelectorAll<HTMLElement>('[role="tab"]')).find(
-        (item) => item.querySelector('.tab-item__label')?.textContent === target
-      );
-      expect(tab).toBeDefined();
-      await act(async () =>
-        tab?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
-      );
-      const items = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'));
-      expect
-        .soft(items.map((item) => item.textContent))
-        .toEqual(['Open in new window', 'Move to new window', 'Close', ...moves]);
-      for (const moveItem of items.filter((item) => item.textContent?.startsWith('Move tab '))) {
-        expect.soft(moveItem.querySelector('.context-menu-icon svg')).not.toBeNull();
-        expect.soft(moveItem.getAttribute('aria-disabled')).toBe('false');
-      }
-      expect(document.querySelectorAll('.context-menu-divider')).toHaveLength(moves.length ? 2 : 1);
+    'offers only the moves $target can make among $contexts',
+    async ({ contexts, target, moves }) => {
+      openClusters(...contexts);
+      view = await app.mountApp();
+
+      expect(await openMenu(target)).toEqual([
+        'Open in new window',
+        'Move to new window',
+        'Close',
+        ...moves,
+      ]);
     }
   );
 
-  it('renders the tab strip with a single cluster open', async () => {
-    mockState.selectedKubeconfigs = ['a'];
-    mockState.selectedKubeconfig = 'a';
-    await renderTabs();
+  it('moves the right-clicked inactive tab and persists the new order', async () => {
+    const [a, b, c] = openClusters('a', 'b', 'c');
+    view = await app.mountApp();
 
-    expect(container.querySelector('.cluster-tabs')).not.toBeNull();
-    const labels = Array.from(container.querySelectorAll('.tab-item__label')).map((node) =>
-      (node as HTMLElement).textContent?.trim()
-    );
-    expect(labels).toEqual(['a']);
-  });
+    await openMenu('b');
+    await choose('Move tab right');
 
-  it('closes the right-clicked inactive cluster through the existing close action', async () => {
-    mockState.selectedKubeconfigs = ['/configs/kube:production', '/configs/kube:staging'];
-    mockState.selectedKubeconfig = '/configs/kube:production';
-    mockState.getClusterMeta = (selection) => ({
-      id: selection.replace('/configs/', ''),
-      name: selection.split(':')[1],
-    });
-    await renderTabs();
-    const tab = Array.from(container.querySelectorAll<HTMLElement>('[role="tab"]')).find(
-      (item) => item.querySelector('.tab-item__label')?.textContent === 'staging'
-    );
-    expect(tab).toBeDefined();
-    await act(async () =>
-      tab?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
-    );
-    const items = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'));
-    expect(items.map((item) => item.textContent)).toEqual([
-      'Open in new window',
-      'Move to new window',
-      'Close',
-      'Move tab left',
+    expect(labels()).toEqual(['Global', 'a', 'c', 'b']);
+    expect(savedOrders()).toEqual([
+      [a.selection, b.selection, c.selection],
+      [a.selection, c.selection, b.selection],
     ]);
-    await act(async () => items.find((item) => item.textContent === 'Close')?.click());
-    expect(mockState.closeKubeconfig).toHaveBeenCalledExactlyOnceWith('/configs/kube:staging');
-    expect(mockState.setActiveKubeconfig).not.toHaveBeenCalled();
-    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(owners().kubeconfig.selectedClusterId).toBe(a.clusterId);
   });
 
-  it('opens the right-clicked inactive cluster in a peer without changing local selection', async () => {
-    mockState.selectedKubeconfigs = ['/configs/kube:production', '/configs/kube:staging'];
-    mockState.selectedKubeconfig = '/configs/kube:production';
-    mockState.getClusterMeta = (selection) => ({
-      id: selection.replace('/configs/', ''),
-      name: selection.split(':')[1],
-    });
-    await renderTabs();
-    const tab = Array.from(container.querySelectorAll<HTMLElement>('[role="tab"]')).find(
-      (item) => item.querySelector('.tab-item__label')?.textContent === 'staging'
+  it('opens and closes the right-clicked inactive cluster without switching to it', async () => {
+    const [production, staging] = openClusters('production', 'staging');
+    app.backend.answer('OpenClusterWindow', () => undefined);
+    view = await app.mountApp();
+
+    await openMenu('staging');
+    await choose('Open in new window');
+    expect(app.backend.calls('OpenClusterWindow')).toEqual([[app.windowName, staging.clusterId]]);
+    expect(owners().kubeconfig.selectedClusterId).toBe(production.clusterId);
+    expect(menu()).toBeNull();
+
+    await openMenu('staging');
+    await choose('Close');
+    expect(app.backend.calls('CloseClusterView')).toEqual([[app.windowName, staging.clusterId]]);
+    expect(owners().kubeconfig.selectedClusterId).toBe(production.clusterId);
+    expect(menu()).toBeNull();
+  });
+
+  it('dismisses a tab’s menu when its cluster closes and does not revive it on reopen', async () => {
+    const [, b] = openClusters('a', 'b');
+    view = await app.mountApp();
+    await openMenu('b');
+    expect(menu()).not.toBeNull();
+
+    // The cluster closes from outside the menu (a shortcut or another window).
+    await act(async () => owners().kubeconfig.closeKubeconfig(b.selection));
+    await app.settle();
+    expect(menu()).toBeNull();
+
+    await act(async () => owners().kubeconfig.openKubeconfig(b.selection));
+    await app.settle();
+    expect(labels()).toEqual(['Global', 'a', 'b']);
+    expect(menu()).toBeNull();
+  });
+
+  it('offers Open Cluster with no cluster open only once the saved clusters have loaded', async () => {
+    const release = app.backend.hold('GetKubeconfigs');
+    view = await app.mountApp();
+    expect(view.container.querySelector('button[aria-label="Open Cluster"]')).toBeNull();
+
+    await act(async () => release());
+    await app.settle();
+    await click(buttonNamed('Open Cluster'));
+
+    expect(tabs()).toEqual([]);
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Select a kubeconfig');
+  });
+
+  it('opens the kubeconfig picker from Open Cluster beside open tabs', async () => {
+    openClusters('a');
+    view = await app.mountApp();
+    expect(labels()).toEqual(['a']);
+
+    await click(buttonNamed('Open Cluster'));
+
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Select a kubeconfig');
+  });
+
+  it('requests a cluster view transfer when a tab is dropped from another app window', async () => {
+    const [production] = openClusters('production');
+    app.backend.answer('RequestClusterTabTransfer', () => undefined);
+    view = await app.mountApp();
+    const strip = requireValue(
+      view.container.querySelector('.cluster-tabs-wrapper'),
+      'expected the cluster tabs'
     );
-    await act(async () =>
-      tab?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
-    );
-    const open = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
-      (item) => item.textContent === 'Open in new window'
-    );
-    await act(async () => open?.click());
-    expect(clusterTransferBridge.open).toHaveBeenCalledExactlyOnceWith('app-a', 'kube:staging');
-    expect(clusterTransferBridge.request).not.toHaveBeenCalled();
-    expect(mockState.closeKubeconfig).not.toHaveBeenCalled();
-    expect(mockState.setActiveKubeconfig).not.toHaveBeenCalled();
-    expect(document.querySelector('[role="menu"]')).toBeNull();
-  });
-
-  it('renders a non-closeable Global tab only when multiple clusters are open', async () => {
-    mockState.selectedKubeconfigs = ['a', 'b'];
-    mockState.selectedKubeconfig = 'a';
-    await renderTabs();
-
-    const globalTab = Array.from(container.querySelectorAll('[role="tab"]')).find(
-      (tab) => tab.querySelector('.tab-item__label')?.textContent === 'Global'
-    );
-    expect(globalTab).toBeTruthy();
-    expect(globalTab?.parentElement?.querySelector('.tab-item__close')).toBeNull();
-
-    mockState.selectedKubeconfigs = ['a'];
-    await renderTabs({ onOpenCluster: vi.fn() });
-    expect(
-      Array.from(container.querySelectorAll('.tab-item__label')).some(
-        (label) => label.textContent === 'Global'
-      )
-    ).toBe(false);
-  });
-
-  it('selects Global independently from the foreground cluster', async () => {
-    mockState.selectedKubeconfigs = ['a', 'b'];
-    mockState.selectedKubeconfig = 'a';
-    viewState.viewType = 'global';
-    await renderTabs();
-
-    const tabs = Array.from(container.querySelectorAll('[role="tab"]'));
-    const globalTab = tabs.find((tab) => tab.textContent?.trim() === 'Global');
-    const clusterTab = tabs.find((tab) => tab.textContent?.trim().startsWith('b')) as HTMLElement;
-    expect(globalTab?.getAttribute('aria-selected')).toBe('true');
-    expect(
-      tabs.find((tab) => tab.textContent?.trim().startsWith('a'))?.getAttribute('aria-selected')
-    ).toBe('false');
-
-    act(() => {
-      clusterTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(viewState.activateClusterWorkspace).toHaveBeenCalledTimes(1);
-    expect(mockState.setActiveKubeconfig).toHaveBeenCalledWith('b');
-    expect(viewState.activateClusterWorkspace.mock.invocationCallOrder[0]).toBeLessThan(
-      mockState.setActiveKubeconfig.mock.invocationCallOrder[0]
-    );
-  });
-
-  it('enters Global without changing the foreground cluster', async () => {
-    mockState.selectedKubeconfigs = ['a', 'b'];
-    mockState.selectedKubeconfig = 'a';
-    await renderTabs();
-
-    const globalTab = Array.from(container.querySelectorAll('[role="tab"]')).find(
-      (tab) => tab.textContent?.trim() === 'Global'
-    ) as HTMLElement;
-    act(() => {
-      globalTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(viewState.navigateToGlobal).toHaveBeenCalledTimes(1);
-    expect(mockState.setActiveKubeconfig).not.toHaveBeenCalled();
-  });
-
-  it('renders only the add-cluster button when no clusters are open', async () => {
-    mockState.selectedKubeconfigs = [];
-    mockState.selectedKubeconfig = '';
-    await renderTabs();
-
-    expect(container.querySelector('.cluster-tabs-add')).not.toBeNull();
-    // No tab strip (and therefore no tabs) when there is nothing to switch between.
-    expect(container.querySelector('.cluster-tabs')).toBeNull();
-  });
-
-  it('does not show the empty-selection affordance while saved clusters are loading', async () => {
-    mockState.selectedKubeconfigs = [];
-    mockState.selectedKubeconfig = '';
-    mockState.kubeconfigsLoading = true;
-    await renderTabs();
-
-    expect(container.querySelector('.cluster-tabs-add')).toBeNull();
-    expect(container.querySelector('.cluster-tabs')).toBeNull();
-  });
-
-  it('does not overwrite saved tab order while saved clusters are loading', async () => {
-    const setClusterTabOrderMock = vi.fn().mockResolvedValue(undefined);
-    const restorePersistence = installClusterTabPersistence(
-      vi.fn().mockResolvedValue(['b', 'a']),
-      setClusterTabOrderMock
-    );
-    mockState.selectedKubeconfigs = [];
-    mockState.selectedKubeconfig = '';
-    mockState.kubeconfigsLoading = true;
-
-    try {
-      await renderTabs();
-      await act(async () => {
-        await Promise.resolve();
-      });
-
-      expect(setClusterTabOrderMock).not.toHaveBeenCalled();
-    } finally {
-      restorePersistence();
-    }
-  });
-
-  it('does not persist selection order before saved tab order hydrates', async () => {
-    let resolveSavedOrder: ((order: string[]) => void) | undefined;
-    const savedOrder = new Promise<string[]>((resolve) => {
-      resolveSavedOrder = resolve;
-    });
-    const setClusterTabOrderMock = vi.fn().mockResolvedValue(undefined);
-    const restorePersistence = installClusterTabPersistence(
-      vi.fn().mockReturnValue(savedOrder),
-      setClusterTabOrderMock
-    );
-    mockState.selectedKubeconfigs = ['a', 'b'];
-    mockState.selectedKubeconfig = 'a';
-    mockState.kubeconfigsLoading = false;
-
-    try {
-      await renderTabs();
-      expect(setClusterTabOrderMock).not.toHaveBeenCalled();
-
-      await act(async () => {
-        resolveSavedOrder?.(['b', 'a']);
-        await savedOrder;
-      });
-
-      expect(setClusterTabOrderMock).not.toHaveBeenCalled();
-      const labels = Array.from(container.querySelectorAll('.tab-item__label')).map((node) =>
-        (node as HTMLElement).textContent?.trim()
-      );
-      expect(labels).toEqual(['Global', 'b', 'a']);
-    } finally {
-      restorePersistence();
-    }
-  });
-
-  it('persists new clusters after selection and tab-order hydration complete', async () => {
-    const setClusterTabOrderMock = vi.fn().mockResolvedValue(undefined);
-    const restorePersistence = installClusterTabPersistence(
-      vi.fn().mockResolvedValue(['b', 'a']),
-      setClusterTabOrderMock
-    );
-    mockState.selectedKubeconfigs = [];
-    mockState.selectedKubeconfig = '';
-    mockState.kubeconfigsLoading = true;
-
-    try {
-      await renderTabs();
-      expect(setClusterTabOrderMock).not.toHaveBeenCalled();
-
-      mockState.selectedKubeconfigs = ['a', 'b', 'c'];
-      mockState.selectedKubeconfig = 'a';
-      mockState.kubeconfigsLoading = false;
-      await renderTabs({ onOpenCluster: vi.fn() });
-
-      expect(setClusterTabOrderMock).toHaveBeenCalledTimes(1);
-      expect(setClusterTabOrderMock).toHaveBeenCalledWith(['b', 'a', 'c']);
-    } finally {
-      restorePersistence();
-    }
-  });
-
-  it('keeps Open Cluster accessible as its label follows empty and populated selections', async () => {
-    const onOpenCluster = vi.fn();
-    const renderOpenButton = async () => {
-      await renderTabs({ onOpenCluster: () => onOpenCluster() });
-      return requireValue(
-        container.querySelector<HTMLButtonElement>('button[aria-label="Open Cluster"]'),
-        'Open Cluster button'
-      );
-    };
-
-    const emptyButton = await renderOpenButton();
-    expect(emptyButton.textContent).toBe('Open Cluster');
-    act(() => emptyButton.click());
-    expect(onOpenCluster).toHaveBeenCalledTimes(1);
-
-    mockState.selectedKubeconfigs = ['a'];
-    mockState.selectedKubeconfig = 'a';
-    const populatedButton = await renderOpenButton();
-    expect(populatedButton.textContent).toBe('');
-    act(() => populatedButton.click());
-    expect(onOpenCluster).toHaveBeenCalledTimes(2);
-
-    mockState.selectedKubeconfigs = ['a', 'b', 'c'];
-    expect((await renderOpenButton()).textContent).toBe('');
-
-    mockState.selectedKubeconfigs = [];
-    mockState.selectedKubeconfig = '';
-    const restoredButton = await renderOpenButton();
-    expect(restoredButton.textContent).toBe('Open Cluster');
-    act(() => restoredButton.click());
-    expect(onOpenCluster).toHaveBeenCalledTimes(3);
-  });
-
-  it('orders tabs by persisted drag order with selection-order fallback', async () => {
-    setClusterTabOrder(['b']);
-    mockState.selectedKubeconfigs = ['a', 'b', 'c'];
-    mockState.selectedKubeconfig = 'a';
-    await renderTabs();
-
-    const labels = Array.from(container.querySelectorAll('.tab-item__label')).map((node) =>
-      (node as HTMLElement).textContent?.trim()
-    );
-    expect(labels).toEqual(['Global', 'b', 'a', 'c']);
-  });
-
-  it('uses persisted order when available', async () => {
-    setClusterTabOrder(['b', 'a']);
-    mockState.selectedKubeconfigs = ['a', 'b'];
-    mockState.selectedKubeconfig = 'a';
-    await renderTabs();
-
-    const labels = Array.from(container.querySelectorAll('.tab-item__label')).map((node) =>
-      (node as HTMLElement).textContent?.trim()
-    );
-    expect(labels).toEqual(['Global', 'b', 'a']);
-  });
-
-  it('invokes setActiveKubeconfig when a tab is clicked', async () => {
-    mockState.selectedKubeconfigs = ['a', 'b'];
-    mockState.selectedKubeconfig = 'a';
-    await renderTabs();
-
-    const tabs = Array.from(container.querySelectorAll('[role="tab"]'));
-    const target = tabs.find((tab) => tab.textContent?.trim().startsWith('b')) as
-      | HTMLElement
-      | undefined;
-    expect(target).toBeTruthy();
-
-    act(() => {
-      target?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(mockState.setActiveKubeconfig).toHaveBeenCalledWith('b');
-  });
-
-  it('invokes closeKubeconfig when a tab is closed', async () => {
-    mockState.selectedKubeconfigs = ['a', 'b'];
-    mockState.selectedKubeconfig = 'a';
-    await renderTabs();
-
-    const tabs = Array.from(container.querySelectorAll('[role="tab"]'));
-    const targetTab = tabs.find(
-      (tab) => tab.querySelector('.tab-item__label')?.textContent === 'b'
-    );
-    const closeButton = targetTab?.parentElement?.querySelector('.tab-item__close') as HTMLElement;
-
-    expect(closeButton).toBeTruthy();
-    await act(async () => {
-      closeButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(mockState.closeKubeconfig).toHaveBeenCalledWith('b');
-    expect(mockState.loadKubeconfigs).not.toHaveBeenCalled();
-    expect(mockState.setSelectedKubeconfigs).not.toHaveBeenCalled();
-  });
-
-  it('dispatches rapid tab closes immediately without serializing behind backend work', async () => {
-    const blockedClose = new Promise<void>(() => undefined);
-    mockState.closeKubeconfig = vi
-      .fn()
-      .mockReturnValueOnce(blockedClose)
-      .mockResolvedValue(undefined);
-    mockState.selectedKubeconfigs = ['a', 'b', 'c'];
-    mockState.selectedKubeconfig = 'a';
-    await renderTabs();
-
-    const closeButtonFor = (label: string) => {
-      const tabs = Array.from(container.querySelectorAll('[role="tab"]'));
-      const tab = tabs.find(
-        (node) => node.querySelector('.tab-item__label')?.textContent === label
-      );
-      return tab?.parentElement?.querySelector('.tab-item__close') as HTMLElement | null;
-    };
-
-    const closeB = closeButtonFor('b');
-    const closeC = closeButtonFor('c');
-    expect(closeB).toBeTruthy();
-    expect(closeC).toBeTruthy();
-
-    act(() => {
-      closeB?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      closeC?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(mockState.closeKubeconfig).toHaveBeenNthCalledWith(1, 'b');
-    expect(mockState.closeKubeconfig).toHaveBeenNthCalledWith(2, 'c');
-  });
-
-  it('shows filename:context for tabs with name collisions', async () => {
-    // Two clusters with the same context name but different files.
-    mockState.getClusterMeta = (config: string) => {
-      if (config === '/kube/alpha:dev') {
-        return { id: 'alpha:dev', name: 'dev' };
-      }
-      if (config === '/kube/beta:dev') {
-        return { id: 'beta:dev', name: 'dev' };
-      }
-      if (config === '/kube/gamma:prod') {
-        return { id: 'gamma:prod', name: 'prod' };
-      }
-      return { id: config, name: config };
-    };
-    mockState.selectedKubeconfigs = ['/kube/alpha:dev', '/kube/beta:dev', '/kube/gamma:prod'];
-    mockState.selectedKubeconfig = '/kube/alpha:dev';
-    await renderTabs();
-
-    const labels = Array.from(container.querySelectorAll('.tab-item__label')).map((node) =>
-      (node as HTMLElement).textContent?.trim()
-    );
-    // "dev" appears twice, so those tabs should show filename:context (alpha:dev, beta:dev).
-    // "prod" is unique, so it shows just the context name.
-    expect(labels).toEqual(['Global', 'alpha:dev', 'beta:dev', 'prod']);
-  });
-});
-
-it('requests a cluster view transfer when a tab is dropped from another app window', async () => {
-  const request = vi.fn(async () => undefined);
-  clusterTransferBridge.request.mockImplementation(request);
-  mockState.kubeconfigsLoading = false;
-  mockState.selectedKubeconfigs = ['production'];
-  mockState.selectedKubeconfig = 'production';
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = ReactDOM.createRoot(container);
-  try {
-    await act(async () =>
-      root.render(
-        <TabDragProvider>
-          <ClusterTabs />
-        </TabDragProvider>
-      )
-    );
-    const target = container.querySelector('.cluster-tabs-wrapper');
-    if (!target) {
-      throw new Error('Expected cluster tabs');
-    }
     const drop = new Event('drop', { bubbles: true, cancelable: true });
     Object.defineProperty(drop, 'dataTransfer', {
       value: {
         getData: () =>
           JSON.stringify({
             kind: 'cluster-tab',
-            clusterId: 'production',
-            selection: 'production',
-            sourceWindowName: 'app-b',
+            clusterId: production.clusterId,
+            selection: production.selection,
+            sourceWindowName: 'workspace-2',
           }),
         types: ['application/x-luxury-yacht-tab', 'application/x-luxury-yacht-tab-cluster-tab'],
         dropEffect: 'move',
       },
     });
-    await act(async () => target.dispatchEvent(drop));
-    expect(request).toHaveBeenCalledWith(
-      'app-a',
-      expect.objectContaining({
-        sourceWindowName: 'app-b',
-        targetWindowName: 'app-a',
-        clusterId: 'production',
-      })
-    );
-  } finally {
-    await act(async () => root.unmount());
-    container.remove();
-  }
+
+    await act(async () => strip.dispatchEvent(drop));
+    await app.settle();
+
+    expect(app.backend.calls('RequestClusterTabTransfer')).toEqual([
+      [
+        app.windowName,
+        expect.objectContaining({
+          sourceWindowName: 'workspace-2',
+          targetWindowName: app.windowName,
+          clusterId: production.clusterId,
+        }),
+      ],
+    ]);
+  });
+
+  it('visits every tab and control by keyboard without activating a cluster', async () => {
+    const [, b] = openClusters('a', 'b', 'c');
+    view = await app.mountApp();
+    await click(tabNamed('b'));
+    const [globalTab, firstTab, activeTab, lastTab] = tabs();
+    const order = [
+      globalTab,
+      firstTab,
+      buttonNamed('Close a'),
+      activeTab,
+      buttonNamed('Close b'),
+      lastTab,
+      buttonNamed('Close c'),
+      buttonNamed('Open Cluster'),
+    ];
+
+    await act(async () => globalTab.focus());
+    for (const control of order.slice(1)) {
+      await press('Tab');
+      expect(document.activeElement).toBe(control);
+    }
+    for (const control of order.slice(0, -1).reverse()) {
+      await press('Tab', { shiftKey: true });
+      expect(document.activeElement).toBe(control);
+    }
+    await press('ArrowRight');
+    expect(document.activeElement).toBe(firstTab);
+    await act(async () => activeTab.focus());
+    await press('ArrowRight');
+    expect(document.activeElement).toBe(lastTab);
+    await press('ArrowLeft');
+    expect(document.activeElement).toBe(activeTab);
+    await press('ArrowRight');
+    await press('Tab', { ctrlKey: true });
+    expect(
+      requireValue(document.activeElement, 'expected a focused control').closest('nav.sidebar')
+    ).not.toBeNull();
+    await press('Tab', { ctrlKey: true, shiftKey: true });
+    expect(document.activeElement).toBe(lastTab);
+
+    expect(owners().kubeconfig.selectedClusterId).toBe(b.clusterId);
+    expect(owners().viewState?.viewType).not.toBe('global');
+  });
+
+  it.each(['Enter', ' '])('activates the focused cluster tab on %j', async (key) => {
+    const [, b] = openClusters('a', 'b');
+    view = await app.mountApp();
+    await act(async () => tabNamed('b').focus());
+
+    await press(key);
+
+    expect(owners().kubeconfig.selectedClusterId).toBe(b.clusterId);
+  });
 });

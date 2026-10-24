@@ -10,18 +10,19 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 )
 
 // Manager coordinates the refresh subsystem once initialized.
 type Manager struct {
 	registry        Registry
-	informerHub     InformerHub
+	feedHub         FeedHub
 	snapshotService SnapshotBuilder
 	metricsPoller   MetricsPoller
 	manualQueue     ManualQueue
 	mu              sync.RWMutex
 	started         bool
-	// runCancel stops informers/metrics/manual queue without requiring callers to hold the parent cancel.
+	// runCancel stops reflectors/metrics/manual queue without requiring callers to hold the parent cancel.
 	runCancel context.CancelFunc
 }
 
@@ -47,20 +48,20 @@ type DomainConfig struct {
 	RuntimePolicyExempt bool
 }
 
-// InformerHub exposes informer lifecycle hooks used by the refresh manager.
-type InformerHub interface {
+// FeedHub exposes the feed's lifecycle hooks used by the refresh manager.
+type FeedHub interface {
 	Start(ctx context.Context) error
 	HasSynced(ctx context.Context) bool
-	// ResourcesSettled reports whether the informers backing the supplied
+	// ResourcesSettled reports whether the reflectors backing the supplied
 	// canonical resource keys (permissions.ResourceKey format) have synced or
-	// terminally failed. Keys with no informer are settled.
+	// terminally failed. Keys with no reflector are settled.
 	ResourcesSettled(keys []string) bool
 	Shutdown() error
 }
 
 // ResourceReadiness describes whether one declared Kubernetes resource can
 // currently provide authoritative data to a snapshot builder. It is separate
-// from InformerHub.ResourcesSettled: a source may stop blocking subsystem
+// from FeedHub.ResourcesSettled: a source may stop blocking subsystem
 // liveness after the sync deadline while its initial LIST is still retrying.
 type ResourceReadiness uint8
 
@@ -91,7 +92,7 @@ func (state ResourceReadiness) String() string {
 }
 
 // ResourceReadinessReporter is the optional data-availability side of an
-// InformerHub. The base lifecycle interface remains small for retained/Cold and
+// FeedHub. The base lifecycle interface remains small for retained/Cold and
 // test hubs; live hubs implement this reporter so snapshot builds can remain
 // honest after a liveness deadline degrades an unsynced source.
 type ResourceReadinessReporter interface {
@@ -124,17 +125,18 @@ type ManualQueue interface {
 
 // ManualRefreshJob captures state for a manual refresh request.
 type ManualRefreshJob struct {
-	ID            string   `json:"jobId"`
-	Domain        string   `json:"domain"`
-	Scope         string   `json:"scope,omitempty"`
-	Reason        string   `json:"reason,omitempty"`
-	OperationID   string   `json:"-"`
-	State         JobState `json:"state"`
-	QueuedAt      int64    `json:"queuedAt"`
-	StartedAt     int64    `json:"startedAt,omitempty"`
-	FinishedAt    int64    `json:"finishedAt,omitempty"`
-	Error         string   `json:"error,omitempty"`
-	LatestVersion uint64   `json:"latestVersion,omitempty"`
+	ID          string   `json:"jobId"`
+	Domain      string   `json:"domain"`
+	Scope       string   `json:"scope,omitempty"`
+	Reason      string   `json:"reason,omitempty"`
+	OperationID string   `json:"-"`
+	State       JobState `json:"state"`
+	QueuedAt    int64    `json:"queuedAt"`
+	StartedAt   int64    `json:"startedAt,omitempty"`
+	FinishedAt  int64    `json:"finishedAt,omitempty"`
+	// Error is the failure's status; set only on a failed job.
+	Error         *errorstatus.Status `json:"error,omitempty"`
+	LatestVersion uint64              `json:"latestVersion,omitempty"`
 }
 
 // ManualRefreshResult summarises a manual refresh execution.
@@ -183,24 +185,24 @@ type SnapshotStats struct {
 }
 
 // NewManager constructs a Manager with the supplied collaborators.
-func NewManager(reg Registry, hub InformerHub, svc SnapshotBuilder, poller MetricsPoller, queue ManualQueue) *Manager {
+func NewManager(reg Registry, hub FeedHub, svc SnapshotBuilder, poller MetricsPoller, queue ManualQueue) *Manager {
 	return &Manager{
 		registry:        reg,
-		informerHub:     hub,
+		feedHub:         hub,
 		snapshotService: svc,
 		metricsPoller:   poller,
 		manualQueue:     queue,
 	}
 }
 
-// Start boots the informer hub and captures the metrics poller context once.
+// Start boots the feed hub and captures the metrics poller context once.
 func (m *Manager) Start(ctx context.Context) error {
 	runCtx, started := m.startContext(ctx)
 	if started {
 		return nil
 	}
-	if m.informerHub != nil {
-		if err := m.informerHub.Start(runCtx); err != nil {
+	if m.feedHub != nil {
+		if err := m.feedHub.Start(runCtx); err != nil {
 			return err
 		}
 	}
@@ -288,7 +290,7 @@ func (m *Manager) Shutdown(ctx context.Context) error {
 	m.runCancel = nil
 	m.mu.Unlock()
 
-	// Cancelling the run context stops informer factories and pollers that rely on it.
+	// Cancelling the run context stops reflectors and pollers that rely on it.
 	if cancel != nil {
 		cancel()
 	}
@@ -299,8 +301,8 @@ func (m *Manager) Shutdown(ctx context.Context) error {
 			firstErr = err
 		}
 	}
-	if m.informerHub != nil {
-		if err := m.informerHub.Shutdown(); err != nil && firstErr == nil {
+	if m.feedHub != nil {
+		if err := m.feedHub.Shutdown(); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}
@@ -330,7 +332,7 @@ func (m *Manager) processManualJob(parent context.Context, job *ManualRefreshJob
 
 	job.State = JobStateRunning
 	job.StartedAt = time.Now().UnixMilli()
-	job.Error = ""
+	job.Error = nil
 	m.manualQueue.Update(job)
 
 	operationContext := applog.ContextWithOperationID(parent, job.OperationID)
@@ -340,7 +342,7 @@ func (m *Manager) processManualJob(parent context.Context, job *ManualRefreshJob
 	version, err := m.executeManualRefresh(ctx, job)
 	if err != nil {
 		job.State = JobStateFailed
-		job.Error = err.Error()
+		job.Error = statusOf(err)
 	} else {
 		job.State = JobStateSucceeded
 		job.LatestVersion = version
@@ -348,13 +350,18 @@ func (m *Manager) processManualJob(parent context.Context, job *ManualRefreshJob
 
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) && job.State != JobStateSucceeded {
 		job.State = JobStateFailed
-		if job.Error == "" {
-			job.Error = ctx.Err().Error()
+		if job.Error == nil {
+			job.Error = statusOf(ctx.Err())
 		}
 	}
 
 	job.FinishedAt = time.Now().UnixMilli()
 	m.manualQueue.Update(job)
+}
+
+func statusOf(err error) *errorstatus.Status {
+	status := errorstatus.Classify(err)
+	return &status
 }
 
 // Run the domain action before rebuilding its snapshot. Publishing job state stays

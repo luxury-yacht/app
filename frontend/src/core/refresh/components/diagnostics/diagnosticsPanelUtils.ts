@@ -6,7 +6,7 @@ import { TABLE_NO_VALUE_TEXT } from '@shared/components/tables/tableNoValue';
  * Provides shared helper functions for the shared components.
  */
 
-import { stripClusterScope } from '@/core/refresh/clusterScope';
+import { type ScopeSelector, tryParseRefreshScope } from '@/core/refresh/scopeSelector';
 import { formatAge, formatFullDate } from '@/utils/ageFormatter';
 import type { RefreshDomain } from '../../types';
 
@@ -20,44 +20,26 @@ export const formatInterval = (intervalMs: number | null): string => {
   return `${(intervalMs / 1000).toFixed(1)}s`;
 };
 
-const resolvePodsNamespace = (scope: string): string => {
-  if (scope.startsWith('workload:')) {
-    const [, namespace] = scope.split(':');
-    return namespace || '-';
+const selectorNamespaceLabel = (domain: RefreshDomain, selector: ScopeSelector): string => {
+  switch (selector.kind) {
+    case 'all-namespaces':
+      return 'All';
+    case 'namespace':
+      return selector.namespace;
+    case 'workload':
+      return selector.object.namespace;
+    case 'node':
+      // Maintenance operations target a node; node-scoped pods span namespaces.
+      return domain === 'object-maintenance' ? selector.node : '-';
+    default:
+      return '-';
   }
-  if (!scope.startsWith('namespace:')) {
-    return '-';
-  }
-  const namespace = scope.slice('namespace:'.length);
-  return namespace === 'all' ? 'All' : namespace || '-';
 };
 
-const resolveMaintenanceTarget = (scope: string): string => {
-  if (!scope.startsWith('node:')) {
-    return scope;
-  }
-  return scope.slice('node:'.length) || '-';
-};
-
+/** The namespace (or maintenance node) a scope targets; '-' when it names none. */
 export const resolveDomainNamespace = (domain: RefreshDomain, scope?: string): string => {
-  if (!scope) {
-    return '-';
-  }
-  const normalizedScope = stripClusterScope(scope);
-  if (!normalizedScope) {
-    return '-';
-  }
-  if (domain.startsWith('namespace-')) {
-    const parts = normalizedScope.split(':');
-    return parts[parts.length - 1] || normalizedScope;
-  }
-  if (domain === 'pods') {
-    return resolvePodsNamespace(normalizedScope);
-  }
-  if (domain === 'object-maintenance') {
-    return resolveMaintenanceTarget(normalizedScope);
-  }
-  return '-';
+  const parsed = scope ? tryParseRefreshScope(domain, scope) : null;
+  return parsed ? selectorNamespaceLabel(domain, parsed.selector) : '-';
 };
 
 export const formatLastUpdated = (value?: number): { display: string; tooltip: string } => {

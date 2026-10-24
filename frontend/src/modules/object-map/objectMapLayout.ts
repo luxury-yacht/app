@@ -1,7 +1,9 @@
 /**
  * frontend/src/modules/object-map/objectMapLayout.ts
  *
- * Seed-anchored compact min-length layered layout. Five passes:
+ * Seed-anchored compact min-length layered layout. Passes 1-5 lay out the
+ * seed and every object with a link to another object on the map; pass 6
+ * places the objects with no link.
  *
  *   (1) Longest-path layering. Sugiyama-style: every node's column =
  *       max(predecessor column + 1) along directed edges. This
@@ -30,9 +32,17 @@
  *
  *   (5) Overloaded logical columns are split into horizontal lanes.
  *       Lane packing keeps contiguous same-kind groups together unless
- *       one kind group alone exceeds the lane limit. The logical column
- *       value is preserved, but neighboring columns are shifted so lanes
- *       do not overlap.
+ *       one kind group alone exceeds the lane limit; the following kinds
+ *       may share that group's last lane. The logical column value is
+ *       preserved, but neighboring columns are shifted so lanes do not
+ *       overlap.
+ *
+ *   (6) Objects with no link (a namespace map's leftover ConfigMaps and
+ *       Secrets, or what a Kind filter leaves unconnected) would otherwise
+ *       all land in the first column. They form their own block of
+ *       kind-ordered lanes instead, right of or below the linked layout.
+ *       Lane count and side are chosen so the whole map fits a 16:10 view
+ *       at the largest zoom. The linked layout does not move.
  *
  * Edges are routed as cubic beziers between source-right and target-
  * left anchors. The same-column rightward-arc fallback is retained for
@@ -58,6 +68,12 @@ export const OBJECT_MAP_KIND_GROUP_GAP = 24;
 
 const COLUMN_STRIDE = OBJECT_MAP_NODE_WIDTH + OBJECT_MAP_COLUMN_GAP;
 
+// Width-to-height ratio of the view the unlinked block is sized for.
+const OBJECT_MAP_FIT_VIEW_ASPECT = 16 / 10;
+// Space between the linked layout and the block of unlinked objects.
+const OBJECT_MAP_UNLINKED_GAP_X = OBJECT_MAP_COLUMN_GAP * 2;
+const OBJECT_MAP_UNLINKED_GAP_Y = OBJECT_MAP_ROW_GAP * 4;
+
 // Number of alternating left↔right sweeps for barycenter ordering.
 // Sugiyama's original suggestion is ~24, but for the small graphs we
 // render here (≤ 1000 nodes per backend cap, typically dozens) four
@@ -78,6 +94,8 @@ export interface PositionedNode {
   ref: ObjectMapNode['ref'];
   creationTimestamp?: string;
   status?: ObjectMapStatus;
+  // A display-only card for an object the cluster does not have.
+  missing?: boolean;
 }
 
 export interface PositionedEdge {
@@ -511,8 +529,11 @@ const orderColumnsByBarycenter = (
   }
 };
 
-const splitColumnIntoKindAwareLanes = (columnNodes: ObjectMapNode[]): ObjectMapNode[][] => {
-  if (columnNodes.length <= OBJECT_MAP_MAX_NODES_PER_LANE) {
+const splitIntoKindAwareLanes = (
+  columnNodes: ObjectMapNode[],
+  laneCap: number
+): ObjectMapNode[][] => {
+  if (columnNodes.length <= laneCap) {
     return [columnNodes];
   }
 
@@ -529,18 +550,20 @@ const splitColumnIntoKindAwareLanes = (columnNodes: ObjectMapNode[]): ObjectMapN
   };
 
   const appendGroup = (group: ObjectMapNode[]) => {
-    if (group.length > OBJECT_MAP_MAX_NODES_PER_LANE) {
+    if (group.length > laneCap) {
       pushCurrentLane();
-      for (let index = 0; index < group.length; index += OBJECT_MAP_MAX_NODES_PER_LANE) {
-        lanes.push(group.slice(index, index + OBJECT_MAP_MAX_NODES_PER_LANE));
+      for (let index = 0; index < group.length; index += laneCap) {
+        // Full lanes close; the group's last, partial lane stays open so the
+        // next kinds can share it instead of starting another lane.
+        currentLane = group.slice(index, index + laneCap);
+        if (currentLane.length === laneCap) {
+          pushCurrentLane();
+        }
       }
       return;
     }
 
-    if (
-      currentLane.length > 0 &&
-      currentLane.length + group.length > OBJECT_MAP_MAX_NODES_PER_LANE
-    ) {
+    if (currentLane.length > 0 && currentLane.length + group.length > laneCap) {
       pushCurrentLane();
     }
     currentLane.push(...group);
@@ -595,17 +618,20 @@ const laneGapBefore = (laneNodes: ObjectMapNode[], index: number): number => {
     : OBJECT_MAP_ROW_GAP + OBJECT_MAP_KIND_GROUP_GAP;
 };
 
-const positionLane = (
-  laneNodes: ObjectMapNode[],
-  x: number,
-  column: number,
-  seedId: string
-): PositionedNode[] => {
-  const totalHeight = laneNodes.reduce(
+const laneHeight = (laneNodes: ObjectMapNode[]): number =>
+  laneNodes.reduce(
     (height, _node, index) => height + laneGapBefore(laneNodes, index) + OBJECT_MAP_NODE_HEIGHT,
     0
   );
-  let y = -totalHeight / 2;
+
+const positionLane = (
+  laneNodes: ObjectMapNode[],
+  x: number,
+  top: number,
+  column: number,
+  seedId: string
+): PositionedNode[] => {
+  let y = top;
   return laneNodes.map((node, index) => {
     if (index > 0) {
       y += OBJECT_MAP_NODE_HEIGHT + laneGapBefore(laneNodes, index);
@@ -621,17 +647,20 @@ const positionLane = (
       ref: node.ref,
       creationTimestamp: node.creationTimestamp,
       status: node.status,
+      missing: node.missing,
     };
   });
 };
 
-export const computeObjectMapLayout = (
+// Passes 1-5: the layered layout of the linked objects. May repeat an ID when
+// the input does; the caller dedupes.
+const placeLayeredNodes = (
   nodes: ObjectMapNode[],
   edges: ObjectMapLayoutEdge[],
   seedId: string
-): ObjectMapLayout => {
+): PositionedNode[] => {
   if (nodes.length === 0) {
-    return { nodes: [], edges: [], bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 } };
+    return [];
   }
 
   const columnOf = computeNodeColumns(nodes, edges, seedId);
@@ -660,7 +689,7 @@ export const computeObjectMapLayout = (
     if (!columnNodes) {
       return;
     }
-    const lanes = splitColumnIntoKindAwareLanes(columnNodes);
+    const lanes = splitIntoKindAwareLanes(columnNodes, OBJECT_MAP_MAX_NODES_PER_LANE);
     columnLanes.set(column, lanes);
     laneCounts.set(column, lanes.length);
   });
@@ -677,9 +706,166 @@ export const computeObjectMapLayout = (
     for (let laneIndex = 0; laneIndex < lanes.length; laneIndex += 1) {
       const laneNodes = lanes[laneIndex];
       const laneX = columnX + laneIndex * COLUMN_STRIDE;
-      placements.push(...positionLane(laneNodes, laneX, column, seedId));
+      placements.push(
+        ...positionLane(laneNodes, laneX, -laneHeight(laneNodes) / 2, column, seedId)
+      );
     }
   });
+
+  return placements;
+};
+
+// The seed always anchors the layered layout, linked or not.
+const collectLinkedNodeIds = (
+  nodes: ObjectMapNode[],
+  edges: ObjectMapLayoutEdge[],
+  seedId: string
+): Set<string> => {
+  const presentIds = new Set(nodes.map((node) => node.id));
+  const linkedIds = new Set<string>(presentIds.has(seedId) ? [seedId] : []);
+  edges.forEach((edge) => {
+    if (edge.source !== edge.target && presentIds.has(edge.source) && presentIds.has(edge.target)) {
+      linkedIds.add(edge.source);
+      linkedIds.add(edge.target);
+    }
+  });
+  return linkedIds;
+};
+
+type LayoutBounds = ObjectMapLayout['bounds'];
+type LayoutSize = { width: number; height: number };
+type UnlinkedBlockSide = 'right' | 'below';
+type UnlinkedBlock = LayoutSize & { lanes: ObjectMapNode[][]; side: UnlinkedBlockSide };
+
+const UNLINKED_BLOCK_SIDES: readonly UnlinkedBlockSide[] = ['right', 'below'];
+
+// The smallest lane cap for each lane count of an evenly split list: about
+// 2√n candidates instead of n. Kind groups can shift a cap's lane count a
+// little, but trying every cap would cost O(n²) at the 1000-object cap.
+const candidateLaneCaps = (count: number): number[] => {
+  const caps = new Set<number>();
+  for (let laneCount = 1; laneCount <= count; laneCount += 1) {
+    caps.add(Math.ceil(count / laneCount));
+  }
+  return Array.from(caps);
+};
+
+const combinedLayoutSize = (
+  block: LayoutSize,
+  side: UnlinkedBlockSide,
+  linked: LayoutBounds | null
+): LayoutSize => {
+  if (!linked) {
+    return block;
+  }
+  const linkedWidth = linked.maxX - linked.minX;
+  const linkedHeight = linked.maxY - linked.minY;
+  if (side === 'right') {
+    return {
+      width: linkedWidth + OBJECT_MAP_UNLINKED_GAP_X + block.width,
+      height: Math.max(linkedHeight, block.height),
+    };
+  }
+  return {
+    width: Math.max(linkedWidth, block.width),
+    height: linkedHeight + OBJECT_MAP_UNLINKED_GAP_Y + block.height,
+  };
+};
+
+// Negative when `a` shows bigger cards: auto-fit zoom is inversely
+// proportional to the width of the smallest fit-view-shaped box that holds the
+// map. Ties go to the smaller map.
+const compareFit = (a: LayoutSize, b: LayoutSize): number =>
+  Math.max(a.width, a.height * OBJECT_MAP_FIT_VIEW_ASPECT) -
+    Math.max(b.width, b.height * OBJECT_MAP_FIT_VIEW_ASPECT) ||
+  a.width * a.height - b.width * b.height;
+
+const chooseUnlinkedBlock = (
+  sorted: ObjectMapNode[],
+  linked: LayoutBounds | null
+): UnlinkedBlock => {
+  let best: UnlinkedBlock | null = null;
+  for (const laneCap of candidateLaneCaps(sorted.length)) {
+    const lanes = splitIntoKindAwareLanes(sorted, laneCap);
+    const size = {
+      width: lanes.length * COLUMN_STRIDE - OBJECT_MAP_COLUMN_GAP,
+      height: Math.max(...lanes.map(laneHeight)),
+    };
+    for (const side of UNLINKED_BLOCK_SIDES) {
+      const candidate = { ...size, lanes, side };
+      if (
+        !best ||
+        compareFit(
+          combinedLayoutSize(candidate, side, linked),
+          combinedLayoutSize(best, best.side, linked)
+        ) < 0
+      ) {
+        best = candidate;
+      }
+    }
+  }
+  return best ?? { width: 0, height: 0, lanes: [], side: 'right' };
+};
+
+const unlinkedBlockOrigin = (
+  block: UnlinkedBlock,
+  linked: LayoutBounds | null
+): { x: number; y: number } => {
+  if (!linked) {
+    return { x: 0, y: -block.height / 2 };
+  }
+  if (block.side === 'right') {
+    return {
+      x: linked.maxX + OBJECT_MAP_UNLINKED_GAP_X,
+      y: (linked.minY + linked.maxY) / 2 - block.height / 2,
+    };
+  }
+  return { x: linked.minX, y: linked.maxY + OBJECT_MAP_UNLINKED_GAP_Y };
+};
+
+// Pass 6: objects with no link to another object on the map form their own
+// block of kind-ordered lanes, beside or below the linked layout, sized so the
+// whole map fits a fit-view-shaped box at the largest zoom.
+const placeUnlinkedBlock = (
+  unlinked: ObjectMapNode[],
+  linkedPlacements: PositionedNode[],
+  seedId: string
+): PositionedNode[] => {
+  const linked = linkedPlacements.length > 0 ? computeObjectMapBounds(linkedPlacements) : null;
+  const block = chooseUnlinkedBlock([...unlinked].sort(compareForColumn), linked);
+  const origin = unlinkedBlockOrigin(block, linked);
+  // Block lanes take the columns after the linked layout's last one.
+  const firstColumn = linkedPlacements.reduce((last, node) => Math.max(last, node.column), -1) + 1;
+  return block.lanes.flatMap((laneNodes, laneIndex) =>
+    positionLane(
+      laneNodes,
+      origin.x + laneIndex * COLUMN_STRIDE,
+      origin.y,
+      firstColumn + laneIndex,
+      seedId
+    )
+  );
+};
+
+export const computeObjectMapLayout = (
+  nodes: ObjectMapNode[],
+  edges: ObjectMapLayoutEdge[],
+  seedId: string
+): ObjectMapLayout => {
+  if (nodes.length === 0) {
+    return { nodes: [], edges: [], bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 } };
+  }
+
+  const linkedIds = collectLinkedNodeIds(nodes, edges, seedId);
+  const placements = placeLayeredNodes(
+    nodes.filter((node) => linkedIds.has(node.id)),
+    edges,
+    seedId
+  );
+  const unlinked = nodes.filter((node) => !linkedIds.has(node.id));
+  if (unlinked.length > 0) {
+    placements.push(...placeUnlinkedBlock(unlinked, placements, seedId));
+  }
 
   const positioned = Array.from(new Map(placements.map((node) => [node.id, node])).values());
   return {

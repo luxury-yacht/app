@@ -1,267 +1,206 @@
+/**
+ * frontend/src/ui/settings/sections/DataManagementSection.test.tsx
+ *
+ * The Data Management settings: the Error Reporting switch saves through the
+ * preference owner; exports and imports run their backend command and report
+ * success; an import reads the imported settings or favorites back into the
+ * app, and every operation stays blocked until that read finishes; a canceled
+ * dialog reports nothing and reads nothing; a failed command is reported under
+ * its action. Runs inside the production shell with the real preference and
+ * favorites owners over the faked backend (test-utils/appState).
+ */
+
+import type { backend } from '@core/backend-api/models';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { eventBus } from '@/core/events';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { useFavorites } from '@/core/contexts/FavoritesContext';
+import { installAppStateHarness, type MountedApp } from '@/test-utils/appState/harness';
+import { partialModelFixture } from '@/test-utils/partialModelFixture';
 import { requireValue } from '@/test-utils/requireValue';
 import DataManagementSection from './DataManagementSection';
 
-const backendMocks = vi.hoisted(() => ({
-  ExportSettings: vi.fn(),
-  ImportSettings: vi.fn(),
-  ExportFavorites: vi.fn(),
-  ImportFavorites: vi.fn(),
-}));
+const app = installAppStateHarness();
+let view: MountedApp;
+let favoriteNames: string[] = [];
 
-const preferenceMocks = vi.hoisted(() => ({
-  enabled: false,
-  hydrateAppPreferences: vi.fn(),
-  setErrorReportingEnabled: vi.fn(),
-}));
+function FavoritesProbe() {
+  favoriteNames = useFavorites().favorites.map((favorite) => favorite.name);
+  return null;
+}
 
-const favoritesMocks = vi.hoisted(() => ({
-  hydrateFavorites: vi.fn(),
-}));
+const chosen = { canceled: false, path: '/tmp/luxury-yacht.json' };
+const canceled = { canceled: true, path: '' };
 
-const errorHandlerMocks = vi.hoisted(() => ({
-  handle: vi.fn(),
-}));
-
-vi.mock('@/core/backend-api', () => backendMocks);
-vi.mock('@/core/persistence/favorites', () => ({
-  hydrateFavorites: (...args: unknown[]) => favoritesMocks.hydrateFavorites(...args),
-}));
-vi.mock('@/core/settings/appPreferences', () => ({
-  getErrorReportingEnabled: () => preferenceMocks.enabled,
-  hydrateAppPreferences: (...args: unknown[]) => preferenceMocks.hydrateAppPreferences(...args),
-  setErrorReportingEnabled: (...args: unknown[]) =>
-    preferenceMocks.setErrorReportingEnabled(...args),
-}));
-vi.mock('@utils/errorHandler', () => ({ errorHandler: errorHandlerMocks }));
-
-const findButton = (container: HTMLElement, label: string): HTMLButtonElement =>
+const button = (label: string) =>
   requireValue(
-    Array.from(container.querySelectorAll('button')).find((button) => button.textContent === label),
-    `expected ${label} button`
+    Array.from(view.container.querySelectorAll<HTMLButtonElement>('button')).find(
+      (candidate) => candidate.textContent === label
+    ),
+    `expected the ${label} button`
   );
 
+const operations = () =>
+  ['Export Settings', 'Import Settings', 'Export Favorites', 'Import Favorites'].map(button);
+
+const errorReporting = () =>
+  requireValue(
+    view.container.querySelector<HTMLButtonElement>(
+      '[role="switch"][aria-label="Error Reporting"]'
+    ),
+    'expected the Error Reporting switch'
+  );
+
+const status = () => view.container.querySelector('[role="status"]')?.textContent ?? null;
+
+const click = async (target: HTMLElement) => {
+  await act(async () => target.click());
+  await app.settle();
+};
+
+beforeEach(async () => {
+  favoriteNames = [];
+  app.preferences({ errorReportingEnabled: false });
+  // Mirrors backend/preferences_settings.go UpdateAppPreferences.
+  app.backend.answer('UpdateAppPreferences', (request) => ({
+    settings: null,
+    changedKeys: (request.changes ?? []).map(({ key }) => key),
+  }));
+  app.backend.answer('ExportSettings', () => chosen);
+  app.backend.answer('ImportSettings', () => chosen);
+  app.backend.answer('ExportFavorites', () => chosen);
+  app.backend.answer('ImportFavorites', () => chosen);
+  view = await app.render(null);
+  await view.show(
+    <>
+      <DataManagementSection />
+      <FavoritesProbe />
+    </>
+  );
+});
+
 describe('DataManagementSection', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  it('saves the Error Reporting switch', async () => {
+    expect(errorReporting().getAttribute('aria-checked')).toBe('false');
 
-  beforeEach(async () => {
-    preferenceMocks.enabled = false;
-    preferenceMocks.hydrateAppPreferences.mockReset();
-    preferenceMocks.hydrateAppPreferences.mockResolvedValue({ errorReportingEnabled: false });
-    preferenceMocks.setErrorReportingEnabled.mockReset();
-    preferenceMocks.setErrorReportingEnabled.mockImplementation(async (value: boolean) => {
-      preferenceMocks.enabled = value;
-      eventBus.emit('settings:error-reporting', value);
-    });
-    favoritesMocks.hydrateFavorites.mockReset();
-    favoritesMocks.hydrateFavorites.mockResolvedValue([]);
-    errorHandlerMocks.handle.mockReset();
-    for (const mock of Object.values(backendMocks)) {
-      mock.mockReset();
-      mock.mockResolvedValue({ canceled: false, path: '/tmp/export.json' });
-    }
+    await click(errorReporting());
 
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    await act(async () => {
-      root.render(<DataManagementSection />);
-      await Promise.resolve();
-    });
-  });
-
-  afterEach(() => {
-    act(() => root.unmount());
-    container.remove();
-  });
-
-  it('persists the Error Reporting toggle', async () => {
-    const toggle = requireValue(
-      container.querySelector<HTMLButtonElement>('[role="switch"][aria-label="Error Reporting"]'),
-      'expected Error Reporting toggle'
-    );
-    expect(toggle.getAttribute('aria-checked')).toBe('false');
-
-    await act(async () => {
-      toggle.click();
-      await Promise.resolve();
-    });
-
-    expect(preferenceMocks.setErrorReportingEnabled).toHaveBeenCalledWith(true);
-    expect(toggle.getAttribute('aria-checked')).toBe('true');
-  });
-
-  it('exports settings and reports success', async () => {
-    await act(async () => {
-      findButton(container, 'Export Settings').click();
-      await Promise.resolve();
-    });
-
-    expect(backendMocks.ExportSettings).toHaveBeenCalledOnce();
-    expect(container.querySelector('[role="status"]')?.textContent).toBe('Settings exported.');
-  });
-
-  it('exports favorites and reports success', async () => {
-    await act(async () => {
-      findButton(container, 'Export Favorites').click();
-      await Promise.resolve();
-    });
-
-    expect(backendMocks.ExportFavorites).toHaveBeenCalledOnce();
-    expect(container.querySelector('[role="status"]')?.textContent).toBe('Favorites exported.');
-  });
-
-  it('imports settings directly and rehydrates preferences', async () => {
-    await act(async () => {
-      findButton(container, 'Import Settings').click();
-      await Promise.resolve();
-    });
-
-    expect(backendMocks.ImportSettings).toHaveBeenCalledOnce();
-    expect(preferenceMocks.hydrateAppPreferences).toHaveBeenLastCalledWith({ force: true });
-    expect(container.querySelector('[role="status"]')?.textContent).toBe('Settings imported.');
-  });
-
-  it('imports favorites directly and refreshes subscribers', async () => {
-    await act(async () => {
-      findButton(container, 'Import Favorites').click();
-      await Promise.resolve();
-    });
-
-    expect(backendMocks.ImportFavorites).toHaveBeenCalledOnce();
-    expect(favoritesMocks.hydrateFavorites).toHaveBeenCalledWith({ force: true });
-    expect(container.querySelector('[role="status"]')?.textContent).toBe('Favorites imported.');
-  });
-
-  it('does not report a canceled export as success', async () => {
-    backendMocks.ExportFavorites.mockResolvedValueOnce({ canceled: true, path: '' });
-
-    await act(async () => {
-      findButton(container, 'Export Favorites').click();
-      await Promise.resolve();
-    });
-
-    expect(container.querySelector('[role="status"]')).toBeNull();
-    expect(errorHandlerMocks.handle).not.toHaveBeenCalled();
-  });
-
-  it('does not rehydrate after a canceled settings import', async () => {
-    backendMocks.ImportSettings.mockResolvedValueOnce({ canceled: true, path: '' });
-
-    await act(async () => {
-      findButton(container, 'Import Settings').click();
-      await Promise.resolve();
-    });
-
-    expect(preferenceMocks.hydrateAppPreferences).toHaveBeenCalledOnce();
-    expect(container.querySelector('[role="status"]')).toBeNull();
-  });
-
-  it('does not rehydrate after a canceled favorites import', async () => {
-    backendMocks.ImportFavorites.mockResolvedValueOnce({ canceled: true, path: '' });
-
-    await act(async () => {
-      findButton(container, 'Import Favorites').click();
-      await Promise.resolve();
-    });
-
-    expect(favoritesMocks.hydrateFavorites).not.toHaveBeenCalled();
-    expect(container.querySelector('[role="status"]')).toBeNull();
+    expect(
+      app.backend.calls('UpdateAppPreferences').flatMap(([request]) => request.changes ?? [])
+    ).toEqual([{ key: 'errorReportingEnabled', value: true }]);
+    expect(errorReporting().getAttribute('aria-checked')).toBe('true');
   });
 
   it.each([
-    ['Settings', preferenceMocks.hydrateAppPreferences, 'importSettings'],
-    ['Favorites', favoritesMocks.hydrateFavorites, 'importFavorites'],
+    ['Export Settings', 'ExportSettings', 'Settings exported.'],
+    ['Export Favorites', 'ExportFavorites', 'Favorites exported.'],
+  ] as const)('%s runs its backend export and reports success', async (label, method, success) => {
+    await click(button(label));
+
+    expect(app.backend.calls(method)).toHaveLength(1);
+    expect(status()).toBe(success);
+  });
+
+  it('imports settings and shows the imported values', async () => {
+    // The backend's import replaces the saved settings.
+    app.backend.answer('ImportSettings', () => {
+      app.preferences({ errorReportingEnabled: true });
+      return chosen;
+    });
+
+    await click(button('Import Settings'));
+
+    expect(status()).toBe('Settings imported.');
+    expect(errorReporting().getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('reports imported settings it cannot read back, and keeps the current ones', async () => {
+    // The user had turned error reporting on.
+    await click(errorReporting());
+    app.backend.answer('GetAppSettings', () => {
+      throw new Error('saved settings unreadable');
+    });
+
+    await click(button('Import Settings'));
+
+    expect(status()).toBeNull();
+    expect(app.errors.take((record) => record.context?.action === 'importSettings')).toHaveLength(
+      1
+    );
+    expect(errorReporting().getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('imports favorites and the app’s favorites list shows them', async () => {
+    let saved: backend.Favorite[] = [];
+    app.backend.answer('GetFavorites', () => saved);
+    app.backend.answer('ImportFavorites', () => {
+      saved = [partialModelFixture<backend.Favorite>({ id: 'fav-1', name: 'Prod pods', order: 0 })];
+      return chosen;
+    });
+
+    await click(button('Import Favorites'));
+
+    expect(status()).toBe('Favorites imported.');
+    expect(favoriteNames).toEqual(['Prod pods']);
+  });
+
+  it.each([
+    ['Settings', 'GetAppSettings'],
+    ['Favorites', 'GetFavorites'],
   ] as const)(
-    'keeps operations blocked during %s rehydration and recovers after failure',
-    async (kind, hydrate, action) => {
-      let rejectHydration: ((error: Error) => void) | undefined;
-      hydrate.mockReturnValueOnce(
-        new Promise((_resolve, reject) => {
-          rejectHydration = reject;
-        })
-      );
-      await act(async () => {
-        findButton(container, `Import ${kind}`).click();
-      });
+    'keeps every operation blocked while imported %s are read back',
+    async (kind, read) => {
+      const release = app.backend.hold(read);
 
-      const buttons = [
-        'Export Settings',
-        'Import Settings',
-        'Export Favorites',
-        'Import Favorites',
-      ].map((label) => findButton(container, label));
-      expect(buttons.every((button) => button.disabled)).toBe(true);
-      await act(async () => {
-        findButton(container, 'Export Settings').click();
-      });
-      expect(backendMocks.ExportSettings).not.toHaveBeenCalled();
-      expect(container.querySelector('[role="status"]')).toBeNull();
+      await click(button(`Import ${kind}`));
 
-      const error = new Error('rehydration failed');
-      await act(async () => {
-        requireValue(rejectHydration, 'expected pending hydration')(error);
-      });
-      expect(errorHandlerMocks.handle).toHaveBeenCalledWith(error, { action });
-      expect(buttons.every((button) => !button.disabled)).toBe(true);
-      await act(async () => {
-        findButton(container, 'Export Settings').click();
-      });
-      expect(backendMocks.ExportSettings).toHaveBeenCalledOnce();
+      expect(operations().every((candidate) => candidate.disabled)).toBe(true);
+      await click(button('Export Settings'));
+      expect(app.backend.calls('ExportSettings')).toHaveLength(0);
+      expect(status()).toBeNull();
+
+      await act(async () => release());
+      await app.settle();
+
+      expect(operations().every((candidate) => !candidate.disabled)).toBe(true);
+      expect(status()).toBe(`${kind} imported.`);
     }
   );
 
-  it('routes export errors through the shared error handler', async () => {
-    const error = new Error('export failed');
-    backendMocks.ExportSettings.mockRejectedValueOnce(error);
+  it.each([
+    ['Export Favorites', 'ExportFavorites', null],
+    ['Import Settings', 'ImportSettings', 'GetAppSettings'],
+    ['Import Favorites', 'ImportFavorites', 'GetFavorites'],
+  ] as const)(
+    'reports nothing and reads nothing back when %s is canceled',
+    async (label, method, read) => {
+      app.backend.answer(method, () => canceled);
+      const readsBefore = read ? app.backend.calls(read).length : 0;
 
-    await act(async () => {
-      findButton(container, 'Export Settings').click();
-      await Promise.resolve();
+      await click(button(label));
+
+      expect(app.backend.calls(method)).toHaveLength(1);
+      expect(status()).toBeNull();
+      if (read) {
+        expect(app.backend.calls(read)).toHaveLength(readsBefore);
+      }
+    }
+  );
+
+  it.each([
+    ['Export Settings', 'ExportSettings', 'exportSettings'],
+    ['Import Favorites', 'ImportFavorites', 'importFavorites'],
+  ] as const)('reports a failed %s under its action', async (label, method, action) => {
+    const failure = new Error(`${action} failed`);
+    app.backend.answer(method, () => {
+      throw failure;
     });
 
-    expect(errorHandlerMocks.handle).toHaveBeenCalledWith(error, { action: 'exportSettings' });
-    expect(container.querySelector('[role="status"]')).toBeNull();
-  });
+    await click(button(label));
 
-  it('routes favorites export errors through the shared error handler', async () => {
-    const error = new Error('favorites export failed');
-    backendMocks.ExportFavorites.mockRejectedValueOnce(error);
-
-    await act(async () => {
-      findButton(container, 'Export Favorites').click();
-      await Promise.resolve();
-    });
-
-    expect(errorHandlerMocks.handle).toHaveBeenCalledWith(error, { action: 'exportFavorites' });
-  });
-
-  it('routes import errors through the shared error handler', async () => {
-    const error = new Error('import failed');
-    backendMocks.ImportFavorites.mockRejectedValueOnce(error);
-
-    await act(async () => {
-      findButton(container, 'Import Favorites').click();
-      await Promise.resolve();
-    });
-
-    expect(errorHandlerMocks.handle).toHaveBeenCalledWith(error, { action: 'importFavorites' });
-    expect(container.querySelector('[role="status"]')).toBeNull();
-  });
-
-  it('routes settings import errors through the shared error handler', async () => {
-    const error = new Error('settings import failed');
-    backendMocks.ImportSettings.mockRejectedValueOnce(error);
-
-    await act(async () => {
-      findButton(container, 'Import Settings').click();
-      await Promise.resolve();
-    });
-
-    expect(errorHandlerMocks.handle).toHaveBeenCalledWith(error, { action: 'importSettings' });
+    expect(
+      app.errors.take((record) => record.error === failure && record.context?.action === action)
+    ).toHaveLength(1);
+    expect(status()).toBeNull();
+    expect(operations().every((candidate) => !candidate.disabled)).toBe(true);
   });
 });

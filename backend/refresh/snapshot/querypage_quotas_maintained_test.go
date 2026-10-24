@@ -46,7 +46,7 @@ func TestQuotasMaintainedStoreSinkMatchesListPath(t *testing.T) {
 	limitIdx := newNamespaceIndexer()
 	pdbIdx := newNamespaceIndexer()
 	store := newTypedMaintainedStore(meta, quotasQuerypageSchema(), quotaTableQueryAdapter())
-	sink := store.Sink()
+	sink := unpublishedSink(store, "")
 	// Feed via the sink with the StreamRow output — exactly what the bundle's Table
 	// half delivers from the reflector. Each kind's descriptor projects its object.
 	for _, q := range quotas {
@@ -125,7 +125,7 @@ func quotasDescriptor(t *testing.T, resource string) streamspec.Descriptor {
 	return streamspec.Descriptor{}
 }
 
-// TestQuotasMaintainedStoreIngestion proves the informer-fed store reflects
+// TestQuotasMaintainedStoreIngestion proves the reflector-fed store reflects
 // Add/Update/Delete (incl. tombstone), tracks the max resourceVersion, and projects
 // rows identically to a direct BuildStreamSummary.
 func TestQuotasMaintainedStoreIngestion(t *testing.T) {
@@ -254,8 +254,8 @@ func TestNamespaceQuotasBuilderMaintainedMatchesListPath(t *testing.T) {
 	}
 
 	collect := quotasCollectIndexer(quotaIdx, limitIdx, pdbIdx)
-	listBuilder := &NamespaceQuotasBuilder{collectIndexer: collect}
-	maintainedBuilder := &NamespaceQuotasBuilder{collectIndexer: collect, maintained: maintained}
+	listBuilder := newTypedTableListOracle(namespaceQuotasDomainSpec(), collect)
+	maintainedBuilder := &NamespaceQuotasBuilder{available: availableFromIndexers(collect), maintained: maintained}
 
 	scopes := []string{
 		"namespace:default",

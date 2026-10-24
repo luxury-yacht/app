@@ -68,7 +68,6 @@ export function karpenterColumns(
       },
       openReference: parts.openReference,
       navigateReference: parts.navigateReference,
-      clusterName: parts.selectedClusterName,
     })
   );
   const columns = withColumnSizing(

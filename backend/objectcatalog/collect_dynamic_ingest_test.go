@@ -152,7 +152,7 @@ func TestUnclassifiedDynamicResourcePromotionMatchesListPath(t *testing.T) {
 	listSvc := NewService(Dependencies{
 		Common:    common.Dependencies{DynamicClient: widgetDynamicClient(w1, w2, w3)},
 		ClusterID: "c1",
-	}, &Options{ResyncInterval: time.Minute, PageSize: 200, ListWorkers: 2, InformerPromotionThreshold: 0})
+	}, &Options{ResyncInterval: time.Minute, PageSize: 200, ListWorkers: 2, ReflectorPromotionThreshold: 0})
 	listSummaries, err := listSvc.collectResource(ctx, desc, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, listSummaries, 3)
@@ -164,7 +164,7 @@ func TestUnclassifiedDynamicResourcePromotionMatchesListPath(t *testing.T) {
 		Common:       common.Dependencies{DynamicClient: widgetDynamicClient(w1, w2, w3)},
 		IngestSource: fake,
 		ClusterID:    "c1",
-	}, &Options{ResyncInterval: time.Minute, PageSize: 200, ListWorkers: 2, InformerPromotionThreshold: 2})
+	}, &Options{ResyncInterval: time.Minute, PageSize: 200, ListWorkers: 2, ReflectorPromotionThreshold: 2})
 
 	// First collect lists (the reflector is not yet registered) and crosses the threshold,
 	// which registers the on-demand dynamic reflector with the ingest source.
@@ -197,7 +197,7 @@ func TestUnclassifiedDynamicResourcePromotesOnlyAboveThreshold(t *testing.T) {
 		Common:       common.Dependencies{DynamicClient: widgetDynamicClient(w1)},
 		IngestSource: fake,
 		ClusterID:    "c1",
-	}, &Options{ResyncInterval: time.Minute, PageSize: 200, ListWorkers: 2, InformerPromotionThreshold: 5})
+	}, &Options{ResyncInterval: time.Minute, PageSize: 200, ListWorkers: 2, ReflectorPromotionThreshold: 5})
 
 	summaries, err := svc.collectResource(ctx, desc, nil, nil)
 	require.NoError(t, err)
@@ -226,7 +226,7 @@ func TestPromotedSourcePreservesListOnlyNamespaceRows(t *testing.T) {
 	defer mgr.Stop()
 	svc := NewService(Dependencies{
 		Common: common.Dependencies{DynamicClient: dyn}, IngestSource: mgr, ClusterID: "c1", AllowedNamespaces: scope,
-	}, &Options{ResyncInterval: time.Minute, PageSize: 200, ListWorkers: 2, InformerPromotionThreshold: 1})
+	}, &Options{ResyncInterval: time.Minute, PageSize: 200, ListWorkers: 2, ReflectorPromotionThreshold: 1})
 	first, err := svc.collectResource(ctx, desc, scope, nil)
 	require.NoError(t, err)
 	require.Len(t, first, 2)
@@ -358,6 +358,10 @@ func (*fakeDynamicIngestSource) ReconcileDiscoveredResource(schema.GroupVersionR
 
 func (source *fakeDynamicIngestSource) SubscribeCatalogSink(gvr schema.GroupVersionResource, sink ingest.Sink) func() {
 	source.AddCatalogSink(gvr, sink)
+	return func() {}
+}
+
+func (*fakeDynamicIngestSource) SubscribeBundleSink(schema.GroupVersionResource, ingest.BundleSink) func() {
 	return func() {}
 }
 

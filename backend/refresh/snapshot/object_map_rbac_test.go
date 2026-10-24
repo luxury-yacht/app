@@ -31,7 +31,6 @@ func TestObjectMapNamespacedRBACRelationships(t *testing.T) {
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"})
 	for _, scope := range []string{
 		"cluster-a|namespace:team-a",
-		"cluster-a|team-a:rbac.authorization.k8s.io/v1:Role:reader",
 		"cluster-a|team-a:rbac.authorization.k8s.io/v1:RoleBinding:readers",
 	} {
 		t.Run(scope, func(t *testing.T) {
@@ -53,6 +52,19 @@ func TestObjectMapNamespacedRBACRelationships(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A Role's map shows the bindings that grant it. Their subjects are reached
+// only by turning around at a binding, so they belong to the binding's map.
+func TestObjectMapRoleShowsGrantingBindingsWithoutSubjects(t *testing.T) {
+	builder := newObjectMapTestBuilder(t, fake.NewSimpleClientset(objectMapNamespacedRBACObjects()...))
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"})
+	snap, err := builder.Build(ctx, "cluster-a|team-a:rbac.authorization.k8s.io/v1:Role:reader")
+	require.NoError(t, err)
+	payload := snap.Payload.(ObjectMapSnapshotPayload)
+	assertEdge(t, payload, "RoleBinding", "readers", "Role", "reader", "grants")
+	assertMissingNode(t, payload, "ServiceAccount", "builder")
+	require.Len(t, payload.Nodes, 2)
 }
 
 func TestObjectMapServiceAccountIncludesNamespacedBinding(t *testing.T) {

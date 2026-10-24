@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/luxury-yacht/app/backend/kind/logspec"
 	"slices"
 	"strings"
 	"sync"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -31,7 +33,9 @@ const frameBudgetBytes = 8 * containerlogs.MaxLineBytes
 
 // Handler serves pod/workload logs over a named Wails stream.
 type Handler struct {
-	streamer    *Streamer
+	streamer *Streamer
+	// targets validate a request's scope; the streamer resolves through the same table.
+	targets     logspec.Targets
 	telemetry   *telemetry.Recorder
 	limiter     *GlobalTargetLimiter
 	sessionsMu  sync.Mutex
@@ -46,30 +50,15 @@ type JSONSender interface {
 	SendJSON(v interface{}) error
 }
 
-// permissionDeniedError preserves the original message while exposing details for structured payloads.
-type permissionDeniedError struct {
-	domain   string
-	resource string
-	message  string
-}
-
-func (e permissionDeniedError) Error() string {
-	return e.message
-}
-
-func (e permissionDeniedError) PermissionDeniedDetails() refresh.PermissionDeniedDetails {
-	return refresh.PermissionDeniedDetails{
-		Domain:   e.domain,
-		Resource: e.resource,
-	}
-}
-
 // NewHandler constructs a container logs stream handler.
-func NewHandler(client kubernetes.Interface, logger Logger, recorder *telemetry.Recorder, limiters ...*GlobalTargetLimiter) (*Handler, error) {
-	return NewHandlerWithLimits(client, logger, recorder, containerlogs.DefaultPerScopeTargetLimit, limiters...)
+func NewHandler(client kubernetes.Interface, targets logspec.Targets, logger Logger, recorder *telemetry.Recorder, limiters ...*GlobalTargetLimiter) (*Handler, error) {
+	return NewHandlerWithLimits(client, targets, logger, recorder, containerlogs.DefaultPerScopeTargetLimit, limiters...)
 }
 
-func NewHandlerWithLimits(client kubernetes.Interface, logger Logger, recorder *telemetry.Recorder, perScopeLimit int, limiters ...*GlobalTargetLimiter) (*Handler, error) {
+// NewHandlerWithLimits builds the container-log stream handler. targets are the
+// kind registry's container-log targets (kindregistry.MustLogTargets), the same
+// table the fetch path reads through.
+func NewHandlerWithLimits(client kubernetes.Interface, targets logspec.Targets, logger Logger, recorder *telemetry.Recorder, perScopeLimit int, limiters ...*GlobalTargetLimiter) (*Handler, error) {
 	if client == nil {
 		return nil, errors.New("containerlogsstream: kubernetes client is required")
 	}
@@ -78,7 +67,8 @@ func NewHandlerWithLimits(client kubernetes.Interface, logger Logger, recorder *
 		limiter = limiters[0]
 	}
 	return &Handler{
-		streamer: NewStreamer(client, logger, recorder, perScopeLimit), telemetry: recorder, limiter: limiter,
+		streamer: NewStreamer(client, targets, logger, recorder, perScopeLimit), targets: targets,
+		telemetry: recorder, limiter: limiter,
 		sessions: make(map[uint64]context.CancelFunc),
 	}, nil
 }
@@ -94,12 +84,9 @@ type containerLogsStream struct {
 
 // Handle serves one already-routed named-stream request.
 func (h *Handler) Handle(ctx context.Context, conn JSONSender, request Request) {
-	options, err := parseRequest(request)
+	options, err := parseRequest(request, h.targets)
 	if err != nil {
-		_ = conn.SendJSON(EventPayload{
-			Domain: containerLogsDomain, Scope: strings.TrimSpace(request.Scope),
-			Sequence: 1, GeneratedAt: time.Now().UnixMilli(), Error: err.Error(),
-		})
+		_ = conn.SendJSON(ErrorPayload(request.Scope, errorstatus.BadRequest(err)))
 		return
 	}
 	ctx, cancel := context.WithCancel(ctx)
@@ -220,14 +207,39 @@ func (s *containerLogsStream) handleInitialError(err error) {
 // writeFatal sends the error that ends the session.
 func (s *containerLogsStream) writeFatal(err error) {
 	s.recordError(err)
-	_ = s.writePayload(EventPayload{Error: err.Error(), ErrorDetails: permissionDeniedStatus(err), Retryable: isRetryable(err)})
+	_ = s.writePayload(failurePayload(err))
 }
 
-// isRetryable reports whether reconnecting could fix a failure. A missing
-// object, a permission denial or a rejected request stays failed.
-func isRetryable(err error) bool {
-	return !apierrors.IsNotFound(err) && !apierrors.IsForbidden(err) &&
-		!apierrors.IsBadRequest(err) && !apierrors.IsInvalid(err)
+// ErrorPayload is the only frame of a request that fails before its session
+// starts.
+func ErrorPayload(scope string, err error) EventPayload {
+	payload := failurePayload(err)
+	payload.Domain = containerLogsDomain
+	payload.Scope = strings.TrimSpace(scope)
+	payload.Sequence = 1
+	payload.GeneratedAt = time.Now().UnixMilli()
+	return payload
+}
+
+// failurePayload carries err's status, naming the denied API resource on a
+// Kubernetes denial, and whether reconnecting can fix it.
+func failurePayload(err error) EventPayload {
+	if apierrors.IsForbidden(err) && !errorstatus.IsPermissionDenied(err) {
+		err = errorstatus.WrapPermissionDenied(err, containerLogsDomain, forbiddenResource(err))
+	}
+	status := errorstatus.Classify(err)
+	return EventPayload{Error: status.Message, ErrorDetails: &status, Reconnect: reconnects(status.Reason)}
+}
+
+// reconnects reports whether reconnecting could fix a failure. A missing
+// target, a permission denial or a rejected request stays failed.
+func reconnects(reason errorstatus.Reason) bool {
+	switch reason {
+	case errorstatus.ReasonNotFound, errorstatus.ReasonForbidden,
+		errorstatus.ReasonBadRequest, errorstatus.ReasonInvalid:
+		return false
+	}
+	return true
 }
 
 func (s *containerLogsStream) recordError(err error) {
@@ -557,15 +569,15 @@ func logTargetLabel(opts Options) string {
 	return opts.Namespace + "/" + opts.Name
 }
 
-func parseRequest(request Request) (Options, error) {
+func parseRequest(request Request, targets logspec.Targets) (Options, error) {
 	rawScope := strings.TrimSpace(request.Scope)
-	identity, err := containerlogs.ParseTargetScope(rawScope)
+	identity, err := containerlogs.ParseTargetScope(rawScope, targets)
 	if err != nil {
 		return Options{}, err
 	}
-	clusterIDs, _ := refresh.SplitClusterScopeList(rawScope)
-	if len(clusterIDs) != 1 {
-		return Options{}, errors.New("log scope requires a single cluster scope")
+	clusterID, _ := refresh.SplitClusterScope(rawScope)
+	if clusterID == "" {
+		return Options{}, errors.New("log scope requires a cluster scope")
 	}
 	maxEntries := config.ContainerLogsStreamDefaultTailLines
 	if request.MaxEntries > 0 {
@@ -577,7 +589,7 @@ func parseRequest(request Request) (Options, error) {
 		maxBytes = min(max(request.MaxBytes, containerlogs.MaxLineBytes), config.ContainerLogsStreamMaxBytes)
 	}
 	return Options{
-		ClusterID:  clusterIDs[0],
+		ClusterID:  clusterID,
 		Namespace:  identity.Namespace,
 		Group:      identity.GVK.Group,
 		Version:    identity.GVK.Version,
@@ -633,25 +645,6 @@ func resumeTargets(namespace string, points []ResumePoint) []containerTarget {
 		targets = append(targets, target)
 	}
 	return targets
-}
-
-// permissionDeniedStatus translates forbidden errors into Status-like payloads
-// that name the denied API resource.
-func permissionDeniedStatus(err error) *refresh.PermissionDeniedStatus {
-	if status, ok := refresh.PermissionDeniedStatusFromError(err); ok {
-		return status
-	}
-	if apierrors.IsForbidden(err) {
-		wrapped := permissionDeniedError{
-			domain:   containerLogsDomain,
-			resource: forbiddenResource(err),
-			message:  err.Error(),
-		}
-		if status, ok := refresh.PermissionDeniedStatusFromError(wrapped); ok {
-			return status
-		}
-	}
-	return nil
 }
 
 // forbiddenResource names the API resource a Forbidden error denied, such as

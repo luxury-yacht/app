@@ -144,16 +144,16 @@ func TestSetClusterAllowedNamespacesRequestsRebuildOnlyOnChange(t *testing.T) {
 	require.Len(t, rebuilt, 2)
 }
 
-func TestAllowedNamespacesForClusterReadsPersistedScope(t *testing.T) {
+func TestRefreshAllowedNamespacesReadsPersistedScope(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newWorkspaceCoordinatorTestFixture(t)
 
-	require.Empty(t, app.Workspace.allowedNamespacesForCluster("kc:ctx"))
+	require.Empty(t, app.Refresh.refreshAllowedNamespaces("kc:ctx"))
 
 	_, err := app.Workspace.SetClusterAllowedNamespaces("kc:ctx", []string{"prod", "dev"})
 	require.NoError(t, err)
-	require.Equal(t, []string{"prod", "dev"}, app.Workspace.allowedNamespacesForCluster("kc:ctx"))
-	require.Empty(t, app.Workspace.allowedNamespacesForCluster("kc:other"))
+	require.Equal(t, []string{"prod", "dev"}, app.Refresh.refreshAllowedNamespaces("kc:ctx"))
+	require.Empty(t, app.Refresh.refreshAllowedNamespaces("kc:other"))
 }
 
 func TestScopeRebuildQueueCoalescesUntilStarted(t *testing.T) {

@@ -3,6 +3,7 @@ import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Drop
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import IconBar from '@shared/components/IconBar/IconBar';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
+import LogTable from '@shared/components/logs/LogTable';
 import ScrollableRegion from '@shared/components/ScrollableRegion';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import {
@@ -29,15 +30,16 @@ import {
   getLogViewerScrollPosition,
   setLogViewerScrollPosition,
 } from '../Logs/logViewerPrefsCache';
-import { formatRawOrPrettyJsonLine } from '../Logs/parsedLogUtils';
+import { formatRawOrPrettyJsonLine, getParsedLogRowKey } from '../Logs/parsedLogUtils';
+import RawLogViewer, { type RenderedLogRow } from '../Logs/RawLogViewer';
 import type { CapabilityState } from '../types';
 import { fetchNodeLogs, type NodeLogFetchResponse, type NodeLogSource } from './nodeLogsApi';
 import '../Logs/LogViewer.css';
 import './NodeLogsTab.css';
 import { useLogDownloadMenu } from '@shared/hooks/useLogDownloadMenu';
+import { useLogScrollRestoration } from '@shared/hooks/useLogScrollRestoration';
 import { errorHandler } from '@utils/errorHandler';
-import { eventBus } from '@/core/events';
-import { getObjPanelLogsBufferMaxSize } from '@/core/settings/appPreferences';
+import { getPreference, subscribePreference } from '@/core/settings/appPreferences';
 import { useLogKeyboardShortcuts } from '../Logs/hooks/useLogKeyboardShortcuts';
 import { useLogMessageRenderer } from '../Logs/hooks/useLogMessageRenderer';
 import {
@@ -46,11 +48,8 @@ import {
   useLogPresentation,
   useRawViewFallback,
 } from '../Logs/hooks/useLogPresentation';
-import { useLogScrollRestoration } from '../Logs/hooks/useLogScrollRestoration';
 import { useLogSelectionCopy } from '../Logs/hooks/useLogSelectionCopy';
 import { useTerminalTheme } from '../Logs/hooks/useTerminalTheme';
-import ParsedLogTable from '../Logs/ParsedLogTable';
-import RawLogViewer, { type RenderedLogRow } from '../Logs/RawLogViewer';
 
 const NODE_LOG_TAIL_BYTES = 256 * 1024;
 
@@ -177,9 +176,7 @@ type NodeLogFetchBatch = {
   response: NodeLogFetchResponse | null;
 };
 
-type NodeLogBatchResolution =
-  | { status: 'error'; message: string }
-  | { status: 'success'; content: string; truncated: boolean };
+type NodeLogBatchResolution = { content: string; truncated: boolean };
 
 type NodeLogFetchPlan = {
   activeSourcePath: string;
@@ -238,40 +235,35 @@ const fetchNodeLogBatch = async (
   nodeName: string,
   plan: NodeLogFetchPlan
 ): Promise<NodeLogFetchBatch> => {
-  let appendMode = Boolean(plan.incrementalSinceTime);
-  let result = await executeNodeLogFetch(
-    clusterId,
-    nodeName,
-    plan.activeSourcePath,
-    plan.requestReason,
-    plan.incrementalSinceTime
-  );
-  let response = getExecutedNodeLogResponse(result);
-  if (!response) {
-    return { appendMode, response: null };
+  const fullRead = async (): Promise<NodeLogFetchBatch> => ({
+    appendMode: false,
+    response: getExecutedNodeLogResponse(
+      await executeNodeLogFetch(clusterId, nodeName, plan.activeSourcePath, plan.requestReason)
+    ),
+  });
+  if (!plan.incrementalSinceTime) {
+    return fullRead();
   }
-  if (appendMode && (response.error || response.truncated)) {
-    result = await executeNodeLogFetch(
-      clusterId,
-      nodeName,
-      plan.activeSourcePath,
-      plan.requestReason
+  // An incremental read that fails or was cut short cannot be appended; a
+  // full read replaces it, and only that read's failure is reported.
+  let response: NodeLogFetchResponse | null;
+  try {
+    response = getExecutedNodeLogResponse(
+      await executeNodeLogFetch(
+        clusterId,
+        nodeName,
+        plan.activeSourcePath,
+        plan.requestReason,
+        plan.incrementalSinceTime
+      )
     );
-    response = getExecutedNodeLogResponse(result);
-    appendMode = false;
+  } catch {
+    return fullRead();
   }
-  return { appendMode, response };
-};
-
-const nodeLogResponseError = (response: NodeLogFetchResponse, clusterId: string): string | null => {
-  if (!response.error) {
-    return null;
+  if (response?.truncated) {
+    return fullRead();
   }
-  return errorHandler.handleInline(new Error(response.error), {
-    action: 'loadNodeLogs',
-    source: 'NodeLogsTab',
-    clusterId,
-  }).message;
+  return { appendMode: true, response };
 };
 
 // `truncated` means lines of this source were dropped: by the node's size
@@ -279,15 +271,10 @@ const nodeLogResponseError = (response: NodeLogFetchResponse, clusterId: string)
 const resolveNodeLogBatch = (
   batch: NodeLogFetchBatch,
   existing: { content: string; truncated: boolean },
-  clusterId: string,
   maxLines: number
 ): NodeLogBatchResolution | null => {
   if (!batch.response) {
     return null;
-  }
-  const responseError = nodeLogResponseError(batch.response, clusterId);
-  if (responseError) {
-    return { status: 'error', message: responseError };
   }
   const incomingContent = batch.response.content ?? '';
   const appending = batch.appendMode && existing.content.length > 0;
@@ -296,7 +283,6 @@ const resolveNodeLogBatch = (
     maxLines
   );
   return {
-    status: 'success',
     content: kept.content,
     truncated:
       Boolean(batch.response.truncated) || kept.dropped || (appending && existing.truncated),
@@ -335,7 +321,7 @@ const useNodeLogRequest = ({
   // Shrinking the buffer setting trims at once; growing applies as lines arrive.
   useEffect(
     () =>
-      eventBus.on('settings:obj-panel-logs-buffer-size', (maxLines) => {
+      subscribePreference('objPanelLogsBufferMaxSize', (maxLines) => {
         const kept = keepRecentNodeLogLines(contentRef.current, maxLines);
         if (kept.dropped) {
           setContent(kept.content);
@@ -375,15 +361,9 @@ const useNodeLogRequest = ({
         const resolution = resolveNodeLogBatch(
           batch,
           { content: contentRef.current, truncated: truncatedRef.current },
-          clusterId,
-          getObjPanelLogsBufferMaxSize()
+          getPreference('objPanelLogsBufferMaxSize')
         );
         if (!resolution) {
-          return;
-        }
-        if (resolution.status === 'error') {
-          setError(resolution.message);
-          setContent((current) => (plan.sourceChanged ? '' : current));
           return;
         }
         loadedSourcePathRef.current = plan.activeSourcePath;
@@ -576,11 +556,13 @@ const NodeLogContent = ({
   }
   if (showTable) {
     return (
-      <ParsedLogTable
+      <LogTable
         rows={parsedLogs}
         columns={tableColumns}
+        keyExtractor={getParsedLogRowKey}
         expandedRows={expandedRows}
         onToggleRow={onToggleParsedRow}
+        className="parsed-logs-table"
       />
     );
   }

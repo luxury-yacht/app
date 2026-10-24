@@ -1,7 +1,6 @@
 package objectcatalog
 
 import (
-	"context"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -9,75 +8,55 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/resourcemodel"
-	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	fakediscovery "k8s.io/client-go/discovery/fake"
-	dynamicfake "k8s.io/client-go/dynamic/fake"
-	kubernetesfake "k8s.io/client-go/kubernetes/fake"
-	k8stesting "k8s.io/client-go/testing"
 )
 
 // A small live change must publish query rows, identity, facets and Attention
 // findings without rebuilding every unchanged object in a large catalog.
 func TestIncrementalCatalogPublication(t *testing.T) {
-	for _, source := range []string{"watch", "ingest"} {
-		t.Run(source, func(t *testing.T) {
-			svc := NewService(Dependencies{ClusterID: "cluster-a"}, nil)
-			desc := testDeploymentDescriptor()
-			registerDesc(svc, desc)
-			svc.catalogIndex.rebuildCacheFromItems(svc.items, []Descriptor{desc})
-			baseline := svc.cacheRebuilds.Load()
-			updates, unsubscribe := svc.SubscribeStreaming()
-			defer unsubscribe()
-			<-updates
-			notifier := newWatchNotifier(svc)
-			obj := &metav1.PartialObjectMetadata{ObjectMeta: metav1.ObjectMeta{
-				Name: "sample", Namespace: "team-a", UID: "original", ResourceVersion: "1",
-			}}
-			apply := func(deleted bool) {
-				if source == "ingest" {
-					svc.applyIngestCatalogSummary(desc.GVR(), svc.buildSummary(desc, obj), deleted)
-				} else {
-					event := watchEvent{eventType: watchEventUpdate, gvr: desc.GVR().String(), key: catalogKey(desc, obj.Namespace, obj.Name), obj: obj}
-					if deleted {
-						event.eventType = watchEventDelete
-					}
-					notifier.flush([]watchEvent{event})
-				}
-				select {
-				case <-updates:
-				case <-time.After(time.Second):
-					t.Fatal("catalog change did not publish a signal")
-				}
-			}
-			apply(false)
-			require.Equal(t, 1, svc.Query(QueryOptions{}).TotalItems)
-			require.Equal(t, []string{"team-a"}, svc.Namespaces())
-			obj.UID = "replacement"
-			obj.ResourceVersion = "2"
-			obj.DeletionTimestamp = &metav1.Time{Time: time.Unix(100, 0)}
-			obj.Finalizers = []string{"example.com/cleanup"}
-			apply(false)
-			result := svc.Query(QueryOptions{})
-			require.Equal(t, 1, result.TotalItems, "recreation must replace the previous query row")
-			require.Equal(t, "replacement", result.Items[0].Ref.UID)
-			_, found := svc.FindByUID("original")
-			require.False(t, found, "old UID must not resolve to its replacement")
-			require.Equal(t, []FinalizerBlocker{{Ref: result.Items[0].Ref, Metadata: result.Items[0].Metadata, DeletionTimestamp: 100000}}, svc.FinalizerBlockers())
-			apply(true)
-			require.Zero(t, svc.Query(QueryOptions{}).TotalItems)
-			require.Empty(t, svc.Namespaces())
-			require.Empty(t, svc.Query(QueryOptions{}).Kinds)
-			require.Empty(t, svc.FinalizerBlockers())
-			_, found = svc.FindExactMatch("team-a", "apps", "v1", "Deployment", "sample")
-			require.False(t, found)
-			require.Equal(t, baseline, svc.cacheRebuilds.Load(), "live changes must not rebuild the full catalog")
-		})
+	svc := NewService(Dependencies{ClusterID: "cluster-a"}, nil)
+	desc := testDeploymentDescriptor()
+	registerDesc(svc, desc)
+	svc.catalogIndex.rebuildCacheFromItems(svc.items, []Descriptor{desc})
+	baseline := svc.cacheRebuilds.Load()
+	updates, unsubscribe := svc.SubscribeStreaming()
+	defer unsubscribe()
+	<-updates
+	obj := &metav1.PartialObjectMetadata{ObjectMeta: metav1.ObjectMeta{
+		Name: "sample", Namespace: "team-a", UID: "original", ResourceVersion: "1",
+	}}
+	apply := func(deleted bool) {
+		svc.applyIngestCatalogSummary(desc.GVR(), svc.buildSummary(desc, obj), deleted)
+		select {
+		case <-updates:
+		case <-time.After(time.Second):
+			t.Fatal("catalog change did not publish a signal")
+		}
 	}
+	apply(false)
+	require.Equal(t, 1, svc.Query(QueryOptions{}).TotalItems)
+	require.Equal(t, []string{"team-a"}, svc.Namespaces())
+	obj.UID = "replacement"
+	obj.ResourceVersion = "2"
+	obj.DeletionTimestamp = &metav1.Time{Time: time.Unix(100, 0)}
+	obj.Finalizers = []string{"example.com/cleanup"}
+	apply(false)
+	result := svc.Query(QueryOptions{})
+	require.Equal(t, 1, result.TotalItems, "recreation must replace the previous query row")
+	require.Equal(t, "replacement", result.Items[0].Ref.UID)
+	_, found := svc.FindByUID("original")
+	require.False(t, found, "old UID must not resolve to its replacement")
+	require.Equal(t, []FinalizerBlocker{{Ref: result.Items[0].Ref, Metadata: result.Items[0].Metadata, DeletionTimestamp: 100000}}, svc.FinalizerBlockers())
+	apply(true)
+	require.Zero(t, svc.Query(QueryOptions{}).TotalItems)
+	require.Empty(t, svc.Namespaces())
+	require.Empty(t, svc.Query(QueryOptions{}).Kinds)
+	require.Empty(t, svc.FinalizerBlockers())
+	_, found = svc.FindExactMatch("team-a", "apps", "v1", "Deployment", "sample")
+	require.False(t, found)
+	require.Equal(t, baseline, svc.cacheRebuilds.Load(), "live changes must not rebuild the full catalog")
 }
 
 func TestIncrementalQueriesMatchFullPublication(t *testing.T) {
@@ -137,38 +116,6 @@ func TestCatalogQueryReadsOnePublication(t *testing.T) {
 	}
 }
 
-func TestSourceReplayPublishesWatchChangesBeforeSignaling(t *testing.T) {
-	svc := NewService(Dependencies{ClusterID: "cluster-a"}, nil)
-	desc := Descriptor{Group: "example.com", Version: "v1", Kind: "Widget", Resource: "widgets", Scope: ScopeNamespace, Namespaced: true}
-	registerDesc(svc, desc)
-	updates, unsubscribe := svc.SubscribeStreaming()
-	defer unsubscribe()
-	<-updates
-	notifier := newWatchNotifier(svc)
-	obj := &metav1.PartialObjectMetadata{ObjectMeta: metav1.ObjectMeta{Name: "during-replay", Namespace: "team-a", UID: "new"}}
-	var once sync.Once
-	svc.deps.IngestSource = replayIngestSource{afterReplay: func() {
-		once.Do(func() {
-			notifier.flush([]watchEvent{{eventType: watchEventAdd, gvr: desc.GVR().String(), key: catalogKey(desc, obj.Namespace, obj.Name), obj: obj}})
-		})
-		select {
-		case <-updates:
-			t.Fatal("source replay signaled before publishing the complete query baseline")
-		default:
-		}
-	}}
-	svc.registerIngestCatalogSinks()
-	select {
-	case <-updates:
-	case <-time.After(time.Second):
-		t.Fatal("source replay did not publish its completion")
-	}
-	page := svc.Query(QueryOptions{})
-	require.Equal(t, 1, page.TotalItems)
-	require.Equal(t, "new", page.Items[0].Ref.UID)
-	require.Equal(t, []string{"team-a"}, page.Namespaces)
-}
-
 func TestIngestReplacementDoesNotRepublishUnchangedFinalizers(t *testing.T) {
 	svc := NewService(Dependencies{ClusterID: "cluster-a"}, nil)
 	desc := testDeploymentDescriptor()
@@ -197,39 +144,6 @@ func TestIngestReplacementDoesNotRepublishUnchangedFinalizers(t *testing.T) {
 		t.Fatal("completed deletion did not remove the Attention finding")
 	}
 	require.Empty(t, svc.FinalizerBlockers())
-}
-
-func TestWatchChangeDuringFullSyncConverges(t *testing.T) {
-	desc := Descriptor{Group: "example.com", Version: "v1", Kind: "Widget", Resource: "widgets", Scope: ScopeNamespace, Namespaced: true}
-	client := kubernetesfake.NewClientset()
-	discovery := &preferredDiscovery{FakeDiscovery: client.Discovery().(*fakediscovery.FakeDiscovery), resources: []*metav1.APIResourceList{{GroupVersion: "example.com/v1", APIResources: []metav1.APIResource{{Name: "widgets", Kind: "Widget", Namespaced: true, Verbs: metav1.Verbs{"list"}}}}}}
-	latest := &unstructured.Unstructured{}
-	latest.SetAPIVersion("example.com/v1")
-	latest.SetKind("Widget")
-	latest.SetName("changed-during-sync")
-	latest.SetNamespace("team-a")
-	latest.SetUID("current")
-	latest.SetResourceVersion("2")
-	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{desc.GVR(): "WidgetList"}, latest)
-	svc := NewService(Dependencies{ClusterID: "cluster-a", Common: common.Dependencies{KubernetesClient: &discoveryOverrideClient{Clientset: client, discovery: discovery}, DynamicClient: dyn}}, nil)
-	notifier := newWatchNotifier(svc)
-	first := true
-	dyn.PrependReactor("list", "widgets", func(k8stesting.Action) (bool, runtime.Object, error) {
-		if !first {
-			return false, nil, nil
-		}
-		first = false
-		// The watch is ahead of the LIST while sync owns publication. Recovery
-		// must reread the source after that stale collection has published.
-		notifier.flush([]watchEvent{{eventType: watchEventAdd, gvr: desc.GVR().String(), key: catalogKey(desc, latest.GetNamespace(), latest.GetName()), obj: latest}})
-		return true, &unstructured.UnstructuredList{}, nil
-	})
-	require.NoError(t, svc.sync(context.Background()))
-	notifier.runRecoverySync(context.Background())
-	page := svc.Query(QueryOptions{})
-	require.Equal(t, 1, page.TotalItems)
-	require.Equal(t, "2", page.Items[0].ResourceVersion)
-	require.Equal(t, []string{"team-a"}, page.Namespaces)
 }
 
 func BenchmarkCatalogIncrementalPublication(b *testing.B) {

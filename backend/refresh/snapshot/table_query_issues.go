@@ -23,6 +23,9 @@ const (
 	typedTableResourceUnavailable
 	typedTableResourceSyncing
 	typedTableResourceDegraded
+	// typedTableResourceNotServed is a kind discovery confirmed the cluster does
+	// not serve: it has no rows and no kind option, and no data is missing.
+	typedTableResourceNotServed
 )
 
 func typedTableSourceState(available bool) typedTableResourceState {
@@ -33,13 +36,16 @@ func typedTableSourceState(available bool) typedTableResourceState {
 }
 
 func (state typedTableResourceState) servesRows() bool {
-	return state != typedTableResourceUnavailable
+	return state != typedTableResourceUnavailable && state != typedTableResourceNotServed
 }
 
 func withTypedTableResourceReadiness(ctx context.Context, domainName string, sources []typedTableResourceSource) []typedTableResourceSource {
 	result := append([]typedTableResourceSource(nil), sources...)
 	for index := range result {
 		source := &result[index]
+		if source.State == typedTableResourceNotServed {
+			continue
+		}
 		if source.State == typedTableResourceUnavailable || !runtimeResourceAllowed(ctx, domainName, source.Group, source.Resource) {
 			source.State = typedTableResourceUnavailable
 			continue
@@ -70,7 +76,7 @@ func typedTableQueryResourceIssues(ctx context.Context, domainName string, query
 		if !typedTableQueryNeedsSource(query, source) {
 			continue
 		}
-		if source.State == typedTableResourceAvailable {
+		if source.State == typedTableResourceAvailable || source.State == typedTableResourceNotServed {
 			continue
 		}
 		message := fmt.Sprintf("%s resources are unavailable; table data is partial", source.Kind)

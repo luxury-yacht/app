@@ -44,7 +44,6 @@ type EventRelatedObjectRow = Omit<EventGridRowIdentity, 'ref'> & {
 
 export interface EventRelatedObjectOptions {
   selectedClusterId?: string | null;
-  selectedClusterName?: string | null;
 }
 
 export const eventGridSearchText = (event: EventGridRowIdentity): string[] =>
@@ -83,7 +82,6 @@ export const eventGridRelatedObjectInput = (
   involvedObject: event.involvedObject ?? undefined,
   objectUid: event.objectUid ?? undefined,
   clusterId: event.ref?.clusterId ?? event.clusterId ?? options.selectedClusterId ?? undefined,
-  clusterName: event.clusterName ?? options.selectedClusterName ?? undefined,
 });
 
 export const eventGridCanOpenRelatedObject = (

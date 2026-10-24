@@ -11,10 +11,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
+	"github.com/luxury-yacht/app/backend/kind/kindspec"
+	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/events"
 )
 
 // replayIngestSource mirrors ProjectingStore.AddCatalogSink: registering a sink
@@ -43,12 +48,40 @@ func (r replayIngestSource) RegisterDynamicCatalogReflector(schema.GroupVersionR
 func (r replayIngestSource) HasSyncedFor(schema.GroupVersionResource) bool { return true }
 func (r replayIngestSource) Tracks(schema.GroupVersionResource) bool       { return true }
 
+// Registration reconciles every built-in kind itself and drops their queued
+// work, but a custom resource queued at the same time must stay queued: here a
+// deleted CRD's reconcile must still clear its rows once the worker reaches it.
+func TestRegistrationKeepsQueuedCustomResourceReconciliation(t *testing.T) {
+	widgetGVR := schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"}
+	widget := Descriptor{Group: "example.com", Version: "v1", Kind: "Widget", Resource: "widgets", Namespaced: true, Scope: ScopeNamespace}
+	svc := NewService(Dependencies{IngestSource: replayIngestSource{rows: map[schema.GroupVersionResource][]interface{}{}}, ClusterID: "cluster-a"}, nil)
+	registerDesc(svc, widget)
+	svc.replaceIngestCatalogSummaries(widgetGVR, []Summary{{
+		Ref:   resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "example.com", Version: "v1", Kind: "Widget", Resource: "widgets", Namespace: "default", Name: "stale"},
+		Scope: ScopeNamespace,
+	}})
+	require.Equal(t, 1, svc.Query(QueryOptions{}).TotalItems)
+
+	// The drain worker is busy with another kind when the retired Widget
+	// source's reconcile is queued.
+	done := make(chan struct{})
+	svc.ingestPendingMu.Lock()
+	svc.ingestPending = map[schema.GroupVersionResource]struct{}{widgetGVR: {}}
+	svc.ingestDrainDone = done
+	svc.ingestPendingMu.Unlock()
+
+	svc.registerIngestCatalogSinks()
+	svc.drainIngestReconciliation(done)
+
+	require.Zero(t, svc.Query(QueryOptions{}).TotalItems, "registration dropped the queued Widget reconcile")
+}
+
 // TestRegisterIngestCatalogSinksRebuildsCacheOnce pins the batched registration:
 // every cut kind's replay lands in the catalog index, but the O(all-items) published
 // cache rebuild + broadcast happens exactly ONCE for the whole registration loop —
 // not once per kind, right in the startup window when the app is busiest.
 func TestRegisterIngestCatalogSinksRebuildsCacheOnce(t *testing.T) {
-	rows := make(map[schema.GroupVersionResource][]interface{}, len(catalogIngestOwnedGVRs))
+	rows := make(map[schema.GroupVersionResource][]interface{}, len(catalogIngestGVRs))
 	source := replayIngestSource{rows: rows}
 	svc := NewService(Dependencies{IngestSource: source}, nil)
 
@@ -56,7 +89,7 @@ func TestRegisterIngestCatalogSinksRebuildsCacheOnce(t *testing.T) {
 	// replay resolves and applies (an unresolvable kind would skip its rebuild and
 	// mask the per-kind cost this test pins).
 	svc.mu.Lock()
-	for gvr := range catalogIngestOwnedGVRs {
+	for gvr := range catalogIngestGVRs {
 		desc := Descriptor{
 			Kind:     gvr.Resource, // any stable non-empty kind; matching matters, not naming
 			Group:    gvr.Group,
@@ -74,13 +107,13 @@ func TestRegisterIngestCatalogSinksRebuildsCacheOnce(t *testing.T) {
 
 	if rebuilds != 1 {
 		t.Fatalf("sink registration must rebuild the published cache exactly once, got %d rebuilds for %d kinds",
-			rebuilds, len(catalogIngestOwnedGVRs))
+			rebuilds, len(catalogIngestGVRs))
 	}
 
 	// Every kind's replayed row must still be present after the single rebuild.
 	svc.mu.RLock()
 	defer svc.mu.RUnlock()
-	for gvr := range catalogIngestOwnedGVRs {
+	for gvr := range catalogIngestGVRs {
 		found := false
 		for _, item := range svc.catalogIndex.items {
 			if item.Ref.Resource == gvr.Resource && item.Ref.Group == gvr.Group {
@@ -96,7 +129,7 @@ func TestRegisterIngestCatalogSinksRebuildsCacheOnce(t *testing.T) {
 
 func TestConcurrentIngestUpdatesBothReachCatalog(t *testing.T) {
 	rows := make(map[schema.GroupVersionResource][]interface{})
-	svc := NewService(Dependencies{IngestSource: replayIngestSource{rows: rows}}, nil)
+	svc := NewService(Dependencies{IngestSource: replayIngestSource{rows: rows}, ClusterID: "cluster-a"}, nil)
 	gvr := schema.GroupVersionResource{Version: "v1", Resource: "pods"}
 	desc := Descriptor{Kind: "Pod", Version: "v1", Resource: "pods", Group: gvr.Group, Namespaced: true}
 	svc.catalogIndex.setResource(gvr.String(), desc)
@@ -149,15 +182,16 @@ func TestConcurrentIngestUpdatesBothReachCatalog(t *testing.T) {
 	}
 }
 
-func TestContendedIngestReplaceReconcilesAuthoritativeRows(t *testing.T) {
+// A bulk replay is reconciled from the store's authoritative rows after the
+// store callback returns, and a retired catalog starts no more reconciliation.
+func TestIngestReplayReconcilesAuthoritativeRows(t *testing.T) {
 	gvr := schema.GroupVersionResource{Version: "v1", Resource: "pods"}
 	desc := Descriptor{Kind: "Pod", Version: "v1", Resource: "pods", Group: gvr.Group, Namespaced: true}
 	row := Summary{Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "latest"}}
-	svc := NewService(Dependencies{IngestSource: replayIngestSource{rows: map[schema.GroupVersionResource][]interface{}{gvr: {row}}}}, nil)
+	svc := NewService(Dependencies{IngestSource: replayIngestSource{rows: map[schema.GroupVersionResource][]interface{}{gvr: {row}}}, ClusterID: "cluster-a"}, nil)
 	svc.catalogIndex.setResource(gvr.String(), desc)
-	svc.syncMu.Lock()
-	svc.replaceIngestCatalogSummaries(gvr, nil)
-	svc.syncMu.Unlock()
+	sink := ingestCatalogSink{service: svc, gvr: gvr}
+	sink.Replace(nil)
 	deadline := time.After(time.Second)
 	for {
 		svc.mu.RLock()
@@ -168,19 +202,35 @@ func TestContendedIngestReplaceReconcilesAuthoritativeRows(t *testing.T) {
 		}
 		select {
 		case <-deadline:
-			t.Fatal("contended Replace never reconciled authoritative rows")
+			t.Fatal("the replay never reconciled authoritative rows")
 		case <-time.After(time.Millisecond):
 		}
 	}
 	svc.stopIngestReconciliation()
-	svc.syncMu.Lock()
-	svc.replaceIngestCatalogSummaries(gvr, nil)
-	svc.syncMu.Unlock()
+	sink.Replace(nil)
 	svc.ingestPendingMu.Lock()
 	defer svc.ingestPendingMu.Unlock()
 	if svc.ingestDrainDone != nil || len(svc.ingestPending) != 0 {
 		t.Fatal("retired catalog spawned another reconciliation")
 	}
+}
+
+// waitForIngestReconciliation waits until queued replays have reconciled.
+func waitForIngestReconciliation(t *testing.T, svc *Service) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		svc.ingestPendingMu.Lock()
+		defer svc.ingestPendingMu.Unlock()
+		return svc.ingestDrainDone == nil && len(svc.ingestPending) == 0
+	}, time.Second, time.Millisecond)
+}
+
+// replaceIngestCatalogSummaries publishes a bulk replacement of gvr's rows the
+// way the partition-aware reconcile does, under the catalog's sync lock.
+func (s *Service) replaceIngestCatalogSummaries(gvr schema.GroupVersionResource, rows []Summary) {
+	s.syncMu.Lock()
+	defer s.syncMu.Unlock()
+	s.replaceIngestCatalogSummariesLocked(gvr, rows)
 }
 
 func (replayIngestSource) ReadDynamicCatalogSource(schema.GroupResource) (ingest.DynamicCatalogSnapshot, bool) {
@@ -199,6 +249,41 @@ func (source replayIngestSource) SubscribeCatalogSink(gvr schema.GroupVersionRes
 	return func() {}
 }
 
+func (replayIngestSource) SubscribeBundleSink(schema.GroupVersionResource, ingest.BundleSink) func() {
+	return func() {}
+}
+
+// PartitionReadinessFor reports the one Ready cluster-wide partition the ingest
+// manager reports for a synced, unscoped store.
 func (replayIngestSource) PartitionReadinessFor(schema.GroupVersionResource) []ingest.PartitionReadiness {
-	return nil
+	return []ingest.PartitionReadiness{{State: refresh.ResourceReadinessReady}}
+}
+
+// subscriptionRecordingSource records which kinds the catalog subscribes to.
+type subscriptionRecordingSource struct {
+	replayIngestSource
+	subscribed map[schema.GroupVersionResource]bool
+}
+
+func (source subscriptionRecordingSource) SubscribeCatalogSink(gvr schema.GroupVersionResource, sink ingest.Sink) func() {
+	source.subscribed[gvr] = true
+	return source.replayIngestSource.SubscribeCatalogSink(gvr, sink)
+}
+
+// The catalog subscribes to the ingest rows of every kind it collects, and to
+// no kind it excludes: Events are fed by an owned reflector but are not
+// catalog objects, and their row volume must not reach the catalog's sink.
+func TestCatalogSubscribesToTheIngestRowsOfCollectedKindsOnly(t *testing.T) {
+	source := subscriptionRecordingSource{subscribed: map[schema.GroupVersionResource]bool{}}
+	svc := NewService(Dependencies{IngestSource: source}, nil)
+	svc.registerIngestCatalogSinks()
+
+	want := map[schema.GroupVersionResource]bool{}
+	for _, descriptor := range kindregistry.All {
+		if descriptor.CatalogSource != kindspec.CatalogNone {
+			want[descriptor.Identity.GVR()] = true
+		}
+	}
+	require.Equal(t, want, source.subscribed)
+	require.NotContains(t, source.subscribed, events.Identity.GVR())
 }

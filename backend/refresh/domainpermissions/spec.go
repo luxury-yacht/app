@@ -3,6 +3,7 @@
 package domainpermissions
 
 import (
+	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/resourcekind"
 	admissionpkg "github.com/luxury-yacht/app/backend/resources/admission"
@@ -56,14 +57,17 @@ const (
 )
 
 // Policy is the shared permission contract for one refresh domain. Runtime
-// requirements gate snapshot reads; stream requirements describe resources that
-// resource streams must be able to list and watch.
+// requirements gate snapshot reads; optional requirements are read sources the
+// domain does not require, checked per read without gating it; stream
+// requirements describe resources that resource streams must be able to list
+// and watch.
 type Policy struct {
-	Domain  string
-	Mode    Mode
-	Reason  string
-	Runtime []permissions.ResourceRequirement
-	Stream  []permissions.ResourceRequirement
+	Domain   string
+	Mode     Mode
+	Reason   string
+	Runtime  []permissions.ResourceRequirement
+	Optional []permissions.ResourceRequirement
+	Stream   []permissions.ResourceRequirement
 }
 
 // Resource describes one Kubernetes resource used by a refresh domain. Group
@@ -91,12 +95,11 @@ type policySpec struct {
 	Mode    Mode
 	Reason  string
 	Runtime []Resource
-	Stream  []Resource
-	// RuntimeClusterWide marks the domain's runtime data source as
-	// cluster-wide regardless of any namespace scope
-	// (docs/architecture/namespace-scope.md): its runtime checks bypass the scope so
-	// the gate matches the source.
-	RuntimeClusterWide bool
+	// Optional resources are read sources the domain does not require: each is
+	// checked per read and reported in AllowedResources, but never denies the
+	// domain or holds its feed readiness.
+	Optional []Resource
+	Stream   []Resource
 }
 
 // Compositions returns the shared resource composition for refresh domains.
@@ -176,6 +179,9 @@ func PreflightRequirements() []permissions.ResourceRequirement {
 		for _, req := range policy.Runtime {
 			add(req)
 		}
+		for _, req := range policy.Optional {
+			add(req)
+		}
 		for _, req := range policy.Stream {
 			add(req)
 		}
@@ -186,18 +192,13 @@ func PreflightRequirements() []permissions.ResourceRequirement {
 func buildPolicies() []Policy {
 	result := make([]Policy, 0, len(policySpecs))
 	for _, spec := range policySpecs {
-		runtime := listRequirements(spec.Runtime)
-		if spec.RuntimeClusterWide {
-			for i := range runtime {
-				runtime[i].ClusterWide = true
-			}
-		}
 		result = append(result, Policy{
-			Domain:  spec.Domain,
-			Mode:    spec.Mode,
-			Reason:  spec.Reason,
-			Runtime: runtime,
-			Stream:  listWatchRequirements(spec.Stream),
+			Domain:   spec.Domain,
+			Mode:     spec.Mode,
+			Reason:   spec.Reason,
+			Runtime:  listRequirements(spec.Runtime),
+			Optional: listRequirements(spec.Optional),
+			Stream:   listWatchRequirements(spec.Stream),
 		})
 	}
 	return result
@@ -205,6 +206,7 @@ func buildPolicies() []Policy {
 
 func copyPolicy(policy Policy) Policy {
 	policy.Runtime = append([]permissions.ResourceRequirement(nil), policy.Runtime...)
+	policy.Optional = append([]permissions.ResourceRequirement(nil), policy.Optional...)
 	policy.Stream = append([]permissions.ResourceRequirement(nil), policy.Stream...)
 	return policy
 }
@@ -232,12 +234,15 @@ func listWatchRequirements(resources []Resource) []permissions.ResourceRequireme
 	return result
 }
 
-func resources(groups ...[]Resource) []Resource {
-	var result []Resource
-	for _, group := range groups {
-		result = append(result, group...)
+// objectMapResources is every kind the object map collects, from the kind
+// registry, so the domain's permission policy cannot drift from its collectors.
+func objectMapResources() []Resource {
+	identities := kindregistry.ObjectMapIdentities()
+	out := make([]Resource, 0, len(identities))
+	for _, id := range identities {
+		out = append(out, fromIdentity(id))
 	}
-	return result
+	return out
 }
 
 // fromIdentity builds a domain Resource from a kind package's canonical Identity,
@@ -278,7 +283,7 @@ var policySpecs = []policySpec{
 			fromIdentity(daemonset.Identity),
 			fromIdentity(job.Identity),
 			fromIdentity(cronjob.Identity),
-			fromIdentity(hpa.IdentityV1),
+			fromIdentity(hpa.Identity),
 		},
 	},
 	{
@@ -328,8 +333,8 @@ var policySpecs = []policySpec{
 	{
 		Domain:  "namespace-autoscaling",
 		Mode:    ModeAll,
-		Runtime: []Resource{fromIdentity(hpa.IdentityV1)},
-		Stream:  []Resource{fromIdentity(hpa.IdentityV1)},
+		Runtime: []Resource{fromIdentity(hpa.Identity)},
+		Stream:  []Resource{fromIdentity(hpa.Identity)},
 	},
 	{
 		Domain: "namespace-quotas",
@@ -369,10 +374,6 @@ var policySpecs = []policySpec{
 		// storage path. Streams also watch ConfigMaps so configmap-backed Helm
 		// release storage can trigger namespace-level resyncs when permitted.
 		Stream: []Resource{fromIdentity(secretpkg.Identity), fromIdentity(configmap.Identity)},
-		// Helm releases are read from the label-filtered CLUSTER-WIDE
-		// helm-storage informer factory, not from per-namespace ingest — the
-		// gate must match that source under a namespace scope.
-		RuntimeClusterWide: true,
 	},
 	{
 		Domain:  "namespace-events",
@@ -389,7 +390,9 @@ var policySpecs = []policySpec{
 		Domain:  "nodes",
 		Mode:    ModeAll,
 		Runtime: []Resource{fromIdentity(nodes.Identity)},
-		Stream:  []Resource{fromIdentity(nodes.Identity)},
+		// Each node's pod counts come from pods; without them the table is partial.
+		Optional: []Resource{fromIdentity(pods.Identity)},
+		Stream:   []Resource{fromIdentity(nodes.Identity)},
 	},
 	{
 		// ModeAny: the overview stays useful for identities without node access
@@ -478,43 +481,9 @@ var policySpecs = []policySpec{
 		Runtime: []Resource{fromIdentity(events.Identity)},
 	},
 	{
-		Domain: "object-map",
-		Mode:   ModeAny,
-		Reason: "object map resources",
-		Runtime: resources(
-			[]Resource{
-				fromIdentity(pods.Identity),
-				fromIdentity(service.Identity),
-				fromIdentity(endpointslice.Identity),
-				fromIdentity(persistentvolumeclaim.Identity),
-				fromIdentity(persistentvolume.Identity),
-				fromIdentity(storageclass.Identity),
-				fromIdentity(configmap.Identity),
-				fromIdentity(secretpkg.Identity),
-				fromIdentity(serviceaccount.Identity),
-				fromIdentity(nodes.Identity),
-			},
-			[]Resource{
-				fromIdentity(deployment.Identity),
-				fromIdentity(replicaset.Identity),
-				fromIdentity(statefulset.Identity),
-				fromIdentity(daemonset.Identity),
-				fromIdentity(job.Identity),
-				fromIdentity(cronjob.Identity),
-				fromIdentity(hpa.IdentityV1),
-				fromIdentity(ingress.Identity),
-				fromIdentity(ingressclass.Identity),
-			},
-			[]Resource{
-				fromIdentity(gatewayclass.Identity),
-				fromIdentity(gatewaypkg.Identity),
-				fromIdentity(httproute.Identity),
-				fromIdentity(grpcroute.Identity),
-				fromIdentity(tlsroute.Identity),
-				fromIdentity(listenerset.Identity),
-				fromIdentity(referencegrant.Identity),
-				fromIdentity(backendtlspolicy.Identity),
-			},
-		),
+		Domain:  "object-map",
+		Mode:    ModeAny,
+		Reason:  "object map resources",
+		Runtime: objectMapResources(),
 	},
 }

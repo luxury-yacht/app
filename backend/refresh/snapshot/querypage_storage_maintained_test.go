@@ -49,7 +49,7 @@ func storageDescriptor(t *testing.T, resource string) streamspec.Descriptor {
 	return streamspec.Descriptor{}
 }
 
-// TestStorageMaintainedStoreIngestion proves the informer-fed store reflects
+// TestStorageMaintainedStoreIngestion proves the reflector-fed store reflects
 // Add/Update/Delete (incl. tombstone), tracks the max resourceVersion, and projects
 // rows identically to a direct BuildStreamSummary.
 func TestStorageMaintainedStoreIngestion(t *testing.T) {
@@ -90,7 +90,7 @@ func TestStorageMaintainedStoreIngestion(t *testing.T) {
 
 // TestStorageMaintainedStoreSinkMatchesListPath is the SAFETY GATE for the live
 // ingest cutover: fed the projected StreamRow through the ingest Sink (the live
-// reflector path PersistentVolumeClaim now takes via IngestOwned), the maintained
+// reflector path PersistentVolumeClaim now takes), the maintained
 // store's rows must equal exactly what the list path produces, for every namespace
 // scope. The sink delivers the bundle's Table half directly.
 func TestStorageMaintainedStoreSinkMatchesListPath(t *testing.T) {
@@ -106,7 +106,7 @@ func TestStorageMaintainedStoreSinkMatchesListPath(t *testing.T) {
 
 	pvcIdx := newNamespaceIndexer()
 	store := newTypedMaintainedStore(meta, storageQuerypageSchema(), storageTableQueryAdapter())
-	sink := store.Sink()
+	sink := unpublishedSink(store, "")
 	for _, pvc := range pvcs {
 		require.NoError(t, pvcIdx.Add(pvc))
 		sink.Upsert(pvcDesc.StreamRow(meta, pvc))
@@ -184,8 +184,8 @@ func TestNamespaceStorageBuilderMaintainedMatchesListPath(t *testing.T) {
 	}
 
 	collect := storageCollectIndexer(pvcIdx)
-	listBuilder := &NamespaceStorageBuilder{collectIndexer: collect}
-	maintainedBuilder := &NamespaceStorageBuilder{collectIndexer: collect, maintained: maintained}
+	listBuilder := newTypedTableListOracle(namespaceStorageDomainSpec(), collect)
+	maintainedBuilder := &NamespaceStorageBuilder{available: availableFromIndexers(collect), maintained: maintained}
 
 	scopes := []string{
 		"namespace:default",

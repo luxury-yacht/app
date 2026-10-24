@@ -6,7 +6,8 @@
  * - Toggle: has an on/off state, shows active styling when on
  * - Split: a toggle or cycle button with a caret beside it that opens a menu of related choices
  * - Disclosure: shows or hides a related section, such as a row of extra controls
- * - Action: fires once on click, optionally shows brief feedback (success/error)
+ * - Action: fires once on click, optionally shows brief feedback (success/error) or a
+ *   lasting tone (success/error) while a state it resolves lasts
  * - Menu: opens a menu of actions, optionally shows brief feedback (success/error)
  */
 
@@ -61,11 +62,19 @@ export interface IconBarDisclosure extends IconBarButton {
   active: boolean;
 }
 
+/** How an action came out, for feedback and tone colors. */
+export type IconBarOutcome = 'success' | 'error';
+
 /** An action button that fires once and optionally shows feedback. */
 export interface IconBarAction extends IconBarButton {
   type: 'action';
   /** Brief feedback state: 'success' or 'error'. Omit or null for default. */
-  feedback?: 'success' | 'error' | null;
+  feedback?: IconBarOutcome | null;
+  /**
+   * A lasting color while the state the action resolves lasts, such as Save
+   * and Cancel while there are unsaved edits. Shown only while enabled.
+   */
+  tone?: IconBarOutcome | null;
 }
 
 /** A button that opens a menu of actions. */
@@ -73,7 +82,7 @@ export interface IconBarMenu extends Omit<IconBarButton, 'onClick'> {
   type: 'menu';
   menuItems: ContextMenuItem[];
   /** Brief feedback after a menu action: 'success' or 'error'. Omit or null for default. */
-  feedback?: 'success' | 'error' | null;
+  feedback?: IconBarOutcome | null;
 }
 
 /** A visual separator between groups of buttons. */
@@ -158,7 +167,7 @@ const SplitButton = ({ item }: { item: IconBarSplit }) => {
   );
 };
 
-const feedbackClassName = (feedback: 'success' | 'error' | null | undefined): string =>
+const feedbackClassName = (feedback: IconBarOutcome | null | undefined): string =>
   feedback ? `icon-bar-button feedback-${feedback}` : 'icon-bar-button';
 
 const MenuButton = ({ item }: { item: IconBarMenu }) => {
@@ -197,7 +206,8 @@ const buttonClassName = (item: IconBarToggle | IconBarDisclosure | IconBarAction
   if (item.type !== 'action') {
     return item.active ? 'icon-bar-button active' : 'icon-bar-button';
   }
-  return feedbackClassName(item.feedback);
+  const base = feedbackClassName(item.feedback);
+  return item.tone ? `${base} tone-${item.tone}` : base;
 };
 
 const PlainButton = ({ item }: { item: IconBarToggle | IconBarDisclosure | IconBarAction }) => (

@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
@@ -18,7 +18,7 @@ import (
 // serves from that store, populated with the supplied HPAs. It mirrors the production wiring
 // (RegisterMaintainedStore + a maintained-backed builder) closely enough to exercise the full
 // Cold-tier cool→serve→re-warm contract end-to-end at the snapshot layer.
-func coolServeFixture(t *testing.T, hpas []*autoscalingv1.HorizontalPodAutoscaler) (*domain.Registry, *Service) {
+func coolServeFixture(t *testing.T, hpas []*autoscalingv2.HorizontalPodAutoscaler) (*domain.Registry, *Service) {
 	t.Helper()
 	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "cluster-a"}
 	hpaDesc := autoscalingDescriptor(t, "horizontalpodautoscalers")
@@ -32,7 +32,7 @@ func coolServeFixture(t *testing.T, hpas []*autoscalingv1.HorizontalPodAutoscale
 
 	reg := domain.New()
 	reg.RegisterMaintainedStore(namespaceAutoscalingDomainName, maintained)
-	builder := &NamespaceAutoscalingBuilder{collectIndexer: autoscalingCollectIndexer(hpaIdx), maintained: maintained}
+	builder := &NamespaceAutoscalingBuilder{available: availableFromIndexers(autoscalingCollectIndexer(hpaIdx)), maintained: maintained}
 	require.NoError(t, reg.Register(refresh.DomainConfig{
 		Name:          namespaceAutoscalingDomainName,
 		BuildSnapshot: builder.Build,
@@ -40,7 +40,7 @@ func coolServeFixture(t *testing.T, hpas []*autoscalingv1.HorizontalPodAutoscale
 
 	// The Service starts with a NOT-synced hub (a live cluster's gate); cooling installs an
 	// always-synced cooled hub so a cooled Build still serves.
-	svc := NewServiceWithPermissions(reg, telemetry.NewRecorder(), meta, nil).WithInformerHub(&fakeInformerHub{synced: true})
+	svc := NewServiceWithPermissions(reg, telemetry.NewRecorder(), meta, nil).WithFeedHub(&fakeFeedHub{synced: true})
 	return reg, svc
 }
 
@@ -59,7 +59,7 @@ func autoscalingPayload(t *testing.T, svc *Service, scope string) NamespaceAutos
 // It runs concurrent Builds across the cool transition, so -race proves no Build reads the
 // mapping after the unmap (the cool→serve→re-warm→serve no-panic / no-race contract).
 func TestCoolServeRewarmRoundTrip(t *testing.T) {
-	hpas := []*autoscalingv1.HorizontalPodAutoscaler{
+	hpas := []*autoscalingv2.HorizontalPodAutoscaler{
 		hpaObj("default", "alpha", "1", "api", 4),
 		hpaObj("default", "beta", "2", "web", 6),
 		hpaObj("kube-system", "gamma", "3", "ctrl", 2),
@@ -93,7 +93,7 @@ func TestCoolServeRewarmRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, closers, 1)
 	require.FileExists(t, filepath.Join(dir, namespaceAutoscalingDomainName+".qcm"))
-	svc.SetInformerHub(alwaysSyncedHub{})
+	svc.SetFeedHub(alwaysSyncedHub{})
 
 	// (a) The cooled cluster serves the SAME payload — now from the mmap-backed store.
 	after := autoscalingPayload(t, svc, scope)

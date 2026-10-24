@@ -13,24 +13,19 @@ type objectMapAssembler struct {
 	index *objectMapIndex
 }
 
-func (b *objectMapBuilder) newObjectMapAssembler(ctx context.Context) (*objectMapAssembler, error) {
+func (b *objectMapBuilder) newObjectMapAssembler(ctx context.Context) *objectMapAssembler {
 	meta := ClusterMetaFromContext(ctx)
 	index := newObjectMapIndex(meta, b.allowedNamespaces)
-	index.addCatalog(b.catalog())
+	index.catalog = b.catalog()
 	index.collectTyped(objectMapTypedSource{
-		shared:      b.shared,
 		permissions: b.permissions,
 		ingest:      b.ingest,
 	})
-	index.collectGatewayTyped(b.gatewayShared, b.gatewayPresence, b.permissions)
-	if err := index.listError(); err != nil {
-		return nil, err
-	}
-	index.enrichActionFacts()
+	index.enrichActionFacts(b.ingest)
 	return &objectMapAssembler{
 		meta:  meta,
 		index: index,
-	}, nil
+	}
 }
 
 func (a *objectMapAssembler) buildObjectSnapshot(scope string, opts objectMapOptions) (*refresh.Snapshot, error) {
@@ -39,7 +34,7 @@ func (a *objectMapAssembler) buildObjectSnapshot(scope string, opts objectMapOpt
 		return nil, fmt.Errorf("object-map seed not found: %s/%s %s/%s", opts.identity.GVK.Group, opts.identity.GVK.Version, opts.identity.GVK.Kind, opts.identity.Name)
 	}
 
-	graph := a.index.buildGraph(seed, opts.maxDepth, opts.maxNodes)
+	graph := a.index.buildGraph(seed, opts.maxNodes)
 	return a.snapshot(scope, seed.ref, graph, opts), nil
 }
 
@@ -70,7 +65,6 @@ func (a *objectMapAssembler) snapshot(
 		Seed:        seed,
 		Nodes:       nodes,
 		Edges:       edges,
-		MaxDepth:    opts.maxDepth,
 		MaxNodes:    opts.maxNodes,
 		Truncated:   graph.truncated,
 		Warnings:    a.index.warnings,

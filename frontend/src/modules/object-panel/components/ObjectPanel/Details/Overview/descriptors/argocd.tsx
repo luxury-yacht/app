@@ -48,12 +48,10 @@ export const argoCDDescriptor: OverviewDescriptor<CustomResourceDetails> = {
   },
 };
 export function getArgoCDOverviewDescriptor(
-  kind: string,
-  detail: unknown
-): OverviewDescriptor<never> | undefined {
-  const data = detail as Partial<CustomResourceDetails> | null | undefined;
-  if (data?.resourceFamily !== 'argocd' || !data.argoCD) {
+  details: CustomResourceDetails
+): OverviewDescriptor<CustomResourceDetails> | undefined {
+  if (details.resourceFamily !== 'argocd' || !details.argoCD) {
     return undefined;
   }
-  return { ...argoCDDescriptor, displayKind: data.kind ?? kind } as OverviewDescriptor<never>;
+  return { ...argoCDDescriptor, displayKind: details.kind };
 }

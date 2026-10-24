@@ -7,6 +7,10 @@
 export const OBJECT_MAP_G6_CARD_NODE = 'object-map-card';
 export const OBJECT_MAP_G6_PATH_EDGE = 'object-map-path-edge';
 
+// Shown in place of the age on a card for an object a Helm release's manifest
+// names that the cluster does not have.
+export const OBJECT_MAP_MISSING_LABEL = 'Not found';
+
 export type ObjectMapG6CardDetailLevel = 'full' | 'compact' | 'minimal';
 export type ObjectMapG6EdgeDetailLevel = 'routed' | 'simple';
 

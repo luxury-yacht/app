@@ -5,13 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	informers "k8s.io/client-go/informers"
-	"k8s.io/client-go/tools/cache"
-	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
-
-	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 )
@@ -19,9 +15,8 @@ import (
 // typedTableDomainSpec bundles the per-domain values for the shared typed-table
 // domain skeleton (the config/RBAC/storage/quotas/autoscaling tables). Every one
 // of those domains follows the same shape — an availability-gated multi-kind row
-// collection served either from an informer-fed maintained store or a per-request
-// list — so each domain file declares only this spec plus its columns, sort, and
-// payload type.
+// collection served from a reflector-fed maintained store — so each domain file
+// declares only this spec plus its columns, sort, and payload type.
 type typedTableDomainSpec[T any] struct {
 	domain string
 	// scopeRequiredErr, when non-empty, marks a namespace-scoped domain: Build
@@ -30,47 +25,55 @@ type typedTableDomainSpec[T any] struct {
 	scopeRequiredErr string
 	entryLimit       int
 	// description names the row set in truncation diagnostics.
-	description string
-	// listErrorPrefix, when non-empty, wraps the list path's error to preserve
-	// each domain's historical error text.
-	listErrorPrefix string
-	adapter         typedTableQueryAdapter[T]
-	schema          querypage.Schema[T]
-	capabilities    ResourceQueryCapabilities
-	sortRows        func([]T)
+	description  string
+	adapter      typedTableQueryAdapter[T]
+	schema       querypage.Schema[T]
+	capabilities ResourceQueryCapabilities
+	sortRows     func([]T)
+	// payload constructs the domain's named payload struct so the wire JSON and
+	// the generated frontend types stay per-domain.
+	payload func(meta ClusterMeta, envelope ResourceQueryEnvelope, rows []T) any
+	// derived, when set, maps one row to the changes of other domains whose
+	// serve-time joins read the same source.
+	derived rowDerivation[T]
 }
 
-// typedTableSources computes per-descriptor availability for THIS request (indexer
-// present AND runtimeResourceAllowed), returning the snapshot sources and a
-// Kind→available map — the same gating collectDescriptorTableRows applies, so the
-// maintained-store path and the list path agree on which kinds are visible.
+// rowDerivation maps one changed row to other domains' changes; domains lists
+// them for a relist that redefines the whole kind.
+type rowDerivation[T any] struct {
+	changes func(row T) []doorbell.Change
+	domains []string
+}
+
+// typedTableSources computes per-descriptor availability for THIS request
+// (available at registration AND runtimeResourceAllowed), returning the snapshot
+// sources and a Kind→available map.
 func typedTableSources(
 	ctx context.Context,
 	domainName string,
-	collectIndexer func(streamspec.Descriptor) cache.Indexer,
+	available kindAvailability,
 ) ([]typedTableResourceSource, map[string]bool) {
-	sources := collectDescriptorSources(ctx, domainName, collectIndexer)
-	available := make(map[string]bool, len(sources))
+	sources := collectDescriptorSources(ctx, domainName, available)
+	kinds := make(map[string]bool, len(sources))
 	for _, source := range sources {
-		available[source.Kind] = source.State.servesRows()
+		kinds[source.Kind] = source.State.servesRows()
 	}
-	return sources, available
+	return sources, kinds
 }
 
 // buildTypedTableSnapshot is the shared Build skeleton: parse the (cluster- or
 // namespace-scoped) query scope, then serve the query straight from the
-// informer-fed maintained store when one is wired (querying it in place,
-// O(log N + page)), else list + re-project via collectDescriptorTableRows.
-// makePayload constructs the domain's named payload struct so the wire JSON and
-// the generated frontend types stay per-domain.
+// reflector-fed maintained store, querying it in place (O(log N + page)).
 func buildTypedTableSnapshot[T any](
 	ctx context.Context,
 	scope string,
 	spec typedTableDomainSpec[T],
-	collectIndexer func(streamspec.Descriptor) cache.Indexer,
+	available kindAvailability,
 	maintained *typedMaintainedStore[T],
-	makePayload func(ClusterMeta, ResourceQueryEnvelope, []T) any,
 ) (*refresh.Snapshot, error) {
+	if maintained == nil {
+		return nil, fmt.Errorf("%s: maintained store is not wired", spec.domain)
+	}
 	meta := ClusterMetaFromContext(ctx)
 	clusterID, trimmed := refresh.SplitClusterScope(scope)
 	baseScope, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), spec.domain, "")
@@ -78,67 +81,37 @@ func buildTypedTableSnapshot[T any](
 		return nil, err
 	}
 
-	// rowsScope selects the store/list rows: the parsed namespace for a
+	// rowsScope selects the store rows: the parsed namespace for a
 	// namespace-scoped domain, all rows ("") for a cluster-scoped one.
 	rowsScope := ""
 	if spec.scopeRequiredErr != "" {
-		parsedScope, scopeErr := parseNamespaceSnapshotScope(refresh.JoinClusterScope(clusterID, baseScope), spec.scopeRequiredErr)
+		parsedScope, scopeErr := parseNamespaceSnapshotScope(spec.domain, clusterID, baseScope, spec.scopeRequiredErr)
 		if scopeErr != nil {
 			return nil, scopeErr
 		}
 		rowsScope = parsedScope.Namespace
 	}
 
-	var resolved typedSnapshotPage[T]
-	var version uint64
-	if maintained != nil {
-		sources, available := typedTableSources(ctx, spec.domain, collectIndexer)
-		resolved = resolveMaintainedDirect(
-			maintained.store,
-			query,
-			maintainedQueryScope{availableKinds: available, namespace: rowsScope},
-			spec.adapter,
-			spec.schema,
-			func() []T {
-				rows := maintained.rows(rowsScope, available)
-				spec.sortRows(rows)
-				return rows
-			},
-			newTypedSnapshotPageConfig(
-				capabilitiesWithAvailableKinds(spec.capabilities, sources),
-				spec.entryLimit,
-				spec.description,
-				spec.adapter.Kind,
-				typedTableQueryResourceIssues(ctx, spec.domain, query, sources),
-			),
-		)
-
-		version = maintained.snapshotVersion()
-	} else {
-		rows, sources, v, listErr := collectDescriptorTableRows[T](ctx, spec.domain, collectIndexer, meta, rowsScope)
-		if listErr != nil {
-			if spec.listErrorPrefix != "" {
-				return nil, fmt.Errorf("%s: %w", spec.listErrorPrefix, listErr)
-			}
-			return nil, listErr
-		}
-		version = v
-		spec.sortRows(rows)
-		resolved = resolveTypedSnapshotPageViaStore(
-			spec.domain,
-			rows,
-			query,
-			spec.adapter,
-			spec.schema,
-			newTypedSnapshotPageConfig(
-				capabilitiesWithAvailableKinds(spec.capabilities, sources),
-				spec.entryLimit,
-				spec.description,
-				spec.adapter.Kind,
-				typedTableQueryResourceIssues(ctx, spec.domain, query, sources),
-			),
-		)
-	}
+	sources, availableKinds := typedTableSources(ctx, spec.domain, available)
+	resolved := resolveMaintainedDirect(
+		maintained.store,
+		query,
+		maintainedQueryScope{availableKinds: availableKinds, namespace: rowsScope},
+		spec.adapter,
+		spec.schema,
+		func() []T {
+			rows := maintained.rows(rowsScope, availableKinds)
+			spec.sortRows(rows)
+			return rows
+		},
+		newTypedSnapshotPageConfig(
+			capabilitiesWithAvailableKinds(spec.capabilities, sources),
+			spec.entryLimit,
+			spec.description,
+			spec.adapter.Kind,
+			typedTableQueryResourceIssues(ctx, spec.domain, query, sources),
+		),
+	)
 
 	// A namespace-scoped snapshot always publishes its full request scope. For a
 	// cluster-scoped domain the window snapshot is the canonical unscoped refresh
@@ -150,32 +123,26 @@ func buildTypedTableSnapshot[T any](
 	return &refresh.Snapshot{
 		Domain:  spec.domain,
 		Scope:   snapshotScope,
-		Version: version,
-		Payload: makePayload(meta, resolved.Envelope, resolved.Rows),
+		Version: maintained.snapshotVersion(),
+		Payload: spec.payload(meta, resolved.Envelope, resolved.Rows),
 		Stats:   resolved.Stats,
 	}, nil
 }
 
 // newRegisteredTypedTableStore wires the shared maintained-store scaffolding every
 // typed-table domain's Register performs: build the store, register it with the
-// governor for spill/restore/reconcile across Cold/re-warm, feed it from the
-// ingest reflectors' Table-half Sinks for the cut kinds, and register informer
-// handlers for any uncut kind (gatewayFactory only for domains with Gateway-API
-// kinds; ingestManager may be nil in unit tests — the cut kinds then have no feed).
+// governor for spill/restore across Cold/re-warm, and feed it from the
+// ingest reflectors' sinks. ingestManager is nil in unit tests, where the store
+// has no feed.
 func newRegisteredTypedTableStore[T any](
 	reg *domain.Registry,
 	spec typedTableDomainSpec[T],
 	clusterMeta ClusterMeta,
-	collectIndexer func(streamspec.Descriptor) cache.Indexer,
-	factory informers.SharedInformerFactory,
-	gatewayFactory gatewayinformers.SharedInformerFactory,
 	ingestManager *ingest.IngestManager,
+	bell doorbell.Bell,
 ) (*typedMaintainedStore[T], error) {
 	maintained := newTypedMaintainedStore(clusterMeta, spec.schema, spec.adapter)
 	reg.RegisterMaintainedStore(spec.domain, maintained)
-	feedMaintainedFromIngest(maintained, spec.domain, ingestManager)
-	if err := registerMaintainedHandlers(maintained, spec.domain, collectIndexer, factory, gatewayFactory); err != nil {
-		return nil, err
-	}
+	feedMaintainedFromIngest(maintained, spec.domain, ingestManager, bell, spec.derived)
 	return maintained, nil
 }

@@ -57,7 +57,7 @@ func rbacDescriptor(t *testing.T, resource string) streamspec.Descriptor {
 	return streamspec.Descriptor{}
 }
 
-// TestRBACMaintainedStoreIngestion proves the informer-fed store reflects
+// TestRBACMaintainedStoreIngestion proves the reflector-fed store reflects
 // Add/Update/Delete (incl. tombstone), tracks the max resourceVersion, and projects
 // rows identically to a direct BuildStreamSummary.
 func TestRBACMaintainedStoreIngestion(t *testing.T) {
@@ -149,7 +149,7 @@ func TestRBACMaintainedStoreMatchesListPath(t *testing.T) {
 
 // TestRBACMaintainedStoreSinkMatchesListPath is the SAFETY GATE for the live ingest
 // cutover: fed the projected StreamRow through the ingest Sink (the live reflector
-// path Role/RoleBinding/ServiceAccount now take via IngestOwned), the maintained
+// path Role/RoleBinding/ServiceAccount now take), the maintained
 // store's rows must equal exactly what the list path produces, for every namespace.
 func TestRBACMaintainedStoreSinkMatchesListPath(t *testing.T) {
 	meta := ClusterMeta{ClusterID: "c1", ClusterName: "cluster-one"}
@@ -174,7 +174,7 @@ func TestRBACMaintainedStoreSinkMatchesListPath(t *testing.T) {
 	bindingIdx := newNamespaceIndexer()
 	saIdx := newNamespaceIndexer()
 	store := newTypedMaintainedStore(meta, rbacQuerypageSchema(), rbacTableQueryAdapter())
-	sink := store.Sink()
+	sink := unpublishedSink(store, "")
 	for _, r := range roles {
 		require.NoError(t, roleIdx.Add(r))
 		sink.Upsert(roleDesc.StreamRow(meta, r))
@@ -243,8 +243,8 @@ func TestNamespaceRBACBuilderMaintainedMatchesListPath(t *testing.T) {
 	}
 
 	collect := rbacCollectIndexer(roleIdx, bindingIdx, saIdx)
-	listBuilder := &NamespaceRBACBuilder{collectIndexer: collect}
-	maintainedBuilder := &NamespaceRBACBuilder{collectIndexer: collect, maintained: maintained}
+	listBuilder := newTypedTableListOracle(namespaceRBACDomainSpec(), collect)
+	maintainedBuilder := &NamespaceRBACBuilder{available: availableFromIndexers(collect), maintained: maintained}
 
 	scopes := []string{
 		"namespace:default",

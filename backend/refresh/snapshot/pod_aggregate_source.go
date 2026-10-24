@@ -1,14 +1,14 @@
 /*
  * backend/refresh/snapshot/pod_aggregate_source.go
  *
- * The pod-aggregation read path for the informer-backed domains after the pod cut.
+ * The pod-aggregation read path for the feed-backed domains.
  * cluster-overview, nodes, and namespace-workloads no longer iterate typed pods: they
  * read the projected streamrows.PodAggregate the pod reflector already built at intake
  * (the Bundle's Aggregate half), keyed off the pod GVR. It is the same PodAggregate the
  * typed-pod path produced via projectPodAggregate, so every per-domain aggregation that
  * reads it stays byte-equivalent.
  *
- * The list-fallback builders (no informer permission) still list typed pods directly
+ * The list-fallback builders (no list+watch permission) still list typed pods directly
  * and project them to PodAggregate via projectPodAggregate inline, so both paths
  * converge on the same []streamrows.PodAggregate the shared aggregation logic consumes.
  */
@@ -30,11 +30,11 @@ type podWorkloadsIndexReader interface {
 	RowsByIndex(gvr schema.GroupVersionResource, indexName string, values []string) []interface{}
 }
 
-// podAggregateIngestSource supplies the projected per-pod aggregation rows for the cut
-// pod kind, whose objects are no longer cached by the shared informer factory.
+// podAggregateIngestSource supplies the projected per-pod aggregation rows from the
+// owned pod reflector, which keeps no typed Pod.
 // *ingest.IngestManager satisfies it (its AggregateRows returns the Bundle Aggregate
 // halves; StoreResourceVersion returns the store's latest list/watch RV). It is the
-// read path the informer-backed aggregation domains use instead of a typed pod lister,
+// read path the feed-backed aggregation domains use instead of a typed pod lister,
 // mirroring the objectMapRowsProvider the object map already uses.
 type podAggregateIngestSource interface {
 	AggregateRows(gvr schema.GroupVersionResource) []interface{}

@@ -117,7 +117,7 @@ const viewStyleSpec = {
   '.cm-panel.cm-search .cm-textfield': {
     minWidth: '12rem',
     padding: '0.35rem 0.5rem',
-    backgroundColor: 'var(--field-surface)',
+    backgroundColor: 'var(--code-surface)',
     color: 'var(--code-text-primary)',
     border: '1px solid var(--code-border)',
     borderRadius: 'var(--border-radius-sm)',

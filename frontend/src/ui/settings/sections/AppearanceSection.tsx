@@ -28,6 +28,8 @@ import {
   isPaletteActive,
   MAX_BRIGHTNESS_OFFSET,
   MAX_SATURATION,
+  PALETTE_BRIGHTNESS_RANGE,
+  PALETTE_SATURATION_RANGE,
 } from '@utils/paletteTint';
 import {
   type CSSProperties,
@@ -1093,10 +1095,10 @@ function AppearanceSection() {
     }
   };
 
-  const saturationOffset = (paletteSaturation / 100) * MAX_SATURATION;
+  const saturationOffset = (paletteSaturation / PALETTE_SATURATION_RANGE) * MAX_SATURATION;
   const brightnessLightness = Math.min(
     99,
-    Math.max(1, 50 + (paletteBrightness / 50) * MAX_BRIGHTNESS_OFFSET)
+    Math.max(1, 50 + (paletteBrightness / PALETTE_BRIGHTNESS_RANGE) * MAX_BRIGHTNESS_OFFSET)
   );
   const hueSliderStyle = buildPaletteSliderStyle(`hsl(${paletteHue}, 100%, 50%)`);
   const saturationSliderStyle = buildPaletteSliderStyle(

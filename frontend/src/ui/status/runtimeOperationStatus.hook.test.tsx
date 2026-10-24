@@ -31,7 +31,14 @@ vi.mock('@core/desktop-runtime', () => ({
 const forward = {
   id: 'pf-a',
   clusterId: 'cluster-a',
-  namespace: 'default',
+  target: {
+    clusterId: 'cluster-a',
+    group: '',
+    version: 'v1',
+    kind: 'Pod',
+    namespace: 'default',
+    name: 'web',
+  },
   podName: 'web',
   containerPort: 80,
   localPort: 8080,

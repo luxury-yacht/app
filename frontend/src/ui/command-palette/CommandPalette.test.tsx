@@ -1,17 +1,31 @@
 /**
  * frontend/src/ui/command-palette/CommandPalette.test.tsx
  *
- * Test suite for CommandPalette.
- * Covers key behaviors and edge cases for CommandPalette.
+ * The command palette: how it opens (the native View menu, File → Open
+ * Cluster, and the select-namespace shortcut) and into which picker; how the
+ * keyboard and the mouse move its selection; how a command runs; and how it
+ * searches the selected cluster's object catalog, ignores a search the user
+ * has moved on from, and opens a found object's panel with full identity.
+ * Also the pure query parsing and catalog ranking it uses. Runs in provider
+ * mode inside the real app shell (keyboard, kubeconfig, and object-panel
+ * owners), with only the backend boundary faked (test-utils/appState); the
+ * palette receives fixed commands, as AppLayout passes it the app's.
  */
 
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { eventBus } from '@/core/events';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
 import type { CanonicalRowTestOverrides, CatalogItem } from '@/core/refresh/types';
 import { compareUtf16Strings } from '@/shared/utils/sort';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { snapshotResponse, statusResponse } from '@/test-utils/appState/transport';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { requireValue } from '@/test-utils/requireValue';
+import { isMacPlatform } from '@/utils/platform';
 import { buildCatalogDisplayEntries, CommandPalette, parseQueryTokens } from './CommandPalette';
 import type { Command } from './CommandPaletteCommands';
 
@@ -144,914 +158,461 @@ describe('parseQueryTokens', () => {
   });
 });
 
-const openWithObjectMock = vi.fn();
-const fetchSnapshotMock = vi.fn();
-let selectedClusterId = 'alpha:ctx';
-let registeredGlobalShortcuts: Array<{
-  key: string;
-  modifiers?: Record<string, boolean>;
-  handler: () => boolean | undefined;
-}> = [];
-let registeredPaletteShortcuts: Array<{
-  key: string;
-  handler: () => boolean | undefined;
-  enabled?: boolean;
-}> = [];
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({
-    openWithObject: openWithObjectMock,
-  }),
-}));
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
 
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedClusterId }),
-}));
+const command = (id: string, label: string, category: string, action = vi.fn()): Command => ({
+  id,
+  label,
+  category,
+  action,
+});
 
-vi.mock('@hooks/useShortNames', () => ({
-  useShortNames: () => false,
-}));
+const showPalette = async (commands: Command[]) => {
+  view = await app.render(null);
+  await view.show(<CommandPalette commands={commands} />);
+};
 
-vi.mock('@/core/refresh/client', () => ({
-  fetchSnapshot: (...args: unknown[]) => fetchSnapshotMock(...args),
-}));
+/** Delivers a native menu event, as the backend does. */
+const menu = async (name: string) => {
+  await act(async () => {
+    app.events.emit(name);
+  });
+  await app.settle();
+};
 
-// Capture Wails runtime event subscriptions so tests can emit native-menu
-// events (e.g. the View → Command Palette item) to the component.
-const wailsEventHandlers = new Map<string, (...args: unknown[]) => void>();
+/** The native View → Command Palette menu item. */
+const openFromViewMenu = () => menu('open-command-palette');
+/** The native File → Open Cluster menu item. */
+const openFromOpenClusterMenu = () => menu('open-cluster');
 
-vi.mock('@core/desktop-runtime', () => ({
-  desktopRuntimeAvailable: () => false,
-  onEvent: (event: string, handler: (...args: unknown[]) => void) => {
-    wailsEventHandlers.set(event, handler);
-    return () => wailsEventHandlers.delete(event);
-  },
-}));
+const primary = (): KeyboardEventInit => (isMacPlatform() ? { metaKey: true } : { ctrlKey: true });
 
-vi.mock('@ui/shortcuts', () => ({
-  useShortcut: (options: {
-    key: string;
-    modifiers?: Record<string, boolean>;
-    handler: () => boolean | undefined;
-  }) => {
-    registeredGlobalShortcuts.push(options);
-  },
-  useShortcuts: (
-    shortcuts: Array<{ key: string; handler: () => boolean | undefined; enabled?: boolean }>,
-    _config: Record<string, unknown> = {}
-  ) => {
-    registeredPaletteShortcuts = shortcuts;
-  },
-  useKeyboardContext: () => ({
-    hasActiveBlockingSurface: vi.fn(() => false),
-    registerSurface: vi.fn(),
-    unregisterSurface: vi.fn(),
-    dispatchNativeAction: vi.fn(() => false),
-  }),
-  useSearchShortcutTarget: () => undefined,
-}));
+const press = async (key: string, modifiers: KeyboardEventInit = {}) => {
+  const event = new KeyboardEvent('keydown', {
+    key,
+    bubbles: true,
+    cancelable: true,
+    ...modifiers,
+  });
+  await act(async () => {
+    (document.activeElement ?? document.body).dispatchEvent(event);
+  });
+  await app.settle();
+  return event;
+};
 
-describe('CommandPalette component behaviour', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+const pressNamespaceShortcut = () => press('N', { ...primary(), shiftKey: true });
 
-  const renderPalette = async (commands: Command[]) => {
-    await act(async () => {
-      root.render(<CommandPalette commands={commands} />);
-      await Promise.resolve();
-    });
-  };
+const palette = () => document.querySelector<HTMLDialogElement>('dialog.command-palette');
 
-  const modifierKeys: Array<'ctrl' | 'meta' | 'shift' | 'alt'> = ['ctrl', 'meta', 'shift', 'alt'];
+const input = () =>
+  requireValue(
+    document.querySelector<HTMLInputElement>('.command-palette [role="combobox"]'),
+    'expected the command-palette input'
+  );
 
-  const modifiersEqual = (
-    actual: Record<string, boolean> | undefined,
-    expected: Record<string, boolean>
-  ) => modifierKeys.every((mod) => (actual?.[mod] ?? false) === (expected[mod] ?? false));
+const type = async (text: string) => {
+  await act(async () => {
+    const field = input();
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(field, text);
+    field.dispatchEvent(new InputEvent('input', { bubbles: true }));
+  });
+};
 
-  const findGlobalShortcut = (expected: Record<string, boolean>, key = 'n') =>
-    registeredGlobalShortcuts.find(
-      (shortcut) =>
-        shortcut.key.toLowerCase() === key && modifiersEqual(shortcut.modifiers, expected)
-    );
+const options = () =>
+  Array.from(document.querySelectorAll<HTMLElement>('.command-palette [role="option"]'));
 
-  const macPlatform =
-    typeof navigator !== 'undefined' &&
-    /Mac/i.test((navigator.platform || '') + (navigator.userAgent || ''));
-  const defaultGlobalModifiers: Record<string, boolean> = macPlatform
-    ? { meta: true, shift: true }
-    : { ctrl: true, shift: true };
+const optionLabels = () => options().map((option) => option.textContent?.trim());
 
-  const emitWailsEvent = async (event: string, ...args: unknown[]) => {
-    const handler = wailsEventHandlers.get(event);
-    const registeredHandler = requireValue(handler, `expected Wails event handler for ${event}`);
-    await act(async () => {
-      registeredHandler(...args);
-      await Promise.resolve();
-    });
-  };
+const selectedIndex = () =>
+  options().findIndex((option) => option.getAttribute('aria-selected') === 'true');
 
-  const openPalette = () => emitWailsEvent('open-command-palette');
+const groups = () =>
+  Array.from(document.querySelectorAll('.command-palette legend')).map((legend) =>
+    legend.textContent?.trim()
+  );
 
-  const queryItems = () =>
-    Array.from(document.querySelectorAll<HTMLDivElement>('.command-palette-item'));
-
-  const queryInput = () =>
-    requireValue(
-      document.querySelector<HTMLInputElement>('.command-palette-input'),
-      'expected the command-palette input'
-    );
-
-  const triggerShortcut = async (key: string) => {
-    const shortcut = requireValue(
-      registeredPaletteShortcuts.find((entry) => entry.key === key),
-      `expected the ${key} command-palette shortcut`
-    );
-    if (shortcut.enabled === false) {
-      throw new Error(`Shortcut ${key} is not enabled`);
-    }
-    await act(async () => {
-      shortcut.handler();
-      await Promise.resolve();
-    });
-  };
-
-  beforeAll(() => {
-    if (!Element.prototype.scrollIntoView) {
-      Element.prototype.scrollIntoView = vi.fn();
-    }
+// A command runs once the palette has closed.
+const runPendingCommand = () =>
+  act(async () => {
+    await vi.advanceTimersByTimeAsync(100);
   });
 
-  beforeEach(() => {
-    registeredGlobalShortcuts = [];
-    registeredPaletteShortcuts = [];
-    wailsEventHandlers.clear();
-    fetchSnapshotMock.mockReset();
-    selectedClusterId = 'alpha:ctx';
-    openWithObjectMock.mockReset();
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
+// The palette searches the catalog once typing pauses.
+const finishSearchDebounce = () =>
+  act(async () => {
+    await vi.advanceTimersByTimeAsync(200);
   });
 
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-    vi.useRealTimers();
+const isPaletteSearch = (cluster: TestCluster, scope: string) =>
+  scope.startsWith(`${cluster.clusterId}|`) && scope.includes('limit=20');
+
+const catalogPayload = (cluster: TestCluster, items: CatalogItem[], total = items.length) =>
+  makeCatalogSnapshotPayload({
+    clusterId: cluster.clusterId,
+    clusterName: cluster.clusterName,
+    items,
+    total,
   });
 
-  it('opens when the native View menu emits open-command-palette', async () => {
-    await renderPalette([]);
-    expect(document.querySelector('.command-palette')).toBeNull();
-
-    await emitWailsEvent('open-command-palette');
-
-    expect(document.querySelector('.command-palette')).toBeTruthy();
+const catalogPod = (cluster: TestCluster, namespace: string, name: string) =>
+  createCatalogItem({
+    ref: { clusterId: cluster.clusterId, namespace, name, uid: `${name}-uid` },
   });
 
-  it('ignores open-command-palette while it is already open', async () => {
-    await renderPalette([]);
-    await emitWailsEvent('open-command-palette');
-    expect(document.querySelector('.command-palette')).toBeTruthy();
+const namespaceAndKubeconfigCommands = () => [
+  command('select-namespace', 'Select namespace...', 'Navigation'),
+  command('select-kubeconfig', 'Select kubeconfig...', 'Navigation'),
+  command('ns-prod', 'prod', 'Namespaces'),
+  command('kc-a', 'cluster-a', 'Kubeconfigs'),
+  command('view-x', 'Toggle X', 'View'),
+];
 
-    // A second emit must not throw or re-open; the guarded open path no-ops.
-    await emitWailsEvent('open-command-palette');
-    expect(document.querySelectorAll('.command-palette').length).toBe(1);
+beforeEach(() => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['default']);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe('CommandPalette', () => {
+  it('opens from the native View menu with its search focused and closes on Escape', async () => {
+    await showPalette([command('open-settings', 'Open Settings', 'Application')]);
+    expect(palette()).toBeNull();
+
+    await openFromViewMenu();
+
+    expect(palette()).not.toBeNull();
+    expect(document.activeElement).toBe(input());
+    expect(optionLabels()).toEqual(['Open Settings']);
+
+    await press('Escape');
+    expect(palette()).toBeNull();
   });
 
-  it('opens in kubeconfig mode when command-palette:open-kubeconfigs fires', async () => {
-    const commands: Command[] = [
-      { id: 'kc-a', label: 'cluster-a', category: 'Kubeconfigs', action: vi.fn() },
-      { id: 'view-x', label: 'Toggle X', category: 'View', action: vi.fn() },
-    ];
-    await renderPalette(commands);
-    expect(document.querySelector('.command-palette')).toBeNull();
+  it('opens straight into the kubeconfig picker from File → Open Cluster, and the first Escape closes it', async () => {
+    await showPalette(namespaceAndKubeconfigCommands());
 
-    await act(async () => {
-      eventBus.emit('command-palette:open-kubeconfigs');
-      await Promise.resolve();
-    });
+    await openFromOpenClusterMenu();
 
-    expect(document.querySelector('.command-palette')).not.toBeNull();
-    const labels = queryItems().map((el) => el.textContent ?? '');
-    expect(labels.some((label) => label.includes('cluster-a'))).toBe(true);
-    expect(labels.some((label) => label.includes('Toggle X'))).toBe(false);
+    expect(groups()).toEqual(['Kubeconfigs']);
+    expect(optionLabels()).toEqual(['cluster-a']);
+    await press('Escape');
+    expect(palette()).toBeNull();
   });
 
-  it('opens in namespaces mode when command-palette:open-namespaces fires', async () => {
-    const commands: Command[] = [
-      { id: 'ns-prod', label: 'prod', category: 'Namespaces', action: vi.fn() },
-      { id: 'view-x', label: 'Toggle X', category: 'View', action: vi.fn() },
-    ];
-    await renderPalette(commands);
-    expect(document.querySelector('.command-palette')).toBeNull();
+  it('opens straight into the namespace picker from its shortcut, and the first Escape closes it', async () => {
+    await showPalette(namespaceAndKubeconfigCommands());
 
-    await act(async () => {
-      eventBus.emit('command-palette:open-namespaces');
-      await Promise.resolve();
-    });
+    await pressNamespaceShortcut();
 
-    expect(document.querySelector('.command-palette')).not.toBeNull();
-    const input = queryInput();
-    expect(input.placeholder).toBe('Select a namespace...');
-    const labels = queryItems().map((el) => el.textContent ?? '');
-    expect(labels.some((label) => label.includes('prod'))).toBe(true);
-    expect(labels.some((label) => label.includes('Toggle X'))).toBe(false);
+    expect(groups()).toEqual(['Namespaces']);
+    expect(optionLabels()).toEqual(['prod']);
+    await press('Escape');
+    expect(palette()).toBeNull();
   });
 
-  it('opens directly in namespaces mode via the global namespace shortcut', async () => {
-    const commands: Command[] = [
-      { id: 'ns-prod', label: 'prod', category: 'Namespaces', action: vi.fn() },
-      { id: 'view-x', label: 'Toggle X', category: 'View', action: vi.fn() },
-    ];
-    await renderPalette(commands);
-    expect(document.querySelector('.command-palette')).toBeNull();
+  it.each([
+    ['Select namespace...', 'Namespaces', 'prod'],
+    ['Select kubeconfig...', 'Kubeconfigs', 'cluster-a'],
+  ])(
+    'enters a picker from the %s command, and Escape returns to every command',
+    async (label, group, entry) => {
+      await showPalette(namespaceAndKubeconfigCommands());
+      await openFromViewMenu();
+      while (optionLabels()[selectedIndex()] !== label) {
+        await press('ArrowDown');
+      }
 
-    const shortcut = findGlobalShortcut(defaultGlobalModifiers);
-    expect(shortcut).toBeTruthy();
-    await act(async () => {
-      shortcut?.handler();
-      await Promise.resolve();
-    });
+      await press('Enter');
 
-    expect(document.querySelector('.command-palette')).not.toBeNull();
-    const input = queryInput();
-    expect(input.placeholder).toBe('Select a namespace...');
-    const labels = queryItems().map((el) => el.textContent ?? '');
-    expect(labels.some((label) => label.includes('prod'))).toBe(true);
-    expect(labels.some((label) => label.includes('Toggle X'))).toBe(false);
-
-    // Opened straight into the mode, so the first Escape closes the palette
-    // instead of backing out to the general palette.
-    await triggerShortcut('Escape');
-    expect(document.querySelector('.command-palette')).toBeNull();
-  });
-
-  it('leaves namespace mode fully when kubeconfig mode opens over it', async () => {
-    const commands: Command[] = [
-      {
-        id: 'select-namespace',
-        label: 'Select namespace...',
-        category: 'Navigation',
-        action: vi.fn(),
-      },
-      { id: 'ns-prod', label: 'prod', category: 'Namespaces', action: vi.fn() },
-      { id: 'kc-a', label: 'cluster-a', category: 'Kubeconfigs', action: vi.fn() },
-    ];
-    await renderPalette(commands);
-    await openPalette();
-
-    // Enter namespace mode via the "Select namespace..." command (index 0:
-    // Navigation sorts before Namespaces/Kubeconfigs).
-    await triggerShortcut('Enter');
-    const input = queryInput();
-    expect(input.placeholder).toBe('Select a namespace...');
-
-    // The Open Cluster surface (⌘O / "+") fires while namespace mode is active.
-    await act(async () => {
-      eventBus.emit('command-palette:open-kubeconfigs');
-      await Promise.resolve();
-    });
-
-    expect(input.placeholder).toBe('Select a kubeconfig...');
-    const headers = Array.from(
-      document.querySelectorAll<HTMLDivElement>('.command-palette-group-header')
-    ).map((el) => el.textContent);
-    expect(headers).toEqual(['Kubeconfigs']);
-  });
-
-  it('switches to namespaces mode when the shortcut fires while open in kubeconfig mode', async () => {
-    const commands: Command[] = [
-      { id: 'ns-prod', label: 'prod', category: 'Namespaces', action: vi.fn() },
-      { id: 'kc-a', label: 'cluster-a', category: 'Kubeconfigs', action: vi.fn() },
-    ];
-    await renderPalette(commands);
-
-    await act(async () => {
-      eventBus.emit('command-palette:open-kubeconfigs');
-      await Promise.resolve();
-    });
-    const input = queryInput();
-    expect(input.placeholder).toBe('Select a kubeconfig...');
-
-    const shortcut = findGlobalShortcut(defaultGlobalModifiers);
-    expect(shortcut).toBeTruthy();
-    await act(async () => {
-      shortcut?.handler();
-      await Promise.resolve();
-    });
-
-    expect(input.placeholder).toBe('Select a namespace...');
-    const headers = Array.from(
-      document.querySelectorAll<HTMLDivElement>('.command-palette-group-header')
-    ).map((el) => el.textContent);
-    expect(headers).toEqual(['Namespaces']);
-  });
-
-  it('opens in normal (search) mode when command-palette:open fires', async () => {
-    const commands: Command[] = [
-      { id: 'a', label: 'Alpha', category: 'Application', action: vi.fn() },
-      { id: 'kc', label: 'cluster-x', category: 'Kubeconfigs', action: vi.fn() },
-    ];
-    await renderPalette(commands);
-    expect(document.querySelector('.command-palette')).toBeNull();
-
-    await act(async () => {
-      eventBus.emit('command-palette:open');
-      await Promise.resolve();
-    });
-
-    expect(document.querySelector('.command-palette')).not.toBeNull();
-    // Normal mode shows all categories (not filtered to Kubeconfigs).
-    const labels = queryItems().map((el) => el.textContent ?? '');
-    expect(labels.some((label) => label.includes('Alpha'))).toBe(true);
-  });
-
-  it('navigates commands with the keyboard and executes the selection', async () => {
-    vi.useFakeTimers();
-    const firstAction = vi.fn();
-    const secondAction = vi.fn();
-    const commands: Command[] = [
-      {
-        id: 'open-settings',
-        label: 'Open Settings',
-        category: 'Application',
-        action: firstAction,
-      },
-      {
-        id: 'toggle-sidebar',
-        label: 'Toggle Sidebar',
-        category: 'Application',
-        action: secondAction,
-      },
-    ];
-
-    await renderPalette(commands);
-    await openPalette();
-
-    expect(document.querySelector('.command-palette')).not.toBeNull();
-    expect(queryItems()).toHaveLength(2);
-    expect(queryItems()[0].classList.contains('selected')).toBe(true);
-
-    const input = document.querySelector<HTMLInputElement>('.command-palette-input');
-    expect(input).not.toBeNull();
-
-    await triggerShortcut('ArrowDown');
-    expect(queryItems()[1].classList.contains('selected')).toBe(true);
-
-    await triggerShortcut('Enter');
-
-    expect(document.querySelector('.command-palette')).toBeNull();
-
-    await vi.advanceTimersByTimeAsync(150);
-    expect(secondAction).toHaveBeenCalledTimes(1);
-    expect(firstAction).not.toHaveBeenCalled();
-  });
-
-  it('exposes search results as an accessible combobox with active option state', async () => {
-    const commands: Command[] = [
-      { id: 'first', label: 'First command', category: 'Application', action: vi.fn() },
-      { id: 'second', label: 'Second command', category: 'Application', action: vi.fn() },
-    ];
-
-    await renderPalette(commands);
-    await openPalette();
-
-    const input = queryInput();
-    const listbox = requireValue(
-      document.querySelector<HTMLElement>('[role="listbox"]'),
-      'expected command-palette listbox'
-    );
-    const options = Array.from(listbox.querySelectorAll<HTMLElement>('[role="option"]'));
-
-    expect(input.getAttribute('role')).toBe('combobox');
-    expect(input.getAttribute('aria-expanded')).toBe('true');
-    expect(input.getAttribute('aria-controls')).toBe(listbox.id);
-    expect(input.getAttribute('aria-autocomplete')).toBe('list');
-    expect(input.getAttribute('aria-activedescendant')).toBe(options[0]?.id);
-    expect(options).toHaveLength(2);
-    expect(options[0]?.getAttribute('aria-selected')).toBe('true');
-    expect(options[1]?.getAttribute('aria-selected')).toBe('false');
-
-    await triggerShortcut('ArrowDown');
-
-    expect(input.getAttribute('aria-activedescendant')).toBe(options[1]?.id);
-    expect(options[0]?.getAttribute('aria-selected')).toBe('false');
-    expect(options[1]?.getAttribute('aria-selected')).toBe('true');
-  });
-
-  it('keeps the first item selected until the mouse actually moves', async () => {
-    const commands: Command[] = [
-      { id: 'first', label: 'First', category: 'Application', action: vi.fn() },
-      { id: 'second', label: 'Second', category: 'Application', action: vi.fn() },
-      { id: 'third', label: 'Third', category: 'Application', action: vi.fn() },
-    ];
-
-    await renderPalette(commands);
-    await openPalette();
-
-    const items = queryItems();
-    const palette = document.querySelector('.command-palette');
-    expect(items).toHaveLength(3);
-    expect(palette?.classList.contains('mouse-selection-armed')).toBe(false);
-    expect(items[0].classList.contains('selected')).toBe(true);
-
-    await act(async () => {
-      items[2].dispatchEvent(
-        new MouseEvent('mouseover', {
-          bubbles: true,
-          relatedTarget: container,
-        })
-      );
-      await Promise.resolve();
-    });
-
-    expect(queryItems()[0].classList.contains('selected')).toBe(true);
-    expect(queryItems()[2].classList.contains('selected')).toBe(false);
-    expect(palette?.classList.contains('mouse-selection-armed')).toBe(false);
-
-    await act(async () => {
-      items[2].dispatchEvent(new Event('pointermove', { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    expect(palette?.classList.contains('mouse-selection-armed')).toBe(true);
-    expect(queryItems()[0].classList.contains('selected')).toBe(false);
-    expect(queryItems()[2].classList.contains('selected')).toBe(true);
-  });
-
-  it('enters namespace selection mode via the appropriate command', async () => {
-    const namespaceCommand: Command = {
-      id: 'namespace:prod',
-      label: 'Namespace: prod',
-      category: 'Namespaces',
-      action: vi.fn(),
-    };
-    const commands: Command[] = [
-      {
-        id: 'select-namespace',
-        label: 'Switch Namespace…',
-        category: 'Navigation',
-        action: vi.fn(),
-      },
-      namespaceCommand,
-    ];
-
-    await renderPalette(commands);
-    await openPalette();
-
-    const input = queryInput();
-    expect(input.placeholder).toBe('Type a command or search...');
-
-    await triggerShortcut('Enter');
-
-    expect(input.placeholder).toBe('Select a namespace...');
-    const headers = Array.from(
-      document.querySelectorAll<HTMLDivElement>('.command-palette-group-header')
-    ).map((el) => el.textContent);
-    expect(headers).toEqual(['Namespaces']);
-
-    const labels = Array.from(
-      document.querySelectorAll<HTMLDivElement>('.command-palette-item-label')
-    ).map((el) => el.textContent);
-    expect(labels).toEqual([namespaceCommand.label]);
-
-    await triggerShortcut('Escape');
-
-    expect(input.placeholder).toBe('Type a command or search...');
-    expect(document.querySelector('.command-palette')).not.toBeNull();
-  });
-
-  it('closes when Escape is pressed outside selection modes', async () => {
-    const commands: Command[] = [
-      {
-        id: 'open-settings',
-        label: 'Open Settings',
-        category: 'Application',
-        action: vi.fn(),
-      },
-    ];
-
-    await renderPalette(commands);
-    await openPalette();
-
-    await triggerShortcut('Escape');
-
-    expect(document.querySelector('.command-palette')).toBeNull();
-  });
-
-  it('enters kubeconfig selection mode when prompted', async () => {
-    const kubeconfigCommand: Command = {
-      id: 'kubeconfig:dev',
-      label: 'Kubeconfig: dev-cluster',
-      category: 'Kubeconfigs',
-      action: vi.fn(),
-    };
-    const commands: Command[] = [
-      {
-        id: 'select-kubeconfig',
-        label: 'Switch Kubeconfig…',
-        category: 'Navigation',
-        action: vi.fn(),
-      },
-      kubeconfigCommand,
-    ];
-
-    await renderPalette(commands);
-    await openPalette();
-
-    const input = queryInput();
-    expect(input.placeholder).toBe('Type a command or search...');
-
-    await triggerShortcut('Enter');
-
-    expect(input.placeholder).toBe('Select a kubeconfig...');
-    const headers = Array.from(
-      document.querySelectorAll<HTMLDivElement>('.command-palette-group-header')
-    ).map((el) => el.textContent);
-    expect(headers).toEqual(['Kubeconfigs']);
-
-    const labels = Array.from(
-      document.querySelectorAll<HTMLDivElement>('.command-palette-item-label')
-    ).map((el) => el.textContent);
-    expect(labels).toEqual([kubeconfigCommand.label]);
-
-    await triggerShortcut('Escape');
-    expect(document.querySelector('.command-palette')).not.toBeNull();
-  });
-
-  it.each(['resolve', 'reject'] as const)(
-    'keeps the current cluster search pending when an obsolete search %ss',
-    async (settlement) => {
-      vi.useFakeTimers();
-      const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-      let resolveOld!: (value: unknown) => void;
-      let rejectOld!: (reason: Error) => void;
-      let resolveCurrent!: (value: unknown) => void;
-      fetchSnapshotMock
-        .mockImplementationOnce(
-          () =>
-            new Promise((resolve, reject) => {
-              resolveOld = resolve;
-              rejectOld = reject;
-            })
-        )
-        .mockImplementationOnce(
-          () =>
-            new Promise((resolve) => {
-              resolveCurrent = resolve;
-            })
-        );
-      await renderPalette([]);
-      await openPalette();
-      await act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
-          queryInput(),
-          'pod'
-        );
-        queryInput().dispatchEvent(new InputEvent('input', { bubbles: true }));
-      });
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(200);
-      });
-      selectedClusterId = 'beta:ctx';
-      await renderPalette([]);
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(200);
-      });
-      expect(fetchSnapshotMock.mock.calls[1][1].scope).toContain('beta:ctx|');
-      await act(async () => {
-        if (settlement === 'resolve') {
-          resolveOld({
-            snapshot: {
-              payload: {
-                items: [
-                  createCatalogItem({
-                    ref: {
-                      clusterId: 'alpha:ctx',
-                      uid: 'old',
-                      name: 'old-pod',
-                      kind: 'Pod',
-                    },
-                  }),
-                ],
-                total: 1,
-              },
-            },
-          });
-        } else {
-          rejectOld(new Error('obsolete search failed'));
-        }
-      });
-      expect(document.querySelector('.command-palette-loading')).not.toBeNull();
-      expect(queryItems()).toHaveLength(0);
-      expect(errors).not.toHaveBeenCalled();
-      await act(async () => {
-        resolveCurrent({
-          snapshot: {
-            payload: {
-              items: [
-                createCatalogItem({
-                  ref: {
-                    clusterId: 'beta:ctx',
-                    uid: 'current',
-                    name: 'current-pod',
-                    kind: 'Pod',
-                  },
-                }),
-              ],
-              total: 1,
-            },
-          },
-        });
-      });
-      expect(document.querySelector('.command-palette-loading')).toBeNull();
-      expect(queryItems()).toHaveLength(1);
-      expect(queryItems()[0].textContent).toContain('current-pod');
-      errors.mockRestore();
+      expect(palette()).not.toBeNull();
+      expect(groups()).toEqual([group]);
+      expect(optionLabels()).toEqual([entry]);
+      await press('Escape');
+      expect(palette()).not.toBeNull();
+      expect(groups()).toEqual(['View', 'Navigation', 'Namespaces', 'Kubeconfigs']);
     }
   );
 
-  it('debounces catalog searches and renders truncated results', async () => {
-    const catalogItem = createCatalogItem({
-      ref: {
-        uid: 'catalog-pod',
-        namespace: 'metrics',
-        name: 'metrics-pod',
-        kind: 'Pod',
-        resource: 'pods',
-      },
-    });
+  it('switches from the namespace picker to the kubeconfig picker without keeping namespaces', async () => {
+    await showPalette(namespaceAndKubeconfigCommands());
+    await openFromViewMenu();
+    await type('select namespace');
+    await press('Enter');
+    expect(groups()).toEqual(['Namespaces']);
 
-    fetchSnapshotMock.mockImplementation(
-      (domain: unknown, options: { scope?: string; signal?: AbortSignal }) => {
-        expect(domain).toBe('catalog');
-        expect(options?.scope).toContain('alpha:ctx|');
-        expect(options?.scope).toContain('limit=20');
-        expect(options?.scope).toContain('kind=pod');
-        expect(options?.scope).toContain('search=metrics');
-        expect(options?.signal).toBeInstanceOf(AbortSignal);
-        return Promise.resolve({
-          snapshot: {
-            payload: {
-              items: [catalogItem],
-              total: 4,
-            },
-          },
-        });
-      }
-    );
+    await openFromOpenClusterMenu();
 
-    await renderPalette([]);
-    await openPalette();
-
-    const input = queryInput();
-
-    await act(async () => {
-      const setInputValue = Object.getOwnPropertyDescriptor(
-        HTMLInputElement.prototype,
-        'value'
-      )?.set;
-      setInputValue?.call(input, 'pod metrics');
-      input.dispatchEvent(new InputEvent('input', { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    });
-
-    const header = Array.from(
-      document.querySelectorAll<HTMLDivElement>('.command-palette-group-header')
-    ).find((el) => el.textContent?.includes('Catalog Results'));
-    expect(header?.textContent).toContain('Catalog Results (1 / 4)');
-
-    const note = document.querySelector<HTMLDivElement>('.command-palette-note');
-    expect(note?.textContent).toContain('Showing first 1 of 4 results');
-
-    const catalogLabel = document.querySelector<HTMLDivElement>(
-      '.command-palette-item-label.catalog'
-    );
-    expect(catalogLabel?.textContent).toContain('metrics/metrics-pod');
-
-    await act(async () => {
-      catalogLabel?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(document.querySelector('.command-palette')).toBeNull();
-
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 150));
-    });
-    expect(openWithObjectMock).toHaveBeenCalledTimes(1);
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'Pod',
-        name: 'metrics-pod',
-        namespace: 'metrics',
-        resource: 'pods',
-        uid: 'catalog-pod',
-        clusterId: 'alpha:ctx',
-      })
-    );
+    expect(groups()).toEqual(['Kubeconfigs']);
+    expect(optionLabels()).toEqual(['cluster-a']);
   });
 
-  it('closes when clicking outside and ignores the menu event while already open', async () => {
-    await renderPalette([
-      { id: 'open-settings', label: 'Open Settings', category: 'Application', action: vi.fn() },
+  it('runs the command the keyboard selects, after the palette closes', async () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    await showPalette([
+      command('open-settings', 'Open Settings', 'Application', first),
+      command('toggle-sidebar', 'Toggle Sidebar', 'Application', second),
     ]);
-    await openPalette();
+    await openFromViewMenu();
+    vi.useFakeTimers();
 
-    const paletteBefore = document.querySelector('.command-palette');
-    expect(paletteBefore).not.toBeNull();
+    await press('ArrowDown');
+    await press('Enter');
+
+    expect(palette()).toBeNull();
+    await runPendingCommand();
+    expect(second).toHaveBeenCalledOnce();
+    expect(first).not.toHaveBeenCalled();
+  });
+
+  it('exposes its results as a combobox listbox whose active option follows the selection', async () => {
+    await showPalette([
+      command('first', 'First command', 'Application'),
+      command('second', 'Second command', 'Application'),
+    ]);
+    await openFromViewMenu();
+
+    const listbox = requireValue(
+      document.querySelector<HTMLElement>('.command-palette [role="listbox"]'),
+      'expected the results listbox'
+    );
+    expect(input().getAttribute('aria-expanded')).toBe('true');
+    expect(input().getAttribute('aria-controls')).toBe(listbox.id);
+    expect(input().getAttribute('aria-autocomplete')).toBe('list');
+    expect(input().getAttribute('aria-activedescendant')).toBe(options()[0]?.id);
+    expect(selectedIndex()).toBe(0);
+
+    await press('ArrowDown');
+
+    expect(input().getAttribute('aria-activedescendant')).toBe(options()[1]?.id);
+    expect(selectedIndex()).toBe(1);
+  });
+
+  it('moves the selection by row (wrapping), by visible page (clamped), and to either end, and resets it when reopened', async () => {
+    await showPalette(
+      Array.from({ length: 8 }, (_, index) =>
+        command(`cmd-${index}`, `Command ${index + 1}`, 'Application')
+      )
+    );
+    await openFromViewMenu();
+    // jsdom has no layout: the results show four 30px rows.
+    const results = requireValue(
+      document.querySelector<HTMLElement>('.command-palette-results'),
+      'expected the results'
+    );
+    Object.defineProperty(results, 'clientHeight', { configurable: true, get: () => 120 });
+    for (const option of options()) {
+      Object.defineProperty(option, 'offsetHeight', { configurable: true, get: () => 30 });
+    }
+
+    const moves: Array<[string, number]> = [
+      ['ArrowUp', 7],
+      ['ArrowDown', 0],
+      ['ArrowDown', 1],
+      ['PageDown', 5],
+      ['PageDown', 7],
+      ['PageUp', 3],
+      ['PageUp', 0],
+      ['End', 7],
+      ['Home', 0],
+      ['End', 7],
+    ];
+    for (const [key, expected] of moves) {
+      await press(key);
+      expect(selectedIndex(), key).toBe(expected);
+    }
+
+    await press('Escape');
+    await openFromViewMenu();
+    expect(selectedIndex()).toBe(0);
+  });
+
+  it('keeps the selection until the mouse actually moves over another result', async () => {
+    await showPalette([
+      command('first', 'First', 'Application'),
+      command('second', 'Second', 'Application'),
+      command('third', 'Third', 'Application'),
+    ]);
+    await openFromViewMenu();
+    const third = requireValue(options()[2], 'expected the third result');
+
+    // The list opening under a resting pointer reports a hover, not a move.
+    await act(async () => {
+      third.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    });
+    expect(selectedIndex()).toBe(0);
+
+    await act(async () => {
+      third.dispatchEvent(new Event('pointermove', { bubbles: true }));
+    });
+    expect(selectedIndex()).toBe(2);
+  });
+
+  it('closes when the user clicks outside it, and opens again from the menu', async () => {
+    await showPalette([command('open-settings', 'Open Settings', 'Application')]);
+    await openFromViewMenu();
 
     await act(async () => {
       document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-      await Promise.resolve();
     });
+    expect(palette()).toBeNull();
 
-    expect(document.querySelector('.command-palette')).toBeNull();
-
-    await openPalette();
-
-    expect(document.querySelector('.command-palette')).not.toBeNull();
-
-    await openPalette();
-
-    expect(document.querySelector('.command-palette')).not.toBeNull();
+    await openFromViewMenu();
+    expect(palette()).not.toBeNull();
   });
 
-  it('wraps arrows, clamps pages, and resets selection when reopened', async () => {
-    const commands: Command[] = Array.from({ length: 3 }, (_, index) => ({
-      id: `cmd-${index}`,
-      label: `Command ${index + 1}`,
-      category: 'Application',
-      action: vi.fn(),
-    }));
-    await renderPalette(commands);
-    await openPalette();
-    const selectedIndex = () =>
-      queryItems().findIndex((item) => item.getAttribute('aria-selected') === 'true');
+  it('selects the whole query on Cmd/Ctrl+A', async () => {
+    await showPalette([command('open-settings', 'Open Settings', 'Application')]);
+    await openFromViewMenu();
+    await type('settings');
+    input().setSelectionRange(3, 3);
 
-    for (const [key, expected] of [
-      ['ArrowUp', 2],
-      ['ArrowDown', 0],
-      ['ArrowDown', 1],
-      ['PageDown', 2],
-      ['PageDown', 2],
-      ['PageUp', 0],
-      ['PageUp', 0],
-      ['End', 2],
-      ['Home', 0],
-      ['End', 2],
-    ] as const) {
-      await triggerShortcut(key);
-      expect(selectedIndex(), key).toBe(expected);
-    }
-    await triggerShortcut('Escape');
-    await openPalette();
-    expect(selectedIndex()).toBe(0);
-    expect(document.querySelector('.command-palette')?.classList.contains('hide-cursor')).toBe(
-      false
-    );
+    const event = await press('a', primary());
+
+    expect(event.defaultPrevented).toBe(true);
+    expect([input().selectionStart, input().selectionEnd]).toEqual([0, 'settings'.length]);
   });
+});
 
-  it('supports page navigation shortcuts and hides cursor until mouse movement', async () => {
-    const commands: Command[] = Array.from({ length: 8 }).map((_, index) => ({
-      id: `cmd-${index}`,
-      label: `Command ${index + 1}`,
-      category: 'Application',
-      action: vi.fn(),
-    }));
-
-    await renderPalette(commands);
-    await openPalette();
-
-    const results = document.querySelector('.command-palette-results') as HTMLElement;
-    const originalClientHeight = Object.getOwnPropertyDescriptor(results, 'clientHeight');
-    Object.defineProperty(results, 'clientHeight', {
-      configurable: true,
-      get: () => 120,
-    });
-    const originalOffsetHeight = Object.getOwnPropertyDescriptor(
-      HTMLElement.prototype,
-      'offsetHeight'
+describe('CommandPalette catalog search', () => {
+  it('searches the selected cluster’s catalog once typing pauses, and opens a found object’s panel', async () => {
+    const found = catalogPod(dev, 'metrics', 'metrics-pod');
+    app.snapshots.answer(({ domain, scope }) =>
+      domain === 'catalog' && isPaletteSearch(dev, scope)
+        ? catalogPayload(dev, [found], 4)
+        : undefined
     );
-    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
-      configurable: true,
-      get() {
-        return this.classList.contains('command-palette-item')
-          ? 30
-          : (originalOffsetHeight?.get?.call(this) ?? 0);
+    await showPalette([]);
+    await openFromViewMenu();
+    vi.useFakeTimers();
+
+    await type('pod');
+    await type('pod metrics');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(199);
+    });
+    expect(app.snapshots.reads('catalog')).toEqual([]);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    await app.settle();
+
+    const searches = app.snapshots.reads('catalog');
+    expect(searches).toHaveLength(1);
+    const query = new URLSearchParams(
+      requireValue(searches[0], 'expected the search').scope.split('|')[1]
+    );
+    expect(Object.fromEntries(query)).toEqual({ limit: '20', kind: 'pod', search: 'metrics' });
+    expect(searches[0]?.scope.startsWith(`${dev.clusterId}|`)).toBe(true);
+    // The palette shows how many of the matches it lists.
+    expect(groups()).toEqual(['Catalog Results (1 / 4)']);
+    expect(optionLabels()).toEqual([expect.stringContaining('metrics/metrics-pod')]);
+
+    await press('Enter');
+    await runPendingCommand();
+
+    expect(palette()).toBeNull();
+    expect(view.openPanels()).toEqual([
+      {
+        clusterId: dev.clusterId,
+        clusterName: dev.clusterName,
+        group: '',
+        version: 'v1',
+        kind: 'Pod',
+        namespace: 'metrics',
+        name: 'metrics-pod',
       },
-    });
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(results.clientHeight).toBe(120);
-    const firstItem = document.querySelector('.command-palette-item') as HTMLElement;
-    expect(firstItem.offsetHeight).toBe(30);
-
-    await triggerShortcut('PageDown');
-    const afterPageDownIndex = queryItems().findIndex((item) =>
-      item.classList.contains('selected')
-    );
-    expect(afterPageDownIndex).toBeGreaterThan(0);
-    expect(document.querySelector('.command-palette')?.classList.contains('hide-cursor')).toBe(
-      true
-    );
-
-    await triggerShortcut('PageUp');
-    const afterPageUpIndex = queryItems().findIndex((item) => item.classList.contains('selected'));
-    expect(afterPageUpIndex).toBeLessThan(afterPageDownIndex);
-
-    await triggerShortcut('End');
-    expect(queryItems().findIndex((item) => item.classList.contains('selected'))).toBe(
-      commands.length - 1
-    );
-
-    await triggerShortcut('Home');
-    expect(queryItems().findIndex((item) => item.classList.contains('selected'))).toBe(0);
-
-    const paletteContainer = document.querySelector('.command-palette') as HTMLElement;
-    await act(async () => {
-      paletteContainer.dispatchEvent(new Event('pointermove', { bubbles: true }));
-      await Promise.resolve();
-    });
-    expect(document.querySelector('.command-palette')?.classList.contains('hide-cursor')).toBe(
-      false
-    );
-
-    if (originalClientHeight) {
-      Object.defineProperty(results, 'clientHeight', originalClientHeight);
-    } else {
-      Reflect.deleteProperty(results, 'clientHeight');
-    }
-    if (originalOffsetHeight) {
-      Object.defineProperty(HTMLElement.prototype, 'offsetHeight', originalOffsetHeight);
-    } else {
-      Reflect.deleteProperty(HTMLElement.prototype, 'offsetHeight');
-    }
+    ]);
   });
 
-  it('selects all text via Ctrl+A and keeps catalog loading state consistent on errors', async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    fetchSnapshotMock.mockRejectedValueOnce(new Error('network down'));
+  it.each(['resolves', 'fails'] as const)(
+    'waits for the current cluster’s search when a search the user moved on from %s',
+    async (settlement) => {
+      const prod = app.cluster({ name: 'prod', context: 'beta' });
+      app.namespaces(prod, ['default']);
+      const pending = new Map<string, { resolve: () => void; reject: (error: Error) => void }>();
+      const payloads = new Map([
+        [dev.clusterId, catalogPayload(dev, [catalogPod(dev, 'default', 'old-pod')])],
+        [prod.clusterId, catalogPayload(prod, [catalogPod(prod, 'default', 'current-pod')])],
+      ]);
+      app.snapshots.respond((request) => {
+        const cluster = [dev, prod].find((candidate) => isPaletteSearch(candidate, request.scope));
+        if (request.domain !== 'catalog' || !cluster) {
+          return undefined;
+        }
+        return new Promise<Response>((resolve, reject) => {
+          pending.set(cluster.clusterId, {
+            resolve: () =>
+              resolve(
+                snapshotResponse({
+                  domain: 'catalog',
+                  scope: request.scope,
+                  version: 1,
+                  payload: payloads.get(cluster.clusterId),
+                })
+              ),
+            reject,
+          });
+        });
+      });
+      await showPalette([]);
+      await openFromViewMenu();
+      vi.useFakeTimers();
+      await type('pod');
+      await finishSearchDebounce();
+      expect([...pending.keys()]).toEqual([dev.clusterId]);
 
-    await renderPalette([]);
-    await openPalette();
+      // The user switches to another cluster tab while the search is in flight.
+      await view.selectCluster(prod);
+      await finishSearchDebounce();
+      expect([...pending.keys()]).toEqual([dev.clusterId, prod.clusterId]);
 
-    const input = queryInput();
-    const selectSpy = vi.spyOn(input, 'select');
+      await act(async () => {
+        const obsolete = requireValue(pending.get(dev.clusterId), 'expected the first search');
+        if (settlement === 'resolves') {
+          obsolete.resolve();
+        } else {
+          obsolete.reject(new Error('obsolete search failed'));
+        }
+      });
+      await app.settle();
+      expect(document.querySelector('.command-palette-loading')).not.toBeNull();
+      expect(options()).toEqual([]);
 
-    const event = new KeyboardEvent('keydown', {
-      key: 'a',
-      ctrlKey: true,
-      bubbles: true,
-      cancelable: true,
-    });
-    const dispatchResult = input.dispatchEvent(event);
-    expect(dispatchResult).toBe(false);
-    expect(selectSpy).toHaveBeenCalled();
+      await act(async () => {
+        requireValue(pending.get(prod.clusterId), 'expected the current search').resolve();
+      });
+      await app.settle();
+      expect(document.querySelector('.command-palette-loading')).toBeNull();
+      expect(optionLabels()).toEqual([expect.stringContaining('current-pod')]);
+    }
+  );
 
-    await act(async () => {
-      const setInputValue = Object.getOwnPropertyDescriptor(
-        HTMLInputElement.prototype,
-        'value'
-      )?.set;
-      setInputValue?.call(input, 'svc metrics');
-      input.dispatchEvent(new InputEvent('input', { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    });
-
-    expect(errorSpy).toHaveBeenCalledWith(
-      'Original Error:',
-      expect.objectContaining({ message: 'network down' })
+  it('reports a failed search and stops showing it as loading', async () => {
+    app.snapshots.respond(({ domain, scope }) =>
+      domain === 'catalog' && isPaletteSearch(dev, scope)
+        ? statusResponse(makeErrorStatus('InternalError', 'catalog unavailable'))
+        : undefined
     );
+    await showPalette([]);
+    await openFromViewMenu();
+    vi.useFakeTimers();
+
+    await type('svc metrics');
+    await finishSearchDebounce();
+    await app.settle();
+
+    expect(app.errors.take((record) => record.context?.action === 'searchCatalog')).toEqual([
+      expect.objectContaining({ kinds: ['operational'] }),
+    ]);
     expect(document.querySelector('.command-palette-loading')).toBeNull();
-    expect(document.querySelector('.command-palette-note')).toBeNull();
-
-    errorSpy.mockRestore();
-  });
-
-  it('focuses the search input when the palette opens', async () => {
-    const commands: Command[] = [
-      { id: 'open-settings', label: 'Open Settings', category: 'Application', action: vi.fn() },
-    ];
-
-    await renderPalette(commands);
-    await openPalette();
-
-    const input = document.querySelector('.command-palette-input') as HTMLInputElement;
-    expect(input).not.toBeNull();
-    expect(document.activeElement).toBe(input);
+    expect(options()).toEqual([]);
   });
 });
 

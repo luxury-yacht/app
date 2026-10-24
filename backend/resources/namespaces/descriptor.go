@@ -8,7 +8,9 @@ import "github.com/luxury-yacht/app/backend/kind/kindspec"
 
 var Descriptor = kindspec.Descriptor{
 	Identity:        Identity,
-	CatalogSource:   kindspec.CatalogShared,
+	ListDomain:      "namespaces",
+	Display:         kindspec.Display{ShortName: "ns"},
 	DetailCacheable: true,
 	Binding:         &DetailBinding,
+	Actions:         kindspec.ObjectActions{NamespaceFinalizer: true},
 }

@@ -8,10 +8,11 @@ live in [large data](../architecture/large-data.md#table-modes).
 
 - Keep pagination controls together in the table footer. Query-backed footers
   show page size, visible range, and honest total/page-count state
-  ([exactness](../architecture/large-data.md#contract)). Omit the footer when an
-  exact result fits the smallest supported page size and neither direction is
-  available; keep it when navigation is available or an approximate count
-  cannot prove a single page.
+  ([exactness](../architecture/large-data.md#contract)). Show the footer only
+  when there is something to page: navigation in either direction, or more rows
+  than the smallest supported page size (25). An approximate total that fits
+  one page with no other page omits it too; the continue token, not the count,
+  proves another page.
 - Complete or explicitly partial local row sets may use `localPagination` for
   presentation paging, never combined with external `paginationControls`.
   `GridTable` applies it after local filter and sort, shows an exact filtered

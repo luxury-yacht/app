@@ -2,10 +2,12 @@ package backend
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/capabilities"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -86,12 +88,37 @@ func requireResolvedResourcePermission(
 		return fmt.Errorf("permission check failed for %s: %s", permissionDescription(kind, attrs), result.EvaluationError)
 	}
 	if !result.Allowed {
-		if result.DeniedReason != "" {
-			return fmt.Errorf("permission denied for %s: %s", permissionDescription(kind, attrs), result.DeniedReason)
-		}
-		return fmt.Errorf("permission denied for %s", permissionDescription(kind, attrs))
+		return permissionDenial(deps.ClusterID, gvr, kind, attrs, result.DeniedReason)
 	}
 	return nil
+}
+
+// permissionDenial is the typed RBAC denial for one operation. It names the
+// object only when the check targets a concrete object.
+func permissionDenial(
+	clusterID string,
+	gvr schema.GroupVersionResource,
+	kind string,
+	attrs *authorizationv1.ResourceAttributes,
+	deniedReason string,
+) error {
+	message := fmt.Sprintf("permission denied for %s", permissionDescription(kind, attrs))
+	if deniedReason != "" {
+		message += ": " + deniedReason
+	}
+	resource := gvr.Resource
+	if attrs.Subresource != "" {
+		resource += "/" + attrs.Subresource
+	}
+	var ref *errorstatus.ObjectRef
+	if attrs.Name != "" {
+		ref = &errorstatus.ObjectRef{
+			ClusterID: clusterID, Group: gvr.Group, Version: gvr.Version,
+			Kind: kind, Namespace: attrs.Namespace, Name: attrs.Name,
+		}
+	}
+	details := errorstatus.Details{Group: gvr.Group, Resource: resource, Name: attrs.Name}
+	return errorstatus.Denied(ref, details, errors.New(message))
 }
 
 func requireAnyResourcePermission(ctx context.Context, deps common.Dependencies, checks ...resourcePermissionCheck) error {

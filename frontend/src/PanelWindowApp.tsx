@@ -3,7 +3,7 @@ import { AuthErrorProvider } from '@core/contexts/AuthErrorContext';
 import { ClusterLifecycleProvider } from '@core/contexts/ClusterLifecycleContext';
 import { ErrorProvider } from '@core/contexts/ErrorContext';
 import { ZoomProvider } from '@core/contexts/ZoomContext';
-import { RefreshManagerProvider } from '@core/refresh';
+import { useDocumentVisibilityEvents } from '@core/refresh/hooks/useDocumentVisibilityEvents';
 import { FixedClusterProvider } from '@modules/kubernetes/config/KubeconfigContext';
 import { NamespaceProvider } from '@modules/namespace/contexts/NamespaceContext';
 import ObjectPanel from '@modules/object-panel/components/PanelContent';
@@ -20,7 +20,7 @@ import { AppRegionNavigation } from '@ui/layout/AppRegionNavigation';
 import WindowHeader from '@ui/layout/WindowHeader';
 import { KeyboardProvider } from '@ui/shortcuts';
 import TextContextMenu from '@ui/shortcuts/components/TextContextMenu';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import type { panelwindow } from '@/core/backend-api/models';
 import { useClusterWorkspaceSnapshot } from '@/core/cluster-workspace/useClusterWorkspace';
 import {
@@ -40,7 +40,6 @@ import {
 } from '@/core/panel-windows/panelLifecycleGuards';
 import { requestPanelTabMove } from '@/core/panel-windows/panelTabActions';
 import { resolvePanelWindowClusterName } from '@/core/panel-windows/panelWindowClusterName';
-import { nativePanelPublication } from '@/core/panel-windows/publicationQueue';
 import {
   type DockableTabDragPayload,
   objectPanelTabSnapshot,
@@ -54,10 +53,15 @@ import './PanelWindowApp.css';
 
 const acknowledgedTransfers = new Set<string>();
 
-const initialGroups = (snapshot: panelwindow.GroupSnapshot): TabGroupState => ({
+/** Test helper to clear acknowledged transfers between runs. */
+export const resetAcknowledgedPanelTransfersForTesting = (): void => {
+  acknowledgedTransfers.clear();
+};
+
+const initialGroups = (group: panelwindow.WorkspaceGroup): TabGroupState => ({
   right: {
-    tabs: snapshot.tabs?.map((tab) => tab.panelId) ?? [],
-    activeTab: snapshot.activePanelId,
+    tabs: group.tabs?.map((tab) => tab.panelId) ?? [],
+    activeTab: group.activePanelId,
   },
   bottom: { tabs: [], activeTab: null },
   floating: [],
@@ -69,7 +73,8 @@ const createTransferId = (): string =>
 function PanelWindowSurface({
   descriptor,
   clusterName,
-}: Readonly<{ descriptor: PanelWindowDescriptor; clusterName: string }>) {
+  children,
+}: Readonly<{ descriptor: PanelWindowDescriptor; clusterName: string; children?: ReactNode }>) {
   const { openPanels } = useObjectPanelState();
   const activeTabs = useObjectPanelActiveTabs();
   const guards = usePanelLifecycleGuardRegistry();
@@ -83,7 +88,7 @@ function PanelWindowSurface({
       }),
     [descriptor.windowName, guards]
   );
-  const initialTabGroups = useMemo(() => initialGroups(descriptor.snapshot), [descriptor.snapshot]);
+  const initialTabGroups = useMemo(() => initialGroups(descriptor.group), [descriptor.group]);
 
   const requestTabClose = useCallback(
     (panelId: string) => {
@@ -99,21 +104,21 @@ function PanelWindowSurface({
   );
 
   useEffect(() => {
-    if (acknowledgedTransfers.has(descriptor.snapshot.transferId)) {
+    if (acknowledgedTransfers.has(descriptor.transferId)) {
       return;
     }
-    acknowledgedTransfers.add(descriptor.snapshot.transferId);
+    acknowledgedTransfers.add(descriptor.transferId);
     const acknowledgeReady = async () => {
       try {
-        await acknowledgePanelWindowReady(descriptor.windowName, descriptor.snapshot.transferId);
+        await acknowledgePanelWindowReady(descriptor.windowName, descriptor.transferId);
         setReady(true);
       } catch (error) {
-        acknowledgedTransfers.delete(descriptor.snapshot.transferId);
+        acknowledgedTransfers.delete(descriptor.transferId);
         try {
           await failPanelWindowTransfer(
             descriptor.windowName,
             descriptor.windowName,
-            descriptor.snapshot.transferId
+            descriptor.transferId
           );
         } catch (cleanupError) {
           reportOperationalError(cleanupError, {
@@ -163,13 +168,12 @@ function PanelWindowSurface({
         activePanelId: group.activeTab ?? group.tabs[0] ?? '',
       };
       guards.freeze(snapshot.transferId, group.tabs);
-      void nativePanelPublication
-        .flush()
-        .then(() => beginPanelWindowDock(descriptor.windowName, targetPosition, snapshot))
-        .catch((error) => {
-          guards.releaseTransfer(snapshot.transferId);
-          reportOperationalError(error, { source: 'PanelWindowApp', action: 'dock-group' });
-        });
+      // The directory validates the group against its own placement, so a
+      // queued window snapshot need not land first.
+      void beginPanelWindowDock(descriptor.windowName, targetPosition, snapshot).catch((error) => {
+        guards.releaseTransfer(snapshot.transferId);
+        reportOperationalError(error, { source: 'PanelWindowApp', action: 'dock-group' });
+      });
     },
     [descriptor, guards, getTabSnapshot]
   );
@@ -248,7 +252,7 @@ function PanelWindowSurface({
       initialTabGroups={initialTabGroups}
       onGroupMoveRequest={handleGroupMove}
       onTabMoveRequest={(payload, target) => {
-        void requestPanelTabMove(payload, target, nativePanelPublication, '').catch((error) =>
+        void requestPanelTabMove(payload, target, '').catch((error) =>
           reportOperationalError(error, {
             source: 'PanelWindowApp',
             action: 'move-panel-tab',
@@ -286,13 +290,21 @@ function PanelWindowSurface({
           </PanelErrorBoundary>
         ))}
       </div>
+      {children}
     </DockablePanelProvider>
   );
 }
 
-export default function PanelWindowApp({
+/**
+ * Every panel-window provider and the panel surface, in production order.
+ * PanelWindowApp renders it alone; the frontend test harness renders the
+ * surface under test inside it.
+ */
+export function PanelWindowShell({
   descriptor,
-}: Readonly<{ descriptor: PanelWindowDescriptor }>) {
+  children,
+}: Readonly<{ descriptor: PanelWindowDescriptor; children?: ReactNode }>) {
+  useDocumentVisibilityEvents();
   const clusterWorkspace = useClusterWorkspaceSnapshot();
   const clusterName = resolvePanelWindowClusterName(
     clusterWorkspace.clusters,
@@ -310,25 +322,22 @@ export default function PanelWindowApp({
               >
                 <PanelWindowRoleProvider descriptor={descriptor}>
                   <AppearanceModeProvider>
-                    <RefreshManagerProvider>
-                      <FixedClusterProvider
-                        clusterId={descriptor.clusterId}
-                        clusterName={clusterName}
-                      >
-                        <ObjectPanelStateProvider initialGroupSnapshot={descriptor.snapshot}>
-                          <ClusterLifecycleProvider>
-                            <NamespaceProvider>
-                              <PanelLifecycleGuardProvider>
-                                <PanelWindowSurface
-                                  descriptor={descriptor}
-                                  clusterName={clusterName}
-                                />
-                              </PanelLifecycleGuardProvider>
-                            </NamespaceProvider>
-                          </ClusterLifecycleProvider>
-                        </ObjectPanelStateProvider>
-                      </FixedClusterProvider>
-                    </RefreshManagerProvider>
+                    <FixedClusterProvider
+                      clusterId={descriptor.clusterId}
+                      clusterName={clusterName}
+                    >
+                      <ObjectPanelStateProvider initialGroup={descriptor.group}>
+                        <ClusterLifecycleProvider>
+                          <NamespaceProvider>
+                            <PanelLifecycleGuardProvider>
+                              <PanelWindowSurface descriptor={descriptor} clusterName={clusterName}>
+                                {children}
+                              </PanelWindowSurface>
+                            </PanelLifecycleGuardProvider>
+                          </NamespaceProvider>
+                        </ClusterLifecycleProvider>
+                      </ObjectPanelStateProvider>
+                    </FixedClusterProvider>
                   </AppearanceModeProvider>
                 </PanelWindowRoleProvider>
               </div>
@@ -338,4 +347,10 @@ export default function PanelWindowApp({
       </ErrorProvider>
     </AppErrorBoundary>
   );
+}
+
+export default function PanelWindowApp({
+  descriptor,
+}: Readonly<{ descriptor: PanelWindowDescriptor }>) {
+  return <PanelWindowShell descriptor={descriptor} />;
 }

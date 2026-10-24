@@ -10,6 +10,7 @@ package pods
 import (
 	"context"
 	"fmt"
+	"github.com/luxury-yacht/app/backend/kind/logspec"
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -19,10 +20,20 @@ import (
 
 type Service struct {
 	deps common.Dependencies
+	// logTargets are the kind registry's container-log targets; only container
+	// log reads need them (NewContainerLogsService).
+	logTargets logspec.Targets
 }
 
 func NewService(deps common.Dependencies) *Service {
 	return &Service{deps: deps}
+}
+
+// NewContainerLogsService builds a service that reads container logs through the
+// kind registry's log targets (kindregistry.MustLogTargets), passed in because
+// the registry imports this package.
+func NewContainerLogsService(deps common.Dependencies, targets logspec.Targets) *Service {
+	return &Service{deps: deps, logTargets: targets}
 }
 
 // GetPod returns detailed information about a single pod.

@@ -1,238 +1,169 @@
-import type { StatusIndicatorAction } from '@shared/components/status/StatusIndicator';
-import type { ReactNode } from 'react';
+/**
+ * frontend/src/ui/status/ConnectivityStatus.test.tsx
+ *
+ * The header connectivity indicator follows the visible cluster's lifecycle,
+ * namespace list, authentication, and the auto-refresh preference, and its
+ * actions act on that cluster: Refresh Now re-reads the cluster's data, Retry
+ * Auth asks the backend to retry that cluster's authentication, and the
+ * auto-refresh action saves the inverse preference. A disconnected cluster
+ * offers no data refresh. Which state wins is connectivityPresentation's
+ * contract (connectivityPresentation.test.ts). Runs in the full app over the
+ * faked backend (test-utils/appState).
+ */
+
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ClusterAuthState } from '@/core/contexts/AuthErrorContext';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { backend } from '@/core/backend-api/models';
+import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
 
-let mockLifecycleState = 'ready';
-let mockNamespaceReady = true;
-let mockHealth: 'healthy' | 'degraded' | 'unknown' = 'healthy';
-let mockSelectedClusterId = 'cluster-a';
-let mockSelectedClusterName = 'alpha';
-let mockAutoRefreshEnabled = true;
-const { setAutoRefreshEnabledMock, retryAuthMock, requestRefreshMock } = vi.hoisted(() => ({
-  setAutoRefreshEnabledMock: vi.fn(),
-  retryAuthMock: vi.fn(),
-  requestRefreshMock: vi.fn(),
-}));
-let mockAuthState: ClusterAuthState = {
-  hasError: false,
-  isRecovering: false,
-  reason: '',
-  clusterName: '',
-  secondsUntilRetry: 0,
-  errorClass: '',
-  execCommand: '',
-  diagnosticKind: '',
-  diagnosticSummary: '',
+const app = installAppStateHarness();
+let view: MountedApp;
+let dev: TestCluster;
+
+const indicator = () =>
+  requireValue(
+    view.container.querySelector<HTMLElement>('[role="button"][aria-label^="Connectivity:"]'),
+    'expected the connectivity indicator'
+  );
+const severity = () =>
+  indicator().querySelector('.status-indicator-dot')?.getAttribute('data-status');
+const summary = () => indicator().getAttribute('aria-label');
+
+/** Opens the indicator's popover from the keyboard and returns its action buttons. */
+const openActions = async () => {
+  if (indicator().getAttribute('aria-expanded') !== 'true') {
+    await act(async () => {
+      indicator().dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+      );
+    });
+    await app.settle();
+  }
+  const popover = requireValue(
+    document.getElementById(indicator().getAttribute('aria-controls') ?? ''),
+    'expected the connectivity popover'
+  );
+  return Array.from(popover.querySelectorAll<HTMLButtonElement>('.status-popover-actions button'));
+};
+const actionLabels = async () => (await openActions()).map((button) => button.textContent);
+const runAction = async (label: string) => {
+  const action = requireValue(
+    (await openActions()).find((button) => button.textContent === label),
+    `expected the ${label} action`
+  );
+  await act(async () => action.click());
+  await app.settle();
 };
 
-vi.mock('@shared/components/status/StatusIndicator', () => ({
-  __esModule: true,
-  default: ({
-    status,
-    message,
-    actionLabel,
-    actions,
-    ariaLabel,
-  }: {
-    status: string;
-    message: ReactNode;
-    actionLabel?: string;
-    actions?: StatusIndicatorAction[];
-    ariaLabel: string;
-  }) => (
-    <div
-      data-testid="indicator"
-      role="status"
-      data-status={status}
-      data-action-label={actionLabel ?? ''}
-      data-actions={(actions ?? []).map((action) => action.label).join('|')}
-      aria-label={ariaLabel}
-    >
-      {message}
-      {(actions ?? []).map((action) => (
-        <button type="button" key={action.label} onClick={action.onClick}>
-          {action.label}
-        </button>
-      ))}
-    </div>
-  ),
-}));
+/** Preference changes the backend saved, in order. */
+const saved = () =>
+  app.backend.calls('UpdateAppPreferences').flatMap(([request]) => request.changes ?? []);
 
-vi.mock('@/core/data-access', () => ({
-  requestContextRefresh: requestRefreshMock,
-}));
+const start = async (lifecycle?: backend.ClusterLifecycleState) => {
+  dev = app.cluster({ name: 'dev', context: 'alpha', lifecycle });
+  app.namespaces(dev, ['default']);
+  app.startScreen(dev);
+  view = await app.mountApp();
+};
 
-vi.mock('@/hooks/useWailsRuntimeEvents', () => ({
-  useClusterHealthListener: () => ({
-    getActiveClusterHealth: () => mockHealth,
-  }),
-}));
-
-vi.mock('@/core/contexts/AuthErrorContext', () => ({
-  useAuthError: () => ({
-    handleRetry: retryAuthMock,
-  }),
-  useActiveClusterAuthState: () => mockAuthState,
-}));
-
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({
-    selectedClusterId: mockSelectedClusterId,
-    selectedClusterName: mockSelectedClusterName,
-  }),
-}));
-
-vi.mock('@core/contexts/ClusterLifecycleContext', () => ({
-  useClusterLifecycle: () => ({
-    getClusterState: () => mockLifecycleState,
-  }),
-}));
-
-vi.mock('@/core/events', () => ({
-  eventBus: {
-    on: vi.fn(() => () => undefined),
-  },
-}));
-
-vi.mock('@/core/settings/appPreferences', () => ({
-  getAutoRefreshEnabled: () => mockAutoRefreshEnabled,
-  setAutoRefreshEnabled: setAutoRefreshEnabledMock,
-}));
-
-vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
-  useNamespace: () => ({
-    namespaceReady: mockNamespaceReady,
-  }),
-}));
-
-import ConnectivityStatus from './ConnectivityStatus';
+beforeEach(() => {
+  // Mirrors backend/preferences_settings.go UpdateAppPreferences.
+  app.backend.answer('UpdateAppPreferences', (request) => ({
+    settings: null,
+    changedKeys: (request.changes ?? []).map(({ key }) => key),
+  }));
+  app.backend.answer('RetryClusterAuth', () => undefined);
+});
 
 describe('ConnectivityStatus', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  it('is ready once the namespaces load, and Refresh Now re-reads the cluster’s data', async () => {
+    await start();
+    expect(severity()).toBe('healthy');
+    expect(summary()).toContain('Ready');
+    expect(await actionLabels()).toEqual(['Refresh Now', 'Disable Auto-Refresh']);
+    app.snapshots.clearReads();
+
+    await runAction('Refresh Now');
+
+    expect(app.snapshots.reads('cluster-overview').map((read) => read.scope)).toContain(
+      buildClusterRefreshScope('cluster-overview', dev.clusterId)
+    );
+    expect(app.backend.calls('RetryClusterAuth')).toEqual([]);
+  });
+
+  it('keeps loading until the namespace list is ready', async () => {
+    // The namespace list read stays in flight until the app abandons it.
+    app.snapshots.respond((request) =>
+      request.domain === 'namespaces'
+        ? new Promise<Response>((_resolve, reject) => {
+            request.signal?.addEventListener('abort', () =>
+              reject(new DOMException('aborted', 'AbortError'))
+            );
+          })
+        : undefined
+    );
+    await start();
+
+    expect(severity()).toBe('refreshing');
+    expect(summary()).toContain('Loading namespaces');
+    expect(await actionLabels()).toEqual(['Disable Auto-Refresh']);
+  });
+
+  it('shows an authentication failure with its reason and retries that cluster’s authentication', async () => {
+    await start();
+    app.snapshots.clearReads();
+
+    await act(async () => {
+      app.events.emit('cluster:lifecycle', { clusterId: dev.clusterId, state: 'auth_failed' });
+      app.events.emit('cluster:auth:failed', {
+        clusterId: dev.clusterId,
+        clusterName: dev.clusterName,
+        reason: 'token expired',
+      });
+    });
+    await app.settle();
+
+    expect(severity()).toBe('unhealthy');
+    expect(summary()).toContain('Authentication failed');
+    expect(summary()).toContain('token expired');
+    expect(await actionLabels()).toEqual(['Retry Auth', 'Disable Auto-Refresh']);
+
+    await runAction('Retry Auth');
+
+    expect(app.backend.calls('RetryClusterAuth')).toEqual([[dev.clusterId]]);
+    expect(app.snapshots.reads()).toEqual([]);
+  });
+
+  it('offers Refresh Now and Enable Auto-Refresh while auto-refresh is paused', async () => {
+    app.preferences({ autoRefreshEnabled: false });
+    await start();
+
+    expect(await actionLabels()).toEqual(['Refresh Now', 'Enable Auto-Refresh']);
+  });
 
   it.each([true, false])(
-    'offers no data-refresh action for a disconnected cluster when auto-refresh is %s',
+    'offers a disconnected cluster no data refresh when auto-refresh is %s',
     async (enabled) => {
-      mockLifecycleState = 'disconnected';
-      mockAutoRefreshEnabled = enabled;
-      await act(async () => {
-        root.render(<ConnectivityStatus />);
-      });
-      const indicator = container.querySelector('[data-testid="indicator"]');
-      expect(indicator?.getAttribute('data-status')).toBe('unhealthy');
-      expect(indicator?.getAttribute('data-actions')).not.toContain('Refresh Now');
-      expect(indicator?.getAttribute('data-actions')).toContain(
-        enabled ? 'Disable Auto-Refresh' : 'Enable Auto-Refresh'
-      );
-      act(() => requireValue(container.querySelector('button'), 'Auto-refresh toggle').click());
-      expect(setAutoRefreshEnabledMock).toHaveBeenCalledWith(!enabled);
-      expect(requestRefreshMock).not.toHaveBeenCalled();
-      expect(retryAuthMock).not.toHaveBeenCalled();
+      app.preferences({ autoRefreshEnabled: enabled });
+      await start(backend.ClusterLifecycleState.ClusterStateDisconnected);
+      app.snapshots.clearReads();
+
+      expect(severity()).toBe('unhealthy');
+      expect(summary()).toContain('Cluster disconnected');
+      expect(await actionLabels()).toEqual([
+        enabled ? 'Disable Auto-Refresh' : 'Enable Auto-Refresh',
+      ]);
+
+      await runAction(enabled ? 'Disable Auto-Refresh' : 'Enable Auto-Refresh');
+
+      expect(saved()).toEqual([{ key: 'autoRefreshEnabled', value: !enabled }]);
+      expect(app.backend.calls('RetryClusterAuth')).toEqual([]);
     }
   );
-
-  beforeEach(() => {
-    setAutoRefreshEnabledMock.mockClear();
-    retryAuthMock.mockClear();
-    requestRefreshMock.mockClear();
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    mockLifecycleState = 'ready';
-    mockNamespaceReady = true;
-    mockHealth = 'healthy';
-    mockSelectedClusterId = 'cluster-a';
-    mockSelectedClusterName = 'alpha';
-    mockAutoRefreshEnabled = true;
-    mockAuthState = {
-      hasError: false,
-      isRecovering: false,
-      reason: '',
-      clusterName: '',
-      secondsUntilRetry: 0,
-      errorClass: '',
-      execCommand: '',
-      diagnosticKind: '',
-      diagnosticSummary: '',
-    };
-  });
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-  });
-
-  const renderStatus = () => {
-    act(() => {
-      root.render(<ConnectivityStatus />);
-    });
-    return container.querySelector('[data-testid="indicator"]') as HTMLDivElement | null;
-  };
-
-  it('keeps the status in loading until namespaces are ready to render', () => {
-    mockNamespaceReady = false;
-
-    const indicator = renderStatus();
-
-    expect(indicator?.getAttribute('data-status')).toBe('refreshing');
-    expect(indicator?.textContent).toContain('Loading namespaces');
-    expect(indicator?.textContent).toContain('alpha is connected');
-    expect(indicator?.getAttribute('data-actions')).toBe('Disable Auto-Refresh');
-    expect(indicator?.getAttribute('aria-label')).toContain('Connectivity: Loading namespaces.');
-  });
-
-  it('shows ready once namespaces are available', () => {
-    const indicator = renderStatus();
-
-    expect(indicator?.getAttribute('data-status')).toBe('healthy');
-    expect(indicator?.textContent).toContain('Ready');
-    expect(indicator?.textContent).toContain('alpha is connected is ready to use.');
-    expect(indicator?.getAttribute('data-actions')).toBe('Refresh Now|Disable Auto-Refresh');
-    expect(indicator?.getAttribute('aria-label')).toContain('Connectivity: Ready.');
-    act(() => requireValue(container.querySelector('button'), 'Refresh action').click());
-    expect(requestRefreshMock).toHaveBeenCalledWith({ reason: 'user' });
-    expect(retryAuthMock).not.toHaveBeenCalled();
-  });
-
-  it('shows auth failure details and retry action', () => {
-    mockLifecycleState = 'auth_failed';
-    mockAuthState = {
-      hasError: true,
-      isRecovering: false,
-      reason: 'token expired',
-      clusterName: 'alpha',
-      secondsUntilRetry: 0,
-      errorClass: 'auth',
-      execCommand: '',
-      diagnosticKind: '',
-      diagnosticSummary: '',
-    };
-
-    const indicator = renderStatus();
-
-    expect(indicator?.getAttribute('data-status')).toBe('unhealthy');
-    expect(indicator?.getAttribute('data-actions')).toBe('Retry Auth|Disable Auto-Refresh');
-    expect(indicator?.textContent).toContain('Authentication failed');
-    expect(indicator?.textContent).toContain('token expired');
-    act(() =>
-      requireValue(container.querySelector('button'), 'Authentication retry action').click()
-    );
-    expect(retryAuthMock).toHaveBeenCalledWith('cluster-a');
-    expect(requestRefreshMock).not.toHaveBeenCalled();
-  });
-
-  it('shows enable auto-refresh when auto-refresh is paused', () => {
-    mockAutoRefreshEnabled = false;
-
-    const indicator = renderStatus();
-
-    expect(indicator?.getAttribute('data-actions')).toBe('Refresh Now|Enable Auto-Refresh');
-  });
 });

@@ -1,8 +1,9 @@
 package ingest
 
 import (
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestCatalogSubscriptionDetachesWithoutStoppingSource(t *testing.T) {

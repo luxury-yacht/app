@@ -5,28 +5,10 @@
  * Provides shared helper functions for the frontend.
  */
 
+import { isPermissionDenied, type RefreshFailure } from '@/core/refresh/refreshFailure';
+
+/** An empty view names a permission denial; any other failure shows the fallback. */
 export const resolveEmptyStateMessage = (
-  error?: string | null,
+  failure?: RefreshFailure | null,
   fallback: string = 'No data available'
-): string => {
-  if (!error) {
-    return fallback;
-  }
-
-  const normalized = error.toLowerCase();
-  if (
-    normalized.includes('forbidden') ||
-    normalized.includes('permission') ||
-    normalized.includes('access denied') ||
-    normalized.includes('unauthorized') ||
-    normalized.includes('not authorized') ||
-    normalized.includes('rbac') ||
-    normalized.includes('cannot list resource') ||
-    normalized.includes('cannot get resource') ||
-    normalized.includes('403')
-  ) {
-    return 'Insufficient permissions';
-  }
-
-  return fallback;
-};
+): string => (isPermissionDenied(failure) ? 'Insufficient permissions' : fallback);

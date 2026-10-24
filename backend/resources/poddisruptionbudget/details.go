@@ -48,24 +48,48 @@ func (s *Service) PodDisruptionBudget(ctx context.Context, namespace, name strin
 func (s *Service) buildPodDisruptionBudgetDetails(pdb *policyv1.PodDisruptionBudget) *PodDisruptionBudgetDetails {
 	facts := BuildFacts(s.deps.ClusterID, pdb)
 	details := &PodDisruptionBudgetDetails{
-		Kind:               "PodDisruptionBudget",
-		Name:               pdb.Name,
-		Namespace:          pdb.Namespace,
-		Details:            detailsSummary(facts),
-		MinAvailable:       pdbIntOrStringValue(facts.MinAvailable),
-		MaxUnavailable:     pdbIntOrStringValue(facts.MaxUnavailable),
-		Selector:           facts.Selector,
-		CurrentHealthy:     facts.CurrentHealthy,
-		DesiredHealthy:     facts.DesiredHealthy,
-		DisruptionsAllowed: facts.AllowedDisruptions,
-		ExpectedPods:       facts.ExpectedPods,
-		ObservedGeneration: facts.ObservedGeneration,
-		DisruptedPods:      pdb.Status.DisruptedPods,
-		Conditions:         restypes.FormatConditions(facts.Conditions),
-		Labels:             pdb.Labels,
-		Annotations:        pdb.Annotations,
+		Kind:                       "PodDisruptionBudget",
+		Name:                       pdb.Name,
+		Namespace:                  pdb.Namespace,
+		Details:                    detailsSummary(facts),
+		MinAvailable:               pdbIntOrStringValue(facts.MinAvailable),
+		MaxUnavailable:             pdbIntOrStringValue(facts.MaxUnavailable),
+		Selector:                   labelSelectorToDetails(facts.Selector),
+		UnhealthyPodEvictionPolicy: facts.UnhealthyPodEvictionPolicy,
+		CurrentHealthy:             facts.CurrentHealthy,
+		DesiredHealthy:             facts.DesiredHealthy,
+		DisruptionsAllowed:         facts.AllowedDisruptions,
+		ExpectedPods:               facts.ExpectedPods,
+		ObservedGeneration:         facts.ObservedGeneration,
+		DisruptedPods:              disruptedPodsToDetails(facts.DisruptedPods),
+		Conditions:                 restypes.ConditionStatesFromFacts(facts.Conditions),
+		Labels:                     pdb.Labels,
+		Annotations:                pdb.Annotations,
 	}
 	return details
+}
+
+// labelSelectorToDetails keeps an unset selector nil so it stays distinct from {}.
+func labelSelectorToDetails(facts *LabelSelectorFacts) *LabelSelector {
+	if facts == nil {
+		return nil
+	}
+	selector := &LabelSelector{MatchLabels: facts.MatchLabels}
+	for _, expr := range facts.MatchExpressions {
+		selector.MatchExpressions = append(selector.MatchExpressions, LabelSelectorRequirement(expr))
+	}
+	return selector
+}
+
+func disruptedPodsToDetails(facts []resourcemodel.DisruptedPodFacts) []DisruptedPod {
+	if len(facts) == 0 {
+		return nil
+	}
+	pods := make([]DisruptedPod, 0, len(facts))
+	for _, pod := range facts {
+		pods = append(pods, DisruptedPod{Pod: pod.Pod, DisruptionTime: pod.DisruptionTime})
+	}
+	return pods
 }
 
 func pdbIntOrStringValue(facts *resourcemodel.IntOrStringFacts) *string {
@@ -79,8 +103,12 @@ func pdbIntOrStringValue(facts *resourcemodel.IntOrStringFacts) *string {
 // detailsSummary is the detail-view summary string (selector + availability + health).
 func detailsSummary(facts Facts) string {
 	selectorSummary := "No selector"
-	if len(facts.Selector) > 0 {
-		selectorSummary = fmt.Sprintf("Selector: %d labels", len(facts.Selector))
+	if facts.Selector != nil {
+		terms := len(facts.Selector.MatchLabels) + len(facts.Selector.MatchExpressions)
+		selectorSummary = "Selector: all pods"
+		if terms > 0 {
+			selectorSummary = fmt.Sprintf("Selector: %d labels", terms)
+		}
 	}
 	availability := ""
 	if facts.MinAvailable != nil {

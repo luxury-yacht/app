@@ -11,14 +11,10 @@ import {
   type DeploymentGroup,
   filterByCollapseInfo,
 } from './objectMapCollapse';
-import { dedupeServiceEdges } from './objectMapDedupe';
-import { filterByDirectionalReachability } from './objectMapDirectionalFilter';
 import {
-  computeObjectMapBounds,
   computeObjectMapLayout,
   type ObjectMapLayout,
   type PositionedNode,
-  routeObjectMapEdges,
 } from './objectMapLayout';
 import { OBJECT_MAP_NODE_DRAG_THRESHOLD_PX } from './objectMapNodeGesture';
 import type { NormalizedObjectMapPayload } from './objectMapPayload';
@@ -27,6 +23,7 @@ import type {
   ObjectMapNodeBadge,
   ObjectMapPointer,
 } from './objectMapRendererTypes';
+import { filterByLineage } from './objectMapTraversal';
 
 type NodePositionOverrides = Map<string, { x: number; y: number }>;
 
@@ -41,6 +38,23 @@ interface NodeDragState {
   startY: number;
   didDrag: boolean;
 }
+
+// nodeDragDelta measures a drag in layout units when the renderer reports
+// layout coordinates, else in screen pixels.
+const nodeDragDelta = (
+  drag: NodeDragState,
+  pointer: ObjectMapPointer
+): { x: number; y: number; screenDistance: number } => {
+  const dxScreen = pointer.clientX - drag.originClientX;
+  const dyScreen = pointer.clientY - drag.originClientY;
+  const { originLayoutX, originLayoutY } = drag;
+  const { layoutX, layoutY } = pointer;
+  return {
+    x: originLayoutX !== undefined && layoutX !== undefined ? layoutX - originLayoutX : dxScreen,
+    y: originLayoutY !== undefined && layoutY !== undefined ? layoutY - originLayoutY : dyScreen,
+    screenDistance: Math.hypot(dxScreen, dyScreen),
+  };
+};
 
 export const useObjectMapModel = (payload: NormalizedObjectMapPayload) => {
   const seedId = useMemo(() => {
@@ -80,46 +94,28 @@ export const useObjectMapModel = (payload: NormalizedObjectMapPayload) => {
     });
   }, []);
 
-  const dedupedEdges = useMemo(
-    () => dedupeServiceEdges(payload.nodes, payload.edges),
-    [payload.nodes, payload.edges]
-  );
-
-  const directionallyReachable = useMemo(
-    () => filterByDirectionalReachability(payload.nodes, dedupedEdges, seedId),
-    [payload.nodes, dedupedEdges, seedId]
-  );
-
+  // The backend owns map membership; collapse is the only view control that
+  // removes objects before layout.
   const collapseInfo = useMemo(
-    () =>
-      computeCollapseInfo(
-        directionallyReachable.nodes,
-        directionallyReachable.edges,
-        seedId,
-        expandedDeployments
-      ),
-    [directionallyReachable.nodes, directionallyReachable.edges, seedId, expandedDeployments]
+    () => computeCollapseInfo(payload.nodes, payload.edges, seedId, expandedDeployments),
+    [payload.nodes, payload.edges, seedId, expandedDeployments]
   );
 
   const collapsed = useMemo(
-    () =>
-      filterByCollapseInfo(
-        directionallyReachable.nodes,
-        directionallyReachable.edges,
-        collapseInfo.visibleNodeIds
-      ),
-    [directionallyReachable.nodes, directionallyReachable.edges, collapseInfo.visibleNodeIds]
+    () => filterByCollapseInfo(payload.nodes, payload.edges, collapseInfo.visibleNodeIds),
+    [payload.nodes, payload.edges, collapseInfo.visibleNodeIds]
   );
 
   const filtered = useMemo(
-    // Collapse can remove the only edge connecting a Pod dependency
-    // (for example its scheduled Node). Prune again so hidden ReplicaSet
-    // branches do not leave disconnected remnants in the rendered graph.
-    () => filterByDirectionalReachability(collapsed.nodes, collapsed.edges, seedId),
+    // Hiding a collapsed ReplicaSet can strand an object reachable only
+    // through it (for example a ConfigMap its old pod template used). Apply the
+    // map's one rule again to what is still shown.
+    () => filterByLineage(collapsed.nodes, collapsed.edges, seedId),
     [collapsed.nodes, collapsed.edges, seedId]
   );
 
-  const baseLayout = useMemo(
+  // The computed layout before pins; visible state applies pins in every view.
+  const layout: ObjectMapLayout = useMemo(
     () => computeObjectMapLayout(filtered.nodes, filtered.edges, seedId),
     [filtered.nodes, filtered.edges, seedId]
   );
@@ -134,29 +130,16 @@ export const useObjectMapModel = (payload: NormalizedObjectMapPayload) => {
     nodeDragRef.current = null;
   }, []);
 
+  // Pins survive refreshes; only objects that left the graph lose theirs.
   useEffect(() => {
-    void filtered.nodes;
-    void filtered.edges;
-    resetLayout();
-  }, [filtered.nodes, filtered.edges, resetLayout]);
-
-  const layout: ObjectMapLayout = useMemo(() => {
-    if (nodePositionOverrides.size === 0) {
-      return baseLayout;
-    }
-    const nodes = baseLayout.nodes.map((node) => {
-      const override = nodePositionOverrides.get(node.id);
-      if (!override) {
-        return node;
+    const present = new Set(payload.nodes.map((node) => node.id));
+    setNodePositionOverrides((previous) => {
+      if (Array.from(previous.keys()).every((id) => present.has(id))) {
+        return previous;
       }
-      return { ...node, x: override.x, y: override.y };
+      return new Map(Array.from(previous).filter(([id]) => present.has(id)));
     });
-    return {
-      nodes,
-      edges: routeObjectMapEdges(nodes, filtered.edges),
-      bounds: computeObjectMapBounds(nodes),
-    };
-  }, [baseLayout, filtered.edges, nodePositionOverrides]);
+  }, [payload.nodes]);
 
   const badgeForNode = useCallback(
     (nodeId: string): ObjectMapNodeBadge | null => {
@@ -223,23 +206,16 @@ export const useObjectMapModel = (payload: NormalizedObjectMapPayload) => {
     if (drag?.pointerId !== pointer.pointerId) {
       return;
     }
-    const dxScreen = pointer.clientX - drag.originClientX;
-    const dyScreen = pointer.clientY - drag.originClientY;
-    if (!drag.didDrag && Math.hypot(dxScreen, dyScreen) >= OBJECT_MAP_NODE_DRAG_THRESHOLD_PX) {
+    const delta = nodeDragDelta(drag, pointer);
+    if (!drag.didDrag && delta.screenDistance >= OBJECT_MAP_NODE_DRAG_THRESHOLD_PX) {
       drag.didDrag = true;
       setAutoFit(false);
     }
     if (!drag.didDrag) {
       return;
     }
-    const { originLayoutX, originLayoutY } = drag;
-    const { layoutX, layoutY } = pointer;
-    const dxLayout =
-      originLayoutX !== undefined && layoutX !== undefined ? layoutX - originLayoutX : dxScreen;
-    const dyLayout =
-      originLayoutY !== undefined && layoutY !== undefined ? layoutY - originLayoutY : dyScreen;
-    const nextX = drag.startX + dxLayout;
-    const nextY = drag.startY + dyLayout;
+    const nextX = drag.startX + delta.x;
+    const nextY = drag.startY + delta.y;
     setNodePositionOverrides((prev) => {
       const current = prev.get(drag.nodeId);
       if (current && current.x === nextX && current.y === nextY) {
@@ -269,6 +245,7 @@ export const useObjectMapModel = (payload: NormalizedObjectMapPayload) => {
 
   return {
     layout,
+    pinnedPositions: nodePositionOverrides as ReadonlyMap<string, { x: number; y: number }>,
     seedId,
     badgeForNode,
     autoFit,

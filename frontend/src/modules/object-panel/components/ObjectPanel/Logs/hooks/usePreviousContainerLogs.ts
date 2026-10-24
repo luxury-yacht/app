@@ -16,7 +16,7 @@ import type {
   ContainerLogsTargetIssue,
   ContainerLogsWarning,
 } from '@/core/refresh/types';
-import { getObjPanelLogsBufferMaxSize } from '@/core/settings/appPreferences';
+import { getPreference } from '@/core/settings/appPreferences';
 
 export type BackendLogSelection = {
   selectedFilters: string[];
@@ -65,7 +65,7 @@ const fetchPreviousLogs = async (
           selectedFilters: selection.selectedFilters,
           matchNone: selection.matchNone,
           previous: true,
-          tailLines: getObjPanelLogsBufferMaxSize(),
+          tailLines: getPreference('objPanelLogsBufferMaxSize'),
         }),
     });
     if (result.status === 'blocked') {
@@ -84,7 +84,7 @@ const fetchPreviousLogs = async (
       })),
       warnings: contractValues(data?.warnings, isContainerLogsWarning),
       issues: contractValues(data?.issues, isContainerLogsTargetIssue),
-      error: data?.error || null,
+      error: null,
     };
   } catch (error) {
     return {

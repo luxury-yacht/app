@@ -10,8 +10,9 @@ paths (see [Boundaries](#boundaries-deliberately-not-this-path)).
 - **Store + query engine:** `backend/refresh/querypage/` (owned columnar
   `Store[R]` and the `Query → Page` engine).
 - **Ingestion:** `backend/refresh/ingest/` (owned-reflector LIST+WATCH with
-  projection at intake); `backend/refresh/informer/` (shared typed-informer
-  factory for uncut kinds, projection transform, startup transport policy).
+  projection at intake, the managed-fields transform, and the startup transport
+  policy) for every built-in kind; `backend/refresh/permissions/` (list/watch
+  grants).
 - **Serve + maintained stores:** `backend/refresh/snapshot/querypage_typed.go`
   (`resolveTypedSnapshotPageViaStore`, `resolveMaintainedDirect`,
   `typedMaintainedStore`); `backend/objectcatalog/` for Browse.
@@ -69,18 +70,61 @@ paths (see [Boundaries](#boundaries-deliberately-not-this-path)).
 - **Project at intake.** `ingest.IngestManager` (`ingest/manager.go`) runs
   client-go reflectors for List/Watch/relist/RV handling and feeds a
   `ProjectingStore` (`ingest/projecting_store.go`) that keeps only the projected
-  bundle. `informer.StripManagedFields` (`informer/projection.go`, a
-  `WithTransform` on every factory) drops `managedFields` before any cache; it
-  is the main memory lever.
+  bundle. `stripManagedFields` (`ingest/managed_fields.go`, applied by every
+  projecting store before its projector) drops `managedFields` before
+  projection; it is the main memory lever.
 - **Locking:** `IngestManager.mu` is a leaf lock that guards only the entries
   map and is never held across a store call; sink delivery runs under the
   store write lock.
-- **LIST+WATCH is the startup transport.** `informer/watchlist_config.go`
+- **Secondary indexes are store config.** `AddIndex` registers a
+  `BundleIndexFunc` that derives a stored bundle's index values from its
+  retained halves; bundles carry no index data. `RowsByIndex` and
+  `RewriteBundlesByIndex` read the index, and a rewrite moves a row by changing
+  the half the func reads (the pod owner-key index reads
+  `PodAggregate.OwnerKey`).
+- **Sink contract** (`ingest/projecting_store.go`):
+  - A sink never reads its own store, because `Rows`, `RowsByIndex`, and
+    `GetByKey` take the same lock. A consumer that aggregates across objects
+    keeps its own index, fed by its sink (the Job owner index, the Helm
+    revision index).
+  - Work that touches another store goes through `ingest.AsyncBundleSink`,
+    which keeps delivery order off the source lock.
+  - A bundle sink receives only the new bundle. A consumer that compares old
+    and new keeps its own last-seen state (the catalog's CRD discovery hook).
+  - On an unpartitioned relist, a `BundleReplacer` gets only `ReplaceBundles`
+    with the full new set, never per-key deletes. A replacer whose removals
+    have side effects diffs that set against its previous one (CRD
+    definitions, the discovery hook, Helm releases). Partition relists deliver
+    per-key deletes.
+  - `RestoreBundles` installs spilled rows without fanning them to sinks. A
+    sink that needs the full set and does not spill it itself (an owner index,
+    or the source records behind Attention's spilled findings, for stores whose
+    rows keep what those records read) implements
+    `BundleSeeder`. Its seed arrives under the write lock, before any live
+    delta.
+- **Settled is not knowledge.** Two signals look complete without being so:
+  - `HasSyncedFor` is true after a deadline degrade.
+  - `RawHasSyncedFor` is true after a restore whose source the permission
+    filter then skips.
+
+  A decision that treats a missing row as an authoritative absence needs
+  `Ready` readiness on every partition it covers (`ingestRowsComplete` in
+  `snapshot/ingest_readiness.go`). The workloads HPA flag and the object-map
+  HPA join use it.
+- **LIST+WATCH is the startup transport.** `ingest/watchlist_config.go`
   disables client-go's beta WatchList gate before reflectors are built. A
   capability probe is insufficient: a proxy can deliver the terminal bookmark
   while streaming a large initial collection too slowly for an interactive app.
+- **Built-in reflectors decode protobuf.** The clientset handed to ingest is
+  built from `protobufRestConfig` (`backend/cluster_client_contract.go`), and
+  `TestOwnedReflectorListsNegotiateProtobuf` pins it. A reflector built on a
+  plain config decodes JSON, several times slower at intake, so benchmarks
+  and spikes must build their clientset the same way. The 2026-10 events spike
+  missed this and blamed reflectors for a 2× slower initial sync than an
+  informer; with protobuf on both sides, the owned events reflector synced
+  faster (73 ms against 102 ms at 30,000 events).
 - **Sync deadline is liveness only.** A per-GVR deadline
-  (`informer/factory.go`) degrades a hung GVR instead of wedging the cluster;
+  (`IngestManager.entrySettled`) degrades a hung GVR instead of wedging the cluster;
   until the source completes a real initial list, dependent snapshots report
   partial/inexact data with a syncing issue, never an authoritative empty
   result.
@@ -89,11 +133,20 @@ paths (see [Boundaries](#boundaries-deliberately-not-this-path)).
   application admission queue; client-go's per-cluster REST rate limiter is the
   pressure boundary. The shared 15-second liveness deadline can mark a source
   degraded but never delays another source's initial LIST.
-- **Two cutover shapes.** Registry-driven single-object kinds set the
-  descriptor `IngestOwned` flag (the generic path wires maintained store,
-  catalog, object-map, and response cache). Cross-kind-join domains (pods,
-  workloads, network, nodes) use `RegisterReflector` plus serve-time
-  re-aggregation (metrics overlay, pod aggregates, HPA, Service↔EndpointSlice).
+- **Two reflector shapes.** Every built-in kind has an owned reflector.
+  Single-object kinds with a stream descriptor take the generic path (it wires
+  maintained store, catalog, object-map, and response cache). Cross-kind-join
+  and bespoke kinds (pods, workloads, network, nodes, namespaces, events) use
+  `RegisterReflector` plus serve-time re-aggregation (metrics overlay, pod
+  aggregates, HPA, Service↔EndpointSlice). `backend/feed_contract_test.go`
+  keeps the shared typed-informer factory out of production code.
+- **Readiness is per resource.** Domains declare the resources they read;
+  the snapshot service waits on those owned stores (`ingestHub`,
+  `backend/refresh/system/ingest_hub.go`). The hub's `HasSynced` reports every
+  tracked store settled. Only a build for a domain that declares no resources
+  waits on it, and every production domain declares its resources. Typed-table
+  domains read kind availability as a predicate (permitted at registration and
+  served) and always serve from their maintained store.
 - **Cross-kind projection inputs need a late-arrival story.** A projection may
   read its own object freely. Reading another kind's cache at projection time
   races that kind's sync, and owned reflectors never resync, so a baked value
@@ -102,28 +155,56 @@ paths (see [Boundaries](#boundaries-deliberately-not-this-path)).
   1. **Re-join at serve** (endpoint counts, pod aggregates, metrics): correct
      by construction; use for volatile joins.
   2. **Bake + heal on the input kind's events** (pod ReplicaSet→Deployment
-     owner: `snapshot/pod_owner_heal.go` via
-     `ingest.ProjectingStore.RewriteBundlesByIndex` from the RS handler): for
-     immutable joins that serve filters and doorbell routing need pre-resolved.
+     and Job→CronJob owners: the pod projector reads owner indexes that the
+     ReplicaSet and Job reflectors' bundle sinks feed and restores seed, and
+     `resourcestream/owner_heals.go` rewrites already-projected pods via
+     `ingest.ProjectingStore.RewriteBundlesByIndex` from async bundle sinks):
+     for immutable joins that serve filters and doorbell routing need
+     pre-resolved.
      Pin the heal with an equivalence test (healed bundle byte-equal to a fresh
      synced-cache projection, `pod_owner_heal_test.go`).
   Review tell: a `New*IngestProjector` signature gaining another kind's
   lister/store without one of these shapes.
-- **Runtime-discovered sources share ingest ownership.** The typed CRD informer
-  supplies definitions; initial watch admission waits for discovery's preferred
-  served version. Ingest compares source specification, definition UID, and
-  permitted namespace partitions before allocating replacement stores/reflectors.
-  Permission checks run outside definition-selection and lifecycle locks, and
-  admission is rechecked before commit so a delayed check cannot restore an
-  older definition. Replacement cancels and joins its predecessor first;
+- **Runtime-discovered sources share ingest ownership.** The owned CRD
+  reflector supplies definitions: its sink publishes each CRD's
+  `apiextensions.Definition` into a copy-on-write table synchronously (under the
+  CRD store lock), and queues lifecycle work on an ordered worker; a relist is
+  diffed against the previous table so a vanished definition is retired by its
+  old UID, and a restore seeds the table. Initial watch admission waits for
+  discovery's preferred served version. Ingest compares source specification,
+  definition UID, and permitted namespace partitions before allocating
+  replacement stores/reflectors. Permission checks run on the worker or the
+  discovery caller, outside definition-selection and lifecycle locks, and
+  commit rechecks the reservation against the published table, so a delayed
+  check cannot restore an older or deleted definition. Replacement cancels and joins its predecessor first;
   incomplete definitions keep the predecessor; terminal shutdown rejects
   admissions. These sources hold catalog projections, not full objects: the
   detail-cache sink runs before catalog notification, retirement evicts the
   old source's responses, and YAML and visible-page/export hydration still read
   live API payloads.
-- **Kept as typed informers** (each justified in `informer/factory.go`):
-  ReplicaSet (pod-owner resolution), CRDs (CR discovery), events, gateway-API
-  ×8, HPA, namespaces.
+- **Events are an owned reflector.** The Events table row goes to the two
+  table sinks at intake and is not stored. The store keeps each Event's
+  catalog Summary and a slim fact (involved object, type, reason, message,
+  source, count, first and last observation), which object events, Attention,
+  the namespace warning rollup, and Recent Events read at serve. Object events
+  scans the store per build; there is no per-object index. A per-bundle index
+  measured about 725 B more per event, and a 30,000-event scan costs about
+  0.9 ms (microbenchmark). At 30,000 events the store retains about 31 MiB, 9% less than the
+  former informer cache (measured 2026-10-21). Event is `CatalogNone`, so the
+  catalog does not subscribe to its rows.
+- Ingest builds a Gateway kind's reflector only when discovery reports it
+  served.
+- **Namespaces are an owned reflector.** The bundle keeps the namespace itself
+  (Aggregate) because the namespaces row joins it at serve with workload
+  presence, warning events, and quota pressure; `namespaces` and
+  `cluster-overview` read that store, and a bundle sink on it drives the
+  namespaces doorbell and its `afterRing` hook.
+- **Helm releases ride the Secrets bundles.** A release Secret's Aggregate half
+  is its revision, decoded once at intake only when the table can show it; a
+  ConfigMap's names its release for cache eviction. The `namespace-helm` sink
+  keeps its own revision index (it cannot read the Secrets store under that
+  store's lock), recomputes only affected releases, diffs releases on an
+  unpartitioned relist, and rebuilds from the restore seed.
 
 ## Lifecycle & governor
 
@@ -194,8 +275,10 @@ paths (see [Boundaries](#boundaries-deliberately-not-this-path)).
 - **Push:** the `refresh-resources` stream carries only a change signal. A
   delta/resync advances the scoped doorbell clocks (`signalVersions`, plus the
   folded `sourceVersion`) and the query-backed view refetches its page. No live
-  row crosses the wire: `streammux.ServerMessage` has no row field. Signal
-  rules: [data-freshness.md](data-freshness.md#signals-and-source-clocks).
+  row crosses the wire: `streammux.ServerMessage` has no row field. The
+  maintained store rings after it applies a change, from its own handler or
+  ingest sink; nothing else rings its domain. Signal rules:
+  [data-freshness.md](data-freshness.md#signals-and-source-clocks).
 - **Metrics** reach a view only by serve-time overlay.
 
 ## Boundaries (deliberately NOT this path)
@@ -213,6 +296,17 @@ and access reviews, not object-state queries).
   and the brute list+project path.
 - `querypage` fuzz/property test (`apply(deltas) == recompute`) and the catalog
   brute-force oracle.
+- Sink-fed consumers run against a real `cache.Reflector` and the
+  `ingest/ingesttest` API server (`system/real_reflector_harness_test.go`).
+  Each such consumer has two re-warm tests:
+  - a spilled store, a valid-version resume, and no object changes, after which
+    the consumer still sees the full set;
+  - an expired version (`WatchGap`, 410), whose relist reaches the same
+    consumer.
+
+  A replacer with removal side effects also has a watch-gap test: an object
+  deleted during the gap loses its side effect, and the survivors are
+  untouched.
 
 ## Deliberately not built (do not re-attempt as TODOs)
 
@@ -232,6 +326,10 @@ Reasons beyond these lines are in git history.
   only on a measured regression.
 - Rejected: `metricsRevision` metric index — it would only serve the unbuilt
   delta layer or profiled metric-sorted views.
+- Rejected: an adapter that presents the ingest contract over client-go
+  informers. It would add a third feed shape and give informer kinds no
+  namespace-scope partitions, spill, or delta resume. Every kind is an owned
+  reflector instead, and `backend/feed_contract_test.go` keeps informers out.
 
 ## Provenance
 

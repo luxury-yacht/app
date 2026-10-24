@@ -1,6 +1,10 @@
 package backend
 
-import "slices"
+import (
+	"slices"
+
+	"github.com/luxury-yacht/app/backend/internal/preferenceschema"
+)
 
 func (p *PreferencesService) SetDiscoveredKubeconfigSearchPaths(paths []string) {
 	p.settingsMu.Lock()
@@ -18,7 +22,7 @@ func (p *PreferencesService) MetricsRefreshIntervalMs() int {
 	p.settingsMu.Lock()
 	defer p.settingsMu.Unlock()
 	if p.appSettings == nil || p.appSettings.MetricsRefreshIntervalMs <= 0 {
-		return defaultMetricsIntervalMs()
+		return preferenceschema.DefaultMetricsRefreshIntervalMs
 	}
 	return p.appSettings.MetricsRefreshIntervalMs
 }
@@ -162,26 +166,30 @@ func (p *PreferencesService) SaveSelectedKubeconfigs(selections []string) error 
 	return p.saveAppSettings()
 }
 
-func (p *PreferencesService) prepareInstallationTelemetry() (string, bool, error) {
+func (p *PreferencesService) prepareInstallationTelemetry() (installationTelemetryState, error) {
 	p.settingsMu.Lock()
 	defer p.settingsMu.Unlock()
 	settings, err := p.loadSettingsFile()
 	if err != nil {
-		return "", false, err
+		return installationTelemetryState{}, err
 	}
 	created, err := ensureAnonymizedID(settings)
 	if err != nil {
-		return "", false, err
+		return installationTelemetryState{}, err
 	}
 	if created {
 		if err := p.saveSettingsFile(settings); err != nil {
-			return "", false, err
+			return installationTelemetryState{}, err
 		}
 	}
-	return settings.Telemetry.AnonymizedID, settings.Telemetry.InstallationMetricReported, nil
+	return installationTelemetryState{
+		anonymizedID:    settings.Telemetry.AnonymizedID,
+		registered:      settings.Telemetry.InstallationMetricReported,
+		reportedVersion: settings.Telemetry.ReportedVersion,
+	}, nil
 }
 
-func (p *PreferencesService) acknowledgeInstallationTelemetry(anonymizedID string) error {
+func (p *PreferencesService) acknowledgeInstallationTelemetry(anonymizedID, version string) error {
 	p.settingsMu.Lock()
 	defer p.settingsMu.Unlock()
 	settings, err := p.loadSettingsFile()
@@ -192,5 +200,6 @@ func (p *PreferencesService) acknowledgeInstallationTelemetry(anonymizedID strin
 		return nil
 	}
 	settings.Telemetry.InstallationMetricReported = true
+	settings.Telemetry.ReportedVersion = version
 	return p.saveSettingsFile(settings)
 }

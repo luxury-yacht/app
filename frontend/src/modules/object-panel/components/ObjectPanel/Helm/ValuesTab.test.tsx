@@ -1,526 +1,253 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Helm/ValuesTab.test.tsx
  *
- * Covers mode switching (defaults, overrides, merged), loading/error/empty
- * states, and correct recursive value computation with typed helpers.
+ * Covers the Defaults/Overrides/Merged views of the backend payload, YAML that
+ * Helm reads back unchanged, per-panel view memory, the release's values read
+ * lifecycle, and loading/paused/error states. Runs inside the real app shell
+ * over a faked backend (test-utils/appState); only the code editor is stubbed,
+ * to read the text it shows.
  */
 
-import React, { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as YAML from 'yaml';
+import type { ObjectHelmValuesSnapshotPayload } from '@/core/refresh/types';
+import { objectPanelId } from '@/modules/object-panel/objectPanelRef';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+  type TestObject,
+} from '@/test-utils/appState/harness';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { requireValue } from '@/test-utils/requireValue';
-
-interface CapturedCodeMirrorProps {
-  value: string;
-  onCreateEditor?: (view: unknown) => void;
-  ref?: React.Ref<unknown>;
-}
-
-// ---------------------------------------------------------------------------
-// Hoisted mocks
-// ---------------------------------------------------------------------------
-
-const searchShortcutMocks = vi.hoisted(() => ({
-  useSearchShortcutTarget: vi.fn(),
-  useKeyboardSurface: vi.fn(),
-}));
-
-const refreshMocks = vi.hoisted(() => ({
-  setScopedDomainEnabled: vi.fn(),
-  acquireScopedDomainLease: vi.fn(),
-  releaseScopedDomainLease: vi.fn(),
-  fetchScopedDomain: vi.fn(() => Promise.resolve()),
-}));
-
-const refreshStoreMocks = vi.hoisted(() => ({
-  useRefreshScopedDomain: vi.fn(),
-  getScopedDomainState: vi.fn(),
-}));
-
-const autoRefreshLoadingState = vi.hoisted(() => ({
-  isPaused: false,
-  isManualRefreshActive: false,
-  suppressPassiveLoading: false,
-}));
-
-const codeMirrorState = {
-  latestProps: { current: { value: '' } as CapturedCodeMirrorProps },
-  editorView: {
-    state: {
-      selection: { main: { from: 0, to: 0 } },
-      sliceDoc: vi.fn(() => ''),
-    },
-    dispatch: vi.fn(),
-    focus: vi.fn(),
-  },
-  value: '',
-};
-
-const CodeMirrorMock = ({ ref, ...props }: CapturedCodeMirrorProps) => {
-  const { onCreateEditor } = props;
-  codeMirrorState.value = props.value;
-  codeMirrorState.latestProps.current = props;
-  if (ref && typeof ref === 'object') {
-    (ref as React.RefObject<{ view: typeof codeMirrorState.editorView } | null>).current = {
-      view: codeMirrorState.editorView,
-    };
-  }
-  React.useEffect(() => {
-    onCreateEditor?.(codeMirrorState.editorView);
-  }, [onCreateEditor]);
-  return (
-    <div data-testid="code-mirror" data-value={props.value}>
-      {props.value}
-    </div>
-  );
-};
-CodeMirrorMock.displayName = 'CodeMirrorMock';
-
-const themeMocks = vi.hoisted(() => ({
-  buildCodeTheme: vi.fn(() => ({ theme: 'dark', highlight: 'highlight-ext' })),
-}));
-
-const searchModuleMocks = vi.hoisted(() => ({
-  createSearchExtensions: vi.fn(() => ['search-ext']),
-  closeSearchPanel: vi.fn(),
-}));
-
-const codemirrorSearchMocks = vi.hoisted(() => {
-  class SearchQuery {
-    search!: string;
-    constructor(options: Record<string, unknown>) {
-      Object.assign(this, options);
-    }
-  }
-  return {
-    SearchQuery,
-    findNext: vi.fn(),
-    findPrevious: vi.fn(),
-    getSearchQuery: vi.fn(() => ({
-      search: '',
-      caseSensitive: false,
-      literal: false,
-      regexp: false,
-      wholeWord: false,
-      replace: '',
-    })),
-    setSearchQuery: { of: vi.fn((q: unknown) => q) },
-  };
-});
-
-// ---------------------------------------------------------------------------
-// vi.mock calls
-// ---------------------------------------------------------------------------
-
-vi.mock('@ui/shortcuts', () => ({
-  useKeyboardSurface: (config: unknown) => searchShortcutMocks.useKeyboardSurface(config),
-  useSearchShortcutTarget: (config: unknown) => searchShortcutMocks.useSearchShortcutTarget(config),
-}));
-
-vi.mock('@/core/refresh', () => ({
-  refreshOrchestrator: refreshMocks,
-  useRefreshScopedDomain: refreshStoreMocks.useRefreshScopedDomain,
-}));
-
-vi.mock('@/core/refresh/store', () => ({
-  useRefreshScopedDomain: refreshStoreMocks.useRefreshScopedDomain,
-  getScopedDomainState: refreshStoreMocks.getScopedDomainState,
-}));
-
-vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
-  useAutoRefreshLoadingState: () => autoRefreshLoadingState,
-}));
-
-vi.mock('@/core/settings/appPreferences', () => ({
-  getAutoRefreshEnabled: () => !autoRefreshLoadingState.isPaused,
-}));
+import ValuesTab from './ValuesTab';
 
 vi.mock('@uiw/react-codemirror', () => ({
   __esModule: true,
-  default: CodeMirrorMock,
+  default: ({ value }: { value: string }) => <pre data-testid="code-mirror">{value}</pre>,
 }));
 
-vi.mock('@codemirror/lang-yaml', () => ({
-  yaml: () => 'yaml-extension',
-}));
+const app = installAppStateHarness();
 
-vi.mock('@codemirror/view', () => ({
-  EditorView: Object.assign(class EditorViewMock {}, {
-    contentAttributes: {
-      of: (attrs: unknown) => ({ type: 'contentAttributes', attrs }),
-    },
-    domEventHandlers(handlers: unknown) {
-      return handlers;
-    },
-    lineWrapping: 'lineWrapping',
-  }),
-  keymap: {
-    of: (bindings: unknown) => bindings,
-  },
-}));
+type Values = Pick<ObjectHelmValuesSnapshotPayload, 'defaults' | 'overrides' | 'merged'>;
 
-vi.mock('@codemirror/search', () => ({
-  SearchQuery: codemirrorSearchMocks.SearchQuery,
-  findNext: codemirrorSearchMocks.findNext,
-  findPrevious: codemirrorSearchMocks.findPrevious,
-  getSearchQuery: codemirrorSearchMocks.getSearchQuery,
-  setSearchQuery: codemirrorSearchMocks.setSearchQuery,
-}));
-
-vi.mock('@/core/codemirror/theme', () => ({
-  buildCodeTheme: themeMocks.buildCodeTheme,
-}));
-
-vi.mock('@/core/codemirror/search', () => ({
-  createSearchExtensions: searchModuleMocks.createSearchExtensions,
-  closeSearchPanel: searchModuleMocks.closeSearchPanel,
-}));
-
-vi.mock('@utils/errorHandler', () => ({
-  errorHandler: { handle: vi.fn() },
-}));
-
-vi.mock('@shared/components/LoadingSpinner', () => ({
-  __esModule: true,
-  default: ({ message }: { message: string }) => <div data-testid="spinner">{message}</div>,
-}));
-
-// ---------------------------------------------------------------------------
-// Test data
-// ---------------------------------------------------------------------------
-
-const ALL_VALUES = {
-  replicaCount: 1,
-  image: { repository: 'nginx', tag: 'latest' },
-  service: { type: 'ClusterIP', port: 80 },
+const VALUES: Values = {
+  defaults: { replicaCount: 1, image: { repository: 'nginx', tag: '' }, podAnnotations: {} },
+  overrides: { replicaCount: 3, image: { tag: 'v2.0' } },
+  merged: { replicaCount: 3, image: { repository: 'nginx', tag: 'v2.0' }, podAnnotations: {} },
 };
-
-const USER_VALUES = {
-  replicaCount: 3,
-  image: { tag: 'v2.0' },
-};
-
-type SnapshotStatus = 'idle' | 'loading' | 'ready' | 'updating' | 'initialising' | 'error';
-
-type Snapshot = {
-  status: SnapshotStatus;
-  data?: {
-    values?: { allValues?: Record<string, unknown>; userValues?: Record<string, unknown> } | null;
-  } | null;
-  error?: string | null;
-};
-
-const snapshotState: { current: Snapshot } = {
-  current: {
-    status: 'ready',
-    data: { values: { allValues: ALL_VALUES, userValues: USER_VALUES } },
-    error: null,
-  },
-};
-
-refreshStoreMocks.useRefreshScopedDomain.mockImplementation(() => snapshotState.current);
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Parse the YAML string that was passed to CodeMirror's value prop. */
-const parsedValue = () => YAML.parse(codeMirrorState.value);
-
-const waitForUpdates = async () => {
-  await act(async () => {
-    await Promise.resolve();
-  });
-  await act(async () => {
-    await Promise.resolve();
-  });
-};
-
-const renderValuesTab = async (
-  props: Partial<{ scope: string | null; isActive: boolean }> = {}
-) => {
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = ReactDOM.createRoot(container);
-
-  const defaultProps = { scope: 'prod:helmrelease:my-app', isActive: true };
-
-  await act(async () => {
-    const { default: ValuesTab } = await import('./ValuesTab');
-    root.render(<ValuesTab {...defaultProps} {...props} />);
-  });
-
-  return {
-    container,
-    root,
-    unmount: async () => {
-      await act(async () => {
-        root.unmount();
-      });
-      container.remove();
-    },
-  };
-};
-
-/** Click a SegmentedButton option by its label text. */
-const clickSegmentedOption = async (container: HTMLElement, label: string) => {
-  const btn = Array.from(container.querySelectorAll('.segmented-button__option')).find(
-    (el) => el.textContent === label
-  );
-  await act(async () => {
-    requireValue(btn, 'expected test value in ValuesTab.test.tsx').dispatchEvent(
-      new MouseEvent('click', { bubbles: true })
-    );
-  });
-  await waitForUpdates();
-};
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe('ValuesTab', () => {
-  beforeEach(() => {
-    snapshotState.current = {
-      status: 'ready',
-      data: { values: { allValues: ALL_VALUES, userValues: USER_VALUES } },
-      error: null,
-    };
-    codeMirrorState.value = '';
-    codeMirrorState.latestProps.current = { value: '' };
-    codeMirrorState.editorView.dispatch.mockClear();
-    codeMirrorState.editorView.focus.mockClear();
-    refreshMocks.setScopedDomainEnabled.mockClear();
-    refreshMocks.fetchScopedDomain.mockClear();
-    autoRefreshLoadingState.isPaused = false;
-    autoRefreshLoadingState.isManualRefreshActive = false;
-    autoRefreshLoadingState.suppressPassiveLoading = false;
-    searchShortcutMocks.useSearchShortcutTarget.mockClear();
-    searchShortcutMocks.useKeyboardSurface.mockClear();
-    searchModuleMocks.createSearchExtensions.mockClear();
-    searchModuleMocks.closeSearchPanel.mockClear();
+  let dev: TestCluster;
+  let release: TestObject;
+  let scope: string;
+  let view: MountedApp;
+  let releaseSequence = 0;
+
+  beforeEach(async () => {
+    dev = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, ['team-a']);
+    // The view memory outlives a test, so each test opens its own release.
+    releaseSequence += 1;
+    release = app.object(dev, {
+      group: 'helm.sh',
+      version: 'v3',
+      kind: 'HelmRelease',
+      namespace: 'team-a',
+      name: `my-app-${releaseSequence}`,
+    });
+    scope = release.scopes.helmScope ?? '';
   });
 
   afterEach(() => {
-    document.body.textContent = '';
+    vi.useRealTimers();
   });
 
-  // -----------------------------------------------------------------------
-  // Mode switching & value computation
-  // -----------------------------------------------------------------------
+  const serveValues = (values: Values) => {
+    app.snapshots.serve('object-helm-values', scope, {
+      clusterId: dev.clusterId,
+      clusterName: dev.clusterName,
+      subchartPaths: null,
+      ...values,
+    });
+  };
 
-  it('renders defaults mode: allValues minus user-overridden keys', async () => {
-    const { unmount } = await renderValuesTab();
-    await waitForUpdates();
+  const showTab = async (panelId = objectPanelId(release.ref)) => {
+    await view.show(<ValuesTab scope={scope} isActive panelId={panelId} />);
+  };
 
-    // Default mode is 'defaults' — should exclude keys present in userValues.
-    const parsed = parsedValue();
-    expect(parsed.replicaCount).toBeUndefined();
-    expect(parsed.image?.tag).toBeUndefined();
-    expect(parsed.image?.repository).toBe('nginx');
-    expect(parsed.service).toEqual({ type: 'ClusterIP', port: 80 });
+  const startWorkspace = async () => {
+    view = await app.render(null);
+  };
 
-    await unmount();
-  });
-
-  it('registers the CodeMirror region as an editor surface', async () => {
-    const { unmount } = await renderValuesTab();
-
-    expect(searchShortcutMocks.useKeyboardSurface).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'editor',
-        active: true,
-        onNativeAction: expect.any(Function),
-      })
+  const shownYaml = () =>
+    requireValue(
+      view.container.querySelector('[data-testid="code-mirror"]')?.textContent,
+      'expected the values editor'
     );
 
-    await unmount();
-  });
+  /** The YAML the editor shows, as Helm reads it back. */
+  const shownValues = (): unknown => YAML.parse(shownYaml());
 
-  it('renders overrides mode: only user-supplied values', async () => {
-    const { container, unmount } = await renderValuesTab();
-    await waitForUpdates();
-
-    await clickSegmentedOption(container, 'Overrides');
-
-    const parsed = parsedValue();
-    expect(parsed.replicaCount).toBe(3);
-    expect(parsed.image).toEqual({ tag: 'v2.0' });
-    // Keys not in userValues should be absent.
-    expect(parsed.service).toBeUndefined();
-
-    await unmount();
-  });
-
-  it('renders merged mode: allValues with user overrides applied', async () => {
-    const { container, unmount } = await renderValuesTab();
-    await waitForUpdates();
-
-    await clickSegmentedOption(container, 'Merged');
-
-    const parsed = parsedValue();
-    expect(parsed.replicaCount).toBe(3);
-    expect(parsed.image).toEqual({ repository: 'nginx', tag: 'v2.0' });
-    expect(parsed.service).toEqual({ type: 'ClusterIP', port: 80 });
-
-    await unmount();
-  });
-
-  it('ignores inherited properties when deriving Helm value modes', async () => {
-    const allValues = Object.assign(Object.create({ inheritedDefault: 'not-a-value' }), {
-      ownDefault: 'default',
-      ownOverride: 'base',
+  const chooseView = async (label: string) => {
+    const option = Array.from(view.container.querySelectorAll('.segmented-button__option')).find(
+      (element) => element.textContent === label
+    );
+    await act(async () => {
+      requireValue(option, `expected the ${label} view`).dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      );
     });
-    const userValues = Object.assign(Object.create({ inheritedOverride: 'not-an-override' }), {
-      ownOverride: 'override',
-    });
-    snapshotState.current = {
-      status: 'ready',
-      data: { values: { allValues, userValues } },
-      error: null,
-    };
+    await app.settle();
+  };
 
-    const { container, unmount } = await renderValuesTab();
-    await waitForUpdates();
+  const valuesReads = () => app.snapshots.reads('object-helm-values').map((read) => read.scope);
 
-    expect(parsedValue()).toEqual({ ownDefault: 'default' });
+  // -----------------------------------------------------------------------
+  // Views of the payload
+  // -----------------------------------------------------------------------
 
-    await clickSegmentedOption(container, 'Overrides');
-    expect(parsedValue()).toEqual({ ownOverride: 'override' });
+  it('shows the chart defaults, user overrides, and merged values for the selected view', async () => {
+    serveValues(VALUES);
+    await startWorkspace();
+    await showTab();
 
-    await clickSegmentedOption(container, 'Merged');
-    expect(parsedValue()).toEqual({ ownDefault: 'default', ownOverride: 'override' });
+    expect(shownValues()).toEqual(VALUES.defaults);
 
-    await unmount();
+    await chooseView('Overrides');
+    expect(shownValues()).toEqual(VALUES.overrides);
+
+    await chooseView('Merged');
+    expect(shownValues()).toEqual(VALUES.merged);
   });
 
-  it('preserves arrays, nulls, empty maps and nested overrides when switching modes', async () => {
-    snapshotState.current = {
-      status: 'ready',
-      data: {
-        values: {
-          allValues: {
-            nested: { retained: null, replaced: 'base', empty: {} },
-            list: ['base'],
-            disabled: true,
-            count: 1,
-            text: 'base',
-            shape: { child: 'retained' },
-          },
-          userValues: {
-            nested: { replaced: null },
-            list: ['override', { enabled: false }],
-            disabled: false,
-            count: 0,
-            text: '',
-            shape: 'scalar',
-            extra: 'user-only',
-          },
-        },
-      },
-      error: null,
-    };
-    const original = structuredClone(snapshotState.current.data);
-    const { container, unmount } = await renderValuesTab();
-    try {
-      expect(parsedValue()).toEqual({
-        nested: { retained: null },
-        shape: { child: 'retained' },
-      });
-      await clickSegmentedOption(container, 'Overrides');
-      expect(parsedValue()).toEqual(original?.values?.userValues);
-      await clickSegmentedOption(container, 'Merged');
-      expect(parsedValue()).toEqual({
-        nested: { retained: null, replaced: null, empty: {} },
-        list: ['override', { enabled: false }],
-        disabled: false,
-        count: 0,
-        text: '',
-        shape: { child: 'retained' },
-      });
-      expect(snapshotState.current.data).toEqual(original);
-    } finally {
-      await unmount();
+  it('shows an empty map when the release has no user-supplied values', async () => {
+    serveValues({ ...VALUES, overrides: null });
+    await startWorkspace();
+    await showTab();
+
+    await chooseView('Overrides');
+    expect(shownValues()).toEqual({});
+  });
+
+  it('summarizes the overrides it marks in the Merged and Overrides views', async () => {
+    serveValues({
+      ...VALUES,
+      defaults: { ...VALUES.defaults, testFramework: { enabled: true } },
+      overrides: { ...VALUES.overrides, testFramework: null },
+    });
+    await startWorkspace();
+    await showTab();
+    const summary = () => view.container.querySelector('.helm-values-override-summary');
+
+    expect(summary()).toBeNull();
+
+    // replicaCount and image.tag are overridden; testFramework was removed.
+    for (const label of ['Merged', 'Overrides']) {
+      await chooseView(label);
+      expect(summary()?.textContent, label).toContain('2 overridden');
+      expect(summary()?.textContent, label).toContain('1 removed');
     }
+
+    await chooseView('Defaults');
+    expect(summary()).toBeNull();
+  });
+
+  it('quotes strings that Helm would otherwise read back as booleans', async () => {
+    const strings = { tls: 'on', enabled: 'yes', legacy: 'off', confirm: 'n' };
+    serveValues({ ...VALUES, defaults: strings });
+    await startWorkspace();
+    await showTab();
+
+    // Helm parses values files as YAML 1.1, where bare yes/on/off/n are booleans.
+    expect(YAML.parse(shownYaml(), { version: '1.1' })).toEqual(strings);
+  });
+
+  it('keeps the selected view for its panel when the tab remounts', async () => {
+    serveValues(VALUES);
+    await startWorkspace();
+    await showTab();
+    await chooseView('Merged');
+
+    view.clear();
+    await showTab();
+    expect(shownValues()).toEqual(VALUES.merged);
+
+    view.clear();
+    await showTab(`${objectPanelId(release.ref)}-other`);
+    expect(shownValues()).toEqual(VALUES.defaults);
   });
 
   // -----------------------------------------------------------------------
-  // Loading / error / empty states
+  // Read lifecycle and states
   // -----------------------------------------------------------------------
 
-  it('shows loading spinner while data is loading', async () => {
-    snapshotState.current = { status: 'loading', data: null, error: null };
-    const { container, unmount } = await renderValuesTab();
+  it('reads the values while the tab is open and stops polling once it closes', async () => {
+    vi.useFakeTimers();
+    serveValues(VALUES);
+    await startWorkspace();
+    await showTab();
+    expect(valuesReads()).toContain(scope);
 
-    expect(container.textContent).toContain('Loading values...');
+    // The open tab keeps its values current on the domain's interval.
+    app.snapshots.clearReads();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(valuesReads()).toContain(scope);
 
-    await unmount();
+    view.clear();
+    await app.settle();
+    app.snapshots.clearReads();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_000);
+    });
+    expect(valuesReads()).toEqual([]);
   });
 
-  it('suppresses passive loading while auto-refresh is paused', async () => {
-    autoRefreshLoadingState.isPaused = true;
-    autoRefreshLoadingState.suppressPassiveLoading = true;
-    snapshotState.current = { status: 'loading', data: null, error: null };
-    const { container, unmount } = await renderValuesTab();
-
-    expect(container.textContent).not.toContain('Loading values...');
-    expect(container.textContent).toContain('Auto-refresh is disabled');
-    expect(refreshMocks.fetchScopedDomain).not.toHaveBeenCalled();
-
-    await unmount();
-  });
-
-  it('shows error message when snapshot has an error', async () => {
-    snapshotState.current = {
-      status: 'error',
-      data: { values: { allValues: ALL_VALUES, userValues: USER_VALUES } },
-      error: 'connection refused',
-    };
-    const { container, unmount } = await renderValuesTab();
-
-    expect(container.textContent).toContain('Error loading values: connection refused');
-
-    await unmount();
-  });
-
-  it('shows empty state when no values data is available', async () => {
-    snapshotState.current = { status: 'ready', data: { values: null }, error: null };
-    const { container, unmount } = await renderValuesTab();
-
-    expect(container.textContent).toContain('No values available');
-
-    await unmount();
-  });
-
-  // -----------------------------------------------------------------------
-  // Scoped domain lifecycle
-  // -----------------------------------------------------------------------
-
-  it('enables scoped domain on mount when active, disables on unmount', async () => {
-    const { unmount } = await renderValuesTab({ scope: 'ns:helmrelease:chart', isActive: true });
-
-    expect(refreshMocks.acquireScopedDomainLease).toHaveBeenCalledWith(
-      'object-helm-values',
-      'ns:helmrelease:chart',
-      { preserveState: true }
+  it('shows a loading spinner while the first read is in flight', async () => {
+    // The backend has not answered yet; the read settles only when aborted.
+    app.snapshots.respond(({ domain, signal }) =>
+      domain === 'object-helm-values'
+        ? new Promise<Response>((_resolve, reject) => {
+            signal?.addEventListener('abort', () => reject(signal.reason));
+          })
+        : undefined
     );
-    expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
-      'object-helm-values',
-      'ns:helmrelease:chart',
-      expect.objectContaining({
-        isManual: false,
-        streamSignal: false,
-        correlationId: expect.any(String),
-      })
-    );
+    await startWorkspace();
+    await showTab();
 
-    await unmount();
+    expect(valuesReads()).toContain(scope);
+    expect(view.container.textContent).toContain('Loading values...');
+  });
 
-    expect(refreshMocks.releaseScopedDomainLease).toHaveBeenCalledWith(
+  it('reads nothing and says data is paused while auto-refresh is off', async () => {
+    app.preferences({ autoRefreshEnabled: false });
+    await startWorkspace();
+    await showTab();
+
+    expect(view.container.textContent).not.toContain('Loading values...');
+    expect(view.container.textContent).toContain('Auto-refresh is disabled');
+    expect(valuesReads()).toEqual([]);
+  });
+
+  it('shows the backend failure when the values cannot be read', async () => {
+    app.snapshots.fail(
       'object-helm-values',
-      'ns:helmrelease:chart',
-      { preserveState: true }
+      scope,
+      makeErrorStatus('ServiceUnavailable', 'connection refused')
     );
+    await startWorkspace();
+    await showTab();
+
+    expect(view.container.textContent).toContain('Error loading values: connection refused');
+    // The refresh layer also reports the failed read once.
+    expect(
+      app.errors.take(
+        (record) =>
+          record.kinds.includes('toast') && record.context?.domain === 'object-helm-values'
+      )
+    ).toHaveLength(1);
   });
 });

@@ -57,8 +57,7 @@ func TestPodBuilderIngestedScopesPreserveObjectAndOwnerIdentity(t *testing.T) {
 		"node:node-1": {"prod/orders-7d9c8b6f5-abcde", "staging/orders-7d9c8b6f5-other"},
 		"workload:prod:apps:v1:Deployment:orders":           {"prod/orders-7d9c8b6f5-abcde"},
 		"workload:prod:apps:v1:ReplicaSet:orders-7d9c8b6f5": {"prod/orders-7d9c8b6f5-abcde"},
-		"object:prod::v1:Pod:lonely":                        {"prod/lonely"},
-		"namespace:prod":                                    {"prod/orders-7d9c8b6f5-abcde", "prod/lonely"},
+		"namespace:prod": {"prod/orders-7d9c8b6f5-abcde", "prod/lonely"},
 	}
 	for scope, want := range scopes {
 		t.Run(scope, func(t *testing.T) {
@@ -88,17 +87,4 @@ func TestPodBuilderIngestedScopesPreserveObjectAndOwnerIdentity(t *testing.T) {
 		require.Equal(t, "orders-7d9c8b6f5-abcde", storeRows[0].Ref.Name)
 	})
 
-	t.Run("object scope is full-identity and namespace bounded", func(t *testing.T) {
-		ctx := WithClusterMeta(context.Background(), meta)
-		storeSnap, err := storeBuilder.Build(ctx, "object:prod::v1:Pod:lonely")
-		require.NoError(t, err)
-
-		storeRows := storeSnap.Payload.(PodSnapshot).Rows
-		require.Len(t, storeRows, 1)
-		require.Equal(t, "prod", storeRows[0].Ref.Namespace)
-		require.Equal(t, "lonely", storeRows[0].Ref.Name)
-
-		_, err = storeBuilder.Build(ctx, "object:prod::v1:Deployment:lonely")
-		require.ErrorContains(t, err, "unsupported object scope")
-	})
 }

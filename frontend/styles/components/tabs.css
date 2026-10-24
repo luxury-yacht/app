@@ -54,7 +54,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  height: var(--tab-height, 32px);
+  height: var(--tab-height);
   padding: 0 0.6rem;
   font-size: var(--font-size-normal);
   font-weight: var(--font-weight-bold);

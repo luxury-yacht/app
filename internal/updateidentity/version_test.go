@@ -63,3 +63,33 @@ func TestParseReleaseVersionRejectsNonReleaseIdentity(t *testing.T) {
 		})
 	}
 }
+
+// Upgrade telemetry reports only when the running release is newer than the
+// last reported one, so ordering must follow semver rather than string order.
+func TestReleaseVersionCompareUsesSemanticPrecedence(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		older string
+		newer string
+	}{
+		{name: "numeric minor", older: "2.9.0", newer: "2.10.0"},
+		{name: "beta before stable", older: "2.6.0-beta.1", newer: "v2.6.0"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			older, err := updateidentity.ParseReleaseVersion(test.older)
+			require.NoError(t, err)
+			newer, err := updateidentity.ParseReleaseVersion(test.newer)
+			require.NoError(t, err)
+
+			require.Negative(t, older.Compare(newer))
+			require.Positive(t, newer.Compare(older))
+			require.Zero(t, newer.Compare(newer))
+		})
+	}
+}

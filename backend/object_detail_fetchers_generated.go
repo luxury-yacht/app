@@ -4,6 +4,7 @@ package backend
 
 import (
 	"context"
+	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/resources/admission"
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 	"github.com/luxury-yacht/app/backend/resources/backendtlspolicy"
@@ -45,254 +46,258 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
 	"github.com/luxury-yacht/app/backend/resources/storageclass"
 	"github.com/luxury-yacht/app/backend/resources/tlsroute"
+	"github.com/luxury-yacht/app/backend/resources/types"
 )
+
+// customResourceDetailType tags discovered custom-resource details.
+const customResourceDetailType = "customresource"
 
 // objectDetailFetchers maps a kind's dispatch key to its typed detail retrieval.
 var objectDetailFetchers = map[string]objectDetailFetcher{
 	"backendtlspolicy": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := backendtlspolicy.NewService(deps).BackendTLSPolicy(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*backendtlspolicy.BackendTLSPolicyDetails]("backendtlspolicy", detail, err)
 		},
 	},
 	"clusterrole": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := clusterrole.NewService(deps).ClusterRole(ctx, name)
-			return detail, err
+			return tagObjectDetail[*clusterrole.ClusterRoleDetails]("clusterrole", detail, err)
 		},
 	},
 	"clusterrolebinding": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := clusterrolebinding.NewService(deps).ClusterRoleBinding(ctx, name)
-			return detail, err
+			return tagObjectDetail[*clusterrolebinding.ClusterRoleBindingDetails]("clusterrolebinding", detail, err)
 		},
 	},
 	"configmap": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := configmap.NewService(deps).ConfigMap(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*configmap.ConfigMapDetails]("configmap", detail, err)
 		},
 	},
 	"cronjob": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := cronjob.NewService(deps).CronJob(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*cronjob.CronJobDetails]("cronjob", detail, err)
 		},
 	},
 	"customresourcedefinition": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := apiextensions.NewService(deps).CustomResourceDefinition(ctx, name)
-			return detail, err
+			return tagObjectDetail[*apiextensions.CustomResourceDefinitionDetails]("customresourcedefinition", detail, err)
 		},
 	},
 	"daemonset": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := daemonset.NewService(deps).DaemonSet(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*daemonset.DaemonSetDetails]("daemonset", detail, err)
 		},
 	},
 	"deployment": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := deployment.NewService(deps).Deployment(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*deployment.DeploymentDetails]("deployment", detail, err)
 		},
 	},
 	"endpointslice": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := endpointslice.NewService(deps).EndpointSlice(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*endpointslice.EndpointSliceDetails]("endpointslice", detail, err)
 		},
 	},
 	"event": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := events.NewService(deps).Event(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*events.EventDetails]("event", detail, err)
 		},
 	},
 	"gateway": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := gateway.NewService(deps).Gateway(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*gateway.GatewayDetails]("gateway", detail, err)
 		},
 	},
 	"gatewayclass": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := gatewayclass.NewService(deps).GatewayClass(ctx, name)
-			return detail, err
+			return tagObjectDetail[*gatewayclass.GatewayClassDetails]("gatewayclass", detail, err)
 		},
 	},
 	"grpcroute": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := grpcroute.NewService(deps).GRPCRoute(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*types.GRPCRouteDetails]("grpcroute", detail, err)
 		},
 	},
 	"helmrelease": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := helm.NewService(helm.Dependencies{Common: deps}).ReleaseDetails(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*helm.HelmReleaseDetails]("helmrelease", detail, err)
 		},
 	},
 	"horizontalpodautoscaler": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := hpa.NewService(deps).HorizontalPodAutoscaler(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*hpa.HorizontalPodAutoscalerDetails]("horizontalpodautoscaler", detail, err)
 		},
 	},
 	"httproute": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := httproute.NewService(deps).HTTPRoute(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*types.HTTPRouteDetails]("httproute", detail, err)
 		},
 	},
 	"ingress": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := ingress.NewService(deps).Ingress(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*ingress.IngressDetails]("ingress", detail, err)
 		},
 	},
 	"ingressclass": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := ingressclass.NewService(deps).IngressClass(ctx, name)
-			return detail, err
+			return tagObjectDetail[*ingressclass.IngressClassDetails]("ingressclass", detail, err)
 		},
 	},
 	"job": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := job.NewService(deps).Job(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*job.JobDetails]("job", detail, err)
 		},
 	},
 	"limitrange": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := limitrange.NewService(deps).LimitRange(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*limitrange.LimitRangeDetails]("limitrange", detail, err)
 		},
 	},
 	"listenerset": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := listenerset.NewService(deps).ListenerSet(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*listenerset.ListenerSetDetails]("listenerset", detail, err)
 		},
 	},
 	"mutatingwebhookconfiguration": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := admission.NewService(deps).MutatingWebhookConfiguration(ctx, name)
-			return detail, err
+			return tagObjectDetail[*admission.MutatingWebhookConfigurationDetails]("mutatingwebhookconfiguration", detail, err)
 		},
 	},
 	"namespace": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := namespaces.NewService(deps).Namespace(ctx, name)
-			return detail, err
+			return tagObjectDetail[*namespaces.NamespaceDetails]("namespace", detail, err)
 		},
 	},
 	"networkpolicy": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := networkpolicy.NewService(deps).NetworkPolicy(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*networkpolicy.NetworkPolicyDetails]("networkpolicy", detail, err)
 		},
 	},
 	"node": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := nodes.NewService(deps).Node(ctx, name)
-			return detail, err
+			return tagObjectDetail[*nodes.NodeDetails]("node", detail, err)
 		},
 	},
 	"persistentvolume": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := persistentvolume.NewService(deps).PersistentVolume(ctx, name)
-			return detail, err
+			return tagObjectDetail[*persistentvolume.PersistentVolumeDetails]("persistentvolume", detail, err)
 		},
 	},
 	"persistentvolumeclaim": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := persistentvolumeclaim.NewService(deps).PersistentVolumeClaim(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*persistentvolumeclaim.PersistentVolumeClaimDetails]("persistentvolumeclaim", detail, err)
 		},
 	},
 	"pod": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := pods.GetPod(ctx, deps, namespace, name, true)
-			return detail, err
+			return tagObjectDetail[*types.PodDetailInfo]("pod", detail, err)
 		},
 	},
 	"poddisruptionbudget": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := poddisruptionbudget.NewService(deps).PodDisruptionBudget(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*poddisruptionbudget.PodDisruptionBudgetDetails]("poddisruptionbudget", detail, err)
 		},
 	},
 	"referencegrant": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := referencegrant.NewService(deps).ReferenceGrant(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*referencegrant.ReferenceGrantDetails]("referencegrant", detail, err)
 		},
 	},
 	"replicaset": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := replicaset.NewService(deps).ReplicaSet(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*replicaset.ReplicaSetDetails]("replicaset", detail, err)
 		},
 	},
 	"resourcequota": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := resourcequota.NewService(deps).ResourceQuota(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*resourcequota.ResourceQuotaDetails]("resourcequota", detail, err)
 		},
 	},
 	"role": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := role.NewService(deps).Role(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*role.RoleDetails]("role", detail, err)
 		},
 	},
 	"rolebinding": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := rolebinding.NewService(deps).RoleBinding(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*rolebinding.RoleBindingDetails]("rolebinding", detail, err)
 		},
 	},
 	"secret": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := secret.NewService(deps).Secret(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*secret.SecretDetails]("secret", detail, err)
 		},
 	},
 	"service": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := service.NewService(deps).GetService(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*service.ServiceDetails]("service", detail, err)
 		},
 	},
 	"serviceaccount": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := serviceaccount.NewService(deps).ServiceAccount(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*serviceaccount.ServiceAccountDetails]("serviceaccount", detail, err)
 		},
 	},
 	"statefulset": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := statefulset.NewService(deps).StatefulSet(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*statefulset.StatefulSetDetails]("statefulset", detail, err)
 		},
 	},
 	"storageclass": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := storageclass.NewService(deps).StorageClass(ctx, name)
-			return detail, err
+			return tagObjectDetail[*storageclass.StorageClassDetails]("storageclass", detail, err)
 		},
 	},
 	"tlsroute": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := tlsroute.NewService(deps).TLSRoute(ctx, namespace, name)
-			return detail, err
+			return tagObjectDetail[*types.TLSRouteDetails]("tlsroute", detail, err)
 		},
 	},
 	"validatingwebhookconfiguration": {
-		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {
+		withDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (snapshot.ObjectDetail, error) {
 			detail, err := admission.NewService(deps).ValidatingWebhookConfiguration(ctx, name)
-			return detail, err
+			return tagObjectDetail[*admission.ValidatingWebhookConfigurationDetails]("validatingwebhookconfiguration", detail, err)
 		},
 	},
 }

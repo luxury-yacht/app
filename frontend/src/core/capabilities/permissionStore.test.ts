@@ -1,105 +1,87 @@
 /**
  * frontend/src/core/capabilities/permissionStore.test.ts
  *
- * Test suite for getPermissionKey and makePermissionStatus.
+ * The permission store checks kind-level permissions per cluster and
+ * namespace through QueryPermissions and publishes them under keys that the
+ * spec lists and the lookups agree on: exact cluster ids, built-in or explicit
+ * group/version, and subresource. It batches and de-duplicates namespace
+ * checks, keeps freshness per namespace and spec list, publishes definitive
+ * answers as ready and failed checks as errors, never caches a "cluster not
+ * active" answer, and re-checks when the cluster becomes operational. Reset
+ * transfers ownership: work begun before it never publishes after it.
+ * Subscribers are notified asynchronously, once per burst. The store runs
+ * unmounted over the harness's faked QueryPermissions RPC (test-utils/appState).
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { DataReadRequest } from '@/core/data-access';
-import type { QueryPayloadItem, QueryPermissionsResponse } from './permissionRead';
-
-type PermissionReadRequest = DataReadRequest<QueryPermissionsResponse>;
-
-const hoisted = vi.hoisted(() => ({
-  readQueryPermissions: vi.fn(),
-  requestData: vi.fn(),
-}));
-
-vi.mock('@/core/data-access', () => ({
-  readQueryPermissions: (...args: unknown[]) => hoisted.readQueryPermissions(...args),
-  requestData: (...args: unknown[]) => hoisted.requestData(...args),
-}));
-
 import { eventBus } from '@/core/events';
 import { getScopedFeaturesForView } from '@/core/refresh/components/diagnostics/diagnosticsPanelConfig';
 import { buildPermissionRows } from '@/core/refresh/components/diagnostics/diagnosticsRowModel';
+import { installAppStateHarness, type PermissionQuery } from '@/test-utils/appState/harness';
 import { PERMISSION_FEATURES } from './permissionFeatures';
+import type { QueryPermissionsResponse } from './permissionRead';
 import { POD_PERMISSIONS, WORKLOAD_PERMISSIONS } from './permissionSpecs';
 import {
-  __resetForTests,
   getPermissionKey,
   getPermissionQueryDiagnosticsSnapshot,
   getUserPermissionMap,
   initializePermissionStore,
-  makePermissionStatus,
   queryClusterPermissions,
-  queryKindPermissions,
   queryNamespacesPermissions,
+  queryPermissionChecks,
   resetPermissionStore,
   setActivePermissionCluster,
   subscribeUserPermissions,
 } from './permissionStore';
-import type { PermissionEntry } from './permissionTypes';
 
-afterEach(() => {
-  __resetForTests();
-  eventBus.clear();
-  hoisted.readQueryPermissions.mockReset();
-  hoisted.requestData.mockReset();
-  vi.restoreAllMocks();
+const app = installAppStateHarness();
+
+interface ResultFields {
+  allowed: boolean;
+  source: string;
+  reason?: string;
+  error?: string;
+}
+
+/** The backend's response with `fields` for each query (backend/resource_gateway_permissions.go). */
+const respond = (
+  queries: PermissionQuery[] | null,
+  fields: (query: PermissionQuery) => ResultFields,
+  diagnostics: QueryPermissionsResponse['diagnostics'] = []
+) => ({
+  results: (queries ?? []).map((query) => ({ ...query, ...fields(query) })),
+  diagnostics: diagnostics ?? [],
 });
 
-const mockSuccessfulQueryPermissions = (): void => {
-  hoisted.requestData.mockImplementation(async (options: PermissionReadRequest) => ({
-    status: 'executed',
-    data: await options.read(),
-  }));
-  hoisted.readQueryPermissions.mockImplementation(async (queries: QueryPayloadItem[]) => {
-    const diagnosticKeys = Array.from(
-      new Set(queries.map((query) => `${query.clusterId}|${query.namespace}`))
-    );
-    return {
-      results: queries.map((query) => ({
-        ...query,
-        allowed: true,
-        source: 'ssrr',
-        reason: '',
-        error: '',
-      })),
-      diagnostics: diagnosticKeys.map((key) => {
-        const [clusterId, namespace] = key.split('|');
-        return {
-          key,
-          clusterId,
-          namespace,
-          method: 'ssrr',
-          ssrrIncomplete: false,
-          ssrrRuleCount: 1,
-          ssarFallbackCount: 0,
-          checkCount: queries.filter((query) => `${query.clusterId}|${query.namespace}` === key)
-            .length,
-        };
-      }),
-    };
-  });
+const answerEach = (fields: (query: PermissionQuery) => ResultFields) => {
+  app.backend.answer('QueryPermissions', (queries) => respond(queries, fields));
 };
 
-// ---------------------------------------------------------------------------
-// getPermissionKey
-// ---------------------------------------------------------------------------
+/** The query batch of every QueryPermissions call, in order. */
+const checks = () => app.backend.calls('QueryPermissions').map(([queries]) => queries ?? []);
 
-describe('getPermissionKey', () => {
+/** The backend's answer while a cluster's connection is still starting. */
+const notActive = (kind: string, clusterId: string) =>
+  `failed to resolve resource kind "${kind}": cluster ${clusterId} not active`;
+
+const permission = (
+  kind: string,
+  verb: string,
+  namespace: string | null,
+  clusterId: string,
+  subresource: string | null = null
+) => getUserPermissionMap().get(getPermissionKey(kind, verb, namespace, subresource, clusterId));
+
+const settle = () => app.settle();
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe('permission keys', () => {
   it('keeps case-distinct cluster grants separate through batching and lookup', async () => {
-    mockSuccessfulQueryPermissions();
-    hoisted.readQueryPermissions.mockImplementation(async (queries: QueryPayloadItem[]) => ({
-      results: queries.map((query) => ({
-        ...query,
-        allowed: query.clusterId === 'config:Production',
-        source: 'ssrr',
-        reason: '',
-        error: '',
-      })),
-    }));
+    app.permissions((query) => query.clusterId === 'config:Production');
+
     await queryNamespacesPermissions(
       [
         { clusterId: 'config:Production', namespace: 'default' },
@@ -107,158 +89,75 @@ describe('getPermissionKey', () => {
       ],
       { specLists: [POD_PERMISSIONS] }
     );
-    const key = (clusterId: string) =>
-      getPermissionKey('Pod', 'delete', 'default', null, clusterId, '', 'v1');
-    expect(getUserPermissionMap().get(key('config:Production'))?.allowed).toBe(true);
-    expect(getUserPermissionMap().get(key('config:production'))?.allowed).toBe(false);
-    const payload = hoisted.readQueryPermissions.mock.calls[0][0] as QueryPayloadItem[];
-    expect(payload.every((item) => item.group === '' && item.version === 'v1')).toBe(true);
+
+    expect(permission('Pod', 'delete', 'default', 'config:Production')?.allowed).toBe(true);
+    expect(permission('Pod', 'delete', 'default', 'config:production')?.allowed).toBe(false);
+    expect(checks()[0]?.every((query) => query.group === '' && query.version === 'v1')).toBe(true);
   });
 
-  it('auto-resolves built-in GVK for kind-only callers so the key matches the spec-emit path', () => {
-    // Deployment is apps/v1 — the builtin lookup table populates the
-    // group/version segment even when the caller doesn't pass them
-    // explicitly. This keeps the kind-only-objects rule intact for
-    // built-ins without forcing every lookup site to pass GVK.
-    const key = getPermissionKey('Deployment', 'delete', 'default', null, 'cluster-1');
-    expect(key).toBe('cluster-1|apps/v1|deployment|delete|default|');
-  });
+  // Regression: kind-only lookups (ClusterResourcesManager, useUserPermission)
+  // missed answers stored under the resolved built-in group/version, so Nodes
+  // showed "missing permission" while the Nodes view worked.
+  it('finds a built-in kind’s answer by a kind-only lookup, keeping subresources apart', async () => {
+    app.denyPermissions([
+      { verb: 'update', resourceKind: 'Deployment', namespace: 'default', subresource: 'scale' },
+    ]);
+    queryClusterPermissions('cluster-1');
+    await queryNamespacesPermissions([{ clusterId: 'cluster-1', namespace: 'default' }], {
+      specLists: [WORKLOAD_PERMISSIONS],
+    });
+    await settle();
 
-  it('auto-resolves Node to core/v1 and uses "cluster" for null namespace', () => {
-    const key = getPermissionKey('Node', 'list', null, null, 'cluster-1');
-    expect(key).toBe('cluster-1|/v1|node|list|cluster|');
-  });
-
-  it('includes subresource in the key with the resolved built-in GVK', () => {
-    const key = getPermissionKey('Deployment', 'update', 'default', 'scale', 'cluster-1');
-    expect(key).toBe('cluster-1|apps/v1|deployment|update|default|scale');
-  });
-
-  it('honours explicit group and version for CRDs so colliding kinds get distinct keys', () => {
-    const ack = getPermissionKey(
-      'DBInstance',
-      'get',
-      'default',
-      null,
-      'cluster-1',
-      'rds.services.k8s.aws',
-      'v1alpha1'
-    );
-    const documentdb = getPermissionKey(
-      'DBInstance',
-      'get',
-      'default',
-      null,
-      'cluster-1',
-      'documentdb.services.k8s.aws',
-      'v1alpha1'
-    );
-    expect(ack).toBe('cluster-1|rds.services.k8s.aws/v1alpha1|dbinstance|get|default|');
-    expect(documentdb).toBe(
-      'cluster-1|documentdb.services.k8s.aws/v1alpha1|dbinstance|get|default|'
-    );
-    expect(ack).not.toBe(documentdb);
-  });
-
-  it('leaves the GVK segment empty when the kind is not a built-in and no GVK was supplied', () => {
-    // The lookup table doesn't contain "DBInstance" so auto-resolve
-    // yields nothing; the key falls back to an empty group/version
-    // segment. In practice every CRD caller should pass explicit
-    // group/version (see the test above), but the fallback is
-    // preserved so incomplete callers fail at the backend guard
-    // rather than producing a collision-prone auto-resolve.
-    const key = getPermissionKey('DBInstance', 'get', 'default', null, 'cluster-1');
-    expect(key).toBe('cluster-1|/|dbinstance|get|default|');
-  });
-
-  // Regression for the "Node get/list shows false while Nodes view still
-  // works" bug. The static CLUSTER_PERMISSIONS specs in permissionSpecs.ts
-  // emit kind-only entries; consumers at ClusterResourcesManager and
-  // ClusterResourcesContext look up permissions via useUserPermission
-  // without group/version. Both paths must produce the same key so the
-  // lookup side can find the entry written by the spec-emit side.
-  //
-  // Before the auto-resolve fix, the spec-emit path stored entries under
-  // `cluster-1|/v1|node|list|cluster|` (because the tightened backend
-  // sent apps/v1 back in the response, and the response's clusterId was
-  // mapped via a fresh key) while the lookup side built
-  // `cluster-1|/|node|list|cluster|` — mismatch → "missing permission".
-  it('kind-only lookups for built-in Node list match the spec-emit key shape', () => {
-    const specEmit = getPermissionKey(
-      'Node',
-      'list',
-      null,
-      null,
-      'cluster-1',
-      '',
-      'v1' // builtinKindGroupVersions populates this at spec-emit time
-    );
-    const lookup = getPermissionKey('Node', 'list', null, null, 'cluster-1');
-    expect(lookup).toBe(specEmit);
-    expect(lookup).toBe('cluster-1|/v1|node|list|cluster|');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// makePermissionStatus
-// ---------------------------------------------------------------------------
-
-describe('makePermissionStatus', () => {
-  it('builds ready status from a definitive ssrr entry', () => {
-    const entry: PermissionEntry = {
+    expect(
+      checks()
+        .flat()
+        .find((query) => query.resourceKind === 'Deployment')
+    ).toMatchObject({ group: 'apps', version: 'v1' });
+    expect(permission('Node', 'list', null, 'cluster-1')).toMatchObject({
       allowed: true,
-      source: 'ssrr',
-      reason: null,
-      descriptor: {
-        clusterId: 'cluster-1',
-        group: 'apps',
-        version: 'v1',
-        resourceKind: 'Deployment',
-        verb: 'get',
-        namespace: 'default',
-        subresource: null,
-      },
-      feature: PERMISSION_FEATURES.namespaceWorkloads,
-    };
-
-    const status = makePermissionStatus('cluster-1|deployment|get|default|', entry);
-
-    expect(status.pending).toBe(false);
-    expect(status.entry.status).toBe('ready');
-    expect(status.error).toBeNull();
-    expect(status.source).toBe('ssrr');
-    expect(status.allowed).toBe(true);
+      pending: false,
+    });
+    expect(permission('Deployment', 'update', 'default', 'cluster-1')?.allowed).toBe(true);
+    expect(permission('Deployment', 'update', 'default', 'cluster-1', 'scale')?.allowed).toBe(
+      false
+    );
   });
 
-  it('builds error status when source is "error"', () => {
-    const entry: PermissionEntry = {
-      allowed: false,
-      source: 'error',
-      reason: 'cluster unreachable',
-      descriptor: {
-        clusterId: 'cluster-1',
-        group: null,
-        version: null,
-        resourceKind: 'Pod',
-        verb: 'list',
-        namespace: 'kube-system',
-        subresource: null,
-      },
-    };
+  it('keeps answers for custom kinds that share a name apart by group', async () => {
+    app.permissions((query) => query.group === 'rds.services.k8s.aws');
+    const deleteCheck = (group: string) => ({
+      clusterId: 'cluster-1',
+      resourceKind: 'DBInstance',
+      verb: 'delete',
+      namespace: 'default',
+      group,
+      version: 'v1alpha1',
+    });
+    queryPermissionChecks([deleteCheck('rds.services.k8s.aws')]);
+    queryPermissionChecks([deleteCheck('documentdb.services.k8s.aws')]);
+    await settle();
 
-    const status = makePermissionStatus('cluster-1|pod|list|kube-system|', entry);
-
-    expect(status.pending).toBe(false);
-    expect(status.entry.status).toBe('error');
-    expect(status.error).toBe('cluster unreachable');
-    expect(status.allowed).toBe(false);
+    const lookup = (group?: string) =>
+      getUserPermissionMap().get(
+        getPermissionKey(
+          'DBInstance',
+          'delete',
+          'default',
+          null,
+          'cluster-1',
+          group,
+          group ? 'v1alpha1' : undefined
+        )
+      );
+    expect(lookup('rds.services.k8s.aws')?.allowed).toBe(true);
+    expect(lookup('documentdb.services.k8s.aws')?.allowed).toBe(false);
+    // A lookup without the group/version cannot pick either one.
+    expect(lookup()).toBeUndefined();
   });
 });
 
 describe('queryNamespacesPermissions', () => {
   it('ignores empty inputs, invalid identities, and duplicate namespace targets', async () => {
-    mockSuccessfulQueryPermissions();
-
     await queryNamespacesPermissions([], { specLists: [POD_PERMISSIONS] });
     await queryNamespacesPermissions([{ namespace: 'default', clusterId: 'cluster-1' }], {
       specLists: [],
@@ -273,16 +172,13 @@ describe('queryNamespacesPermissions', () => {
       { specLists: [POD_PERMISSIONS] }
     );
 
-    expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(1);
-    const payload = hoisted.readQueryPermissions.mock.calls[0][0] as QueryPayloadItem[];
-    expect(new Set(payload.map((item) => `${item.clusterId}|${item.namespace}`))).toEqual(
+    expect(checks()).toHaveLength(1);
+    expect(new Set(checks()[0]?.map((query) => `${query.clusterId}|${query.namespace}`))).toEqual(
       new Set(['cluster-1|default'])
     );
   });
 
-  it('queries many namespaces in one QueryPermissions call for a scoped spec list', async () => {
-    mockSuccessfulQueryPermissions();
-
+  it('checks many namespaces in one QueryPermissions call for a scoped spec list', async () => {
     await queryNamespacesPermissions(
       [
         { namespace: 'default', clusterId: 'cluster-1' },
@@ -291,67 +187,71 @@ describe('queryNamespacesPermissions', () => {
       { specLists: [POD_PERMISSIONS] }
     );
 
-    expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(1);
-    const payload = hoisted.readQueryPermissions.mock.calls[0][0] as Array<{
-      resourceKind: string;
-      namespace: string;
-    }>;
-    expect(payload).toHaveLength(POD_PERMISSIONS.specs.length * 2);
-    expect(new Set(payload.map((item) => item.namespace))).toEqual(
+    expect(checks()).toHaveLength(1);
+    const batch = checks()[0] ?? [];
+    expect(batch).toHaveLength(POD_PERMISSIONS.specs.length * 2);
+    expect(new Set(batch.map((query) => query.namespace))).toEqual(
       new Set(['default', 'kube-system'])
     );
-    expect(new Set(payload.map((item) => item.resourceKind))).toEqual(new Set(['Pod']));
+    expect(new Set(batch.map((query) => query.resourceKind))).toEqual(new Set(['Pod']));
   });
 
   it('tracks freshness by namespace and spec list instead of suppressing later feature checks', async () => {
-    mockSuccessfulQueryPermissions();
+    const target = [{ namespace: 'default', clusterId: 'cluster-1' }];
+    await queryNamespacesPermissions(target, { specLists: [POD_PERMISSIONS] });
+    await queryNamespacesPermissions(target, { specLists: [POD_PERMISSIONS] });
+    await queryNamespacesPermissions(target, { specLists: [WORKLOAD_PERMISSIONS] });
 
-    await queryNamespacesPermissions([{ namespace: 'default', clusterId: 'cluster-1' }], {
-      specLists: [POD_PERMISSIONS],
-    });
-    await queryNamespacesPermissions([{ namespace: 'default', clusterId: 'cluster-1' }], {
-      specLists: [POD_PERMISSIONS],
-    });
-    await queryNamespacesPermissions([{ namespace: 'default', clusterId: 'cluster-1' }], {
-      specLists: [WORKLOAD_PERMISSIONS],
-    });
-
-    expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(2);
-    const secondPayload = hoisted.readQueryPermissions.mock.calls[1][0] as Array<{
-      resourceKind: string;
-    }>;
-    expect(secondPayload).toHaveLength(WORKLOAD_PERMISSIONS.specs.length);
-    expect(new Set(secondPayload.map((item) => item.resourceKind))).toContain('Deployment');
+    expect(checks()).toHaveLength(2);
+    const workloads = checks()[1] ?? [];
+    expect(workloads).toHaveLength(WORKLOAD_PERMISSIONS.specs.length);
+    expect(new Set(workloads.map((query) => query.resourceKind))).toContain('Deployment');
   });
 
   it('bypasses the freshness interval only when force is requested', async () => {
-    mockSuccessfulQueryPermissions();
+    const target = [{ namespace: 'default', clusterId: 'cluster-1' }];
+    await queryNamespacesPermissions(target, { specLists: [POD_PERMISSIONS] });
+    await queryNamespacesPermissions(target, { force: true, specLists: [POD_PERMISSIONS] });
 
-    await queryNamespacesPermissions([{ namespace: 'default', clusterId: 'cluster-1' }], {
-      specLists: [POD_PERMISSIONS],
-    });
-    await queryNamespacesPermissions([{ namespace: 'default', clusterId: 'cluster-1' }], {
-      force: true,
-      specLists: [POD_PERMISSIONS],
-    });
-
-    expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(2);
+    expect(checks()).toHaveLength(2);
   });
 
-  it('materializes transport failures as cluster-scoped permission errors', async () => {
-    hoisted.requestData.mockImplementation(async (options: PermissionReadRequest) => ({
-      status: 'executed',
-      data: await options.read(),
-    }));
-    hoisted.readQueryPermissions.mockRejectedValue(new Error('permission transport failed'));
+  it('publishes a definitive answer as ready and a failed review as an error', async () => {
+    answerEach((query) =>
+      query.verb === 'delete'
+        ? { allowed: false, source: 'error', error: 'review failed' }
+        : { allowed: true, source: 'ssrr' }
+    );
 
     await queryNamespacesPermissions([{ namespace: 'team-a', clusterId: 'cluster-1' }], {
       specLists: [POD_PERMISSIONS],
     });
 
-    expect(
-      getUserPermissionMap().get(getPermissionKey('Pod', 'delete', 'team-a', null, 'cluster-1'))
-    ).toMatchObject({
+    expect(permission('Pod', 'list', 'team-a', 'cluster-1')).toMatchObject({
+      allowed: true,
+      pending: false,
+      source: 'ssrr',
+      error: null,
+      entry: { status: 'ready' },
+    });
+    expect(permission('Pod', 'delete', 'team-a', 'cluster-1')).toMatchObject({
+      allowed: false,
+      pending: false,
+      error: 'review failed',
+      entry: { status: 'error' },
+    });
+  });
+
+  it('materializes transport failures as cluster-scoped permission errors', async () => {
+    app.backend.answer('QueryPermissions', () => {
+      throw new Error('permission transport failed');
+    });
+
+    await queryNamespacesPermissions([{ namespace: 'team-a', clusterId: 'cluster-1' }], {
+      specLists: [POD_PERMISSIONS],
+    });
+
+    expect(permission('Pod', 'delete', 'team-a', 'cluster-1')).toMatchObject({
       allowed: false,
       pending: false,
       error: 'Error: permission transport failed',
@@ -367,136 +267,74 @@ describe('queryNamespacesPermissions', () => {
 });
 
 describe('queryNamespacesPermissions transient errors', () => {
-  const mockTransientThenSuccess = (): void => {
-    hoisted.requestData.mockImplementation(async (options: PermissionReadRequest) => ({
-      status: 'executed',
-      data: await options.read(),
-    }));
-    hoisted.readQueryPermissions
-      .mockImplementationOnce(async (queries: QueryPayloadItem[]) => ({
-        results: queries.map((query) => ({
-          ...query,
-          allowed: false,
-          source: 'error',
-          reason: '',
-          error: 'failed to resolve resource kind "Pod": cluster cluster-1:cluster-1 not active',
-        })),
-        diagnostics: [],
-      }))
-      .mockImplementation(async (queries: QueryPayloadItem[]) => ({
-        results: queries.map((query) => ({
-          ...query,
-          allowed: true,
-          source: 'ssrr',
-          reason: '',
-          error: '',
-        })),
-        diagnostics: [],
-      }));
+  /** The first namespace check finds the cluster not active; later ones succeed. */
+  const answerNotActiveOnce = () => {
+    let namespaceChecks = 0;
+    answerEach((query) => {
+      if (query.namespace !== 'team-a') {
+        return { allowed: true, source: 'ssar' };
+      }
+      return namespaceChecks++ < POD_PERMISSIONS.specs.length
+        ? { allowed: false, source: 'error', error: notActive('Pod', query.clusterId) }
+        : { allowed: true, source: 'ssrr' };
+    });
   };
 
   it('does not cache cluster-not-active responses as namespace permission denials', async () => {
-    mockTransientThenSuccess();
+    answerNotActiveOnce();
 
     await queryNamespacesPermissions([{ namespace: 'team-a', clusterId: 'cluster-1' }], {
       specLists: [POD_PERMISSIONS],
     });
 
-    expect(
-      getUserPermissionMap().get(getPermissionKey('Pod', 'delete', 'team-a', null, 'cluster-1'))
-    ).toBeUndefined();
+    expect(permission('Pod', 'delete', 'team-a', 'cluster-1')).toBeUndefined();
   });
 
-  it('does not TTL-block a retry after a transient failure', async () => {
-    mockTransientThenSuccess();
+  it('does not freshness-block a retry after a transient failure', async () => {
+    answerNotActiveOnce();
+    const target = [{ namespace: 'team-a', clusterId: 'cluster-1' }];
 
-    await queryNamespacesPermissions([{ namespace: 'team-a', clusterId: 'cluster-1' }], {
-      specLists: [POD_PERMISSIONS],
-    });
-    await queryNamespacesPermissions([{ namespace: 'team-a', clusterId: 'cluster-1' }], {
-      specLists: [POD_PERMISSIONS],
-    });
+    await queryNamespacesPermissions(target, { specLists: [POD_PERMISSIONS] });
+    await queryNamespacesPermissions(target, { specLists: [POD_PERMISSIONS] });
 
-    expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(2);
-    expect(
-      getUserPermissionMap().get(getPermissionKey('Pod', 'delete', 'team-a', null, 'cluster-1'))
-    ).toMatchObject({ allowed: true, pending: false });
+    expect(checks()).toHaveLength(2);
+    expect(permission('Pod', 'delete', 'team-a', 'cluster-1')).toMatchObject({
+      allowed: true,
+      pending: false,
+    });
   });
 
-  it('re-issues recorded namespace queries when their cluster becomes ready', async () => {
-    hoisted.requestData.mockImplementation(async (options: PermissionReadRequest) => ({
-      status: 'executed',
-      data: await options.read(),
-    }));
-    // The cluster-scoped init query for the active cluster succeeds; the
-    // FIRST namespace batch hits a still-connecting cluster (transient),
-    // later namespace batches succeed.
-    let namespaceBatchCalls = 0;
-    hoisted.readQueryPermissions.mockImplementation(async (queries: QueryPayloadItem[]) => {
-      const isNamespaceBatch = queries.some((query) => query.namespace === 'team-a');
-      const transient = isNamespaceBatch && namespaceBatchCalls++ === 0;
-      return {
-        results: queries.map((query) => ({
-          ...query,
-          allowed: !transient,
-          source: transient ? 'error' : 'ssrr',
-          reason: '',
-          error: transient
-            ? 'failed to resolve resource kind "Pod": cluster cluster-1:cluster-1 not active'
-            : '',
-        })),
-        diagnostics: [],
-      };
-    });
-
-    // The lifecycle subscription is owned by the store and registered on
-    // initialize. The active cluster is a DIFFERENT cluster — the panel's
-    // cluster readiness must heal its own namespace queries regardless.
+  it('re-issues recorded namespace checks when their cluster becomes operational', async () => {
+    answerNotActiveOnce();
+    // The active cluster is a different cluster: the namespace's own cluster
+    // becoming operational heals its checks.
     initializePermissionStore('cluster-active');
-    await vi.waitFor(() => expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(1));
-
+    await settle();
     await queryNamespacesPermissions([{ namespace: 'team-a', clusterId: 'cluster-1' }], {
       specLists: [POD_PERMISSIONS],
     });
-    expect(
-      getUserPermissionMap().get(getPermissionKey('Pod', 'delete', 'team-a', null, 'cluster-1'))
-    ).toBeUndefined();
+    expect(permission('Pod', 'delete', 'team-a', 'cluster-1')).toBeUndefined();
 
-    eventBus.emit('cluster:lifecycle', {
-      clusterId: 'cluster-1',
-      state: 'degraded',
+    // The lifecycle input the cluster workspace forwards to the app's event bus.
+    eventBus.emit('cluster:lifecycle', { clusterId: 'cluster-1', state: 'degraded' });
+    await settle();
+
+    expect(permission('Pod', 'delete', 'team-a', 'cluster-1')).toMatchObject({
+      allowed: true,
+      pending: false,
     });
-
-    await vi.waitFor(() =>
-      expect(
-        getUserPermissionMap().get(getPermissionKey('Pod', 'delete', 'team-a', null, 'cluster-1'))
-      ).toMatchObject({ allowed: true, pending: false })
-    );
   });
 });
 
 describe('queryClusterPermissions', () => {
   it('shows only cluster-wide binding list checks for Identities while retaining RBAC diagnostics', async () => {
-    mockSuccessfulQueryPermissions();
-    hoisted.readQueryPermissions.mockImplementation(async (queries: QueryPayloadItem[]) => ({
-      results: queries.map((query) => ({
-        ...query,
-        allowed: !['ServiceAccount', 'RoleBinding'].includes(query.resourceKind),
-        source: 'ssar',
-        reason: '',
-        error: '',
-      })),
-    }));
+    app.permissions((query) => !['ServiceAccount', 'RoleBinding'].includes(query.resourceKind));
     queryClusterPermissions('cluster-a');
     queryClusterPermissions('cluster-b');
     await queryNamespacesPermissions([{ clusterId: 'cluster-a', namespace: 'payments' }]);
-    await vi.waitFor(() =>
-      expect(
-        getUserPermissionMap().get(
-          getPermissionKey('ClusterRoleBinding', 'list', null, null, 'cluster-a')
-        )?.pending
-      ).toBe(false)
-    );
+    await settle();
+    expect(permission('ClusterRoleBinding', 'list', null, 'cluster-a')?.pending).toBe(false);
+
     const rowsFor = (tab: 'identities' | 'rbac' | 'browse') =>
       buildPermissionRows({
         permissionMap: getUserPermissionMap(),
@@ -551,125 +389,90 @@ describe('queryClusterPermissions', () => {
   });
 
   it('does not cache cluster-not-active responses as permission errors', async () => {
-    hoisted.requestData.mockImplementation(async (options: PermissionReadRequest) => ({
-      status: 'executed',
-      data: await options.read(),
-    }));
-    hoisted.readQueryPermissions.mockImplementation(async (queries: QueryPayloadItem[]) => ({
-      results: queries.map((query) => ({
-        ...query,
-        allowed: false,
-        source: 'error',
-        reason: '',
-        error: 'failed to resolve resource kind "Node": cluster cluster-1:cluster-1 not active',
-      })),
-      diagnostics: [],
+    answerEach((query) => ({
+      allowed: false,
+      source: 'error',
+      error: notActive(query.resourceKind, query.clusterId),
     }));
 
     queryClusterPermissions('cluster-1');
+    await settle();
 
-    await vi.waitFor(() => expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect(getUserPermissionMap().size).toBe(0));
-
-    const permissionMap = getUserPermissionMap();
-    expect(permissionMap.size).toBe(0);
-    expect(
-      permissionMap.get(getPermissionKey('Node', 'patch', null, null, 'cluster-1'))
-    ).toBeUndefined();
+    expect(checks()).toHaveLength(1);
+    expect(getUserPermissionMap().size).toBe(0);
   });
 
   it('retries cluster permissions when the selected cluster becomes ready', async () => {
-    hoisted.requestData.mockImplementation(async (options: PermissionReadRequest) => ({
-      status: 'executed',
-      data: await options.read(),
-    }));
-    hoisted.readQueryPermissions
-      .mockImplementationOnce(async (queries: QueryPayloadItem[]) => ({
-        results: queries.map((query) => ({
-          ...query,
-          allowed: false,
-          source: 'error',
-          reason: 'failed to resolve resource kind "Node": cluster cluster-1:cluster-1 not active',
-          error: '',
-        })),
-        diagnostics: [],
-      }))
-      .mockImplementationOnce(async (queries: QueryPayloadItem[]) => ({
-        results: queries.map((query) => ({
-          ...query,
-          allowed: true,
-          source: 'ssar',
-          reason: '',
-          error: '',
-        })),
-        diagnostics: [],
-      }));
+    let clusterActive = false;
+    answerEach((query) =>
+      clusterActive
+        ? { allowed: true, source: 'ssar' }
+        : { allowed: false, source: 'error', reason: notActive('Node', query.clusterId) }
+    );
 
     initializePermissionStore('cluster-1');
+    await settle();
+    expect(checks()).toHaveLength(1);
+    expect(getUserPermissionMap().size).toBe(0);
 
-    await vi.waitFor(() => expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect(getUserPermissionMap().size).toBe(0));
+    clusterActive = true;
+    eventBus.emit('cluster:lifecycle', { clusterId: 'cluster-1', state: 'ready' });
+    await settle();
 
-    eventBus.emit('cluster:lifecycle', {
-      clusterId: 'cluster-1',
-      state: 'ready',
+    expect(checks()).toHaveLength(2);
+    expect(permission('Node', 'patch', null, 'cluster-1')).toMatchObject({
+      allowed: true,
+      pending: false,
     });
-
-    await vi.waitFor(() => expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(2));
-    await vi.waitFor(() =>
-      expect(
-        getUserPermissionMap().get(getPermissionKey('Node', 'patch', null, null, 'cluster-1'))
-      ).toMatchObject({
-        allowed: true,
-        pending: false,
-      })
-    );
   });
 });
 
 describe('permission store reset ownership', () => {
   it('does not start staggered namespace refreshes after reset', async () => {
     vi.useFakeTimers();
-    try {
-      mockSuccessfulQueryPermissions();
-      initializePermissionStore('cluster-a');
-      await vi.advanceTimersByTimeAsync(0);
-      await queryNamespacesPermissions(
-        [
-          { clusterId: 'cluster-a', namespace: 'alpha' },
-          { clusterId: 'cluster-a', namespace: 'beta' },
-        ],
-        { specLists: [POD_PERMISSIONS] }
-      );
-      hoisted.readQueryPermissions.mockClear();
-      await vi.advanceTimersByTimeAsync(120_000);
-      expect(
-        hoisted.readQueryPermissions.mock.calls.some(([queries]) =>
-          (queries as QueryPayloadItem[]).some((query) => query.namespace === 'alpha')
-        )
-      ).toBe(true);
-      const callsBeforeReset = hoisted.readQueryPermissions.mock.calls.length;
-      resetPermissionStore();
-      await vi.advanceTimersByTimeAsync(1_000);
-      expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(callsBeforeReset);
-      expect(getUserPermissionMap().size).toBe(0);
-    } finally {
-      vi.useRealTimers();
-    }
+    initializePermissionStore('cluster-a');
+    await settle();
+    await queryNamespacesPermissions(
+      [
+        { clusterId: 'cluster-a', namespace: 'alpha' },
+        { clusterId: 'cluster-a', namespace: 'beta' },
+      ],
+      { specLists: [POD_PERMISSIONS] }
+    );
+    const beforeRefresh = checks().length;
+
+    // The refresh interval re-checks expired namespaces 500 ms apart.
+    await vi.advanceTimersByTimeAsync(120_000);
+    await settle();
+    const refreshed = checks().slice(beforeRefresh);
+    expect(refreshed.some((batch) => batch.some((query) => query.namespace === 'alpha'))).toBe(
+      true
+    );
+    expect(refreshed.some((batch) => batch.some((query) => query.namespace === 'beta'))).toBe(
+      false
+    );
+
+    const beforeReset = checks().length;
+    resetPermissionStore();
+    await vi.advanceTimersByTimeAsync(1_000);
+    await settle();
+
+    expect(checks()).toHaveLength(beforeReset);
+    expect(getUserPermissionMap().size).toBe(0);
   });
 
   it.each(['namespace', 'cluster', 'kind'] as const)(
-    'ignores a completed %s query from before reset while a replacement is pending',
+    'ignores a completed %s check from before reset while a replacement is pending',
     async (kind) => {
-      mockSuccessfulQueryPermissions();
       const completions: Array<{
-        queries: QueryPayloadItem[];
-        resolve: (response: QueryPermissionsResponse) => void;
+        queries: PermissionQuery[];
+        resolve: (response: ReturnType<typeof respond>) => void;
       }> = [];
-      hoisted.readQueryPermissions.mockImplementation(
-        (queries: QueryPayloadItem[]) =>
-          new Promise<QueryPermissionsResponse>((resolve) => {
-            completions.push({ queries, resolve });
+      app.backend.answer(
+        'QueryPermissions',
+        (queries) =>
+          new Promise((resolve) => {
+            completions.push({ queries: queries ?? [], resolve });
           })
       );
       const start = () => {
@@ -681,37 +484,44 @@ describe('permission store reset ownership', () => {
         if (kind === 'cluster') {
           return queryClusterPermissions('cluster-a');
         }
-        return queryKindPermissions('Pod', 'default', 'cluster-a', '', 'v1');
+        return queryPermissionChecks([
+          {
+            clusterId: 'cluster-a',
+            resourceKind: 'Pod',
+            verb: 'delete',
+            namespace: 'default',
+            group: '',
+            version: 'v1',
+          },
+        ]);
       };
-      const complete = (index: number, allowed: boolean) => {
-        const { queries, resolve } = completions[index];
-        resolve({
-          results: queries.map((query) => ({
-            ...query,
-            allowed,
-            source: 'ssar',
-            reason: '',
-            error: '',
-          })),
-        });
+      const complete = async (index: number, allowed: boolean) => {
+        const completion = completions[index];
+        completion?.resolve(
+          respond(completion.queries, () => ({ allowed, source: 'ssar', reason: '' }))
+        );
+        await settle();
       };
+
       const first = start();
-      await vi.waitFor(() => expect(completions).toHaveLength(1));
+      await settle();
+      expect(completions).toHaveLength(1);
       resetPermissionStore();
       expect(getUserPermissionMap().size).toBe(0);
+
       const replacement = start();
-      await vi.waitFor(() => expect(completions).toHaveLength(2));
-      const key = completions[1].queries[0].id;
+      await settle();
+      expect(completions).toHaveLength(2);
+      const key = completions[1]?.queries[0]?.id ?? '';
       expect(getUserPermissionMap().get(key)?.pending).toBe(true);
-      complete(0, true);
+
+      await complete(0, true);
       await first;
-      await new Promise((resolve) => setTimeout(resolve, 0));
       expect(getUserPermissionMap().get(key)).toMatchObject({ allowed: false, pending: true });
-      complete(1, false);
+
+      await complete(1, false);
       await replacement;
-      await vi.waitFor(() =>
-        expect(getUserPermissionMap().get(key)).toMatchObject({ allowed: false, pending: false })
-      );
+      expect(getUserPermissionMap().get(key)).toMatchObject({ allowed: false, pending: false });
     }
   );
 });
@@ -731,7 +541,6 @@ describe('permission store notifications', () => {
     expect(listener).toHaveBeenCalledTimes(1);
 
     unsubscribe();
-    vi.useRealTimers();
   });
 
   it('coalesces multiple synchronous permission-store writes into one notification tick', async () => {
@@ -749,97 +558,83 @@ describe('permission store notifications', () => {
     expect(listener).toHaveBeenCalledTimes(1);
 
     unsubscribe();
-    vi.useRealTimers();
   });
 });
 
-// ---------------------------------------------------------------------------
-// setActivePermissionCluster
-// ---------------------------------------------------------------------------
-
 describe('setActivePermissionCluster', () => {
-  it('initializes and queries cluster permissions when the cluster is operational', async () => {
-    mockSuccessfulQueryPermissions();
-
+  it('initializes and checks cluster permissions when the cluster is operational', async () => {
     setActivePermissionCluster('cluster-a');
+    await settle();
 
-    await vi.waitFor(() => expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() =>
-      expect(
-        getUserPermissionMap().get(getPermissionKey('Node', 'patch', null, null, 'cluster-a'))
-      ).toMatchObject({ allowed: true, pending: false })
-    );
+    expect(checks()).toHaveLength(1);
+    expect(permission('Node', 'patch', null, 'cluster-a')).toMatchObject({
+      allowed: true,
+      pending: false,
+    });
   });
 
   it('trims the cluster id before initializing', async () => {
-    mockSuccessfulQueryPermissions();
-
     setActivePermissionCluster('  cluster-a  ');
+    await settle();
 
-    await vi.waitFor(() => expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(1));
-    const queries = hoisted.readQueryPermissions.mock.calls[0][0] as { clusterId: string }[];
-    expect(queries.length).toBeGreaterThan(0);
-    expect(queries.every((query) => query.clusterId === 'cluster-a')).toBe(true);
+    const batch = checks()[0] ?? [];
+    expect(batch.length).toBeGreaterThan(0);
+    expect(batch.every((query) => query.clusterId === 'cluster-a')).toBe(true);
   });
 
-  it('keeps existing entries and issues no query for a non-operational cluster', async () => {
-    mockSuccessfulQueryPermissions();
+  it('keeps existing entries and checks nothing for a non-operational cluster', async () => {
     setActivePermissionCluster('cluster-a');
-    await vi.waitFor(() => expect(getUserPermissionMap().size).toBeGreaterThan(0));
+    await settle();
     const sizeBefore = getUserPermissionMap().size;
-    hoisted.readQueryPermissions.mockClear();
+    expect(sizeBefore).toBeGreaterThan(0);
+    const checksBefore = checks().length;
 
     setActivePermissionCluster('cluster-b', { operational: false });
+    await settle();
 
     // A not-ready ACTIVE cluster must not wipe the store: other clusters'
     // and other namespaces' permissions stay valid, and one-shot consumers
     // (open object panels) have no re-query path after a wipe.
-    expect(hoisted.readQueryPermissions).not.toHaveBeenCalled();
+    expect(checks()).toHaveLength(checksBefore);
     expect(getUserPermissionMap().size).toBe(sizeBefore);
     // The id is still recorded as the fallback for key building.
     expect(getPermissionKey('Pod', 'get', 'ns')).toMatch(/^cluster-b\|/);
   });
 
-  it('queries after a previously waiting cluster becomes operational', async () => {
-    mockSuccessfulQueryPermissions();
-
+  it('checks once a previously waiting cluster becomes operational', async () => {
     setActivePermissionCluster('cluster-a', { operational: false });
-    expect(hoisted.readQueryPermissions).not.toHaveBeenCalled();
+    await settle();
+    expect(checks()).toEqual([]);
 
     setActivePermissionCluster('cluster-a', { operational: true });
-    await vi.waitFor(() => expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(1));
+    await settle();
+
+    expect(checks()).toHaveLength(1);
   });
 
   it('resets the store when no cluster is selected', async () => {
-    mockSuccessfulQueryPermissions();
     setActivePermissionCluster('cluster-a');
-    await vi.waitFor(() => expect(getUserPermissionMap().size).toBeGreaterThan(0));
-    hoisted.readQueryPermissions.mockClear();
+    await settle();
+    expect(getUserPermissionMap().size).toBeGreaterThan(0);
+    const checksBefore = checks().length;
 
     setActivePermissionCluster('   ');
 
     expect(getUserPermissionMap().size).toBe(0);
-    expect(hoisted.readQueryPermissions).not.toHaveBeenCalled();
+    expect(checks()).toHaveLength(checksBefore);
   });
 });
 
-describe('permission query completion contracts', () => {
+describe('permission check completion contracts', () => {
   it('keeps overlapping namespace checks pending until each feature batch completes', async () => {
-    mockSuccessfulQueryPermissions();
     const finish: Array<() => void> = [];
-    hoisted.readQueryPermissions.mockImplementation(
-      (queries: QueryPayloadItem[]) =>
+    app.backend.answer(
+      'QueryPermissions',
+      (queries) =>
         new Promise((resolve) => {
           finish.push(() =>
-            resolve({
-              results: queries.map((query) => ({
-                ...query,
-                allowed: true,
-                source: 'ssar',
-                reason: '',
-                error: '',
-              })),
-              diagnostics: [
+            resolve(
+              respond(queries, () => ({ allowed: true, source: 'ssar' }), [
                 {
                   key: 'cluster-1|team-a',
                   clusterId: 'cluster-1',
@@ -847,21 +642,22 @@ describe('permission query completion contracts', () => {
                   method: 'ssar',
                   ssrrIncomplete: true,
                   ssrrRuleCount: 3,
-                  ssarFallbackCount: queries.length,
-                  checkCount: queries.length,
+                  ssarFallbackCount: queries?.length ?? 0,
+                  checkCount: queries?.length ?? 0,
                 },
-              ],
-            })
+              ])
+            )
           );
         })
     );
     const targets = [{ clusterId: 'cluster-1', namespace: 'team-a' }];
     const pods = queryNamespacesPermissions(targets, { specLists: [POD_PERMISSIONS] });
     const workloads = queryNamespacesPermissions(targets, { specLists: [WORKLOAD_PERMISSIONS] });
+    await settle();
     expect(finish).toHaveLength(2);
-    const workloadChecks = hoisted.readQueryPermissions.mock.calls[1][0].length;
+    const workloadChecks = checks()[1]?.length ?? 0;
 
-    finish[0]();
+    finish[0]?.();
     await pods;
     expect(getPermissionQueryDiagnosticsSnapshot()).toEqual([
       expect.objectContaining({
@@ -873,7 +669,8 @@ describe('permission query completion contracts', () => {
         lastResult: 'success',
       }),
     ]);
-    finish[1]();
+
+    finish[1]?.();
     await workloads;
     expect(getPermissionQueryDiagnosticsSnapshot()).toEqual([
       expect.objectContaining({
@@ -886,14 +683,17 @@ describe('permission query completion contracts', () => {
     ]);
   });
 
-  it('preserves cluster identity and failure state when a cluster permission read rejects', async () => {
-    mockSuccessfulQueryPermissions();
-    hoisted.readQueryPermissions.mockRejectedValue(new Error('offline'));
+  it('preserves cluster identity and failure state when a cluster permission check rejects', async () => {
+    app.backend.answer('QueryPermissions', () => {
+      throw new Error('offline');
+    });
+
     queryClusterPermissions('cluster-1');
-    const key = getPermissionKey('Node', 'list', null, null, 'cluster-1');
-    await vi.waitFor(() => expect(getUserPermissionMap().get(key)?.pending).toBe(false));
-    expect(getUserPermissionMap().get(key)).toMatchObject({
+    await settle();
+
+    expect(permission('Node', 'list', null, 'cluster-1')).toMatchObject({
       allowed: false,
+      pending: false,
       source: 'error',
       error: 'Error: offline',
       descriptor: { clusterId: 'cluster-1', group: '', version: 'v1', namespace: null },
@@ -911,18 +711,18 @@ describe('permission query completion contracts', () => {
   });
 
   it('retains custom-kind identity and denial reasons without sharing freshness across API groups', async () => {
-    mockSuccessfulQueryPermissions();
-    hoisted.readQueryPermissions.mockImplementation(async (queries: QueryPayloadItem[]) => ({
-      results: queries.map((query) => ({
-        ...query,
-        allowed: false,
-        source: 'denied',
-        reason: 'RBAC denied',
-        error: '',
-      })),
-    }));
+    answerEach(() => ({ allowed: false, source: 'denied', reason: 'RBAC denied' }));
     const queryKind = (group: string) =>
-      queryKindPermissions('Widget', 'team-a', 'cluster-1', group, 'v1');
+      queryPermissionChecks(
+        ['delete', 'patch'].map((verb) => ({
+          clusterId: 'cluster-1',
+          resourceKind: 'Widget',
+          verb,
+          namespace: 'team-a',
+          group,
+          version: 'v1',
+        }))
+      );
     const key = getPermissionKey(
       'Widget',
       'delete',
@@ -932,13 +732,16 @@ describe('permission query completion contracts', () => {
       'first.example',
       'v1'
     );
+
     queryKind('first.example');
-    await vi.waitFor(() => expect(getUserPermissionMap().get(key)?.pending).toBe(false));
+    await settle();
+
     expect(getUserPermissionMap().get(key)).toMatchObject({
       allowed: false,
+      pending: false,
       reason: 'RBAC denied',
       error: null,
-      feature: PERMISSION_FEATURES.namespaceCustom,
+      feature: PERMISSION_FEATURES.objectActions,
       descriptor: {
         clusterId: 'cluster-1',
         group: 'first.example',
@@ -946,20 +749,38 @@ describe('permission query completion contracts', () => {
         namespace: 'team-a',
       },
     });
+
     queryKind('first.example');
     queryKind('second.example');
-    await vi.waitFor(() => expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(2));
+    await settle();
+
+    expect(checks()).toHaveLength(2);
+    expect(checks()[1]?.every((query) => query.group === 'second.example')).toBe(true);
   });
 
   it('clears pending custom-kind checks after transport failure and retains their retry interval', async () => {
-    mockSuccessfulQueryPermissions();
-    hoisted.readQueryPermissions.mockRejectedValue(new Error('offline'));
+    app.backend.answer('QueryPermissions', () => {
+      throw new Error('offline');
+    });
     const key = getPermissionKey('Widget', 'patch', null, null, 'cluster-1', 'example.io', 'v1');
-    const query = () => queryKindPermissions('Widget', null, 'cluster-1', 'example.io', 'v1');
+    const query = () =>
+      queryPermissionChecks([
+        {
+          clusterId: 'cluster-1',
+          resourceKind: 'Widget',
+          verb: 'patch',
+          group: 'example.io',
+          version: 'v1',
+        },
+      ]);
+
     query();
     expect(getUserPermissionMap().get(key)?.pending).toBe(true);
-    await vi.waitFor(() => expect(getUserPermissionMap().has(key)).toBe(false));
+    await settle();
+    expect(getUserPermissionMap().has(key)).toBe(false);
+
     query();
-    expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(1);
+
+    expect(checks()).toHaveLength(1);
   });
 });

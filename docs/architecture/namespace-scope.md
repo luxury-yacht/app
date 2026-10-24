@@ -28,11 +28,10 @@ RoleBindings (issue #243) and doubles as a noise/perf scope on large clusters.
   per-namespace results cached individually) only for resources whose data path
   is scoped: namespaced and ingest-owned (`scopedResourcePredicate`,
   `backend/refresh/system/manager.go`).
-- Resources served from [cluster-wide sources](#deliberately-cluster-wide) keep
-  cluster-wide checks, so their domains register only when the identity can read
-  that source: a scoped identity sees honest permission denial, never a silently
-  empty view. `Checker.CanClusterWide` and `ResourceRequirement.ClusterWide` are
-  the explicit escape hatches (helm-storage gate, namespace-helm runtime policy).
+- Cluster-scoped kinds keep cluster-wide checks, so their domains register only
+  when the identity can read them: a scoped identity sees honest permission
+  denial, never a silently empty view. No namespaced kind is watched
+  cluster-wide ([partitioned sources](#partitioned-sources)).
 - Per-namespace surfaces use `Checker.CanInNamespace` (the ingest permission
   filter checks each reflector's own namespace).
 
@@ -40,8 +39,8 @@ RoleBindings (issue #243) and doubles as a noise/perf scope on large clusters.
 
 - **Namespaces domain** (`RegisterNamespaceDomain`,
   `backend/refresh/snapshot/namespaces.go`): scoped clusters synthesize
-  name-only rows from the configured list, with no namespaces informer, no
-  cluster permission, and runtime policy exempted. Browse namespace groups serve
+  name-only rows from the configured list, without reading the namespace
+  reflector's store, with no cluster permission, and runtime policy exempted. Browse namespace groups serve
   the same list (`catalogNamespaceGroups`).
   - Every domain has two permission gates: registration-time (gate/policy table)
     and serve-time (`ensurePermissions` re-runs the runtime policy per snapshot
@@ -58,11 +57,13 @@ RoleBindings (issue #243) and doubles as a noise/perf scope on large clusters.
     doorbell.
   - Warning Event counts per involved-object namespace carry
     `warningEventsState`: `available` (authoritative zero), `loading` (allowed
-    informer warming), or `unavailable` (list/watch source). Event handlers feed
-    the namespace notifier; its signature ignores Normal-event churn and advances
-    the `warning-events` source clock only when a visible count or source state
-    changes. Events stay cluster-wide under a scope, so this aggregate is enabled
-    only with cluster-wide list+watch on Events.
+    store warming), or `unavailable` (list/watch source). The events store's
+    sink feeds the namespace notifier; its signature ignores Normal-event churn
+    and advances the `warning-events` source clock only when a visible count or
+    source state changes. Under a scope, Events partition per configured
+    namespace like every owned namespaced kind, and each namespace's state
+    comes from its own partition: a namespace without Event access reads
+    `unavailable`, not an authoritative zero.
   - ResourceQuota ingest retains only a compact aggregate (namespace + highest
     used percentage). Rows expose quota count, strongest percentage, explicit
     source state, and backend-owned pressure (`warning` at 80%, `critical` at
@@ -92,11 +93,11 @@ RoleBindings (issue #243) and doubles as a noise/perf scope on large clusters.
 - **Metrics**: the pod-metrics poll runs per scope namespace and merges successes
   (`backend/refresh/metrics/poller.go`); node metrics stay cluster-scoped and
   permission-degrade.
-- **Object map**: Gateway API and HPA collectors read synchronized cluster-wide
-  informer caches and filter namespaced objects to the scope. A scoped identity
-  without cluster-wide list+watch gets an insufficient-permissions warning for
-  those kinds. Rejected: per-namespace live-LIST fallback — graph builds issue
-  no LIST calls.
+- **Object map**: every collector reads ingest-owned stores, which arrive
+  already partitioned to the scope. A kind the identity cannot list+watch is
+  skipped with an insufficient-permissions warning, and HPA ownership stays
+  unknown while any covering HPA partition is not ready. Rejected:
+  per-namespace live-LIST fallback — graph builds issue no LIST calls.
 - **UI** (`frontend/src/ui/layout/NamespaceScopeEditor.tsx`): the sidebar
   namespaces section is the editor (add affordance, per-row hover delete), and
   its affordances are deliberately the only "scope active" indicator. Validation
@@ -123,14 +124,15 @@ RoleBindings (issue #243) and doubles as a noise/perf scope on large clusters.
 
 ## Fail-fast contract for denied domains
 
-A typed 403 (`SnapshotPermissionDeniedError`) is a settled answer everywhere it
-surfaces:
+A refresh failure whose status reason is `Forbidden` is a settled answer
+everywhere it surfaces:
 
 - The orchestrator stamps the scope `permissionDenied` and stops background
-  refetches.
-- The typed query hook reads the stamp and settles without warm-up retries; the
-  shared table shows "Insufficient permissions" (`resolveEmptyStateMessage`), not
-  a spinner or generic failure.
+  refetches. The stamp is separate from the stored failure, which a stream
+  start or resync clears.
+- The typed query hook reads the stamp and settles without warm-up retries;
+  the shared table shows "Insufficient permissions" (`resolveEmptyStateMessage`),
+  not a spinner or generic failure.
 - A stream permission error frame blocks that scope's streaming
   (`refresh:resource-stream-permission-denied` → `blockStreaming`) instead of
   resync-looping.
@@ -140,13 +142,10 @@ Manual refresh re-asks; otherwise all three latches hold until that cluster's
 ([permissions](permissions.md#refresh-permission-rules)), or auth recovery
 releases them.
 
-## Deliberately cluster-wide
+## Partitioned sources
 
-The typed shared-informer factory's namespaced informers (events, replicasets,
-HPA v1/v2), the Gateway API informer factory, and the helm-storage factory watch
-cluster-wide. Under a scope their domains stay gated on the cluster-wide check
-(honest denial). Scoping them needs N per-namespace client-go factories plus
-multiplexed listers/handlers at each consumer; do not call those domains
-namespace-scoped until fan-out, lifecycle, and permissions exist end to end.
-Per-namespace GET row enrichment uses the canonical capability path but does not
-make those watches namespace-scoped.
+Every namespaced built-in kind is an owned reflector and partitions per
+configured namespace under a scope — Events, ReplicaSets, HPAs, Gateway API
+kinds, and the Helm release storage on Secrets included — so its permission
+checks fan out over the scope with it. Per-namespace GET row enrichment uses the
+canonical capability path.

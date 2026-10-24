@@ -146,31 +146,32 @@ describe('computeObjectMapLayout', () => {
   });
 
   it('eliminates same-column edges in acyclic graphs by extending edges to the longest path', () => {
-    // Service and EndpointSlice are both reachable in 1 hop from a
-    // Pod seed (Service via selector, ES via TargetRef), but the
-    // Service → ES endpoint edge keeps them in different columns
-    // under longest-path layering. Without that constraint the two
-    // would collide in the same column and the edge would loop back.
+    // ReplicaSet and ConfigMap are both reachable in 1 hop from a
+    // Deployment seed (it owns the ReplicaSet and its template uses the
+    // ConfigMap), but the ReplicaSet → ConfigMap uses edge keeps them in
+    // different columns under longest-path layering. Without that
+    // constraint the two would collide in the same column and the edge
+    // would loop back.
     const nodes: ObjectMapNode[] = [
-      node('seed', 0, 'Pod', 'web-pod'),
-      node('svc', 1, 'Service', 'web'),
-      node('es', 1, 'EndpointSlice', 'web-xyz'),
+      node('seed', 0, 'Deployment', 'web'),
+      node('rs', 1, 'ReplicaSet', 'web-xyz'),
+      node('cm', 1, 'ConfigMap', 'web-config'),
     ];
     const edges: ObjectMapEdge[] = [
-      edge('e1', 'svc', 'seed', 'selector'),
-      edge('e2', 'es', 'seed', 'endpoint'),
-      edge('e3', 'svc', 'es', 'endpoint'),
+      edge('e1', 'seed', 'rs', 'owner'),
+      edge('e2', 'seed', 'cm', 'uses'),
+      edge('e3', 'rs', 'cm', 'uses'),
     ];
     const layout = computeObjectMapLayout(nodes, edges, 'seed');
-    const svc = requireValue(
-      layout.nodes.find((n) => n.id === 'svc'),
+    const rs = requireValue(
+      layout.nodes.find((n) => n.id === 'rs'),
       'expected test value in objectMapLayout.test.ts'
     );
-    const es = requireValue(
-      layout.nodes.find((n) => n.id === 'es'),
+    const cm = requireValue(
+      layout.nodes.find((n) => n.id === 'cm'),
       'expected test value in objectMapLayout.test.ts'
     );
-    expect(svc.column).not.toBe(es.column);
+    expect(rs.column).not.toBe(cm.column);
     layout.edges.forEach((e) => {
       expect(e.sameColumn).toBe(false);
     });
@@ -396,6 +397,160 @@ describe('computeObjectMapLayout', () => {
 
     expect(cm.column).toBe(2);
     expect(cm.x).toBe(COLUMN_STRIDE * 3);
+  });
+
+  it('lets later kinds share the last lane of a split kind group', () => {
+    const manyPods = Array.from({ length: OBJECT_MAP_MAX_NODES_PER_LANE + 1 }, (_, index) =>
+      node(`pod-${index}`, 1, 'Pod', `pod-${String(index).padStart(2, '0')}`)
+    );
+    const services = ['a', 'b', 'c'].map((name) => node(`svc-${name}`, 1, 'Service', name));
+    const related = [...manyPods, ...services];
+    const nodes: ObjectMapNode[] = [node('seed', 0, 'Deployment', 'web'), ...related];
+    const edges: ObjectMapEdge[] = related.map((row) =>
+      edge(`e-${row.id}`, 'seed', row.id, 'uses')
+    );
+
+    const layout = computeObjectMapLayout(nodes, edges, 'seed');
+    const columnOne = layout.nodes.filter((row) => row.column === 1);
+    const lastPod = requireValue(
+      layout.nodes.find((row) => row.id === `pod-${OBJECT_MAP_MAX_NODES_PER_LANE}`),
+      'expected test value in objectMapLayout.test.ts'
+    );
+
+    expect(new Set(columnOne.map((row) => row.x)).size).toBe(2);
+    layout.nodes
+      .filter((row) => row.ref.kind === 'Service')
+      .forEach((row) => {
+        expect(row.x).toBe(lastPod.x);
+      });
+  });
+
+  describe('objects with no link', () => {
+    // A namespace map: the seed is the Namespace, which is not a card.
+    const linkedNodes: ObjectMapNode[] = [
+      node('hpa', 0, 'HorizontalPodAutoscaler', 'api'),
+      node('deploy', 0, 'Deployment', 'api'),
+      node('cm-api', 0, 'ConfigMap', 'api-config'),
+      node('rb', 0, 'RoleBinding', 'api'),
+      node('role', 0, 'Role', 'api'),
+    ];
+    const linkedEdges: ObjectMapEdge[] = [
+      edge('e-scales', 'hpa', 'deploy', 'scales'),
+      edge('e-uses', 'deploy', 'cm-api', 'uses'),
+      edge('e-grants', 'rb', 'role', 'grants'),
+    ];
+    const unlinkedNodes: ObjectMapNode[] = [
+      ...['kube-root-ca.crt', 'legacy-flags', 'old-dashboard'].map((name) =>
+        node(`cm-${name}`, 0, 'ConfigMap', name)
+      ),
+      ...['v1', 'v2', 'v3', 'v4', 'v5', 'v6', 'v7'].map((name) =>
+        node(`secret-${name}`, 0, 'Secret', `sh.helm.release.v1.api.${name}`)
+      ),
+      ...['headless', 'metrics'].map((name) => node(`svc-${name}`, 0, 'Service', name)),
+      node('sa-default', 0, 'ServiceAccount', 'default'),
+      node('pdb', 0, 'PodDisruptionBudget', 'api'),
+      node('netpol', 0, 'NetworkPolicy', 'default-deny'),
+      node('pvc', 0, 'PersistentVolumeClaim', 'scratch'),
+    ];
+    const unlinkedIds = new Set(unlinkedNodes.map((row) => row.id));
+
+    it('lays them out apart from the linked objects instead of stacking them in one column', () => {
+      const layout = computeObjectMapLayout([...linkedNodes, ...unlinkedNodes], linkedEdges, '');
+      const linkedOnly = computeObjectMapLayout(linkedNodes, linkedEdges, '');
+
+      // The linked objects keep the layout they would have on their own.
+      linkedOnly.nodes.forEach((expected) => {
+        const actual = requireValue(
+          layout.nodes.find((row) => row.id === expected.id),
+          'expected test value in objectMapLayout.test.ts'
+        );
+        expect({ x: actual.x, y: actual.y }).toEqual({ x: expected.x, y: expected.y });
+      });
+
+      // Unlinked objects sit right of or below the linked objects, never among them.
+      const linkedBounds = linkedOnly.bounds;
+      const unlinkedRows = layout.nodes.filter((row) => unlinkedIds.has(row.id));
+      expect(unlinkedRows).toHaveLength(unlinkedNodes.length);
+      unlinkedRows.forEach((row) => {
+        expect(row.x >= linkedBounds.maxX || row.y >= linkedBounds.maxY).toBe(true);
+      });
+
+      // They wrap into lanes, so the map is no longer one tall column.
+      const { minX, minY, maxX, maxY } = layout.bounds;
+      expect(maxX - minX).toBeGreaterThan(maxY - minY);
+
+      // Read lane by lane, they keep kind/name order so each kind stays together.
+      const readingOrder = [...unlinkedRows]
+        .sort((a, b) => a.x - b.x || a.y - b.y)
+        .map((row) => `${row.ref.kind}/${row.ref.name}`);
+      const kindNameOrder = [...unlinkedNodes]
+        .sort(
+          (a, b) => a.ref.kind.localeCompare(b.ref.kind) || a.ref.name.localeCompare(b.ref.name)
+        )
+        .map((row) => `${row.ref.kind}/${row.ref.name}`);
+      expect(readingOrder).toEqual(kindNameOrder);
+    });
+
+    it('puts them below a wide linked layout', () => {
+      const chain = ['a', 'b', 'c', 'd', 'e', 'f'].map((name) => node(name, 0, 'Deployment', name));
+      const chainEdges = chain
+        .slice(1)
+        .map((row, index) => edge(`e-${row.id}`, chain[index].id, row.id, 'owner'));
+      const loose = unlinkedNodes.slice(0, 6);
+
+      const layout = computeObjectMapLayout([...chain, ...loose], chainEdges, 'a');
+      const chainBottom = Math.max(
+        ...layout.nodes.filter((row) => !unlinkedIds.has(row.id)).map((row) => row.y + row.height)
+      );
+
+      layout.nodes
+        .filter((row) => unlinkedIds.has(row.id))
+        .forEach((row) => {
+          expect(row.y).toBeGreaterThan(chainBottom);
+        });
+    });
+
+    it('puts them beside a tall linked layout', () => {
+      const pods = Array.from({ length: 20 }, (_, index) =>
+        node(`pod-${index}`, 1, 'Pod', `pod-${String(index).padStart(2, '0')}`)
+      );
+      const seed = node('seed', 0, 'ReplicaSet', 'web-1');
+      const podEdges = pods.map((pod) => edge(`e-${pod.id}`, 'seed', pod.id, 'owner'));
+      const loose = unlinkedNodes.slice(0, 6);
+
+      const layout = computeObjectMapLayout([seed, ...pods, ...loose], podEdges, 'seed');
+      const podsRight = Math.max(
+        ...layout.nodes.filter((row) => !unlinkedIds.has(row.id)).map((row) => row.x + row.width)
+      );
+
+      layout.nodes
+        .filter((row) => unlinkedIds.has(row.id))
+        .forEach((row) => {
+          expect(row.x).toBeGreaterThan(podsRight);
+        });
+    });
+
+    it('keeps a seed with no links as the anchor at column 0', () => {
+      const seed = node('seed', 0, 'Deployment', 'web');
+      const loose = unlinkedNodes.slice(0, 5);
+
+      const layout = computeObjectMapLayout([seed, ...loose], [], 'seed');
+      const seedRow = requireValue(
+        layout.nodes.find((row) => row.id === 'seed'),
+        'expected test value in objectMapLayout.test.ts'
+      );
+
+      expect(seedRow.column).toBe(0);
+      expect(seedRow.x).toBe(0);
+      expect(seedRow.isSeed).toBe(true);
+      layout.nodes
+        .filter((row) => unlinkedIds.has(row.id))
+        .forEach((row) => {
+          expect(row.x > seedRow.x + seedRow.width || row.y > seedRow.y + seedRow.height).toBe(
+            true
+          );
+        });
+    });
   });
 
   it('drops edges that reference unknown nodes', () => {

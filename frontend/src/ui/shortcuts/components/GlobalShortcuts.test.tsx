@@ -1,417 +1,207 @@
 /**
  * frontend/src/ui/shortcuts/components/GlobalShortcuts.test.tsx
  *
- * Test suite for GlobalShortcuts.
- * Covers key behaviors and edge cases for GlobalShortcuts.
+ * The workspace window's global shortcuts as the app shell wires them
+ * (App.tsx AppContent): Shift+? toggles the keyboard shortcut help unless
+ * Settings is open; Escape closes the help, then Settings, then the
+ * Application Logs panel; Cmd/Ctrl+R refreshes what the selected cluster
+ * shows; Cmd/Ctrl+Alt+Left/Right switch cluster tabs; and the native Close
+ * menu (or its accelerator) closes the active cluster tab, or the window when
+ * no cluster is open. Runs in provider mode inside the real app shell, which
+ * mounts GlobalShortcuts with its production owners; only the backend
+ * boundary is faked (test-utils/appState).
  */
 
-import { resetClusterTabOrderCacheForTesting } from '@core/persistence/clusterTabOrder';
+import { Window as WailsWindow } from '@wailsio/runtime';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { KeyCodes } from '../constants';
-import { GlobalShortcuts } from './GlobalShortcuts';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { isMacPlatform } from '@/utils/platform';
 
-// Capture event handlers registered via onEvent so tests can invoke them.
-const wailsEventHandlers: Record<string, (...args: unknown[]) => void> = {};
-const closeWindowMock = vi.fn();
-type ShortcutOptions = Parameters<typeof import('../hooks').useShortcut>[0];
+const app = installAppStateHarness();
+let view: MountedApp;
 
-vi.mock('@core/desktop-runtime', () => ({
-  desktopRuntimeAvailable: () => false,
-  onEventMultiple: () => undefined,
-  onEvent: (eventName: string, handler: (...args: unknown[]) => void) => {
-    wailsEventHandlers[eventName] = handler;
-    return () => {
-      if (wailsEventHandlers[eventName] === handler) {
-        delete wailsEventHandlers[eventName];
-      }
-    };
-  },
-  closeWindow: (...args: unknown[]) => closeWindowMock(...args),
-}));
+const primary = (): KeyboardEventInit => (isMacPlatform() ? { metaKey: true } : { ctrlKey: true });
 
-let latestHelpProps: { isOpen: boolean; onClose: () => void } | null = null;
-const registeredShortcuts: Array<{
-  key: string;
-  modifiers?: ShortcutOptions['modifiers'];
-  handler: (event?: KeyboardEvent) => void;
-  enabled?: boolean;
-}> = [];
-const isMacPlatformMock = vi.fn(() => true);
-const setSelectedKubeconfigsMock = vi.fn();
-const setActiveKubeconfigMock = vi.fn();
-const loadKubeconfigsMock = vi.fn();
-const closeKubeconfigMock = vi.fn();
-const kubeconfigState = {
-  selectedKubeconfig: 'cluster-1',
-  selectedKubeconfigs: ['cluster-1', 'cluster-2'],
+const press = async (key: string, modifiers: KeyboardEventInit = {}) => {
+  const event = new KeyboardEvent('keydown', {
+    key,
+    bubbles: true,
+    cancelable: true,
+    ...modifiers,
+  });
+  await act(async () => {
+    (document.activeElement ?? document.body).dispatchEvent(event);
+  });
+  await app.settle();
+  return event;
 };
 
-vi.mock('../hooks', () => ({
-  useShortcut: (options: Parameters<typeof import('../hooks').useShortcut>[0]) => {
-    registeredShortcuts.push({
-      key: options.key,
-      handler: options.handler,
-      modifiers: options.modifiers,
-      enabled: options.enabled,
-    });
-  },
-}));
+/** Delivers a native menu event, as the backend does. */
+const menu = async (name: string) => {
+  await act(async () => {
+    app.events.emit(name);
+  });
+  await app.settle();
+};
 
-vi.mock('@/utils/platform', () => ({
-  isMacPlatform: () => isMacPlatformMock(),
-}));
+const viewState = () => {
+  const state = view.owners().viewState;
+  if (!state) {
+    throw new Error('expected the workspace view state');
+  }
+  return state;
+};
 
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({
-    kubeconfigs: [],
-    selectedKubeconfigs: kubeconfigState.selectedKubeconfigs,
-    selectedKubeconfig: kubeconfigState.selectedKubeconfig,
-    selectedClusterId: kubeconfigState.selectedKubeconfig,
-    selectedClusterName: kubeconfigState.selectedKubeconfig,
-    selectedClusterIds: kubeconfigState.selectedKubeconfigs,
-    kubeconfigsLoading: false,
-    setSelectedKubeconfigs: setSelectedKubeconfigsMock,
-    closeKubeconfig: closeKubeconfigMock,
-    setActiveKubeconfig: setActiveKubeconfigMock,
-    getClusterMeta: (selection: string) => ({ id: selection, name: selection }),
-    loadKubeconfigs: loadKubeconfigsMock,
-  }),
-}));
+const helpOpen = () =>
+  document.querySelector('[role="dialog"][aria-labelledby="shortcut-help-modal-title"]') !== null;
 
-vi.mock('@core/contexts/ZoomContext', () => ({
-  useZoom: () => ({
-    zoomLevel: 100,
-    zoomIn: vi.fn(),
-    zoomOut: vi.fn(),
-    resetZoom: vi.fn(),
-    canZoomIn: true,
-    canZoomOut: true,
-  }),
-}));
+// The help keeps its surface through its 200 ms exit animation.
+const finishHelpExit = () =>
+  act(async () => {
+    await vi.advanceTimersByTimeAsync(200);
+  });
 
-vi.mock('./ShortcutHelpModal', () => ({
-  ShortcutHelpModal: (props: { isOpen: boolean; onClose: () => void }) => {
-    latestHelpProps = props;
-    return (
-      <div data-testid="shortcut-help" data-open={props.isOpen}>
-        Shortcut Help
-      </div>
-    );
-  },
-}));
+const openClusters = (names: string[]): TestCluster[] =>
+  names.map((name, index) => {
+    const cluster = app.cluster({ name, context: `ctx-${index}` });
+    app.namespaces(cluster, ['default']);
+    return cluster;
+  });
+
+beforeEach(() => {
+  // The Wails runtime's window handle (an external boundary, vitest.setup.ts).
+  vi.mocked(WailsWindow.Close).mockClear();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('GlobalShortcuts', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  it('toggles the shortcut help with Shift+?, and Escape closes it before the Application Logs panel', async () => {
+    openClusters(['dev']);
+    view = await app.render(null);
+    vi.useFakeTimers();
+    await menu('toggle-app-logs-panel');
+    expect(viewState().showAppLogsPanel).toBe(true);
 
-  const renderComponent = async (props: React.ComponentProps<typeof GlobalShortcuts>) => {
-    await act(async () => {
-      root.render(<GlobalShortcuts {...props} />);
-      await Promise.resolve();
-    });
-  };
+    await press('?', { shiftKey: true });
+    expect(helpOpen()).toBe(true);
+    await press('?', { shiftKey: true });
+    await finishHelpExit();
+    expect(helpOpen()).toBe(false);
 
-  const modifierKeys: Array<'ctrl' | 'meta' | 'shift' | 'alt'> = ['ctrl', 'meta', 'shift', 'alt'];
+    await press('?', { shiftKey: true });
+    await press('Escape');
+    await finishHelpExit();
 
-  const modifiersEqual = (
-    actual: ShortcutOptions['modifiers'],
-    expected: NonNullable<ShortcutOptions['modifiers']>
-  ) => {
-    return modifierKeys.every((mod) => {
-      const actualValue = actual?.[mod] ?? false;
-      const expectedValue = expected[mod] ?? false;
-      return actualValue === expectedValue;
-    });
-  };
+    expect(helpOpen()).toBe(false);
+    expect(viewState().showAppLogsPanel).toBe(true);
+  });
 
-  const findShortcut = (key: string, modifiers?: ShortcutOptions['modifiers']) => {
-    for (let i = registeredShortcuts.length - 1; i >= 0; i -= 1) {
-      if (
-        registeredShortcuts[i].key === key &&
-        (!modifiers || modifiersEqual(registeredShortcuts[i].modifiers, modifiers))
-      ) {
-        return registeredShortcuts[i];
-      }
-    }
-    throw new Error(
-      `Shortcut for key "${key}"${modifiers ? ` with modifiers ${JSON.stringify(modifiers)}` : ''} not registered`
+  it('keeps the help closed while Settings is open and opens it once Settings closes', async () => {
+    openClusters(['dev']);
+    view = await app.render(null);
+    await menu('open-settings');
+    expect(viewState().isSettingsOpen).toBe(true);
+
+    await press('?', { shiftKey: true });
+    expect(helpOpen()).toBe(false);
+
+    await press('Escape');
+    expect(viewState().isSettingsOpen).toBe(false);
+    await press('?', { shiftKey: true });
+    expect(helpOpen()).toBe(true);
+  });
+
+  it('closes Settings before the Application Logs panel on Escape, then the panel', async () => {
+    openClusters(['dev']);
+    view = await app.render(null);
+    await menu('toggle-app-logs-panel');
+    await menu('open-settings');
+    expect(viewState().isSettingsOpen).toBe(true);
+
+    await press('Escape');
+    expect(viewState().isSettingsOpen).toBe(false);
+    expect(viewState().showAppLogsPanel).toBe(true);
+
+    await press('Escape');
+    expect(viewState().showAppLogsPanel).toBe(false);
+  });
+
+  it('refreshes what the selected cluster shows on Cmd/Ctrl+R', async () => {
+    const [, prod] = openClusters(['dev', 'prod']);
+    view = await app.render(null);
+    await view.selectCluster(prod);
+    await app.settle();
+    app.snapshots.clearReads();
+    const jobsBefore = app.snapshots.requests().length;
+
+    const event = await press('r', primary());
+
+    expect(event.defaultPrevented).toBe(true);
+    // A manual refresh runs a refresh job for each scope the cluster shows, then rereads it.
+    expect(app.snapshots.requests().slice(jobsBefore)).toContain('POST /api/v2/refresh/namespaces');
+    expect(app.snapshots.reads().map(({ domain, scope }) => `${domain} ${scope}`)).toContain(
+      `namespaces ${prod.clusterId}|`
     );
-  };
-
-  beforeEach(() => {
-    registeredShortcuts.length = 0;
-    latestHelpProps = null;
-    setSelectedKubeconfigsMock.mockClear();
-    setActiveKubeconfigMock.mockClear();
-    loadKubeconfigsMock.mockClear();
-    loadKubeconfigsMock.mockResolvedValue(undefined);
-    closeKubeconfigMock.mockClear();
-    closeKubeconfigMock.mockResolvedValue(undefined);
-    closeWindowMock.mockClear();
-    closeWindowMock.mockResolvedValue(undefined);
-    // Clear captured Wails event handlers
-    for (const key of Object.keys(wailsEventHandlers)) {
-      delete wailsEventHandlers[key];
-    }
-    resetClusterTabOrderCacheForTesting();
-    kubeconfigState.selectedKubeconfig = 'cluster-1';
-    kubeconfigState.selectedKubeconfigs = ['cluster-1', 'cluster-2'];
-    isMacPlatformMock.mockReturnValue(true);
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
+    expect(app.snapshots.reads().every(({ scope }) => scope.startsWith(`${prod.clusterId}|`))).toBe(
+      true
+    );
   });
 
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-  });
-
-  it('toggles shortcut help overlay through the registered handler', async () => {
-    await renderComponent({});
-
-    const helpShortcut = findShortcut('?');
-    expect(latestHelpProps?.isOpen).toBe(false);
-
-    act(() => {
-      helpShortcut.handler();
-    });
-    expect(latestHelpProps?.isOpen).toBe(true);
-
-    act(() => {
-      helpShortcut.handler();
-    });
-    expect(latestHelpProps?.isOpen).toBe(false);
-  });
-
-  it('allows help immediately after help or settings closes while blocking it during settings', async () => {
-    await renderComponent({});
-    act(() => findShortcut('?').handler());
-    expect(latestHelpProps?.isOpen).toBe(true);
-    act(() => findShortcut(KeyCodes.ESCAPE).handler());
-    expect(latestHelpProps?.isOpen).toBe(false);
-    act(() => findShortcut('?').handler());
-    expect(latestHelpProps?.isOpen).toBe(true);
-    act(() => latestHelpProps?.onClose());
-
-    await renderComponent({ isSettingsOpen: true });
-    act(() => findShortcut('?').handler());
-    expect(latestHelpProps?.isOpen).toBe(false);
-    await renderComponent({ isSettingsOpen: false });
-    act(() => findShortcut('?').handler());
-    expect(latestHelpProps?.isOpen).toBe(true);
-  });
-
-  it('uses the latest overlay state when Escape moves from settings to logs', async () => {
-    const toggleSettings = vi.fn();
-    const toggleAppLogsPanel = vi.fn();
-    const callbacks = {
-      onToggleSettings: toggleSettings,
-      onToggleAppLogsPanel: toggleAppLogsPanel,
+  it('switches to the previous and next cluster tab on Cmd/Ctrl+Alt+Left and Right', async () => {
+    const [dev, stg, prod] = openClusters(['dev', 'stg', 'prod']);
+    view = await app.render(null);
+    await view.selectCluster(stg);
+    const switchTab = async (key: 'ArrowLeft' | 'ArrowRight') => {
+      await press(key, { ...primary(), altKey: true });
+      return view.owners().kubeconfig.selectedClusterId;
     };
-    await renderComponent({ ...callbacks, isSettingsOpen: true, isAppLogsPanelOpen: true });
-    act(() => findShortcut(KeyCodes.ESCAPE).handler());
-    expect(toggleSettings).toHaveBeenCalledOnce();
-    expect(toggleAppLogsPanel).not.toHaveBeenCalled();
 
-    await renderComponent({ ...callbacks, isSettingsOpen: false, isAppLogsPanelOpen: true });
-    act(() => findShortcut(KeyCodes.ESCAPE).handler());
-    expect(toggleSettings).toHaveBeenCalledOnce();
-    expect(toggleAppLogsPanel).toHaveBeenCalledOnce();
-    await renderComponent({ ...callbacks, isSettingsOpen: false, isAppLogsPanelOpen: false });
-    act(() => findShortcut(KeyCodes.ESCAPE).handler());
-    expect(toggleAppLogsPanel).toHaveBeenCalledOnce();
+    expect(await switchTab('ArrowLeft')).toBe(dev.clusterId);
+    // The first tab has no previous tab; the order does not wrap.
+    expect(await switchTab('ArrowLeft')).toBe(dev.clusterId);
+    expect(await switchTab('ArrowRight')).toBe(stg.clusterId);
+    expect(await switchTab('ArrowRight')).toBe(prod.clusterId);
+    expect(await switchTab('ArrowRight')).toBe(prod.clusterId);
   });
 
-  it('prioritises settings modal when Escape shortcut fires', async () => {
-    const toggleSettings = vi.fn();
-    const toggleAppLogsPanel = vi.fn();
+  it('closes the active cluster tab from the native Close menu, keeping the others', async () => {
+    const [dev, prod] = openClusters(['dev', 'prod']);
+    view = await app.render(null);
+    await view.selectCluster(prod);
 
-    await renderComponent({
-      onToggleSettings: toggleSettings,
-      onToggleAppLogsPanel: toggleAppLogsPanel,
-      isSettingsOpen: true,
-      isAppLogsPanelOpen: true,
-    });
+    await menu('menu:close');
 
-    await act(async () => {
-      findShortcut(KeyCodes.ESCAPE).handler();
-      await Promise.resolve();
-    });
-
-    expect(toggleSettings).toHaveBeenCalledTimes(1);
-    expect(toggleAppLogsPanel).not.toHaveBeenCalled();
+    expect(app.backend.calls('CloseClusterView')).toEqual([[app.windowName, prod.clusterId]]);
+    expect(view.owners().kubeconfig.selectedKubeconfigs).toEqual([dev.selection]);
+    expect(view.owners().kubeconfig.selectedClusterId).toBe(dev.clusterId);
+    expect(WailsWindow.Close).not.toHaveBeenCalled();
   });
 
-  it('closes the help overlay before invoking other Escape handlers', async () => {
-    const toggleAppLogsPanel = vi.fn();
+  it('closes the last cluster tab from the Close accelerator without closing the window', async () => {
+    const [dev] = openClusters(['dev']);
+    view = await app.render(null);
 
-    await renderComponent({
-      onToggleAppLogsPanel: toggleAppLogsPanel,
-      isAppLogsPanelOpen: true,
-    });
+    await press('w', primary());
 
-    await act(async () => {
-      findShortcut('?').handler();
-      await Promise.resolve();
-    });
-    expect(latestHelpProps?.isOpen).toBe(true);
-
-    await act(async () => {
-      findShortcut(KeyCodes.ESCAPE).handler();
-      await Promise.resolve();
-    });
-
-    expect(latestHelpProps?.isOpen).toBe(false);
-    expect(toggleAppLogsPanel).not.toHaveBeenCalled();
+    expect(app.backend.calls('CloseClusterView')).toEqual([[app.windowName, dev.clusterId]]);
+    expect(view.owners().kubeconfig.selectedKubeconfigs).toEqual([]);
+    expect(WailsWindow.Close).not.toHaveBeenCalled();
   });
 
-  it('falls back to toggling the Application Logs Panel when Escape fires', async () => {
-    const toggleAppLogsPanel = vi.fn();
+  it('closes the window from the native Close menu when no cluster is open', async () => {
+    view = await app.render(null);
 
-    await renderComponent({
-      onToggleAppLogsPanel: toggleAppLogsPanel,
-      isAppLogsPanelOpen: true,
-      isSettingsOpen: false,
-    });
+    await menu('menu:close');
 
-    await act(async () => {
-      findShortcut(KeyCodes.ESCAPE).handler();
-      await Promise.resolve();
-    });
-
-    expect(toggleAppLogsPanel).toHaveBeenCalledTimes(1);
-  });
-
-  it('registers refresh shortcut only when handler provided', async () => {
-    isMacPlatformMock.mockReturnValue(true);
-    await renderComponent({});
-    const refreshShortcutWithoutHandlerMeta = findShortcut('r', { meta: true });
-    expect(refreshShortcutWithoutHandlerMeta.enabled).toBe(false);
-    expect(() => findShortcut('r', { ctrl: true })).toThrow();
-
-    const refreshHandlerMac = vi.fn();
-    await renderComponent({ onRefresh: refreshHandlerMac });
-    const refreshShortcutMeta = findShortcut('r', { meta: true });
-    expect(refreshShortcutMeta.enabled).toBe(true);
-
-    act(() => {
-      refreshShortcutMeta.handler(new KeyboardEvent('keydown'));
-    });
-    expect(refreshHandlerMac).toHaveBeenCalledTimes(1);
-
-    registeredShortcuts.length = 0;
-    isMacPlatformMock.mockReturnValue(false);
-
-    await renderComponent({});
-    const refreshShortcutWithoutHandlerCtrl = findShortcut('r', { ctrl: true });
-    expect(refreshShortcutWithoutHandlerCtrl.enabled).toBe(false);
-
-    const refreshHandlerCtrl = vi.fn();
-    await renderComponent({ onRefresh: refreshHandlerCtrl });
-    const refreshShortcutCtrl = findShortcut('r', { ctrl: true });
-    expect(refreshShortcutCtrl.enabled).toBe(true);
-
-    act(() => {
-      refreshShortcutCtrl.handler(new KeyboardEvent('keydown'));
-    });
-    expect(refreshHandlerCtrl).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not register an active sessions shortcut', async () => {
-    isMacPlatformMock.mockReturnValue(true);
-    registeredShortcuts.length = 0;
-    await renderComponent({});
-
-    expect(() => findShortcut('s', { meta: true, shift: true })).toThrow('not registered');
-  });
-
-  it('closes the active cluster tab on menu:close when multiple tabs open', async () => {
-    kubeconfigState.selectedKubeconfig = 'cluster-2';
-    kubeconfigState.selectedKubeconfigs = ['cluster-1', 'cluster-2'];
-
-    await renderComponent({});
-
-    expect(wailsEventHandlers['menu:close']).toBeDefined();
-
-    await act(async () => {
-      wailsEventHandlers['menu:close']();
-      await Promise.resolve();
-    });
-
-    expect(closeKubeconfigMock).toHaveBeenCalledWith('cluster-2');
-    expect(loadKubeconfigsMock).not.toHaveBeenCalled();
-    expect(setSelectedKubeconfigsMock).not.toHaveBeenCalled();
-    expect(closeWindowMock).not.toHaveBeenCalled();
-  });
-
-  it('closes the last cluster tab on menu:close without quitting the app', async () => {
-    kubeconfigState.selectedKubeconfig = 'cluster-1';
-    kubeconfigState.selectedKubeconfigs = ['cluster-1'];
-
-    await renderComponent({});
-
-    expect(wailsEventHandlers['menu:close']).toBeDefined();
-
-    await act(async () => {
-      wailsEventHandlers['menu:close']();
-      await Promise.resolve();
-    });
-
-    expect(closeKubeconfigMock).toHaveBeenCalledWith('cluster-1');
-    expect(closeWindowMock).not.toHaveBeenCalled();
-    expect(setSelectedKubeconfigsMock).not.toHaveBeenCalled();
-  });
-
-  it('closes the current window on menu:close when no clusters are open', async () => {
-    kubeconfigState.selectedKubeconfig = '';
-    kubeconfigState.selectedKubeconfigs = [];
-
-    await renderComponent({});
-
-    expect(wailsEventHandlers['menu:close']).toBeDefined();
-
-    await act(async () => {
-      wailsEventHandlers['menu:close']();
-      await Promise.resolve();
-    });
-
-    expect(closeKubeconfigMock).not.toHaveBeenCalled();
-    expect(closeWindowMock).toHaveBeenCalledOnce();
-    expect(setSelectedKubeconfigsMock).not.toHaveBeenCalled();
-  });
-
-  it('switches to the previous cluster tab on Cmd+Alt+Left', async () => {
-    isMacPlatformMock.mockReturnValue(true);
-    registeredShortcuts.length = 0;
-    kubeconfigState.selectedKubeconfig = 'cluster-2';
-    kubeconfigState.selectedKubeconfigs = ['cluster-1', 'cluster-2', 'cluster-3'];
-
-    await renderComponent({});
-
-    act(() => {
-      findShortcut(KeyCodes.ARROW_LEFT, { meta: true, alt: true }).handler();
-    });
-
-    expect(setActiveKubeconfigMock).toHaveBeenCalledWith('cluster-1');
-  });
-
-  it('switches to the next cluster tab on Ctrl+Alt+Right', async () => {
-    isMacPlatformMock.mockReturnValue(false);
-    registeredShortcuts.length = 0;
-    kubeconfigState.selectedKubeconfig = 'cluster-2';
-    kubeconfigState.selectedKubeconfigs = ['cluster-1', 'cluster-2', 'cluster-3'];
-
-    await renderComponent({});
-
-    act(() => {
-      findShortcut(KeyCodes.ARROW_RIGHT, { ctrl: true, alt: true }).handler();
-    });
-
-    expect(setActiveKubeconfigMock).toHaveBeenCalledWith('cluster-3');
+    expect(WailsWindow.Close).toHaveBeenCalledOnce();
+    expect(app.backend.calls('CloseClusterView')).toEqual([]);
   });
 });

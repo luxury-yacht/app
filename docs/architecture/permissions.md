@@ -34,6 +34,12 @@ failure behavior, and diagnostics.
 - Single-resource domains are all-or-nothing. Multi-resource domains degrade to
   partial data when showing permitted resources is useful; partial builders
   guard nil or missing listers.
+- A resource a domain reads but does not require, such as the pods behind
+  Nodes' pod counts, is an `Optional` runtime resource. Each read checks it and
+  records the result in the domain's allowed resources, so the builder can
+  report it as missing; it never denies the domain or joins its feed
+  readiness. A builder must not check a resource its policy omits: an
+  unevaluated resource reads as denied.
 - `namespaces` is deliberately fail-fast with no degraded fallback: the sidebar
   shows an explicit permission message, and a permission-denied build still
   fires the cluster-Ready transition.
@@ -86,6 +92,14 @@ failure behavior, and diagnostics.
   permission store, specs, hooks, and feature labels:
   `frontend/src/core/capabilities`. Specs and diagnostics filters use stable
   `PERMISSION_FEATURES` keys, never display labels.
+- `useCapabilities` sends only descriptors with a `name` to `QueryPermissions`.
+  A descriptor without one resolves from the namespace permission store, so its
+  kind/verb/subresource must appear in a static spec list and its consumer must
+  query that namespace with that list (`queryNamespacesPermissions(...,
+  { specLists })`); otherwise it stays unresolved and its control stays hidden.
+  The panel queries only the object's own namespace; checks in any other
+  namespace (node-scoped pods, the node shell's debug pod namespace) query it
+  themselves.
 - Permission caches and diagnostics stay cluster-scoped. A cached permission
   may serve several features. Diagnostics matches static permission-spec
   membership at the same scope as well as the last query's feature, so one
@@ -103,9 +117,12 @@ failure behavior, and diagnostics.
   templates, and kind eligibility are backend-authored: catalog in
   `backend/objectaction`, per-kind eligibility from
   `backend/kind/kindspec.Descriptor` aggregated through `backend/kind/kindregistry`.
-  `go generate ./backend` writes
-  `frontend/src/shared/actions/objectActions.generated.ts`. Change the source
-  and regenerate; never add a frontend action matrix.
+  `go generate ./backend` writes the action vocabulary to
+  `frontend/src/shared/actions/objectActions.generated.ts` and per-kind
+  eligibility to the kind facets table
+  (`frontend/src/shared/kinds/kindFacets.generated.ts`,
+  [resource-kind-registry.md](resource-kind-registry.md)). Change the source and
+  regenerate; never add a frontend action matrix.
 - `frontend/src/shared/actions/objectActionPolicy.ts`
   (`resolveObjectActionPolicy`) projects the generated data for contract,
   policy, and port-forward helpers. Every UI-visible mutating action appears

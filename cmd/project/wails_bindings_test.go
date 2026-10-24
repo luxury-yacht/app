@@ -340,7 +340,6 @@ func TestGeneratedWailsEventsCoverBackendBoundary(t *testing.T) {
 	expected := []string{
 		"app-logs:added",
 		"app-update",
-		"backend-error",
 		"cluster:auth:failed",
 		"cluster:auth:progress",
 		"cluster:auth:recovered",

@@ -17,10 +17,11 @@ import {
 } from '@shared/events/EventsGridView';
 import { clusterEventRowIdentity } from '@shared/events/eventGridModel';
 import React, { useCallback, useMemo } from 'react';
+import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 
 interface EventViewProps {
-  error?: string | null;
+  error?: RefreshFailure | null;
 }
 
 /**
@@ -47,7 +48,6 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(({ error }) => {
     clusterId: selectedClusterId,
     domain: 'cluster-events',
     label: 'Cluster Events',
-    baseScope: 'cluster',
     selectRows: selectPayloadRows,
     viewId: 'cluster-events',
     columns,

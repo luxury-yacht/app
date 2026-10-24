@@ -1,4 +1,5 @@
-import { findGridTableRowByKey } from '@shared/components/tables/GridTable.utils';
+import { findGridTableRowByKey, revealVertically } from '@shared/components/tables/GridTable.utils';
+import { getAppZoomFactor } from '@shared/utils/appZoom';
 
 import type { RefObject } from 'react';
 import { useCallback, useEffect, useRef } from 'react';
@@ -25,6 +26,22 @@ interface GridTableKeyboardNavigation {
   moveSelectionByDelta: (delta: number) => boolean;
   jumpToIndex: (index: number) => boolean;
 }
+
+// The focused row's index when it can be revealed by its virtual position; -1 otherwise.
+const virtualRowIndex = (
+  shouldVirtualize: boolean,
+  virtualRowHeight: number,
+  focusedRowIndex: number | null
+): number => (shouldVirtualize && virtualRowHeight > 0 ? (focusedRowIndex ?? -1) : -1);
+
+// Scrolls the wrapper just far enough to show the span from rowTop to rowBottom.
+const revealVirtualRow = (wrapper: HTMLElement, rowTop: number, rowBottom: number) => {
+  if (rowTop < wrapper.scrollTop) {
+    wrapper.scrollTo({ top: rowTop, behavior: 'auto' });
+  } else if (rowBottom > wrapper.scrollTop + wrapper.clientHeight) {
+    wrapper.scrollTo({ top: rowBottom - wrapper.clientHeight, behavior: 'auto' });
+  }
+};
 
 export function useGridTableKeyboardNavigation({
   tableDataLength,
@@ -101,7 +118,8 @@ export function useGridTableKeyboardNavigation({
       }
 
       const firstRow = wrapper.querySelector<HTMLElement>('.gridtable-row');
-      const rowHeight = firstRow?.getBoundingClientRect().height || 44;
+      // The viewport height is in CSS pixels; rects are zoomed under page zoom.
+      const rowHeight = (firstRow?.getBoundingClientRect().height ?? 0) / getAppZoomFactor() || 44;
       getPageSizeRef.current = Math.max(1, Math.round(height / Math.max(rowHeight, 1)));
     };
 
@@ -109,40 +127,23 @@ export function useGridTableKeyboardNavigation({
   }, [shouldVirtualize, virtualRowHeight, viewportHeight, wrapperRef, tableDataLength]);
 
   useEffect(() => {
-    if (!shortcutsActive || !focusedRowKey) {
-      return;
-    }
     const wrapper = wrapperRef.current;
-    if (!wrapper) {
+    if (!shortcutsActive || !focusedRowKey || !wrapper) {
       return;
     }
     const allowAutoScroll = lastNavigationMethodRef.current === 'keyboard';
     const rowElement = findGridTableRowByKey(wrapper, focusedRowKey);
     if (rowElement) {
-      if (allowAutoScroll && typeof rowElement.scrollIntoView === 'function') {
-        rowElement.scrollIntoView({ block: 'nearest' });
+      if (allowAutoScroll) {
+        revealVertically(rowElement);
       }
       updateHoverForElement(rowElement);
       return;
     }
-    if (
-      allowAutoScroll &&
-      shouldVirtualize &&
-      virtualRowHeight > 0 &&
-      focusedRowIndex !== null &&
-      focusedRowIndex !== undefined &&
-      focusedRowIndex >= 0
-    ) {
-      const rowTop = getRowTop(focusedRowIndex);
-      const rowBottom = getRowTop(focusedRowIndex + 1);
-      const viewportTop = wrapper.scrollTop;
-      const viewportBottom = viewportTop + wrapper.clientHeight;
-
-      if (rowTop < viewportTop) {
-        wrapper.scrollTo({ top: rowTop, behavior: 'auto' });
-      } else if (rowBottom > viewportBottom) {
-        wrapper.scrollTo({ top: rowBottom - wrapper.clientHeight, behavior: 'auto' });
-      }
+    // A virtualized row outside the rendered window is revealed by its position.
+    const virtualIndex = virtualRowIndex(shouldVirtualize, virtualRowHeight, focusedRowIndex);
+    if (allowAutoScroll && virtualIndex >= 0) {
+      revealVirtualRow(wrapper, getRowTop(virtualIndex), getRowTop(virtualIndex + 1));
     }
   }, [
     focusedRowIndex,

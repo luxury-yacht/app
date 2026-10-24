@@ -41,6 +41,44 @@ func (s *Service) FindExactMatch(namespace, group, version, kind, name string) (
 	)
 }
 
+// ObjectLookup is the catalog's answer for one object identity.
+type ObjectLookup struct {
+	Summary Summary
+	Found   bool
+	// Absent is true only when the catalog has completely listed the object's
+	// resource, so not finding the object means the cluster does not have it.
+	Absent bool
+	// Denied names the resource (kubectl-style resource[.group]) when listing
+	// it was forbidden; a miss then proves nothing.
+	Denied string
+}
+
+// LookupObject finds an object by group, kind, namespace, and name under
+// whichever served version the catalog lists its resource, so a caller holding
+// another served version of the same object still finds it. Every part of the
+// answer comes from one publication.
+func (s *Service) LookupObject(namespace, group, kind, name string) ObjectLookup {
+	if s == nil {
+		return ObjectLookup{}
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	idx := &s.catalogIndex
+	desc, listed := idx.descriptorForGroupKind(strings.TrimSpace(group), strings.TrimSpace(kind))
+	if !listed {
+		return ObjectLookup{}
+	}
+	if summary, found := idx.findExact(normalizeLookupNamespace(namespace), desc.Group, desc.Version, desc.Kind, strings.TrimSpace(name)); found {
+		return ObjectLookup{Summary: summary, Found: true}
+	}
+	resource := deniedResourceName(desc)
+	if _, denied := idx.deniedResources[resource]; denied {
+		return ObjectLookup{Denied: resource}
+	}
+	_, complete := idx.completeResources[desc.GVR().String()]
+	return ObjectLookup{Absent: complete && idx.cachesAreReady()}
+}
+
 // FindByUID resolves a single catalog item by UID within this cluster's
 // catalog snapshot.
 func (s *Service) FindByUID(uid string) (Summary, bool) {

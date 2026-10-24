@@ -1,13 +1,11 @@
 /*
  * backend/objectcatalog/ingest_source.go
  *
- * The catalog's side of the owned-reflector ingest cutover. For ingest-owned (cut)
- * kinds the shared informer factory no longer caches the typed object, so the
- * catalog reads those kinds two ways from the ingest manager instead:
+ * The catalog reads built-in kinds two ways from their owned reflectors:
  *
  *   - the full collect path reads CatalogRows(gvr) (Summaries projected at intake);
  *   - incremental updates arrive through a Catalog-half ingest Sink that applies the
- *     same per-object summary set/delete the shared-informer watch handler did.
+ *     per-object summary set/delete.
  *
  * SummaryProjector is registered with the ingest manager (before it starts) so the
  * Catalog half of each cut kind's bundle is the exact Summary the live collect path
@@ -17,12 +15,14 @@
 package objectcatalog
 
 import (
+	"context"
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
+	"github.com/luxury-yacht/app/backend/kind/kindspec"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcekind"
 )
@@ -44,48 +44,44 @@ func SummaryProjector(clusterID string, identity resourcekind.Identity) func(met
 	}
 }
 
-// catalogIngestOwnedGVRs is the set of GVRs cut over to the ingest path, derived
-// from the single kind registry's IngestOwned facet. The catalog reads these from
-// the ingest manager rather than the shared informer; flipping the facet on the next
-// domain's kinds adds them here automatically.
-var catalogIngestOwnedGVRs = kindregistry.IngestOwnedGVRs()
+// catalogIngestGVRs is the set of built-in GVRs the catalog collects from their
+// owned reflectors: every registry kind except those the catalog excludes
+// (CatalogNone). Events are excluded, so their row volume never reaches the
+// catalog's sink.
+var catalogIngestGVRs = collectedIngestGVRs()
 
-// isIngestOwned reports whether a GroupResource is served by the ingest path. The
-// catalog keys its collect/watch plans by GroupResource, so this resolves the cut
-// set's GVRs to their GroupResource for membership.
-func isIngestOwned(gr schema.GroupResource) bool {
-	for gvr := range catalogIngestOwnedGVRs {
-		if gvr.GroupResource() == gr {
-			return true
+func collectedIngestGVRs() map[schema.GroupVersionResource]struct{} {
+	out := make(map[schema.GroupVersionResource]struct{})
+	for _, descriptor := range kindregistry.All {
+		if descriptor.CatalogSource != kindspec.CatalogNone {
+			out[descriptor.Identity.GVR()] = struct{}{}
 		}
 	}
-	return false
+	return out
 }
 
-// collectViaIngest serves a cut kind's full collect from the ingest manager's
-// CatalogRows (Summaries projected at intake) instead of a shared/dynamic lister.
-// It returns handled=false (so the caller falls through to the next source) only
-// when the kind is not ingest-owned or no ingest source is configured. For a cut
-// kind it ALWAYS handles the collect, so the catalog never falls through to the
-// shared factory for a GVR the factory no longer registers. Static cut kinds
-// report an incomplete collect until their own ingest store has synced/settled.
-// Summaries for a namespaced kind are filtered to the requested namespaces,
-// matching the lister path's per-namespace scope.
-func (s *Service) collectViaIngest(desc Descriptor, namespaces []string, agg *streamingAggregator) ([]Summary, bool, error) {
+// collectViaIngest serves a built-in kind's full collect from its owned
+// reflector's CatalogRows (Summaries projected at intake). It returns
+// handled=false (so the caller falls through to the next source) only when the
+// kind is not collected from ingest or no ingest source is configured. A
+// built-in kind reports an incomplete collect until its store has settled;
+// after that, partitions without a synced watch (skipped by the permission
+// filter, or degraded) are collected with LIST, like a dynamic source's.
+// Summaries for a namespaced kind are filtered to the requested namespaces.
+func (s *Service) collectViaIngest(ctx context.Context, desc Descriptor, namespaces []string, agg *streamingAggregator) ([]Summary, bool, error) {
 	source := s.deps.IngestSource
 	if source == nil {
 		return nil, false, nil
 	}
 	gvr := desc.GVR()
-	_, staticCut := catalogIngestOwnedGVRs[gvr]
+	_, staticCut := catalogIngestGVRs[gvr]
 	if !staticCut {
 		return nil, false, nil
 	}
 	if !source.HasSyncedFor(gvr) {
 		return nil, true, fmt.Errorf("catalog ingest store for %s is not synced", gvr)
 	}
-	summaries := catalogSummaries(source.CatalogRows(gvr), requestedNamespaceSet(desc, namespaces))
-	return emitSummaries(agg, summaries, nil, true)
+	return s.collectIngestPartitions(ctx, desc, namespaces, staticIngestPartitions(source, gvr), agg)
 }
 
 // catalogSummaries keeps only catalog projections in the requested namespace set.
@@ -169,15 +165,6 @@ func (s *Service) publishIngestSummary(desc Descriptor, summary Summary, deleted
 	}
 }
 
-func (s *Service) replaceIngestCatalogSummaries(gvr schema.GroupVersionResource, rows []Summary) {
-	if !s.syncMu.TryLock() {
-		s.queueIngestReconciliation(gvr)
-		return
-	}
-	defer s.syncMu.Unlock()
-	s.replaceIngestCatalogSummariesLocked(gvr, rows)
-}
-
 func (s *Service) replaceIngestCatalogSummariesLocked(gvr schema.GroupVersionResource, rows []Summary) {
 	desc, ok := s.resolveIngestDescriptor(gvr)
 	if !ok {
@@ -232,7 +219,7 @@ func (s *Service) resolveIngestDescriptor(gvr schema.GroupVersionResource) (Desc
 // ingestCatalogSink adapts the catalog's incremental summary apply to an ingest
 // Catalog-half Sink. The reflector delivers the already-projected Summary on
 // Upsert/Delete (never the source object), so the sink keys off the Summary itself —
-// exactly the data the shared-informer watch handler used to derive from the object.
+// so no source object is needed.
 type ingestCatalogSink struct {
 	service *Service
 	gvr     schema.GroupVersionResource
@@ -254,8 +241,12 @@ func (s ingestCatalogSink) Delete(row interface{}) {
 	s.service.applyIngestCatalogSummary(s.gvr, summary, true)
 }
 
-func (s ingestCatalogSink) Replace(rows []interface{}) {
-	s.service.replaceIngestCatalogSummaries(s.gvr, catalogSummaries(rows, nil))
+// Replace receives the store's whole row set on a subscription replay or a
+// relist. Those rows cover only the watched partitions (plus rows restored
+// into skipped ones), so the kind is reconciled by partition from its store
+// rather than replaced with them.
+func (s ingestCatalogSink) Replace([]interface{}) {
+	s.service.queueIngestReconciliation(s.gvr)
 }
 
 // Coalesce contention by kind, then reread its authoritative store after the
@@ -277,6 +268,17 @@ func (s *Service) queueIngestReconciliation(gvr schema.GroupVersionResource) {
 	done := make(chan struct{})
 	s.ingestDrainDone = done
 	go s.drainIngestReconciliation(done)
+}
+
+// dropPendingIngestReconciliation removes the queued kinds in gvrs, for a
+// caller that owns syncMu and reconciles them itself. Other queued kinds, such
+// as custom resources, stay queued for the drain worker.
+func (s *Service) dropPendingIngestReconciliation(gvrs map[schema.GroupVersionResource]struct{}) {
+	s.ingestPendingMu.Lock()
+	defer s.ingestPendingMu.Unlock()
+	for gvr := range gvrs {
+		delete(s.ingestPending, gvr)
+	}
 }
 
 func (s *Service) drainIngestReconciliation(done chan struct{}) {

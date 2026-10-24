@@ -21,6 +21,7 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useRefreshDomainHandle } from '@/core/data-access';
+import { failureMessage } from '@/core/refresh/refreshFailure';
 import type { ObjectMapSnapshotPayload } from '@/core/refresh/types';
 import { errorHandler } from '@/utils/errorHandler';
 
@@ -76,7 +77,7 @@ const NsViewMap: React.FC<NsViewMapProps> = ({ namespace }) => {
       <div className="namespace-map__body">
         {snapshot.error && !payload && (
           <div className="namespace-map__message namespace-map__message--error">
-            <ErrorSurface kind="reported" message={snapshot.error} />
+            <ErrorSurface kind="reported" message={failureMessage(snapshot.error)} />
           </div>
         )}
         {!!loading && <div className="namespace-map__message">Loading namespace map...</div>}

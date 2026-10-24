@@ -2,14 +2,14 @@ import { CurrentObjectPanelContext } from '@modules/object-panel/hooks/useObject
 import type { Meta, StoryObj } from '@storybook/react';
 import type { CustomResourceDetails } from '@/core/refresh/types';
 import { SidebarProvidersDecorator } from '../../../../../../../.storybook/decorators/SidebarProvidersDecorator';
-import { getOverviewDescriptor } from './descriptorRegistry';
+import { resolveOverviewDescriptor } from './descriptorRegistry';
 import { OverviewRenderer } from './OverviewRenderer';
 import '../DetailsTab.css';
 import '../../shared.css';
 import '@/App.css';
 
 function PrometheusOverviewPreview({ detail }: Readonly<{ detail: CustomResourceDetails }>) {
-  const descriptor = getOverviewDescriptor(detail.kind, detail);
+  const descriptor = resolveOverviewDescriptor({ detailType: 'customresource', details: detail });
   return (
     <CurrentObjectPanelContext.Provider
       value={{ objectData: null, panelId: null, creationTimestamp: '2026-09-01T12:00:00Z' }}
@@ -18,7 +18,7 @@ function PrometheusOverviewPreview({ detail }: Readonly<{ detail: CustomResource
         <div className="object-panel-section">
           <div className="object-panel-section-title">Overview</div>
           <div className="object-panel-section-grid">
-            {descriptor && <OverviewRenderer descriptor={descriptor} data={detail as never} />}
+            {descriptor && <OverviewRenderer descriptor={descriptor} data={detail} />}
           </div>
         </div>
       </div>

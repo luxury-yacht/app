@@ -2,6 +2,7 @@ package domainpermissions
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
@@ -88,11 +89,10 @@ func TestRuntimeAccessKeepsOptionalAttentionSourcesWhenAllAreDenied(t *testing.T
 	}
 }
 
-// The namespace-helm domain reads from the CLUSTER-WIDE helm-storage factory,
-// so its runtime policy must stay a cluster-wide check under a namespace
-// scope (docs/architecture/namespace-scope.md): a per-namespace secrets grant must
-// not register a domain whose source can only 403.
-func TestRuntimeAccessHelmPolicyStaysClusterWideUnderScope(t *testing.T) {
+// The namespace-helm domain reads Helm releases from the Secrets ingest
+// partitions, so under a namespace scope a per-namespace secrets grant
+// registers it, exactly like namespace-config (docs/architecture/namespace-scope.md).
+func TestRuntimeAccessHelmPolicyFollowsTheNamespaceScope(t *testing.T) {
 	access := NewRuntimeAccess()
 	checker := permissions.NewCheckerWithReview("cluster-a", 0, func(_ context.Context, _, _, _, namespace string) (bool, error) {
 		// Allowed per-namespace, denied cluster-wide.
@@ -102,13 +102,43 @@ func TestRuntimeAccessHelmPolicyStaysClusterWideUnderScope(t *testing.T) {
 		return resource == "secrets" || resource == "configmaps"
 	})
 
-	decision, err := access.Check(context.Background(), "namespace-helm", checker)
-	require.NoError(t, err)
-	require.False(t, decision.Allowed, "cluster-wide helm source denied ⇒ domain denied, even with per-namespace grants")
+	for _, domainName := range []string{"namespace-helm", "namespace-config"} {
+		decision, err := access.Check(context.Background(), domainName, checker)
+		require.NoError(t, err)
+		require.True(t, decision.Allowed, "%s must register on per-namespace grants", domainName)
+	}
+}
 
-	// A domain whose source IS scoped (ingest-owned kinds) registers on the
-	// strength of the per-namespace grant.
-	decision, err = access.Check(context.Background(), "namespace-config", checker)
-	require.NoError(t, err)
-	require.True(t, decision.Allowed)
+// The Nodes table joins each node's pods for its pod counts. Its policy checks
+// pods on every request without requiring them: readable pods are reported
+// allowed, and denied or unevaluable pods are reported not allowed while the
+// Nodes view still loads.
+func TestRuntimeAccessChecksNodePodsWithoutRequiringThem(t *testing.T) {
+	access := NewRuntimeAccess()
+	for _, tc := range []struct {
+		name     string
+		pods     func() (bool, error)
+		wantPods bool
+	}{
+		{name: "pods readable", pods: func() (bool, error) { return true, nil }, wantPods: true},
+		{name: "pods denied", pods: func() (bool, error) { return false, nil }, wantPods: false},
+		{name: "pods check failed", pods: func() (bool, error) { return false, errors.New("review failed") }, wantPods: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			checker := permissions.NewCheckerWithReview("cluster-a", 0, func(_ context.Context, _, resource, _, _ string) (bool, error) {
+				if resource == "pods" {
+					return tc.pods()
+				}
+				return true, nil
+			})
+
+			decision, err := access.Check(context.Background(), "nodes", checker)
+			require.NoError(t, err)
+			require.True(t, decision.Allowed)
+			require.Equal(t, AllowedResources{
+				permissions.ResourceKey("", "nodes"): true,
+				permissions.ResourceKey("", "pods"):  tc.wantPods,
+			}, decision.AllowedResources)
+		})
+	}
 }

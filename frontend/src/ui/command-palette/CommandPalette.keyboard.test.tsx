@@ -1,500 +1,215 @@
+/**
+ * frontend/src/ui/command-palette/CommandPalette.keyboard.test.tsx
+ *
+ * The command palette inside the app's keyboard system: as a modal surface it
+ * keeps Tab inside itself and returns focus to the control that invoked it;
+ * the application-menu accelerators reach it while it is open (Cmd/Ctrl+
+ * Shift+P leaves an open palette and its query alone, Cmd/Ctrl+O switches it
+ * to the kubeconfig picker), as does its own Cmd/Ctrl+Shift+N (to the
+ * namespace picker); and no entry point opens it over another modal.
+ * Runs in provider mode inside the real app shell, whose KeyboardProvider,
+ * application-menu shortcuts, and menu-command wiring (App.tsx AppContent)
+ * are the production ones; only the backend boundary is faked
+ * (test-utils/appState). jsdom's navigator is not a Mac, so the frontend
+ * handles the accelerators as it does with the custom window frame on
+ * Windows and Linux.
+ */
+
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
-import { KeyboardProvider } from '@ui/shortcuts/context';
-import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
-import React, { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { backend } from '@/core/backend-api/models';
-import { eventBus } from '@/core/events';
+import { act, useId, useRef } from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
-import { ApplicationMenuCommandProvider } from '@/ui/layout/ApplicationMenuCommandContext';
-import { ApplicationMenuShortcuts } from '@/ui/shortcuts/components/ApplicationMenuShortcuts';
+import { isMacPlatform } from '@/utils/platform';
 import { CommandPalette } from './CommandPalette';
 import type { Command } from './CommandPaletteCommands';
 
-const openWithObjectMock = vi.fn();
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
 
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({
-    openWithObject: openWithObjectMock,
-  }),
-}));
+const command = (id: string, label: string, category: string): Command => ({
+  id,
+  label,
+  category,
+  action: vi.fn(),
+});
 
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedClusterId: 'alpha:ctx' }),
-}));
-
-vi.mock('@hooks/useShortNames', () => ({
-  useShortNames: () => false,
-}));
-
-vi.mock('@/core/refresh/client', () => ({
-  fetchSnapshot: vi.fn().mockResolvedValue({ snapshot: null }),
-}));
-
-vi.mock('@/utils/platform', () => ({
-  isMacPlatform: () => false,
-  usesCustomWindowFrame: () => true,
-}));
-
-const dispatchOpenCommand = () => eventBus.emit('command-palette:open');
-
-const macPlatform =
-  typeof navigator !== 'undefined' &&
-  /Mac/i.test((navigator.platform || '') + (navigator.userAgent || ''));
-
-const dispatchNamespaceShortcut = (target: EventTarget = document) => {
-  const event = new KeyboardEvent('keydown', {
-    key: 'N',
-    bubbles: true,
-    cancelable: true,
-    shiftKey: true,
-    ...(macPlatform ? { metaKey: true } : { ctrlKey: true }),
-  });
-
-  if (target instanceof Node) {
-    target.dispatchEvent(event);
-  } else {
-    document.dispatchEvent(event);
-  }
-
-  return event;
-};
-
-function BlockingSurfaceHarness() {
-  const ref = React.useRef<HTMLDivElement>(null);
-
-  useKeyboardSurface({
-    kind: 'modal',
-    rootRef: ref,
-    active: true,
-    blocking: true,
-  });
-
-  return <div ref={ref}>Blocking surface</div>;
-}
-
-function SharedModalHarness() {
-  const modalRef = React.useRef<HTMLDivElement>(null);
-  const titleId = React.useId();
-
-  useModalFocusTrap({
-    ref: modalRef,
-    disabled: false,
-  });
-
+/** A shared app modal (ModalSurface with the modal focus trap), open. */
+function OpenModal() {
+  const modalRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  useModalFocusTrap({ ref: modalRef, disabled: false });
   return (
     <ModalSurface
       modalRef={modalRef}
       labelledBy={titleId}
       onClose={() => undefined}
-      containerClassName="test-blocking-modal"
       closeOnBackdrop={false}
     >
-      <div className="modal-header">
-        <h2 id={titleId}>Blocking modal</h2>
-      </div>
-      <div className="modal-content">
-        <button type="button">Inside modal</button>
-      </div>
+      <h2 id={titleId}>Blocking modal</h2>
+      <button type="button">Inside modal</button>
     </ModalSurface>
   );
 }
 
-describe('CommandPalette keyboard integration', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+const primary = (): KeyboardEventInit => (isMacPlatform() ? { metaKey: true } : { ctrlKey: true });
 
-  beforeAll(() => {
-    if (!Element.prototype.scrollIntoView) {
-      Element.prototype.scrollIntoView = vi.fn();
-    }
+const press = async (key: string, modifiers: KeyboardEventInit = {}) => {
+  const event = new KeyboardEvent('keydown', {
+    key,
+    bubbles: true,
+    cancelable: true,
+    ...modifiers,
   });
-
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    openWithObjectMock.mockReset();
+  await act(async () => {
+    (document.activeElement ?? document.body).dispatchEvent(event);
   });
+  await app.settle();
+  return event;
+};
 
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-    vi.useRealTimers();
+/** Delivers a native menu event, as the backend does. */
+const menu = async (name: string) => {
+  await act(async () => {
+    app.events.emit(name);
   });
+  await app.settle();
+};
 
-  it('contains Tab in the palette and restores the invoking control on Escape', async () => {
-    await act(async () => {
-      root.render(
-        <KeyboardProvider>
-          <button type="button" data-testid="palette-invoker">
-            Open
-          </button>
-          <CommandPalette commands={[]} />
-        </KeyboardProvider>
-      );
-    });
+const palette = () => document.querySelector<HTMLDialogElement>('dialog.command-palette');
+
+const input = () =>
+  requireValue(
+    document.querySelector<HTMLInputElement>('.command-palette [role="combobox"]'),
+    'expected the command-palette input'
+  );
+
+const groups = () =>
+  Array.from(document.querySelectorAll('.command-palette legend')).map((legend) =>
+    legend.textContent?.trim()
+  );
+
+beforeEach(() => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['default']);
+});
+
+describe('CommandPalette in the keyboard system', () => {
+  it('keeps Tab inside the open palette and returns focus to its invoker on Escape', async () => {
+    view = await app.render(null);
+    await view.show(
+      <>
+        <button type="button">Invoker</button>
+        <CommandPalette commands={[]} />
+      </>
+    );
     const invoker = requireValue(
-      document.querySelector<HTMLElement>('[data-testid="palette-invoker"]'),
-      'invoker'
+      view.container.querySelector<HTMLButtonElement>('button'),
+      'expected the invoker'
     );
     invoker.focus();
-    await act(async () => {
-      eventBus.emit('command-palette:open');
-    });
-    const input = requireValue(
-      document.querySelector<HTMLInputElement>('.command-palette-input'),
-      'palette input'
-    );
-    const dialog = requireValue(input.closest('.command-palette'), 'palette dialog');
-    expect(dialog).toBeInstanceOf(HTMLDialogElement);
-    expect(dialog.hasAttribute('open')).toBe(true);
+
+    await menu('open-command-palette');
+
+    const dialog = requireValue(palette(), 'expected the palette');
+    expect(dialog.open).toBe(true);
+    // A native dialog supplies the dialog role itself.
     expect(dialog.hasAttribute('role')).toBe(false);
-    expect(container.hasAttribute('inert')).toBe(true);
+    expect(view.container.hasAttribute('inert')).toBe(true);
     for (const shiftKey of [false, true]) {
-      const event = new KeyboardEvent('keydown', {
-        key: 'Tab',
-        shiftKey,
-        bubbles: true,
-        cancelable: true,
-      });
-      await act(async () => {
-        input.dispatchEvent(event);
-      });
+      const event = await press('Tab', { shiftKey });
       expect(event.defaultPrevented).toBe(true);
-      expect(document.activeElement?.closest('.command-palette')).not.toBeNull();
+      expect(dialog.contains(document.activeElement)).toBe(true);
     }
-    await act(async () => {
-      input.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
-      );
-    });
+
+    await press('Escape');
+
+    expect(palette()).toBeNull();
     expect(document.activeElement).toBe(invoker);
   });
 
-  it('keeps an open palette intact when its application accelerator is pressed again', async () => {
-    const execute = (menuCommand: backend.ApplicationMenuCommand) => {
-      if (menuCommand === backend.ApplicationMenuCommand.ApplicationMenuCommandCommandPalette) {
-        eventBus.emit('command-palette:open');
-      }
-    };
+  it('keeps an open palette and its query when the palette is invoked again', async () => {
+    view = await app.render(null);
+    await view.show(<CommandPalette commands={[command('first', 'First', 'Application')]} />);
+    await press('p', { ...primary(), shiftKey: true });
     await act(async () => {
-      root.render(
-        <KeyboardProvider>
-          <ApplicationMenuCommandProvider execute={execute}>
-            <ApplicationMenuShortcuts />
-            <CommandPalette
-              commands={[{ id: 'first', label: 'First', category: 'Application', action: vi.fn() }]}
-            />
-          </ApplicationMenuCommandProvider>
-        </KeyboardProvider>
-      );
-      await Promise.resolve();
-    });
-    await act(async () => {
-      eventBus.emit('command-palette:open');
-      await Promise.resolve();
+      const field = input();
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(field, 'fir');
+      field.dispatchEvent(new InputEvent('input', { bubbles: true }));
     });
 
-    const input = requireValue(
-      document.querySelector<HTMLInputElement>('.command-palette-input'),
-      'expected command palette input'
+    await press('p', { ...primary(), shiftKey: true });
+    await menu('open-command-palette');
+
+    expect(palette()).not.toBeNull();
+    expect(input().value).toBe('fir');
+  });
+
+  it('switches an open palette to the kubeconfig picker on Cmd/Ctrl+O', async () => {
+    view = await app.render(null);
+    await view.show(
+      <CommandPalette
+        commands={[
+          command('first', 'First', 'Application'),
+          command('kc-a', 'cluster-a', 'Kubeconfigs'),
+        ]}
+      />
     );
-    await act(async () => {
-      input.value = 'fir';
-      input.dispatchEvent(new InputEvent('input', { bubbles: true }));
-      input.dispatchEvent(
-        new KeyboardEvent('keydown', {
-          key: 'p',
-          ctrlKey: true,
-          shiftKey: true,
-          bubbles: true,
-          cancelable: true,
-        })
-      );
-      await Promise.resolve();
-    });
+    await menu('open-command-palette');
+    expect(groups()).toEqual(['Application', 'Kubeconfigs']);
 
-    expect(document.querySelector('.command-palette')).not.toBeNull();
-    expect(input.value).toBe('fir');
+    await press('o', primary());
+
+    expect(palette()).not.toBeNull();
+    expect(groups()).toEqual(['Kubeconfigs']);
   });
 
-  it('switches an open palette into kubeconfig mode when Ctrl+O is pressed', async () => {
-    const execute = (menuCommand: backend.ApplicationMenuCommand) => {
-      if (menuCommand === backend.ApplicationMenuCommand.ApplicationMenuCommandOpenCluster) {
-        eventBus.emit('command-palette:open-kubeconfigs');
-      }
-    };
-    await act(async () => {
-      root.render(
-        <KeyboardProvider>
-          <ApplicationMenuCommandProvider execute={execute}>
-            <ApplicationMenuShortcuts />
-            <CommandPalette
-              commands={[
-                { id: 'kc-a', label: 'cluster-a', category: 'Kubeconfigs', action: vi.fn() },
-              ]}
-            />
-          </ApplicationMenuCommandProvider>
-        </KeyboardProvider>
-      );
-      await Promise.resolve();
-    });
-    await act(async () => {
-      eventBus.emit('command-palette:open');
-      await Promise.resolve();
-    });
-
-    const input = requireValue(
-      document.querySelector<HTMLInputElement>('.command-palette-input'),
-      'expected command palette input'
+  it('switches an open palette to the namespace picker on Cmd/Ctrl+Shift+N', async () => {
+    view = await app.render(null);
+    await view.show(
+      <CommandPalette
+        commands={[
+          command('first', 'First', 'Application'),
+          command('ns-prod', 'prod', 'Namespaces'),
+        ]}
+      />
     );
-    await act(async () => {
-      input.dispatchEvent(
-        new KeyboardEvent('keydown', {
-          key: 'o',
-          ctrlKey: true,
-          bubbles: true,
-          cancelable: true,
-        })
-      );
-      await Promise.resolve();
-    });
+    await menu('open-command-palette');
+    expect(groups()).toEqual(['Application', 'Namespaces']);
 
-    expect(document.querySelector('.command-palette')).not.toBeNull();
-    expect(input.placeholder).toBe('Select a kubeconfig...');
+    await press('N', { ...primary(), shiftKey: true });
+
+    expect(palette()).not.toBeNull();
+    expect(groups()).toEqual(['Namespaces']);
   });
 
-  it('navigates and activates results through the palette surface while the input is focused', async () => {
-    vi.useFakeTimers();
-    const firstAction = vi.fn();
-    const secondAction = vi.fn();
-    const commands: Command[] = [
-      { id: 'first', label: 'First', category: 'Application', action: firstAction },
-      { id: 'second', label: 'Second', category: 'Application', action: secondAction },
-    ];
-
-    await act(async () => {
-      root.render(
-        <KeyboardProvider>
-          <CommandPalette commands={commands} />
-        </KeyboardProvider>
-      );
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      dispatchOpenCommand();
-      await Promise.resolve();
-    });
-
-    const input = document.querySelector<HTMLInputElement>('.command-palette-input');
-    expect(input).not.toBeNull();
-    expect(document.activeElement).toBe(input);
-
-    await act(async () => {
-      input?.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true })
-      );
-      await Promise.resolve();
-    });
-
-    const items = Array.from(document.querySelectorAll<HTMLDivElement>('.command-palette-item'));
-    expect(items[1]?.classList.contains('selected')).toBe(true);
-
-    await act(async () => {
-      input?.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
-      );
-      await Promise.resolve();
-    });
-
-    expect(document.querySelector('.command-palette')).toBeNull();
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(150);
-    });
-
-    expect(secondAction).toHaveBeenCalledTimes(1);
-    expect(firstAction).not.toHaveBeenCalled();
-  });
-
-  it('closes on Escape through the palette surface while the input is focused', async () => {
-    const commands: Command[] = [
-      { id: 'first', label: 'First', category: 'Application', action: vi.fn() },
-    ];
-
-    await act(async () => {
-      root.render(
-        <KeyboardProvider>
-          <CommandPalette commands={commands} />
-        </KeyboardProvider>
-      );
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      dispatchOpenCommand();
-      await Promise.resolve();
-    });
-
-    const input = document.querySelector<HTMLInputElement>('.command-palette-input');
-    expect(input).not.toBeNull();
-    expect(document.activeElement).toBe(input);
-
-    await act(async () => {
-      input?.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
-      );
-      await Promise.resolve();
-    });
-
-    expect(document.querySelector('.command-palette')).toBeNull();
-  });
-
-  it('closes on the first Escape when opened directly in kubeconfig mode', async () => {
-    const commands: Command[] = [
-      { id: 'kc-a', label: 'cluster-a', category: 'Kubeconfigs', action: vi.fn() },
-    ];
-
-    await act(async () => {
-      root.render(
-        <KeyboardProvider>
-          <CommandPalette commands={commands} />
-        </KeyboardProvider>
-      );
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      eventBus.emit('command-palette:open-kubeconfigs');
-      await Promise.resolve();
-    });
-
-    expect(document.querySelector('.command-palette')).not.toBeNull();
-
-    const input = document.querySelector<HTMLInputElement>('.command-palette-input');
-    await act(async () => {
-      input?.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
-      );
-      await Promise.resolve();
-    });
-
-    expect(document.querySelector('.command-palette')).toBeNull();
-  });
-
-  it('opens directly in namespaces mode on the namespace shortcut and closes on first Escape', async () => {
-    const commands: Command[] = [
-      { id: 'ns-prod', label: 'prod', category: 'Namespaces', action: vi.fn() },
-      { id: 'view-x', label: 'Toggle X', category: 'View', action: vi.fn() },
-    ];
-
-    await act(async () => {
-      root.render(
-        <KeyboardProvider>
-          <CommandPalette commands={commands} />
-        </KeyboardProvider>
-      );
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      dispatchNamespaceShortcut();
-      await Promise.resolve();
-    });
-
-    const input = requireValue(
-      document.querySelector<HTMLInputElement>('.command-palette-input'),
-      'expected the command-palette input'
+  it('does not open from any entry point while another modal is open', async () => {
+    view = await app.render(null);
+    await view.show(
+      <>
+        <OpenModal />
+        <CommandPalette
+          commands={[
+            command('first', 'First', 'Application'),
+            command('ns-prod', 'prod', 'Namespaces'),
+            command('kc-a', 'cluster-a', 'Kubeconfigs'),
+          ]}
+        />
+      </>
     );
-    expect(input.placeholder).toBe('Select a namespace...');
-    const labels = Array.from(
-      document.querySelectorAll<HTMLDivElement>('.command-palette-item-label')
-    ).map((el) => el.textContent);
-    expect(labels).toEqual(['prod']);
 
-    await act(async () => {
-      input?.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
-      );
-      await Promise.resolve();
-    });
+    await menu('open-command-palette');
+    await press('p', { ...primary(), shiftKey: true });
+    await menu('open-cluster');
+    await press('N', { ...primary(), shiftKey: true });
 
-    expect(document.querySelector('.command-palette')).toBeNull();
-  });
-
-  it('does not open in namespaces mode while another blocking surface is active', async () => {
-    const commands: Command[] = [
-      { id: 'ns-prod', label: 'prod', category: 'Namespaces', action: vi.fn() },
-    ];
-
-    await act(async () => {
-      root.render(
-        <KeyboardProvider>
-          <BlockingSurfaceHarness />
-          <CommandPalette commands={commands} />
-        </KeyboardProvider>
-      );
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      dispatchNamespaceShortcut();
-      await Promise.resolve();
-    });
-
-    expect(document.querySelector('.command-palette')).toBeNull();
-  });
-
-  it('does not open while another blocking surface is active', async () => {
-    const commands: Command[] = [
-      { id: 'first', label: 'First', category: 'Application', action: vi.fn() },
-    ];
-
-    await act(async () => {
-      root.render(
-        <KeyboardProvider>
-          <BlockingSurfaceHarness />
-          <CommandPalette commands={commands} />
-        </KeyboardProvider>
-      );
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      dispatchOpenCommand();
-      await Promise.resolve();
-    });
-
-    expect(document.querySelector('.command-palette')).toBeNull();
-  });
-
-  it('does not open while a shared modal surface is active', async () => {
-    const commands: Command[] = [
-      { id: 'first', label: 'First', category: 'Application', action: vi.fn() },
-    ];
-
-    await act(async () => {
-      root.render(
-        <KeyboardProvider>
-          <SharedModalHarness />
-          <CommandPalette commands={commands} />
-        </KeyboardProvider>
-      );
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      dispatchOpenCommand();
-      await Promise.resolve();
-    });
-
-    expect(document.querySelector('.command-palette')).toBeNull();
-    expect(document.querySelector('.test-blocking-modal')).not.toBeNull();
+    expect(palette()).toBeNull();
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
   });
 });

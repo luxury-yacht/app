@@ -1,41 +1,34 @@
-import { ZoomProvider } from '@core/contexts/ZoomContext';
+/**
+ * frontend/src/ui/dockable/DockablePanel.lifetime.test.tsx
+ *
+ * Moving, closing, and reordering dock tabs keeps every other tab's YAML
+ * draft and its lifecycle guard. Runs inside the production shell (keyboard,
+ * zoom, cluster selection, and the real lifecycle guard registry), with only
+ * the backend boundary faked (test-utils/appState).
+ */
+
 import { getYamlPanelBlockReason } from '@modules/object-panel/components/ObjectPanel/Yaml/yamlPanelGuard';
 import { useYamlTransaction } from '@modules/object-panel/components/ObjectPanel/Yaml/yamlTransaction';
 import DockablePanel from '@ui/dockable/DockablePanel';
 import { DockablePanelProvider, useDockablePanelContext } from '@ui/dockable/DockablePanelProvider';
 import { PanelErrorBoundary } from '@ui/errors/PanelErrorBoundary';
-import { KeyboardProvider } from '@ui/shortcuts/context';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import {
-  PanelLifecycleGuardProvider,
   usePanelLifecycleGuard,
   usePanelLifecycleGuardRegistry,
 } from '@/core/panel-windows/panelLifecycleGuards';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { DockablePanelTestHost } from '@/test-utils/DockablePanelTestHost';
 import { requireValue } from '@/test-utils/requireValue';
 
-vi.mock('@core/backend-api', () => ({
-  GetZoomLevel: vi.fn().mockResolvedValue(100),
-  SetZoomLevel: vi.fn().mockResolvedValue(undefined),
-}));
-vi.mock('@/utils/errorHandler', () => ({
-  errorHandler: { warn: vi.fn(), handle: vi.fn() },
-  reportOperationalError: vi.fn(),
-}));
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: vi.fn(() => ({
-    selectedClusterId: 'cluster-a',
-    selectedClusterIds: ['cluster-a'],
-  })),
-}));
-vi.mock('@/core/data-access', () => ({
-  requestRefreshDomain: vi.fn().mockResolvedValue(undefined),
-  setRefreshDomainEnabled: vi.fn(),
-  readObjectYAMLForRef: vi.fn(),
-  requestData: vi.fn(),
-}));
+const app = installAppStateHarness();
+let view: MountedApp;
+let dev: TestCluster;
 
 const transactions = new Map<string, ReturnType<typeof useYamlTransaction>>();
 let dock: ReturnType<typeof useDockablePanelContext>;
@@ -45,12 +38,15 @@ const seed = (id: string) =>
   `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: ${id}\n  namespace: default\n  uid: ${id}-uid\n  resourceVersion: "1"\ndata:\n  value: initial\n`;
 const draft = (id: string) => seed(id).replace('initial', 'unsaved-change');
 
+const configMap = (id: string) =>
+  app.object(dev, { group: '', version: 'v1', kind: 'ConfigMap', namespace: 'default', name: id });
+
 function Editor({ id }: { id: string }) {
   const tx = useYamlTransaction({
-    scope: `cluster-a|default:/v1:ConfigMap:${id}`,
+    scope: configMap(id).scopes.detailScope,
     isActive: true,
     canEdit: true,
-    clusterId: 'cluster-a',
+    clusterId: dev.clusterId,
     yamlContent: seed(id),
     prepareVisibleDraftYaml: passthrough,
   });
@@ -59,8 +55,7 @@ function Editor({ id }: { id: string }) {
     const reason = getYamlPanelBlockReason({
       isEditing: tx.isEditing,
       isSaving: tx.isSaving,
-      draftYaml: tx.draftYaml,
-      baselineYaml: seed(id),
+      hasUnsavedEdits: tx.hasUnsavedEdits,
     });
     return reason ? { reason, focus: () => undefined } : null;
   });
@@ -75,39 +70,29 @@ type Item = { id: string; position?: 'right' | 'bottom'; broken?: boolean };
 function BrokenContent(): never {
   throw new Error('failed object content');
 }
-let root: ReactDOM.Root;
-let host: HTMLDivElement;
 let currentItems: Item[];
 async function draw(items: Item[]) {
   currentItems = items;
-  await act(async () =>
-    root.render(
-      <KeyboardProvider>
-        <PanelLifecycleGuardProvider>
-          <DockablePanelProvider>
-            <ZoomProvider>
-              <DockablePanelTestHost />
-              <Probe />
-              {items.map(({ id, position, broken }) => (
-                <PanelErrorBoundary key={id} panelName={id} onClose={() => undefined}>
-                  <DockablePanel
-                    panelId={id}
-                    title={id}
-                    isOpen
-                    defaultPosition={position ?? 'right'}
-                    onClose={() => {
-                      void draw(currentItems.filter((item) => item.id !== id));
-                    }}
-                  >
-                    {broken ? <BrokenContent /> : <Editor id={id} />}
-                  </DockablePanel>
-                </PanelErrorBoundary>
-              ))}
-            </ZoomProvider>
-          </DockablePanelProvider>
-        </PanelLifecycleGuardProvider>
-      </KeyboardProvider>
-    )
+  await view.show(
+    <DockablePanelProvider>
+      <DockablePanelTestHost />
+      <Probe />
+      {items.map(({ id, position, broken }) => (
+        <PanelErrorBoundary key={id} panelName={id} onClose={() => undefined}>
+          <DockablePanel
+            panelId={id}
+            title={id}
+            isOpen
+            defaultPosition={position ?? 'right'}
+            onClose={() => {
+              void draw(currentItems.filter((item) => item.id !== id));
+            }}
+          >
+            {broken ? <BrokenContent /> : <Editor id={id} />}
+          </DockablePanel>
+        </PanelErrorBoundary>
+      ))}
+    </DockablePanelProvider>
   );
 }
 async function start(items: Item[]) {
@@ -119,9 +104,17 @@ async function start(items: Item[]) {
   content.getBoundingClientRect = () =>
     DOMRect.fromRect({ x: 0, y: 0, width: window.innerWidth, height: window.innerHeight });
   document.body.appendChild(content);
-  host = document.createElement('div');
-  document.body.appendChild(host);
-  root = ReactDOM.createRoot(host);
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['default']);
+  // Every tab a test opens reads its object's YAML.
+  for (const id of ['a', 'b', 'c']) {
+    app.snapshots.serve('object-yaml', configMap(id).scopes.detailScope ?? '', {
+      clusterId: dev.clusterId,
+      clusterName: dev.clusterName,
+      yaml: seed(id),
+    });
+  }
+  view = await app.render(null);
   await draw(items);
 }
 async function edit(id: string) {
@@ -132,11 +125,10 @@ async function edit(id: string) {
     requireValue(transactions.get(id), 'mounted YAML transaction').handleEditorChange(draft(id))
   );
 }
-afterEach(async () => {
-  if (root) {
-    await act(async () => root.unmount());
-  }
-  document.body.replaceChildren();
+afterEach(() => {
+  document.querySelectorAll('.content').forEach((node) => {
+    node.remove();
+  });
   transactions.clear();
 });
 
@@ -206,6 +198,10 @@ it('blocks closing or moving the dirty tab itself without losing its draft', asy
   await act(async () => dock.requestTabMove('b', 'bottom'));
   expect(dock.tabGroups.right.tabs).toEqual(['a', 'b']);
   expect(requireValue(transactions.get('b'), 'blocked editor').draftYaml).toBe(draft('b'));
+  // Each blocked request tells the user why.
+  expect(
+    app.errors.take((record) => record.kinds.includes('warning')).map(({ kinds }) => kinds)
+  ).toEqual([['warning'], ['warning']]);
 });
 
 it('isolates a sibling content failure without discarding another tab’s work', async () => {
@@ -220,6 +216,12 @@ it('isolates a sibling content failure without discarding another tab’s work',
     expect(requireValue(transactions.get('a'), 'unaffected editor').draftYaml).toBe(draft('a'));
     expect(guards.firstBlocker(['a'])?.reason).toBe('unsaved-yaml');
     expect(document.querySelector('[data-editor="b"]')).toBeNull();
+    // The failure is caught by its own panel's boundary and reported once.
+    expect(
+      app.errors
+        .take((record) => record.kinds.includes('render-caught'))
+        .map(({ kinds, error }) => ({ kinds, message: (error as Error).message }))
+    ).toEqual([{ kinds: ['render-caught', 'toast'], message: 'failed object content' }]);
   } finally {
     errors.mockRestore();
   }

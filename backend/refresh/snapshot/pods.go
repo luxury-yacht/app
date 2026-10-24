@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	podres "github.com/luxury-yacht/app/backend/resources/pods"
 
 	corev1 "k8s.io/api/core/v1"
@@ -20,6 +21,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
@@ -158,6 +160,74 @@ func podQuerypageSchema() querypage.Schema[PodSummary] {
 // alias keeps the snapshot-side name and wire JSON unchanged.
 type PodSummary = streamrows.PodSummary
 
+// podRowPublication rings the scopes a pod row is viewed at, plus the workload
+// and node rows that join pod aggregates at serve.
+func podRowPublication(m *typedMaintainedStore[PodSummary], bell doorbell.Bell) rowPublication[PodSummary] {
+	return rowPublication[PodSummary]{
+		bell: bell, domain: podDomainName, meta: m.meta,
+		scopes:         podDoorbellScopes,
+		derived:        podDerivedChanges,
+		derivedDomains: []string{namespaceWorkloadsDomainName, nodeDomainName},
+		ref: func(row PodSummary) *resourcemodel.ResourceRef {
+			ref := row.Ref
+			return &ref
+		},
+	}
+}
+
+// podDoorbellScopes are the scopes a pod row is viewed at: its namespace and All
+// Namespaces, its node, and the workload scopes of its collapsed owner and of its
+// direct owner (a ReplicaSet-scoped Pods tab subscribes to the direct owner).
+func podDoorbellScopes(row PodSummary) []string {
+	var scopes []string
+	if row.Ref.Namespace != "" {
+		scopes = append(scopes, namespaceDoorbellScopes(row.Ref.Namespace)...)
+	}
+	if row.Node != "" {
+		scopes = append(scopes, refresh.NodeSelector(row.Node).String())
+	}
+	if row.OwnerKind != "" && row.OwnerKind != "None" && row.OwnerName != "" && row.OwnerName != "None" {
+		if scope := workloadDoorbellScope(row.Ref.Namespace, row.OwnerAPIVersion, row.OwnerKind, row.OwnerName); scope != "" {
+			scopes = append(scopes, scope)
+		}
+	}
+	if row.DirectOwnerKind != "" && row.DirectOwnerName != "" {
+		if scope := workloadDoorbellScope(row.Ref.Namespace, row.DirectOwnerAPIVersion, row.DirectOwnerKind, row.DirectOwnerName); scope != "" {
+			scopes = append(scopes, scope)
+		}
+	}
+	return scopes
+}
+
+func workloadDoorbellScope(namespace, apiVersion, kind, name string) string {
+	if namespace == "" || apiVersion == "" || kind == "" || name == "" {
+		return ""
+	}
+	gv, err := schema.ParseGroupVersion(apiVersion)
+	if err != nil || gv.Version == "" {
+		return ""
+	}
+	return refresh.WorkloadSelector(refresh.ObjectScopeIdentity{Namespace: namespace, GVK: gv.WithKind(kind), Name: name}).String()
+}
+
+// podDerivedChanges rings the workload rows of the pod's namespace (a pod changes
+// its owner's aggregates, or is a standalone workload row itself) and its node's row.
+func podDerivedChanges(row PodSummary) []doorbell.Change {
+	changes := []doorbell.Change{{
+		Domain: namespaceWorkloadsDomainName,
+		Source: doorbell.SourceObject,
+		Target: doorbell.Scopes(namespaceDoorbellScopes(row.Ref.Namespace)...),
+	}}
+	if row.Node != "" {
+		changes = append(changes, doorbell.Change{
+			Domain: nodeDomainName,
+			Source: doorbell.SourceObject,
+			Target: doorbell.Scopes(clusterDoorbellScopes()...),
+		})
+	}
+	return changes
+}
+
 // PodMetricsInfo mirrors metrics poller metadata for pods.
 type PodMetricsInfo struct {
 	CollectedAt int64 `json:"collectedAt,omitempty"`
@@ -172,33 +242,25 @@ type PodMetricsInfo struct {
 	FailureCount        uint64 `json:"failureCount"`
 }
 
-const (
-	podDomainName     = "pods"
-	workloadScopeKey  = "workload"
-	objectScopeKey    = "object"
-	nodeScopeKey      = "node"
-	namespaceScopeKey = "namespace"
-)
+const podDomainName = "pods"
 
 // RegisterPodDomain registers the pods snapshot domain.
 //
-// Pods is an owned-reflector ingest kind (IngestOwned): the typed pod informer is
-// never instantiated. The per-cluster maintained store of pod rows
-// is fed by the pod reflector's Table-half ingest Sink — the bespoke pod projector
-// (NewPodIngestProjector) builds the same object-state PodSummary the old informer
-// handler did, so the store rows are byte-identical. With no typed lister, the builder serves EVERY
+// The per-cluster maintained store of pod rows is fed by the owned pod reflector's
+// Table-half ingest Sink — the bespoke pod projector (NewPodIngestProjector) builds
+// the object-state PodSummary at intake. With no typed lister, the builder serves EVERY
 // scope (namespace/node/workload) from the store rows, which carry the resolved Node
 // and owner the scope filters need. ingestManager may be nil in a unit test, in which
 // case the store has no feed.
-func RegisterPodDomain(reg *domain.Registry, provider metrics.Provider, clusterMeta ClusterMeta, ingestManager *ingest.IngestManager) error {
+func RegisterPodDomain(reg *domain.Registry, provider metrics.Provider, clusterMeta ClusterMeta, ingestManager *ingest.IngestManager, bell doorbell.Bell) error {
 	// Maintain a per-cluster store of pod rows, fed by the pod
 	// reflector's Table-half Sink. The sink is registered BEFORE the ingest manager
 	// starts (this runs during registration), so the snapshot sync gate guarantees the
 	// store is populated before the first Build serves from it.
 	maintained := newTypedMaintainedStore(clusterMeta, podQuerypageSchema(), podTableQueryAdapter())
-	reg.RegisterMaintainedStore(podDomainName, maintained) // spill/restore/reconcile across Cold/re-warm
+	reg.RegisterMaintainedStore(podDomainName, maintained) // spill/restore across Cold/re-warm
 	if ingestManager != nil {
-		ingestManager.AddSink(PodGVR, maintained.Sink())
+		ingestManager.AddSink(PodGVR, maintained.sinkFor("", podRowPublication(maintained, bell)))
 	}
 
 	builder := &PodBuilder{
@@ -322,42 +384,21 @@ func (b *PodBuilder) collectSummariesFromStore(baseScope string) ([]PodSummary, 
 // filterPodRowsByScope matches node and namespace scopes against projected rows,
 // and workload scopes against their resolved and direct owner identities.
 func filterPodRowsByScope(rows []PodSummary, scope string) ([]PodSummary, error) {
-	parts := strings.SplitN(scope, ":", 2)
-	if len(parts) != 2 {
-		return nil, fmt.Errorf("invalid pods scope: %s", scope)
+	selector, err := domain.ParseDomainSelector(podDomainName, scope)
+	if err != nil {
+		return nil, err
 	}
-	scopeKey, value := parts[0], parts[1]
-	switch scopeKey {
-	case nodeScopeKey:
-		if value == "" {
-			return []PodSummary{}, nil
-		}
-		return filterPodRows(rows, func(row PodSummary) bool { return row.Node == value }), nil
-	case workloadScopeKey:
-		parsed, err := parseWorkloadScope(value)
-		if err != nil {
-			return nil, err
-		}
-		return filterPodRows(rows, func(row PodSummary) bool { return podRowMatchesWorkload(row, parsed) }), nil
-	case objectScopeKey:
-		parsed, err := parsePodObjectScope(value)
-		if err != nil {
-			return nil, err
-		}
-		return filterPodRows(rows, func(row PodSummary) bool {
-			return row.Ref.Namespace == parsed.namespace && row.Ref.Name == parsed.name
-		}), nil
-	case namespaceScopeKey:
-		namespace := strings.TrimSpace(value)
-		if namespace == "" {
-			return nil, fmt.Errorf("invalid namespace scope: %s", scope)
-		}
-		if namespace == "all" || namespace == "*" {
-			return append([]PodSummary(nil), rows...), nil
-		}
-		return filterPodRows(rows, func(row PodSummary) bool { return row.Ref.Namespace == namespace }), nil
+	switch selector.Kind {
+	case refresh.ScopeSelectorNode:
+		return filterPodRows(rows, func(row PodSummary) bool { return row.Node == selector.Node }), nil
+	case refresh.ScopeSelectorWorkload:
+		return filterPodRows(rows, func(row PodSummary) bool { return podRowMatchesWorkload(row, selector.Object) }), nil
+	case refresh.ScopeSelectorNamespace:
+		return filterPodRows(rows, func(row PodSummary) bool { return row.Ref.Namespace == selector.Namespace }), nil
+	case refresh.ScopeSelectorAllNamespaces:
+		return append([]PodSummary(nil), rows...), nil
 	default:
-		return nil, fmt.Errorf("unsupported pods scope: %s", scope)
+		return nil, fmt.Errorf("pods scope %q selects no pods", scope)
 	}
 }
 
@@ -373,24 +414,21 @@ func filterPodRows(rows []PodSummary, keep func(PodSummary) bool) []PodSummary {
 
 // podRowMatchesWorkload accepts either the direct controller or resolved owner.
 // ReplicaSet panels need the direct owner even after resolution to a Deployment.
-func podRowMatchesWorkload(row PodSummary, scope workloadScope) bool {
-	if row.Ref.Namespace != scope.namespace {
+func podRowMatchesWorkload(row PodSummary, workload refresh.ObjectScopeIdentity) bool {
+	if row.Ref.Namespace != workload.Namespace {
 		return false
 	}
-	return ownerTripleMatchesScope(row.DirectOwnerAPIVersion, row.DirectOwnerKind, row.DirectOwnerName, scope) ||
-		ownerTripleMatchesScope(row.OwnerAPIVersion, row.OwnerKind, row.OwnerName, scope)
+	return ownerTripleMatchesScope(row.DirectOwnerAPIVersion, row.DirectOwnerKind, row.DirectOwnerName, workload) ||
+		ownerTripleMatchesScope(row.OwnerAPIVersion, row.OwnerKind, row.OwnerName, workload)
 }
 
 // ownerTripleMatchesScope compares the complete owner identity with the scope.
-func ownerTripleMatchesScope(apiVersion, kind, name string, scope workloadScope) bool {
+func ownerTripleMatchesScope(apiVersion, kind, name string, workload refresh.ObjectScopeIdentity) bool {
 	gv, err := schema.ParseGroupVersion(apiVersion)
 	if err != nil {
 		return false
 	}
-	return gv.Group == scope.group &&
-		gv.Version == scope.version &&
-		kind == scope.kind &&
-		name == scope.name
+	return gv.WithKind(kind) == workload.GVK && name == workload.Name
 }
 
 // metricSampleValid reports whether a metrics sample may be overlaid onto an object
@@ -539,63 +577,6 @@ func parseReadyPairInt32(value string) (int32, int32, bool) {
 		return 0, 0, false
 	}
 	return int32(ready), int32(total), true
-}
-
-type workloadScope struct {
-	namespace string
-	group     string
-	version   string
-	kind      string
-	name      string
-}
-
-type podObjectScope struct {
-	namespace string
-	name      string
-}
-
-// parsePodObjectScope accepts the complete Kubernetes identity encoded by the
-// frontend selection. Pods are core/v1, so the group segment is intentionally
-// empty in object:<namespace>::v1:Pod:<name>.
-func parsePodObjectScope(value string) (podObjectScope, error) {
-	parts := strings.Split(value, ":")
-	if len(parts) != 5 {
-		return podObjectScope{}, fmt.Errorf("invalid object scope: %s", value)
-	}
-	namespace := strings.TrimSpace(parts[0])
-	group := strings.TrimSpace(parts[1])
-	version := strings.TrimSpace(parts[2])
-	kind := strings.TrimSpace(parts[3])
-	name := strings.TrimSpace(parts[4])
-	if namespace == "" || version == "" || kind == "" || name == "" {
-		return podObjectScope{}, fmt.Errorf("invalid object scope: %s", value)
-	}
-	if group != podres.Identity.Group || version != podres.Identity.Version || kind != podres.Identity.Kind {
-		return podObjectScope{}, fmt.Errorf("unsupported object scope: %s", value)
-	}
-	return podObjectScope{namespace: namespace, name: name}, nil
-}
-
-func parseWorkloadScope(value string) (workloadScope, error) {
-	parts := strings.Split(value, ":")
-	if len(parts) != 5 {
-		return workloadScope{}, fmt.Errorf("invalid workload scope: %s", value)
-	}
-	namespace := strings.TrimSpace(parts[0])
-	group := strings.TrimSpace(parts[1])
-	version := strings.TrimSpace(parts[2])
-	kind := strings.TrimSpace(parts[3])
-	name := strings.TrimSpace(parts[4])
-	if namespace == "" || group == "" || version == "" || kind == "" || name == "" {
-		return workloadScope{}, fmt.Errorf("invalid workload scope: %s", value)
-	}
-	return workloadScope{
-		namespace: namespace,
-		group:     group,
-		version:   version,
-		kind:      kind,
-		name:      name,
-	}, nil
 }
 
 func parsePodResourceVersion(pod *corev1.Pod) uint64 {

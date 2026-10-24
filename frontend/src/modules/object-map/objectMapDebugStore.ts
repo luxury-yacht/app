@@ -40,7 +40,6 @@ export interface ObjectMapDebugSnapshot {
   seedRef: ObjectMapReference;
   seedNodeId: string;
   activeNodeId: string | null;
-  focusMode: boolean;
   autoFit: boolean;
   selectedKinds: MultiSelectFilterSelection;
   enabledEdgeTypes: string[] | null;
@@ -48,7 +47,6 @@ export interface ObjectMapDebugSnapshot {
   payload: {
     nodes: number;
     edges: number;
-    maxDepth: number;
     maxNodes: number;
     truncated: boolean;
     warnings: number;

@@ -6,11 +6,7 @@
 
 import type { PositionedEdge } from './objectMapLayout';
 import type { ObjectMapSelectionState } from './objectMapRendererTypes';
-import {
-  appendDirectionalEdge,
-  collectDirectionalConnections,
-  type DirectionalAdjacency,
-} from './objectMapTraversal';
+import { collectLineage } from './objectMapTraversal';
 
 const EMPTY_SELECTION: ObjectMapSelectionState = {
   activeId: null,
@@ -31,10 +27,12 @@ export const computeObjectMapSelectionState = (
     return EMPTY_SELECTION;
   }
 
-  const adjacency: DirectionalAdjacency = { outgoing: new Map(), incoming: new Map() };
-  edges.forEach((edge) => {
-    appendDirectionalEdge(adjacency, edge.id, edge.sourceId, edge.targetId);
-  });
-
-  return { activeId: activeNodeId, ...collectDirectionalConnections(activeNodeId, adjacency) };
+  // The active object's lineage, with every link between its objects, as on
+  // the map itself.
+  const { nodeIds, edgeIds } = collectLineage(
+    activeNodeId,
+    edges.map((edge) => ({ id: edge.id, source: edge.sourceId, target: edge.targetId }))
+  );
+  nodeIds.delete(activeNodeId);
+  return { activeId: activeNodeId, connectedIds: nodeIds, connectedEdgeIds: edgeIds };
 };

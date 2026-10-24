@@ -11,7 +11,7 @@
 }
 
 .settings-panel-title {
-  font-family: var(--font-family-display, var(--font-family-base));
+  font-family: var(--font-family-base);
   font-size: 1.3rem;
   font-weight: 700;
   color: var(--color-text);
@@ -22,12 +22,12 @@
 .settings-data-management-status {
   margin-top: 0.25rem;
   color: var(--color-success);
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
 }
 
 /* Subgroup label (e.g., "MODE", "THEME") rendered as small uppercase caption */
 .settings-subgroup-label {
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -72,7 +72,7 @@
 }
 
 .settings-row-label-help {
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   line-height: 1.4;
 }
@@ -192,7 +192,7 @@
 }
 
 .object-panel-defaults .opd-warning {
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
   color: var(--color-warning);
   padding-top: var(--spacing-sm);
 }
@@ -261,7 +261,7 @@
 .settings-choice-button--active:hover {
   border-color: var(--color-accent);
   background: var(--color-accent);
-  color: var(--color-accent-text, var(--color-bg));
+  color: var(--color-text-inverse);
 }
 
 /* ==========================================================================
@@ -331,7 +331,7 @@
 .palette-slider-value {
   width: 2.5rem;
   text-align: right;
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
   color: var(--color-text);
   font-family: var(--font-family-mono);
 }
@@ -339,7 +339,7 @@
 .color-swatch-value {
   width: 4rem;
   text-align: right;
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
   color: var(--color-text);
   font-family: var(--font-family-mono);
 }
@@ -449,12 +449,12 @@
 /* A field's validation message, below the field (as the theme pattern error). */
 .settings-field-error {
   color: var(--color-error-text);
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
   line-height: 1.25;
 }
 
 .setting-description {
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
 
@@ -529,7 +529,7 @@
 .kubeconfig-path-status,
 .kubeconfig-path-empty {
   color: var(--color-text-secondary);
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
 }
 
 /* ==========================================================================
@@ -562,7 +562,7 @@
   border-radius: var(--border-radius-sm);
   background: var(--status-warning-bg, var(--color-warning-bg, rgba(245, 158, 11, 0.1)));
   color: var(--color-warning);
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
   line-height: 1.35;
 }
 
@@ -573,7 +573,7 @@
   background: transparent;
   color: inherit;
   cursor: pointer;
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
   padding: 0.25rem 0.45rem;
 }
 
@@ -669,7 +669,7 @@
 .theme-pattern-error {
   grid-column: 1 / -1;
   color: var(--color-error-text);
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
   line-height: 1.25;
 }
 
@@ -679,7 +679,7 @@
   border-radius: var(--border-radius-sm);
   color: var(--color-text-secondary);
   cursor: pointer;
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
@@ -701,7 +701,7 @@
 }
 
 .theme-action-delete:hover {
-  color: var(--color-danger, #f87171);
+  color: var(--color-error);
   background: rgba(248, 113, 113, 0.1);
 }
 
@@ -712,6 +712,6 @@
 
 .themes-loading {
   color: var(--color-text-secondary);
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
   padding: 0.75rem;
 }

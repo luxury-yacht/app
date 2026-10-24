@@ -3,15 +3,14 @@ package snapshot
 import (
 	"context"
 	"fmt"
-	"strings"
 
-	"gopkg.in/yaml.v2"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/luxury-yacht/app/backend/resources/helm"
 )
 
 const (
@@ -27,10 +26,15 @@ type ObjectYAMLProvider interface {
 	FetchObjectYAML(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) (string, error)
 }
 
+// HelmManifestProvider supplies a release's rendered manifest and revision.
+type HelmManifestProvider interface {
+	FetchHelmManifest(ctx context.Context, namespace, name string) (string, int, error)
+}
+
 // HelmContentProvider supplies Helm manifest/values for a release.
 type HelmContentProvider interface {
-	FetchHelmManifest(ctx context.Context, namespace, name string) (string, int, error)
-	FetchHelmValues(ctx context.Context, namespace, name string) (map[string]interface{}, int, error)
+	HelmManifestProvider
+	FetchHelmValues(ctx context.Context, namespace, name string) (helm.HelmReleaseValues, int, error)
 }
 
 type HelmResourceResolverProvider interface {
@@ -51,11 +55,17 @@ type ObjectHelmManifestSnapshotPayload struct {
 	Resources []resourcemodel.ResourceLink `json:"resources,omitempty"`
 }
 
-// ObjectHelmValuesSnapshotPayload represents the Helm values payload.
+// ObjectHelmValuesSnapshotPayload carries the Values tab's three views of one
+// release revision.
 type ObjectHelmValuesSnapshotPayload struct {
 	ClusterMeta
-	Values   map[string]interface{} `json:"values"`
-	Revision int                    `json:"revision,omitempty"`
+	Defaults  map[string]interface{} `json:"defaults"`
+	Merged    map[string]interface{} `json:"merged"`
+	Overrides map[string]interface{} `json:"overrides"`
+	// SubchartPaths locate subchart values, so the Values tab can mark the
+	// subchart copies Helm makes of overridden `global` values.
+	SubchartPaths [][]string `json:"subchartPaths"`
+	Revision      int        `json:"revision,omitempty"`
 }
 
 // RegisterObjectYAMLDdomain wires the YAML domain.
@@ -128,24 +138,20 @@ type ObjectHelmManifestBuilder struct {
 }
 
 func (b *ObjectHelmManifestBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	namespace, name, err := parseHelmScope(scope)
+	namespace, name, err := parseHelmScope(objectHelmManifestDomain, scope)
 	if err != nil {
 		return nil, err
 	}
 	meta := ClusterMetaFromContext(ctx)
 
-	manifest, revision, err := b.provider.FetchHelmManifest(ctx, namespace, name)
+	release, err := fetchHelmManifestResources(ctx, b.provider, meta.ClusterID, namespace, name)
 	if err != nil {
 		return nil, err
 	}
 
 	version := uint64(0)
-	if revision > 0 {
-		version = uint64(revision)
-	}
-	var resolver common.ResourceResolver
-	if resolverProvider, ok := b.provider.(HelmResourceResolverProvider); ok {
-		resolver = resolverProvider.ResourceResolver(ctx)
+	if release.revision > 0 {
+		version = uint64(release.revision)
 	}
 
 	return &refresh.Snapshot{
@@ -154,9 +160,9 @@ func (b *ObjectHelmManifestBuilder) Build(ctx context.Context, scope string) (*r
 		Version: version,
 		Payload: ObjectHelmManifestSnapshotPayload{
 			ClusterMeta: meta,
-			Manifest:    manifest,
-			Revision:    revision,
-			Resources:   extractHelmManifestResourceLinks(ctx, resolver, meta.ClusterID, manifest, namespace),
+			Manifest:    release.manifest,
+			Revision:    release.revision,
+			Resources:   release.resources,
 		},
 		Stats: refresh.SnapshotStats{
 			ItemCount: 1,
@@ -164,128 +170,38 @@ func (b *ObjectHelmManifestBuilder) Build(ctx context.Context, scope string) (*r
 	}, nil
 }
 
+// helmManifestResources is one read of a release's manifest with the
+// identities of the objects it names.
+type helmManifestResources struct {
+	manifest  string
+	revision  int
+	resources []resourcemodel.ResourceLink
+}
+
+// fetchHelmManifestResources reads a release's manifest and resolves each
+// object it names through the provider's resource resolver, when it has one.
+func fetchHelmManifestResources(ctx context.Context, provider HelmManifestProvider, clusterID, namespace, name string) (helmManifestResources, error) {
+	manifest, revision, err := provider.FetchHelmManifest(ctx, namespace, name)
+	if err != nil {
+		return helmManifestResources{}, err
+	}
+	var resolver common.ResourceResolver
+	if resolverProvider, ok := provider.(HelmResourceResolverProvider); ok {
+		resolver = resolverProvider.ResourceResolver(ctx)
+	}
+	return helmManifestResources{
+		manifest:  manifest,
+		revision:  revision,
+		resources: extractHelmManifestResourceLinks(ctx, resolver, clusterID, manifest, namespace),
+	}, nil
+}
+
 func extractHelmManifestResourceLinks(ctx context.Context, resolver common.ResourceResolver, clusterID, manifest, defaultNamespace string) []resourcemodel.ResourceLink {
 	var links []resourcemodel.ResourceLink
-	seen := map[string]struct{}{}
-	trimmed := strings.TrimPrefix(strings.TrimSpace(manifest), "---")
-	docs := strings.Split(trimmed, "\n---")
-	for _, doc := range docs {
-		doc = strings.TrimSpace(doc)
-		if doc == "" || doc == "---" {
-			continue
-		}
-		var obj map[string]interface{}
-		if err := yaml.Unmarshal([]byte(doc), &obj); err != nil || obj == nil {
-			continue
-		}
-		appendManifestResourceLinks(ctx, resolver, &links, seen, clusterID, obj, defaultNamespace)
+	for _, resource := range helm.ParseManifestResources(manifest, defaultNamespace) {
+		links = append(links, resourcemodel.BuildHelmManifestResourceLinkWithNamespaceSourceAndResolver(ctx, resolver, clusterID, resource))
 	}
 	return links
-}
-
-func appendManifestResourceLinks(
-	ctx context.Context,
-	resolver common.ResourceResolver,
-	links *[]resourcemodel.ResourceLink,
-	seen map[string]struct{},
-	clusterID string,
-	obj map[string]interface{},
-	defaultNamespace string,
-) {
-	target := manifestResourceLinkTarget{links: links, seen: seen, clusterID: clusterID}
-	kind, _ := obj["kind"].(string)
-	apiVersion, _ := obj["apiVersion"].(string)
-	if kind == "" {
-		return
-	}
-	if strings.HasSuffix(kind, "List") {
-		items, ok := obj["items"].([]interface{})
-		if !ok {
-			return
-		}
-		for _, item := range items {
-			itemMap, ok := manifestStringMap(item)
-			if !ok {
-				continue
-			}
-			itemKind, _ := itemMap["kind"].(string)
-			if itemKind == "" {
-				continue
-			}
-			itemAPIVersion, _ := itemMap["apiVersion"].(string)
-			if itemAPIVersion == "" {
-				itemAPIVersion = apiVersion
-			}
-			appendSingleManifestResourceLink(ctx, resolver, target, itemAPIVersion, itemKind, itemMap, defaultNamespace)
-		}
-		return
-	}
-	appendSingleManifestResourceLink(ctx, resolver, target, apiVersion, kind, obj, defaultNamespace)
-}
-
-type manifestResourceLinkTarget struct {
-	links     *[]resourcemodel.ResourceLink
-	seen      map[string]struct{}
-	clusterID string
-}
-
-func appendSingleManifestResourceLink(
-	ctx context.Context,
-	resolver common.ResourceResolver,
-	target manifestResourceLinkTarget,
-	apiVersion, kind string,
-	obj map[string]interface{},
-	defaultNamespace string,
-) {
-	name, namespace, namespaceExplicit := manifestNameNamespace(obj, defaultNamespace)
-	if name == "" {
-		return
-	}
-	key := apiVersion + "/" + kind + "/" + namespace + "/" + name
-	if _, ok := target.seen[key]; ok {
-		return
-	}
-	target.seen[key] = struct{}{}
-	link := resourcemodel.BuildHelmManifestResourceLinkWithNamespaceSourceAndResolver(ctx, resolver, target.clusterID, resourcemodel.HelmManifestResource{APIVersion: apiVersion, Kind: kind, Namespace: namespace, Name: name, NamespaceExplicit: namespaceExplicit})
-	*target.links = append(*target.links, link)
-}
-
-func manifestNameNamespace(obj map[string]interface{}, defaultNamespace string) (string, string, bool) {
-	metadataRaw, ok := obj["metadata"]
-	if !ok {
-		return "", defaultNamespace, false
-	}
-	metadata, ok := manifestStringMap(metadataRaw)
-	if !ok {
-		return "", defaultNamespace, false
-	}
-	name, _ := metadata["name"].(string)
-	namespace := defaultNamespace
-	namespaceExplicit := false
-	if ns, ok := metadata["namespace"].(string); ok && ns != "" {
-		namespace = ns
-		namespaceExplicit = true
-	}
-	return name, namespace, namespaceExplicit
-}
-
-func manifestStringMap(value interface{}) (map[string]interface{}, bool) {
-	switch typed := value.(type) {
-	case map[string]interface{}:
-		return typed, true
-	case map[interface{}]interface{}:
-		result := make(map[string]interface{}, len(typed))
-		for key, value := range typed {
-			keyString, ok := key.(string)
-			if !ok {
-				continue
-			}
-			result[keyString] = value
-		}
-		return result, true
-	default:
-		return nil, false
-	}
 }
 
 // ObjectHelmValuesBuilder builds values snapshots.
@@ -294,7 +210,7 @@ type ObjectHelmValuesBuilder struct {
 }
 
 func (b *ObjectHelmValuesBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	namespace, name, err := parseHelmScope(scope)
+	namespace, name, err := parseHelmScope(objectHelmValuesDomain, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -315,32 +231,26 @@ func (b *ObjectHelmValuesBuilder) Build(ctx context.Context, scope string) (*ref
 		Scope:   scope,
 		Version: version,
 		Payload: ObjectHelmValuesSnapshotPayload{
-			ClusterMeta: meta,
-			Values:      values,
-			Revision:    revision,
+			ClusterMeta:   meta,
+			Defaults:      values.Defaults,
+			Merged:        values.Merged,
+			Overrides:     values.Overrides,
+			SubchartPaths: values.SubchartPaths,
+			Revision:      revision,
 		},
 		Stats: refresh.SnapshotStats{
-			ItemCount: len(values),
+			ItemCount: 1,
 		},
 	}, nil
 }
 
-func parseHelmScope(scope string) (string, string, error) {
-	if strings.TrimSpace(scope) == "" {
-		return "", "", fmt.Errorf("helm scope is required")
+// parseHelmScope decodes a Helm release scope for domainName (the manifest and
+// values domains share one grammar). The cluster comes from the request.
+func parseHelmScope(domainName, scope string) (string, string, error) {
+	_, tail := refresh.SplitClusterScope(scope)
+	selector, _, err := domain.ParseDomainScopeTail(domainName, tail)
+	if err != nil {
+		return "", "", err
 	}
-	_, trimmed := refresh.SplitClusterScope(scope)
-	parts := strings.SplitN(trimmed, ":", 2)
-	if len(parts) != 2 {
-		return "", "", fmt.Errorf("invalid helm scope %q", trimmed)
-	}
-	namespace := parts[0]
-	if namespace == refresh.ObjectClusterScopeToken {
-		namespace = ""
-	}
-	name := parts[1]
-	if name == "" {
-		return "", "", fmt.Errorf("helm release name missing in scope %q", scope)
-	}
-	return namespace, name, nil
+	return selector.Namespace, selector.Name, nil
 }

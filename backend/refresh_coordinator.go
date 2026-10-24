@@ -2,11 +2,14 @@ package backend
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
+	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/internal/preferenceschema"
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
@@ -58,7 +61,7 @@ type RefreshCoordinator struct {
 	clusterWorkspace      refreshClusterWorkspace
 	attention             refreshAttention
 	logger                *Logger
-	allowedNamespaces     func(string) []string
+	allowedNamespaces     func(string) ([]string, error)
 	preferences           cacheDirPathProvider
 	containerLogsPolicy   *ContainerLogsSelectionPolicy
 	permissionFetchPolicy *PermissionFetchPolicy
@@ -112,9 +115,9 @@ type RefreshCoordinator struct {
 }
 
 type refreshResourceGateway interface {
+	responseCacheInvalidator
 	clearCaches()
 	objectDetailProvider() snapshot.ObjectDetailProvider
-	registerResponseCacheInvalidation(*system.Subsystem, string)
 }
 
 type RefreshCoordinatorDependencies struct {
@@ -122,7 +125,7 @@ type RefreshCoordinatorDependencies struct {
 	ClusterWorkspace      refreshClusterWorkspace
 	Attention             refreshAttention
 	Logger                *Logger
-	AllowedNamespaces     func(string) []string
+	AllowedNamespaces     func(string) ([]string, error)
 	Preferences           cacheDirPathProvider
 	ContainerLogsPolicy   *ContainerLogsSelectionPolicy
 	PermissionFetchPolicy *PermissionFetchPolicy
@@ -155,7 +158,7 @@ func newRefreshCoordinator(dependencies RefreshCoordinatorDependencies) *Refresh
 		objectCatalogEntries:      make(map[string]*objectCatalogEntry),
 		resourceProjection:        dependencies.ResourceProjection,
 		nodeMaintenanceStore:      dependencies.NodeMaintenanceStore,
-		metricsInterval:           time.Duration(defaultMetricsIntervalMs()) * time.Millisecond,
+		metricsInterval:           time.Duration(preferenceschema.DefaultMetricsRefreshIntervalMs) * time.Millisecond,
 	}
 	dependencies.SettingsBridge.bind(coordinator)
 	return coordinator
@@ -229,9 +232,21 @@ func (r *RefreshCoordinator) runtimeAvailable() bool {
 	return r != nil && r.runtimeAvailableFn != nil && r.runtimeAvailableFn()
 }
 
+// refreshAllowedNamespaces is the subsystem-construction read of the persisted
+// namespace scope. A settings read failure degrades to cluster-wide (empty)
+// with a warning — the same degradation every settings consumer applies when
+// settings.json is unreadable — rather than failing the whole cluster build.
 func (r *RefreshCoordinator) refreshAllowedNamespaces(clusterID string) []string {
 	if r == nil || r.allowedNamespaces == nil {
 		return nil
 	}
-	return r.allowedNamespaces(clusterID)
+	namespaces, err := r.allowedNamespaces(clusterID)
+	if err != nil {
+		r.logger.Warn(
+			fmt.Sprintf("Could not read allowed namespaces for cluster %s (running cluster-wide): %v", clusterID, err),
+			logsources.Settings, clusterID, r.clusterRuntime.clusterNameForID(clusterID),
+		)
+		return nil
+	}
+	return namespaces
 }

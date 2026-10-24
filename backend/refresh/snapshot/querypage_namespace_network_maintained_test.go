@@ -16,6 +16,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
+	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
@@ -27,20 +28,18 @@ import (
 // seedNetworkMaintained wires a fresh Sink-fed maintained store onto the builder and feeds it
 // the domain's OWN-rows the builder's own test sources carry — exactly the production wiring:
 //
-//   - the four cut kinds' (Service/EndpointSlice/Ingress/NetworkPolicy) Table-half NetworkSummary
-//     rows are delivered to the store's Sink from the builder's fake ingest source, mirroring
-//     RegisterNamespaceNetworkDomainWithGatewayAPI's AddSink-per-cut-GVR;
-//   - the uncut Gateway-API kinds' rows are ingested into the SAME store from the builder's
-//     descriptor test indexers via store.ingest(descriptor, obj), mirroring
-//     registerMaintainedHandlers (which feeds only the Gateway-API kinds; the cut kinds' sentinel
-//     indexers hold no objects, so iterating them contributes nothing).
+//   - the Service/EndpointSlice/Ingress/NetworkPolicy Table-half NetworkSummary rows are
+//     delivered to the store's Sink from the builder's fake ingest source;
+//   - the Gateway API kinds' rows are delivered to the SAME Sink as their descriptor StreamRow
+//     projection, which is the Table half their owned reflectors produce in production
+//     (RegisterNamespaceNetworkDomain's feedMaintainedFromIngest).
 //
 // After seeding, Build serves every own-row from the store and re-joins the EndpointSlice
 // endpoint count onto Service rows at serve. meta stamps the store's cluster identity (the rows
 // carry their own ClusterMeta from the projector / StreamRow).
-func seedNetworkMaintained(b *NamespaceNetworkBuilder, meta ClusterMeta) {
+func seedNetworkMaintained(b *NamespaceNetworkBuilder, meta ClusterMeta, indexerFor func(streamspec.Descriptor) cache.Indexer) {
 	b.maintained = newTypedMaintainedStore(meta, networkQuerypageSchema(), networkTableQueryAdapter())
-	sink := b.maintained.Sink()
+	sink := unpublishedSink(b.maintained, "")
 	if src, ok := b.networkIngest.(fakeNetworkIngestSource); ok {
 		for _, gvr := range []schema.GroupVersionResource{ServiceGVR, EndpointSliceGVR, IngressGVR, NetworkPolicyGVR} {
 			for _, raw := range src.Rows(gvr) {
@@ -54,16 +53,13 @@ func seedNetworkMaintained(b *NamespaceNetworkBuilder, meta ClusterMeta) {
 			}
 		}
 	}
-	if b.collectIndexer == nil {
-		return
-	}
 	for _, d := range kindregistry.StreamDescriptorsForDomain(namespaceNetworkDomainName) {
-		indexer := b.collectIndexer(d)
+		indexer := indexerFor(d)
 		if indexer == nil {
 			continue
 		}
 		for _, obj := range indexer.List() {
-			b.maintained.ingest(d, obj)
+			sink.Upsert(d.StreamRow(meta, obj.(metav1.Object)))
 		}
 	}
 }
@@ -74,12 +70,13 @@ func TestNamespaceNetworkMaintainedGatewayRowsRespectCurrentAccess(t *testing.T)
 	route := &gatewayv1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{Name: "route", Namespace: "default"}}
 	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
 	require.NoError(t, indexer.Add(route))
+	indexers := networkCollectIndexer(networkIndexers{httproute: indexer})
 	builder := &NamespaceNetworkBuilder{
 		networkIngest:   newFakeNetworkIngestSource(meta, svc),
 		includeServices: true,
-		collectIndexer:  networkCollectIndexer(networkIndexers{httproute: indexer}),
+		available:       availableFromIndexers(indexers),
 	}
-	seedNetworkMaintained(builder, meta)
+	seedNetworkMaintained(builder, meta, indexers)
 	routeKey := permissions.ResourceKey("gateway.networking.k8s.io", "httproutes")
 	allowed := domainpermissions.AllowedResources{permissions.ResourceKey("", "services"): true, routeKey: true}
 	ctx := domainpermissions.WithAllowedResources(WithClusterMeta(context.Background(), meta), namespaceNetworkDomainName, allowed)
@@ -110,7 +107,7 @@ func TestNamespaceNetworkMaintainedGatewayRowsRespectCurrentAccess(t *testing.T)
 }
 
 // TestNamespaceNetworkBuilderMaintainedMatchesIngestSource is the namespace-network maintained-
-// store cutover gate: a builder serving every own-row from the Sink/informer-fed maintained
+// store cutover gate: a builder serving every own-row from the Sink-fed maintained
 // store — the four cut kinds' Table halves via the Sink plus the uncut Gateway-API rows via
 // store.ingest — must produce the byte-identical NamespaceNetworkSnapshot a builder serving the
 // same projected rows produces. Both builders are wired identically and seeded from the same
@@ -142,17 +139,18 @@ func TestNamespaceNetworkBuilderMaintainedMatchesIngestSource(t *testing.T) {
 	require.NoError(t, hrIndexer.Add(hr2))
 
 	mk := func() *NamespaceNetworkBuilder {
+		indexers := networkCollectIndexer(networkIndexers{
+			ingress:   emptyIndexer, // cut kind: sentinel marks it available; rows come from ingest
+			httproute: hrIndexer,
+		})
 		b := &NamespaceNetworkBuilder{
 			networkIngest:         newFakeNetworkIngestSource(ClusterMeta{}, svc, slice, ing),
 			includeServices:       true,
 			includeEndpointSlices: true,
 			includeIngresses:      true,
-			collectIndexer: networkCollectIndexer(networkIndexers{
-				ingress:   ingestAvailabilityIndexer, // cut kind: sentinel marks it available; rows come from ingest
-				httproute: hrIndexer,
-			}),
+			available:             availableFromIndexers(indexers),
 		}
-		seedNetworkMaintained(b, ClusterMeta{})
+		seedNetworkMaintained(b, ClusterMeta{}, indexers)
 		return b
 	}
 	a := mk()
@@ -198,13 +196,14 @@ func TestNamespaceNetworkMaintainedEndpointJoinFromStore(t *testing.T) {
 		Endpoints:   []discoveryv1.Endpoint{{Addresses: []string{"10.1.0.1", "10.1.0.2"}, Conditions: discoveryv1.EndpointConditions{Ready: &ready}}},
 	}
 
+	indexers := networkCollectIndexer(networkIndexers{})
 	b := &NamespaceNetworkBuilder{
 		networkIngest:         newFakeNetworkIngestSource(ClusterMeta{}, svc, slice),
 		includeServices:       true,
 		includeEndpointSlices: true,
-		collectIndexer:        networkCollectIndexer(networkIndexers{}),
+		available:             availableFromIndexers(indexers),
 	}
-	seedNetworkMaintained(b, ClusterMeta{})
+	seedNetworkMaintained(b, ClusterMeta{}, indexers)
 
 	// Sanity: the Service OWN-row in the store carries NO endpoint-join segment (built with nil
 	// slices), so the "Addresses: 2" below can only come from the serve-time ingest join.
@@ -223,8 +222,7 @@ func TestNamespaceNetworkMaintainedEndpointJoinFromStore(t *testing.T) {
 }
 
 // TestNetworkMaintainedStoreSpillRestoreRoundTrip proves the network maintained store — the
-// per-cluster store of NetworkSummary OWN-rows fed by the four cut network GVRs' Table-half Sinks
-// (plus the Gateway-API informer handlers) — spills to disk and restores into a fresh store with
+// per-cluster store of NetworkSummary OWN-rows fed by each network GVR's Table-half Sink — spills to disk and restores into a fresh store with
 // identical rows, the warm-paint capability the governor's Cold/re-warm uses. It goes through the
 // network schema + adapter, so it proves the network store wiring round-trips, mirroring
 // TestNodeMaintainedStoreSpillRestoreRoundTrip / TestWorkloadsMaintainedStoreSpillRestoreRoundTrip.
@@ -246,7 +244,7 @@ func TestNetworkMaintainedStoreSpillRestoreRoundTrip(t *testing.T) {
 	src := newFakeNetworkIngestSource(meta, svc, ing, policy)
 
 	orig := newTypedMaintainedStore(meta, networkQuerypageSchema(), networkTableQueryAdapter())
-	sink := orig.Sink()
+	sink := unpublishedSink(orig, "")
 	for _, gvr := range []schema.GroupVersionResource{ServiceGVR, EndpointSliceGVR, IngressGVR, NetworkPolicyGVR} {
 		for _, raw := range src.Rows(gvr) {
 			if bundle, ok := raw.(ingest.Bundle); ok {

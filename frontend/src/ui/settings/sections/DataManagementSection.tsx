@@ -8,12 +8,9 @@ import {
   ImportSettings,
 } from '@/core/backend-api';
 import { hydrateFavorites } from '@/core/persistence/favorites';
-import {
-  getErrorReportingEnabled,
-  hydrateAppPreferences,
-  setErrorReportingEnabled,
-} from '@/core/settings/appPreferences';
-import { SettingRow, usePreferenceValue } from './SettingsControls';
+import { hydrateAppPreferences, setErrorReportingEnabled } from '@/core/settings/appPreferences';
+import { usePreference } from '@/core/settings/usePreference';
+import { SettingRow } from './SettingsControls';
 
 const dataManagementOperations = {
   'export-settings': {
@@ -42,10 +39,7 @@ type DataManagementOperation = keyof typeof dataManagementOperations;
 
 function DataManagementSection() {
   const elementIdPrefix = useId();
-  const errorReportingEnabled = usePreferenceValue(
-    getErrorReportingEnabled,
-    'settings:error-reporting'
-  );
+  const errorReportingEnabled = usePreference('errorReportingEnabled');
   const [operation, setOperation] = useState<DataManagementOperation | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 

@@ -18,7 +18,7 @@ import (
 
 // TestBuildSubsystemsInSelectionOrderRunsConcurrentlyAndPreservesOrder pins the two
 // contracts of the parallel subsystem build: selections build CONCURRENTLY (multiple
-// clusters must not pay the ~seconds-each informer+SSAR construction serially), and
+// clusters must not pay the ~seconds-each reflector+SSAR construction serially), and
 // the assembled outcomes keep SELECTION order so clusterOrder stays deterministic.
 func TestBuildSubsystemsInSelectionOrderRunsConcurrentlyAndPreservesOrder(t *testing.T) {
 	const n = 3

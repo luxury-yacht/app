@@ -11,10 +11,13 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/internal/sentry"
+	"github.com/luxury-yacht/app/internal/updateidentity"
 )
 
 const (
 	installationRegisteredMetric   = "app.installation.registered"
+	installationUpgradedMetric     = "app.installation.upgraded"
+	installationUpgradeFromUnknown = "unknown"
 	installationMetricFlushTimeout = 2 * time.Second
 )
 
@@ -54,7 +57,63 @@ func ensureAnonymizedID(settings *settingsFile) (bool, error) {
 	}
 	settings.Telemetry.AnonymizedID = anonymizedId
 	settings.Telemetry.InstallationMetricReported = false
+	settings.Telemetry.ReportedVersion = ""
 	return true, nil
+}
+
+// installationMetric is one count metric to send and the release version to
+// record once Sentry confirms delivery.
+type installationMetric struct {
+	name       string
+	attributes map[string]string
+	version    string
+}
+
+// installationMetricFor decides which metric, if any, this launch sends. New
+// installations register once; registered installations report an upgrade when
+// the running release is newer than the last reported one. Development and
+// other non-release builds never report upgrades.
+func installationMetricFor(state installationTelemetryState, currentVersion string) (installationMetric, bool) {
+	current, err := updateidentity.ParseReleaseVersion(currentVersion)
+	isRelease := err == nil
+	if !state.registered {
+		metric := installationMetric{name: installationRegisteredMetric, attributes: installationMetricAttributes()}
+		if isRelease {
+			metric.version = current.Version
+		}
+		return metric, true
+	}
+	if !isRelease {
+		return installationMetric{}, false
+	}
+	fromVersion, upgraded := upgradedFromVersion(state.reportedVersion, current)
+	if !upgraded {
+		return installationMetric{}, false
+	}
+	attributes := installationMetricAttributes()
+	attributes["from.version"] = fromVersion
+	return installationMetric{name: installationUpgradedMetric, attributes: attributes, version: current.Version}, true
+}
+
+// upgradedFromVersion returns the version a registered installation upgraded
+// from. A missing or unreadable reported version means the installation
+// registered before upgrade tracking existed, so it upgraded from an unknown
+// version. The reported version only moves forward, so a downgrade or relaunch
+// is not an upgrade.
+func upgradedFromVersion(reportedVersion string, current updateidentity.ReleaseVersion) (string, bool) {
+	previous, err := updateidentity.ParseReleaseVersion(reportedVersion)
+	if err != nil {
+		return installationUpgradeFromUnknown, true
+	}
+	return previous.Version, previous.Compare(current) < 0
+}
+
+func installationMetricAttributes() map[string]string {
+	return map[string]string{
+		"app.type": "desktop",
+		"os.name":  runtime.GOOS,
+		"os.arch":  runtime.GOARCH,
+	}
 }
 
 func (s *ErrorReportingService) scheduleInstallationMetricRegistration(ctx context.Context) {
@@ -73,55 +132,50 @@ func (s *ErrorReportingService) reportInstallationMetricIfNeeded(ctx context.Con
 }
 
 func (s *ErrorReportingService) reportInstallationMetricForGeneration(ctx context.Context, generation uint64) {
-	if ctx == nil || ctx.Err() != nil {
-		return
-	}
-	if s == nil || s.reporter == nil || s.telemetryRepository == nil {
-		return
-	}
-	metricReporter, ok := s.reporter.(sentryreporting.MetricReporter)
-	if !ok || !s.reporter.Enabled() {
+	metricReporter, ok := s.installationMetricReporter(ctx)
+	if !ok {
 		return
 	}
 
 	s.installationTelemetryMu.Lock()
 	defer s.installationTelemetryMu.Unlock()
-	if s.suppressTelemetrySchedule.Load() || s.telemetryResetGeneration.Load() != generation {
-		return
-	}
-	if !s.reporter.Enabled() {
+	if s.suppressTelemetrySchedule.Load() || s.telemetryResetGeneration.Load() != generation || !s.reporter.Enabled() {
 		return
 	}
 
-	anonymizedId, reported, err := s.telemetryRepository.prepareInstallationTelemetry()
+	state, err := s.telemetryRepository.prepareInstallationTelemetry()
 	if err != nil {
 		s.warnInstallationTelemetry("Could not prepare installation telemetry", err)
 		return
 	}
-	if reported {
+	metric, ok := installationMetricFor(state, s.currentVersion)
+	if !ok {
 		return
 	}
 
 	metricCtx, cancel := context.WithTimeout(ctx, installationMetricFlushTimeout)
 	defer cancel()
-	flushed := metricReporter.CaptureCountMetric(
-		metricCtx,
-		installationRegisteredMetric,
-		1,
-		map[string]string{
-			"app.type": "desktop",
-			"os.name":  runtime.GOOS,
-			"os.arch":  runtime.GOARCH,
-		},
-	)
-	if !flushed {
+	if !metricReporter.CaptureCountMetric(metricCtx, metric.name, 1, metric.attributes) {
 		return
 	}
 
-	err = s.telemetryRepository.acknowledgeInstallationTelemetry(anonymizedId)
+	err = s.telemetryRepository.acknowledgeInstallationTelemetry(state.anonymizedID, metric.version)
 	if err != nil {
 		s.warnInstallationTelemetry("Could not save installation telemetry acknowledgement", err)
 	}
+}
+
+// installationMetricReporter returns the metric reporter when installation
+// telemetry may run: the context is live and reporting is enabled.
+func (s *ErrorReportingService) installationMetricReporter(ctx context.Context) (sentryreporting.MetricReporter, bool) {
+	if ctx == nil || ctx.Err() != nil {
+		return nil, false
+	}
+	if s == nil || s.reporter == nil || s.telemetryRepository == nil {
+		return nil, false
+	}
+	metricReporter, ok := s.reporter.(sentryreporting.MetricReporter)
+	return metricReporter, ok && s.reporter.Enabled()
 }
 
 func (s *ErrorReportingService) warnInstallationTelemetry(message string, err error) {

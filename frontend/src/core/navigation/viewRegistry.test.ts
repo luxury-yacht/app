@@ -11,9 +11,11 @@ import {
 } from './viewRegistry';
 
 describe('view registry', () => {
-  it('migrates the removed Pods route to the combined Workloads view', () => {
-    expect(parseNamespaceViewType('pods')).toBe('workloads');
-    expect(getViewDescriptor('namespace', 'pods')).toBeUndefined();
+  it('routes saved and linked pods destinations to the Pods view', () => {
+    expect(parseNamespaceViewType('pods')).toBe('pods');
+    expect(
+      NAMESPACE_VIEW_DESCRIPTORS.find((view) => view.id === 'pods')?.supportsAllNamespaces
+    ).toBe(true);
   });
 
   it('maps target lens language onto the existing stable navigation surfaces', () => {

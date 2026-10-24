@@ -2,17 +2,13 @@ package snapshot
 
 import (
 	"context"
-	"fmt"
 	"sort"
-
-	informers "k8s.io/client-go/informers"
-	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
-	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/persistentvolume"
@@ -23,8 +19,8 @@ const clusterStorageDomainName = "cluster-storage"
 // ClusterStorageBuilder constructs PersistentVolume summaries via the shared
 // typed-table domain skeleton (typed_table_domain.go).
 type ClusterStorageBuilder struct {
-	collectIndexer func(streamspec.Descriptor) cache.Indexer
-	// maintained, when set, is an informer-fed store the builder serves rows from
+	available kindAvailability
+	// maintained, when set, is a reflector-fed store the builder serves rows from
 	// instead of listing + re-projecting per request. nil falls back to the list path.
 	maintained *typedMaintainedStore[ClusterStorageEntry]
 }
@@ -64,14 +60,16 @@ type ClusterStorageEntry = streamrows.ClusterStorageEntry
 
 func clusterStorageDomainSpec() typedTableDomainSpec[ClusterStorageEntry] {
 	return typedTableDomainSpec[ClusterStorageEntry]{
-		domain:          clusterStorageDomainName,
-		entryLimit:      config.SnapshotClusterStorageEntryLimit,
-		description:     "persistent volumes",
-		listErrorPrefix: "cluster storage: failed to list persistent volumes",
-		adapter:         clusterStorageTableQueryAdapter(),
-		schema:          clusterStorageQuerypageSchema(),
-		capabilities:    clusterStorageQueryCapabilities(),
-		sortRows:        sortClusterStorageEntries,
+		domain:       clusterStorageDomainName,
+		entryLimit:   config.SnapshotClusterStorageEntryLimit,
+		description:  "persistent volumes",
+		adapter:      clusterStorageTableQueryAdapter(),
+		schema:       clusterStorageQuerypageSchema(),
+		capabilities: clusterStorageQueryCapabilities(),
+		sortRows:     sortClusterStorageEntries,
+		payload: func(meta ClusterMeta, envelope ResourceQueryEnvelope, rows []ClusterStorageEntry) any {
+			return ClusterStorageSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: envelope, Rows: rows}
+		},
 	}
 }
 
@@ -83,28 +81,24 @@ func sortClusterStorageEntries(entries []ClusterStorageEntry) {
 
 // RegisterClusterStorageDomain registers the storage domain.
 //
-// PersistentVolume is an owned-reflector ingest kind (IngestOwned): when ingestManager
-// is non-nil its maintained-store feed comes from the ingest reflector's Table-half
-// Sink and registerMaintainedHandlers skips it (the shared factory no longer caches
-// it). When ingestManager is nil (a unit test) the store has no feed for the cut kind.
+// PersistentVolume feeds the maintained store from its owned reflector's Table-half
+// sink. When ingestManager is nil (a unit test) the store has no feed.
 func RegisterClusterStorageDomain(
 	reg *domain.Registry,
-	factory informers.SharedInformerFactory,
 	clusterMeta ClusterMeta,
 	ingestManager *ingest.IngestManager,
+	bell doorbell.Bell,
 ) error {
-	if factory == nil {
-		return fmt.Errorf("shared informer factory is nil")
-	}
-	collectIndexer := unconditionalSharedIndexers(factory, clusterStorageDomainName, ingestManager)
-	maintained, err := newRegisteredTypedTableStore(reg, clusterStorageDomainSpec(), clusterMeta, collectIndexer, factory, nil, ingestManager)
+	available := unconditionalIngestAvailability(clusterStorageDomainName, ingestManager)
+	maintained, err := newRegisteredTypedTableStore(reg, clusterStorageDomainSpec(), clusterMeta,
+		ingestManager, bell)
 	if err != nil {
 		return err
 	}
 
 	builder := &ClusterStorageBuilder{
-		collectIndexer: collectIndexer,
-		maintained:     maintained,
+		available:  available,
+		maintained: maintained,
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          clusterStorageDomainName,
@@ -114,8 +108,5 @@ func RegisterClusterStorageDomain(
 
 // Build creates a snapshot of persistent volumes.
 func (b *ClusterStorageBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	return buildTypedTableSnapshot(ctx, scope, clusterStorageDomainSpec(), b.collectIndexer, b.maintained,
-		func(meta ClusterMeta, envelope ResourceQueryEnvelope, rows []ClusterStorageEntry) any {
-			return ClusterStorageSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: envelope, Rows: rows}
-		})
+	return buildTypedTableSnapshot(ctx, scope, clusterStorageDomainSpec(), b.available, b.maintained)
 }

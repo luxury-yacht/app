@@ -96,7 +96,7 @@
 }
 
 .karpenter-value-toggle:hover {
-  color: var(--color-link);
+  color: var(--color-object-panel-link-hover);
 }
 
 .karpenter-taint {

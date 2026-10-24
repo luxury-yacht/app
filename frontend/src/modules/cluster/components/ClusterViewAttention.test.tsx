@@ -1,147 +1,57 @@
-import ClusterViewAttention from '@modules/cluster/components/ClusterViewAttention';
-import { StatusChip } from '@shared/components/StatusChip';
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
-import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
-import {
-  requestGridTableFilters,
-  setPendingGridTableFilterRequest,
-} from '@shared/components/tables/hooks/useGridTableExternalFilters';
+/**
+ * frontend/src/modules/cluster/components/ClusterViewAttention.test.tsx
+ *
+ * The cluster Attention view: it lists the visible cluster's findings from
+ * the backend query (most severe first), shows each finding's causes and
+ * current status once, opens a finding's object with complete identity from
+ * its Name link, opens the finding's namespace from its Namespace link,
+ * ignores a finding for the object, the cluster, or every cluster, and
+ * restores each kind of ignore rule from the ignored-findings dialog. A filter
+ * the Overview requests before the view opens is applied to its query, and
+ * the filtered-empty state offers the ignored-findings dialog. Runs in the
+ * full app, navigated through the sidebar, over a faked backend
+ * (test-utils/appState).
+ */
+
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ClusterAttentionFinding } from '@/core/refresh/types';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { makeClusterOverviewSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
+import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
+import type {
+  AttentionIgnoreRules,
+  ClusterAttentionFinding,
+  ClusterAttentionSnapshot,
+} from '@/core/refresh/types';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type ObjectIdentity,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { requireValue } from '@/test-utils/requireValue';
 
-const {
-  openWithObjectMock,
-  ignoreObjectMock,
-  ignoreTypeMock,
-  ignoreGlobalTypeMock,
-  restoreTypeMock,
-  restoreGlobalTypeMock,
-  restoreObjectMock,
-  queryPayloadRef,
-  queryParamsRef,
-  tablePropsRef,
-  persistenceRef,
-  setSelectedNamespaceMock,
-  setViewTypeMock,
-  setSidebarSelectionMock,
-  setActiveNamespaceTabMock,
-} = vi.hoisted(() => ({
-  openWithObjectMock: vi.fn(),
-  ignoreObjectMock: vi
-    .fn()
-    .mockResolvedValue({ objectFindings: [], clusterFindingTypes: [], globalFindingTypes: [] }),
-  ignoreTypeMock: vi
-    .fn()
-    .mockResolvedValue({ objectFindings: [], clusterFindingTypes: [], globalFindingTypes: [] }),
-  ignoreGlobalTypeMock: vi
-    .fn()
-    .mockResolvedValue({ objectFindings: [], clusterFindingTypes: [], globalFindingTypes: [] }),
-  restoreTypeMock: vi
-    .fn()
-    .mockResolvedValue({ objectFindings: [], clusterFindingTypes: [], globalFindingTypes: [] }),
-  restoreGlobalTypeMock: vi
-    .fn()
-    .mockResolvedValue({ objectFindings: [], clusterFindingTypes: [], globalFindingTypes: [] }),
-  restoreObjectMock: vi
-    .fn()
-    .mockResolvedValue({ objectFindings: [], clusterFindingTypes: [], globalFindingTypes: [] }),
-  queryPayloadRef: {
-    current: {
-      ignoreRules: {
-        objectFindings: [],
-        clusterFindingTypes: ['restarts'],
-        globalFindingTypes: [],
-      },
-      findingTypes: [
-        { id: 'restarts', label: 'Restarts' },
-        { id: 'replica-mismatch', label: 'Replica mismatch' },
-      ],
-    } as Record<string, unknown>,
-  },
-  queryParamsRef: { current: null as Record<string, unknown> | null },
-  tablePropsRef: { current: null as Record<string, unknown> | null },
-  persistenceRef: {
-    current: { hydrated: true, setFilters: vi.fn() },
-  },
-  setSelectedNamespaceMock: vi.fn(),
-  setViewTypeMock: vi.fn(),
-  setSidebarSelectionMock: vi.fn(),
-  setActiveNamespaceTabMock: vi.fn(),
-}));
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
 
-vi.mock('@/core/settings/clusterAttentionIgnores', () => ({
-  ignoreClusterAttentionObjectFinding: ignoreObjectMock,
-  ignoreClusterAttentionFindingType: ignoreTypeMock,
-  ignoreGlobalAttentionFindingType: ignoreGlobalTypeMock,
-  restoreClusterAttentionFindingType: restoreTypeMock,
-  restoreGlobalAttentionFindingType: restoreGlobalTypeMock,
-  restoreClusterAttentionObjectFinding: restoreObjectMock,
-}));
+const checkout: ObjectIdentity = {
+  group: 'apps',
+  version: 'v1',
+  kind: 'Deployment',
+  namespace: 'payments',
+  name: 'checkout',
+};
 
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedClusterId: 'cluster-a' }),
-}));
+const checkoutRef = () => ({
+  ...checkout,
+  clusterId: dev.clusterId,
+  resource: 'deployments',
+  uid: 'uid-checkout',
+});
 
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: openWithObjectMock }),
-}));
-
-vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
-  useNamespace: () => ({ setSelectedNamespace: setSelectedNamespaceMock }),
-}));
-
-vi.mock('@/core/contexts/ViewStateContext', () => ({
-  useViewState: () => ({
-    setViewType: setViewTypeMock,
-    setActiveNamespaceTab: setActiveNamespaceTabMock,
-  }),
-}));
-
-vi.mock('@/core/contexts/SidebarStateContext', () => ({
-  useSidebarState: () => ({ setSidebarSelection: setSidebarSelectionMock }),
-}));
-
-vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: vi.fn() }),
-}));
-
-vi.mock('@/hooks/useShortNames', () => ({ useShortNames: () => false }));
-
-vi.mock('@modules/resource-grid/useQueryBackedResourceGridTable', () => ({
-  useQueryBackedClusterResourceGridTable: (params: Record<string, unknown>) => {
-    queryParamsRef.current = params;
-    return {
-      gridTableProps: { keyExtractor: params.keyExtractor },
-      favModal: null,
-      source: { rows: [], loading: false, loaded: true, error: null },
-      queryPayload: queryPayloadRef.current,
-      persistence: persistenceRef.current,
-    };
-  },
-}));
-
-vi.mock('@modules/resource-grid/ResourceInventoryTable', () => ({
-  default: (props: Record<string, unknown>) => {
-    tablePropsRef.current = props;
-    return <div data-testid="attention-table" />;
-  },
-}));
-
-const finding: ClusterAttentionFinding = {
-  ref: {
-    clusterId: 'cluster-a',
-    group: 'apps',
-    version: 'v1',
-    kind: 'Deployment',
-    resource: 'deployments',
-    namespace: 'payments',
-    name: 'checkout',
-    uid: 'uid-checkout',
-  },
-
+/** A finding as backend/refresh/snapshot/cluster_attention.go projects it. */
+const finding = (overrides: Partial<ClusterAttentionFinding> = {}): ClusterAttentionFinding => ({
+  ref: checkoutRef(),
   namespace: 'payments',
   severity: 'warning',
   status: '1/2 ready',
@@ -154,253 +64,100 @@ const finding: ClusterAttentionFinding = {
     },
   ],
   age: '2m',
+  ...overrides,
+});
+
+const NO_RULES: AttentionIgnoreRules = {
+  objectFindings: [],
+  clusterFindingTypes: [],
+  globalFindingTypes: [],
 };
 
-// The view passes its own icon in the view-actions slot of the main icon bar.
-const getManageIgnoredFindingsAction = () =>
-  (
-    queryParamsRef.current?.viewActions as Array<{ id?: string; onClick?: () => void }> | undefined
-  )?.find((item) => item.id === 'attention-ignored-findings');
+const serveFindings = (
+  rows: ClusterAttentionFinding[],
+  payload: Partial<ClusterAttentionSnapshot> = {}
+) =>
+  app.serveTable(dev, 'cluster-attention', {
+    rows,
+    ignoreRules: NO_RULES,
+    findingTypes: [{ id: 'replica-mismatch', label: 'Replica mismatch' }],
+    ...payload,
+  });
 
-const openIgnoredFindings = () => {
-  const manageAction = getManageIgnoredFindingsAction();
-  if (!manageAction?.onClick) {
-    throw new Error('expected Manage ignored findings action');
-  }
-  act(() => manageAction.onClick?.());
+const start = async () => {
+  view = await app.mountApp();
+  await view.goTo({ clusterView: 'attention' });
 };
+
+const lastAttentionQuery = () => {
+  const scope = requireValue(
+    app.snapshots
+      .reads('cluster-attention')
+      .filter((read) => read.scope.includes('?'))
+      .slice(-1)[0],
+    'expected an Attention query'
+  ).scope;
+  return { scope, params: new URLSearchParams(scope.slice(scope.indexOf('?') + 1)) };
+};
+
+const tableRows = () => Array.from(view.container.querySelectorAll<HTMLElement>('.gridtable-row'));
+const cellOf = (row: HTMLElement, column: string) =>
+  requireValue(
+    row.querySelector<HTMLElement>(`.grid-cell[data-column="${column}"]`),
+    `expected the ${column} cell`
+  );
+
+const click = async (element: Element | null | undefined, what: string) => {
+  const target = requireValue(element as HTMLElement | null | undefined, `expected ${what}`);
+  await act(async () => target.click());
+  await app.settle();
+};
+
+const menuItems = () =>
+  Array.from(document.body.querySelectorAll<HTMLElement>('[role="menu"] .context-menu-item'));
+const menuLabel = (item: HTMLElement) =>
+  item.querySelector('.context-menu-label')?.textContent?.trim();
+
+const openRowMenu = async () => {
+  await act(async () => {
+    cellOf(requireValue(tableRows()[0], 'expected a finding'), 'name').dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 })
+    );
+  });
+  await app.settle();
+  return menuItems().map(menuLabel);
+};
+
+const buttonNamed = (label: string, within: ParentNode = document.body) =>
+  Array.from(within.querySelectorAll<HTMLButtonElement>('button')).find(
+    (button) => button.textContent?.trim() === label
+  );
+
+const ignoredDialog = () => document.body.querySelector<HTMLElement>('.attention-ignored-modal');
+
+beforeEach(() => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['payments']);
+  app.startScreen(dev);
+});
 
 describe('ClusterViewAttention', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  it('lists the visible cluster’s findings from its query, most severe first', async () => {
+    serveFindings([finding()]);
+    await start();
 
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    openWithObjectMock.mockClear();
-    ignoreObjectMock.mockClear();
-    ignoreTypeMock.mockClear();
-    ignoreGlobalTypeMock.mockClear();
-    restoreTypeMock.mockClear();
-    restoreGlobalTypeMock.mockClear();
-    restoreObjectMock.mockClear();
-    setSelectedNamespaceMock.mockClear();
-    setViewTypeMock.mockClear();
-    setSidebarSelectionMock.mockClear();
-    setActiveNamespaceTabMock.mockClear();
-    queryPayloadRef.current = {
-      ignoreRules: {
-        objectFindings: [],
-        clusterFindingTypes: ['restarts'],
-        globalFindingTypes: [],
-      },
-      findingTypes: [
-        { id: 'restarts', label: 'Restarts' },
-        { id: 'replica-mismatch', label: 'Replica mismatch' },
-      ],
-    };
-    queryParamsRef.current = null;
-    tablePropsRef.current = null;
-    persistenceRef.current = { hydrated: true, setFilters: vi.fn() };
-    setPendingGridTableFilterRequest(null);
-  });
-
-  afterEach(() => {
-    act(() => root.unmount());
-    container.remove();
-    setPendingGridTableFilterRequest(null);
-  });
-
-  it('applies a staged Overview filter request after table persistence hydrates', async () => {
-    persistenceRef.current = { hydrated: false, setFilters: vi.fn() };
-    const filters = {
-      ...DEFAULT_GRID_TABLE_FILTER_STATE,
-      kinds: { mode: 'some' as const, values: ['Pod'] },
-      queryFacets: { findings: { mode: 'some' as const, values: ['restarts'] } },
-    };
-    requestGridTableFilters({
-      clusterId: 'cluster-a',
-      destinationViewId: 'cluster-attention',
-      filters,
-    });
-
-    await act(async () => {
-      root.render(<ClusterViewAttention />);
-      await Promise.resolve();
-    });
-    expect(persistenceRef.current.setFilters).not.toHaveBeenCalled();
-
-    persistenceRef.current = { ...persistenceRef.current, hydrated: true };
-    await act(async () => {
-      root.render(<ClusterViewAttention />);
-      await Promise.resolve();
-    });
-
-    expect(persistenceRef.current.setFilters).toHaveBeenCalledWith(filters);
-  });
-
-  it('binds the cluster-scoped Attention query with kind and namespace filters', async () => {
-    await act(async () => {
-      root.render(<ClusterViewAttention />);
-      await Promise.resolve();
-    });
-
-    expect(queryParamsRef.current).toEqual(
-      expect.objectContaining({
-        clusterId: 'cluster-a',
-        domain: 'cluster-attention',
-        viewId: 'cluster-attention',
-        showKindDropdown: true,
-        showNamespaceFilters: true,
-        defaultSortKey: 'severity',
-      })
-    );
-    expect(tablePropsRef.current).not.toHaveProperty('onRowClick');
-  });
-
-  it('keeps ignored-findings management as a standard action when ignore rules exist', async () => {
-    await act(async () => {
-      root.render(<ClusterViewAttention />);
-      await Promise.resolve();
-    });
-
-    expect(getManageIgnoredFindingsAction()).not.toHaveProperty('active');
-  });
-
-  it('offers ignored-findings management from the filtered-empty state', async () => {
-    await act(async () => {
-      root.render(<ClusterViewAttention />);
-      await Promise.resolve();
-    });
-
-    const filteredEmptyState = tablePropsRef.current?.filteredEmptyState as
-      | {
-          description: string;
-          clearFiltersLabel: string;
-          secondaryAction: { label: string; onClick: () => void };
-        }
-      | undefined;
-    expect(filteredEmptyState).toEqual(
-      expect.objectContaining({
-        description: 'Items could be hidden due to filters or ignored findings',
-        clearFiltersLabel: 'Clear filters',
-        secondaryAction: expect.objectContaining({ label: 'Manage ignored findings' }),
-      })
-    );
-
-    act(() => filteredEmptyState?.secondaryAction.onClick());
-    expect(document.body.textContent).toContain('Ignored findings');
-  });
-
-  it('opens the complete object reference from the Name link', async () => {
-    await act(async () => {
-      root.render(<ClusterViewAttention />);
-      await Promise.resolve();
-    });
-
-    const columns = queryParamsRef.current?.columns as
-      | GridColumnDefinition<ClusterAttentionFinding>[]
-      | undefined;
-    expect(columns?.map((column) => column.header)).toEqual([
-      'Kind',
-      'Name',
-      'Namespace',
-      'Severity',
-      'Finding',
-      'Age',
+    expect(tableRows().map((row) => row.textContent)).toEqual([
+      expect.stringContaining('checkout'),
     ]);
-    const nameCell = columns?.find((column) => column.key === 'name')?.render(finding);
-    expect(nameCell).toBeTruthy();
-    const onClick = (
-      nameCell as React.ReactElement<{ onClick: (event: { altKey: boolean }) => void }>
-    ).props.onClick;
-    act(() => onClick({ altKey: false }));
-
-    expect(openWithObjectMock).toHaveBeenCalledWith({
-      clusterId: 'cluster-a',
-      clusterName: undefined,
-      group: 'apps',
-      version: 'v1',
-      kind: 'Deployment',
-      kindAlias: undefined,
-      resource: 'deployments',
-      namespace: 'payments',
-      name: 'checkout',
-      uid: 'uid-checkout',
-    });
+    const { scope, params } = lastAttentionQuery();
+    expect(scope.startsWith(`${dev.clusterId}|`)).toBe(true);
+    expect(params.get('sort')).toBe('severity');
+    expect(params.get('sortDirection')).toBe('asc');
   });
 
-  it('selects the namespace in the sidebar from the Namespace link', async () => {
-    await act(async () => {
-      root.render(<ClusterViewAttention />);
-      await Promise.resolve();
-    });
-
-    const columns = queryParamsRef.current
-      ?.columns as GridColumnDefinition<ClusterAttentionFinding>[];
-    const namespaceCell = columns.find((column) => column.key === 'namespace')?.render(finding) as
-      | React.ReactElement<{
-          className: string;
-          onClick: (event: { altKey: boolean }) => void;
-        }>
-      | undefined;
-
-    expect(namespaceCell?.type).toBe('button');
-    expect(namespaceCell?.props.className).toContain('gridtable-link');
-    act(() => namespaceCell?.props.onClick({ altKey: false }));
-
-    expect(setSelectedNamespaceMock).toHaveBeenCalledWith('payments', 'cluster-a');
-    expect(setViewTypeMock).toHaveBeenCalledWith('namespace');
-    expect(setSidebarSelectionMock).toHaveBeenCalledWith({
-      type: 'namespace',
-      value: 'payments',
-    });
-    expect(setActiveNamespaceTabMock).toHaveBeenCalledWith('workloads');
-  });
-
-  it('renders every severity with the matching status chip', async () => {
-    await act(async () => {
-      root.render(<ClusterViewAttention />);
-      await Promise.resolve();
-    });
-
-    const columns = queryParamsRef.current?.columns as
-      | GridColumnDefinition<ClusterAttentionFinding>[]
-      | undefined;
-    const severityColumn = columns?.find((column) => column.key === 'severity');
-    for (const [severity, variant] of [
-      ['info', 'info'],
-      ['warning', 'warning'],
-      ['error', 'unhealthy'],
-    ] as const) {
-      const severityCell = severityColumn?.render({ ...finding, severity });
-
-      expect(severityCell).toBeTruthy();
-      expect((severityCell as React.ReactElement).type).toBe(StatusChip);
-      expect(
-        (severityCell as React.ReactElement<{ variant: string; children: React.ReactNode }>).props
-      ).toEqual(expect.objectContaining({ variant, children: severity }));
-      expect(severityColumn?.measurementElement?.({ ...finding, severity })).toEqual({
-        tagName: 'span',
-        className: `status-chip status-chip--${variant}`,
-        textContent: severity,
-      });
-    }
-  });
-
-  it('folds the current status into Finding without duplicating cause details', async () => {
-    await act(async () => {
-      root.render(<ClusterViewAttention />);
-      await Promise.resolve();
-    });
-
-    const columns = queryParamsRef.current
-      ?.columns as GridColumnDefinition<ClusterAttentionFinding>[];
-    const rendered = columns
-      .find((column) => column.key === 'reason')
-      ?.render({
-        ...finding,
+  it('shows each cause once and the current status only where it adds to the severity', async () => {
+    serveFindings([
+      finding({
         status: 'Updating',
         causes: [
           {
@@ -409,35 +166,16 @@ describe('ClusterViewAttention', () => {
             message: 'Updating',
             severity: 'warning',
           },
-          ...(finding.causes ?? []),
+          {
+            type: 'replica-mismatch',
+            label: 'Replica mismatch',
+            message: '1/2 ready',
+            severity: 'warning',
+          },
         ],
-      });
-    const markup = renderToStaticMarkup(rendered);
-    const cell = document.createElement('div');
-    cell.innerHTML = markup;
-
-    expect(cell.querySelector('.attention-finding-labels')?.textContent).toBe(
-      'Unhealthy workloads · Replica mismatch'
-    );
-    expect(cell.querySelector('.attention-finding-details')?.textContent).toBe(
-      'Updating · 1/2 ready'
-    );
-  });
-
-  it('does not repeat a status that matches the finding severity', async () => {
-    await act(async () => {
-      root.render(<ClusterViewAttention />);
-      await Promise.resolve();
-    });
-
-    const columns = queryParamsRef.current
-      ?.columns as GridColumnDefinition<ClusterAttentionFinding>[];
-    const rendered = columns
-      .find((column) => column.key === 'reason')
-      ?.render({
-        ...finding,
-        ref: { ...finding.ref, kind: 'Event' },
-        severity: 'warning',
+      }),
+      finding({
+        ref: { ...checkoutRef(), kind: 'Event', group: '', resource: 'events', name: 'api.17f' },
         status: 'Warning',
         causes: [
           {
@@ -447,112 +185,185 @@ describe('ClusterViewAttention', () => {
             severity: 'warning',
           },
         ],
-      });
-    const markup = renderToStaticMarkup(rendered);
-    const cell = document.createElement('div');
-    cell.innerHTML = markup;
+      }),
+    ]);
+    await start();
 
-    expect(cell.querySelector('.attention-finding-details')?.textContent).toBe(
+    const [workload, event] = tableRows().map((row) => cellOf(row, 'reason'));
+    expect(workload?.querySelector('.attention-finding-labels')?.textContent).toBe(
+      'Unhealthy workloads · Replica mismatch'
+    );
+    // The status repeats the first cause's message only once.
+    expect(workload?.querySelector('.attention-finding-details')?.textContent).toBe(
+      'Updating · 1/2 ready'
+    );
+    // A status equal to the severity adds nothing.
+    expect(event?.querySelector('.attention-finding-details')?.textContent).toBe(
       'BackOff · Back-off restarting failed container'
     );
   });
 
-  it('offers object, cluster, and global ignore scopes for each finding', async () => {
-    await act(async () => {
-      root.render(<ClusterViewAttention />);
-      await Promise.resolve();
-    });
+  it('opens the finding’s object with complete identity from its Name link only', async () => {
+    app.servePanel(dev, checkout);
+    // backend/autoscaling_details.go IsWorkloadHPAManaged: no HPA targets the workload.
+    app.backend.answer('IsWorkloadHPAManaged', () => false);
+    serveFindings([finding()]);
+    await start();
+    const table = requireValue(
+      view.container.querySelector<HTMLElement>('table[tabindex="0"]'),
+      'expected the findings table'
+    );
 
-    const getItems = tablePropsRef.current?.getCustomContextMenuItems as (
-      row: ClusterAttentionFinding,
-      columnKey: string
-    ) => Array<{ label?: string; onClick?: () => void }>;
-    const items = getItems(finding, 'name');
-    expect(items.map((item) => item.label)).toEqual([
+    // Enter on a focused finding opens nothing; the links open objects.
+    await act(async () => table.focus());
+    await act(async () => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+      );
+    });
+    await app.settle();
+    expect(view.openPanels()).toEqual([]);
+
+    await click(cellOf(tableRows()[0] as HTMLElement, 'name').querySelector('button'), 'Name link');
+
+    expect(view.openPanels()).toEqual([
+      { ...checkout, clusterId: dev.clusterId, clusterName: dev.clusterName },
+    ]);
+  });
+
+  it('opens the finding’s namespace on its Workloads view from the Namespace link', async () => {
+    serveFindings([finding()]);
+    app.serveTable(dev, 'namespace-workloads');
+    await start();
+
+    await click(
+      cellOf(tableRows()[0] as HTMLElement, 'namespace').querySelector('button'),
+      'Namespace link'
+    );
+
+    const { namespace, viewState } = view.owners();
+    expect(namespace.selectedNamespace).toBe('payments');
+    expect(namespace.selectedNamespaceClusterId).toBe(dev.clusterId);
+    expect(viewState?.viewType).toBe('namespace');
+    expect(viewState?.activeNamespaceTab).toBe('workloads');
+  });
+
+  it('ignores a finding for the object, the cluster, or every cluster', async () => {
+    const answer = () => NO_RULES;
+    app.backend.answer('IgnoreClusterAttentionObjectFinding', answer);
+    app.backend.answer('IgnoreClusterAttentionFindingType', answer);
+    app.backend.answer('IgnoreGlobalAttentionFindingType', answer);
+    serveFindings([finding()]);
+    await start();
+
+    const labels = [
       'Ignore "Replica mismatch" for this object only',
       'Ignore "Replica mismatch" in this cluster',
       'Ignore "Replica mismatch" in all clusters',
+    ];
+    expect(await openRowMenu()).toEqual(expect.arrayContaining(labels));
+    for (const label of labels) {
+      await openRowMenu();
+      await click(
+        menuItems().find((item) => menuLabel(item) === label),
+        label
+      );
+    }
+
+    expect(app.backend.calls('IgnoreClusterAttentionObjectFinding')).toEqual([
+      [dev.clusterId, checkoutRef(), 'replica-mismatch'],
     ]);
-
-    await act(async () => {
-      items[0].onClick?.();
-      items[1].onClick?.();
-      items[2].onClick?.();
-      await Promise.resolve();
-    });
-    expect(ignoreObjectMock).toHaveBeenCalledWith('cluster-a', finding.ref, 'replica-mismatch');
-    expect(ignoreTypeMock).toHaveBeenCalledWith('cluster-a', 'replica-mismatch');
-    expect(ignoreGlobalTypeMock).toHaveBeenCalledWith('cluster-a', 'replica-mismatch');
+    expect(app.backend.calls('IgnoreClusterAttentionFindingType')).toEqual([
+      [dev.clusterId, 'replica-mismatch'],
+    ]);
+    expect(app.backend.calls('IgnoreGlobalAttentionFindingType')).toEqual([
+      [dev.clusterId, 'replica-mismatch'],
+    ]);
   });
 
-  it('opens ignored-findings management and restores a type rule', async () => {
-    await act(async () => {
-      root.render(<ClusterViewAttention />);
-      await Promise.resolve();
-    });
-
-    openIgnoredFindings();
-    expect(document.body.textContent).toContain('Ignored findings');
-    const restore = Array.from(document.body.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Restore'
-    );
-    expect(restore).toBeTruthy();
-    await act(async () => {
-      restore?.click();
-      await Promise.resolve();
-    });
-    expect(restoreTypeMock).toHaveBeenCalledWith('cluster-a', 'restarts');
-  });
-
-  it('restores an object-scoped finding from management', async () => {
-    queryPayloadRef.current = {
-      ignoreRules: {
-        objectFindings: [{ ref: finding.ref, findingType: 'replica-mismatch' }],
-        clusterFindingTypes: [],
-        globalFindingTypes: [],
-      },
-      findingTypes: [],
+  it('restores each kind of ignore rule from the ignored-findings dialog', async () => {
+    const rules: AttentionIgnoreRules = {
+      objectFindings: [{ ref: checkoutRef(), findingType: 'replica-mismatch' }],
+      clusterFindingTypes: ['restarts'],
+      globalFindingTypes: ['warning-event'],
     };
-    await act(async () => {
-      root.render(<ClusterViewAttention />);
-      await Promise.resolve();
+    const remaining = { ...rules };
+    app.backend.answer('RestoreClusterAttentionObjectFinding', () => {
+      remaining.objectFindings = [];
+      return { ...remaining };
     });
+    app.backend.answer('RestoreClusterAttentionFindingType', () => {
+      remaining.clusterFindingTypes = [];
+      return { ...remaining };
+    });
+    app.backend.answer('RestoreGlobalAttentionFindingType', () => {
+      remaining.globalFindingTypes = [];
+      return { ...remaining };
+    });
+    serveFindings([], {
+      ignoreRules: rules,
+      findingTypes: [
+        { id: 'replica-mismatch', label: 'Replica mismatch' },
+        { id: 'restarts', label: 'Restarts' },
+        { id: 'warning-event', label: 'Warning events' },
+      ],
+    });
+    await start();
 
-    openIgnoredFindings();
-    expect(document.body.textContent).toContain('Deployment payments/checkout');
-    const restore = Array.from(document.body.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Restore'
+    await click(
+      view.container.querySelector('[aria-label="Manage ignored findings"]'),
+      'the Manage ignored findings action'
     );
-    await act(async () => {
-      restore?.click();
-      await Promise.resolve();
-    });
-    expect(restoreObjectMock).toHaveBeenCalledWith('cluster-a', finding.ref, 'replica-mismatch');
+    const dialog = requireValue(ignoredDialog(), 'expected the ignored-findings dialog');
+    for (const rule of ['Replica mismatch', 'Restarts', 'Warning events']) {
+      const item = requireValue(
+        Array.from(dialog.querySelectorAll('li')).find((li) => li.textContent?.includes(rule)),
+        `expected the ${rule} rule`
+      );
+      await click(buttonNamed('Restore', item), `Restore ${rule}`);
+    }
+
+    expect(app.backend.calls('RestoreClusterAttentionObjectFinding')).toEqual([
+      [dev.clusterId, checkoutRef(), 'replica-mismatch'],
+    ]);
+    expect(app.backend.calls('RestoreClusterAttentionFindingType')).toEqual([
+      [dev.clusterId, 'restarts'],
+    ]);
+    expect(app.backend.calls('RestoreGlobalAttentionFindingType')).toEqual([
+      [dev.clusterId, 'warning-event'],
+    ]);
+    expect(dialog.querySelectorAll('li')).toHaveLength(0);
   });
 
-  it('restores an all-cluster finding type from management', async () => {
-    queryPayloadRef.current = {
-      ignoreRules: {
-        objectFindings: [],
-        clusterFindingTypes: [],
-        globalFindingTypes: ['warning-event'],
-      },
-      findingTypes: [{ id: 'warning-event', label: 'Warning events' }],
-    };
-    await act(async () => {
-      root.render(<ClusterViewAttention />);
-      await Promise.resolve();
+  it('applies the Overview’s requested filter and offers ignored findings when it hides everything', async () => {
+    const overview = makeClusterOverviewSnapshotPayload({
+      clusterId: dev.clusterId,
+      clusterName: dev.clusterName,
     });
-
-    openIgnoredFindings();
-    expect(document.body.textContent).toContain('All Clusters');
-    const restore = Array.from(document.body.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Restore'
+    app.snapshots.serve(
+      'cluster-overview',
+      buildClusterRefreshScope('cluster-overview', dev.clusterId),
+      {
+        ...overview,
+        overview: { ...overview.overview, restartedPods: 4 },
+      }
     );
-    await act(async () => {
-      restore?.click();
-      await Promise.resolve();
-    });
-    expect(restoreGlobalTypeMock).toHaveBeenCalledWith('cluster-a', 'warning-event');
+    serveFindings([]);
+    view = await app.mountApp();
+
+    await click(
+      view.container.querySelector('[data-testid="cluster-pod-status-restarted"]'),
+      'the restarts card'
+    );
+
+    expect(view.owners().viewState?.activeClusterTab).toBe('attention');
+    const { params } = lastAttentionQuery();
+    expect(params.getAll('kinds')).toEqual(['Pod']);
+    expect(params.getAll('facet.findings')).toEqual(['restarts']);
+    await click(
+      buttonNamed('Manage ignored findings', view.container),
+      'the filtered-empty action'
+    );
+    expect(ignoredDialog()).not.toBeNull();
   });
 });

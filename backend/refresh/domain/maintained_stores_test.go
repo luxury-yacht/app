@@ -52,6 +52,29 @@ func (f *fakeSpillable) SwapToMmap(path string) (func() error, error) {
 	return func() error { f.closed++; return nil }, nil
 }
 
+// spillOnlyStore spills and restores but has nothing to reconcile, like a store
+// whose reflector's relist already removes stale rows.
+type spillOnlyStore struct{ inner fakeSpillable }
+
+func (s *spillOnlyStore) SpillTo(path string) error     { return s.inner.SpillTo(path) }
+func (s *spillOnlyStore) RestoreFrom(path string) error { return s.inner.RestoreFrom(path) }
+func (s *spillOnlyStore) SwapToMmap(path string) (func() error, error) {
+	return s.inner.SwapToMmap(path)
+}
+
+// Re-warm reconciliation reaches the stores that reconcile, and a store with
+// nothing to reconcile needs no Reconcile method to be spilled and restored.
+func TestReconcileMaintainedStoresReachesReconcilers(t *testing.T) {
+	reg := New()
+	reconciling := &fakeSpillable{}
+	reg.RegisterMaintainedStore("cluster-attention", reconciling)
+	reg.RegisterMaintainedStore("pods", &spillOnlyStore{})
+
+	reg.ReconcileMaintainedStores()
+
+	require.True(t, reconciling.reconciled)
+}
+
 // TestRegistryCoolMaintainedStoresToMmap proves CoolMaintainedStoresToMmap swaps every
 // registered store to a per-domain mmap file and returns one closer per store.
 func TestRegistryCoolMaintainedStoresToMmap(t *testing.T) {

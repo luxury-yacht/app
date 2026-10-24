@@ -4,6 +4,7 @@
   --cluster-tabs-height: 0px;
   --app-content-top: calc(var(--app-header-height) + var(--cluster-tabs-height));
   --gridtable-filter-bar-height: 40px;
+  --tab-height: 32px;
 
   /* Spacing scale */
   --spacing-xs: 0.25rem;

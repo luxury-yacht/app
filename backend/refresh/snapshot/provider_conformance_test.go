@@ -97,7 +97,7 @@ func TestTypedProviderBuildersEmitTheEnvelope(t *testing.T) {
 
 	t.Run("cluster-storage (static family)", func(t *testing.T) {
 		pv := &corev1.PersistentVolume{ObjectMeta: metav1.ObjectMeta{Name: "pv-a"}}
-		builder := &ClusterStorageBuilder{collectIndexer: clusterStorageCollectIndexer(testsupport.NewClusterIndexer(t, pv))}
+		builder := clusterStorageBuilderFor(ClusterMeta{}, clusterStorageCollectIndexer(testsupport.NewClusterIndexer(t, pv)))
 		snap, err := builder.Build(ctx, "")
 		require.NoError(t, err)
 		payload, ok := snap.Payload.(ClusterStorageSnapshot)

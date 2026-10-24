@@ -23,13 +23,16 @@ export interface DiagnosticsRow {
   clusterId: string;
   label: string;
   status: DomainStatus;
+  // A live stream subscription serves this scope, so it is in use even while
+  // its status is idle (a query-backed table before its first change signal).
+  streamActive?: boolean;
   version: string;
   interval: string;
   lastUpdated: string;
   lastUpdatedTooltip: string;
   telemetryTooltip?: string;
   duration?: string;
-  // Formatted peak informer-sync-gate wait (initial-LIST gating cost) for this
+  // Formatted peak feed-sync-gate wait (initial-LIST gating cost) for this
   // domain; '—' / undefined when no wait was recorded.
   syncWait?: string;
   telemetrySuccess?: number;
@@ -48,8 +51,8 @@ export interface DiagnosticsRow {
   scopeTooltip?: string;
   role: string;
   roleTooltip?: string;
-  // Structured scope entries for multi-line display (Active/Background clusters).
-  scopeEntries?: { label: 'Active' | 'Background'; clusterName: string }[];
+  // The scope's cluster, shown with an "(active)" marker for the foreground cluster.
+  scopeEntry?: { label: 'Active' | 'Background'; clusterName: string };
   mode: string;
   modeTooltip?: string;
   healthStatus: string;
@@ -134,7 +137,7 @@ export interface ClusterDataScopeRow extends ClusterDataTreeNode {
   domainLabel: string;
   scope: string;
   scopeTooltip?: string;
-  scopeEntries?: { label: 'Active' | 'Background'; clusterName: string }[];
+  scopeEntry?: { label: 'Active' | 'Background'; clusterName: string };
   health: ClusterDataHealth;
   feed: string;
   feedTooltip: string;

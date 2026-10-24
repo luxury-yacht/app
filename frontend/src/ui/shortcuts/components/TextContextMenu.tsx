@@ -8,7 +8,7 @@
  * but both render the same ContextMenu component for visual consistency.
  */
 
-import { writeClipboardText } from '@core/desktop-runtime';
+import { readClipboardText, writeClipboardText } from '@core/desktop-runtime';
 import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMenu';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -142,8 +142,7 @@ const TextContextMenu: React.FC = () => {
           label: 'Paste',
           onClick: () => {
             focusTarget(targetRef.current);
-            navigator.clipboard
-              .readText()
+            readClipboardText()
               .then((text) => {
                 if (text) {
                   document.execCommand('insertText', false, text);

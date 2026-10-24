@@ -7,15 +7,14 @@
 
 import {
   type AppPreferenceKey,
-  getDefaultObjectPanelPosition,
   getIntegerPreferenceMetadata,
-  getObjectPanelLayoutDefaults,
   normalizeIntegerPreferenceValue,
   type ObjectPanelLayoutDefaults,
   type ObjectPanelPosition,
   setDefaultObjectPanelPosition,
   setObjectPanelLayoutDefaults,
 } from '@core/settings/appPreferences';
+import { usePreference } from '@core/settings/usePreference';
 import {
   DockBottomIcon,
   DockRightIcon,
@@ -38,12 +37,12 @@ const objectPanelPositionOptions = [
 
 type LayoutField = 'dockedRightWidth' | 'dockedBottomHeight' | 'floatingWidth' | 'floatingHeight';
 
-const fieldPreferenceKeys: Record<LayoutField, AppPreferenceKey> = {
+const fieldPreferenceKeys = {
   dockedRightWidth: 'objectPanelDockedRightWidth',
   dockedBottomHeight: 'objectPanelDockedBottomHeight',
   floatingWidth: 'objectPanelFloatingWidth',
   floatingHeight: 'objectPanelFloatingHeight',
-};
+} as const satisfies Record<LayoutField, AppPreferenceKey>;
 
 // Each layout row is a pair of bounded pixel inputs.
 const layoutRows: Array<{
@@ -92,46 +91,32 @@ const layoutRows: Array<{
 function ObjectPanelSection() {
   const elementIdPrefix = useId();
   const { applyLayoutDefaultsAcrossClusters } = useDockablePanelContext();
-  const [objectPanelPosition, setObjectPanelPositionState] = useState<ObjectPanelPosition>(() =>
-    getDefaultObjectPanelPosition()
-  );
-  const [panelLayout, setPanelLayout] = useState<ObjectPanelLayoutDefaults>(() =>
-    getObjectPanelLayoutDefaults()
+  const objectPanelPosition = usePreference('defaultObjectPanelPosition');
+  const dockedRightWidth = usePreference(fieldPreferenceKeys.dockedRightWidth);
+  const dockedBottomHeight = usePreference(fieldPreferenceKeys.dockedBottomHeight);
+  const floatingWidth = usePreference(fieldPreferenceKeys.floatingWidth);
+  const floatingHeight = usePreference(fieldPreferenceKeys.floatingHeight);
+  const panelLayout = useMemo<ObjectPanelLayoutDefaults>(
+    () => ({ dockedRightWidth, dockedBottomHeight, floatingWidth, floatingHeight }),
+    [dockedRightWidth, dockedBottomHeight, floatingWidth, floatingHeight]
   );
 
-  // Track raw input strings so users can freely backspace/clear without
-  // values snapping back to 0 on every keystroke.
-  const [panelLayoutInputs, setPanelLayoutInputs] = useState<Record<LayoutField, string>>(() => {
-    const defaults = getObjectPanelLayoutDefaults();
-    return {
-      dockedRightWidth: String(defaults.dockedRightWidth),
-      dockedBottomHeight: String(defaults.dockedBottomHeight),
-      floatingWidth: String(defaults.floatingWidth),
-      floatingHeight: String(defaults.floatingHeight),
-    };
-  });
-
-  const handleObjectPanelPositionChange = (position: ObjectPanelPosition) => {
-    setObjectPanelPositionState(position);
-    setDefaultObjectPanelPosition(position);
-  };
+  // Raw text per field while the user types, so clearing a field doesn't snap it
+  // back; the saved value (including a rollback) shows once the field is left.
+  const [layoutDrafts, setLayoutDrafts] = useState<Partial<Record<LayoutField, string>>>({});
 
   const handlePanelLayoutInput = (field: LayoutField, raw: string) => {
-    setPanelLayoutInputs((prev) => ({ ...prev, [field]: raw }));
+    setLayoutDrafts((prev) => ({ ...prev, [field]: raw }));
     const parsed = Number.parseInt(raw, 10);
     if (!Number.isNaN(parsed)) {
-      const clamped = normalizeIntegerPreferenceValue(fieldPreferenceKeys[field], parsed, {
-        defaultOnNonPositive: true,
-      });
-      const updated = { ...panelLayout, [field]: clamped };
-      setPanelLayout(updated);
-      setObjectPanelLayoutDefaults(updated);
+      const clamped = normalizeIntegerPreferenceValue(fieldPreferenceKeys[field], parsed);
+      setObjectPanelLayoutDefaults({ ...panelLayout, [field]: clamped });
       applyLayoutDefaultsAcrossClusters();
     }
   };
 
   const handlePanelLayoutBlur = (field: LayoutField) => {
-    setPanelLayoutInputs((prev) => ({ ...prev, [field]: String(panelLayout[field]) }));
+    setLayoutDrafts((prev) => ({ ...prev, [field]: undefined }));
   };
 
   // Warn when configured values exceed the current visible content area.
@@ -164,7 +149,7 @@ function ObjectPanelSection() {
           min={metadata.min}
           max={metadata.max}
           className={panelLayoutWarning?.fields.has(field) ? 'opd-input-warn' : ''}
-          value={panelLayoutInputs[field]}
+          value={layoutDrafts[field] ?? String(panelLayout[field])}
           onChange={(e) => handlePanelLayoutInput(field, e.target.value)}
           onBlur={() => handlePanelLayoutBlur(field)}
           aria-label={aria}
@@ -186,7 +171,7 @@ function ObjectPanelSection() {
           ariaLabel="Default Object Panel position"
           value={objectPanelPosition}
           options={objectPanelPositionOptions}
-          onChange={handleObjectPanelPositionChange}
+          onChange={setDefaultObjectPanelPosition}
         />
       </SettingRow>
 

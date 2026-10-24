@@ -1,104 +1,41 @@
 /**
  * frontend/src/modules/object-map/ObjectMap.test.tsx
  *
- * Integration-style tests for the object-map shell with a mocked renderer.
+ * The object map shell over the backend's graph: which objects and links it
+ * shows (seed cluster, ReplicaSet collapse, kind and relationship filters,
+ * transitive paths), selection, search, legend and viewport controls, manual
+ * layout, empty/truncated/warning states, and the object and canvas context
+ * menus with the actions each object's facts and identity allow. Runs inside
+ * the production shell (keyboard, zoom, permissions, object actions, context
+ * menu) over a faked backend (test-utils/appState); only the G6 canvas
+ * renderer is stubbed, exposing its layout and callbacks as plain buttons.
  */
 
 import type { ObjectMapReference, ObjectMapSnapshotPayload } from '@core/refresh/types';
 import { OBJECT_ACTION_IDS, objectActionLabel } from '@shared/actions/objectActionContract';
-import { withStableListKeys } from '@shared/utils/stableListKeys';
-import { KeyboardProvider } from '@ui/shortcuts';
 import { act } from 'react';
-import * as ReactDOMClient from 'react-dom/client';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
 import ObjectMap from './ObjectMap';
 import type { ObjectMapViewportControls } from './objectMapRendererTypes';
 
-const useShortNamesMock = vi.hoisted(() => vi.fn(() => false));
-Element.prototype.scrollIntoView ??= vi.fn();
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp | undefined;
 
-vi.mock('@/hooks/useShortNames', () => ({
-  useShortNames: () => useShortNamesMock(),
-}));
+/** The production shell, mounted once per test. */
+const mountShell = async (): Promise<MountedApp> => {
+  view ??= await app.render(null);
+  return view;
+};
 
-vi.mock('@/utils/platform', () => ({
-  isMacPlatform: () => true,
-}));
-
-vi.mock('@core/contexts/ZoomContext', () => ({
-  useZoom: () => ({ zoomLevel: 100 }),
-}));
-
-vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: vi.fn() }),
-}));
-
-vi.mock('@/core/capabilities', () => ({
-  getPermissionKey: (
-    kind: string,
-    verb: string,
-    namespace?: string | null,
-    subresource?: string | null,
-    clusterId?: string | null,
-    group?: string | null,
-    version?: string | null
-  ) =>
-    [
-      clusterId ?? '',
-      group ?? '',
-      version ?? '',
-      kind,
-      namespace ?? '',
-      verb,
-      subresource ?? '',
-    ].join('|'),
-  queryKindPermissions: vi.fn(),
-  useUserPermissions: () => {
-    const permissions = new Map();
-    permissions.get = () => ({ allowed: true, pending: false });
-    return permissions;
-  },
-}));
-
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: vi.fn() }),
-}));
-
-vi.mock('@shared/components/ContextMenu', () => ({
-  default: ({
-    items,
-  }: {
-    items: Array<{
-      actionId?: string;
-      label?: string;
-      onClick?: () => void;
-      icon?: React.ReactNode;
-      divider?: boolean;
-      header?: boolean;
-    }>;
-  }) => (
-    <div data-testid="mock-context-menu">
-      {withStableListKeys(
-        items,
-        (item) => item.actionId ?? item.label ?? (item.divider ? 'divider' : 'header')
-      ).map(({ key, value: item }) =>
-        item.divider || item.header ? null : (
-          <button
-            key={key}
-            type="button"
-            data-context-action-id={item.actionId}
-            onClick={item.onClick}
-          >
-            {!!item.icon && <span data-testid="mock-context-menu-icon">{item.icon}</span>}
-            {item.label}
-          </button>
-        )
-      )}
-    </div>
-  ),
-}));
-
+// G6 draws on a canvas jsdom cannot provide; the stub renders the laid-out
+// nodes and edges as buttons that drive the renderer callbacks.
 vi.mock('./ObjectMapG6Renderer', () => {
   const MockObjectMapG6Renderer = (props: {
     layout: {
@@ -353,7 +290,6 @@ const payload: ObjectMapSnapshotPayload = {
     },
   ],
   edges: [{ id: 'edge-1', source: 'deploy', target: 'pod', type: 'owner', label: 'owns' }],
-  maxDepth: 4,
   maxNodes: 250,
   truncated: false,
 };
@@ -363,36 +299,20 @@ const shortNamesPayload: ObjectMapSnapshotPayload = {
   seed: ref('service', 'Service', 'frontend', ''),
   nodes: [
     { id: 'service', depth: 0, ref: ref('service', 'Service', 'frontend', '') },
-    { id: 'pod', depth: 1, ref: ref('pod', 'Pod', 'frontend-abc', '') },
-  ],
-  edges: [
-    { id: 'edge-service', source: 'service', target: 'pod', type: 'selector', label: 'selects' },
-  ],
-};
-
-const hpaManagedPayload: ObjectMapSnapshotPayload = {
-  ...payload,
-  nodes: [
     {
-      id: 'hpa',
+      id: 'slice',
       depth: 1,
-      ref: {
-        ...ref('hpa', 'HorizontalPodAutoscaler', 'web', 'autoscaling', 'v2'),
-        resource: 'horizontalpodautoscalers',
-      },
-    },
-    {
-      id: 'deploy',
-      depth: 0,
-      ref: {
-        ...ref('deploy', 'Deployment', 'web', 'apps'),
-        resource: 'deployments',
-      },
-      actionFacts: { hpaManaged: true, desiredReplicas: 3 },
+      ref: ref('slice', 'EndpointSlice', 'frontend-abc', 'discovery.k8s.io'),
     },
   ],
   edges: [
-    { id: 'edge-hpa-deploy', source: 'hpa', target: 'deploy', type: 'scales', label: 'scales' },
+    {
+      id: 'edge-service',
+      source: 'service',
+      target: 'slice',
+      type: 'endpoint',
+      label: 'has endpoints',
+    },
   ],
 };
 
@@ -517,21 +437,80 @@ const rolloutReplicaSetPayload: ObjectMapSnapshotPayload = {
   ],
 };
 
-const focusModePayload: ObjectMapSnapshotPayload = {
+// The backend graph for a Pod seed: its owner chain and the HPA scaling it,
+// the EndpointSlice listing the Pod with its Service and Ingress in front, the
+// PDB and NetworkPolicy selecting the Pod, and the Node it runs on.
+const podNeighborhoodPayload: ObjectMapSnapshotPayload = {
+  ...payload,
+  seed: ref('pod', 'Pod', 'web-pod', ''),
+  nodes: [
+    { id: 'pod', depth: 0, ref: ref('pod', 'Pod', 'web-pod', '') },
+    { id: 'rs', depth: 1, ref: ref('rs', 'ReplicaSet', 'web-rs', 'apps') },
+    { id: 'deploy', depth: 2, ref: ref('deploy', 'Deployment', 'web', 'apps') },
+    {
+      id: 'hpa',
+      depth: 3,
+      ref: ref('hpa', 'HorizontalPodAutoscaler', 'web', 'autoscaling', 'v2'),
+    },
+    { id: 'node', depth: 1, ref: ref('node', 'Node', 'worker-a', '') },
+    { id: 'slice', depth: 1, ref: ref('slice', 'EndpointSlice', 'web-abc', 'discovery.k8s.io') },
+    { id: 'svc', depth: 2, ref: ref('svc', 'Service', 'web', '') },
+    { id: 'ing', depth: 3, ref: ref('ing', 'Ingress', 'web', 'networking.k8s.io') },
+    { id: 'pdb', depth: 1, ref: ref('pdb', 'PodDisruptionBudget', 'web', 'policy') },
+    { id: 'netpol', depth: 1, ref: ref('netpol', 'NetworkPolicy', 'web', 'networking.k8s.io') },
+  ],
+  edges: [
+    { id: 'deploy-rs', source: 'deploy', target: 'rs', type: 'owner', label: 'owns' },
+    { id: 'rs-pod', source: 'rs', target: 'pod', type: 'owner', label: 'owns' },
+    { id: 'hpa-deploy', source: 'hpa', target: 'deploy', type: 'scales', label: 'scales' },
+    { id: 'pod-node', source: 'pod', target: 'node', type: 'schedules', label: 'scheduled on' },
+    { id: 'svc-slice', source: 'svc', target: 'slice', type: 'endpoint', label: 'has endpoints' },
+    { id: 'slice-pod', source: 'slice', target: 'pod', type: 'endpoint', label: 'has endpoints' },
+    { id: 'ing-svc', source: 'ing', target: 'svc', type: 'routes', label: 'routes to' },
+    { id: 'pdb-pod', source: 'pdb', target: 'pod', type: 'selector', label: 'selects' },
+    { id: 'netpol-pod', source: 'netpol', target: 'pod', type: 'selector', label: 'selects' },
+  ],
+};
+
+// An old ReplicaSet with no Pods still references the ConfigMap from its pod
+// template; that ConfigMap is reachable only through the collapsible RS. The
+// new Pod's ConfigMap and the HPA scaling the Deployment are reached without it.
+const collapseRemnantPayload: ObjectMapSnapshotPayload = {
   ...payload,
   nodes: [
     { id: 'deploy', depth: 0, ref: ref('deploy', 'Deployment', 'web', 'apps') },
-    { id: 'pod-a', depth: 1, ref: ref('pod-a', 'Pod', 'web-a', '') },
-    { id: 'pod-b', depth: 1, ref: ref('pod-b', 'Pod', 'web-b', '') },
-    { id: 'config-a', depth: 2, ref: ref('config-a', 'ConfigMap', 'web-a-config', '') },
-    { id: 'secret-a', depth: 3, ref: ref('secret-a', 'Secret', 'web-a-secret', '') },
+    { id: 'rs-new', depth: 1, ref: ref('rs-new', 'ReplicaSet', 'web-new', 'apps') },
+    { id: 'rs-old', depth: 1, ref: ref('rs-old', 'ReplicaSet', 'web-old', 'apps') },
+    { id: 'pod-new', depth: 2, ref: ref('pod-new', 'Pod', 'web-new-abc', '') },
+    { id: 'config-old', depth: 2, ref: ref('config-old', 'ConfigMap', 'web-config-v1', '') },
+    { id: 'config-new', depth: 3, ref: ref('config-new', 'ConfigMap', 'web-config-v2', '') },
+    {
+      id: 'hpa',
+      depth: 1,
+      ref: ref('hpa', 'HorizontalPodAutoscaler', 'web', 'autoscaling', 'v2'),
+    },
   ],
   edges: [
-    { id: 'edge-a', source: 'deploy', target: 'pod-a', type: 'owner', label: 'owns' },
-    { id: 'edge-b', source: 'deploy', target: 'pod-b', type: 'owner', label: 'owns' },
-    { id: 'edge-config', source: 'pod-a', target: 'config-a', type: 'uses', label: 'uses' },
-    { id: 'edge-secret', source: 'config-a', target: 'secret-a', type: 'uses', label: 'uses' },
+    { id: 'edge-new', source: 'deploy', target: 'rs-new', type: 'owner', label: 'owns' },
+    { id: 'edge-old', source: 'deploy', target: 'rs-old', type: 'owner', label: 'owns' },
+    { id: 'edge-pod', source: 'rs-new', target: 'pod-new', type: 'owner', label: 'owns' },
+    { id: 'edge-config', source: 'rs-old', target: 'config-old', type: 'uses', label: 'uses' },
+    { id: 'edge-config-new', source: 'pod-new', target: 'config-new', type: 'uses', label: 'uses' },
+    { id: 'edge-hpa', source: 'hpa', target: 'deploy', type: 'scales', label: 'scales' },
   ],
+};
+
+/** The fixtures' objects belong to the visible cluster. */
+const inCluster = (testPayload: ObjectMapSnapshotPayload): ObjectMapSnapshotPayload => {
+  const move = (target: ObjectMapReference) =>
+    target.clusterId === 'cluster-a' ? { ...target, clusterId: dev.clusterId } : target;
+  return {
+    ...testPayload,
+    clusterId: dev.clusterId,
+    clusterName: dev.clusterName,
+    seed: move(testPayload.seed),
+    nodes: (testPayload.nodes ?? []).map((node) => ({ ...node, ref: move(node.ref) })),
+  };
 };
 
 const renderObjectMap = async ({
@@ -545,57 +524,32 @@ const renderObjectMap = async ({
   onNavigateView?: (ref: ObjectMapReference) => void;
   onOpenObjectMap?: (ref: ObjectMapReference) => void;
 } = {}) => {
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = ReactDOMClient.createRoot(container);
-
-  await act(async () => {
-    root.render(
-      <KeyboardProvider>
-        <ObjectMap
-          payload={testPayload}
-          onOpenPanel={onOpenPanel}
-          onNavigateView={onNavigateView}
-          onOpenObjectMap={onOpenObjectMap}
-        />
-      </KeyboardProvider>
+  const shell = await mountShell();
+  const draw = (next: ObjectMapSnapshotPayload) =>
+    shell.show(
+      <ObjectMap
+        payload={inCluster(next)}
+        onOpenPanel={onOpenPanel}
+        onNavigateView={onNavigateView}
+        onOpenObjectMap={onOpenObjectMap}
+      />
     );
-    await Promise.resolve();
-  });
-
-  for (
-    let attempts = 0;
-    attempts < 5 &&
-    !container.querySelector('[data-testid="object-map-g6-mock"]') &&
-    !container.querySelector('[data-testid="object-map-empty"]');
-    attempts += 1
-  ) {
-    await act(async () => {
-      await Promise.resolve();
-    });
-  }
-
+  await draw(testPayload);
   return {
-    container,
-    rerender: async (nextPayload: ObjectMapSnapshotPayload) =>
-      act(async () =>
-        root.render(
-          <KeyboardProvider>
-            <ObjectMap
-              payload={nextPayload}
-              onOpenPanel={onOpenPanel}
-              onNavigateView={onNavigateView}
-              onOpenObjectMap={onOpenObjectMap}
-            />
-          </KeyboardProvider>
-        )
-      ),
-    cleanup: () => {
-      act(() => root.unmount());
-      container.remove();
-    },
+    container: shell.container,
+    rerender: draw,
+    cleanup: () => shell.clear(),
   };
 };
+
+/** The open context menu (a portal on the document body). */
+const contextMenu = () => document.body.querySelector<HTMLElement>('[role="menu"]');
+const menuAction = (actionId: string) =>
+  contextMenu()?.querySelector<HTMLElement>(`[data-context-action-id="${actionId}"]`) ?? null;
+const menuItem = (label: string) =>
+  Array.from(contextMenu()?.querySelectorAll<HTMLElement>('.context-menu-item') ?? []).find(
+    (item) => item.querySelector('.context-menu-label')?.textContent?.trim() === label
+  );
 
 const mouseEvent = (type: string, init: MouseEventInit = {}): MouseEvent =>
   new MouseEvent(type, { bubbles: true, cancelable: true, ...init });
@@ -609,9 +563,13 @@ const pointerEvent = (
   return event;
 };
 
+beforeEach(() => {
+  view = undefined;
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['default']);
+});
+
 afterEach(() => {
-  useShortNamesMock.mockReturnValue(false);
-  document.body.innerHTML = '';
   vi.useRealTimers();
 });
 
@@ -635,17 +593,6 @@ describe('ObjectMap', () => {
     expect(shownOther).toBeNull();
   });
 
-  it('renders the existing toolbar without an extra object chooser or actions row', async () => {
-    const { container, cleanup } = await renderObjectMap();
-    expect(container.querySelector('.object-map__header')).not.toBeNull();
-    expect(container.querySelector('[aria-label="Search map objects"]')).not.toBeNull();
-    expect(container.querySelector('[aria-label="Filter map kinds"]')).not.toBeNull();
-    expect(container.querySelector('[aria-label="Choose map object"]')).toBeNull();
-    expect(container.querySelector('[aria-label="Selected object actions"]')).toBeNull();
-    expect(container.querySelector('.object-map__object-controls')).toBeNull();
-    cleanup();
-  });
-
   it('discards a selected-object menu when its object disappears instead of reviving it', async () => {
     const { container, rerender, cleanup } = await renderObjectMap();
     await act(async () => {
@@ -653,10 +600,10 @@ describe('ObjectMap', () => {
         .querySelector<HTMLButtonElement>('[aria-label="Deployment: web"]')
         ?.dispatchEvent(mouseEvent('contextmenu', { clientX: 100, clientY: 120 }));
     });
-    expect(container.querySelector('[data-testid="mock-context-menu"]')).not.toBeNull();
+    expect(contextMenu()).not.toBeNull();
     await rerender({ ...payload, nodes: [], edges: [] });
     await rerender(payload);
-    expect(container.querySelector('[data-testid="mock-context-menu"]')).toBeNull();
+    expect(contextMenu()).toBeNull();
     cleanup();
   });
 
@@ -673,11 +620,29 @@ describe('ObjectMap', () => {
         .querySelector<HTMLButtonElement>('[aria-label="Deployment: web"]')
         ?.dispatchEvent(mouseEvent('contextmenu', { clientX: 100, clientY: 120 }));
     });
-    expect(container.querySelector('[data-testid="mock-context-menu"]')).toBeNull();
-    expect(container.querySelector('[data-context-action-id]')).toBeNull();
+    expect(contextMenu()).toBeNull();
+    expect(document.body.querySelector('[role="menu"] [data-context-action-id]')).toBeNull();
     cleanup();
   });
-  it('keeps resource actions without movement or connection entries in the map context menu', async () => {
+
+  it('does not offer an object menu for a missing object, which has nothing to act on', async () => {
+    const node = {
+      ...requireValue(payload.nodes?.[0], 'expected deployment node'),
+      status: undefined,
+      missing: true,
+    };
+    const { container, cleanup } = await renderObjectMap({
+      testPayload: { ...payload, nodes: [node], edges: [] },
+    });
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[aria-label="Deployment: web"]')
+        ?.dispatchEvent(mouseEvent('contextmenu', { clientX: 100, clientY: 120 }));
+    });
+    expect(document.body.querySelector('[role="menu"] [data-context-action-id]')).toBeNull();
+    cleanup();
+  });
+  it('opens a selected object’s details from its menu with full identity', async () => {
     const onOpenPanel = vi.fn();
     const { container, cleanup } = await renderObjectMap({ onOpenPanel });
     const pod = requireValue(
@@ -691,51 +656,14 @@ describe('ObjectMap', () => {
     await act(async () => {
       pod.dispatchEvent(mouseEvent('contextmenu', { clientX: 100, clientY: 120 }));
     });
-    const menu = requireValue(
-      container.querySelector('[data-testid="mock-context-menu"]'),
-      'expected object context menu'
+    const open = requireValue(
+      menuAction(OBJECT_ACTION_IDS.viewDetails),
+      'expected View Details in the object menu'
     );
-    for (const direction of ['left', 'right', 'up', 'down']) {
-      expect(menu.textContent).not.toContain(`Move object ${direction}`);
-    }
-    expect(menu.textContent).not.toContain('Deployment web');
-    expect(menu.textContent).not.toContain('owns');
-    const open = container.querySelector<HTMLButtonElement>(
-      `[data-context-action-id="${OBJECT_ACTION_IDS.viewDetails}"]`
+    await act(async () => open.click());
+    expect(onOpenPanel).toHaveBeenCalledWith(
+      expect.objectContaining(requireValue(inCluster(payload).nodes?.[1], 'pod node').ref)
     );
-    expect(open).toBeTruthy();
-    await act(async () => open?.click());
-    expect(onOpenPanel).toHaveBeenCalledWith(expect.objectContaining(payload.nodes?.[1].ref ?? {}));
-    cleanup();
-  });
-
-  it('keeps ReplicaSet expansion on the existing badge without extra context-menu entries', async () => {
-    const { container, cleanup } = await renderObjectMap({ testPayload: collapsePayload });
-    const openActions = async () =>
-      act(async () => {
-        container
-          .querySelector<HTMLButtonElement>('[aria-label="ReplicaSet: web-new"]')
-          ?.dispatchEvent(mouseEvent('contextmenu', { clientX: 100, clientY: 120 }));
-      });
-    await openActions();
-    const menu = requireValue(
-      container.querySelector('[data-testid="mock-context-menu"]'),
-      'expected ReplicaSet context menu'
-    );
-    expect(menu.textContent).toContain(objectActionLabel(OBJECT_ACTION_IDS.viewMap));
-    expect(menu.textContent).not.toContain('Expand older ReplicaSets');
-    const badge = requireValue(
-      container.querySelector<HTMLButtonElement>('[aria-label="Show 1 hidden ReplicaSet"]'),
-      'expected existing ReplicaSet badge'
-    );
-    await act(async () => badge.click());
-    expect(container.querySelector('[aria-label="ReplicaSet: web-old"]')).toBeTruthy();
-    await openActions();
-    expect(container.querySelector('[data-testid="mock-context-menu"]')?.textContent).not.toContain(
-      'Collapse older ReplicaSets'
-    );
-    await act(async () => badge.click());
-    expect(container.querySelector('[aria-label="ReplicaSet: web-old"]')).toBeNull();
     cleanup();
   });
 
@@ -814,11 +742,6 @@ describe('ObjectMap', () => {
     expect(hideAll).toBeTruthy();
     expect(showAll?.disabled).toBe(true);
     expect(hideAll?.disabled).toBe(false);
-    const legend = container.querySelector<HTMLElement>('.object-map__legend');
-    const legendText = legend?.textContent ?? '';
-    expect(legendText).not.toContain('cmd+click');
-    expect(legendText).not.toContain('alt+click');
-    expect(container.querySelectorAll('.object-map__legend-separator').length).toBeGreaterThan(0);
     expect(container.querySelector('.object-map__legend-counts')?.textContent).toContain(
       '2Objects'
     );
@@ -989,102 +912,6 @@ describe('ObjectMap', () => {
     cleanup();
   });
 
-  it('toggles focus mode to redraw all recursively related objects', async () => {
-    const { container, cleanup } = await renderObjectMap({ testPayload: focusModePayload });
-    const focusToggle = container.querySelector<HTMLButtonElement>(
-      '[aria-label="Toggle focus mode"]'
-    );
-    const resetButton = container.querySelector<HTMLButtonElement>('[aria-label="Reset layout"]');
-    const podA = container.querySelector<HTMLButtonElement>('[aria-label="Pod: web-a"]');
-    const podANode = container.querySelector<HTMLElement>('[data-testid="mock-node-pod-a"]');
-
-    expect(focusToggle).toBeTruthy();
-    expect(resetButton).toBeTruthy();
-    expect(resetButton?.disabled).toBe(true);
-    expect(podA).toBeTruthy();
-    expect(podANode).toBeTruthy();
-    const initialPodAX = requireValue(podANode, 'expected test value in ObjectMap.test.tsx').dataset
-      .x;
-    expect(container.querySelector('[aria-label="Deployment: web"]')).toBeTruthy();
-    expect(container.querySelector('[aria-label="Pod: web-b"]')).toBeTruthy();
-    expect(container.querySelector('[aria-label="ConfigMap: web-a-config"]')).toBeTruthy();
-    expect(container.querySelector('[aria-label="Secret: web-a-secret"]')).toBeTruthy();
-    expect(container.querySelector('[data-testid="mock-edge-edge-a"]')).toBeTruthy();
-    expect(container.querySelector('[data-testid="mock-edge-edge-b"]')).toBeTruthy();
-    expect(container.querySelector('[data-testid="mock-edge-edge-config"]')).toBeTruthy();
-    expect(container.querySelector('[data-testid="mock-edge-edge-secret"]')).toBeTruthy();
-
-    await act(async () => {
-      requireValue(podA, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
-        mouseEvent('click')
-      );
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      requireValue(focusToggle, 'expected test value in ObjectMap.test.tsx').click();
-      await Promise.resolve();
-    });
-
-    expect(focusToggle?.getAttribute('aria-pressed')).toBe('true');
-    expect(resetButton?.disabled).toBe(false);
-    expect(container.querySelector('[aria-label="Deployment: web"]')).toBeTruthy();
-    expect(container.querySelector('[aria-label="Pod: web-a"]')).toBeTruthy();
-    expect(container.querySelector<HTMLElement>('[data-testid="mock-node-pod-a"]')?.dataset.x).toBe(
-      initialPodAX
-    );
-    expect(container.querySelector('[aria-label="ConfigMap: web-a-config"]')).toBeTruthy();
-    expect(container.querySelector('[aria-label="Secret: web-a-secret"]')).toBeTruthy();
-    expect(container.querySelector('[aria-label="Pod: web-b"]')).toBeNull();
-    expect(container.querySelector('[data-testid="mock-edge-edge-a"]')).toBeTruthy();
-    expect(container.querySelector('[data-testid="mock-edge-edge-config"]')).toBeTruthy();
-    expect(container.querySelector('[data-testid="mock-edge-edge-secret"]')).toBeTruthy();
-    expect(container.querySelector('[data-testid="mock-edge-edge-b"]')).toBeNull();
-
-    await act(async () => {
-      requireValue(resetButton, 'expected test value in ObjectMap.test.tsx').click();
-      await Promise.resolve();
-    });
-
-    expect(focusToggle?.getAttribute('aria-pressed')).toBe('false');
-    expect(container.querySelector('[aria-label="Pod: web-b"]')).toBeTruthy();
-    expect(container.querySelector('[data-testid="mock-edge-edge-b"]')).toBeTruthy();
-    expect(resetButton?.disabled).toBe(true);
-
-    cleanup();
-  });
-
-  it('does not preserve a selected node viewport anchor while focus mode is active', async () => {
-    const { container, cleanup } = await renderObjectMap({ testPayload: focusModePayload });
-    const focusToggle = container.querySelector<HTMLButtonElement>(
-      '[aria-label="Toggle focus mode"]'
-    );
-    const manualViewportChange = container.querySelector<HTMLButtonElement>(
-      '[data-testid="mock-user-viewport-change"]'
-    );
-    const podA = container.querySelector<HTMLButtonElement>('[aria-label="Pod: web-a"]');
-
-    expect(focusToggle).toBeTruthy();
-    expect(manualViewportChange).toBeTruthy();
-    expect(podA).toBeTruthy();
-
-    await act(async () => {
-      requireValue(manualViewportChange, 'expected test value in ObjectMap.test.tsx').click();
-      requireValue(podA, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
-        mouseEvent('click')
-      );
-      requireValue(focusToggle, 'expected test value in ObjectMap.test.tsx').click();
-      await Promise.resolve();
-    });
-
-    expect(
-      container.querySelector<HTMLElement>('[data-testid="object-map-g6-mock"]')?.dataset
-        .preserveViewportNodeId
-    ).toBe('');
-
-    cleanup();
-  });
-
   it('searches and focuses matching objects', async () => {
     const { container, cleanup } = await renderObjectMap();
     const search = container.querySelector<HTMLInputElement>('[aria-label="Search map objects"]');
@@ -1243,7 +1070,7 @@ describe('ObjectMap', () => {
   });
 
   it('uses short resource names in map controls when the setting is enabled', async () => {
-    useShortNamesMock.mockReturnValue(true);
+    app.preferences({ useShortResourceNames: true });
     const { container, cleanup } = await renderObjectMap({ testPayload: shortNamesPayload });
     const renderer = container.querySelector<HTMLElement>('[data-testid="object-map-g6-mock"]');
     const kindTrigger = container.querySelector<HTMLElement>('[aria-label="Filter map kinds"]');
@@ -1312,7 +1139,7 @@ describe('ObjectMap', () => {
     expect(onOpenPanel).toHaveBeenCalledTimes(1);
     expect(onOpenPanel).toHaveBeenCalledWith(
       expect.objectContaining({
-        clusterId: 'cluster-a',
+        clusterId: dev.clusterId,
         group: '',
         version: 'v1',
         kind: 'Pod',
@@ -1341,7 +1168,7 @@ describe('ObjectMap', () => {
     expect(onOpenObjectMap).toHaveBeenCalledTimes(1);
     expect(onOpenObjectMap).toHaveBeenCalledWith(
       expect.objectContaining({
-        clusterId: 'cluster-a',
+        clusterId: dev.clusterId,
         group: '',
         version: 'v1',
         kind: 'Pod',
@@ -1361,7 +1188,7 @@ describe('ObjectMap', () => {
     expect(onNavigateView).toHaveBeenCalledTimes(1);
     expect(onNavigateView).toHaveBeenCalledWith(
       expect.objectContaining({
-        clusterId: 'cluster-a',
+        clusterId: dev.clusterId,
         group: '',
         version: 'v1',
         kind: 'Pod',
@@ -1389,7 +1216,7 @@ describe('ObjectMap', () => {
       await Promise.resolve();
     });
 
-    const menu = container.querySelector<HTMLElement>('[data-testid="mock-context-menu"]');
+    const menu = contextMenu();
     expect(menu?.textContent).toContain(objectActionLabel(OBJECT_ACTION_IDS.viewDetails));
     expect(menu?.textContent).toContain(objectActionLabel(OBJECT_ACTION_IDS.viewMap));
     expect(menu?.textContent).toContain(objectActionLabel(OBJECT_ACTION_IDS.goToTable));
@@ -1416,7 +1243,7 @@ describe('ObjectMap', () => {
 
     expect(onOpenPanel).toHaveBeenCalledWith(
       expect.objectContaining({
-        clusterId: 'cluster-a',
+        clusterId: dev.clusterId,
         group: '',
         version: 'v1',
         kind: 'Pod',
@@ -1433,7 +1260,7 @@ describe('ObjectMap', () => {
       await Promise.resolve();
     });
 
-    const nextMenu = container.querySelector<HTMLElement>('[data-testid="mock-context-menu"]');
+    const nextMenu = contextMenu();
     const nextMapItem = requireValue(
       nextMenu,
       'expected test value in ObjectMap.test.tsx'
@@ -1447,7 +1274,7 @@ describe('ObjectMap', () => {
 
     expect(onOpenObjectMap).toHaveBeenCalledWith(
       expect.objectContaining({
-        clusterId: 'cluster-a',
+        clusterId: dev.clusterId,
         group: '',
         version: 'v1',
         kind: 'Pod',
@@ -1460,119 +1287,51 @@ describe('ObjectMap', () => {
     cleanup();
   });
 
-  it('shows HPA scale actions from node action facts', async () => {
-    const { container, cleanup } = await renderObjectMap({ testPayload: hpaManagedPayload });
-    const deploy = container.querySelector<HTMLButtonElement>('[aria-label="Deployment: web"]');
-    expect(deploy).toBeTruthy();
-
-    await act(async () => {
-      requireValue(deploy, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
-        mouseEvent('contextmenu', { clientX: 100, clientY: 120 })
-      );
-      await Promise.resolve();
-    });
-
-    const menu = container.querySelector<HTMLElement>('[data-testid="mock-context-menu"]');
-    expect(
-      requireValue(menu, 'expected test value in ObjectMap.test.tsx').querySelector(
-        `[data-context-action-id="${OBJECT_ACTION_IDS.scaleToZero}"]`
-      )
-    ).toBeTruthy();
-    expect(
-      requireValue(menu, 'expected test value in ObjectMap.test.tsx').querySelector(
-        `[data-context-action-id="${OBJECT_ACTION_IDS.scale}"]`
-      )
-    ).toBeNull();
-
-    cleanup();
-  });
-
-  it('shows HPA scale actions even when the scales edge is not visible', async () => {
-    const { container, cleanup } = await renderObjectMap({
+  // The action facts decide, whether or not the map shows the scales edge.
+  it.each([
+    {
+      facts: 'an autoscaler manages it',
       testPayload: hpaManagedFactWithoutEdgePayload,
-    });
-    const deploy = container.querySelector<HTMLButtonElement>('[aria-label="Deployment: web"]');
-    expect(deploy).toBeTruthy();
-
-    await act(async () => {
-      requireValue(deploy, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
-        mouseEvent('contextmenu', { clientX: 100, clientY: 120 })
-      );
-      await Promise.resolve();
-    });
-
-    const menu = container.querySelector<HTMLElement>('[data-testid="mock-context-menu"]');
-    expect(
-      requireValue(menu, 'expected test value in ObjectMap.test.tsx').querySelector(
-        `[data-context-action-id="${OBJECT_ACTION_IDS.scaleToZero}"]`
-      )
-    ).toBeTruthy();
-    expect(
-      requireValue(menu, 'expected test value in ObjectMap.test.tsx').querySelector(
-        `[data-context-action-id="${OBJECT_ACTION_IDS.scale}"]`
-      )
-    ).toBeNull();
-
-    cleanup();
-  });
-
-  it('shows normal Scale for map workloads when action facts say no HPA manages them', async () => {
-    const { container, cleanup } = await renderObjectMap({
+      offered: OBJECT_ACTION_IDS.scaleToZero,
+      withheld: [OBJECT_ACTION_IDS.scale],
+    },
+    {
+      facts: 'no autoscaler manages it',
       testPayload: nonHpaManagedScalablePayload,
-    });
-    const deploy = container.querySelector<HTMLButtonElement>('[aria-label="Deployment: web"]');
-    expect(deploy).toBeTruthy();
-
-    await act(async () => {
-      requireValue(deploy, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
-        mouseEvent('contextmenu', { clientX: 100, clientY: 120 })
-      );
-      await Promise.resolve();
-    });
-
-    const menu = container.querySelector<HTMLElement>('[data-testid="mock-context-menu"]');
-    expect(
-      requireValue(menu, 'expected test value in ObjectMap.test.tsx').querySelector(
-        `[data-context-action-id="${OBJECT_ACTION_IDS.scale}"]`
-      )
-    ).toBeTruthy();
-    expect(
-      requireValue(menu, 'expected test value in ObjectMap.test.tsx').querySelector(
-        `[data-context-action-id="${OBJECT_ACTION_IDS.scaleToZero}"]`
-      )
-    ).toBeNull();
-
-    cleanup();
-  });
-
-  it('hides scale actions for map workloads when HPA ownership is unknown', async () => {
-    const { container, cleanup } = await renderObjectMap({
+      offered: OBJECT_ACTION_IDS.scale,
+      withheld: [OBJECT_ACTION_IDS.scaleToZero],
+    },
+    {
+      facts: 'autoscaler ownership is unknown',
       testPayload: unknownHpaManagedScalablePayload,
-    });
-    const deploy = container.querySelector<HTMLButtonElement>('[aria-label="Deployment: web"]');
-    expect(deploy).toBeTruthy();
+      offered: null,
+      withheld: [OBJECT_ACTION_IDS.scale, OBJECT_ACTION_IDS.scaleToZero],
+    },
+  ])(
+    'offers the scale actions a workload allows when $facts',
+    async ({ testPayload, offered, withheld }) => {
+      // Nothing else has asked for the workload's permissions: the map's menu does.
+      await mountShell();
+      const { container, cleanup } = await renderObjectMap({ testPayload });
 
-    await act(async () => {
-      requireValue(deploy, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
-        mouseEvent('contextmenu', { clientX: 100, clientY: 120 })
-      );
-      await Promise.resolve();
-    });
+      await act(async () => {
+        requireValue(
+          container.querySelector<HTMLButtonElement>('[aria-label="Deployment: web"]'),
+          'expected the Deployment node'
+        ).dispatchEvent(mouseEvent('contextmenu', { clientX: 100, clientY: 120 }));
+      });
+      await app.settle();
 
-    const menu = container.querySelector<HTMLElement>('[data-testid="mock-context-menu"]');
-    expect(
-      requireValue(menu, 'expected test value in ObjectMap.test.tsx').querySelector(
-        `[data-context-action-id="${OBJECT_ACTION_IDS.scale}"]`
-      )
-    ).toBeNull();
-    expect(
-      requireValue(menu, 'expected test value in ObjectMap.test.tsx').querySelector(
-        `[data-context-action-id="${OBJECT_ACTION_IDS.scaleToZero}"]`
-      )
-    ).toBeNull();
-
-    cleanup();
-  });
+      expect(contextMenu()).not.toBeNull();
+      if (offered) {
+        expect(menuAction(offered)).not.toBeNull();
+      }
+      for (const actionId of withheld) {
+        expect(menuAction(actionId)).toBeNull();
+      }
+      cleanup();
+    }
+  );
 
   it('opens a canvas context menu with map controls', async () => {
     const { container, cleanup } = await renderObjectMap();
@@ -1594,24 +1353,16 @@ describe('ObjectMap', () => {
       await Promise.resolve();
     });
 
-    const menu = container.querySelector<HTMLElement>('[data-testid="mock-context-menu"]');
+    const menu = contextMenu();
     expect(menu?.textContent).toContain('Zoom out');
     expect(menu?.textContent).toContain('Zoom in');
     expect(menu?.textContent).toContain('Reset zoom');
     expect(menu?.textContent).toContain('Fit');
     expect(menu?.textContent).toContain('Auto-fit off');
-    expect(menu?.textContent).toContain('Focus on');
     expect(menu?.textContent).toContain('Reset layout');
-    expect(menu?.textContent).not.toContain('Refresh');
     expect(menu?.textContent).toContain('Hide legend');
-    expect(container.querySelectorAll('[data-testid="mock-context-menu-icon"]')).toHaveLength(8);
 
-    const autoFitItem = Array.from(
-      requireValue(menu, 'expected test value in ObjectMap.test.tsx').querySelectorAll('button')
-    ).find((button) => button.textContent === 'Auto-fit off');
-    const legendItem = Array.from(
-      requireValue(menu, 'expected test value in ObjectMap.test.tsx').querySelectorAll('button')
-    ).find((button) => button.textContent === 'Hide legend');
+    const autoFitItem = menuItem('Auto-fit off');
 
     await act(async () => {
       requireValue(autoFitItem, 'expected test value in ObjectMap.test.tsx').click();
@@ -1627,26 +1378,13 @@ describe('ObjectMap', () => {
       );
       await Promise.resolve();
     });
-    expect(container.querySelector('[data-testid="mock-context-menu"]')?.textContent).toContain(
-      'Auto-fit on'
-    );
+    expect(contextMenu()?.textContent).toContain('Auto-fit on');
 
     await act(async () => {
-      requireValue(legendItem, 'expected test value in ObjectMap.test.tsx').click();
+      requireValue(menuItem('Hide legend'), 'expected Hide legend').click();
       await Promise.resolve();
     });
     expect(container.querySelector('.object-map__legend')).toBeNull();
-
-    cleanup();
-  });
-
-  it('does not render a refresh button in the toolbar', async () => {
-    const { container, cleanup } = await renderObjectMap();
-    const toolbar = container.querySelector<HTMLElement>('.object-map__toolbar');
-
-    expect(toolbar).toBeTruthy();
-    expect(toolbar?.querySelector('[aria-label="Refresh"]')).toBeNull();
-    expect(toolbar?.querySelector('[aria-label="Refreshing"]')).toBeNull();
 
     cleanup();
   });
@@ -1669,6 +1407,12 @@ describe('ObjectMap', () => {
 
     expect(container.querySelector('[aria-label="ReplicaSet: web-old"]')).toBeTruthy();
 
+    await act(async () => {
+      requireValue(badge, 'expected test value in ObjectMap.test.tsx').click();
+      await Promise.resolve();
+    });
+    expect(container.querySelector('[aria-label="ReplicaSet: web-old"]')).toBeNull();
+
     cleanup();
   });
 
@@ -1682,6 +1426,72 @@ describe('ObjectMap', () => {
     expect(container.querySelector('[aria-label="ReplicaSet: web-aaa"]')).toBeTruthy();
     expect(container.querySelector('[aria-label="Pod: web-aaa-def"]')).toBeTruthy();
     expect(container.querySelector('[aria-label="Node: worker-a"]')).toBeTruthy();
+
+    cleanup();
+  });
+
+  it('shows every object the backend graph sends for a Pod', async () => {
+    const { container, cleanup } = await renderObjectMap({
+      testPayload: podNeighborhoodPayload,
+    });
+
+    for (const label of [
+      'Pod: web-pod',
+      'ReplicaSet: web-rs',
+      'Deployment: web',
+      'HorizontalPodAutoscaler: web',
+      'Node: worker-a',
+      'EndpointSlice: web-abc',
+      'Service: web',
+      'Ingress: web',
+      'PodDisruptionBudget: web',
+      'NetworkPolicy: web',
+    ]) {
+      expect(container.querySelector(`[aria-label="${label}"]`), label).toBeTruthy();
+    }
+
+    cleanup();
+  });
+
+  it('hides objects reachable only through collapsed ReplicaSets but keeps the rest of the lineage', async () => {
+    const { container, cleanup } = await renderObjectMap({ testPayload: collapseRemnantPayload });
+    const kept = ['ConfigMap: web-config-v2', 'HorizontalPodAutoscaler: web'];
+
+    expect(container.querySelector('[aria-label="ReplicaSet: web-old"]')).toBeNull();
+    expect(container.querySelector('[aria-label="ConfigMap: web-config-v1"]')).toBeNull();
+    for (const label of kept) {
+      expect(container.querySelector(`[aria-label="${label}"]`), label).toBeTruthy();
+    }
+
+    const badge = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Show 1 hidden ReplicaSet"]'
+    );
+    await act(async () => {
+      requireValue(badge, 'expected collapse badge').click();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[aria-label="ReplicaSet: web-old"]')).toBeTruthy();
+    expect(container.querySelector('[aria-label="ConfigMap: web-config-v1"]')).toBeTruthy();
+    for (const label of kept) {
+      expect(container.querySelector(`[aria-label="${label}"]`), label).toBeTruthy();
+    }
+
+    cleanup();
+  });
+
+  it('keeps permission warnings visible when the map has no objects', async () => {
+    const { container, cleanup } = await renderObjectMap({
+      testPayload: {
+        ...payload,
+        nodes: [],
+        edges: [],
+        warnings: ['skipped pods: insufficient permissions'],
+      },
+    });
+
+    expect(container.querySelector('[data-testid="object-map-empty"]')).toBeTruthy();
+    expect(container.textContent).toContain('skipped pods: insufficient permissions');
 
     cleanup();
   });
@@ -1707,7 +1517,7 @@ describe('ObjectMap', () => {
     });
 
     expect(warned.container.querySelector('.object-map__banner')?.textContent).toContain(
-      'Showing 2 of many'
+      'Showing 2'
     );
     expect(warned.container.querySelector('.object-map__warnings')?.textContent).toContain(
       'permission denied for secrets'
@@ -1763,6 +1573,110 @@ describe('ObjectMap', () => {
       initialPath
     );
     expect(resetButton?.disabled).toBe(true);
+
+    cleanup();
+  });
+
+  it('moves a dragged node while a kind filter is active', async () => {
+    const { container, cleanup } = await renderObjectMap();
+    const kindTrigger = requireValue(
+      container.querySelector<HTMLElement>('[aria-label="Filter map kinds"]'),
+      'kind filter'
+    );
+    await act(async () => {
+      kindTrigger.dispatchEvent(mouseEvent('click'));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      requireValue(
+        document.body.querySelector<HTMLButtonElement>('button[aria-label="Select none"]'),
+        'Select none'
+      ).dispatchEvent(mouseEvent('click'));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      requireValue(
+        Array.from(document.body.querySelectorAll<HTMLElement>('.dropdown-option')).find((option) =>
+          option.textContent?.includes('Pod')
+        ),
+        'Pod option'
+      ).dispatchEvent(mouseEvent('click'));
+      await Promise.resolve();
+    });
+    expect(container.querySelector('[data-testid="mock-node-deploy"]')).toBeNull();
+
+    const pod = requireValue(
+      container.querySelector<HTMLElement>('[data-testid="mock-node-pod"]'),
+      'pod node'
+    );
+    const startX = Number(pod.dataset.x);
+    await act(async () => {
+      requireValue(
+        container.querySelector<HTMLButtonElement>('[data-testid="mock-drag-first-node"]'),
+        'drag control'
+      ).click();
+      await Promise.resolve();
+    });
+
+    expect(Number(pod.dataset.x)).toBe(startX + 60);
+
+    cleanup();
+  });
+
+  it('keeps dragged positions across refreshes until the dragged object leaves the map', async () => {
+    const { container, rerender, cleanup } = await renderObjectMap();
+    const deployX = () =>
+      requireValue(
+        container.querySelector<HTMLElement>('[data-testid="mock-node-deploy"]'),
+        'deployment node'
+      ).dataset.x;
+    const resetButton = () =>
+      requireValue(
+        container.querySelector<HTMLButtonElement>('button[aria-label="Reset layout"]'),
+        'reset layout'
+      );
+    const computedX = deployX();
+    await act(async () => {
+      requireValue(
+        container.querySelector<HTMLButtonElement>('[data-testid="mock-drag-first-node"]'),
+        'drag control'
+      ).click();
+      await Promise.resolve();
+    });
+    const draggedX = deployX();
+    expect(draggedX).not.toBe(computedX);
+
+    const statusOnly = {
+      ...payload,
+      nodes: (payload.nodes ?? []).map((node) =>
+        node.id === 'pod' ? { ...node, status: { state: 'Running', label: 'Running' } } : node
+      ),
+    };
+    await rerender(statusOnly);
+    expect(deployX()).toBe(draggedX);
+
+    const withNewPod = {
+      ...statusOnly,
+      nodes: [
+        ...(statusOnly.nodes ?? []),
+        { id: 'pod-2', depth: 1, ref: ref('pod-2', 'Pod', 'web-def', '') },
+      ],
+      edges: [
+        ...(statusOnly.edges ?? []),
+        { id: 'edge-2', source: 'deploy', target: 'pod-2', type: 'owner', label: 'owns' },
+      ],
+    };
+    await rerender(withNewPod);
+    expect(deployX()).toBe(draggedX);
+
+    await rerender({
+      ...payload,
+      nodes: [requireValue(payload.nodes?.[1], 'pod node')],
+      edges: [],
+    });
+    expect(resetButton().disabled).toBe(true);
+    await rerender(payload);
+    expect(deployX()).toBe(computedX);
 
     cleanup();
   });

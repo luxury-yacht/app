@@ -41,16 +41,68 @@ backend and object panel. Editor mechanics: [YAML editor](../frontend/yaml-edito
    recorded. `object_yaml_ownership.go` filters routine managers (the editor's
    own, `kubectl*`). Surviving conflicts open a save anyway / keep editing /
    cancel edit dialog before apply. If the check errors (no SSA, transient
-   failure), the save proceeds without a prompt; it must never block saving.
-6. **Drift is discovered reactively, not enforced.** The `object-yaml` refresh
-   domain is disabled while editing, freezing the snapshot; drift surfaces
-   through a failed merge, ownership conflicts on untouched fields, or the
-   post-apply diff. Reload & Merge is an in-process three-way merge
-   (`overwrite=false`) that never writes; unresolvable overlap returns a
-   `MergeConflict` with the live YAML for manual review.
+   failure), the failure is reported operationally (no toast) and the save
+   proceeds without a prompt; it must never block saving. An identity change
+   found by the check comes back as `yamlConflict` and is likewise ignored;
+   Apply reports it.
+6. **Drift is watched while editing, never enforced.**
+   - The tab keeps its `object-yaml` lease while it is active, also while
+     editing. Live snapshots never touch the draft or its baseline; only
+     editor actions set them.
+   - Unsaved edits are the draft against its edit baseline
+     (`hasUnsavedYamlEdits`, ignoring the fields the draft leaves out), never
+     against the live object, so a change made elsewhere is not an edit.
+     They light Save green and Cancel red, and make closing the panel ask
+     first.
+   - Drift is a new resourceVersion whose content differs from the baseline
+     under the field policy's semantic compare. Status, resourceVersion, uid,
+     managedFields, and the other server-managed fields are ignored, so
+     controller churn is not drift.
+   - A drifted object shows a field table (`yamlDriftFields.ts`): each field
+     changed outside the editor, with its Original Value (when editing
+     began), External Edit (live), and Your Edit (the draft's value, or a
+     dash where the draft still holds the original value). Named list items
+     are keyed by name. Values are shown in full, never truncated: a long
+     value wraps inside its cell, preferring its separators, so both
+     options stay in view in a docked panel.
+   - A conflict is a field the draft also changed, to a different value. Its
+     row offers the external edit and your edit as value chips; clicking
+     a value keeps it.
+     - The external edit copies the live value into the draft. Your edit
+       keeps the draft's value, and restores it after the external edit was
+       chosen.
+     - A choice holds while the live value is unchanged and the draft still
+       holds the chosen value.
+     - Save and Merge wait until every conflict has a choice. The notice says
+       which fields need one, and the merge button reads "Select values to
+       keep" until then.
+   - "Merge changes and continue editing" is Reload & Merge, which never
+     writes. It applies the draft's own edits (the two-way baseline → draft
+     patch, the same family Save sends) to the live object, so a field only
+     changed outside the editor keeps its live value.
+     - An edit to a field the live object also changed, to a different
+       value, returns a `MergeConflict` with the live YAML. This is the field
+       table's conflict rule.
+     - For each field where your edit was chosen, the merge request's
+       baseline carries the live value, so the merge applies your edit
+       instead of stopping.
+     - Saving without merging also keeps others' changes to fields the draft
+       did not edit.
+   - A replaced object (a live uid that differs from the baseline's, or an
+     `ObjectUIDMismatch` conflict from Apply) offers Copy draft and Edit the
+     new object. It offers no merge (the merge refuses a different object),
+     and Save is disabled.
+   - Conflicts (UID mismatch, merge conflict, failed merge precondition) are
+     `yamlConflict` results on the Apply, Merge and ownership-check responses,
+     never errors, so the live YAML cannot reach toasts, history, or
+     telemetry. Real API rejections stay errors whose status carries the field
+     causes.
 7. **Every save is verified.** The editor re-fetches the live object,
    semantic-compares it with the submission, and shows a diff when
    controllers or concurrent writers changed the stored result.
+   Save, Reload & Merge, and post-save re-read failures are shown in the
+   editor and reported through `errorHandler.handleInline`, never as a toast
+   that would repeat them.
 
 ## Known Gaps (accepted)
 
@@ -59,7 +111,8 @@ backend and object panel. Editor mechanics: [YAML editor](../frontend/yaml-edito
   deleted paths.
 - CRD list edits use JSON merge patch, which replaces whole arrays and ignores
   `x-kubernetes-list-type`; only SSA or precise JSON Patch fixes this.
-- Concurrent same-field overwrites show only in the post-apply diff.
+- A same-field change made by someone else during the edit is flagged as
+  drift, but saving anyway still writes the draft's value, like kubectl edit.
 
 ## Rejected Approaches
 

@@ -8,10 +8,9 @@ import { useEffect, useState } from 'react';
 
 // A versionless relationship can become openable when the catalog knows its exact UID.
 export function useResourceLinkReference(
-  link: resourcemodel.ResourceLink | null | undefined,
-  clusterName?: string
+  link: resourcemodel.ResourceLink | null | undefined
 ): ResolvedObjectReference | undefined {
-  const direct = resourceLinkToObjectReference(link, clusterName);
+  const direct = resourceLinkToObjectReference(link);
   const hasDirect = Boolean(direct);
   const clusterId = link?.display?.clusterId;
   const uid = link?.display?.uid;
@@ -39,5 +38,5 @@ export function useResourceLinkReference(
   }, [hasDirect, clusterId, uid, key]);
 
   const reference = resolved?.key === key ? resolved.reference : undefined;
-  return direct ?? (reference ? { ...reference, clusterName } : undefined);
+  return direct ?? reference;
 }

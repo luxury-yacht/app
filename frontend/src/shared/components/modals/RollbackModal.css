@@ -100,17 +100,17 @@
   letter-spacing: 0.04em;
   padding: 1px 6px;
   border-radius: 4px;
-  background: var(--color-accent, var(--primary-color));
+  background: var(--color-accent);
   color: #fff;
 }
 
 .rollback-revision-age {
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
 
 .rollback-revision-cause {
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   white-space: nowrap;
   overflow: hidden;
@@ -139,7 +139,7 @@
 }
 
 .rollback-diff-label {
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   font-weight: 500;
 }
@@ -148,7 +148,7 @@
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   cursor: pointer;
   user-select: none;
@@ -218,7 +218,7 @@
 .rollback-modal-footer-error {
   flex: 1;
   color: var(--color-error);
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

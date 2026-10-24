@@ -30,7 +30,7 @@ func BuildFacts(clusterID string, event *corev1.Event) Facts {
 	if event == nil {
 		return Facts{}
 	}
-	first, last := eventTimes(event)
+	first, last := EventTimes(event)
 	facts := Facts{
 		EventType:               event.Type,
 		Reason:                  strings.TrimSpace(event.Reason),
@@ -42,7 +42,7 @@ func BuildFacts(clusterID string, event *corev1.Event) Facts {
 		Action:                  strings.TrimSpace(event.Action),
 		ReportingController:     strings.TrimSpace(event.ReportingController),
 		ReportingInstance:       strings.TrimSpace(event.ReportingInstance),
-		InvolvedObject:          eventObjectLink(clusterID, event.InvolvedObject),
+		InvolvedObject:          ObjectLink(clusterID, event.InvolvedObject),
 		InvolvedObjectFieldPath: strings.TrimSpace(event.InvolvedObject.FieldPath),
 	}
 	if !event.EventTime.IsZero() {
@@ -58,7 +58,7 @@ func BuildFacts(clusterID string, event *corev1.Event) Facts {
 		}
 	}
 	if event.Related != nil {
-		facts.RelatedObject = eventObjectLink(clusterID, *event.Related)
+		facts.RelatedObject = ObjectLink(clusterID, *event.Related)
 		facts.RelatedObjectFieldPath = strings.TrimSpace(event.Related.FieldPath)
 	}
 	return facts
@@ -92,7 +92,7 @@ func EventTimestamp(event *corev1.Event) metav1.Time {
 	if event == nil {
 		return metav1.Time{}
 	}
-	_, last := eventTimes(event)
+	_, last := EventTimes(event)
 	return last
 }
 
@@ -134,7 +134,10 @@ func FormatEventSource(event corev1.Event, empty string) string {
 	return empty
 }
 
-func eventTimes(event *corev1.Event) (first, last metav1.Time) {
+// EventTimes returns when an event was first and last observed: first from the
+// event time, falling back to first-seen then creation; last is the latest of
+// that, last-seen, and the series' last observation.
+func EventTimes(event *corev1.Event) (first, last metav1.Time) {
 	if event == nil {
 		return metav1.Time{}, metav1.Time{}
 	}
@@ -166,7 +169,9 @@ func eventSeriesLastObservedTime(event *corev1.Event) metav1.Time {
 	return metav1.NewTime(event.Series.LastObservedTime.Time)
 }
 
-func eventObjectLink(clusterID string, ref corev1.ObjectReference) *resourcemodel.ResourceLink {
+// ObjectLink links an object an event refers to, or nil when the reference
+// names no kind or name.
+func ObjectLink(clusterID string, ref corev1.ObjectReference) *resourcemodel.ResourceLink {
 	apiVersion := strings.TrimSpace(ref.APIVersion)
 	group, version := "", ""
 	if apiVersion != "" {

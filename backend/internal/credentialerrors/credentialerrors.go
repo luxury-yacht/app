@@ -7,7 +7,9 @@ package credentialerrors
 import (
 	"context"
 	"errors"
+	"io"
 	"net"
+	"net/url"
 	"strings"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -171,6 +173,9 @@ func isConnectivity(err error, msg string) bool {
 	if errors.As(err, &networkErr) && networkErr.Timeout() {
 		return true
 	}
+	if isTransportEOF(err) {
+		return true
+	}
 
 	return strings.Contains(msg, "connection refused") ||
 		strings.Contains(msg, "connection reset") ||
@@ -185,7 +190,18 @@ func isConnectivity(err error, msg string) bool {
 		strings.Contains(msg, "tls handshake") ||
 		strings.Contains(msg, "x509") ||
 		strings.Contains(msg, "econnrefused") ||
-		strings.Contains(msg, "econnreset")
+		strings.Contains(msg, "econnreset") ||
+		// net/http's HTTP/2 transport reports dropped connections only as text.
+		strings.Contains(msg, "http2: client connection lost") ||
+		strings.Contains(msg, "http2: client connection force closed") ||
+		strings.Contains(msg, "http2: server sent goaway")
+}
+
+// isTransportEOF reports a request whose connection closed before the server
+// replied. An EOF outside a transport request is an application failure.
+func isTransportEOF(err error) bool {
+	var requestErr *url.Error
+	return errors.As(err, &requestErr) && errors.Is(requestErr.Err, io.EOF)
 }
 
 // isMissingHelper reports an exec credential helper that could not be located.

@@ -1,3 +1,12 @@
+# Builds every platform and publishes a GitHub release.
+#
+#   plan -> test -> build-macos   -> prepare-release -> release -> update-site
+#                   build-windows
+#                   build-linux
+#
+# A tag push publishes a release. A manual run is a dry run unless "Create
+# GitHub release" is checked; dry runs can skip the tests, build only some
+# platforms, and try Windows signing with the SignPath test certificate.
 name: Release
 
 on:
@@ -8,6 +17,33 @@ on:
         required: false
         default: false
         type: boolean
+      skip_tests:
+        description: "Skip the test job (dry runs only)"
+        required: false
+        default: false
+        type: boolean
+      sign_windows:
+        description: "Sign Windows builds with the SignPath test certificate (dry runs only)"
+        required: false
+        default: false
+        type: boolean
+      # Platform checkboxes: unchecking any is for dry runs only, and release
+      # preparation runs only when every platform is built.
+      build_macos:
+        description: "Build macOS"
+        required: false
+        default: true
+        type: boolean
+      build_windows:
+        description: "Build Windows"
+        required: false
+        default: true
+        type: boolean
+      build_linux:
+        description: "Build Linux"
+        required: false
+        default: true
+        type: boolean
   push:
     tags:
       - "v[1-9]*"
@@ -16,8 +52,49 @@ permissions:
   contents: read
 
 jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      publish: ${{ steps.plan.outputs.publish }}
+      sign_windows: ${{ steps.plan.outputs.sign_windows }}
+    steps:
+      - name: Check run options
+        id: plan
+        env:
+          PUBLISH: ${{ github.event_name == 'push' || github.event.inputs.release == 'true' }}
+          SKIP_TESTS: ${{ github.event.inputs.skip_tests == 'true' }}
+          SIGN_WINDOWS_REQUESTED: ${{ github.event.inputs.sign_windows == 'true' }}
+          # Published releases sign Windows builds only when this is "true". Turn
+          # it on once SignPath Foundation issues the release certificate.
+          RELEASES_SIGN_WINDOWS: "false"
+          # Null on tag pushes, which have no run options.
+          INPUTS: ${{ toJSON(github.event.inputs) }}
+        run: |
+          builds="$(jq -c '[(. // {}) | to_entries[] | select(.key | startswith("build_")) | .value | tostring]' <<<"$INPUTS")"
+          if [ "$PUBLISH" = "true" ]; then
+            if [ "$SKIP_TESTS" = "true" ] || jq -e 'any(. == "false")' <<<"$builds" >/dev/null; then
+              echo "::error::A published release must run the tests and build every platform."
+              exit 1
+            fi
+            sign_windows="$RELEASES_SIGN_WINDOWS"
+          else
+            if jq -e 'length > 0 and all(. == "false")' <<<"$builds" >/dev/null; then
+              echo "::error::Select at least one platform to build."
+              exit 1
+            fi
+            sign_windows="$SIGN_WINDOWS_REQUESTED"
+          fi
+          [ "$sign_windows" = "true" ] || sign_windows=false
+          {
+            echo "publish=$PUBLISH"
+            echo "sign_windows=$sign_windows"
+          } >> "$GITHUB_OUTPUT"
+
   test:
-    runs-on: ubuntu-latest-32core-amd64
+    needs:
+      - plan
+    if: ${{ github.event.inputs.skip_tests != 'true' }}
+    runs-on: ubuntu-latest-32core-amd64 # ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -29,7 +106,7 @@ jobs:
           install-linux-deps: "true"
 
       - name: Validate release tag
-        if: ${{ github.event_name == 'push' || github.event.inputs.release == 'true' }}
+        if: ${{ needs.plan.outputs.publish == 'true' }}
         env:
           RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
         run: go run ./cmd/project validate-release-tag
@@ -50,66 +127,27 @@ jobs:
           echo "🟣 Run frontend tests"
           wails3 task test:frontend
 
-  build:
-    needs: test
+  build-macos:
+    name: Build macOS (${{ matrix.arch }})
+    needs:
+      - plan
+      - test
+    if: ${{ !cancelled() && !failure() && github.event.inputs.build_macos != 'false' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-26
+          - arch: amd64
+            runner: macos-26
+    runs-on: ${{ matrix.runner }}
     env:
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
       SENTRY_BACKEND_DSN: ${{ secrets.SENTRY_BACKEND_DSN }}
       SENTRY_FRONTEND_DSN: ${{ secrets.SENTRY_FRONTEND_DSN }}
       SENTRY_FRONTEND_PROJECT: ${{ secrets.SENTRY_FRONTEND_PROJECT }}
       SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
-    strategy:
-      # Don't fail the whole build if one matrix job fails.
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-latest
-            goos: darwin
-            arch: arm64-and-amd64
-            artifact_name: artifacts-darwin
-            artifact_path: |
-              bin/*-macos-*.dmg
-              bin/*-darwin-*.zip
-          - runner: windows-latest
-            goos: windows
-            arch: amd64
-            artifact_name: artifacts-windows-amd64
-            artifact_path: |
-              bin/*-windows-amd64.exe
-              bin/*-windows-amd64-user-installer.exe
-              bin/*-windows-amd64-system-installer.exe
-          - runner: windows-latest-arm
-            goos: windows
-            arch: arm64
-            artifact_name: artifacts-windows-arm64
-            artifact_path: |
-              bin/*-windows-arm64.exe
-              bin/*-windows-arm64-user-installer.exe
-              bin/*-windows-arm64-system-installer.exe
-          # Linux release binaries are built on Ubuntu 24.04, the oldest supported
-          # distribution, so they load with its glibc; moving labels such as
-          # ubuntu-latest would raise that floor without notice.
-          - runner: ubuntu-24.04
-            goos: linux
-            arch: amd64
-            artifact_name: artifacts-linux-amd64
-            artifact_path: |
-              bin/*.deb
-              bin/*.rpm
-              bin/*-linux-*.tar.gz
-              bin/*-linux-*.AppImage
-          - runner: ubuntu-24.04-arm
-            goos: linux
-            arch: arm64
-            artifact_name: artifacts-linux-arm64
-            artifact_path: |
-              bin/*.deb
-              bin/*.rpm
-              bin/*-linux-*.tar.gz
-              bin/*-linux-*.AppImage
-
-    runs-on: ${{ matrix.runner }}
-    name: Build ${{ matrix.goos }} (${{ matrix.arch }})
     steps:
       - uses: actions/checkout@v7
         with:
@@ -117,23 +155,15 @@ jobs:
 
       - name: Setup toolchain
         uses: ./.github/actions/setup-toolchain
-        with:
-          install-linux-deps: ${{ matrix.goos == 'linux' }}
 
-      - name: Set up macOS code signing
-        if: matrix.goos == 'darwin'
+      - name: Set up code signing
         id: macos_signing
         uses: ./.github/actions/macos-signing
         with:
           macos_certificate: ${{ secrets.MACOS_CERTIFICATE }}
           macos_certificate_pwd: ${{ secrets.MACOS_CERTIFICATE_PWD }}
 
-      - name: Install Windows dependencies
-        if: matrix.goos == 'windows'
-        uses: ./.github/actions/install-nsis
-
-      - name: Create package for macOS (signed and notarized)
-        if: matrix.goos == 'darwin'
+      - name: Package, sign, and notarize
         env:
           MACOS_SIGNING_IDENTITY: ${{ steps.macos_signing.outputs.macos_identity }}
           MACOS_APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -149,7 +179,7 @@ jobs:
             --team-id "$MACOS_APPLE_TEAM_ID" \
             --password "$MACOS_APPLE_APP_PASSWORD"
 
-          wails3 task darwin:package ARCH=arm64
+          wails3 task darwin:package ARCH=${{ matrix.arch }}
           wails3 tool sign \
             --input "$APP_BUNDLE" \
             --identity "$MACOS_SIGNING_IDENTITY" \
@@ -158,44 +188,94 @@ jobs:
           codesign --verify --deep --strict "$APP_BUNDLE"
           spctl --assess --type execute "$APP_BUNDLE"
           xcrun stapler validate "$APP_BUNDLE"
-          wails3 task darwin:create:updater-archive ARCH=arm64
-          UPDATER_ARTIFACT="bin/$(GOOS=darwin GOARCH=arm64 RELEASE_FORMAT=updater go run ./cmd/project release-artifact-name)" GOARCH=arm64 wails3 task release:validate-macos-updater
+          wails3 task darwin:create:updater-archive ARCH=${{ matrix.arch }}
+          UPDATER_ARTIFACT="bin/$(GOOS=darwin GOARCH=${{ matrix.arch }} RELEASE_FORMAT=updater go run ./cmd/project release-artifact-name)" GOARCH=${{ matrix.arch }} wails3 task release:validate-macos-updater
           wails3 task darwin:create:dmg
-          mv "$APP_DMG" "bin/$(GOOS=darwin GOARCH=arm64 RELEASE_FORMAT=dmg go run ./cmd/project release-artifact-name)"
+          mv "$APP_DMG" "bin/$(GOOS=darwin GOARCH=${{ matrix.arch }} RELEASE_FORMAT=dmg go run ./cmd/project release-artifact-name)"
 
-          wails3 task darwin:package ARCH=amd64
-          wails3 tool sign \
-            --input "$APP_BUNDLE" \
-            --identity "$MACOS_SIGNING_IDENTITY" \
-            --notarize \
-            --keychain-profile luxury-yacht-ci
-          codesign --verify --deep --strict "$APP_BUNDLE"
-          spctl --assess --type execute "$APP_BUNDLE"
-          xcrun stapler validate "$APP_BUNDLE"
-          wails3 task darwin:create:updater-archive ARCH=amd64
-          UPDATER_ARTIFACT="bin/$(GOOS=darwin GOARCH=amd64 RELEASE_FORMAT=updater go run ./cmd/project release-artifact-name)" GOARCH=amd64 wails3 task release:validate-macos-updater
-          wails3 task darwin:create:dmg
-          mv "$APP_DMG" "bin/$(GOOS=darwin GOARCH=amd64 RELEASE_FORMAT=dmg go run ./cmd/project release-artifact-name)"
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: artifacts-macos-${{ matrix.arch }}
+          path: |
+            bin/*-macos-*.dmg
+            bin/*-darwin-*.zip
+          if-no-files-found: error
 
-      - name: Create package for Linux
-        if: matrix.goos == 'linux'
-        env:
-          GOARCH: ${{ matrix.arch }}
+  build-windows:
+    name: Build Windows (${{ matrix.arch }})
+    needs:
+      - plan
+      - test
+    if: ${{ !cancelled() && !failure() && github.event.inputs.build_windows != 'false' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: windows-2025
+          - arch: arm64
+            runner: windows-11-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      # SignPath reads this run's job details and downloads the unsigned files.
+      actions: read
+    env:
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      SENTRY_BACKEND_DSN: ${{ secrets.SENTRY_BACKEND_DSN }}
+      SENTRY_FRONTEND_DSN: ${{ secrets.SENTRY_FRONTEND_DSN }}
+      SENTRY_FRONTEND_PROJECT: ${{ secrets.SENTRY_FRONTEND_PROJECT }}
+      SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+      # Windows signing is optional until the SignPath release certificate is
+      # issued; the plan job decides whether this run signs.
+      SIGN_WINDOWS: ${{ needs.plan.outputs.sign_windows }}
+      # Releases use the trusted certificate and need approval in SignPath;
+      # dry runs use the test certificate and are signed without approval.
+      SIGNPATH_SIGNING_POLICY: ${{ needs.plan.outputs.publish == 'true' && 'release-signing' || 'test-signing' }}
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-toolchain
+
+      - name: Install NSIS
+        uses: ./.github/actions/install-nsis
+
+      - name: Build executable
+        id: build
         run: |
-          wails3 task linux:build ARCH=${{ matrix.arch }}
-          wails3 task release:validate-linux-glibc
-          wails3 task linux:generate:deb ARCH=${{ matrix.arch }}
-          wails3 task linux:generate:rpm ARCH=${{ matrix.arch }}
-          wails3 task linux:generate:portable ARCH=${{ matrix.arch }}
-          wails3 task linux:generate:appimage ARCH=${{ matrix.arch }}
-          wails3 task linux:smoke:appimage ARCH=${{ matrix.arch }}
-          UPDATER_ARTIFACT="bin/$(GOOS=linux GOARCH=${{ matrix.arch }} RELEASE_FORMAT=updater go run ./cmd/project release-artifact-name)" GOARCH=${{ matrix.arch }} wails3 task release:validate-linux-updater
-
-      - name: Create package for Windows (unsigned)
-        if: matrix.goos == 'windows'
-        run: |
+          # Fail on any failing command, not just the last one the runner checks.
+          $PSNativeCommandUseErrorActionPreference = $true
           go test ./internal/updatetemp ./internal/updateidentity ./internal/windowsinstall ./backend -run Windows -count=1
-          wails3 task windows:package ARCH=${{ matrix.arch }}
+          wails3 task windows:build ARCH=${{ matrix.arch }}
+          $config = go run ./cmd/project config | ConvertFrom-Json
+          "version=$($config.version)" >> $env:GITHUB_OUTPUT
+          "executable=bin/$(go run ./cmd/project binary-name).exe" >> $env:GITHUB_OUTPUT
+
+      # Both installers and the updater payload carry this executable, so it is
+      # signed before packaging.
+      - name: Sign executable
+        if: env.SIGN_WINDOWS == 'true'
+        uses: ./.github/actions/windows-signing
+        with:
+          path: ${{ steps.build.outputs.executable }}
+          artifact-name: signpath-windows-executable-${{ matrix.arch }}
+          artifact-configuration: windows-exe
+          signing-policy: ${{ env.SIGNPATH_SIGNING_POLICY }}
+          version: ${{ steps.build.outputs.version }}
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+
+      - name: Package installers and updater
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          wails3 task windows:package:from-built ARCH=${{ matrix.arch }}
           $env:GOOS = "windows"
           $env:GOARCH = "${{ matrix.arch }}"
           $env:WINDOWS_ARCH = "${{ matrix.arch }}"
@@ -209,17 +289,87 @@ jobs:
           if ($systemInstaller.Count -ne 1) { throw "Expected exactly one Windows system installer" }
           ./build/windows/package-drill.ps1 -UserInstaller $userInstaller.FullName -SystemInstaller $systemInstaller.FullName -ExpectedVersion $config.version -ProductName $config.productName -UninstallRegistryPath $config.windowsUninstallRegistryPath
 
-      - uses: actions/upload-artifact@v7
+      - name: Sign installers
+        if: env.SIGN_WINDOWS == 'true'
+        uses: ./.github/actions/windows-signing
         with:
-          name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.artifact_path }}
+          path: bin/*-windows-${{ matrix.arch }}-*-installer.exe
+          artifact-name: signpath-windows-installers-${{ matrix.arch }}
+          artifact-configuration: windows-installers
+          signing-policy: ${{ env.SIGNPATH_SIGNING_POLICY }}
+          version: ${{ steps.build.outputs.version }}
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: artifacts-windows-${{ matrix.arch }}
+          path: |
+            bin/*-windows-${{ matrix.arch }}.exe
+            bin/*-windows-${{ matrix.arch }}-user-installer.exe
+            bin/*-windows-${{ matrix.arch }}-system-installer.exe
+          if-no-files-found: error
+
+  build-linux:
+    name: Build Linux (${{ matrix.arch }})
+    needs:
+      - plan
+      - test
+    if: ${{ !cancelled() && !failure() && github.event.inputs.build_linux != 'false' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    env:
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      SENTRY_BACKEND_DSN: ${{ secrets.SENTRY_BACKEND_DSN }}
+      SENTRY_FRONTEND_DSN: ${{ secrets.SENTRY_FRONTEND_DSN }}
+      SENTRY_FRONTEND_PROJECT: ${{ secrets.SENTRY_FRONTEND_PROJECT }}
+      SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+      GOARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-toolchain
+        with:
+          install-linux-deps: "true"
+
+      - name: Package
+        run: |
+          wails3 task linux:build ARCH=${{ matrix.arch }}
+          wails3 task linux:generate:deb ARCH=${{ matrix.arch }}
+          wails3 task linux:generate:rpm ARCH=${{ matrix.arch }}
+          wails3 task linux:generate:portable ARCH=${{ matrix.arch }}
+          UPDATER_ARTIFACT="bin/$(GOOS=linux GOARCH=${{ matrix.arch }} RELEASE_FORMAT=updater go run ./cmd/project release-artifact-name)" GOARCH=${{ matrix.arch }} wails3 task release:validate-linux-updater
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: artifacts-linux-${{ matrix.arch }}
+          path: |
+            bin/*.deb
+            bin/*.rpm
+            bin/*-linux-*.tar.gz
           if-no-files-found: error
 
   prepare-release:
     needs:
-      - test
-      - build
-    runs-on: ubuntu-latest
+      - build-macos
+      - build-windows
+      - build-linux
+    # Release preparation needs every platform's updater payloads, so it runs
+    # only when all three platforms were built.
+    if: ${{ !cancelled() && needs.build-macos.result == 'success' && needs.build-windows.result == 'success' && needs.build-linux.result == 'success' }}
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -235,6 +385,8 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v8
         with:
+          # Excludes the unsigned signpath-* uploads, which share release file names.
+          pattern: artifacts-*
           path: ./artifacts
 
       - name: Materialize updater signing key
@@ -272,9 +424,11 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: ${{ github.event.inputs.release == 'true' || github.event_name == 'push' }}
-    needs: prepare-release
-    runs-on: ubuntu-latest
+    needs:
+      - plan
+      - prepare-release
+    if: ${{ needs.plan.outputs.publish == 'true' }}
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     env:
@@ -303,10 +457,10 @@ jobs:
           wails3 task release:app
 
   update-site:
-    if: ${{ github.event.inputs.release == 'true' || github.event_name == 'push' }}
+    # Runs only after a published release.
     needs:
       - release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 

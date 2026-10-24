@@ -4,14 +4,15 @@ import {
   AcknowledgeApplicationQuitPreflight,
   AcknowledgeClusterPanelClose,
   AcknowledgeClusterTabTransfer,
+  AcknowledgePanelTransfer,
   AcknowledgePanelWindowClose,
-  AcknowledgePanelWindowDock,
   AcknowledgePanelWindowReady,
   AcknowledgePanelWorkspaceReady,
   AcknowledgeWorkspaceWindowClose,
   BeginPanelWindowDock,
   BeginPanelWindowOpen,
   CloseClusterView,
+  ClosePanelWorkspaceObject,
   FailClusterTabTransfer,
   FailPanelTabTransfer,
   FailPanelWindowTransfer,
@@ -19,10 +20,10 @@ import {
   OpenClusterWindow,
   OpenPanelWorkspaceObject,
   PublishDockedPanels,
+  PublishPanelWindowGroup,
   RequestClusterTabTransfer,
   RequestPanelTabClose,
   RequestPanelTabTransfer,
-  UpdatePanelWindowSnapshot,
 } from '@/core/backend-api';
 import type { panelwindow } from '@/core/backend-api/models';
 import { desktopRuntimeAvailable, onEvent } from '@/core/desktop-runtime';
@@ -32,6 +33,12 @@ export type PanelWindowDescriptor = panelwindow.WindowDescriptor;
 
 export const openPanelWorkspaceObject = (windowName: string, tab: panelwindow.TabSnapshot) =>
   OpenPanelWorkspaceObject(windowName, tab);
+
+export const closePanelWorkspaceObject = (
+  windowName: string,
+  clusterId: string,
+  panelId: string
+): Promise<void> => ClosePanelWorkspaceObject(windowName, clusterId, panelId);
 
 export const publishDockedPanels = (windowName: string, groups: panelwindow.WorkspaceGroup[]) =>
   PublishDockedPanels(windowName, groups);
@@ -85,11 +92,13 @@ export const beginPanelWindowDock = (
   snapshot: panelwindow.GroupSnapshot
 ): Promise<void> => BeginPanelWindowDock(windowName, targetPosition, snapshot);
 
-export const acknowledgePanelWindowDock = (
+// Settles a directory move this renderer was asked to reconstruct: mounted
+// commits it, otherwise the source keeps the panels.
+export const acknowledgePanelTransfer = (
   callerWindowName: string,
-  windowName: string,
-  transferId: string
-): Promise<void> => AcknowledgePanelWindowDock(callerWindowName, windowName, transferId);
+  transferId: string,
+  mounted: boolean
+): Promise<void> => AcknowledgePanelTransfer(callerWindowName, transferId, mounted);
 
 export const failPanelWindowTransfer = (
   callerWindowName: string,
@@ -109,10 +118,11 @@ export const acknowledgeApplicationQuitPreflight = (
   allowed: boolean
 ): Promise<void> => AcknowledgeApplicationQuitPreflight(callerWindowName, transactionId, allowed);
 
-export const updatePanelWindowSnapshot = (
+// Reports a native window's arrangement; it never opens, closes, or moves a panel.
+export const publishPanelWindowGroup = (
   windowName: string,
-  snapshot: panelwindow.GroupSnapshot
-): Promise<void> => UpdatePanelWindowSnapshot(windowName, snapshot);
+  group: panelwindow.WorkspaceGroup
+): Promise<void> => PublishPanelWindowGroup(windowName, group);
 
 export const requestPanelTabClose = (windowName: string, panelId: string): Promise<void> =>
   RequestPanelTabClose(windowName, panelId);
@@ -132,10 +142,6 @@ export const failPanelTabTransfer = (callerWindowName: string, transferId: strin
 
 export const onPanelWindowOpened = (handler: (event: panelwindow.WindowOpenedEvent) => void) =>
   onEvent('panel-window:opened', handler);
-
-export const onPanelWindowDockRequested = (
-  handler: (event: panelwindow.WindowDockRequestedEvent) => void
-) => onEvent('panel-window:dock-requested', handler);
 
 export const onPanelWindowFocusRequested = (
   handler: (event: panelwindow.WindowFocusRequestedEvent) => void

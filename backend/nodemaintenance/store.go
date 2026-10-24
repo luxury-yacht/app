@@ -23,8 +23,6 @@ const (
 	DrainStatusFailed    DrainStatus = "failed"
 )
 
-const AggregateScope = "aggregate"
-
 // DrainEventKind represents the type of drain event emitted.
 type DrainEventKind string
 
@@ -473,24 +471,6 @@ func (s *Store) activeJobForKeyLocked(key drainHistoryKey) *DrainJob {
 
 func isActiveStatus(status DrainStatus) bool {
 	return status == DrainStatusRunning || status == DrainStatusCanceling
-}
-
-// ParseScope extracts the node name from a scope string.
-func ParseScope(scope string) string {
-	if scope == "" {
-		return ""
-	}
-	trimmed := strings.TrimSpace(strings.ToLower(scope))
-	if trimmed == "" {
-		return ""
-	}
-	if trimmed == AggregateScope {
-		return ""
-	}
-	if strings.HasPrefix(trimmed, "node:") {
-		return strings.TrimPrefix(trimmed, "node:")
-	}
-	return trimmed
 }
 
 func (s *Store) JobForCluster(jobID, clusterID string) (DrainJob, bool) {

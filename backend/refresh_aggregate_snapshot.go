@@ -9,6 +9,7 @@ import (
 
 	"k8s.io/klog/v2"
 
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
@@ -40,15 +41,14 @@ func newAggregateSnapshotService(subsystems map[string]*system.Subsystem) *aggre
 // Build routes one cluster-scoped snapshot request to the owning per-cluster service.
 func (s *aggregateSnapshotService) Build(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
 	services := s.snapshotConfig()
-	clusterIDs, scopeValue := refresh.SplitClusterScopeList(scope)
-	target, err := s.resolveTarget(domain, clusterIDs, services)
-	if err != nil {
+	target, scopeValue := refresh.SplitClusterScope(scope)
+	if err := requireActiveTarget(domain, target, services); err != nil {
 		return nil, err
 	}
 
 	service := services[target]
 	if service == nil {
-		return nil, fmt.Errorf("snapshot service unavailable for %s", target)
+		return nil, errorstatus.ClusterNotReady(fmt.Errorf("snapshot service unavailable for %s", target))
 	}
 	scoped := refresh.JoinClusterScope(target, scopeValue)
 	snapshotData, err := service.Build(ctx, domain, scoped)
@@ -59,7 +59,7 @@ func (s *aggregateSnapshotService) Build(ctx context.Context, domain, scope stri
 		// domain, so without this signal a restricted-RBAC cluster wedges in
 		// "loading" forever. The error still propagates: the client renders
 		// the permission message instead of a namespace list.
-		if domain == "namespaces" && refresh.IsPermissionDenied(err) {
+		if domain == "namespaces" && errorstatus.IsPermissionDenied(err) {
 			s.notifyNamespaceSnapshot(target, snapshot.NamespaceWorkloadReady)
 		}
 		return nil, err
@@ -91,24 +91,17 @@ func namespaceSnapshotWorkloadReadiness(snap *refresh.Snapshot) snapshot.Namespa
 	return payload.WorkloadReadiness
 }
 
-// resolveTarget chooses which cluster should handle the requested domain/scope pair.
-func (s *aggregateSnapshotService) resolveTarget(
-	domain string,
-	clusterIDs []string,
-	services map[string]refresh.SnapshotBuilder,
-) (string, error) {
-	if len(clusterIDs) == 0 {
-		return "", fmt.Errorf("cluster scope is required for domain %s", domain)
+// requireActiveTarget checks that the scope names a cluster with an active
+// service. A missing cluster is the caller's mistake; an inactive one may
+// still be starting.
+func requireActiveTarget[T any](domain, target string, active map[string]T) error {
+	if target == "" {
+		return errorstatus.BadRequest(fmt.Errorf("cluster scope is required for domain %s", domain))
 	}
-	if len(clusterIDs) > 1 {
-		return "", fmt.Errorf("domain %s requires a single cluster scope (requested: %v)", domain, clusterIDs)
+	if _, ok := active[target]; !ok {
+		return errorstatus.ClusterNotReady(fmt.Errorf("cluster %s not active", target))
 	}
-
-	target := clusterIDs[0]
-	if _, ok := services[target]; !ok {
-		return "", fmt.Errorf("no active clusters available (requested: %v)", clusterIDs)
-	}
-	return target, nil
+	return nil
 }
 
 func (s *aggregateSnapshotService) snapshotConfig() map[string]refresh.SnapshotBuilder {

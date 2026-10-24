@@ -26,30 +26,24 @@ const (
 
 // Refresh subsystem settings.
 const (
-	// RefreshResyncInterval controls how often shared informers perform a full resync sweep.
-	// This is the cadence we hand to Kubernetes SharedInformers for their built-in "full resync" sweep.
-	// At that interval the informer re-lists the resource from the API to reconcile any missed events.
-	// It is a coarse, background safety-net.
-	RefreshResyncInterval = 15 * time.Second
-
-	// RefreshInformerSyncPollInterval is the poll frequency used while waiting for informer caches to sync.
-	// This is purely local to our code. While we are waiting for a set of informers to report HasSynced() == true,
-	// we poll them on that short interval so the refresh snapshot builder can unblock as soon as their caches
+	// RefreshSyncPollInterval is the poll frequency used while waiting for reflector stores to sync.
+	// This is purely local to our code. While we are waiting for a set of stores to report HasSynced() == true,
+	// we poll them on that short interval so the refresh snapshot builder can unblock as soon as they
 	// are ready. Once they are synced, the poller stops.
-	RefreshInformerSyncPollInterval = 50 * time.Millisecond
+	RefreshSyncPollInterval = 50 * time.Millisecond
 
-	// RefreshInformerSyncTimeout bounds how long a snapshot build waits for informer caches
-	// to sync. A single informer whose watch can never complete (for example an
+	// RefreshSyncTimeout bounds how long a snapshot build waits for reflector stores
+	// to sync. A single reflector whose watch can never complete (for example an
 	// RBAC-forbidden resource) would otherwise hang every snapshot for the cluster forever.
-	RefreshInformerSyncTimeout = 30 * time.Second
+	RefreshSyncTimeout = 30 * time.Second
 
-	// RefreshInformerSyncDeadline bounds how long a single informer may take to reach
+	// RefreshSyncDeadline bounds how long a single reflector may take to reach
 	// its initial sync after Start before it is marked DEGRADED and excluded from the
 	// "all settled" readiness gate. Without this deadline, an unavailable API or a hung
 	// initial LIST for one GVR would block the whole cluster's readiness forever. A
-	// degraded informer is logged once and keeps retrying in the background; it stops
+	// degraded reflector is logged once and keeps retrying in the background; it stops
 	// gating readiness so the rest of the cluster becomes usable.
-	RefreshInformerSyncDeadline = 15 * time.Second
+	RefreshSyncDeadline = 15 * time.Second
 
 	// RefreshMetricsInterval determines the cadence for the metrics poller (node/pod metrics).
 	RefreshMetricsInterval = 5 * time.Second
@@ -63,15 +57,12 @@ const (
 	// SnapshotCacheTTL controls how long snapshot builds are cached to avoid redundant work.
 	SnapshotCacheTTL = 5 * time.Second
 
-	// ResponseCacheTTL controls how long non-informer resource GETs are cached.
+	// ResponseCacheTTL controls how long resource GETs the refresh feed does not serve are cached.
 	// Keep this short to reduce staleness while still cutting repeated requests.
 	ResponseCacheTTL = 10 * time.Second
 
 	// ResponseCacheMaxEntries caps the number of cached GET responses before eviction.
 	ResponseCacheMaxEntries = 512
-
-	// ResponseCacheInvalidationWarmupAge ignores cache invalidation events for very new objects.
-	ResponseCacheInvalidationWarmupAge = time.Minute
 
 	// SnapshotClusterEventsLimit caps cluster event summaries in refresh snapshots.
 	SnapshotClusterEventsLimit = 500
@@ -163,7 +154,7 @@ const (
 	// PermissionReviewRetryMaxBackoff caps retry delays for authorization reviews.
 	PermissionReviewRetryMaxBackoff = time.Second
 
-	// PermissionPrimeTimeout bounds permission priming calls before informer registration.
+	// PermissionPrimeTimeout bounds permission priming calls before reflector registration.
 	PermissionPrimeTimeout = 10 * time.Second
 
 	// PermissionPreflightTimeout bounds permission preflight calls during refresh setup.
@@ -387,8 +378,8 @@ const (
 	// ObjectCatalogEvictionTTL controls how long missing catalog entries are retained.
 	ObjectCatalogEvictionTTL = 10 * time.Minute
 
-	// ObjectCatalogInformerPromotionThreshold controls when resources are promoted to informer-backed updates.
-	ObjectCatalogInformerPromotionThreshold = 5000
+	// ObjectCatalogReflectorPromotionThreshold controls when listed dynamic resources are promoted to an owned reflector.
+	ObjectCatalogReflectorPromotionThreshold = 5000
 
 	// ObjectCatalogStreamingBatchSize controls catalog streaming batch size.
 	ObjectCatalogStreamingBatchSize = 100
@@ -421,14 +412,9 @@ const (
 	// from an aggregated-apiserver install), not for CRDs.
 	ObjectCatalogDiscoveryCacheTTL = 10 * time.Minute
 
-	// ObjectCatalogWatchPendingBufferSize caps pending informer watch events.
-	ObjectCatalogWatchPendingBufferSize = 8192
-
-	// ObjectCatalogWatchDebounceInterval coalesces informer watch flushes.
+	// ObjectCatalogWatchDebounceInterval coalesces the catalog's full-resync
+	// requests into one sync.
 	ObjectCatalogWatchDebounceInterval = 200 * time.Millisecond
-
-	// ObjectCatalogWatchOverflowWarnInterval throttles notifier overflow warnings per cluster.
-	ObjectCatalogWatchOverflowWarnInterval = 30 * time.Second
 
 	// ObjectCatalogReactiveMinResyncInterval is the minimum full resync interval when reactive updates are enabled.
 	ObjectCatalogReactiveMinResyncInterval = 5 * time.Minute
@@ -483,6 +469,21 @@ const (
 
 	// DebugContainerPollTimeout controls how long to wait for a debug container to start.
 	DebugContainerPollTimeout = 30 * time.Second
+
+	// NodeDebugPodPollInterval controls how often a node shell's debug pod status is polled.
+	NodeDebugPodPollInterval = 500 * time.Millisecond
+
+	// NodeDebugPodStartTimeout bounds how long a node shell waits for its debug
+	// pod to run, including the image pull on that node.
+	NodeDebugPodStartTimeout = 2 * time.Minute
+
+	// NodeDebugPodDeleteTimeout bounds deleting a node shell's debug pod when
+	// the session ends, including during app shutdown.
+	NodeDebugPodDeleteTimeout = 10 * time.Second
+
+	// ShellStartDrainTimeout bounds how long cluster removal and app shutdown
+	// wait for cancelled node shell starts to delete their debug pods.
+	ShellStartDrainTimeout = NodeDebugPodDeleteTimeout + 5*time.Second
 )
 
 // Application update settings.

@@ -48,15 +48,13 @@ import { CheckForUpdates } from '@/core/backend-api';
 import { requestContextRefresh } from '@/core/data-access';
 import { eventBus } from '@/core/events';
 import { GLOBAL_VIEW_DESCRIPTORS } from '@/core/navigation/viewRegistry';
-import { useAutoRefresh } from '@/core/refresh';
 import {
+  setAutoRefreshEnabled,
   setDimInactiveNamespaces,
   setExclusiveNamespaces,
   setUseShortResourceNames,
 } from '@/core/settings/appPreferences';
-import { useDimInactiveNamespaces } from '@/hooks/useDimInactiveNamespaces';
-import { useExclusiveNamespaces } from '@/hooks/useExclusiveNamespaces';
-import { useShortNames } from '@/hooks/useShortNames';
+import { usePreference } from '@/core/settings/usePreference';
 import type { ClusterViewType, NamespaceViewType } from '@/types/navigation/views';
 import { changeAppearanceMode } from '@/utils/appearanceMode';
 import { reportOperationalError } from '@/utils/errorHandler';
@@ -194,12 +192,12 @@ export function useCommandPaletteCommands() {
   const { favorites, setPendingFavorite } = useFavorites();
   const { mode } = useAppearanceMode();
   const { zoomIn, zoomOut, resetZoom, zoomLevel } = useZoom();
-  const { enabled: autoRefreshEnabled, toggle: toggleAutoRefresh } = useAutoRefresh();
+  const autoRefreshEnabled = usePreference('autoRefreshEnabled');
   const availableClusterViews = useAvailableClusterViews(selectedClusterId);
   const availableNamespaceViews = useAvailableNamespaceViews(selectedClusterId);
-  const useShortResourceNames = useShortNames();
-  const dimInactiveNamespaces = useDimInactiveNamespaces();
-  const exclusiveNamespaces = useExclusiveNamespaces();
+  const useShortResourceNames = usePreference('useShortResourceNames');
+  const dimInactiveNamespaces = usePreference('dimInactiveNamespaces');
+  const exclusiveNamespaces = usePreference('exclusiveNamespaces');
 
   const openClusterTab = useCallback(
     (tab: ClusterViewType) => {
@@ -299,7 +297,7 @@ export function useCommandPaletteCommands() {
           viewState.setIsSettingsOpen(true);
         },
         keywords: ['settings', 'preferences', 'config'],
-        shortcut: ['⌘', ','],
+        shortcut: platformShortcut(['⌘', ','], ['Ctrl', ',']),
       },
       {
         id: 'toggle-sidebar',
@@ -339,7 +337,7 @@ export function useCommandPaletteCommands() {
           eventBus.emit('view:toggle-app-logs-panel');
         },
         keywords: ['logs', 'application', 'debug'],
-        shortcut: ['⇧', '⌃', 'L'],
+        shortcut: platformShortcut(['⇧', '⌃', 'L'], ['Ctrl', 'Shift', 'L']),
       },
       {
         id: 'toggle-diagnostics',
@@ -351,7 +349,7 @@ export function useCommandPaletteCommands() {
           eventBus.emit('view:toggle-diagnostics');
         },
         keywords: ['diagnostics', 'status', 'permissions', 'refresh'],
-        shortcut: ['⇧', '⌃', 'D'],
+        shortcut: platformShortcut(['⇧', '⌃', 'D'], ['Ctrl', 'Shift', 'D']),
       },
 
       // Zoom Commands
@@ -455,7 +453,7 @@ export function useCommandPaletteCommands() {
         icon: <RefreshIcon width={16} height={16} />,
         description: 'Enable or disable automatic refresh',
         category: 'Settings',
-        action: toggleAutoRefresh,
+        action: () => setAutoRefreshEnabled(!autoRefreshEnabled),
         keywords: ['auto', 'refresh', 'toggle', 'pause', 'resume', 'automatic'],
       },
       {
@@ -465,10 +463,12 @@ export function useCommandPaletteCommands() {
         description: 'Manually refresh the current view',
         category: 'Settings',
         action: () => {
-          void requestContextRefresh({ reason: 'user' });
+          if (selectedClusterId) {
+            void requestContextRefresh({ reason: 'user', clusterId: selectedClusterId });
+          }
         },
         keywords: ['refresh', 'reload', 'update'],
-        shortcut: ['⌘', 'R'],
+        shortcut: platformShortcut(['⌘', 'R'], ['Ctrl', 'R']),
       },
       {
         id: 'reset-all-gridtable-state',
@@ -545,7 +545,6 @@ export function useCommandPaletteCommands() {
       closeTabShortcut,
       selectNamespaceShortcut,
       selectKubeconfigShortcut,
-      toggleAutoRefresh,
       diffObjectsShortcut,
       autoRefreshEnabled,
       useShortResourceNames,
@@ -556,6 +555,7 @@ export function useCommandPaletteCommands() {
       resetZoom,
       zoomLevel,
       selectedKubeconfigs.length,
+      selectedClusterId,
     ]
   );
 

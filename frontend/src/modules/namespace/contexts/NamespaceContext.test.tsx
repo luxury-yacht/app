@@ -1,1294 +1,537 @@
 /**
  * frontend/src/modules/namespace/contexts/NamespaceContext.test.tsx
  *
- * Test suite for NamespaceContext.
- * Covers key behaviors and edge cases for NamespaceContext.
+ * The namespace owner: the active cluster tab's namespace list (with the
+ * backend's rollups and usage), each tab's own namespace selection, and which
+ * clusters' namespace lists and utilization the window keeps subscribed as
+ * tabs, lifecycles, and the active tab change. Runs inside the production
+ * shell: the real namespace, kubeconfig, cluster-lifecycle, and refresh
+ * owners over a faked backend (test-utils/appState). Namespace lists and usage
+ * come from the backend's snapshots, lifecycle and scope changes from backend
+ * events. Denial of the namespace list is covered by
+ * test-utils/appState/harness.isolation.test.tsx.
  */
 
-import type React from 'react';
+import { backend } from '@core/backend-api/models';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
+import type { DomainPayloadMap, NamespaceSummary, RefreshDomain } from '@/core/refresh/types';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { snapshotResponse } from '@/test-utils/appState/transport';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
+import { useNamespace, useNamespaceStatesByScope } from './NamespaceContext';
 
-const errorHandlerMock = vi.hoisted(() => ({ handle: vi.fn() }));
-vi.mock('@/utils/errorHandler', () => ({ errorHandler: errorHandlerMock }));
+const app = installAppStateHarness();
+let view: MountedApp;
+let alpha: TestCluster;
+let beta: TestCluster;
 
-import { ALL_NAMESPACES_DISPLAY_NAME } from '@modules/namespace/constants';
-import { eventBus } from '@/core/events';
-import { resetAllScopedDomainStates, setScopedDomainState } from '@/core/refresh/store';
-import { NamespaceProvider, useNamespace } from './NamespaceContext';
+const ALL = 'All Namespaces';
+const ns = () => view.owners().namespace;
+const listed = () => ns().namespaces.map((item) => item.name);
 
-let mockClusterId = 'cluster-a';
-let mockClusterIds = ['cluster-a'];
-let mockClusterLifecycleStates = new Map([
-  ['cluster-a', 'loading'],
-  ['cluster-b', 'loading'],
-]);
+const scopeOf = (cluster: TestCluster, domain: RefreshDomain = 'namespaces') =>
+  buildClusterRefreshScope(domain, cluster.clusterId);
+const readsOf = (cluster: TestCluster, domain: RefreshDomain = 'namespaces') =>
+  app.snapshots.reads(domain).filter((read) => read.scope === scopeOf(cluster, domain));
+const streamOf = (cluster: TestCluster, domain: RefreshDomain = 'namespaces') =>
+  `${domain} ${scopeOf(cluster, domain)}`;
+const refreshJobs = () =>
+  app.snapshots.requests().filter((request) => request.startsWith('POST /api/v2/refresh/'));
 
-interface TestNamespaceDomain {
-  status: 'ready' | 'loading' | 'idle';
-  data: {
-    metrics?: {
-      collectedAt?: number;
-      stale: boolean;
-      staleAfterSeconds?: number;
-      successCount: number;
-      failureCount: number;
-    };
-    metricsState?: 'available' | 'loading' | 'unavailable';
-    namespaces: Array<{
-      name: string;
-      ref: {
-        clusterId: string;
-        group: string;
-        version: string;
-        kind: string;
-        resource: string;
-        name: string;
-      };
-      phase: string;
-      resourceVersion: string;
-      creationTimestamp: number;
-      clusterId: string;
-      clusterName: string;
-      unhealthyWorkloads?: number;
-      warningEvents?: number;
-      warningEventsState?: 'available' | 'loading' | 'unavailable';
-      cpuUsageMilli?: number;
-      memoryUsageBytes?: number;
-      quotaCount?: number;
-      quotaHighestUsedPercentage?: number;
-      quotaPressure?: '' | 'warning' | 'critical';
-      quotaPressureState?: 'available' | 'loading' | 'unavailable';
-    }>;
-  } | null;
-  error: null;
-}
+/** Declares alpha (team-a, team-b) and beta (team-c, team-d) as open tabs. */
+const declareClusters = (betaLifecycle?: ClusterLifecycle) => {
+  alpha = app.cluster({ name: 'dev', context: 'alpha' });
+  beta = app.cluster({ name: 'dev', context: 'beta', lifecycle: betaLifecycle });
+  app.namespaces(alpha, ['team-a', 'team-b']);
+  app.namespaces(beta, ['team-c', 'team-d']);
+};
+type ClusterLifecycle = Parameters<typeof app.cluster>[0]['lifecycle'];
 
-interface TestNamespaceMetricsDomain {
-  status: 'ready' | 'loading' | 'idle';
-  data: {
-    metrics: {
-      collectedAt?: number;
-      stale: boolean;
-      staleAfterSeconds?: number;
-      successCount: number;
-      failureCount: number;
-    };
-    metricsState: 'available' | 'loading' | 'unavailable';
-    namespaces: Array<{
-      ref: {
-        clusterId: string;
-        group: string;
-        version: string;
-        kind: string;
-        resource: string;
-        name: string;
-      };
-      cpuUsageMilli?: number;
-      memoryUsageBytes?: number;
-    }>;
-  } | null;
-  error: null;
-}
+const start = async (betaLifecycle?: ClusterLifecycle) => {
+  declareClusters(betaLifecycle);
+  view = await app.render(null);
+};
 
-const {
-  mockRefreshOrchestrator,
-  namespaceDomainRef,
-  namespaceMetricsDomainRef,
-  namespaceDomainsByScopeRef,
-} = vi.hoisted(() => {
-  return {
-    mockRefreshOrchestrator: {
-      setDomainEnabled: vi.fn(),
-      resetDomain: vi.fn(),
-      fetchScopedDomain: vi.fn(() => Promise.resolve()),
-      setScopedDomainEnabled: vi.fn(),
-      acquireScopedDomainLease: vi.fn(),
-      releaseScopedDomainLease: vi.fn(),
-      updateContext: vi.fn(),
-    },
-    namespaceDomainRef: { current: createNamespaceDomain('ready', ['alpha', 'beta']) },
-    namespaceMetricsDomainRef: {
-      current: {
-        status: 'idle',
-        data: null,
-        error: null,
-      } as TestNamespaceMetricsDomain,
-    },
-    namespaceDomainsByScopeRef: { current: {} as Record<string, unknown> },
+/**
+ * Keeps the cluster's namespace-list reads in flight until the returned
+ * release, then answers them with the cluster's `names`.
+ */
+const holdNamespaceReads = (cluster: TestCluster, names: string[]) => {
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  app.snapshots.respond((request) => {
+    if (request.domain !== 'namespaces' || request.scope !== scopeOf(cluster)) {
+      return undefined;
+    }
+    return released.then(() =>
+      snapshotResponse({
+        domain: request.domain,
+        scope: request.scope,
+        version: 1_000,
+        payload: {
+          clusterId: cluster.clusterId,
+          clusterName: cluster.clusterName,
+          namespaces: names.map((name) => namespaceRow(cluster, name)),
+        },
+        itemCount: names.length,
+      })
+    );
+  });
+  return async () => {
+    await act(async () => release());
+    await app.settle();
   };
+};
+
+/** The backend moves a cluster's lifecycle; later workspace answers keep it. */
+const setLifecycle = (cluster: TestCluster, state: `${backend.ClusterLifecycleState}`) =>
+  app.setClusterState(cluster, { lifecycle: state as backend.ClusterLifecycleState });
+
+const select = async (namespace: string, clusterId?: string) => {
+  act(() => {
+    ns().setSelectedNamespace(namespace, clusterId);
+  });
+  await app.settle();
+};
+
+const selection = () => ({
+  namespace: ns().selectedNamespace,
+  clusterId: ns().selectedNamespaceClusterId,
 });
 
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({
-    selectedKubeconfig: 'test',
-    selectedClusterId: mockClusterId,
-    selectedClusterIds: mockClusterIds,
-    managedClusterIds: mockClusterIds,
-  }),
-}));
-
-vi.mock('@core/contexts/ClusterLifecycleContext', () => ({
-  useClusterLifecycle: () => ({
-    getClusterState: (clusterId: string) => mockClusterLifecycleStates.get(clusterId),
-  }),
-}));
-
-vi.mock('@/core/refresh', () => ({
-  refreshOrchestrator: mockRefreshOrchestrator,
-  useRefreshScopedDomain: (domain: string, scope: string) => {
-    if (domain === 'namespace-metrics') {
-      return namespaceMetricsDomainRef.current;
-    }
-    if (domain === 'namespaces') {
-      return namespaceDomainsByScopeRef.current[scope] ?? namespaceDomainRef.current;
-    }
-    throw new Error(`Unexpected scoped domain requested in test: ${domain}`);
-  },
-  useRefreshScopedDomainStates: (domain: string) => {
-    if (domain !== 'namespaces') {
-      throw new Error(`Unexpected scoped domain states requested in test: ${domain}`);
-    }
-    return namespaceDomainsByScopeRef.current;
-  },
-}));
-
-vi.mock('@/core/capabilities', () => ({
-  queryNamespacePermissions: vi.fn(),
-}));
-
-const SelectedNamespace: React.FC = () => {
-  const { selectedNamespace, selectedNamespaceClusterId } = useNamespace();
-  return (
-    <>
-      <span data-testid="selected">{selectedNamespace ?? 'none'}</span>
-      <span data-testid="selected-cluster">{selectedNamespaceClusterId ?? 'none'}</span>
-    </>
-  );
+/**
+ * The backend says the namespace list changed (the namespaces doorbell); the
+ * stream coalesces signals briefly before the list is read again.
+ */
+const ringNamespaces = async (cluster: TestCluster, version: string) => {
+  await act(async () => {
+    app.streams.ring('namespaces', scopeOf(cluster), 'object', version);
+    await vi.advanceTimersByTimeAsync(500);
+  });
+  await app.settle();
 };
 
-const namespaceRef: { current: ReturnType<typeof useNamespace> | null } = { current: null };
-
-const namespaceRenders: string[][] = [];
-const Harness: React.FC = () => {
-  namespaceRef.current = useNamespace();
-  namespaceRenders.push(namespaceRef.current.namespaces.map((item) => item.name));
-  return null;
+/** Lets released streams close after their unsubscribe debounce. */
+const closeReleasedStreams = async () => {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1_000);
+  });
 };
 
-describe('NamespaceProvider selection behaviour', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    namespaceDomainRef.current = createNamespaceDomain('ready', ['alpha', 'beta']);
-    namespaceMetricsDomainRef.current = { status: 'idle', data: null, error: null };
-    namespaceDomainsByScopeRef.current = {};
-    mockClusterId = 'cluster-a';
-    mockClusterIds = ['cluster-a', 'cluster-b'];
-    mockClusterLifecycleStates = new Map([
-      ['cluster-a', 'loading'],
-      ['cluster-b', 'loading'],
-    ]);
-    namespaceRef.current = null;
-    resetAllScopedDomainStates('namespaces');
-    resetAllScopedDomainStates('namespace-metrics');
-    vi.clearAllMocks();
-    mockRefreshOrchestrator.setScopedDomainEnabled.mockReset();
-    mockRefreshOrchestrator.acquireScopedDomainLease.mockImplementation((domain, scope, options) =>
-      mockRefreshOrchestrator.setScopedDomainEnabled(domain, scope, true, options)
-    );
-    mockRefreshOrchestrator.releaseScopedDomainLease.mockImplementation((domain, scope, options) =>
-      mockRefreshOrchestrator.setScopedDomainEnabled(domain, scope, false, options)
-    );
-  });
-
-  afterEach(() => {
-    resetAllScopedDomainStates('namespaces');
-    resetAllScopedDomainStates('namespace-metrics');
-    vi.useRealTimers();
-  });
-
-  const renderWithProvider = () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = ReactDOM.createRoot(container);
-    act(() => {
-      root.render(
-        <NamespaceProvider>
-          <Harness />
-          <SelectedNamespace />
-        </NamespaceProvider>
-      );
-    });
-
-    const rerender = () => {
-      act(() => {
-        root.render(
-          <NamespaceProvider>
-            <Harness />
-            <SelectedNamespace />
-          </NamespaceProvider>
-        );
-      });
-    };
-
-    const cleanup = () => {
-      act(() => root.unmount());
-      container.remove();
-    };
-
-    return { container, rerender, cleanup };
-  };
-
-  it('never exposes retained namespaces from the previous cluster while the next cluster loads', () => {
-    const { rerender, cleanup } = renderWithProvider();
-    namespaceRenders.length = 0;
-    mockClusterId = 'cluster-b';
-    namespaceDomainRef.current = { status: 'loading', data: null, error: null };
-    rerender();
-    const renders = [...namespaceRenders];
-    cleanup();
-    expect(renders.length).toBeGreaterThan(0);
-    expect(renders.every((names) => names.length === 0)).toBe(true);
-  });
-
-  it('keeps the selected namespace while refresh is in progress', () => {
-    const { rerender, cleanup } = renderWithProvider();
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    act(() => {
-      namespaceRef.current?.setSelectedNamespace('alpha');
-    });
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    expect(getSelected()).toBe('alpha');
-    expect(getSelectedCluster()).toBe('cluster-a');
-
-    namespaceDomainRef.current = {
-      ...namespaceDomainRef.current,
-      status: 'loading',
-    };
-    rerender();
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    expect(getSelected()).toBe('alpha');
-    expect(getSelectedCluster()).toBe('cluster-a');
-
-    namespaceDomainRef.current = createNamespaceDomain('ready', ['alpha', 'beta']);
-    rerender();
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    expect(getSelected()).toBe('alpha');
-    expect(getSelectedCluster()).toBe('cluster-a');
-    cleanup();
-  });
-
-  it('clears selection when refreshed list removes the previous namespace', () => {
-    const { rerender, cleanup } = renderWithProvider();
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    act(() => {
-      namespaceRef.current?.setSelectedNamespace('alpha');
-    });
-    act(() => {
-      vi.runAllTimers();
-    });
-    expect(getSelected()).toBe('alpha');
-    expect(getSelectedCluster()).toBe('cluster-a');
-
-    namespaceDomainRef.current = createNamespaceDomain('ready', ['bravo']);
-    rerender();
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    expect(getSelected()).toBe('none');
-    expect(getSelectedCluster()).toBe('none');
-    cleanup();
-  });
-
-  it('filters namespaces to the active cluster', () => {
-    namespaceDomainRef.current = {
-      status: 'ready',
-      data: {
-        namespaces: [
-          {
-            name: 'alpha',
-            ref: namespaceObjectRef('cluster-a', 'alpha'),
-            phase: 'Active',
-            resourceVersion: '1',
-            creationTimestamp: Math.floor(Date.now() / 1000),
-            clusterId: 'cluster-a',
-            clusterName: 'alpha',
-          },
-          {
-            name: 'beta',
-            ref: namespaceObjectRef('cluster-b', 'beta'),
-            phase: 'Active',
-            resourceVersion: '2',
-            creationTimestamp: Math.floor(Date.now() / 1000),
-            clusterId: 'cluster-b',
-            clusterName: 'beta',
-          },
-        ],
-      },
-      error: null,
-    };
-
-    const { cleanup } = renderWithProvider();
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    const visibleNames = namespaceRef.current?.namespaces.map((item) => item.name) ?? [];
-    expect(visibleNames).toEqual([ALL_NAMESPACES_DISPLAY_NAME, 'alpha']);
-    expect(namespaceRef.current?.namespaceReady).toBe(true);
-    cleanup();
-  });
-
-  it('maps backend workload and warning-event rollups into namespace display data', () => {
-    namespaceDomainRef.current = {
-      status: 'ready',
-      data: {
-        namespaces: [
-          {
-            name: 'alpha',
-            ref: {
-              clusterId: 'cluster-a',
-              group: '',
-              version: 'v1',
-              kind: 'Namespace',
-              resource: 'namespaces',
-              name: 'alpha',
-            },
-            phase: 'Active',
-            resourceVersion: '1',
-            creationTimestamp: Math.floor(Date.now() / 1000),
-            clusterId: 'cluster-a',
-            clusterName: 'alpha',
-            unhealthyWorkloads: 3,
-            warningEvents: 2,
-            warningEventsState: 'available',
-            quotaCount: 2,
-            quotaHighestUsedPercentage: 92,
-            quotaPressure: 'warning',
-            quotaPressureState: 'available',
-          },
-        ],
-      },
-      error: null,
-    };
-    namespaceMetricsDomainRef.current = {
-      status: 'ready',
-      data: {
-        metrics: {
-          collectedAt: 1_700_000_000,
-          stale: false,
-          successCount: 1,
-          failureCount: 0,
-        },
-        metricsState: 'available',
-        namespaces: [
-          {
-            ref: {
-              clusterId: 'cluster-a',
-              group: '',
-              version: 'v1',
-              kind: 'Namespace',
-              resource: 'namespaces',
-              name: 'alpha',
-            },
-            cpuUsageMilli: 200,
-            memoryUsageBytes: 96 * 1024 * 1024,
-          },
-        ],
-      },
-      error: null,
-    };
-
-    const { cleanup } = renderWithProvider();
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    const alpha = namespaceRef.current?.namespaces.find((item) => item.name === 'alpha');
-    expect(alpha?.unhealthyWorkloads).toBe(3);
-    expect(alpha?.warningEvents).toBe(2);
-    expect(alpha?.warningEventsState).toBe('available');
-    expect(alpha?.cpuUsageMilli).toBe(200);
-    expect(alpha?.memoryUsageBytes).toBe(96 * 1024 * 1024);
-    expect(alpha?.utilizationState).toBe('available');
-    expect(alpha?.quotaHighestUsedPercentage).toBe(92);
-    expect(alpha?.quotaPressure).toBe('warning');
-    expect(alpha?.quotaPressureState).toBe('available');
-    expect(alpha?.details).toContain('Unhealthy workloads: 3');
-    expect(alpha?.details).toContain('Warning events: 2');
-    expect(alpha?.details).toContain('Utilization: 200m CPU, 96Mi memory');
-    expect(alpha?.details).toContain('Quota pressure: 92%');
-    cleanup();
-  });
-
-  it('normalizes a nullable namespace wire list', () => {
-    namespaceDomainRef.current = {
-      status: 'ready',
-      data: { namespaces: null },
-      error: null,
-    } as unknown as typeof namespaceDomainRef.current;
-
-    const { cleanup } = renderWithProvider();
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    expect(namespaceRef.current?.namespaces).toEqual([]);
-    cleanup();
-  });
-
-  it('marks namespace utilization stale at the client-side freshness boundary', () => {
-    const collectedAt = Math.floor(Date.now() / 1000);
-    namespaceDomainRef.current = {
-      status: 'ready',
-      data: {
-        namespaces: [
-          {
-            name: 'alpha',
-            ref: {
-              clusterId: 'cluster-a',
-              group: '',
-              version: 'v1',
-              kind: 'Namespace',
-              resource: 'namespaces',
-              name: 'alpha',
-            },
-            phase: 'Active',
-            resourceVersion: '1',
-            creationTimestamp: collectedAt,
-            clusterId: 'cluster-a',
-            clusterName: 'alpha',
-            quotaPressureState: 'available',
-          },
-        ],
-      },
-      error: null,
-    };
-    namespaceMetricsDomainRef.current = {
-      status: 'ready',
-      data: {
-        metrics: {
-          collectedAt,
-          stale: false,
-          staleAfterSeconds: 30,
-          successCount: 1,
-          failureCount: 0,
-        },
-        metricsState: 'available',
-        namespaces: [
-          {
-            ref: {
-              clusterId: 'cluster-a',
-              group: '',
-              version: 'v1',
-              kind: 'Namespace',
-              resource: 'namespaces',
-              name: 'alpha',
-            },
-            cpuUsageMilli: 200,
-            memoryUsageBytes: 96 * 1024 * 1024,
-          },
-        ],
-      },
-      error: null,
-    };
-
-    const { cleanup } = renderWithProvider();
-    expect(namespaceRef.current?.namespaces[1]?.details).not.toContain('Awaiting metrics data');
-
-    act(() => {
-      vi.advanceTimersByTime(30_500);
-    });
-    expect(namespaceRef.current?.namespaces[1]?.details).toContain('Awaiting metrics data');
-    cleanup();
-  });
-
-  it('enables and starts namespace refresh separately for every open cluster', () => {
-    const { cleanup } = renderWithProvider();
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
-      'namespaces',
-      'cluster-a|',
-      true,
-      { preserveState: true }
-    );
-    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
-      'namespaces',
-      'cluster-b|',
-      true,
-      { preserveState: true }
-    );
-    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
-      'namespaces',
-      'cluster-a|',
-      expect.objectContaining({ isManual: false, streamSignal: false })
-    );
-    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
-      'namespaces',
-      'cluster-b|',
-      expect.objectContaining({ isManual: false, streamSignal: false })
-    );
-
-    cleanup();
-  });
-
-  it('does not request namespace refresh until backend lifecycle reaches refresh availability', () => {
-    mockClusterLifecycleStates = new Map([
-      ['cluster-a', 'loading'],
-      ['cluster-b', 'connected'],
-    ]);
-    const { rerender, cleanup } = renderWithProvider();
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
-      'namespaces',
-      'cluster-a|',
-      true,
-      { preserveState: true }
-    );
-    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
-      'namespaces',
-      'cluster-a|',
-      expect.objectContaining({ isManual: false, streamSignal: false })
-    );
-    expect(mockRefreshOrchestrator.setScopedDomainEnabled).not.toHaveBeenCalledWith(
-      'namespaces',
-      'cluster-b|',
-      true,
-      { preserveState: true }
-    );
-    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalledWith(
-      'namespaces',
-      'cluster-b|',
-      expect.objectContaining({ isManual: false, streamSignal: false })
-    );
-
-    mockClusterLifecycleStates = new Map([
-      ['cluster-a', 'loading'],
-      ['cluster-b', 'loading'],
-    ]);
-    rerender();
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
-      'namespaces',
-      'cluster-b|',
-      true,
-      { preserveState: true }
-    );
-    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
-      'namespaces',
-      'cluster-b|',
-      expect.objectContaining({ isManual: false, streamSignal: false })
-    );
-
-    cleanup();
-  });
-
-  it('stops every temporarily unavailable open scope without clearing retained snapshots', () => {
-    const { rerender, cleanup } = renderWithProvider();
-    act(() => {
-      vi.runAllTimers();
-    });
-    mockRefreshOrchestrator.setScopedDomainEnabled.mockClear();
-    mockRefreshOrchestrator.fetchScopedDomain.mockClear();
-
-    mockClusterLifecycleStates = new Map([
-      ['cluster-a', 'connected'],
-      ['cluster-b', 'connected'],
-    ]);
-    rerender();
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
-      'namespaces',
-      'cluster-a|',
-      false,
-      { preserveState: true }
-    );
-    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
-      'namespaces',
-      'cluster-b|',
-      false,
-      { preserveState: true }
-    );
-    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
-    expect(namespaceRef.current?.namespaces.map((item) => item.name)).toEqual([
-      ALL_NAMESPACES_DISPLAY_NAME,
-      'alpha',
-      'beta',
-    ]);
-
-    cleanup();
-  });
-
-  it('keeps namespace selection scoped to the active cluster tab', () => {
-    namespaceDomainRef.current = createNamespaceDomainMulti('ready', [
-      {
-        clusterId: 'cluster-a',
-        clusterName: 'alpha',
-        names: ['alpha', 'beta'],
-      },
-      {
-        clusterId: 'cluster-b',
-        clusterName: 'beta',
-        names: ['gamma', 'delta'],
-      },
-    ]);
-    const { rerender, cleanup } = renderWithProvider();
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    act(() => {
-      namespaceRef.current?.setSelectedNamespace('beta');
-    });
-    act(() => {
-      vi.runAllTimers();
-    });
-    expect(getSelected()).toBe('beta');
-
-    mockClusterId = 'cluster-b';
-    rerender();
-    act(() => {
-      vi.runAllTimers();
-    });
-    expect(getSelected()).toBe('none');
-
-    act(() => {
-      namespaceRef.current?.setSelectedNamespace('delta');
-    });
-
-    mockClusterId = 'cluster-a';
-    rerender();
-    act(() => {
-      vi.runAllTimers();
-    });
-    expect(getSelected()).toBe('beta');
-    cleanup();
-  });
-
-  it('shares namespace metrics with another mounted owner until both release it', () => {
-    const leases = new Map<string, number>();
-    const enabled = new Set<string>();
-    mockRefreshOrchestrator.setScopedDomainEnabled.mockImplementation((domain, scope, active) => {
-      if (domain !== 'namespace-metrics') {
-        return;
-      }
-      if (active) {
-        enabled.add(scope);
-      } else if (!(leases.get(scope) ?? 0)) {
-        enabled.delete(scope);
-      }
-    });
-    mockRefreshOrchestrator.acquireScopedDomainLease.mockImplementation((_domain, scope) => {
-      leases.set(scope, (leases.get(scope) ?? 0) + 1);
-      enabled.add(scope);
-    });
-    mockRefreshOrchestrator.releaseScopedDomainLease.mockImplementation((_domain, scope) => {
-      const remaining = Math.max(0, (leases.get(scope) ?? 0) - 1);
-      leases.set(scope, remaining);
-      if (!remaining) {
-        enabled.delete(scope);
-      }
-    });
-    const first = renderWithProvider();
-    const second = renderWithProvider();
-    first.cleanup();
-    const remaining = [...enabled];
-    second.cleanup();
-    expect(remaining).toEqual(['cluster-a|']);
-    expect(enabled.size).toBe(0);
-  });
-
-  it('renders warmed namespace data immediately when switching open cluster tabs', () => {
-    namespaceDomainsByScopeRef.current = {
-      'cluster-a|': createNamespaceDomainWithCluster('ready', ['alpha'], 'cluster-a', 'alpha'),
-      'cluster-b|': createNamespaceDomainWithCluster('ready', ['gamma'], 'cluster-b', 'beta'),
-    };
-
-    const { rerender, cleanup } = renderWithProvider();
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    expect(namespaceRef.current?.namespaces.map((item) => item.name)).toEqual([
-      ALL_NAMESPACES_DISPLAY_NAME,
-      'alpha',
-    ]);
-    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
-      'namespace-metrics',
-      'cluster-a|',
-      true,
-      { preserveState: true }
-    );
-    expect(mockRefreshOrchestrator.setScopedDomainEnabled).not.toHaveBeenCalledWith(
-      'namespace-metrics',
-      'cluster-b|',
-      true,
-      expect.anything()
-    );
-
-    mockRefreshOrchestrator.setScopedDomainEnabled.mockClear();
-    mockRefreshOrchestrator.fetchScopedDomain.mockClear();
-
-    mockClusterId = 'cluster-b';
-    rerender();
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    expect(namespaceRef.current?.namespaces.map((item) => item.name)).toEqual([
-      ALL_NAMESPACES_DISPLAY_NAME,
-      'gamma',
-    ]);
-    expect(namespaceRef.current?.namespaceLoading).toBe(false);
-    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
-      'namespaces',
-      'cluster-b|',
-      expect.objectContaining({ isManual: false, streamSignal: false })
-    );
-    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
-      'namespace-metrics',
-      'cluster-a|',
-      false,
-      { preserveState: true }
-    );
-    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
-      'namespace-metrics',
-      'cluster-b|',
-      true,
-      { preserveState: true }
-    );
-    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
-      'namespace-metrics',
-      'cluster-b|',
-      expect.objectContaining({ isManual: false, streamSignal: false })
-    );
-    // Switching the ACTIVE tab must not disable any still-open cluster's scope
-    // — both leases stay live so both stay warm (no disable/re-enable churn).
-    const disables = mockRefreshOrchestrator.setScopedDomainEnabled.mock.calls.filter(
-      (call) => call[0] === 'namespaces' && call[2] === false
-    );
-    expect(disables).toEqual([]);
-
-    cleanup();
-  });
-
-  it('paints retained namespaces before a stale lifecycle gate allows refresh', () => {
-    namespaceDomainsByScopeRef.current = {
-      'cluster-a|': createNamespaceDomainWithCluster('ready', ['alpha'], 'cluster-a', 'alpha'),
-      'cluster-b|': createNamespaceDomainWithCluster('ready', ['gamma'], 'cluster-b', 'beta'),
-    };
-    mockClusterLifecycleStates = new Map([
-      ['cluster-a', 'loading'],
-      ['cluster-b', 'loading'],
-    ]);
-
-    const { rerender, cleanup } = renderWithProvider();
-    act(() => {
-      vi.runAllTimers();
-    });
-    mockRefreshOrchestrator.setScopedDomainEnabled.mockClear();
-    mockRefreshOrchestrator.fetchScopedDomain.mockClear();
-
-    // A late/stale lifecycle edge makes an open cluster temporarily ineligible
-    // for refresh. Its lease must stop without erasing its retained snapshot.
-    mockClusterLifecycleStates = new Map([
-      ['cluster-a', 'loading'],
-      ['cluster-b', 'connected'],
-    ]);
-    rerender();
-    act(() => {
-      vi.runAllTimers();
-    });
-    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
-      'namespaces',
-      'cluster-b|',
-      false,
-      { preserveState: true }
-    );
-    mockRefreshOrchestrator.setScopedDomainEnabled.mockClear();
-    mockRefreshOrchestrator.fetchScopedDomain.mockClear();
-
-    // The backend activation boundary has not converged yet, but retained data
-    // belongs to the selected cluster and must paint during this render.
-    mockClusterId = 'cluster-b';
-    rerender();
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    expect(namespaceRef.current?.namespaces.map((item) => item.name)).toEqual([
-      ALL_NAMESPACES_DISPLAY_NAME,
-      'gamma',
-    ]);
-    expect(namespaceRef.current?.namespaceLoading).toBe(false);
-    expect(mockRefreshOrchestrator.setScopedDomainEnabled).not.toHaveBeenCalledWith(
-      'namespaces',
-      'cluster-b|',
-      true,
-      expect.anything()
-    );
-    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalledWith(
-      'namespaces',
-      'cluster-b|',
-      expect.anything()
-    );
-
-    // Once lifecycle catches up, the same retained scope becomes eligible for
-    // its ordinary non-manual reconciliation.
-    mockClusterLifecycleStates = new Map([
-      ['cluster-a', 'loading'],
-      ['cluster-b', 'loading'],
-    ]);
-    rerender();
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
-      'namespaces',
-      'cluster-b|',
-      true,
-      { preserveState: true }
-    );
-    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
-      'namespaces',
-      'cluster-b|',
-      expect.objectContaining({ isManual: false, streamSignal: false })
-    );
-
-    cleanup();
-  });
-
-  it('honors explicit cluster IDs when setting namespace selection', () => {
-    namespaceDomainRef.current = createNamespaceDomainMulti('ready', [
-      {
-        clusterId: 'cluster-a',
-        clusterName: 'alpha',
-        names: ['alpha', 'beta'],
-      },
-      {
-        clusterId: 'cluster-b',
-        clusterName: 'beta',
-        names: ['gamma', 'delta'],
-      },
-    ]);
-    const { cleanup } = renderWithProvider();
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    act(() => {
-      namespaceRef.current?.setSelectedNamespace('delta', 'cluster-b');
-    });
-
-    expect(getSelected()).toBe('none');
-    expect(namespaceRef.current?.getClusterNamespace('cluster-b')).toBe('delta');
-    expect(namespaceRef.current?.getClusterNamespace('cluster-a')).toBeUndefined();
-    cleanup();
-  });
-
-  it('drops namespace selections for closed cluster tabs', () => {
-    namespaceDomainRef.current = createNamespaceDomainMulti('ready', [
-      {
-        clusterId: 'cluster-a',
-        clusterName: 'alpha',
-        names: ['alpha', 'beta'],
-      },
-      {
-        clusterId: 'cluster-b',
-        clusterName: 'beta',
-        names: ['gamma', 'delta'],
-      },
-    ]);
-    const { rerender, cleanup } = renderWithProvider();
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    mockClusterId = 'cluster-b';
-    rerender();
-    act(() => {
-      vi.runAllTimers();
-    });
-    act(() => {
-      namespaceRef.current?.setSelectedNamespace('delta');
-    });
-
-    mockClusterIds = ['cluster-a'];
-    mockClusterId = 'cluster-a';
-    rerender();
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    mockClusterIds = ['cluster-a', 'cluster-b'];
-    mockClusterId = 'cluster-b';
-    rerender();
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    expect(getSelected()).toBe('none');
-    cleanup();
-  });
-
-  it('keeps namespaces empty while the active cluster has no data', () => {
-    namespaceDomainRef.current = createNamespaceDomainMulti('ready', [
-      {
-        clusterId: 'cluster-a',
-        clusterName: 'alpha',
-        names: ['alpha'],
-      },
-    ]);
-    mockClusterId = 'cluster-b';
-
-    const { cleanup } = renderWithProvider();
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    expect(namespaceRef.current?.namespaces).toEqual([]);
-    expect(namespaceRef.current?.namespaceLoading).toBe(true);
-    expect(namespaceRef.current?.namespaceReady).toBe(false);
-    cleanup();
-  });
-
-  it('triggers manual refresh with spinner control', async () => {
-    const { cleanup } = renderWithProvider();
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    await act(async () => {
-      await namespaceRef.current?.loadNamespaces();
-    });
-
-    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
-      'namespaces',
-      'cluster-a|',
-      expect.objectContaining({ isManual: true, streamSignal: false })
-    );
-    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
-      'namespaces',
-      'cluster-b|',
-      expect.objectContaining({ isManual: true, streamSignal: false })
-    );
-    cleanup();
-  });
-
-  it('reconciles a rebuilt namespace scope without creating manual refresh jobs', () => {
-    const { cleanup } = renderWithProvider();
-    act(() => {
-      vi.runAllTimers();
-    });
-    mockRefreshOrchestrator.fetchScopedDomain.mockClear();
-
-    act(() => {
-      eventBus.emit('cluster:scope-changed', { clusterId: 'cluster-a' });
-      vi.runAllTimers();
-    });
-
-    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
-      'namespaces',
-      'cluster-a|',
-      expect.objectContaining({ isManual: false, streamSignal: false })
-    );
-    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledTimes(1);
-    cleanup();
-  });
-
-  it('refetches a scope when its doorbell signal advances the sourceVersion, exactly once per signal', () => {
-    // The stream-signal hook reads the REAL scoped store. Initial state carries
-    // the initial fetch's validator (applySnapshot always sets sourceVersion
-    // after a 200) — the hook consumes it without fetching.
-    setScopedDomainState('namespaces', 'cluster-a|', (previous) => ({
-      ...previous,
-      status: 'ready',
-      data: { clusterId: 'cluster-a', namespaces: [] } as never,
-      sourceVersion: 'validator-1',
-      scope: 'cluster-a|',
-    }));
-
-    const { cleanup, rerender } = renderWithProvider();
-    act(() => {
-      vi.runAllTimers();
-    });
-    mockRefreshOrchestrator.fetchScopedDomain.mockClear();
-
-    // Doorbell: the stream signal advances the scoped signal clock
-    // (signalVersions is written only by the stream manager's doorbell path).
-    act(() => {
-      setScopedDomainState('namespaces', 'cluster-a|', (previous) => ({
-        ...previous,
-        sourceVersion: 'ns-1',
-        signalVersions: { object: 'ns-1' },
-      }));
-    });
-    act(() => {
-      vi.runAllTimers();
-    });
-    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
-      'namespaces',
-      'cluster-a|',
-      expect.objectContaining({ isManual: false, streamSignal: true })
-    );
-
-    // The same signal version must not refetch again.
-    mockRefreshOrchestrator.fetchScopedDomain.mockClear();
-    rerender();
-    act(() => {
-      vi.runAllTimers();
-    });
-    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
-    cleanup();
-    resetAllScopedDomainStates('namespaces');
-  });
-
-  it('leaves existing clusters untouched when another cluster tab opens', () => {
-    // Multi-cluster invariant: one cluster's tab lifecycle must never disturb
-    // another cluster's scoped refresh state. The old effect disabled and
-    // re-enabled EVERY scope on each scope-set change; the disable->enable
-    // cycle reset the active scope's store (blank list + spinner + diagnostics
-    // row churn) whenever ANY tab opened/closed or ANY lifecycle event fired.
-    mockClusterIds = ['cluster-a'];
-    const { cleanup, rerender } = renderWithProvider();
-    act(() => {
-      vi.runAllTimers();
-    });
-    mockRefreshOrchestrator.setScopedDomainEnabled.mockClear();
-    mockRefreshOrchestrator.resetDomain.mockClear();
-
-    // Open a second cluster tab.
-    mockClusterIds = ['cluster-a', 'cluster-b'];
-    rerender();
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    // The new cluster's scope is enabled...
-    const clusterBEnables = mockRefreshOrchestrator.setScopedDomainEnabled.mock.calls.filter(
-      (call) => call[0] === 'namespaces' && call[1] === 'cluster-b|' && call[2] === true
-    );
-    expect(clusterBEnables.length).toBeGreaterThan(0);
-    // ...and cluster-a's scope is never disabled or reset by the change.
-    const clusterADisables = mockRefreshOrchestrator.setScopedDomainEnabled.mock.calls.filter(
-      (call) => call[1] === 'cluster-a|' && call[2] === false
-    );
-    expect(clusterADisables).toEqual([]);
-    expect(mockRefreshOrchestrator.resetDomain).not.toHaveBeenCalled();
-
-    // Closing the second tab disables ONLY cluster-b's scope.
-    mockRefreshOrchestrator.setScopedDomainEnabled.mockClear();
-    mockClusterIds = ['cluster-a'];
-    rerender();
-    act(() => {
-      vi.runAllTimers();
-    });
-    const clusterADisablesAfterClose =
-      mockRefreshOrchestrator.setScopedDomainEnabled.mock.calls.filter(
-        (call) => call[1] === 'cluster-a|' && call[2] === false
-      );
-    expect(clusterADisablesAfterClose).toEqual([]);
-    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
-      'namespaces',
-      'cluster-b|',
-      false
-    );
-    cleanup();
-  });
-
-  it('uses a startup request for the initial namespace load', () => {
-    namespaceDomainRef.current = {
-      status: 'idle',
-      data: null,
-      error: null,
-    };
-
-    const { cleanup } = renderWithProvider();
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
-      'namespaces',
-      'cluster-a|',
-      expect.objectContaining({ isManual: false, streamSignal: false })
-    );
-    cleanup();
-  });
-
-  it('exposes namespacesPermissionDenied for a permission-denied namespaces domain — and does not toast', () => {
-    namespaceDomainRef.current = {
-      status: 'error',
-      data: null,
-      error: 'permission denied for domain namespaces (core/namespaces)',
-      permissionDenied: true,
-    } as unknown as typeof namespaceDomainRef.current;
-    const { cleanup } = renderWithProvider();
-    act(() => {
-      vi.runAllTimers();
-    });
-    expect(namespaceRef.current?.namespacesPermissionDenied).toBe(true);
-    // A designed, rendered state — not a toast (the sidebar shows the message).
-    expect(errorHandlerMock.handle).not.toHaveBeenCalled();
-    cleanup();
-  });
-
-  it('keeps namespacesPermissionDenied false for transient errors (which still toast)', () => {
-    namespaceDomainRef.current = {
-      status: 'error',
-      data: null,
-      error: 'apiserver timeout',
-    } as unknown as typeof namespaceDomainRef.current;
-    const { cleanup } = renderWithProvider();
-    act(() => {
-      vi.runAllTimers();
-    });
-    expect(namespaceRef.current?.namespacesPermissionDenied).toBe(false);
-    expect(errorHandlerMock.handle).toHaveBeenCalled();
-    cleanup();
-  });
-
-  it('does not replay a retained namespace error when switching away and back', () => {
-    namespaceDomainsByScopeRef.current = {
-      'cluster-a|': {
-        ...createNamespaceDomainWithCluster('ready', ['alpha'], 'cluster-a', 'alpha'),
-        status: 'error',
-        error: 'Manual refresh timed out after 60 seconds for namespaces',
-      },
-      'cluster-b|': createNamespaceDomainWithCluster('ready', ['beta'], 'cluster-b', 'beta'),
-    };
-
-    const { rerender, cleanup } = renderWithProvider();
-    act(() => {
-      vi.runAllTimers();
-    });
-    expect(errorHandlerMock.handle).toHaveBeenCalledTimes(1);
-
-    mockClusterId = 'cluster-b';
-    rerender();
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    mockClusterId = 'cluster-a';
-    rerender();
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    expect(errorHandlerMock.handle).toHaveBeenCalledTimes(1);
-    cleanup();
-  });
-});
-
-function getSelected(): string {
-  const element = document.querySelector('[data-testid="selected"]');
-  return element?.textContent ?? '';
-}
-
-function getSelectedCluster(): string {
-  const element = document.querySelector('[data-testid="selected-cluster"]');
-  return element?.textContent ?? '';
-}
-
-function createNamespaceDomain(
-  status: 'ready' | 'loading' | 'idle',
-  names: string[]
-): TestNamespaceDomain {
-  return createNamespaceDomainWithCluster(status, names, 'cluster-a', 'alpha');
-}
-
-function createNamespaceDomainWithCluster(
-  status: 'ready' | 'loading' | 'idle',
-  names: string[],
-  clusterId: string,
-  clusterName: string
-): TestNamespaceDomain {
-  return {
-    status,
-    data: {
-      namespaces: names.map((name, index) => ({
-        name,
-        ref: namespaceObjectRef(clusterId, name),
-        phase: 'Active',
-        resourceVersion: String(index + 1),
-        creationTimestamp: Math.floor(Date.now() / 1000),
-        clusterId,
-        clusterName,
-      })),
-    },
-    error: null,
-  };
-}
-
-type ClusterNamespaceGroup = {
-  clusterId: string;
-  clusterName: string;
-  names: string[];
-};
-
-function createNamespaceDomainMulti(
-  status: 'ready' | 'loading' | 'idle',
-  clusters: ClusterNamespaceGroup[]
-): TestNamespaceDomain {
-  const namespaces = clusters.flatMap((cluster) =>
-    cluster.names.map((name, index) => ({
-      name,
-      ref: namespaceObjectRef(cluster.clusterId, name),
-      phase: 'Active',
-      resourceVersion: `${cluster.clusterId}-${index + 1}`,
-      creationTimestamp: Math.floor(Date.now() / 1000),
-      clusterId: cluster.clusterId,
-      clusterName: cluster.clusterName,
-    }))
-  );
-
-  return {
-    status,
-    data: {
-      namespaces,
-    },
-    error: null,
-  };
-}
-
-function namespaceObjectRef(clusterId: string, name: string) {
-  return {
-    clusterId,
+const namespaceRow = (
+  cluster: TestCluster,
+  name: string,
+  rollups: Partial<NamespaceSummary> = {}
+): NamespaceSummary => ({
+  ref: {
+    clusterId: cluster.clusterId,
     group: '',
     version: 'v1',
     kind: 'Namespace',
     resource: 'namespaces',
+    namespace: '',
     name,
-  };
-}
+    uid: `${cluster.clusterId}/${name}`,
+  },
+  phase: 'Active',
+  resourceVersion: '1',
+  creationTimestamp: 0,
+  hasWorkloads: true,
+  warningEventsState: 'available',
+  quotaPressureState: 'available',
+  ...rollups,
+});
+
+const serveUsage = (
+  cluster: TestCluster,
+  usage: Array<{ name: string; cpuUsageMilli: number; memoryUsageBytes: number }>,
+  metrics: Partial<DomainPayloadMap['namespace-metrics']['metrics']> = {}
+) => {
+  app.snapshots.serve('namespace-metrics', scopeOf(cluster, 'namespace-metrics'), {
+    clusterId: cluster.clusterId,
+    clusterName: cluster.clusterName,
+    namespaces: usage.map(({ name, ...values }) => ({
+      ref: namespaceRow(cluster, name).ref,
+      ...values,
+    })),
+    metrics: { stale: false, successCount: 1, failureCount: 0, ...metrics },
+    metricsState: 'available',
+  });
+};
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe('the namespace list', () => {
+  it('lists the active cluster’s namespaces and shows another open tab’s at once on switch', async () => {
+    await start();
+    expect(listed()).toEqual([ALL, 'team-a', 'team-b']);
+    expect(ns().namespaceReady).toBe(true);
+
+    // beta's list is already loaded; any read of it for the switch stays in flight.
+    const releaseBeta = holdNamespaceReads(beta, ['team-c', 'team-d']);
+    await view.selectCluster(beta);
+
+    expect(listed()).toEqual([ALL, 'team-c', 'team-d']);
+    expect(ns().namespaceLoading).toBe(false);
+    // Switching tabs keeps every open cluster's list subscribed.
+    expect(app.streams.active()).toEqual(expect.arrayContaining([streamOf(alpha), streamOf(beta)]));
+    await releaseBeta();
+  });
+
+  it('never shows the previous cluster’s namespaces while the next cluster’s list loads', async () => {
+    declareClusters();
+    const releaseBeta = holdNamespaceReads(beta, ['team-c', 'team-d']);
+    view = await app.render(null);
+    const renders: Array<{ clusterId: string; names: string[] }> = [];
+    function RenderLog() {
+      const { selectedClusterId } = useKubeconfig();
+      const { namespaces } = useNamespace();
+      renders.push({ clusterId: selectedClusterId, names: namespaces.map((item) => item.name) });
+      return null;
+    }
+    await view.show(<RenderLog />);
+
+    await view.selectCluster(beta);
+
+    const betaRenders = renders.filter((render) => render.clusterId === beta.clusterId);
+    expect(betaRenders).not.toEqual([]);
+    expect(betaRenders.every((render) => render.names.length === 0)).toBe(true);
+    expect(ns().namespaceLoading).toBe(true);
+    expect(ns().namespaceReady).toBe(false);
+    await releaseBeta();
+  });
+
+  it('maps the backend’s rollups and usage into the namespace list', async () => {
+    declareClusters();
+    app.snapshots.serve('namespaces', scopeOf(alpha), {
+      clusterId: alpha.clusterId,
+      clusterName: alpha.clusterName,
+      namespaces: [
+        namespaceRow(alpha, 'team-a', {
+          unhealthyWorkloads: 3,
+          warningEvents: 2,
+          quotaCount: 2,
+          quotaHighestUsedPercentage: 92,
+          quotaPressure: 'warning',
+        }),
+      ],
+    });
+    serveUsage(alpha, [{ name: 'team-a', cpuUsageMilli: 200, memoryUsageBytes: 96 * 1024 ** 2 }], {
+      collectedAt: Math.floor(Date.now() / 1000),
+    });
+    view = await app.render(null);
+
+    const teamA = ns().namespaces.find((item) => item.name === 'team-a');
+    expect(teamA).toMatchObject({
+      unhealthyWorkloads: 3,
+      warningEvents: 2,
+      warningEventsState: 'available',
+      cpuUsageMilli: 200,
+      memoryUsageBytes: 96 * 1024 ** 2,
+      utilizationState: 'available',
+      quotaHighestUsedPercentage: 92,
+      quotaPressure: 'warning',
+      quotaPressureState: 'available',
+    });
+    expect(teamA?.details).toContain('200m CPU, 96Mi memory');
+  });
+
+  it('treats a null namespace list from the backend as no namespaces', async () => {
+    declareClusters();
+    app.snapshots.serve('namespaces', scopeOf(alpha), {
+      clusterId: alpha.clusterId,
+      clusterName: alpha.clusterName,
+      namespaces: null,
+    } as unknown as DomainPayloadMap['namespaces']);
+    view = await app.render(null);
+
+    expect(ns().namespaces).toEqual([]);
+  });
+
+  it('marks utilization stale once the metrics pass their freshness window', async () => {
+    vi.useFakeTimers();
+    declareClusters();
+    serveUsage(alpha, [{ name: 'team-a', cpuUsageMilli: 200, memoryUsageBytes: 1024 ** 2 }], {
+      collectedAt: Math.floor(Date.now() / 1000),
+      staleAfterSeconds: 30,
+    });
+    view = await app.render(null);
+    const teamADetails = () => ns().namespaces.find((item) => item.name === 'team-a')?.details;
+    expect(teamADetails()).not.toContain('Awaiting metrics data');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_500);
+    });
+
+    expect(teamADetails()).toContain('Awaiting metrics data');
+  });
+});
+
+describe('refresh demand', () => {
+  it('reads every open cluster’s namespaces at startup without a refresh job', async () => {
+    await start();
+
+    expect(readsOf(alpha)).not.toEqual([]);
+    expect(readsOf(beta)).not.toEqual([]);
+    expect(refreshJobs()).toEqual([]);
+  });
+
+  it('reads a cluster’s namespaces only once its lifecycle allows refresh', async () => {
+    await start(backend.ClusterLifecycleState.ClusterStateConnected);
+    expect(readsOf(alpha)).not.toEqual([]);
+    expect(readsOf(beta)).toEqual([]);
+
+    await setLifecycle(beta, 'loading');
+
+    expect(readsOf(beta)).not.toEqual([]);
+  });
+
+  it('stops subscribing to clusters that become unavailable but keeps their listed namespaces', async () => {
+    vi.useFakeTimers();
+    await start();
+    app.snapshots.clearReads();
+
+    await setLifecycle(alpha, 'connected');
+    await setLifecycle(beta, 'connected');
+    await closeReleasedStreams();
+
+    expect(app.streams.active()).not.toContain(streamOf(alpha));
+    expect(app.streams.active()).not.toContain(streamOf(beta));
+    expect(app.snapshots.reads('namespaces')).toEqual([]);
+    expect(listed()).toEqual([ALL, 'team-a', 'team-b']);
+  });
+
+  it('paints a retained list on switch before the cluster’s lifecycle allows its refresh', async () => {
+    vi.useFakeTimers();
+    await start();
+    // A late lifecycle edge leaves beta temporarily unavailable for refresh.
+    await setLifecycle(beta, 'connected');
+    await closeReleasedStreams();
+    app.snapshots.clearReads();
+
+    await view.selectCluster(beta);
+
+    expect(listed()).toEqual([ALL, 'team-c', 'team-d']);
+    expect(ns().namespaceLoading).toBe(false);
+    expect(readsOf(beta)).toEqual([]);
+    expect(app.streams.active()).not.toContain(streamOf(beta));
+
+    await setLifecycle(beta, 'loading');
+
+    expect(app.streams.active()).toContain(streamOf(beta));
+    expect(listed()).toEqual([ALL, 'team-c', 'team-d']);
+  });
+
+  it('never resets another cluster’s namespace list while a tab opens and closes', async () => {
+    vi.useFakeTimers();
+    alpha = app.cluster({ name: 'dev', context: 'alpha' });
+    beta = app.cluster({ name: 'dev', context: 'beta', open: false });
+    app.namespaces(alpha, ['team-a']);
+    app.namespaces(beta, ['team-c']);
+    view = await app.render(null);
+    const alphaListed: boolean[] = [];
+    function AlphaListLog() {
+      alphaListed.push(Boolean(useNamespaceStatesByScope()[scopeOf(alpha)]?.data));
+      return null;
+    }
+    await view.show(<AlphaListLog />);
+    const kubeconfig = () => view.owners().kubeconfig;
+
+    let opening!: Promise<void>;
+    act(() => {
+      opening = kubeconfig().openKubeconfig(beta.selection);
+    });
+    await act(async () => {
+      await opening;
+    });
+    await setLifecycle(beta, 'ready');
+    expect(app.streams.active()).toEqual(expect.arrayContaining([streamOf(alpha), streamOf(beta)]));
+
+    let closing!: Promise<void>;
+    act(() => {
+      closing = kubeconfig().closeKubeconfig(beta.selection);
+    });
+    await act(async () => {
+      await closing;
+    });
+    await closeReleasedStreams();
+
+    expect(app.streams.active()).not.toContain(streamOf(beta));
+    expect(app.streams.active()).toContain(streamOf(alpha));
+    expect(alphaListed).not.toContain(false);
+  });
+
+  it('refreshes every open cluster’s namespaces when the user refreshes them', async () => {
+    await start();
+    app.snapshots.clearReads();
+
+    await act(async () => {
+      await ns().loadNamespaces();
+    });
+    await app.settle();
+
+    expect(readsOf(alpha)).not.toEqual([]);
+    expect(readsOf(beta)).not.toEqual([]);
+  });
+
+  it('reconciles a rebuilt namespace scope with one read and no refresh job', async () => {
+    await start();
+    app.snapshots.clearReads();
+    const jobsBefore = refreshJobs().length;
+
+    await act(async () => {
+      app.events.emit('cluster:scope:changed', { clusterId: alpha.clusterId });
+    });
+    await app.settle();
+
+    expect(readsOf(alpha)).toHaveLength(1);
+    expect(readsOf(beta)).toEqual([]);
+    expect(refreshJobs()).toHaveLength(jobsBefore);
+  });
+
+  it('keeps the active cluster’s utilization while another surface releases it, and moves it on switch', async () => {
+    vi.useFakeTimers();
+    await start();
+    // The global Namespaces view leases each cluster's utilization too.
+    const releaseGlobalView = await view.lease({
+      domain: 'namespace-metrics',
+      scope: scopeOf(alpha, 'namespace-metrics'),
+      preserveState: true,
+    });
+    await releaseGlobalView();
+    await closeReleasedStreams();
+    expect(app.streams.active()).toContain(streamOf(alpha, 'namespace-metrics'));
+
+    await view.selectCluster(beta);
+    await closeReleasedStreams();
+
+    expect(app.streams.active()).toContain(streamOf(beta, 'namespace-metrics'));
+    expect(app.streams.active()).not.toContain(streamOf(alpha, 'namespace-metrics'));
+  });
+});
+
+describe('namespace selection', () => {
+  it('keeps the selected namespace while the list refreshes', async () => {
+    vi.useFakeTimers();
+    await start();
+    await select('team-a');
+    const releaseAlpha = holdNamespaceReads(alpha, ['team-a', 'team-b']);
+    app.snapshots.clearReads();
+
+    await ringNamespaces(alpha, 'v2');
+    expect(readsOf(alpha)).toHaveLength(1);
+    expect(selection()).toEqual({ namespace: 'team-a', clusterId: alpha.clusterId });
+
+    await releaseAlpha();
+    expect(selection()).toEqual({ namespace: 'team-a', clusterId: alpha.clusterId });
+  });
+
+  it('clears the selection when the refreshed list no longer has it', async () => {
+    vi.useFakeTimers();
+    await start();
+    await select('team-a');
+
+    app.namespaces(alpha, ['bravo']);
+    await ringNamespaces(alpha, 'v2');
+
+    expect(listed()).toEqual([ALL, 'bravo']);
+    expect(selection()).toEqual({ namespace: undefined, clusterId: undefined });
+  });
+
+  it('keeps each cluster tab’s own namespace selection', async () => {
+    await start();
+    await select('team-b');
+
+    await view.selectCluster(beta);
+    expect(selection().namespace).toBeUndefined();
+    await select('team-d');
+
+    await view.selectCluster(alpha);
+    expect(selection()).toEqual({ namespace: 'team-b', clusterId: alpha.clusterId });
+  });
+
+  it('selects a namespace in the cluster the caller names', async () => {
+    await start();
+
+    await select('team-d', beta.clusterId);
+
+    expect(selection().namespace).toBeUndefined();
+    expect(ns().getClusterNamespace(beta.clusterId)).toBe('team-d');
+    expect(ns().getClusterNamespace(alpha.clusterId)).toBeUndefined();
+  });
+
+  it('forgets a closed cluster tab’s namespace selection', async () => {
+    await start();
+    await view.selectCluster(beta);
+    await select('team-d');
+
+    let closing!: Promise<void>;
+    act(() => {
+      closing = view.owners().kubeconfig.closeKubeconfig(beta.selection);
+    });
+    await act(async () => {
+      await closing;
+    });
+    let reopening!: Promise<void>;
+    act(() => {
+      reopening = view.owners().kubeconfig.openKubeconfig(beta.selection);
+    });
+    await act(async () => {
+      await reopening;
+    });
+    await app.settle();
+
+    expect(view.owners().kubeconfig.selectedClusterId).toBe(beta.clusterId);
+    expect(selection().namespace).toBeUndefined();
+  });
+});
+
+describe('failures', () => {
+  // The refresh layer reports a namespace-list failure
+  // (core/refresh/refreshErrorNotifier.ts), once per scope and message.
+  const failNamespaces = (cluster: TestCluster, message: string) =>
+    app.snapshots.fail('namespaces', scopeOf(cluster), makeErrorStatus('ServerTimeout', message));
+  const failureReports = () =>
+    app.errors
+      .records()
+      .filter((record) => record.context?.domain === 'namespaces' || record.context?.context);
+  const takeReports = () => app.errors.take(() => true);
+
+  it('reports a transient namespace failure once without marking the list denied', async () => {
+    declareClusters();
+    failNamespaces(alpha, 'apiserver timeout on startup');
+    view = await app.render(null);
+
+    expect(ns().namespacesPermissionDenied).toBe(false);
+    expect(failureReports()).toEqual([
+      expect.objectContaining({
+        context: expect.objectContaining({ domain: 'namespaces', scope: scopeOf(alpha) }),
+      }),
+    ]);
+    takeReports();
+  });
+
+  it('does not report a cluster’s namespace failure again when the user switches away and back', async () => {
+    declareClusters();
+    failNamespaces(alpha, 'apiserver timeout before switching');
+    view = await app.render(null);
+    expect(failureReports()).toHaveLength(1);
+
+    await view.selectCluster(beta);
+    await view.selectCluster(alpha);
+
+    expect(failureReports()).toHaveLength(1);
+    takeReports();
+  });
+});

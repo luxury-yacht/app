@@ -1,13 +1,19 @@
-import { expect, it } from 'vitest';
+import { afterEach, expect, it } from 'vitest';
 import {
   buildGridTableStorageKey,
   captureClusterTableState,
   computeClusterHash,
   loadPersistedState,
   registerPendingGridTableSave,
+  resetGridTablePersistenceCacheForTesting,
   restoreClusterTableState,
   savePersistedState,
 } from './gridTablePersistence';
+
+// Saved tables live in a module cache; each test starts with none.
+afterEach(() => {
+  resetGridTablePersistenceCacheForTesting();
+});
 
 it('carries only one cluster table state and leaves other cluster filters alone', async () => {
   const prod = buildGridTableStorageKey({

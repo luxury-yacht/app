@@ -9,75 +9,42 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/luxury-yacht/app/backend/refresh"
-	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 )
 
-// Pins the object-events doorbell wiring: the notifier's broadcast — wired
-// through the SAME helper production uses — invalidates the object-events
-// snapshot cache FIRST and then fans a SourceEvent doorbell to the involved
-// object's subscribed events scope (a sibling object's subscription stays
-// silent). The invalidate-then-broadcast ordering is what keeps the Events
-// tab's push refetch from being served the pre-change cached snapshot.
-func TestObjectEventsNotifierInvalidatesCacheThenBroadcastsDoorbell(t *testing.T) {
-	manager := resourcestream.NewManager(
-		nil,
-		nil,
-		nil,
-		snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+func objectEventNames(t *testing.T, h *reflectorHarness, scope string) []string {
+	t.Helper()
+	snap, err := h.subsystem.SnapshotService.Build(context.Background(), "object-events", "c1|"+scope)
+	require.NoError(t, err)
+	payload, ok := snap.Payload.(snapshot.ObjectEventsSnapshotPayload)
+	require.True(t, ok, "payload %T", snap.Payload)
+	names := make([]string, 0, len(payload.Events))
+	for _, event := range payload.Events {
+		names = append(names, event.Ref.Name)
+	}
+	return names
+}
 
-		nil,
-	)
-	selector, err := resourcestream.ParseStreamSelector("c1", "object-events", "team-a:/v1:Pod:web-1")
-	require.NoError(t, err)
-	sub, err := manager.SubscribeSelector(selector)
-	require.NoError(t, err)
+// An Event change rings the involved object's Events tab after the events
+// store holds it, and the ring invalidates the cached object-events page first,
+// so the refetch it triggers serves the change. A sibling object's tab stays
+// silent.
+func TestObjectEventsDoorbellRefetchServesTheStoredEvent(t *testing.T) {
+	server := newReflectorAPIServer(t)
+	h := newReflectorHarness(t, server, "")
+	sub := h.subscribe(t, "object-events", "team-a:/v1:Pod:web-1")
+	other := h.subscribe(t, "object-events", "team-a:/v1:Pod:other")
+	require.Empty(t, objectEventNames(t, h, "team-a:/v1:Pod:web-1"), "prime the cache")
 
-	otherSelector, err := resourcestream.ParseStreamSelector("c1", "object-events", "team-a:/v1:Pod:other")
-	require.NoError(t, err)
-	otherSub, err := manager.SubscribeSelector(otherSelector)
-	require.NoError(t, err)
-
-	// A real snapshot service with a counting object-events builder, its cache
-	// primed with the pre-change build.
-	reg := domain.New()
-	builds := 0
-	require.NoError(t, reg.Register(refresh.DomainConfig{
-		Name: "object-events",
-		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-			builds++
-			return &refresh.Snapshot{
-				Domain:  "object-events",
-				Scope:   scope,
-				Payload: map[string]int{"build": builds},
-			}, nil
-		},
-	}))
-	service := snapshot.NewServiceWithPermissions(reg, nil, snapshot.ClusterMeta{ClusterID: "c1"}, nil)
-	manager.SetSnapshotDomainInvalidator(service.InvalidateDomainCache)
-	_, err = service.Build(context.Background(), "object-events", "c1|team-a:/v1:Pod:web-1")
-	require.NoError(t, err)
-	_, err = service.Build(context.Background(), "object-events", "c1|team-a:/v1:Pod:web-1")
-	require.NoError(t, err)
-	require.Equal(t, 1, builds, "cache must serve the second pre-change build")
-
-	notifier := snapshot.NewObjectEventsChangeNotifier()
-	defer notifier.Stop()
-	wireObjectEventsDoorbell(notifier, manager)
-
-	notifier.EventChanged(&corev1.Event{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "team-a", Name: "web-1.evt"},
-		InvolvedObject: corev1.ObjectReference{
-			APIVersion: "v1",
-			Kind:       "Pod",
-			Namespace:  "team-a",
-			Name:       "web-1",
-		},
+	server.Create(t, &corev1.Event{
+		ObjectMeta:     metav1.ObjectMeta{Namespace: "team-a", Name: "web-1.evt"},
+		InvolvedObject: corev1.ObjectReference{APIVersion: "v1", Kind: "Pod", Namespace: "team-a", Name: "web-1"},
+		Reason:         "BackOff",
+		Type:           corev1.EventTypeWarning,
+		LastTimestamp:  metav1.NewTime(time.Now()),
 	})
 
-	deadline := time.After(3 * time.Second)
 	select {
 	case update := <-sub.Updates:
 		require.Equal(t, "object-events", update.Domain)
@@ -85,18 +52,10 @@ func TestObjectEventsNotifierInvalidatesCacheThenBroadcastsDoorbell(t *testing.T
 		require.Equal(t, resourcestream.SourceEvent, update.Source)
 		require.Equal(t, resourcestream.SignalChanged, update.Signal)
 		require.NotEmpty(t, update.Version)
-	case <-deadline:
+	case <-time.After(3 * time.Second):
 		t.Fatal("expected an object-events doorbell update")
 	}
-
-	select {
-	case unexpected := <-otherSub.Updates:
-		t.Fatalf("sibling object's subscription must stay silent, got %+v", unexpected)
-	default:
-	}
-
-	// The refetch the doorbell triggers must REBUILD, not replay the cache.
-	_, err = service.Build(context.Background(), "object-events", "c1|team-a:/v1:Pod:web-1")
-	require.NoError(t, err)
-	require.Equal(t, 2, builds, "the doorbell must have invalidated the cached object-events snapshot")
+	require.Equal(t, []string{"web-1.evt"}, objectEventNames(t, h, "team-a:/v1:Pod:web-1"),
+		"the doorbell must have invalidated the cached object-events page")
+	requireQuiet(t, 750*time.Millisecond, map[string]*resourcestream.Subscription{"sibling object": other})
 }

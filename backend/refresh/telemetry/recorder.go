@@ -43,12 +43,12 @@ type SnapshotStatus struct {
 	LastBatchSize      int                `json:"lastBatchSize,omitempty"`
 	IsFinalBatch       bool               `json:"isFinalBatch,omitempty"`
 	TimeToFirstBatchMs int64              `json:"timeToFirstBatchMs,omitempty"`
-	// MaxInformerSyncWaitMs is the PEAK time a Build for this domain spent blocked
-	// in waitForInformerSync (the initial-LIST / informer settle gate) before
+	// MaxSyncWaitMs is the PEAK time a Build for this domain spent blocked
+	// in waitForFeedSync (the initial-LIST / reflector settle gate) before
 	// building. It is recorded as a max, not a last, because the wait is ~0 once the
-	// domain's informers have synced — a "last" value would read 0 by the time anyone
+	// domain's reflectors have synced — a "last" value would read 0 by the time anyone
 	// opens diagnostics, hiding the cold-start gating cost the field exists to surface.
-	MaxInformerSyncWaitMs int64 `json:"maxInformerSyncWaitMs,omitempty"`
+	MaxSyncWaitMs int64 `json:"maxSyncWaitMs,omitempty"`
 }
 
 // MetricsStatus captures metrics poller health.
@@ -224,7 +224,7 @@ type SnapshotRecord struct {
 	BatchSize          int
 	IsFinal            bool
 	TimeToFirstBatchMs int64
-	InformerSyncWaitMs int64
+	SyncWaitMs         int64
 }
 
 // RecordSnapshot logs a snapshot outcome. ClusterID and ClusterName identify
@@ -239,7 +239,7 @@ func (r *Recorder) RecordSnapshot(record SnapshotRecord) {
 
 	entry := r.snapshotStatus(record.ClusterID, record.Domain, record.Scope)
 	updateSnapshotBatch(entry, record)
-	updateSnapshotTiming(entry, record.BatchIndex, record.TimeToFirstBatchMs, record.InformerSyncWaitMs)
+	updateSnapshotTiming(entry, record.BatchIndex, record.TimeToFirstBatchMs, record.SyncWaitMs)
 	updateSnapshotWarnings(entry, record.Warnings)
 	updateSnapshotResult(entry, record.Err)
 }
@@ -289,14 +289,14 @@ func updateSnapshotBatch(entry *SnapshotStatus, record SnapshotRecord) {
 	entry.IsFinalBatch = record.IsFinal
 }
 
-func updateSnapshotTiming(entry *SnapshotStatus, batchIndex int, timeToFirstBatchMs, informerSyncWaitMs int64) {
+func updateSnapshotTiming(entry *SnapshotStatus, batchIndex int, timeToFirstBatchMs, syncWaitMs int64) {
 	if batchIndex == 0 && timeToFirstBatchMs > 0 {
 		entry.TimeToFirstBatchMs = timeToFirstBatchMs
 	}
 	// Retain the peak sync-gate wait: warm builds wait ~0, so a plain assignment
 	// would erase the cold-start gating cost this surfaces.
-	if informerSyncWaitMs > entry.MaxInformerSyncWaitMs {
-		entry.MaxInformerSyncWaitMs = informerSyncWaitMs
+	if syncWaitMs > entry.MaxSyncWaitMs {
+		entry.MaxSyncWaitMs = syncWaitMs
 	}
 }
 

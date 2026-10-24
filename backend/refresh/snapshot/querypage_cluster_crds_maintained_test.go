@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	apiextlisters "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
 
@@ -29,7 +28,7 @@ func crdForMaintained(name, group, scope, rv string) *apiextv1.CustomResourceDef
 }
 
 // TestClusterCRDBuilderMaintainedMatchesListPath is the cluster-crds maintained-store
-// cutover gate: a builder serving from the informer-fed maintained store must produce the
+// cutover gate: a builder serving from the reflector-fed maintained store must produce the
 // byte-identical ClusterCRDSnapshot the list path produces, across window + query scopes
 // (sort, search, kind filter). The maintained path differs only in row SOURCE.
 func TestClusterCRDBuilderMaintainedMatchesListPath(t *testing.T) {
@@ -46,10 +45,10 @@ func TestClusterCRDBuilderMaintainedMatchesListPath(t *testing.T) {
 	maintained := newTypedMaintainedStore(meta, crdsQuerypageSchema(), clusterCRDTableQueryAdapter())
 	for _, c := range crds {
 		require.NoError(t, indexer.Add(c))
-		maintained.upsertRow(apiextensions.BuildStreamSummary(meta, c), c)
+		maintained.ingest(apiextensions.StreamDescriptor, c)
 	}
-	listBuilder := &ClusterCRDBuilder{crdLister: apiextlisters.NewCustomResourceDefinitionLister(indexer)}
-	maintainedBuilder := &ClusterCRDBuilder{maintained: maintained}
+	listBuilder := newTypedTableListOracle(clusterCRDDomainSpec(), clusterCRDCollectIndexer(indexer))
+	maintainedBuilder := &ClusterCRDBuilder{available: availableFromIndexers(clusterCRDCollectIndexer(indexer)), maintained: maintained}
 
 	scopes := []string{
 		"",

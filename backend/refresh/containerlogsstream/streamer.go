@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/luxury-yacht/app/backend/kind/logspec"
 	"io"
 	"slices"
 	"strings"
@@ -26,7 +27,9 @@ import (
 
 // Streamer manages Kubernetes container logs streaming sessions.
 type Streamer struct {
-	client        kubernetes.Interface
+	client kubernetes.Interface
+	// targets are the kind registry's container-log targets.
+	targets       logspec.Targets
 	logger        Logger
 	telemetry     *telemetry.Recorder
 	perScopeLimit int
@@ -39,7 +42,7 @@ type Streamer struct {
 }
 
 // NewStreamer constructs a Streamer.
-func NewStreamer(client kubernetes.Interface, logger Logger, recorder *telemetry.Recorder, limits ...int) *Streamer {
+func NewStreamer(client kubernetes.Interface, targets logspec.Targets, logger Logger, recorder *telemetry.Recorder, limits ...int) *Streamer {
 	if logger == nil {
 		logger = applog.Noop
 	}
@@ -48,7 +51,7 @@ func NewStreamer(client kubernetes.Interface, logger Logger, recorder *telemetry
 		limit = containerlogs.ClampPerScopeTargetLimit(limits[0])
 	}
 	return &Streamer{
-		client: client, logger: logger, telemetry: recorder, perScopeLimit: limit,
+		client: client, targets: targets, logger: logger, telemetry: recorder, perScopeLimit: limit,
 		responseTimeout: config.ContainerLogsStreamResponseTimeout,
 		caughtUpIdle:    config.ContainerLogsStreamCaughtUpIdle,
 		historyGather:   config.ContainerLogsStreamHistoryGather,
@@ -187,7 +190,7 @@ func (s *Streamer) resolve(ctx context.Context, opts Options) (containerlogs.Res
 	if opts.MatchNone {
 		return containerlogs.Resolution{}, nil
 	}
-	return containerlogs.Resolve(ctx, s.client, opts.target(), opts.Selection)
+	return containerlogs.Resolve(ctx, s.client, s.targets, opts.target(), opts.Selection)
 }
 
 // containerLogRun owns one session's pod inventory and container followers.
@@ -609,9 +612,16 @@ func (r *containerLogRun) applyPodEvent(ctx context.Context, event podEvent) {
 	}
 	r.mu.Lock()
 	delete(r.seeded, event.pod.Name)
+	unchanged := r.holdsVersionLocked(event.pod)
 	r.mu.Unlock()
 	if event.deleted {
 		r.removePod(ctx, event.pod.Name)
+		return
+	}
+	// The informer's first list, and its re-list after an expired watch,
+	// re-deliver every pod the session holds. An unchanged pod changes no target,
+	// and re-selecting for each one would make those lists cost pods².
+	if unchanged {
 		return
 	}
 	if !r.ownsPod(ctx, event.pod) {
@@ -622,6 +632,13 @@ func (r *containerLogRun) applyPodEvent(ctx context.Context, event podEvent) {
 	r.mu.Unlock()
 	r.cancelRemoval(event.pod.Name)
 	r.reconcileTargets(ctx)
+}
+
+// holdsVersionLocked reports whether the run already holds this version of the
+// pod. A pod without a resource version is never treated as unchanged.
+func (r *containerLogRun) holdsVersionLocked(pod *corev1.Pod) bool {
+	held, ok := r.currentPods[pod.Name]
+	return ok && pod.ResourceVersion != "" && held.ResourceVersion == pod.ResourceVersion
 }
 
 func (r *containerLogRun) ownsPod(ctx context.Context, pod *corev1.Pod) bool {

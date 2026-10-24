@@ -11,12 +11,14 @@ import (
 	"runtime"
 )
 
+// authoredScopeContract is one domain's scope language. Valid and invalid hold
+// canonical scope tails (after "<clusterId>|") that both layers' codecs must
+// accept or reject; the generator validates only the vocabulary.
 type authoredScopeContract struct {
-	Kind              string   `json:"kind"`
-	ClusterPrefix     string   `json:"clusterPrefix"`
-	Parser            string   `json:"parser"`
-	FrontendBuilder   string   `json:"frontendBuilder"`
-	AcceptedEncodings []string `json:"acceptedEncodings"`
+	Selectors []string `json:"selectors"`
+	Query     string   `json:"query"`
+	Valid     []string `json:"valid"`
+	Invalid   []string `json:"invalid,omitempty"`
 }
 
 type authoredDomainInventory struct {
@@ -40,18 +42,15 @@ type authoredBackendPolicy struct {
 
 type authoredFrontendTiming struct {
 	Interval int `json:"interval"`
-	Cooldown int `json:"cooldown"`
 	Timeout  int `json:"timeout"`
 }
 
 type authoredFrontendPolicy struct {
-	RefresherName     string                 `json:"refresherName"`
 	Orchestrator      string                 `json:"orchestrator"`
 	DiagnosticsStream json.RawMessage        `json:"diagnosticsStream"`
 	Timing            authoredFrontendTiming `json:"timing"`
 	Priority          *int                   `json:"priority,omitempty"`
 	RegistrationOrder *int                   `json:"registrationOrder"`
-	Scheduled         *bool                  `json:"scheduled,omitempty"`
 }
 
 type authoredDomainRegistration struct {
@@ -92,6 +91,12 @@ var knownFrontendOrchestrators = stringSet(
 	"container-logs-stream",
 )
 var knownDiagnosticsStreams = stringSet("resources", "container-logs")
+
+// knownScopeSelectors and knownScopeQueries mirror refresh.ScopeSelectorKind
+// and refresh.ScopeQueryMode; the generated Go policy references those constants,
+// so an unknown value here would fail to compile there.
+var knownScopeSelectors = []string{"cluster", "namespace", "all-namespaces", "node", "workload", "object", "helm-release"}
+var knownScopeQueries = []string{"none", "typed-table", "object-map", "catalog"}
 
 func stringSet(values ...string) map[string]struct{} {
 	result := make(map[string]struct{}, len(values))
@@ -168,7 +173,6 @@ type parsedFrontendDomainPolicy struct {
 	priority          int
 	hasPriority       bool
 	registrationOrder int
-	scheduled         bool
 }
 
 func registeredDomainInventory(
@@ -213,24 +217,15 @@ func parseFrontendDomainPolicy(
 	inventorySize int,
 	seenFrontendOrder map[int]string,
 ) (parsedFrontendDomainPolicy, error) {
-	if registration.Frontend.RefresherName == "" {
-		return parsedFrontendDomainPolicy{}, fmt.Errorf("refresh domain %q has an empty frontend.refresherName", registration.Domain)
-	}
-	if registration.Frontend.Timing.Interval <= 0 || registration.Frontend.Timing.Cooldown <= 0 || registration.Frontend.Timing.Timeout <= 0 {
+	if registration.Frontend.Timing.Interval <= 0 || registration.Frontend.Timing.Timeout <= 0 {
 		return parsedFrontendDomainPolicy{}, fmt.Errorf("refresh domain %q has non-positive frontend timing", registration.Domain)
 	}
 	if registration.Frontend.Priority != nil && *registration.Frontend.Priority < 0 {
 		return parsedFrontendDomainPolicy{}, fmt.Errorf("refresh domain %q has a negative frontend priority", registration.Domain)
 	}
-	if registration.Frontend.RegistrationOrder == nil {
-		return parsedFrontendDomainPolicy{}, fmt.Errorf("refresh domain %q is missing frontend.registrationOrder", registration.Domain)
-	}
-	registrationOrder := *registration.Frontend.RegistrationOrder
-	if registrationOrder < 0 || registrationOrder >= inventorySize {
-		return parsedFrontendDomainPolicy{}, fmt.Errorf("refresh domain %q has out-of-range frontend.registrationOrder %d", registration.Domain, registrationOrder)
-	}
-	if previous, duplicate := seenFrontendOrder[registrationOrder]; duplicate {
-		return parsedFrontendDomainPolicy{}, fmt.Errorf("refresh domains %q and %q share frontend.registrationOrder %d", previous, registration.Domain, registrationOrder)
+	registrationOrder, err := parseFrontendRegistrationOrder(registration, inventorySize, seenFrontendOrder)
+	if err != nil {
+		return parsedFrontendDomainPolicy{}, err
 	}
 	diagnosticsStream, err := decodeNullableString(registration.Frontend.DiagnosticsStream)
 	if err != nil {
@@ -246,15 +241,30 @@ func parseFrontendDomainPolicy(
 		diagnosticsStream: diagnosticsStream,
 		hasPriority:       registration.Frontend.Priority != nil,
 		registrationOrder: registrationOrder,
-		scheduled:         true,
-	}
-	if registration.Frontend.Scheduled != nil {
-		policy.scheduled = *registration.Frontend.Scheduled
 	}
 	if policy.hasPriority {
 		policy.priority = *registration.Frontend.Priority
 	}
 	return policy, nil
+}
+
+// parseFrontendRegistrationOrder requires a unique order within the inventory.
+func parseFrontendRegistrationOrder(
+	registration authoredDomainRegistration,
+	inventorySize int,
+	seenFrontendOrder map[int]string,
+) (int, error) {
+	if registration.Frontend.RegistrationOrder == nil {
+		return 0, fmt.Errorf("refresh domain %q is missing frontend.registrationOrder", registration.Domain)
+	}
+	registrationOrder := *registration.Frontend.RegistrationOrder
+	if registrationOrder < 0 || registrationOrder >= inventorySize {
+		return 0, fmt.Errorf("refresh domain %q has out-of-range frontend.registrationOrder %d", registration.Domain, registrationOrder)
+	}
+	if previous, duplicate := seenFrontendOrder[registrationOrder]; duplicate {
+		return 0, fmt.Errorf("refresh domains %q and %q share frontend.registrationOrder %d", previous, registration.Domain, registrationOrder)
+	}
+	return registrationOrder, nil
 }
 
 func validateDomainSourceClocks(registration authoredDomainRegistration) error {
@@ -291,6 +301,9 @@ func contractDomainSpec(
 	if err := validateDomainSourceClocks(registration); err != nil {
 		return domainSpec{}, err
 	}
+	if err := validateScopeContract(registration.Domain, inventory.ScopeContract); err != nil {
+		return domainSpec{}, err
+	}
 
 	payload, frontendOwned, err := decodePayloadType(inventory.RefreshPayloadType)
 	if err != nil {
@@ -310,17 +323,44 @@ func contractDomainSpec(
 		backendPermission:         registration.Backend.Permission,
 		backendResourceStream:     registration.Backend.ResourceStream,
 		backendBypassSingleflight: registration.Backend.BypassSingleflight,
-		frontendRefresherName:     registration.Frontend.RefresherName,
 		frontendOrchestrator:      registration.Frontend.Orchestrator,
 		frontendDiagnosticsStream: frontend.diagnosticsStream,
 		frontendTimingInterval:    registration.Frontend.Timing.Interval,
-		frontendTimingCooldown:    registration.Frontend.Timing.Cooldown,
 		frontendTimingTimeout:     registration.Frontend.Timing.Timeout,
 		frontendPriority:          frontend.priority,
 		frontendHasPriority:       frontend.hasPriority,
 		frontendRegistrationOrder: frontend.registrationOrder,
-		frontendScheduled:         frontend.scheduled,
+		scopeSelectors:            append([]string(nil), inventory.ScopeContract.Selectors...),
+		scopeQuery:                inventory.ScopeContract.Query,
 	}, nil
+}
+
+func validateScopeContract(domain string, contract authoredScopeContract) error {
+	if len(contract.Selectors) == 0 {
+		return fmt.Errorf("refresh domain %q scopeContract.selectors is empty", domain)
+	}
+	known := stringSet(knownScopeSelectors...)
+	seen := make(map[string]struct{}, len(contract.Selectors))
+	for _, selector := range contract.Selectors {
+		if err := validateKnownValue(domain, "scopeContract.selectors", selector, known); err != nil {
+			return err
+		}
+		if _, duplicate := seen[selector]; duplicate {
+			return fmt.Errorf("refresh domain %q declares scope selector %q more than once", domain, selector)
+		}
+		seen[selector] = struct{}{}
+	}
+	if err := validateKnownValue(domain, "scopeContract.query", contract.Query, stringSet(knownScopeQueries...)); err != nil {
+		return err
+	}
+	// A catalog tail is the query itself, so there is no selector to choose.
+	if contract.Query == "catalog" && (len(contract.Selectors) != 1 || contract.Selectors[0] != "cluster") {
+		return fmt.Errorf("refresh domain %q catalog scope query requires exactly the cluster selector", domain)
+	}
+	if len(contract.Valid) == 0 {
+		return fmt.Errorf("refresh domain %q scopeContract.valid is empty", domain)
+	}
+	return nil
 }
 
 func validateKnownValue(domain, field, value string, known map[string]struct{}) error {

@@ -8,6 +8,7 @@ package poddisruptionbudget
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -89,4 +90,107 @@ func TestPodDisruptionBudgetDetailsFormatting(t *testing.T) {
 	require.Contains(t, resp.Details, "MinAvailable: 1")
 	require.Contains(t, resp.Details, "MaxUnavailable: 50%")
 	require.Len(t, resp.Conditions, 1)
+}
+
+// detailsWire fetches a PDB through the detail service and returns its JSON wire shape, which is the
+// contract the frontend Overview reads.
+func detailsWire(t *testing.T, pdb *policyv1.PodDisruptionBudget) map[string]any {
+	t.Helper()
+	svc := NewService(common.Dependencies{
+		KubernetesClient: fake.NewClientset(pdb),
+		Logger:           &errorCapturingLogger{},
+		ClusterID:        "cluster-a",
+	})
+	resp, err := svc.PodDisruptionBudget(context.Background(), pdb.Namespace, pdb.Name)
+	require.NoError(t, err)
+	raw, err := json.Marshal(resp)
+	require.NoError(t, err)
+	var wire map[string]any
+	require.NoError(t, json.Unmarshal(raw, &wire))
+	return wire
+}
+
+// A missing selector matches no pods while an empty one matches every pod in the namespace, and
+// matchExpressions narrow the match; the Overview can only explain coverage if all three survive.
+func TestPodDisruptionBudgetDetailsKeepsSelectorSemantics(t *testing.T) {
+	pdbWith := func(selector *metav1.LabelSelector) *policyv1.PodDisruptionBudget {
+		return &policyv1.PodDisruptionBudget{
+			ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
+			Spec:       policyv1.PodDisruptionBudgetSpec{Selector: selector},
+		}
+	}
+
+	_, present := detailsWire(t, pdbWith(nil))["selector"]
+	require.False(t, present, "a missing selector must stay absent on the wire")
+
+	require.Equal(t, map[string]any{}, detailsWire(t, pdbWith(&metav1.LabelSelector{}))["selector"])
+
+	require.Equal(t, map[string]any{
+		"matchLabels": map[string]any{"app": "web"},
+		"matchExpressions": []any{
+			map[string]any{"key": "tier", "operator": "In", "values": []any{"frontend", "web"}},
+		},
+	}, detailsWire(t, pdbWith(&metav1.LabelSelector{
+		MatchLabels: map[string]string{"app": "web"},
+		MatchExpressions: []metav1.LabelSelectorRequirement{
+			{Key: "tier", Operator: metav1.LabelSelectorOpIn, Values: []string{"frontend", "web"}},
+		},
+	}))["selector"])
+}
+
+// The Health section explains why evictions are blocked (the controller's DisruptionAllowed reason and
+// message), links each disrupted pod to its cluster-scoped Pod, and the Budget section shows the
+// unhealthy-pod eviction policy.
+func TestPodDisruptionBudgetDetailsProjectsEvictionState(t *testing.T) {
+	policy := policyv1.AlwaysAllow
+	evicted := metav1.NewTime(metav1.Now().Rfc3339Copy().Time)
+	wire := detailsWire(t, &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
+		Spec:       policyv1.PodDisruptionBudgetSpec{UnhealthyPodEvictionPolicy: &policy},
+		Status: policyv1.PodDisruptionBudgetStatus{
+			DisruptedPods: map[string]metav1.Time{"web-b": evicted, "web-a": evicted},
+			Conditions: []metav1.Condition{{
+				Type:    policyv1.DisruptionAllowedCondition,
+				Status:  metav1.ConditionFalse,
+				Reason:  policyv1.SyncFailedReason,
+				Message: "found no controllers for pod web-a",
+			}},
+		},
+	})
+
+	require.Equal(t, "AlwaysAllow", wire["unhealthyPodEvictionPolicy"])
+
+	conditions, ok := wire["conditions"].([]any)
+	require.True(t, ok, "conditions must be structured, got %T", wire["conditions"])
+	require.Len(t, conditions, 1)
+	require.Equal(t, map[string]any{
+		"type":    "DisruptionAllowed",
+		"status":  "False",
+		"reason":  "SyncFailed",
+		"message": "found no controllers for pod web-a",
+	}, conditions[0])
+
+	disrupted, ok := wire["disruptedPods"].([]any)
+	require.True(t, ok, "disrupted pods must be a list of pod links, got %T", wire["disruptedPods"])
+	names := make([]string, 0, len(disrupted))
+	for _, entry := range disrupted {
+		pod := entry.(map[string]any)
+		require.NotEmpty(t, pod["disruptionTime"])
+		ref := pod["pod"].(map[string]any)["ref"].(map[string]any)
+		require.Equal(t, "cluster-a", ref["clusterId"])
+		require.Equal(t, "v1", ref["version"])
+		require.Equal(t, "Pod", ref["kind"])
+		require.Equal(t, "default", ref["namespace"])
+		names = append(names, ref["name"].(string))
+	}
+	// Sorted so the list does not reshuffle on every refetch of the map-backed status.
+	require.Equal(t, []string{"web-a", "web-b"}, names)
+}
+
+func TestPodDisruptionBudgetDetailsLeavesUnsetEvictionPolicyAbsent(t *testing.T) {
+	wire := detailsWire(t, &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
+	})
+	_, present := wire["unhealthyPodEvictionPolicy"]
+	require.False(t, present, "an unset policy must stay distinguishable from an explicit one")
 }

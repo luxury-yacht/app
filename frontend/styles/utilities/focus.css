@@ -29,7 +29,9 @@
 
 /* Editable fields can match :focus-visible after a click. Tint them only
    when the shared keyboard-navigation observer marks their focus.
-   Menus and their options retain their own background and selection colors. */
+   Menus and their options retain their own background and selection colors.
+   Region roots never fill: WebKit focuses an open panel <dialog> with
+   :focus-visible when its native window becomes key, without keyboard use. */
 :root
   body
   :is(
@@ -45,6 +47,7 @@
       .dropdown-option,
       .dropdown-group-header,
       .content-body,
+      .dockable-panel,
       .gridtable--body,
       .yaml-editor-shell,
       .yaml-editor-shell *,
@@ -68,6 +71,7 @@
       .dropdown-option,
       .dropdown-group-header,
       .content-body,
+      .dockable-panel,
       .gridtable--body,
       .yaml-editor-shell,
       .yaml-editor-shell *,

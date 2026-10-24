@@ -1,569 +1,410 @@
 /**
  * frontend/src/modules/object-panel/hooks/useObjectPanel.test.tsx
  *
- * Covers key behaviors for the multi-tab object panel system.
+ * Opening object and identity panels: an open claims the panel through the
+ * shared directory, reuses a panel shown elsewhere or already open, applies
+ * the requested or retained view, moves focus to it, switches to its cluster
+ * first, refuses incomplete identities, and floats only a newly opened panel
+ * when the user prefers floating. Runs the hook in the full app, whose layout
+ * hosts the open panels, with its real object-panel state, dock, and
+ * kubeconfig owner; only the backend boundary is faked (test-utils/appState).
  */
 
 import {
-  ObjectPanelStateProvider,
   objectPanelId,
   useObjectPanelActiveTabs,
 } from '@modules/object-panel/contexts/ObjectPanelStateContext';
-import type { TabGroupState } from '@ui/dockable/tabGroupTypes';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import { panelwindow } from '@/core/backend-api/models';
+import { acknowledgePanelWindowReady } from '@/core/panel-windows';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { snapshotResponse } from '@/test-utils/appState/transport';
 import { requireValue } from '@/test-utils/requireValue';
+import { useObjectPanel } from './useObjectPanel';
 
-// Mock dockable panel context (replaces the old useDockablePanelState mock).
-const mockFocusPanel = vi.fn();
-const mockRequestGroupMove = vi.fn(() => true);
-const mockReportError = vi.hoisted(() => vi.fn());
-const sharedPanelMocks = vi.hoisted(() => ({ open: vi.fn() }));
+const app = installAppStateHarness();
+let view: MountedApp;
+let dev: TestCluster;
+let other: TestCluster;
+let hook: ReturnType<typeof useObjectPanel> | undefined;
+let activeTabs = new Map<string, string>();
 
-vi.mock('@/core/panel-windows', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/core/panel-windows')>()),
-  openPanelWorkspaceObject: (...args: unknown[]) => sharedPanelMocks.open(...args),
-}));
-let mockDefaultObjectPanelPosition: 'right' | 'bottom' | 'floating' = 'right';
-let mockTabGroups: TabGroupState = {
-  right: { tabs: [], activeTab: null },
-  bottom: { tabs: [], activeTab: null },
-  floating: [],
+function Probe() {
+  hook = useObjectPanel();
+  activeTabs = useObjectPanelActiveTabs() as Map<string, string>;
+  return null;
+}
+
+const panel = () => requireValue(hook, 'object panel hook');
+const pod = (cluster = dev) => ({
+  kind: 'Pod',
+  group: '',
+  version: 'v1',
+  name: 'api',
+  namespace: 'default',
+  clusterId: cluster.clusterId,
+});
+
+const start = async () => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  other = app.cluster({ name: 'dev', context: 'beta' });
+  app.namespaces(dev, ['default']);
+  app.namespaces(other, ['default']);
+  app.startScreen(dev);
+  app.startScreen(other);
+  view = await app.mountApp(<Probe />);
 };
-vi.mock('@ui/dockable', () => ({
-  useDockablePanelContext: () => ({
-    tabGroups: mockTabGroups,
-    focusPanel: mockFocusPanel,
-    requestGroupMove: mockRequestGroupMove,
-  }),
-}));
 
-vi.mock('@/core/settings/appPreferences', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/core/settings/appPreferences')>()),
-  getDefaultObjectPanelPosition: () => mockDefaultObjectPanelPosition,
-}));
-
-const kubeconfigMocks = vi.hoisted(() => ({
-  selectedClusterId: 'test-cluster',
-  selectedClusterName: 'test',
-  selectedClusterIds: ['test-cluster', 'other-cluster'],
-  selectedKubeconfigs: ['/kube/test-cluster', '/kube/other-cluster'],
-  setActiveKubeconfig: vi.fn(),
-}));
-
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({
-    selectedClusterId: kubeconfigMocks.selectedClusterId,
-    selectedClusterName: kubeconfigMocks.selectedClusterName,
-    selectedClusterIds: kubeconfigMocks.selectedClusterIds,
-    selectedKubeconfigs: kubeconfigMocks.selectedKubeconfigs,
-    setActiveKubeconfig: kubeconfigMocks.setActiveKubeconfig,
-    getClusterMeta: (selection: string) => {
-      const id = selection.replace('/kube/', '');
-      return { id, name: id === 'test-cluster' ? 'test' : 'other' };
-    },
-  }),
-}));
-
-vi.mock('@ui/dockable/useDockablePanelState', () => ({
-  clearPanelState: vi.fn(),
-  handoffLayoutBeforeClose: vi.fn(),
-}));
-
-vi.mock('@/utils/errorHandler', () => ({
-  reportOperationalError: mockReportError,
-}));
-
-describe('useObjectPanel', () => {
-  type UseObjectPanelExports = typeof import('./useObjectPanel');
-  let useObjectPanel: UseObjectPanelExports['useObjectPanel'];
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
-  let hookResult: ReturnType<UseObjectPanelExports['useObjectPanel']>;
-  let activeTabs = new Map<string, string>();
-
-  function TestComponent() {
-    hookResult = requireValue(useObjectPanel, 'expected test value in useObjectPanel.test.tsx')();
-    activeTabs = useObjectPanelActiveTabs() as Map<string, string>;
-    return null;
-  }
-
-  /**
-   * Wraps the test component with ObjectPanelStateProvider so that
-   * useObjectPanelState() is available. Note: we intentionally do NOT
-   * wrap with CurrentObjectPanelContext, so objectData will be null
-   * (matching the "outside an ObjectPanel tree" scenario).
-   */
-  function WrappedTestComponent() {
-    return (
-      <ObjectPanelStateProvider>
-        <TestComponent />
-      </ObjectPanelStateProvider>
-    );
-  }
-
-  beforeAll(async () => {
-    ({ useObjectPanel } = await import('./useObjectPanel'));
-  });
-
-  function renderHookComponent() {
-    act(() => {
-      root.render(<WrappedTestComponent />);
+const openObject = async (
+  ref: Parameters<ReturnType<typeof useObjectPanel>['openWithObject']>[0],
+  options?: Parameters<ReturnType<typeof useObjectPanel>['openWithObject']>[1]
+) => {
+  // The app renders the panel it opens, which reads its object. An incomplete
+  // identity opens nothing, so it has nothing to serve.
+  const cluster = [dev, other].find((candidate) => candidate.clusterId === ref.clusterId);
+  if (cluster && typeof ref.group === 'string' && ref.version && ref.kind && ref.name) {
+    app.servePanel(cluster, {
+      group: ref.group,
+      version: ref.version,
+      kind: ref.kind,
+      namespace: ref.namespace ?? '',
+      name: ref.name,
     });
   }
+  await act(async () => {
+    panel().openWithObject(ref, options);
+  });
+  await app.settle();
+};
 
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    mockTabGroups = {
-      right: { tabs: [], activeTab: null },
-      bottom: { tabs: [], activeTab: null },
-      floating: [],
-    };
-    mockFocusPanel.mockClear();
-    mockRequestGroupMove.mockClear();
-    mockDefaultObjectPanelPosition = 'right';
-    mockReportError.mockClear();
-    sharedPanelMocks.open.mockReset();
-    sharedPanelMocks.open.mockImplementation(async (_windowName, tab) => ({
-      render: true,
-      panel: { tab },
+const focusedPanelId = () =>
+  document.activeElement?.closest('[data-panel-id]')?.getAttribute('data-panel-id');
+
+describe('opening an object panel', () => {
+  it('opens the panel with its object and cluster, and focuses it', async () => {
+    await start();
+
+    await openObject(pod());
+
+    // Outside a panel's own tree there is no current object.
+    expect(panel().objectData).toBeNull();
+    expect(panel().isOpen).toBe(true);
+    expect(Array.from(panel().openPanels.values())).toEqual([
+      { ...pod(), clusterName: dev.clusterName },
+    ]);
+    expect(focusedPanelId()).toBe(objectPanelId(pod()));
+  });
+
+  it('uses the shared panel shown elsewhere instead of opening a duplicate here', async () => {
+    await start();
+    // The directory already shows the panel in a native window.
+    app.backend.answer('OpenPanelWorkspaceObject', (_windowName, tab) => ({
+      panel: {
+        tab,
+        location: {
+          kind: panelwindow.PanelLocationKind.PanelLocationWindow,
+          windowName: 'panel-1',
+          groupId: 'native',
+          index: 0,
+          active: true,
+        },
+      },
+      render: false,
     }));
-    kubeconfigMocks.selectedClusterId = 'test-cluster';
-    kubeconfigMocks.selectedClusterName = 'test';
-    kubeconfigMocks.setActiveKubeconfig.mockClear();
-    if (!useObjectPanel) {
-      throw new Error('Object panel hooks failed to load');
-    }
-    renderHookComponent();
+
+    await openObject(pod());
+
+    expect(app.backend.calls('OpenPanelWorkspaceObject')).toEqual([
+      [app.windowName, expect.objectContaining({ objectRef: expect.objectContaining(pod()) })],
+    ]);
+    expect(panel().openPanels.size).toBe(0);
   });
 
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
+  it('activates the existing tab instead of duplicating it, and focuses it again', async () => {
+    await start();
+    await openObject(pod());
+    (document.activeElement as HTMLElement | null)?.blur();
+
+    await openObject(pod());
+
+    expect(panel().openPanels.size).toBe(1);
+    expect(focusedPanelId()).toBe(objectPanelId(pod()));
   });
 
-  it('uses the shared cluster panel location instead of opening a duplicate in this app window', async () => {
-    sharedPanelMocks.open.mockResolvedValue({ render: false });
-    const pod = {
-      clusterId: 'test-cluster',
-      group: '',
-      version: 'v1',
-      kind: 'Pod',
-      namespace: 'default',
-      name: 'api',
-    };
-    await act(async () => {
-      hookResult.openWithObject(pod);
-    });
-    expect(sharedPanelMocks.open).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({ objectRef: pod })
-    );
-    expect(hookResult.openPanels.size).toBe(0);
-    expect(mockFocusPanel).not.toHaveBeenCalled();
-  });
+  // Links spell some kinds in lowercase (a Deployment's ReplicaSet link). The
+  // directory refuses a listed panel id whose object identity differs, so a
+  // reopen through such a link must send the identity it was opened with.
+  it('focuses the open panel when a link spells its kind in another case', async () => {
+    await start();
+    await openObject(pod());
+    (document.activeElement as HTMLElement | null)?.blur();
 
-  it('opens identities through the shared registry and preserves exact subjects when focusing again', async () => {
-    const ref = {
-      targetType: 'identity' as const,
-      clusterId: 'test-cluster',
-      kind: 'User' as const,
-      name: ' alice ',
-    };
-    await act(async () => hookResult.openWithIdentity(ref));
-    expect(sharedPanelMocks.open).toHaveBeenLastCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        kind: 'identity',
-        identityRef: { clusterId: ref.clusterId, kind: ref.kind, name: ref.name },
-        activeView: 'details',
-      })
-    );
-    const tab = sharedPanelMocks.open.mock.calls[0][1];
-    expect(tab.objectRef).toBeUndefined();
-    expect([...hookResult.openPanels.values()]).toEqual([ref]);
-    expect(mockFocusPanel).toHaveBeenLastCalledWith(tab.panelId, ref.clusterId);
-    await act(async () => hookResult.openWithIdentity(ref));
-    expect(hookResult.openPanels.size).toBe(1);
-    await act(async () => hookResult.openWithIdentity({ ...ref, kind: 'Group' }));
-    expect(hookResult.openPanels.size).toBe(2);
-  });
+    await openObject({ ...pod(), kind: 'pod' });
 
-  it('opens the panel with object details', async () => {
-    const pod = {
-      kind: 'Pod',
-      group: '',
-      version: 'v1',
-      name: 'api',
-      namespace: 'default',
-      clusterId: 'test-cluster',
-    };
-
-    await act(async () => {
-      hookResult.openWithObject(pod);
-    });
-
-    // objectData is null because we are outside a CurrentObjectPanelContext tree.
-    expect(hookResult.objectData).toBeNull();
-    expect(hookResult.isOpen).toBe(true);
-    expect(hookResult.openPanels.size).toBe(1);
-
-    // Verify the stored object has enriched cluster metadata.
-    const entries = Array.from(hookResult.openPanels.values());
-    expect(entries[0]).toEqual({
-      ...pod,
-      clusterId: 'test-cluster',
-      clusterName: 'test',
-    });
-  });
-
-  it('activates existing tab instead of duplicating', async () => {
-    const pod = {
-      kind: 'Pod',
-      group: '',
-      version: 'v1',
-      name: 'api',
-      namespace: 'default',
-      clusterId: 'test-cluster',
-    };
-
-    await act(async () => {
-      hookResult.openWithObject(pod);
-    });
-
-    await act(async () => {
-      hookResult.openWithObject(pod);
-    });
-
-    // Opening the same object twice should not create a second panel entry.
-    expect(hookResult.openPanels.size).toBe(1);
+    expect(app.backend.calls('OpenPanelWorkspaceObject').map(([, tab]) => tab.objectRef)).toEqual([
+      expect.objectContaining({ kind: 'Pod' }),
+      expect.objectContaining({ kind: 'Pod' }),
+    ]);
+    expect(panel().openPanels.size).toBe(1);
+    expect(focusedPanelId()).toBe(objectPanelId(pod()));
   });
 
   it('restores the retained panel sub-tab when reopening its object', async () => {
-    const pod = {
-      kind: 'Pod',
-      group: '',
-      version: 'v1',
-      name: 'api',
-      namespace: 'default',
-      clusterId: 'test-cluster',
-    };
-    const panelId = objectPanelId(pod);
-    sharedPanelMocks.open.mockResolvedValue({
+    await start();
+    const panelId = objectPanelId(pod());
+    app.backend.answer('OpenPanelWorkspaceObject', (windowName) => ({
+      panel: {
+        tab: {
+          kind: panelwindow.TabKind.TabKindObject,
+          panelId,
+          objectRef: pod(),
+          activeView: 'events',
+        },
+        location: {
+          kind: panelwindow.PanelLocationKind.PanelLocationDocked,
+          windowName,
+          groupId: 'right',
+          index: 0,
+          active: true,
+        },
+      },
       render: true,
-      panel: { tab: { kind: 'object', panelId, objectRef: pod, activeView: 'events' } },
-    });
-    await act(async () => hookResult.openWithObject(pod));
-    expect(activeTabs.get(panelId)).toBe('events');
-  });
+    }));
 
-  it('applies an initial object sub-tab in the same open transaction', async () => {
-    const pod = {
-      kind: 'Pod',
-      group: '',
-      version: 'v1',
-      name: 'api',
-      namespace: 'default',
-      clusterId: 'test-cluster',
-    };
-    const panelId = objectPanelId(pod);
-
-    await act(async () => {
-      hookResult.openWithObject(pod, { initialTab: 'events' });
-    });
+    await openObject(pod());
 
     expect(activeTabs.get(panelId)).toBe('events');
   });
 
-  it('focuses an existing docked panel immediately', async () => {
-    const pod = {
-      kind: 'Pod',
-      group: '',
-      version: 'v1',
-      name: 'api',
-      namespace: 'default',
-      clusterId: 'test-cluster',
-    };
-    const panelId = objectPanelId(pod);
-    mockTabGroups = {
-      right: { tabs: [panelId], activeTab: panelId },
-      bottom: { tabs: [], activeTab: null },
-      floating: [],
-    };
-    renderHookComponent();
+  it('applies an initial sub-tab in the same open', async () => {
+    await start();
 
-    await act(async () => {
-      hookResult.openWithObject(pod);
-    });
+    await openObject(pod(), { initialTab: 'events' });
 
-    expect(mockFocusPanel).toHaveBeenCalledWith(panelId, 'test-cluster');
+    expect(activeTabs.get(objectPanelId(pod()))).toBe('events');
   });
 
-  it('activates the owning cluster before opening a cross-cluster object panel', async () => {
+  it('switches to the owning cluster before opening a cross-cluster object panel', async () => {
+    await start();
     const namespace = {
       kind: 'Namespace',
       group: '',
       version: 'v1',
       name: 'team-b',
-      clusterId: 'other-cluster',
-      clusterName: 'other',
+      clusterId: other.clusterId,
+      clusterName: other.clusterName,
     };
 
-    await act(async () => {
-      hookResult.openWithObject(namespace);
-    });
+    await openObject(namespace);
 
-    expect(kubeconfigMocks.setActiveKubeconfig).toHaveBeenCalledWith('/kube/other-cluster');
-    expect(hookResult.openPanels.size).toBe(0);
-
-    kubeconfigMocks.selectedClusterId = 'other-cluster';
-    kubeconfigMocks.selectedClusterName = 'other';
-    renderHookComponent();
-
-    expect(mockFocusPanel).toHaveBeenCalledWith(objectPanelId(namespace), 'other-cluster');
-    expect(Array.from(hookResult.openPanels.values())).toEqual([
-      expect.objectContaining(namespace),
-    ]);
+    expect(view.owners().kubeconfig.selectedClusterId).toBe(other.clusterId);
+    expect(Array.from(panel().openPanels.values())).toEqual([expect.objectContaining(namespace)]);
+    expect(focusedPanelId()).toBe(objectPanelId(namespace));
   });
 
-  it('rejects a cross-cluster open when the owning cluster is not open', async () => {
-    await act(async () => {
-      hookResult.openWithObject({
+  it.each([
+    ['the name a link built in another cluster carried', 'borrowed'],
+    ['no name', 'none'],
+  ] as const)(
+    'names a cross-cluster object panel from its cluster id when the ref carries %s',
+    async (_case, carried) => {
+      await start();
+      const namespace = {
         kind: 'Namespace',
         group: '',
         version: 'v1',
-        name: 'missing',
-        clusterId: 'unopened-cluster',
-      });
+        name: 'team-b',
+        clusterId: other.clusterId,
+      };
+
+      await openObject(
+        carried === 'borrowed' ? { ...namespace, clusterName: dev.clusterName } : namespace
+      );
+
+      expect(Array.from(panel().openPanels.values())).toEqual([
+        expect.objectContaining({ ...namespace, clusterName: other.clusterName }),
+      ]);
+    }
+  );
+
+  it('tells the user, and opens nothing, for a cluster this window does not display', async () => {
+    const unopened = app.cluster({ name: 'dev', context: 'unopened', open: false });
+    await start();
+
+    await openObject({
+      kind: 'Namespace',
+      group: '',
+      version: 'v1',
+      name: 'missing',
+      clusterId: unopened.clusterId,
     });
 
-    expect(mockReportError).toHaveBeenCalledWith(
-      expect.any(Error),
+    // The window never claims a panel for a cluster it does not show.
+    expect(app.backend.calls('OpenPanelWorkspaceObject')).toEqual([]);
+    expect(panel().openPanels.size).toBe(0);
+    expect(view.owners().kubeconfig.selectedClusterId).toBe(dev.clusterId);
+    expect(app.errors.take((record) => record.kinds.includes('warning'))).toEqual([
       expect.objectContaining({
-        action: 'activate-object-panel-cluster',
-        clusterId: 'unopened-cluster',
-      })
-    );
-    expect(hookResult.openPanels.size).toBe(0);
-  });
-
-  it('hands new-panel focus to the persistent dockable owner before group registration', async () => {
-    const pod = {
-      kind: 'Pod',
-      group: '',
-      version: 'v1',
-      name: 'api',
-      namespace: 'default',
-      clusterId: 'test-cluster',
-    };
-    const enrichedPod = {
-      ...pod,
-      clusterId: 'test-cluster',
-      clusterName: 'test',
-    };
-    const panelId = objectPanelId(enrichedPod);
-
-    await act(async () => {
-      hookResult.openWithObject(pod);
-      await Promise.resolve();
-    });
-
-    expect(mockFocusPanel).toHaveBeenCalledWith(panelId, 'test-cluster');
-
-    mockTabGroups = {
-      right: { tabs: [panelId], activeTab: panelId },
-      bottom: { tabs: [], activeTab: null },
-      floating: [],
-    };
-
-    await act(async () => {
-      root.render(<WrappedTestComponent />);
-      await Promise.resolve();
-    });
-
-    expect(mockFocusPanel).toHaveBeenCalledWith(panelId, 'test-cluster');
-  });
-
-  it('floats only the new panel group when floating is the default', async () => {
-    mockDefaultObjectPanelPosition = 'floating';
-    const pod = {
-      kind: 'Pod',
-      group: '',
-      version: 'v1',
-      name: 'api',
-      namespace: 'default',
-      clusterId: 'test-cluster',
-    };
-    const panelId = objectPanelId({ ...pod, clusterName: 'test' });
-
-    await act(async () => {
-      hookResult.openWithObject(pod);
-      await Promise.resolve();
-    });
-    mockTabGroups = {
-      right: { tabs: ['existing-panel'], activeTab: 'existing-panel' },
-      bottom: { tabs: [], activeTab: null },
-      floating: [{ groupId: 'new-panel-group', tabs: [panelId], activeTab: panelId }],
-    };
-
-    await act(async () => {
-      root.render(<WrappedTestComponent />);
-      await Promise.resolve();
-    });
-
-    expect(mockRequestGroupMove).toHaveBeenCalledWith('new-panel-group', 'floating');
-    expect(mockRequestGroupMove).not.toHaveBeenCalledWith('right', 'floating');
+        context: expect.objectContaining({ clusterId: unopened.clusterId }),
+      }),
+    ]);
   });
 
   it('closes all panels via close()', async () => {
-    const resource = {
-      kind: 'ConfigMap',
-      group: '',
-      version: 'v1',
-      name: 'settings',
-      namespace: 'default',
-      clusterId: 'test-cluster',
-    };
+    await start();
+    const settings = { ...pod(), kind: 'ConfigMap', name: 'settings' };
+    await openObject(settings);
+    await openObject({ ...settings, name: 'other-settings' });
+    expect(panel().openPanels.size).toBe(2);
 
-    await act(async () => {
-      hookResult.openWithObject(resource);
-      hookResult.openWithObject({ ...resource, name: 'other-settings' });
-    });
+    await act(async () => panel().close());
 
-    expect(hookResult.isOpen).toBe(true);
-    expect(hookResult.openPanels.size).toBe(2);
-
-    await act(async () => {
-      hookResult.close();
-    });
-
-    // Without CurrentObjectPanelContext, close() falls through to onCloseObjectPanel
-    // which clears all panels.
-    expect(hookResult.isOpen).toBe(false);
-    expect(hookResult.openPanels.size).toBe(0);
+    // Outside a panel's own tree, close() closes every panel.
+    expect(panel().isOpen).toBe(false);
+    expect(panel().openPanels.size).toBe(0);
   });
 
-  // Runtime defense for the kind-only-objects bug. The audit test
-  // (openWithObjectAudit.test.ts) covers literal call sites; this guard
-  // covers programmatic constructions (helpers, mappers, destructure-and-
-  // rebuild) that the literal walker can't see. See
-  // assertObjectRefHasRequiredIdentity in src/types/view-state.ts.
-  describe('kind-only-objects runtime guard', () => {
-    it('throws when openWithObject receives a ref with kind but no version', async () => {
-      // The shape of bug we want to catch: a future helper builds a ref
-      // from raw catalog data and forgets to thread group/version. This
-      // ref would slip past the literal-walker audit because it isn't a
-      // literal call site.
-      const brokenRef = {
+  it('floats only each newly opened panel when floating is the default', async () => {
+    app.preferences({ defaultObjectPanelPosition: 'floating' });
+    await start();
+
+    await openObject(pod());
+    const [[, first]] = app.backend.calls('BeginPanelWindowOpen');
+    await act(async () => {
+      await acknowledgePanelWindowReady('panel-1', first.transferId);
+    });
+    await app.settle();
+    await openObject({ ...pod(), name: 'worker' });
+
+    expect(
+      app.backend
+        .calls('BeginPanelWindowOpen')
+        .map(([, snapshot]) => (snapshot.tabs ?? []).map((tab) => tab.panelId))
+    ).toEqual([[objectPanelId(pod())], [objectPanelId({ ...pod(), name: 'worker' })]]);
+  });
+});
+
+describe('opening an identity panel', () => {
+  it('opens identities through the shared registry and keeps exact subjects', async () => {
+    await start();
+    const ref = {
+      targetType: 'identity' as const,
+      clusterId: dev.clusterId,
+      kind: 'User' as const,
+      name: ' alice ',
+    };
+    // An identity panel looks its subject up (backend cluster-identities query); none bound.
+    app.snapshots.respond((request) =>
+      request.domain === 'cluster-identities'
+        ? snapshotResponse({
+            domain: 'cluster-identities',
+            scope: request.scope,
+            version: 1,
+            payload: {
+              clusterId: dev.clusterId,
+              clusterName: dev.clusterName,
+              provider: 'typed-resource',
+              table: 'cluster-identities',
+              total: 0,
+              unfilteredTotal: 0,
+              totalIsExact: true,
+              facetsExact: true,
+              capabilities: {},
+              rows: [],
+              completeness: 'complete',
+            },
+          })
+        : undefined
+    );
+
+    await act(async () => panel().openWithIdentity(ref));
+    await app.settle();
+
+    const [[, tab]] = app.backend.calls('OpenPanelWorkspaceObject');
+    expect(tab).toMatchObject({
+      kind: 'identity',
+      identityRef: { clusterId: ref.clusterId, kind: ref.kind, name: ref.name },
+      activeView: 'details',
+    });
+    expect(tab.objectRef).toBeUndefined();
+    expect([...panel().openPanels.values()]).toEqual([ref]);
+    expect(focusedPanelId()).toBe(tab.panelId);
+
+    await act(async () => panel().openWithIdentity(ref));
+    expect(panel().openPanels.size).toBe(1);
+    await act(async () => panel().openWithIdentity({ ...ref, kind: 'Group' }));
+    expect(panel().openPanels.size).toBe(2);
+  });
+});
+
+// Runtime defense for the kind-only-objects bug: programmatically built refs
+// (helpers, mappers) that a literal call-site audit cannot see. See
+// assertObjectRefHasRequiredIdentity in src/types/view-state.ts.
+describe('refusing incomplete object identity', () => {
+  it.each([
+    [
+      'a kind without a version',
+      () => ({
         kind: 'DBInstance',
         name: 'primary',
         namespace: 'default',
-        clusterId: 'test-cluster',
-      };
-
-      expect(() => {
-        act(() => {
-          hookResult.openWithObject(brokenRef);
-        });
-      }).toThrow(/missing version/);
-      expect(hookResult.openPanels.size).toBe(0);
-    });
-
-    it('throws with a hint pointing to the fix helpers', async () => {
-      const brokenRef = { kind: 'Rollout', name: 'canary', clusterId: 'test-cluster' };
-
-      expect(() => {
-        act(() => {
-          hookResult.openWithObject(brokenRef);
-        });
-      }).toThrow(/resolveBuiltinGroupVersion|parseApiVersion/);
-    });
-
-    it('throws when a custom resource carries version but omits group', async () => {
-      const brokenRef = {
+        clusterId: dev.clusterId,
+      }),
+      /missing version/,
+    ],
+    [
+      'a custom resource without a group',
+      () => ({
         kind: 'DBInstance',
         version: 'v1alpha1',
         name: 'primary',
         namespace: 'default',
-        clusterId: 'test-cluster',
-      };
+        clusterId: dev.clusterId,
+      }),
+      /missing group/,
+    ],
+    [
+      'a ref missing both, with a hint to the fix helpers',
+      () => ({ kind: 'Rollout', name: 'canary', clusterId: dev.clusterId }),
+      /resolveBuiltinGroupVersion|parseApiVersion/,
+    ],
+  ])('throws for %s', async (_case, ref, message) => {
+    await start();
 
-      expect(() => {
-        act(() => {
-          hookResult.openWithObject(brokenRef);
-        });
-      }).toThrow(/missing group/);
-      expect(hookResult.openPanels.size).toBe(0);
-    });
-
-    it('requires synthetic HelmRelease refs to use canonical identity', async () => {
-      const helmRelease = {
-        kind: 'HelmRelease',
-        group: 'helm.sh',
-        version: 'v3',
-        name: 'demo',
-        namespace: 'default',
-        clusterId: 'test-cluster',
-      };
-
-      expect(() => {
-        act(() => {
-          hookResult.openWithObject(helmRelease);
-        });
-      }).not.toThrow();
-      await act(async () => {
-        await Promise.resolve();
+    expect(() => {
+      act(() => {
+        panel().openWithObject(ref());
       });
-      expect(hookResult.openPanels.size).toBe(1);
-    });
+    }).toThrow(message);
+    expect(panel().openPanels.size).toBe(0);
+  });
 
-    it('accepts a fully-qualified GVK ref (built-in core resource)', async () => {
-      const pod = {
-        kind: 'Pod',
-        group: '',
-        version: 'v1',
-        name: 'api',
-        namespace: 'default',
-        clusterId: 'test-cluster',
-      };
-
-      expect(() => {
-        act(() => {
-          hookResult.openWithObject(pod);
-        });
-      }).not.toThrow();
-      await act(async () => {
-        await Promise.resolve();
-      });
-      expect(hookResult.openPanels.size).toBe(1);
-    });
-
-    it('accepts a fully-qualified GVK ref (CRD with group)', async () => {
-      // The exact shape that would have triggered the original
-      // kind-only-objects bug if version were missing — now valid.
-      const dbInstance = {
+  it.each([
+    [
+      'a synthetic HelmRelease with canonical identity',
+      () => ({ ...pod(), kind: 'HelmRelease', group: 'helm.sh', version: 'v3', name: 'demo' }),
+    ],
+    ['a built-in core resource', () => pod()],
+    [
+      'a custom resource with its group',
+      () => ({
+        ...pod(),
         kind: 'DBInstance',
         group: 'rds.services.k8s.aws',
         version: 'v1alpha1',
         name: 'primary',
-        namespace: 'default',
-        clusterId: 'test-cluster',
-      };
+      }),
+    ],
+  ])('opens %s', async (_case, ref) => {
+    await start();
 
-      expect(() => {
-        act(() => {
-          hookResult.openWithObject(dbInstance);
-        });
-      }).not.toThrow();
-      await act(async () => {
-        await Promise.resolve();
-      });
-      expect(hookResult.openPanels.size).toBe(1);
-    });
+    await openObject(ref());
+
+    expect(panel().openPanels.size).toBe(1);
   });
 });

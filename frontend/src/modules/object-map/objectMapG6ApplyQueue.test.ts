@@ -85,7 +85,6 @@ describe('createObjectMapG6ApplyQueue', () => {
         .mockResolvedValue(undefined);
       const queue = createObjectMapG6ApplyQueue({
         getGraph: () => currentGraph,
-        getCurrentLayout: () => layout(),
         getCurrentSelectionState: () => selectionState(),
         getHoveredEdgeId: () => null,
         getPreserveViewportNodeId: () => null,
@@ -94,18 +93,18 @@ describe('createObjectMapG6ApplyQueue', () => {
       });
       const schedule = (id: string) => {
         if (kind === 'data') {
-          queue.scheduleGraphData({ nodes: [{ id }] });
+          queue.scheduleGraphData({ nodes: [{ id }] }, layout([id]));
         } else {
-          queue.scheduleSelectionState(layout([id]), selectionState(id));
+          queue.scheduleSelectionState(selectionState(id));
         }
       };
-      queue.setRenderedData({ nodes: [] });
+      queue.setRenderedData({ nodes: [] }, layout([]));
       queue.setReady(true);
       schedule('old');
       queue.clear();
       currentGraph = replacement;
       const replacementBase = { nodes: [{ id: 'replacement-base' }] };
-      queue.setRenderedData(replacementBase);
+      queue.setRenderedData(replacementBase, layout(['replacement-base']));
       queue.setReady(true);
       schedule('replacement-first');
       schedule('replacement-latest');
@@ -137,14 +136,13 @@ describe('createObjectMapG6ApplyQueue', () => {
     const latest: GraphData = { nodes: [{ id: 'latest' }] };
     const queue = createObjectMapG6ApplyQueue({
       getGraph: () => g,
-      getCurrentLayout: () => layout(),
       getCurrentSelectionState: () => selectionState(),
       getHoveredEdgeId: () => null,
       getPreserveViewportNodeId: () => null,
     });
 
-    queue.scheduleGraphData(first);
-    queue.scheduleGraphData(latest);
+    queue.scheduleGraphData(first, layout(['first']));
+    queue.scheduleGraphData(latest, layout(['latest']));
 
     expect(g.setData).not.toHaveBeenCalled();
 
@@ -168,17 +166,16 @@ describe('createObjectMapG6ApplyQueue', () => {
       .mockResolvedValue(undefined);
     const queue = createObjectMapG6ApplyQueue({
       getGraph: () => g,
-      getCurrentLayout: () => layout(),
       getCurrentSelectionState: () => selectionState(),
       getHoveredEdgeId: () => null,
       getPreserveViewportNodeId: () => null,
       applyGraphDataFn,
     });
 
-    queue.setRenderedData(previous);
+    queue.setRenderedData(previous, layout(['previous']));
     queue.setReady(true);
-    queue.scheduleGraphData(first);
-    queue.scheduleGraphData(latest);
+    queue.scheduleGraphData(first, layout(['first']));
+    queue.scheduleGraphData(latest, layout(['latest']));
 
     expect(applyGraphDataFn).toHaveBeenCalledTimes(1);
     expect(applyGraphDataFn).toHaveBeenNthCalledWith(1, g, previous, first, {
@@ -205,7 +202,6 @@ describe('createObjectMapG6ApplyQueue', () => {
     let draggedNodeId: string | null = 'pod';
     const queue = createObjectMapG6ApplyQueue({
       getGraph: () => g,
-      getCurrentLayout: () => layout(),
       getCurrentSelectionState: () => selectionState(),
       getHoveredEdgeId: () => null,
       getPreserveViewportNodeId: () => 'pod',
@@ -213,8 +209,8 @@ describe('createObjectMapG6ApplyQueue', () => {
       applyGraphDataFn,
     });
 
-    queue.setRenderedData(previous);
-    queue.scheduleGraphData(next);
+    queue.setRenderedData(previous, layout(['pod']));
+    queue.scheduleGraphData(next, layout(['pod']));
     draggedNodeId = null;
     queue.setReady(true);
     await flushPromises();
@@ -232,14 +228,14 @@ describe('createObjectMapG6ApplyQueue', () => {
     const applySelectionStateFn = vi.fn().mockResolvedValue(undefined);
     const queue = createObjectMapG6ApplyQueue({
       getGraph: () => g,
-      getCurrentLayout: () => currentLayout,
       getCurrentSelectionState: () => currentSelection,
       getHoveredEdgeId: () => 'edge-1',
       getPreserveViewportNodeId: () => null,
       applySelectionStateFn,
     });
 
-    queue.scheduleSelectionState(currentLayout, currentSelection);
+    queue.setRenderedData({ nodes: [{ id: 'deploy' }, { id: 'pod' }] }, currentLayout);
+    queue.scheduleSelectionState(currentSelection);
     expect(applySelectionStateFn).not.toHaveBeenCalled();
 
     queue.setReady(true);
@@ -258,14 +254,13 @@ describe('createObjectMapG6ApplyQueue', () => {
     const latest: GraphData = { nodes: [{ id: 'latest' }] };
     const queue = createObjectMapG6ApplyQueue({
       getGraph: () => g,
-      getCurrentLayout: () => layout(),
       getCurrentSelectionState: () => selectionState(),
       getHoveredEdgeId: () => null,
       getPreserveViewportNodeId: () => null,
     });
 
-    queue.setRenderedData({ nodes: [{ id: 'previous' }] });
-    queue.scheduleGraphData(latest);
+    queue.setRenderedData({ nodes: [{ id: 'previous' }] }, layout(['previous']));
+    queue.scheduleGraphData(latest, layout(['latest']));
     queue.clear();
     queue.setReady(true);
     await flushPromises();
@@ -275,13 +270,62 @@ describe('createObjectMapG6ApplyQueue', () => {
     expect(queue.getRenderedData()).toBeNull();
   });
 
+  it('applies selection state only to elements the graph holds while newer data is queued', async () => {
+    // Like G6, the graph rejects element state for ids missing from its data.
+    let heldIds = new Set(['deploy']);
+    const firstRender = deferred();
+    const g = {
+      ...graph(),
+      setData: vi.fn((data: GraphData) => {
+        heldIds = new Set((data.nodes ?? []).map((node) => String(node.id)));
+      }),
+      render: vi
+        .fn()
+        .mockImplementationOnce(() => firstRender.promise)
+        .mockResolvedValue(undefined),
+      setElementState: vi.fn(async (states: Record<string, string[]>) => {
+        const unknown = Object.keys(states).find((id) => !heldIds.has(id));
+        if (unknown) {
+          throw new Error(`Unknown element type of id: ${unknown}`);
+        }
+      }),
+    } as unknown as Graph;
+    const dataFor = (ids: string[]): GraphData => ({ nodes: ids.map((id) => ({ id })), edges: [] });
+    const onSelectionStateError = vi.fn();
+    const queue = createObjectMapG6ApplyQueue({
+      getGraph: () => g,
+      getCurrentSelectionState: () => selectionState('deploy'),
+      getHoveredEdgeId: () => null,
+      getPreserveViewportNodeId: () => null,
+      onSelectionStateError,
+    });
+    queue.setRenderedData(dataFor(['deploy']), layout(['deploy']));
+    queue.setReady(true);
+    // The renderer schedules data, then selection, for each new layout.
+    const showLayout = (ids: string[]) => {
+      queue.scheduleGraphData(dataFor(ids), layout(ids));
+      queue.scheduleSelectionState(selectionState('deploy'));
+    };
+
+    showLayout(['deploy', 'rs']);
+    await flushPromises();
+    showLayout(['deploy', 'rs', 'pod']);
+    await flushPromises();
+    firstRender.resolve();
+    await vi.waitFor(() => expect(queue.getRenderedData()?.nodes).toHaveLength(3));
+    await flushPromises();
+
+    expect(onSelectionStateError).not.toHaveBeenCalled();
+    const lastStates = vi.mocked(g.setElementState).mock.lastCall?.[0];
+    expect(Object.keys(lastStates ?? {})).toEqual(['deploy', 'rs', 'pod']);
+  });
+
   it('ignores scheduling when the graph has been destroyed', () => {
     const g = graph();
     Object.defineProperty(g, 'destroyed', { configurable: true, value: true });
     const applyGraphDataFn = vi.fn();
     const queue = createObjectMapG6ApplyQueue({
       getGraph: () => g,
-      getCurrentLayout: () => layout(),
       getCurrentSelectionState: () => selectionState(),
       getHoveredEdgeId: () => null,
       getPreserveViewportNodeId: () => null,
@@ -289,7 +333,7 @@ describe('createObjectMapG6ApplyQueue', () => {
     });
 
     queue.setReady(true);
-    queue.scheduleGraphData({ nodes: [{ id: 'pod' }] });
+    queue.scheduleGraphData({ nodes: [{ id: 'pod' }] }, layout(['pod']));
 
     expect(applyGraphDataFn).not.toHaveBeenCalled();
     expect(g.setData).not.toHaveBeenCalled();
@@ -418,6 +462,19 @@ describe('applyGraphData', () => {
     });
     expect(g.draw).toHaveBeenCalledTimes(1);
     expect(g.render).not.toHaveBeenCalled();
+  });
+
+  it('patches and redraws when a card outline turns dashed or solid', async () => {
+    const previous: GraphData = { nodes: [{ id: 'cm', style: {} }], edges: [] };
+    const next: GraphData = { nodes: [{ id: 'cm', style: { lineDash: [4, 3] } }], edges: [] };
+    const g = graph();
+
+    await applyGraphData(g, previous, next);
+
+    expect(g.updateData).toHaveBeenCalledWith({
+      nodes: [requireValue(next.nodes, 'expected test value in objectMapG6ApplyQueue.test.ts')[0]],
+    });
+    expect(g.draw).toHaveBeenCalledTimes(1);
   });
 
   it('patches and redraws when card detail level changes', async () => {

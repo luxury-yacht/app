@@ -56,7 +56,7 @@ const ConfirmationModalContent: React.FC<Omit<ConfirmationModalProps, 'isOpen'>>
   cancelText = 'Cancel',
   confirmButtonClass = 'danger',
   secondaryActionText,
-  secondaryActionButtonClass = 'secondary',
+  secondaryActionButtonClass = 'generic',
   onSecondaryAction,
   onConfirm,
   onCancel,

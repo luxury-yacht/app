@@ -3,7 +3,6 @@ import {
   GetAppLogs,
   GetAppLogsSince,
   GetAppSettings,
-  GetAppSettingsSchema,
   GetKubeconfigSearchPaths,
   GetKubeconfigs,
   GetPanelWorkspace,
@@ -19,7 +18,6 @@ export const readKubeconfigs = () => GetKubeconfigs();
 export const readPanelWorkspace = (windowName: string, clusterId: string) =>
   GetPanelWorkspace(windowName, clusterId);
 export const readAppSettings = () => GetAppSettings();
-export const readAppSettingsSchema = () => GetAppSettingsSchema();
 export const readThemes = async () => (await GetThemes()) ?? [];
 export const readZoomLevel = () => GetZoomLevel();
 export const readKubeconfigSearchPaths = async () => (await GetKubeconfigSearchPaths()) ?? [];

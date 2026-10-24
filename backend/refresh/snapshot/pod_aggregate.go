@@ -22,13 +22,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	appslisters "k8s.io/client-go/listers/apps/v1"
 )
 
 // PodOwnerSources are the related-object lookups needed to resolve a Pod's
 // controller ancestry without retaining typed Pods in the ingest store.
 type PodOwnerSources struct {
-	ReplicaSets        appslisters.ReplicaSetLister
+	ReplicaSetOwner    podres.ReplicaSetOwnerLookup
 	JobControllerOwner func(namespace, jobName string) (JobControllerOwner, bool)
 }
 
@@ -43,7 +42,7 @@ func projectPodAggregate(pod *corev1.Pod, sources PodOwnerSources) streamrows.Po
 		return streamrows.PodAggregate{}
 	}
 
-	ownerSummary := podres.BuildStreamSummary(streamrows.ClusterMeta{}, pod, sources.ReplicaSets, jobOwnerLookupAdapter(sources.JobControllerOwner))
+	ownerSummary := podres.BuildStreamSummary(streamrows.ClusterMeta{}, pod, sources.ReplicaSetOwner, jobOwnerLookupAdapter(sources.JobControllerOwner))
 	return projectPodAggregateFromSummary(pod, sources, ownerSummary)
 }
 
@@ -61,7 +60,7 @@ func projectPodAggregateFromSummary(pod *corev1.Pod, sources PodOwnerSources, ow
 		// WorkloadKind is cluster-overview's metrics-bucketing kind: the controlling
 		// owner's kind, with a ReplicaSet resolved to Deployment via the RS lister
 		// (the actual RS owner ref), matching clusterOverviewWorkloadKind exactly.
-		WorkloadKind: workloadKindForPod(pod, sources.ReplicaSets),
+		WorkloadKind: workloadKindForPod(pod, sources.ReplicaSetOwner),
 		// Status presentation is derived once from the typed pod (overview reads
 		// exactly this string via BuildResourceModel(...).Status.Presentation).
 		StatusPresentation: podres.BuildResourceModel("", pod).Status.Presentation,
@@ -92,7 +91,7 @@ func podAggregateOwnerKey(pod *corev1.Pod, sources PodOwnerSources, summary stre
 		ownerKey = workloadOwnerKey(summary.DirectOwnerKind, pod.Namespace, summary.DirectOwnerName)
 	}
 	// Legacy typed helpers have no ReplicaSet source and retain their owner-ref fallback.
-	if sources.ReplicaSets == nil && summary.OwnerKind == replicasetpkg.Identity.Kind {
+	if sources.ReplicaSetOwner == nil && summary.OwnerKind == replicasetpkg.Identity.Kind {
 		ownerKey = ownerKeyForPod(pod)
 	}
 	return ownerKey
@@ -140,44 +139,39 @@ func jobOwnerLookupAdapter(lookup func(namespace, jobName string) (JobController
 // workloadKindForPod resolves the cluster-overview metrics-bucketing workload kind
 // for a pod: the controlling owner's kind for the four bucketed workload kinds, with
 // a ReplicaSet owner resolved to Deployment via the actual ReplicaSet's owner
-// reference (read from rsLister). This is the exact resolution
+// reference (read from rsOwners). This is the exact resolution
 // clusterOverviewWorkloadKind applies through buildClusterOverviewReplicaSetDeploymentMap,
 // moved to projection time so the aggregation domains never read the typed pod's
 // owner references. Returns "" when there is no controlling owner, the owner is an
 // unbucketed kind, or a ReplicaSet owner cannot be resolved to a Deployment.
-func workloadKindForPod(pod *corev1.Pod, rsLister appslisters.ReplicaSetLister) string {
+func workloadKindForPod(pod *corev1.Pod, rsOwners podres.ReplicaSetOwnerLookup) string {
 	for _, owner := range pod.OwnerReferences {
 		if owner.Controller == nil || !*owner.Controller {
 			continue
 		}
-		return workloadKindForControllerOwner(pod.Namespace, owner, rsLister)
+		return workloadKindForControllerOwner(pod.Namespace, owner, rsOwners)
 	}
 	return ""
 }
 
-func workloadKindForControllerOwner(namespace string, owner metav1.OwnerReference, rsLister appslisters.ReplicaSetLister) string {
+func workloadKindForControllerOwner(namespace string, owner metav1.OwnerReference, rsOwners podres.ReplicaSetOwnerLookup) string {
 	switch owner.Kind {
 	case deploymentpkg.Identity.Kind, daemonsetpkg.Identity.Kind, statefulsetpkg.Identity.Kind, jobpkg.Identity.Kind:
 		return owner.Kind
 	case replicasetpkg.Identity.Kind:
-		return deploymentKindForReplicaSet(namespace, owner.Name, rsLister)
+		return deploymentKindForReplicaSet(namespace, owner.Name, rsOwners)
 	default:
 		return ""
 	}
 }
 
-func deploymentKindForReplicaSet(namespace, replicaSetName string, rsLister appslisters.ReplicaSetLister) string {
-	if rsLister == nil {
+func deploymentKindForReplicaSet(namespace, replicaSetName string, rsOwners podres.ReplicaSetOwnerLookup) string {
+	if rsOwners == nil {
 		return ""
 	}
-	replicaSet, err := rsLister.ReplicaSets(namespace).Get(replicaSetName)
-	if err != nil {
-		return ""
-	}
-	for _, owner := range replicaSet.OwnerReferences {
-		if owner.Controller != nil && *owner.Controller && owner.Kind == deploymentpkg.Identity.Kind {
-			return deploymentpkg.Identity.Kind
-		}
+	controller, known := rsOwners(namespace, replicaSetName)
+	if known && controller.Controller != nil && *controller.Controller && controller.Kind == deploymentpkg.Identity.Kind {
+		return deploymentpkg.Identity.Kind
 	}
 	return ""
 }

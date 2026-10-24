@@ -16,6 +16,7 @@ import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useGridTableExternalFilters } from '@shared/components/tables/hooks/useGridTableExternalFilters';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
+import { kindDisplayName } from '@shared/kinds/kindDisplay';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -30,9 +31,8 @@ import {
   restoreClusterAttentionObjectFinding,
   restoreGlobalAttentionFindingType,
 } from '@/core/settings/clusterAttentionIgnores';
-import { useShortNames } from '@/hooks/useShortNames';
+import { usePreference } from '@/core/settings/usePreference';
 import { errorHandler } from '@/utils/errorHandler';
-import { getDisplayKind } from '@/utils/kindAliasMap';
 import AttentionIgnoredModal from './AttentionIgnoredModal';
 import './ClusterViewAttention.css';
 
@@ -82,7 +82,7 @@ export default function ClusterViewAttention() {
   const { selectedClusterId } = useKubeconfig();
   const { openWithObject } = useObjectPanel();
   const { navigateToView } = useNavigateToView();
-  const useShortResourceNames = useShortNames();
+  const useShortResourceNames = usePreference('useShortResourceNames');
   const [ignoredModalOpen, setIgnoredModalOpen] = useState(false);
   const namespaceColumnLink = useNamespaceColumnLink<ClusterAttentionFinding>(
     'workloads',
@@ -111,7 +111,7 @@ export default function ClusterViewAttention() {
     const result: GridColumnDefinition<ClusterAttentionFinding>[] = [
       cf.createKindColumn<ClusterAttentionFinding>({
         getKind: (row) => row.ref.kind,
-        getDisplayText: (row) => getDisplayKind(row.ref.kind, useShortResourceNames),
+        getDisplayText: (row) => kindDisplayName(row.ref, useShortResourceNames),
         onClick: openObject,
         onAltClick: navigateObject,
       }),
@@ -130,7 +130,6 @@ export default function ClusterViewAttention() {
         key: 'severity',
         header: 'Severity',
         sortable: true,
-        sortValue: (row) => row.severity,
         measurementElement: (row) =>
           createStatusChipMeasurementElement(severityChipVariants[row.severity], row.severity),
         render: (row) => (
@@ -141,8 +140,6 @@ export default function ClusterViewAttention() {
         key: 'reason',
         header: 'Finding',
         sortable: true,
-        sortValue: (row) =>
-          compactFindingText((row.causes ?? []).map((cause) => cause.label)).join(', '),
         render: renderFinding,
       },
       cf.createAgeColumn<ClusterAttentionFinding>('age', 'Age', (row) => row.age),

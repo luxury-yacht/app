@@ -17,11 +17,11 @@ type compositionTelemetryRepository struct {
 	acknowledged string
 }
 
-func (*compositionTelemetryRepository) prepareInstallationTelemetry() (string, bool, error) {
-	return "installation-id", false, nil
+func (*compositionTelemetryRepository) prepareInstallationTelemetry() (installationTelemetryState, error) {
+	return installationTelemetryState{anonymizedID: "installation-id"}, nil
 }
 
-func (r *compositionTelemetryRepository) acknowledgeInstallationTelemetry(id string) error {
+func (r *compositionTelemetryRepository) acknowledgeInstallationTelemetry(id, _ string) error {
 	r.acknowledged = id
 	return nil
 }
@@ -65,16 +65,16 @@ func TestCompositionPortsRejectEarlyUseAndDuplicateBinding(t *testing.T) {
 	require.Panics(t, func() { searchPathPort.bind(compositionSearchPathRepository{}) })
 
 	telemetryPort := &installationTelemetryPort{}
-	_, _, err = telemetryPort.prepareInstallationTelemetry()
+	_, err = telemetryPort.prepareInstallationTelemetry()
 	require.ErrorContains(t, err, "not available")
 	repository := &compositionTelemetryRepository{}
 	telemetryPort.bind(repository)
-	id, reported, err := telemetryPort.prepareInstallationTelemetry()
+	state, err := telemetryPort.prepareInstallationTelemetry()
 	require.NoError(t, err)
-	require.Equal(t, "installation-id", id)
-	require.False(t, reported)
-	require.NoError(t, telemetryPort.acknowledgeInstallationTelemetry(id))
-	require.Equal(t, id, repository.acknowledged)
+	require.Equal(t, "installation-id", state.anonymizedID)
+	require.False(t, state.registered)
+	require.NoError(t, telemetryPort.acknowledgeInstallationTelemetry(state.anonymizedID, ""))
+	require.Equal(t, state.anonymizedID, repository.acknowledged)
 	require.Panics(t, func() { telemetryPort.bind(repository) })
 }
 

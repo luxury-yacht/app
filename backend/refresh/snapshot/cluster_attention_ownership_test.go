@@ -18,8 +18,8 @@ func TestClusterAttentionRejectsForeignClusterHealthRows(t *testing.T) {
 	foreign.Ref.ClusterID = "cluster-b"
 	for _, mode := range []string{"upsert", "replace", "restore"} {
 		t.Run(mode, func(t *testing.T) {
-			index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a"}, func() time.Time { return now })
-			t.Cleanup(index.Stop)
+			index := newTestAttentionIndex(ClusterMeta{ClusterID: "cluster-a"}, func() time.Time { return now })
+			t.Cleanup(index.stopForTest)
 			switch mode {
 			case "upsert":
 				index.UpsertSource("pods", foreign)
@@ -27,8 +27,8 @@ func TestClusterAttentionRejectsForeignClusterHealthRows(t *testing.T) {
 			case "replace":
 				index.ReplaceSource("pods", []attentionSourceRecord{foreign, local})
 			case "restore":
-				other := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-b"}, func() time.Time { return now })
-				t.Cleanup(other.Stop)
+				other := newTestAttentionIndex(ClusterMeta{ClusterID: "cluster-b"}, func() time.Time { return now })
+				t.Cleanup(other.stopForTest)
 				other.UpsertSource("pods", foreign)
 				path := t.TempDir() + "/foreign.spill"
 				require.NoError(t, other.SpillTo(path))

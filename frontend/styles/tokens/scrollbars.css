@@ -1,15 +1,15 @@
 :root {
-  --scrollbar-width: 4px;
-  --scrollbar-height: 4px;
+  --scrollbar-width: 6px;
+  --scrollbar-height: 6px;
   --scrollbar-hover-zone-size: 16px;
-  --scrollbar-hover-scale: 2.5;
+  --scrollbar-hover-scale: 2;
   --scrollbar-hover-resize-duration: 100ms;
   --scrollbar-radius: 100px;
   --scrollbar-min-thumb-size: 32px;
   --scrollbar-thumb-inset: 0px;
   --scrollbar-fade-in-duration: 100ms;
-  --scrollbar-fade-out-duration: 1000ms;
-  --scrollbar-active-timeout: 1000ms;
+  --scrollbar-fade-out-duration: 200ms;
+  --scrollbar-active-timeout: 500ms;
   --scrollbar-thumb-idle-bg: transparent;
   --scrollbar-thumb-idle-opacity: 0;
   --scrollbar-thumb-active-opacity: 1;

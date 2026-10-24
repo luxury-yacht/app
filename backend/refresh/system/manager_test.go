@@ -3,8 +3,6 @@ package system
 import (
 	"context"
 	"errors"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -12,8 +10,8 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/refresh"
-	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
+	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/testsupport"
@@ -29,18 +27,17 @@ import (
 	cgotesting "k8s.io/client-go/testing"
 )
 
-func TestNewInformerInfrastructureDisablesWatchList(t *testing.T) {
+func TestNewPermissionInfrastructureDisablesWatchList(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, true)
 
-	checker, factory, err := newInformerInfrastructure(context.Background(), Config{
+	checker, grants, err := newPermissionInfrastructure(Config{
 		KubernetesClient:  kubernetesfake.NewClientset(),
-		ResyncInterval:    time.Minute,
 		AllowedNamespaces: []string{"default"},
 	})
 
 	require.NoError(t, err)
 	require.NotNil(t, checker)
-	require.NotNil(t, factory)
+	require.NotNil(t, grants)
 	require.False(t, clientfeatures.FeatureGates().Enabled(clientfeatures.WatchListClient))
 }
 
@@ -71,7 +68,6 @@ func TestNewSubsystemRecordsPermissionIssuesOnAuthorizationFailure(t *testing.T)
 	cfg := Config{
 		KubernetesClient:    client,
 		RestConfig:          &rest.Config{},
-		ResyncInterval:      time.Millisecond,
 		MetricsInterval:     time.Millisecond,
 		APIExtensionsClient: apiextensionsfake.NewClientset(),
 		DynamicClient:       dyn,
@@ -82,74 +78,38 @@ func TestNewSubsystemRecordsPermissionIssuesOnAuthorizationFailure(t *testing.T)
 		NodeMaintenanceStore: nodemaintenance.NewStore(5),
 	}
 
-	manager, handler, recorder, issues, cache, factory, err := NewSubsystem(cfg)
+	manager, recorder, issues, cache, grants, err := NewSubsystem(cfg)
 
 	require.NoError(t, err)
 	require.NotNil(t, manager)
-	require.NotNil(t, handler)
 	require.NotNil(t, recorder)
 	require.NotEmpty(t, issues)
 	require.Nil(t, cache)
-	require.NotNil(t, factory)
-}
-
-func TestHealthHandlerReflectsInformerSync(t *testing.T) {
-	t.Run("returns 503 when informer not synced", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/healthz/refresh", nil)
-		rec := httptest.NewRecorder()
-
-		HealthHandler(fakeInformerHub{synced: false})(rec, req)
-
-		require.Equal(t, http.StatusServiceUnavailable, rec.Code)
-		require.Contains(t, rec.Body.String(), "informers not yet synced")
-	})
-
-	t.Run("returns 200 when informer synced", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/healthz/refresh", nil)
-		rec := httptest.NewRecorder()
-
-		HealthHandler(fakeInformerHub{synced: true})(rec, req)
-
-		require.Equal(t, http.StatusOK, rec.Code)
-		require.Equal(t, "ok", rec.Body.String())
-	})
+	require.NotNil(t, grants)
 }
 
 type noopObjectDetailProvider struct {
 	err error
 }
 
-func (p noopObjectDetailProvider) FetchObjectDetails(context.Context, schema.GroupVersionKind, string, string) (interface{}, error) {
-	return nil, p.err
+func (p noopObjectDetailProvider) FetchObjectDetails(context.Context, schema.GroupVersionKind, string, string) (snapshot.ObjectDetail, error) {
+	return snapshot.ObjectDetail{}, p.err
 }
-
-type fakeInformerHub struct {
-	synced bool
-}
-
-func (h fakeInformerHub) Start(context.Context) error { return nil }
-
-func (h fakeInformerHub) HasSynced(context.Context) bool { return h.synced }
-
-func (h fakeInformerHub) ResourcesSettled([]string) bool { return h.synced }
-
-func (fakeInformerHub) Shutdown() error { return nil }
 
 // NewSubsystem is the tuple-unpacking convenience over NewSubsystemWithServices,
 // kept in test scope: production uses NewSubsystemWithServices directly.
-// NewSubsystem prepares the refresh manager, HTTP handler, and supporting services.
-func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Recorder, []PermissionIssue, map[string]bool, *informer.Factory, error) {
+// NewSubsystem prepares the refresh manager and supporting services.
+func NewSubsystem(cfg Config) (*refresh.Manager, *telemetry.Recorder, []PermissionIssue, map[string]bool, *permissions.Grants, error) {
 	subsystem, err := NewSubsystemWithServices(context.Background(), cfg)
 	if err != nil {
 		recorder := telemetry.NewRecorder()
 		recorder.SetClusterMeta(cfg.ClusterID, cfg.ClusterName)
-		return nil, nil, recorder, nil, nil, nil, err
+		return nil, recorder, nil, nil, nil, err
 	}
 	return subsystem.Manager,
-		subsystem.Handler,
 		subsystem.Telemetry,
 		subsystem.PermissionIssues,
 		nil,
-		subsystem.InformerFactory,
+		subsystem.PermissionGrants,
 		nil
 }

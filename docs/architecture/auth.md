@@ -27,8 +27,8 @@ poisons other selected clusters.
 ## State Model
 
 - Durable state lives in the per-cluster auth manager as explicit states
-  (valid, invalid, recovering, unknown), never derived from error strings. Error
-  capture may detect auth-like stderr only as input.
+  (valid, invalid, recovering, unknown), never derived from error strings or
+  stderr. Captured stderr is only logged.
 - Events: `cluster:auth:failed`, `cluster:auth:recovering`,
   `cluster:auth:recovered`, `cluster:auth:progress`. Payloads and overlays carry
   `clusterId` and enough cluster metadata to identify and update only the

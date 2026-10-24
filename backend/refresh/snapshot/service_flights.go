@@ -3,7 +3,6 @@ package snapshot
 import (
 	"context"
 	"fmt"
-	"runtime/debug"
 	"sync"
 
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -15,6 +14,9 @@ import (
 type snapshotBuildFlights struct {
 	mu      sync.Mutex
 	flights map[string]*snapshotBuildFlight
+	// reportPanic records a recovered build panic, with its stack, before the
+	// build fails with a short message. It is set before the first build.
+	reportPanic func(recovered any)
 }
 
 type snapshotBuildFlight struct {
@@ -55,7 +57,11 @@ func (f *snapshotBuildFlights) join(
 		func() {
 			defer func() {
 				if recovered := recover(); recovered != nil {
-					err = fmt.Errorf("snapshot build panic: %v\n%s", recovered, debug.Stack())
+					// The stack goes to the panic report; the error is shown in the UI.
+					if f.reportPanic != nil {
+						f.reportPanic(recovered)
+					}
+					err = fmt.Errorf("snapshot build panic: %v", recovered)
 				}
 			}()
 			snapshot, err = build(buildCtx)

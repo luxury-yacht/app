@@ -36,8 +36,9 @@ export function useDockablePanelState(panelId: string, defaultPosition: DockPosi
     (isOpen: boolean) => store.setPanelOpenById(panelId, isOpen),
     [store, panelId]
   );
+  // layoutStore is the active cluster's store; it changes on a cluster tab switch.
   return useMemo(
-    () => ({ ...tab, position, initialize, setOpen }),
-    [tab, position, initialize, setOpen]
+    () => ({ ...tab, position, initialize, setOpen, layoutStore: store }),
+    [tab, position, initialize, setOpen, store]
   );
 }

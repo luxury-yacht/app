@@ -50,7 +50,7 @@ class DetailsTabDataErrorBoundary extends Component<Props, State> {
               <span
                 style={{
                   color: 'var(--color-text-secondary)',
-                  fontSize: 'var(--font-size-small)',
+                  fontSize: 'var(--font-size-sm)',
                   marginLeft: 'var(--spacing-sm)',
                 }}
               >

@@ -7,8 +7,12 @@
  */
 
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { isObjectMapSupportedKind } from '@modules/object-panel/objectPanelRef';
+import { isObjectMapSupportedRef } from '@modules/object-panel/objectPanelRef';
 import { PortForwardModal, type PortForwardTarget } from '@modules/port-forward';
+import {
+  lookupObjectActionKindCapability,
+  type ObjectActionKindCapability,
+} from '@shared/actions/objectActionCapabilities';
 import {
   buildObjectActionTarget,
   type FinalizerPath,
@@ -24,7 +28,7 @@ import {
   buildObjectActionPermissionDescriptor,
   OBJECT_ACTION_IDS,
   type ObjectActionIdentitySource,
-  type ObjectActionPermissionDescriptor,
+  objectActionPermissionStatus,
 } from '@shared/actions/objectActionContract';
 import type {
   ObjectActionPermissionStatuses,
@@ -34,19 +38,21 @@ import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import RollbackModal from '@shared/components/modals/RollbackModal';
 import ScaleModal from '@shared/components/modals/ScaleModal';
-import { resolveNodeActionPermissionStatuses } from '@shared/hooks/nodeActionPermissions';
+import {
+  nodeActionPermissionInputs,
+  resolveNodeActionPermissionStatuses,
+} from '@shared/hooks/nodeActionPermissions';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import {
   buildObjectActionItems,
-  normalizeKind,
   type ObjectActionData,
   type ObjectActionHandlers,
 } from '@shared/hooks/useObjectActions';
 import { useCallback, useMemo, useState } from 'react';
 import {
-  getPermissionKey,
+  type PermissionCheck,
   type PermissionMap,
-  queryKindPermissions,
+  queryPermissionChecks,
   useUserPermissions,
 } from '@/core/capabilities';
 import { usePanelWindowRole } from '@/core/panel-windows/PanelWindowRoleContext';
@@ -71,12 +77,12 @@ interface PerObjectHandlers {
 interface ObjectActionControllerOptions {
   context: ObjectActionContext;
   actionLoading?: boolean;
-  queryMissingPermissions?: boolean;
   useDefaultHandlers?: boolean;
   onOpen?: (object: ObjectActionReference) => void;
   onOpenObjectMap?: (object: ObjectActionReference) => void;
   onNavigateView?: (object: ObjectActionReference) => void;
   onViewInvolvedObject?: (object: ObjectActionReference) => void;
+  onGoToNamespace?: (object: ObjectActionReference) => void;
   handlerOverrides?: ObjectActionHandlers;
   /**
    * Per-row handlers that receive the resolved object when the menu item
@@ -94,6 +100,79 @@ interface ScaleState {
   loading: boolean;
   error: string | null;
 }
+
+interface ConfirmationSpec {
+  title: string;
+  message: string;
+  notice?: string;
+  warning?: string;
+  confirmText: string;
+  confirmButtonClass?: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+const restartConfirmation = (
+  target: ObjectActionData,
+  onConfirm: () => void,
+  onCancel: () => void
+): ConfirmationSpec => ({
+  title: `Restart ${target.kind || 'Workload'}`,
+  message: `Are you sure you want to restart ${target.kind.toLowerCase()} "${target.name}"?\n\nThis will perform a rolling restart of all pods.`,
+  confirmText: 'Restart',
+  confirmButtonClass: 'danger',
+  onConfirm,
+  onCancel,
+});
+
+// Deleting a node that drains (its drain facet) and is still schedulable warns
+// that its pods stop abruptly.
+const deleteConfirmation = (
+  target: ObjectActionData,
+  onConfirm: () => void,
+  onCancel: () => void
+): ConfirmationSpec => {
+  const isUndrainedNode =
+    Boolean(lookupObjectActionKindCapability(target)?.drain) && !target.unschedulable;
+  return {
+    title: `Delete ${target.kind || 'Resource'}`,
+    message: `Are you sure you want to delete ${target.kind.toLowerCase()} "${target.name}"?\n\nThis action cannot be undone.`,
+    warning: isUndrainedNode
+      ? 'This node has not been drained. Pods running on it will be terminated abruptly when the node is removed.'
+      : undefined,
+    confirmText: 'Delete',
+    confirmButtonClass: 'danger',
+    onConfirm,
+    onCancel,
+  };
+};
+
+const triggerConfirmation = (
+  target: ObjectActionData,
+  onConfirm: () => void,
+  onCancel: () => void
+): ConfirmationSpec => ({
+  title: 'Trigger CronJob',
+  message: `Create a new Job from CronJob "${target.name}" immediately?`,
+  confirmText: 'Trigger',
+  confirmButtonClass: undefined,
+  onConfirm,
+  onCancel,
+});
+
+const scaleToZeroConfirmation = (
+  object: ObjectActionData,
+  onConfirm: () => void,
+  onCancel: () => void
+): ConfirmationSpec => ({
+  title: 'Scale to 0',
+  message: `Scale ${object.kind.toLowerCase()} "${object.name}" to 0 replicas?`,
+  warning: 'This will stop currently running pods for this workload.',
+  confirmText: 'Scale to 0',
+  confirmButtonClass: 'danger',
+  onConfirm,
+  onCancel,
+});
 
 interface ScaleConfirmationState {
   object: ObjectActionData;
@@ -118,6 +197,24 @@ const deletionIsWithinFinalizerCleanupGrace = (deletionTimestamp?: string): bool
   const requestedAt = Date.parse(deletionTimestamp);
   return Number.isFinite(requestedAt) && Date.now() < requestedAt + FINALIZER_CLEANUP_GRACE_MS;
 };
+
+const finalizerRemovalConfirmation = (
+  { object, finalizer, deletionTimestamp }: FinalizerRemovalTarget,
+  onConfirm: () => void,
+  onCancel: () => void
+): ConfirmationSpec => ({
+  title: 'Remove Finalizer',
+  message: `Remove finalizer "${finalizer}" from ${object.kind.toLowerCase()} "${object.name}"?`,
+  notice: deletionIsWithinFinalizerCleanupGrace(deletionTimestamp)
+    ? RECENT_FINALIZER_REMOVAL_NOTICE
+    : undefined,
+  warning:
+    'This may leave objects in an unknown or bad state. Only continue if the responsible controller cannot complete cleanup.',
+  confirmText: 'Remove',
+  confirmButtonClass: 'danger',
+  onConfirm,
+  onCancel,
+});
 
 const clampReplicas = (value: number): number => Math.max(0, Math.min(9999, value));
 
@@ -154,54 +251,15 @@ const actionTargetFor = (object: ObjectActionData, action: string) => {
   return buildObjectActionTarget(object, action);
 };
 
-const permissionKeyInput = (descriptor: ObjectActionPermissionDescriptor) => ({
-  resourceKind: descriptor.resourceKind,
-  verb: descriptor.verb,
-  namespace: descriptor.namespace ?? null,
-  subresource: descriptor.subresource ?? null,
-  clusterId: descriptor.clusterId ?? null,
-  group: descriptor.group ?? null,
-  version: descriptor.version ?? null,
-});
-
-const permissionStatusFor = (
-  permissionMap: PermissionMap,
-  descriptor: ObjectActionPermissionDescriptor | null
-): PermissionStatus | null => {
-  if (!descriptor) {
-    return null;
-  }
-  const input = permissionKeyInput(descriptor);
-  return (
-    permissionMap.get(
-      getPermissionKey(
-        input.resourceKind,
-        input.verb,
-        input.namespace,
-        input.subresource,
-        input.clusterId,
-        input.group,
-        input.version
-      )
-    ) ?? null
-  );
-};
-
 const resolveNodePermissions = (
   permissionMap: PermissionMap,
   source: ObjectActionIdentitySource,
-  normalizedKind: string
+  capability: ObjectActionKindCapability | null
 ): Pick<ObjectActionPermissionStatuses, 'cordon' | 'drain'> => {
-  if (normalizedKind !== 'Node') {
+  if (!capability?.cordon && !capability?.drain) {
     return { cordon: null, drain: null };
   }
-  const descriptors = buildNodeActionPermissionDescriptorMap(source);
-  return resolveNodeActionPermissionStatuses({
-    nodeGet: permissionStatusFor(permissionMap, descriptors.nodeGet),
-    nodePatch: permissionStatusFor(permissionMap, descriptors.nodePatch),
-    podEvictionCreate: permissionStatusFor(permissionMap, descriptors.podEvictionCreate),
-    podDelete: permissionStatusFor(permissionMap, descriptors.podDelete),
-  });
+  return resolveNodeActionPermissionStatuses(nodeActionPermissionInputs(permissionMap, source));
 };
 
 const actionPermissionStatus = (
@@ -209,13 +267,16 @@ const actionPermissionStatus = (
   actionId: Parameters<typeof buildObjectActionPermissionDescriptor>[0],
   source: ObjectActionIdentitySource
 ): PermissionStatus | null =>
-  permissionStatusFor(permissionMap, buildObjectActionPermissionDescriptor(actionId, source));
+  objectActionPermissionStatus(
+    permissionMap,
+    buildObjectActionPermissionDescriptor(actionId, source)
+  );
 
-const resolveObjectActionPermissions = (
-  object: ObjectActionData,
-  permissionMap: PermissionMap
-): ObjectActionPermissionStatuses => {
-  const normalizedKind = normalizeKind(object.kind);
+// Permissions are keyed by the kind's canonical spelling, except delete, which
+// targets the object's own kind.
+const actionIdentitySources = (object: ObjectActionData) => {
+  const capability = lookupObjectActionKindCapability(object);
+  const normalizedKind = capability?.kind ?? object.kind;
   const source: ObjectActionIdentitySource = {
     clusterId: object.clusterId,
     group: object.group,
@@ -224,19 +285,25 @@ const resolveObjectActionPermissions = (
     namespace: object.namespace ?? null,
     name: object.name,
   };
-  const targetSource: ObjectActionIdentitySource = { ...source, kind: object.kind };
-  const isCronJob = normalizedKind === 'CronJob';
-  const nodePermissions = resolveNodePermissions(permissionMap, source, normalizedKind);
+  return { capability, source, targetSource: { ...source, kind: object.kind } };
+};
+
+const resolveObjectActionPermissions = (
+  object: ObjectActionData,
+  permissionMap: PermissionMap
+): ObjectActionPermissionStatuses => {
+  const { capability, source, targetSource } = actionIdentitySources(object);
+  const nodePermissions = resolveNodePermissions(permissionMap, source, capability);
 
   return {
     restart: actionPermissionStatus(permissionMap, OBJECT_ACTION_IDS.restart, source),
     rollback: actionPermissionStatus(permissionMap, OBJECT_ACTION_IDS.rollback, source),
     delete: actionPermissionStatus(permissionMap, OBJECT_ACTION_IDS.delete, targetSource),
     scale: actionPermissionStatus(permissionMap, OBJECT_ACTION_IDS.scale, source),
-    trigger: isCronJob
+    trigger: capability?.trigger
       ? actionPermissionStatus(permissionMap, OBJECT_ACTION_IDS.triggerNow, source)
       : null,
-    suspend: isCronJob
+    suspend: capability?.suspend
       ? actionPermissionStatus(permissionMap, OBJECT_ACTION_IDS.suspend, source)
       : null,
     portForward: actionPermissionStatus(permissionMap, OBJECT_ACTION_IDS.portForward, source),
@@ -244,12 +311,53 @@ const resolveObjectActionPermissions = (
   };
 };
 
+// The checks behind every action the object's kind supports, keyed exactly as
+// resolveObjectActionPermissions reads them.
+const actionPermissionDescriptors = (object: ObjectActionData) => {
+  const { capability, source, targetSource } = actionIdentitySources(object);
+  const supported = [
+    capability?.restart && OBJECT_ACTION_IDS.restart,
+    capability?.rollback && OBJECT_ACTION_IDS.rollback,
+    capability?.scale && OBJECT_ACTION_IDS.scale,
+    capability?.trigger && OBJECT_ACTION_IDS.triggerNow,
+    capability?.suspend && OBJECT_ACTION_IDS.suspend,
+    capability?.portForward && OBJECT_ACTION_IDS.portForward,
+  ].filter((actionId) => typeof actionId === 'string');
+  const nodeChecks =
+    capability?.cordon || capability?.drain
+      ? Object.values(buildNodeActionPermissionDescriptorMap(source))
+      : [];
+  return [
+    ...supported.map((actionId) => buildObjectActionPermissionDescriptor(actionId, source)),
+    buildObjectActionPermissionDescriptor(OBJECT_ACTION_IDS.delete, targetSource),
+    ...nodeChecks,
+  ].filter((descriptor) => descriptor !== null);
+};
+
+// The checks the permission map has no answer for yet.
+const missingPermissionChecks = (
+  object: ObjectActionData,
+  permissionMap: PermissionMap
+): PermissionCheck[] =>
+  actionPermissionDescriptors(object)
+    .filter((descriptor) => objectActionPermissionStatus(permissionMap, descriptor) === null)
+    .map((descriptor) => ({
+      clusterId: descriptor.clusterId ?? '',
+      resourceKind: descriptor.resourceKind,
+      verb: descriptor.verb,
+      namespace: descriptor.namespace ?? null,
+      subresource: descriptor.subresource ?? null,
+      group: descriptor.group ?? null,
+      version: descriptor.version ?? null,
+    }));
+
 interface NavigationHandlerOptions {
   object: ObjectActionData;
   onOpen: ObjectActionControllerOptions['onOpen'];
   onOpenObjectMap: ObjectActionControllerOptions['onOpenObjectMap'];
   onNavigateView: ObjectActionControllerOptions['onNavigateView'];
   onViewInvolvedObject: ObjectActionControllerOptions['onViewInvolvedObject'];
+  onGoToNamespace: ObjectActionControllerOptions['onGoToNamespace'];
   openWithObject: ReturnType<typeof useObjectPanel>['openWithObject'];
   navigateToView: ReturnType<typeof useNavigateToView>['navigateToView'];
   navigateToViewAvailable: boolean;
@@ -261,6 +369,7 @@ const buildNavigationHandlers = ({
   onOpenObjectMap,
   onNavigateView,
   onViewInvolvedObject,
+  onGoToNamespace,
   openWithObject,
   navigateToView,
   navigateToViewAvailable,
@@ -273,7 +382,7 @@ const buildNavigationHandlers = ({
       () => navigateToView(actionObject),
       navigateToViewAvailable
     ),
-    onObjectMap: isObjectMapSupportedKind(object.kind)
+    onObjectMap: isObjectMapSupportedRef(object)
       ? () => {
           if (onOpenObjectMap) {
             onOpenObjectMap(actionObject);
@@ -285,6 +394,7 @@ const buildNavigationHandlers = ({
     onViewInvolvedObject: onViewInvolvedObject
       ? () => onViewInvolvedObject(actionObject)
       : undefined,
+    onGoToNamespace: onGoToNamespace ? () => onGoToNamespace(actionObject) : undefined,
   };
 };
 
@@ -427,12 +537,12 @@ const buildControllerHandlers = (options: ControllerHandlerOptions): ObjectActio
 export const useObjectActionController = ({
   context,
   actionLoading = false,
-  queryMissingPermissions = false,
   useDefaultHandlers = true,
   onOpen,
   onOpenObjectMap,
   onNavigateView,
   onViewInvolvedObject,
+  onGoToNamespace,
   handlerOverrides,
   perObjectHandlers,
   onAfterAction,
@@ -475,14 +585,10 @@ export const useObjectActionController = ({
         return [];
       }
       const permissions = resolveObjectActionPermissions(object, permissionMap);
-      if (queryMissingPermissions && !permissions.delete) {
-        queryKindPermissions(
-          object.kind,
-          object.namespace ?? null,
-          object.clusterId,
-          object.group,
-          object.version
-        );
+      const missing = missingPermissionChecks(object, permissionMap);
+      if (missing.length > 0) {
+        // Menus build their items while rendering; ask once the render is done.
+        queueMicrotask(() => queryPermissionChecks(missing));
       }
       return buildObjectActionItems({
         object,
@@ -497,6 +603,7 @@ export const useObjectActionController = ({
           onOpenObjectMap,
           onNavigateView,
           onViewInvolvedObject,
+          onGoToNamespace,
           openWithObject,
           navigateToView,
           navigateToViewAvailable: navigateFallbackAvailable,
@@ -525,9 +632,9 @@ export const useObjectActionController = ({
       onOpenObjectMap,
       onNavigateView,
       onViewInvolvedObject,
+      onGoToNamespace,
       openWithObject,
       permissionMap,
-      queryMissingPermissions,
       navigateToView,
       navigateFallbackAvailable,
       useDefaultHandlers,
@@ -650,69 +757,25 @@ export const useObjectActionController = ({
     });
   }, [executeMutation, finalizerRemovalTarget, onAfterAction]);
 
-  const confirmation = useMemo(() => {
+  const confirmation = useMemo((): ConfirmationSpec | null => {
     if (finalizerRemovalTarget) {
-      const { object, finalizer, deletionTimestamp } = finalizerRemovalTarget;
-      return {
-        title: 'Remove Finalizer',
-        message: `Remove finalizer "${finalizer}" from ${object.kind.toLowerCase()} "${object.name}"?`,
-        notice: deletionIsWithinFinalizerCleanupGrace(deletionTimestamp)
-          ? RECENT_FINALIZER_REMOVAL_NOTICE
-          : undefined,
-        warning:
-          'This may leave objects in an unknown or bad state. Only continue if the responsible controller cannot complete cleanup.',
-        confirmText: 'Remove',
-        confirmButtonClass: 'danger',
-        onConfirm: confirmFinalizerRemoval,
-        onCancel: () => setFinalizerRemovalTarget(null),
-      };
+      return finalizerRemovalConfirmation(finalizerRemovalTarget, confirmFinalizerRemoval, () =>
+        setFinalizerRemovalTarget(null)
+      );
     }
     if (restartTarget) {
-      return {
-        title: `Restart ${restartTarget.kind || 'Workload'}`,
-        message: `Are you sure you want to restart ${restartTarget.kind.toLowerCase()} "${restartTarget.name}"?\n\nThis will perform a rolling restart of all pods.`,
-        confirmText: 'Restart',
-        confirmButtonClass: 'danger',
-        onConfirm: confirmRestart,
-        onCancel: () => setRestartTarget(null),
-      };
+      return restartConfirmation(restartTarget, confirmRestart, () => setRestartTarget(null));
     }
     if (deleteTarget) {
-      const isUndrainedNode =
-        normalizeKind(deleteTarget.kind) === 'Node' && !deleteTarget.unschedulable;
-      return {
-        title: `Delete ${deleteTarget.kind || 'Resource'}`,
-        message: `Are you sure you want to delete ${deleteTarget.kind.toLowerCase()} "${deleteTarget.name}"?\n\nThis action cannot be undone.`,
-        warning: isUndrainedNode
-          ? 'This node has not been drained. Pods running on it will be terminated abruptly when the node is removed.'
-          : undefined,
-        confirmText: 'Delete',
-        confirmButtonClass: 'danger',
-        onConfirm: confirmDelete,
-        onCancel: () => setDeleteTarget(null),
-      };
+      return deleteConfirmation(deleteTarget, confirmDelete, () => setDeleteTarget(null));
     }
     if (triggerTarget) {
-      return {
-        title: 'Trigger CronJob',
-        message: `Create a new Job from CronJob "${triggerTarget.name}" immediately?`,
-        confirmText: 'Trigger',
-        confirmButtonClass: undefined,
-        onConfirm: confirmTrigger,
-        onCancel: () => setTriggerTarget(null),
-      };
+      return triggerConfirmation(triggerTarget, confirmTrigger, () => setTriggerTarget(null));
     }
     if (scaleConfirmation) {
-      const object = scaleConfirmation.object;
-      return {
-        title: 'Scale to 0',
-        message: `Scale ${object.kind.toLowerCase()} "${object.name}" to 0 replicas?`,
-        warning: 'This will stop currently running pods for this workload.',
-        confirmText: 'Scale to 0',
-        confirmButtonClass: 'danger',
-        onConfirm: confirmScaleToZero,
-        onCancel: () => setScaleConfirmation(null),
-      };
+      return scaleToZeroConfirmation(scaleConfirmation.object, confirmScaleToZero, () =>
+        setScaleConfirmation(null)
+      );
     }
     return null;
   }, [

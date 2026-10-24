@@ -7,12 +7,14 @@ import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import Tooltip from '@shared/components/Tooltip';
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { useMemo } from 'react';
 import type { ClusterIdentitiesSnapshot, ClusterIdentity } from '@/core/refresh/types';
 import './ClusterViewIdentities.css';
 
-const identityKey = (row: ClusterIdentity) => JSON.stringify([row.clusterId, row.kind, row.name]);
+const identityKey = (row: ClusterIdentity) =>
+  buildClusterScopedKey(row, JSON.stringify([row.kind, row.name]));
 
 function IdentityBindings({ row }: Readonly<{ row: ClusterIdentity }>) {
   const bindings = row.bindings ?? [];

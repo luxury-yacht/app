@@ -84,7 +84,9 @@ func TestStartupPanelBookkeepingPreservesAuthenticationResults(t *testing.T) {
 			case "move-cluster", "cancel-move":
 				_, err = app.Workspace.StageClusterViewTransfer("workspace-1", "workspace-2", "config:expired")
 				if err == nil && action == "move-cluster" {
-					err = app.Workspace.CommitClusterViewTransfer("workspace-1", "workspace-2", "config:expired", nil)
+					if _, err = app.Workspace.PanelWorkspaceDirectory().BeginViewTransfer("move-cluster", "workspace-1", "workspace-2", "config:expired"); err == nil {
+						err = app.Workspace.CommitClusterViewTransfer("workspace-1", "workspace-2", "config:expired", "move-cluster")
+					}
 				} else if err == nil {
 					err = app.Workspace.CancelClusterViewTransfer("workspace-2", "config:expired")
 				}

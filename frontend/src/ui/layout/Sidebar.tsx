@@ -38,22 +38,20 @@ import {
   type NamespaceViewDescriptor,
   SIDEBAR_VIEW_GROUPS,
 } from '@/core/navigation/viewRegistry';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
-import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
+import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
 import type { AttentionSeverity } from '@/core/refresh/types';
-import { useDimInactiveNamespaces } from '@/hooks/useDimInactiveNamespaces';
-import { useExclusiveNamespaces } from '@/hooks/useExclusiveNamespaces';
+import { usePreference } from '@/core/settings/usePreference';
 import type { ClusterViewType, GlobalViewType, NamespaceViewType } from '@/types/navigation/views';
 import { isMacPlatform } from '@/utils/platform';
 import { NamespaceScopeAddRow, useNamespaceScope } from './NamespaceScopeEditor';
 import { type SidebarCursorTarget, useSidebarKeyboardControls } from './SidebarKeys';
 import { useSidebarGroupExpansion } from './useSidebarGroupExpansion';
 
-const toNamespaceKey = (clusterId: string | undefined, scope: string): string => {
-  const scoped = buildClusterScope(clusterId, scope);
-  return scoped || scope;
-};
+// A namespace row's sidebar identity (expansion state, DOM ids), keyed by
+// cluster; the namespace is a selection value, not a refresh scope.
+const toNamespaceKey = (clusterId: string | undefined, namespace: string): string =>
+  clusterId ? `${clusterId}|${namespace}` : namespace;
 
 const escapeAttributeSelectorValue = (value: string): string =>
   value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -848,8 +846,8 @@ function Sidebar() {
   // (docs/architecture/namespace-scope.md): the namespaces section doubles as its
   // inline editor when a scope is set or the cluster-wide list is denied.
   const namespaceScope = useNamespaceScope(optionalClusterId(selectedClusterId));
-  const dimInactiveNamespaces = useDimInactiveNamespaces();
-  const exclusiveNamespaces = useExclusiveNamespaces();
+  const dimInactiveNamespaces = usePreference('dimInactiveNamespaces');
+  const exclusiveNamespaces = usePreference('exclusiveNamespaces');
   // The namespaces domain is the ONLY membership source. It is
   // permission-gated backend-side: without list permission it fails fast and
   // the sidebar renders the permission message — no catalog inference (manual
@@ -861,7 +859,7 @@ function Sidebar() {
 
   const width = viewState.isSidebarVisible ? viewState.sidebarWidth : 50;
   const isCollapsed = !viewState.isSidebarVisible;
-  const attentionScope = buildClusterScope(selectedClusterId, '');
+  const attentionScope = buildClusterRefreshScope('cluster-attention', selectedClusterId);
   const attentionBadgesEnabled = Boolean(attentionScope) && viewState.viewType !== 'global';
   const { data: attentionData } = useRefreshDomainHandle({
     domain: 'cluster-attention',
@@ -869,7 +867,6 @@ function Sidebar() {
     enabled: attentionBadgesEnabled,
     preserveState: true,
   });
-  useStreamSignalRefetch('cluster-attention', attentionBadgesEnabled ? [attentionScope] : []);
   const sidebarSelection = viewState.sidebarSelection;
   const selectedNamespaceRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -983,8 +980,6 @@ function Sidebar() {
 
   const handleClusterViewSelect = (view: ClusterViewType) => {
     setPendingSelection({ kind: 'cluster-view', view });
-    // Set activeClusterView BEFORE setViewType so the orchestrator context
-    // has the correct view when triggerManualRefreshForContext() fires.
     viewState.setActiveClusterView(view);
     viewState.setViewType('cluster');
     viewState.setSidebarSelection({ type: 'cluster', value: 'cluster' });

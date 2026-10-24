@@ -7,7 +7,7 @@ export type DockableTabDragPayload = Extract<TabDragPayload, { kind: 'dockable-t
 
 export { panelTargetSnapshot as objectPanelTabSnapshot } from '@modules/object-panel/panelTarget';
 
-export const singleTabGroupSnapshot = (
+const singleTabGroupSnapshot = (
   request: panelwindow.TabTransferRequest
 ): panelwindow.GroupSnapshot => ({
   schemaVersion: 1,

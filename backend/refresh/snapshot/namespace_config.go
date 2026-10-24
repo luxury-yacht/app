@@ -2,18 +2,14 @@ package snapshot
 
 import (
 	"context"
-	"fmt"
 	"sort"
-
-	informers "k8s.io/client-go/informers"
-	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
-	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resources/configmap"
 	"github.com/luxury-yacht/app/backend/resources/secret"
@@ -27,8 +23,8 @@ const (
 // NamespaceConfigBuilder constructs config summaries (ConfigMap, Secret) for a
 // namespace via the shared typed-table domain skeleton (typed_table_domain.go).
 type NamespaceConfigBuilder struct {
-	collectIndexer func(streamspec.Descriptor) cache.Indexer
-	// maintained, when set, is an informer-fed store the builder serves rows from
+	available kindAvailability
+	// maintained, when set, is a reflector-fed store the builder serves rows from
 	// instead of listing + re-projecting per request. nil falls back to the list path.
 	maintained *typedMaintainedStore[ConfigSummary]
 }
@@ -66,6 +62,9 @@ func namespaceConfigDomainSpec() typedTableDomainSpec[ConfigSummary] {
 		schema:           configQuerypageSchema(),
 		capabilities:     namespaceConfigQueryCapabilities(),
 		sortRows:         sortConfigSummaries,
+		payload: func(meta ClusterMeta, envelope ResourceQueryEnvelope, rows []ConfigSummary) any {
+			return NamespaceConfigSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: envelope, Rows: rows}
+		},
 	}
 }
 
@@ -74,30 +73,25 @@ func namespaceConfigDomainSpec() typedTableDomainSpec[ConfigSummary] {
 // so they still appear in the source list (for query capabilities/issues) but
 // are not listed.
 //
-// ConfigMap and Secret are owned-reflector ingest kinds (IngestOwned): when
-// ingestManager is non-nil their maintained-store feed comes from the ingest
-// reflectors' Table-half Sink and registerMaintainedHandlers skips them (the shared
-// factory no longer caches them). When ingestManager is nil (a unit test) the store
-// has no feed for the cut kinds.
+// ConfigMap and Secret feed the maintained store from their owned reflectors'
+// Table-half sinks. When ingestManager is nil (a unit test) the store has no feed.
 func RegisterNamespaceConfigDomain(
 	reg *domain.Registry,
-	factory informers.SharedInformerFactory,
 	allowed domainpermissions.AllowedResources,
 	clusterMeta ClusterMeta,
 	ingestManager *ingest.IngestManager,
+	bell doorbell.Bell,
 ) error {
-	if factory == nil {
-		return fmt.Errorf("shared informer factory is nil")
-	}
-	collectIndexer := sharedFactoryIndexers(factory, allowed, namespaceConfigDomainName, ingestManager)
-	maintained, err := newRegisteredTypedTableStore(reg, namespaceConfigDomainSpec(), clusterMeta, collectIndexer, factory, nil, ingestManager)
+	available := ingestAvailability(allowed, namespaceConfigDomainName, ingestManager)
+	maintained, err := newRegisteredTypedTableStore(reg, namespaceConfigDomainSpec(), clusterMeta,
+		ingestManager, bell)
 	if err != nil {
 		return err
 	}
 
 	builder := &NamespaceConfigBuilder{
-		collectIndexer: collectIndexer,
-		maintained:     maintained,
+		available:  available,
+		maintained: maintained,
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceConfigDomainName,
@@ -109,10 +103,7 @@ func RegisterNamespaceConfigDomain(
 // the querypage engine (proven byte-equivalent to the bespoke typed-table
 // executor in querypage_config_test.go).
 func (b *NamespaceConfigBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	return buildTypedTableSnapshot(ctx, scope, namespaceConfigDomainSpec(), b.collectIndexer, b.maintained,
-		func(meta ClusterMeta, envelope ResourceQueryEnvelope, rows []ConfigSummary) any {
-			return NamespaceConfigSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: envelope, Rows: rows}
-		})
+	return buildTypedTableSnapshot(ctx, scope, namespaceConfigDomainSpec(), b.available, b.maintained)
 }
 
 func sortConfigSummaries(resources []ConfigSummary) {

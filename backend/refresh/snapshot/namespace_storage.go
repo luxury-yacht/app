@@ -2,17 +2,13 @@ package snapshot
 
 import (
 	"context"
-	"fmt"
 	"sort"
-
-	informers "k8s.io/client-go/informers"
-	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
-	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/persistentvolumeclaim"
@@ -26,8 +22,8 @@ const (
 // NamespaceStorageBuilder constructs PVC summaries for a namespace via the shared
 // typed-table domain skeleton (typed_table_domain.go).
 type NamespaceStorageBuilder struct {
-	collectIndexer func(streamspec.Descriptor) cache.Indexer
-	// maintained, when set, is an informer-fed store the builder serves rows from
+	available kindAvailability
+	// maintained, when set, is a reflector-fed store the builder serves rows from
 	// instead of listing + re-projecting per request. nil falls back to the list path.
 	maintained *typedMaintainedStore[StorageSummary]
 }
@@ -67,11 +63,13 @@ func namespaceStorageDomainSpec() typedTableDomainSpec[StorageSummary] {
 		scopeRequiredErr: errNamespaceStorageScopeRequired,
 		entryLimit:       config.SnapshotNamespaceStorageEntryLimit,
 		description:      "storage resources",
-		listErrorPrefix:  "namespace storage: failed to list pvcs",
 		adapter:          storageTableQueryAdapter(),
 		schema:           storageQuerypageSchema(),
 		capabilities:     namespaceStorageQueryCapabilities(),
 		sortRows:         sortStorageSummaries,
+		payload: func(meta ClusterMeta, envelope ResourceQueryEnvelope, rows []StorageSummary) any {
+			return NamespaceStorageSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: envelope, Rows: rows}
+		},
 	}
 }
 
@@ -86,29 +84,25 @@ func sortStorageSummaries(resources []StorageSummary) {
 
 // RegisterNamespaceStorageDomain registers the storage domain.
 //
-// PersistentVolumeClaim is an owned-reflector ingest kind (IngestOwned): when
-// ingestManager is non-nil its maintained-store feed comes from the ingest reflector's
-// Table-half Sink, and registerMaintainedHandlers skips it (the shared factory no
-// longer caches it). When ingestManager is nil (a unit test) the store has no feed for
-// the cut kind, mirroring the quotas domain.
+// PersistentVolumeClaim feeds the maintained store from its owned reflector's
+// Table-half sink. When ingestManager is nil (a unit test) the store has no feed,
+// mirroring the quotas domain.
 func RegisterNamespaceStorageDomain(
 	reg *domain.Registry,
-	factory informers.SharedInformerFactory,
 	clusterMeta ClusterMeta,
 	ingestManager *ingest.IngestManager,
+	bell doorbell.Bell,
 ) error {
-	if factory == nil {
-		return fmt.Errorf("shared informer factory is nil")
-	}
-	collectIndexer := unconditionalSharedIndexers(factory, namespaceStorageDomainName, ingestManager)
-	maintained, err := newRegisteredTypedTableStore(reg, namespaceStorageDomainSpec(), clusterMeta, collectIndexer, factory, nil, ingestManager)
+	available := unconditionalIngestAvailability(namespaceStorageDomainName, ingestManager)
+	maintained, err := newRegisteredTypedTableStore(reg, namespaceStorageDomainSpec(), clusterMeta,
+		ingestManager, bell)
 	if err != nil {
 		return err
 	}
 
 	builder := &NamespaceStorageBuilder{
-		collectIndexer: collectIndexer,
-		maintained:     maintained,
+		available:  available,
+		maintained: maintained,
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceStorageDomainName,
@@ -118,8 +112,5 @@ func RegisterNamespaceStorageDomain(
 
 // Build assembles PVC summaries for the namespace.
 func (b *NamespaceStorageBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	return buildTypedTableSnapshot(ctx, scope, namespaceStorageDomainSpec(), b.collectIndexer, b.maintained,
-		func(meta ClusterMeta, envelope ResourceQueryEnvelope, rows []StorageSummary) any {
-			return NamespaceStorageSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: envelope, Rows: rows}
-		})
+	return buildTypedTableSnapshot(ctx, scope, namespaceStorageDomainSpec(), b.available, b.maintained)
 }

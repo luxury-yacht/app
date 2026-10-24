@@ -7,8 +7,9 @@ describe('diagnosticsPanelUtils', () => {
     ['pods', undefined, '-'],
     ['pods', 'cluster-a|', '-'],
     ['namespace-workloads', 'cluster-a|namespace:alpha', 'alpha'],
-    ['namespace-workloads', 'cluster-a|alpha', 'alpha'],
-    ['pods', 'cluster-a|workload:alpha:Deployment:api', 'alpha'],
+    ['namespace-workloads', 'cluster-a|namespace:all?limit=50', 'All'],
+    ['namespace-workloads', 'cluster-a|alpha', '-'],
+    ['pods', 'cluster-a|workload:alpha:apps:v1:Deployment:api', 'alpha'],
     ['pods', 'cluster-a|workload:', '-'],
     ['pods', 'cluster-a|namespace:alpha', 'alpha'],
     ['pods', 'cluster-a|namespace:all', 'All'],
@@ -16,7 +17,7 @@ describe('diagnosticsPanelUtils', () => {
     ['pods', 'cluster-a|node:worker-a', '-'],
     ['object-maintenance', 'cluster-a|node:worker-a', 'worker-a'],
     ['object-maintenance', 'cluster-a|node:', '-'],
-    ['object-maintenance', 'cluster-a|custom-scope', 'custom-scope'],
+    ['object-maintenance', 'cluster-a|custom-scope', '-'],
     ['cluster-events', 'cluster-a|namespace:alpha', '-'],
   ])('resolves %s scope %s as %s', (domain, scope, expected) => {
     expect(resolveDomainNamespace(domain, scope)).toBe(expected);

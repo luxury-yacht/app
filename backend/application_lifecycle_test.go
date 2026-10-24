@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -81,13 +80,6 @@ func TestSetupEnvironmentAddsHomeLocalBin(t *testing.T) {
 
 	pathVar := os.Getenv("PATH")
 	require.Contains(t, pathVar, target)
-}
-
-func TestContainsAuthPatternDoesNotTreatPermissionDenialAsAuthentication(t *testing.T) {
-	require.True(t, containsAuthPattern("request unauthorized"))
-	require.False(t, containsAuthPattern("watch is forbidden"))
-	require.False(t, containsAuthPattern("permission denied"))
-	require.False(t, containsAuthPattern("access denied"))
 }
 
 func TestSetupRefreshSubsystemRequiresSelections(t *testing.T) {
@@ -194,7 +186,6 @@ func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
 		},
 	}
 	manager := refresh.NewManager(nil, nil, nil, nil, nil)
-	handler := http.NewServeMux()
 
 	var capturedCfg system.Config
 	original := newRefreshSubsystemWithServices
@@ -202,7 +193,6 @@ func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
 		capturedCfg = cfg
 		return &system.Subsystem{
 			Manager:   manager,
-			Handler:   handler,
 			Telemetry: telemetry.NewRecorder(),
 		}, nil
 	}

@@ -14,7 +14,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
-	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
@@ -154,7 +154,7 @@ func (a *RefreshCoordinator) startObjectCatalogForTarget(target catalogTarget) e
 	if target.meta.ID == "" {
 		return fmt.Errorf("cluster identifier missing")
 	}
-	// Cold clusters deliberately have no live informer/ingest producers. Starting
+	// Cold clusters deliberately have no live ingest producers. Starting
 	// their catalogs would run discovery and capability checks, then repeatedly try
 	// to collect from stores whose feeds the governor intentionally stopped.
 	if a.governorKeepsClusterCold(target.meta.ID) {
@@ -167,25 +167,17 @@ func (a *RefreshCoordinator) startObjectCatalogForTarget(target catalogTarget) e
 	}
 
 	subsystem := a.getRefreshSubsystem(target.meta.ID)
-	if subsystem == nil || subsystem.InformerFactory == nil {
-		return fmt.Errorf("refresh subsystem informers unavailable")
+	if subsystem == nil || subsystem.IngestManager == nil {
+		return fmt.Errorf("refresh subsystem ingest unavailable")
 	}
 
 	commonDeps := a.clusterRuntime.resourceDependenciesForSelection(target.selection, clients, target.meta.ID)
 	telemetryRecorder := a.catalogTelemetryRecorder(subsystem)
 	deps := objectcatalog.Dependencies{
-		Common:                       commonDeps,
-		Logger:                       applog.ClusterScoped(a.logger, target.meta.ID, target.meta.Name),
-		Telemetry:                    telemetryRecorder,
-		InformerFactory:              subsystem.InformerFactory.SharedInformerFactory(),
-		APIExtensionsInformerFactory: subsystem.InformerFactory.APIExtensionsInformerFactory(),
-		GatewayInformerFactory:       subsystem.InformerFactory.GatewayInformerFactory(),
-		PermissionChecker:            subsystem.InformerFactory,
-		// The factory's settle contract, not raw client-go cache sync: an informer
-		// whose watch is forbidden or past the sync deadline must not hold the
-		// catalog's first collection forever.
-		InformerReadiness: subsystem.InformerFactory,
-		IngestSource:      subsystem.IngestManager,
+		Common:       commonDeps,
+		Logger:       applog.ClusterScoped(a.logger, target.meta.ID, target.meta.Name),
+		Telemetry:    telemetryRecorder,
+		IngestSource: subsystem.IngestManager,
 		CapabilityFactory: func() *capabilities.Service {
 			return capabilities.NewService(capabilities.Dependencies{
 				Common:             commonDeps,
@@ -238,8 +230,8 @@ func (a *RefreshCoordinator) startObjectCatalogForTarget(target catalogTarget) e
 			close(done)
 		}()
 		// No cache wait here: the service starts immediately so discovery and the
-		// RBAC preflight overlap the informer factory's initial sync; sync() itself
-		// waits for its sources just before the collect (deps.InformerReadiness above).
+		// RBAC preflight overlap the reflectors' initial sync; sync() itself waits for
+		// its ingest sources just before the collect.
 		if err := svc.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			a.logger.Warn(fmt.Sprintf("Object catalog terminated unexpectedly: %v", err), logsources.ObjectCatalog, target.meta.ID, target.meta.Name)
 		}
@@ -288,8 +280,8 @@ func runCatalogSubsetBridge[T any](
 	}
 }
 
-func runCatalogDoorbellBridge(ctx context.Context, updates <-chan objectcatalog.StreamingUpdate, manager *resourcestream.Manager) {
-	if manager == nil {
+func runCatalogDoorbellBridge(ctx context.Context, updates <-chan objectcatalog.StreamingUpdate, bell doorbell.Bell) {
+	if bell == nil {
 		return
 	}
 	var sequence uint64
@@ -302,7 +294,12 @@ func runCatalogDoorbellBridge(ctx context.Context, updates <-chan objectcatalog.
 				return
 			}
 			sequence++
-			manager.BroadcastCatalogRefresh(fmt.Sprintf("%d", sequence))
+			bell.Ring(doorbell.Change{
+				Domain:  "catalog",
+				Source:  doorbell.SourceCatalog,
+				Target:  doorbell.Subscribed(),
+				Version: fmt.Sprintf("%d", sequence),
+			})
 		}
 	}
 }
@@ -436,7 +433,7 @@ func (a *RefreshCoordinator) catalogNamespaceGroups() []snapshot.CatalogNamespac
 		// A scoped cluster's namespace list is synthesized from the
 		// configured scope (docs/architecture/namespace-scope.md) so Browse agrees
 		// with the sidebar even before anything is catalogued.
-		if scope := a.allowedNamespaces(entry.meta.ID); len(scope) > 0 {
+		if scope := a.refreshAllowedNamespaces(entry.meta.ID); len(scope) > 0 {
 			namespaces = append([]string(nil), scope...)
 			sort.Strings(namespaces)
 		}

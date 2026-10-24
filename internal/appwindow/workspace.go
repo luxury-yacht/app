@@ -18,20 +18,20 @@ func (r *Registry) windowHasCluster(windowName, clusterID string) bool {
 	return err == nil && descriptor.ClusterID == clusterID
 }
 
-func (r *Registry) validateGroupSource(windowName string, snapshot panelwindow.GroupSnapshot) error {
-	if err := panelwindow.ValidateGroupSnapshot(snapshot); err != nil {
+// beginGroupPlacement asks the directory to move a native group transfer's
+// panels. The directory validates them against its own placement; the native
+// transfer's terminal releases the move unless it was committed first.
+func (r *Registry) beginGroupPlacement(windowName string, snapshot panelwindow.GroupSnapshot, target panelwindow.PanelLocation, reservations ...*panelwindow.WorkspaceReservation) error {
+	if err := r.workspace.BeginGroupTransfer(panelwindow.GroupTransfer{
+		TransferID:   snapshot.TransferID,
+		SourceWindow: snapshot.SourceWindowName,
+		Target:       target,
+		Group:        panelwindow.WorkspaceGroup{ClusterID: snapshot.ClusterID, Tabs: snapshot.Tabs, ActivePanelID: snapshot.ActivePanelID},
+	}, reservations...); err != nil {
 		return err
 	}
-	panels := make(map[string]panelwindow.WorkspacePanel)
-	for _, panel := range r.workspace.Snapshot(snapshot.ClusterID).Panels {
-		panels[panel.Tab.PanelID] = panel
-	}
-	for _, tab := range snapshot.Tabs {
-		panel, exists := panels[tab.PanelID]
-		if !exists || panel.Tab != tab || panel.Location.WindowName != windowName {
-			return fmt.Errorf("panel group source is stale")
-		}
-	}
+	directory := r.workspace
+	r.panels.attachRelease(windowName, snapshot.TransferID, func() { directory.CancelGroupTransfer(snapshot.TransferID) })
 	return nil
 }
 
@@ -55,27 +55,11 @@ func (r *Registry) AcknowledgePanelWorkspaceReady(windowName string) error {
 	delete(r.queuedWorkspaceEvents, windowName)
 	r.closeMu.Unlock()
 	for _, event := range queued {
-		if !r.workspaceEventPending(windowName, event) {
-			continue
-		}
 		if !r.emitWindowEvent(windowName, event.name, event.payload) {
 			return fmt.Errorf("app window %q is not available", windowName)
 		}
 	}
 	return nil
-}
-
-// Readiness cannot revive a transfer that failed while its renderer was loading.
-func (r *Registry) workspaceEventPending(windowName string, event workspaceWindowEvent) bool {
-	switch request := event.payload.(type) {
-	case panelwindow.TabTransferInsertRequestedEvent:
-		return r.panelTabInsertionPending(request.Request)
-	case panelwindow.WindowDockRequestedEvent:
-		position, err := r.panels.DockTarget(request.WindowName, request.TransferID, windowName)
-		return err == nil && position == request.TargetPosition
-	default:
-		return true
-	}
 }
 
 func (r *Registry) queueWorkspaceEvent(windowName, name string, payload any) bool {
@@ -114,21 +98,10 @@ func (r *Registry) appWindowForCluster(clusterID, source string) (string, error)
 func (r *Registry) abortReadyPanelWindow(descriptor PanelWindowDescriptor) error {
 	r.closeAuthorizedWindow(descriptor.WindowName)
 	r.panels.Remove(descriptor.WindowName)
-	r.failPanelTabTransfer(descriptor.Snapshot.TransferID, "new panel target failed before readiness")
+	r.failPanelTabTransfer(descriptor.TransferID, "new panel target failed before readiness")
 	cleanup := r.releaseNativePanelReference(descriptor.WindowName)
 	r.emitPanelClosed(descriptor)
 	return cleanup
-}
-
-func (r *Registry) restoreFailedPanelOpen(targetWindow string, previous []panelwindow.WorkspacePanel) {
-	for i := range previous {
-		panel := &previous[i]
-		if panel.Location.Kind == panelwindow.PanelLocationDocked && !r.windowHasCluster(panel.Location.WindowName, panel.Tab.ClusterID()) {
-			panel.Location.Kind = panelwindow.PanelLocationRetained
-			panel.Location.WindowName = ""
-		}
-	}
-	r.workspace.RestoreTransferredPanels(targetWindow, previous)
 }
 
 func (r *Registry) GetPanelWorkspace(windowName, clusterID string) (panelwindow.WorkspaceSnapshot, error) {
@@ -168,6 +141,23 @@ func (r *Registry) OpenPanelWorkspaceObject(windowName string, tab panelwindow.T
 	}
 	r.emitWorkspaceChanged(tab.ClusterID())
 	return panelwindow.PanelOpenResult{Panel: panel, Render: render}, nil
+}
+
+// ClosePanelWorkspaceObject removes a panel its renderer closed. The directory
+// ignores a panel it has since placed elsewhere or is moving.
+func (r *Registry) ClosePanelWorkspaceObject(windowName, clusterID, panelID string) error {
+	if windowName == "" || clusterID == "" || panelID == "" {
+		return fmt.Errorf("panel close requires window, cluster, and panel identity")
+	}
+	r.workspaceMu.Lock()
+	closed := r.workspace.ClosePanel(windowName, clusterID, panelID)
+	r.workspaceMu.Unlock()
+	if !closed {
+		return nil
+	}
+	r.releaseUnusedPanelWorkspace(clusterID)
+	r.emitWorkspaceChanged(clusterID)
+	return nil
 }
 
 func (r *Registry) releasePanelReservation(reservation *panelwindow.WorkspaceReservation, clusterID string) {
@@ -232,11 +222,7 @@ func (r *Registry) commitDockedPublication(windowName string, groups []panelwind
 			return fmt.Errorf("panel publication cluster was removed")
 		}
 	}
-	publishedGroups, err := r.excludeProvisionalDockTabs(windowName, groups)
-	if err != nil {
-		return err
-	}
-	if err := r.publishPanelGroups(windowName, panelwindow.PanelLocationDocked, publishedGroups, reservations...); err != nil {
+	if err := r.workspace.PublishWindow(windowName, panelwindow.PanelLocationDocked, groups, reservations...); err != nil {
 		return err
 	}
 	for _, clusterID := range clusterIDs {
@@ -259,51 +245,6 @@ func (r *Registry) validateDockedPublication(windowName string, groups []panelwi
 		}
 	}
 	return clusterIDs, nil
-}
-
-type provisionalDockTab struct {
-	tab      panelwindow.TabSnapshot
-	position string
-}
-
-func (r *Registry) provisionalDockTabs(windowName string) map[string]provisionalDockTab {
-	tabs := make(map[string]provisionalDockTab)
-	r.addClusterTransferTabs(windowName, tabs)
-	for _, name := range r.panels.Names("") {
-		descriptor, err := r.panels.Descriptor(name)
-		if err != nil || descriptor.State != PanelWindowStateDocking {
-			continue
-		}
-		position, err := r.panels.DockTarget(name, descriptor.Snapshot.TransferID, windowName)
-		if err != nil {
-			continue
-		}
-		for _, tab := range descriptor.Snapshot.Tabs {
-			tabs[tab.ClusterID()+"\x00"+tab.PanelID] = provisionalDockTab{tab, position}
-		}
-	}
-	return tabs
-}
-
-// A provisional target can publish its mounted layout before its dock
-// acknowledgement. Those tabs stay assigned to the native source until commit.
-func (r *Registry) excludeProvisionalDockTabs(windowName string, groups []panelwindow.WorkspaceGroup) ([]panelwindow.WorkspaceGroup, error) {
-	pending := r.provisionalDockTabs(windowName)
-	result := make([]panelwindow.WorkspaceGroup, 0, len(groups))
-	for _, group := range groups {
-		kept, err := excludeProvisionalGroupTabs(group, pending)
-		if err != nil {
-			return nil, err
-		}
-		if len(kept.Tabs) == 0 {
-			continue
-		}
-		if !slices.ContainsFunc(kept.Tabs, func(tab panelwindow.TabSnapshot) bool { return tab.PanelID == kept.ActivePanelID }) {
-			kept.ActivePanelID = kept.Tabs[0].PanelID
-		}
-		result = append(result, kept)
-	}
-	return result, nil
 }
 
 func (r *Registry) retainPanelWorkspace(clusterID string) error {
@@ -336,33 +277,4 @@ func (r *Registry) reportPanelLifecycleError(err error, action string) {
 	if err != nil && r.application != nil && r.application.Logger != nil {
 		r.application.Logger.Error(action, "error", err)
 	}
-}
-
-func (r *Registry) addClusterTransferTabs(windowName string, tabs map[string]provisionalDockTab) {
-	for id, transfer := range r.clusterTransfers.all() {
-		if !r.clusterTransfers.awaiting(id, transferAwaitingTarget) || transfer.event.Request.TargetWindowName != windowName {
-			continue
-		}
-		for _, group := range transfer.event.Snapshot.Groups {
-			for _, tab := range group.Tabs {
-				tabs[group.ClusterID+"\x00"+tab.PanelID] = provisionalDockTab{tab, group.GroupID}
-			}
-		}
-	}
-}
-
-func excludeProvisionalGroupTabs(group panelwindow.WorkspaceGroup, pending map[string]provisionalDockTab) (panelwindow.WorkspaceGroup, error) {
-	kept := group
-	kept.Tabs = nil
-	for _, tab := range group.Tabs {
-		provisional, exists := pending[group.ClusterID+"\x00"+tab.PanelID]
-		if !exists {
-			kept.Tabs = append(kept.Tabs, tab)
-			continue
-		}
-		if provisional.tab != tab || provisional.position != group.GroupID {
-			return panelwindow.WorkspaceGroup{}, fmt.Errorf("provisional dock tab does not match the transfer")
-		}
-	}
-	return kept, nil
 }

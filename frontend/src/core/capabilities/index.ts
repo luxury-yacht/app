@@ -13,7 +13,6 @@ export {
   useUserPermissions,
 } from './hooks';
 export {
-  PERMISSION_FEATURE_LABELS,
   PERMISSION_FEATURES,
   type PermissionFeatureKey,
   permissionFeatureLabel,
@@ -21,37 +20,23 @@ export {
 // Permission spec lists.
 export {
   ALL_NAMESPACE_PERMISSIONS,
-  AUTOSCALING_PERMISSIONS,
   CLUSTER_PERMISSIONS,
-  CONFIG_PERMISSIONS,
-  EVENT_PERMISSIONS,
-  NETWORK_PERMISSIONS,
+  NODE_SHELL_PERMISSIONS,
   type PermissionSpecList,
   POD_PERMISSIONS,
-  QUOTA_PERMISSIONS,
-  RBAC_PERMISSIONS,
-  STORAGE_PERMISSIONS,
-  WORKLOAD_PERMISSIONS,
 } from './permissionSpecs';
 // Permission store.
 export {
   getPermissionKey,
-  queryClusterPermissions,
-  queryKindPermissions,
+  type PermissionCheck,
   queryNamespacePermissions,
   queryNamespacesPermissions,
+  queryPermissionChecks,
   setActivePermissionCluster,
 } from './permissionStore';
 export type {
-  PermissionEntry,
   PermissionMap,
   PermissionQueryDiagnostics,
-  PermissionSpec,
   PermissionStatus,
 } from './permissionTypes';
-export type {
-  CapabilityDescriptor,
-  CapabilityState,
-  CapabilityStatus,
-  NormalizedCapabilityDescriptor,
-} from './types';
+export type { CapabilityDescriptor } from './types';

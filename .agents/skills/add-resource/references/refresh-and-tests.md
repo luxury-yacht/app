@@ -27,10 +27,10 @@ refresh-subsystem skill for lifecycle, doorbell, or stream-health changes.
 ## Resource streams
 
 - Declare `Stream *streamspec.Descriptor` on the kind descriptor with its row DTO
-  in `backend/kind/streamrows`; `registerDescriptorStreams` in
-  `backend/refresh/resourcestream/stream_descriptor_dispatch.go` registers it.
-- Use a bespoke direct/network handler only for related-object invalidation or
-  a non-shared informer factory.
+  in `backend/kind/streamrows`. The domain's maintained store rings after it
+  applies the kind's changes (`backend/refresh/snapshot/store_doorbell.go`);
+  add a derived change only when another domain's serve-time join reads the
+  kind. Never register a ringing handler outside the store.
 - Snapshot and stream projections share row helpers and parity tests.
 - Streams carry only change signals; the query-backed view refetches its page
   and no live row crosses the wire
@@ -41,8 +41,10 @@ refresh-subsystem skill for lifecycle, doorbell, or stream-health changes.
 ## Object map and catalog priority
 
 - Use the object-map skill when the kind adds graph nodes or edges. Backend graph
-  data, frontend support checks, and navigation refs change together; never add
-  only a renderer allowlist entry.
+  data, frontend support checks, and navigation refs change together. Frontend
+  map support is the generated kind facets' `objectMap` facet, derived from the
+  kind's registry collector; run `go generate ./backend`. There is no frontend
+  allowlist.
 - Change `streamingResourcePriority` in `backend/objectcatalog/service.go` only
   when evidence shows the kind needs earlier catalog availability.
 

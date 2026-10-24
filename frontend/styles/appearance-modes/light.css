@@ -21,6 +21,8 @@
 
   /* Semantic colors */
   --color-success: #22c55e;
+  --color-success-text: #15803d;
+  --color-modified-text: #c026d3;
   --color-warning: #c47c00;
   --color-error: #ef4444;
   --color-error-bg: rgba(239, 68, 68, 0.1);
@@ -40,6 +42,7 @@
   --color-success-bg: rgba(34, 197, 94, 0.1);
   --color-warning-bg: rgba(245, 158, 11, 0.1);
   --color-warning-border: rgba(245, 158, 11, 0.3);
+  --color-info: #2563eb;
   --color-info-bg: rgba(14, 165, 233, 0.1);
 
   /* Button colors */
@@ -96,7 +99,7 @@
   --status-available-text: var(--color-text);
   --status-failed-bg: rgba(239, 68, 68, 0.1);
   --status-failed-border: rgba(239, 68, 68, 0.25);
-  --status-failed-text: var(--badge-red-text);
+  --status-failed-text: var(--color-error-text);
   --status-released-bg: rgba(249, 115, 22, 0.15);
   --status-released-text: var(--badge-orange-text);
   --status-warning-bg: rgba(245, 158, 11, 0.15);
@@ -157,10 +160,10 @@
 
   /* Scrollbar colors */
   --scrollbar-track-bg: transparent;
-  --scrollbar-thumb-bg: var(--color-bg-tertiary);
-  --scrollbar-thumb-hover-bg: var(--color-bg-tertiary);
-  --scrollbar-gutter-hover-bg: var(--scrollbar-thumb-bg);
-  --scrollbar-gutter-hover-opacity: 0.12;
+  --scrollbar-thumb-bg: rgba(0, 0, 0, 0.45);
+  --scrollbar-thumb-hover-bg: rgba(0, 0, 0, 0.6);
+  --scrollbar-gutter-hover-bg: rgb(0, 0, 0);
+  --scrollbar-gutter-hover-opacity: 0.06;
   --scrollbar-corner-bg: transparent;
 
   /* Shadows */

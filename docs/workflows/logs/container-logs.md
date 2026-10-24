@@ -7,9 +7,13 @@ Panel; they are neither Application nor Node Logs. Viewer controls come from the
 ## Agent Contract
 
 - The live stream and the previous-logs fetch share one canonical log scope and
-  resolver (`containerlogs.Resolve`), so they agree on a scope's pods and
-  containers. Workload targets resolve to bounded pod/container targets before
-  retrieval.
+  resolver (`containerlogs.Resolve`) over one target table
+  (`kindregistry.LogTargets`, injected at `backend/pod_logs.go` and
+  `refresh/system/streams.go`), so they agree on a scope's pods and containers.
+  Each kind declares its target in its descriptor (`Descriptor.Logs`,
+  `resources/<kind>/logstarget.go`): its pods now and the watch, with the
+  ownership check, that follows them. Workload targets resolve to bounded
+  pod/container targets before retrieval.
 - Frontend filters (search, regex, display mode, timestamps, wrap, ANSI) never
   change backend target identity. Previous logs, history size, follow,
   timestamps, and target caps are backend query concerns.
@@ -95,10 +99,14 @@ Server frames (generated into `types.generated.ts`):
   snapshot) and per-container `issues` (`unavailable`, `forbidden`, `failed`,
   with reason). When present they replace the previous lists. A per-container
   problem never sets `error`.
-- **Fatal error**: `error`, optional permission `errorDetails`, `retryable`;
-  then the stream closes. Missing objects, permission denials, and rejected
-  requests are not retryable. A stream arriving while the refresh subsystem or
-  its cluster's handler is being republished is told to retry.
+- **Fatal error**: `error`, the failure's status as `errorDetails`, and
+  `reconnect`; then the stream closes. The stream reconnects unless the reason
+  is `NotFound`, `Forbidden`, `BadRequest` or `Invalid` (missing objects,
+  permission denials, rejected requests), so an unclassified drop still
+  reconnects. `reconnect` is the stream's own decision, separate from
+  `status.retryable`. A stream arriving while the refresh subsystem
+  (`RefreshUnavailable`) or its cluster's handler (`ClusterNotReady`) is being
+  republished reconnects.
 
 Restarts (reconnect, window shown, auto-refresh back on) resume. A selection
 change, larger buffer size, empty buffer, or unusable resume points (one voids
@@ -109,7 +117,7 @@ keeps timestamp order and evicts oldest by count and UTF-8 line bytes.
 Client phases (`containerLogsStreamProtocol.ts`): `connecting`,
 `awaiting-snapshot`, `live`, `reconnecting`, `failed`, `stopping`. Reconnect
 backoff grows until a snapshot arrives (not a socket open), capped at 30 s. A
-non-retryable failure is terminal: the tab shows the reason and turns
+failure without `reconnect` is terminal: the tab shows the reason and turns
 auto-refresh off; one toggle (or `R`) retries.
 
 ## Backend Behavior
@@ -155,7 +163,7 @@ auto-refresh off; one toggle (or `R`) retries.
   otherwise the stream fails non-retryably, naming the verb. Previous logs need
   no `watch`: Pod → `get` pod; Deployment, ReplicaSet, DaemonSet, StatefulSet →
   `get` workload + `list` pods; Job → `list` pods; CronJob → `list` jobs and
-  pods (`containerlogs.Resolve`). So previous logs can load when live logs
+  pods (each kind's `LogsTarget`). So previous logs can load when live logs
   cannot: loading, paused, and failure-before-lines states render in the log
   region below the controls, leaving Previous Logs and the auto-refresh retry
   usable.

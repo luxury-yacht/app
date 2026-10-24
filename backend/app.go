@@ -2,8 +2,8 @@ package backend
 
 import (
 	"context"
-	"fmt"
 
+	"github.com/luxury-yacht/app/backend/internal/preferenceschema"
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/internal/panelwindow"
@@ -54,12 +54,12 @@ type ApplicationRuntimeOptions struct {
 	BeginPanelWindowOpen       func(panelwindow.GroupSnapshot) (panelwindow.WindowDescriptor, error)
 	AcknowledgePanelReady      func(string, string) (panelwindow.WindowDescriptor, error)
 	BeginPanelWindowDock       func(string, string, panelwindow.GroupSnapshot) error
-	AcknowledgePanelDock       func(string, string, string) error
+	AcknowledgePanelTransfer   func(string, string, bool) error
 	FailPanelTransfer          func(string, string, string) error
 	AcknowledgePanelClose      func(string) error
 	AcknowledgeWorkspaceClose  func(string) error
 	RoutePanelCommand          func(string, panelwindow.WorkspaceCommand) error
-	UpdatePanelSnapshot        func(string, panelwindow.GroupSnapshot) error
+	PublishPanelGroup          func(string, panelwindow.WorkspaceGroup) error
 	RequestPanelTabClose       func(string, string) error
 	RequestPanelTabTransfer    func(string, panelwindow.TabTransferRequest) error
 	AcceptPanelTabTransfer     func(string, string) error
@@ -85,7 +85,7 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 	if options.Reporter != nil {
 		reporters = append(reporters, options.Reporter)
 	}
-	appLogs := NewAppLogService(NewLogger(1000, reporters...))
+	appLogs := NewApplicationLogs(reporters...)
 	signals := newApplicationRuntimeSignals(
 		func(_ context.Context, name string, data ...interface{}) {
 			if wailsApplication != nil {
@@ -94,8 +94,8 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 		},
 	)
 	clusterWorkspace := newClusterWorkspaceProjection()
-	containerLogsPolicy := NewContainerLogsSelectionPolicy(defaultObjPanelLogsTargetPerScopeLimit)
-	permissionFetchPolicy := NewPermissionFetchPolicy(defaultPermissionSSRRFetchConcurrency)
+	containerLogsPolicy := NewContainerLogsSelectionPolicy(preferenceschema.DefaultObjPanelLogsTargetPerScopeLimit)
+	permissionFetchPolicy := NewPermissionFetchPolicy(preferenceschema.DefaultPermissionSSRRFetchConcurrency)
 	updateCheck := &updateCheckPort{}
 	kubeconfigSearchPaths := &kubeconfigSearchPathPort{}
 	desktopShell := NewDesktopShell(
@@ -108,12 +108,12 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 			BeginPanelWindowOpen:       options.BeginPanelWindowOpen,
 			AcknowledgePanelReady:      options.AcknowledgePanelReady,
 			BeginPanelWindowDock:       options.BeginPanelWindowDock,
-			AcknowledgePanelDock:       options.AcknowledgePanelDock,
+			AcknowledgePanelTransfer:   options.AcknowledgePanelTransfer,
 			FailPanelTransfer:          options.FailPanelTransfer,
 			AcknowledgePanelClose:      options.AcknowledgePanelClose,
 			AcknowledgeWorkspaceClose:  options.AcknowledgeWorkspaceClose,
 			RoutePanelCommand:          options.RoutePanelCommand,
-			UpdatePanelSnapshot:        options.UpdatePanelSnapshot,
+			PublishPanelGroup:          options.PublishPanelGroup,
 			RequestPanelTabClose:       options.RequestPanelTabClose,
 			RequestPanelTabTransfer:    options.RequestPanelTabTransfer,
 			AcceptPanelTabTransfer:     options.AcceptPanelTabTransfer,
@@ -126,12 +126,14 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 		options.ApplicationUpdates, updateCheck,
 	)
 	installationTelemetry := &installationTelemetryPort{}
-	errorReporting := NewErrorReportingService(options.Reporter, signals.CtxOrBackground, appLogs.Logger(), installationTelemetry)
-	refreshSettings := newRefreshSettingBridge(
-		defaultObjPanelLogsTargetGlobalLimit,
-		defaultMetricsIntervalMs(),
+	errorReporting := NewErrorReportingService(
+		options.Reporter, signals.CtxOrBackground, appLogs.Logger(), Version, installationTelemetry,
 	)
-	clusterRateLimits := newClusterRateLimitBridge(defaultKubernetesClientQPS, defaultKubernetesClientBurst)
+	refreshSettings := newRefreshSettingBridge(
+		preferenceschema.DefaultObjPanelLogsTargetGlobalLimit,
+		preferenceschema.DefaultMetricsRefreshIntervalMs,
+	)
+	clusterRateLimits := newClusterRateLimitBridge(preferenceschema.DefaultKubernetesClientQPS, preferenceschema.DefaultKubernetesClientBurst)
 	preferences := NewPreferencesService(
 		desktopShell,
 		NewSettingsEffectDispatcher(errorReporting, clusterRateLimits, permissionFetchPolicy, containerLogsPolicy, refreshSettings, appLogs.Logger()),
@@ -144,7 +146,7 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 		Projection: clusterWorkspace, EmitEvent: signals.emitEvent, Context: signals.CtxOrBackground,
 		RateLimitsBridge: clusterRateLimits,
 	})
-	attention := NewClusterAttentionService(preferences, appLogs.Logger())
+	attention := NewClusterAttentionService(preferences, appLogs.Logger(), clusterRuntime.clusterNameForID)
 	resourceProjection := newRefreshResourceProjection()
 	nodeMaintenanceStore := nodemaintenance.NewStore(5)
 	operations := newApplicationOperationsCoordinator(
@@ -155,11 +157,8 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 		resolveClusterDependencies:       clusterRuntime.resolveClusterDependencies,
 		resourceDependenciesForClusterID: clusterRuntime.resourceDependenciesForClusterID,
 		context:                          signals.CtxOrBackground,
-		emitEvent:                        signals.emitEvent,
 		logger:                           appLogs.Logger(),
 		clusterName:                      clusterRuntime.clusterNameForID,
-		recordTransportSuccess:           clusterRuntime.recordClusterTransportSuccess,
-		recordTransportFailure:           clusterRuntime.recordClusterTransportFailure,
 		resourceResolverForCluster: func(clusterID string) common.ResourceResolver {
 			return clusterRuntimeResourceResolver{
 				runtime: clusterRuntime, clusterID: clusterID,
@@ -175,15 +174,8 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 	refresh := newRefreshCoordinator(RefreshCoordinatorDependencies{
 		ClusterRuntime: clusterRuntime, ClusterWorkspace: clusterWorkspace,
 		Attention: attention, Logger: appLogs.Logger(),
-		AllowedNamespaces: func(clusterID string) []string {
-			namespaces, err := preferences.clusterAllowedNamespaces(clusterID)
-			if err != nil {
-				appLogs.Logger().Warn(fmt.Sprintf("Could not read allowed namespaces for cluster %s (running cluster-wide): %v", clusterID, err), "Settings", clusterID, clusterID)
-				return nil
-			}
-			return namespaces
-		},
-		Preferences: preferences, ContainerLogsPolicy: containerLogsPolicy,
+		AllowedNamespaces: preferences.clusterAllowedNamespaces, Preferences: preferences,
+		ContainerLogsPolicy:   containerLogsPolicy,
 		PermissionFetchPolicy: permissionFetchPolicy, Resources: resources,
 		Context:          signals.CtxOrBackground,
 		RuntimeAvailable: signals.runtimeAvailable, EmitEvent: signals.emitEvent,

@@ -28,7 +28,10 @@
     "includes": [
       "**",
       "!src/core/refresh/types.generated.ts",
-      "!src/shared/actions/objectActions.generated.ts"
+      "!src/shared/actions/objectActions.generated.ts",
+      "!src/shared/kinds/kindFacets.generated.ts",
+      "!src/core/settings/appPreferences.generated.ts",
+      "!src/core/settings/appPreferences.parity.generated.json"
     ],
     "indentStyle": "space",
     "indentWidth": 2,
@@ -42,7 +45,10 @@
     "includes": [
       "**",
       "!src/core/refresh/types.generated.ts",
-      "!src/shared/actions/objectActions.generated.ts"
+      "!src/shared/actions/objectActions.generated.ts",
+      "!src/shared/kinds/kindFacets.generated.ts",
+      "!src/core/settings/appPreferences.generated.ts",
+      "!src/core/settings/appPreferences.parity.generated.json"
     ],
     "actions": {
       "preset": "recommended"
@@ -55,7 +61,10 @@
     "includes": [
       "**",
       "!src/core/refresh/types.generated.ts",
-      "!src/shared/actions/objectActions.generated.ts"
+      "!src/shared/actions/objectActions.generated.ts",
+      "!src/shared/kinds/kindFacets.generated.ts",
+      "!src/core/settings/appPreferences.generated.ts",
+      "!src/core/settings/appPreferences.parity.generated.json"
     ],
     "rules": {
       "preset": "recommended",
@@ -222,6 +231,11 @@
       "includes": ["**/src/**/*.{ts,tsx}", "!**/src/**/*.test.*", "!**/src/**/*.stories.*"]
     },
     {
+      // Clipboard reads use the native desktop clipboard; the WebView gates browser reads behind a Paste callout.
+      "path": "./biome-plugins/no-direct-clipboard-read.grit",
+      "includes": ["**/src/**/*.{ts,tsx}", "!**/src/**/*.test.*", "!**/src/**/*.stories.*"]
+    },
+    {
       // Caught operational failures cross one boundary so the original exception is reportable.
       "path": "./biome-plugins/no-direct-console-error.grit",
       "includes": [
@@ -241,6 +255,17 @@
         "!**/src/shared/components/errors/**",
         "!**/src/ui/errors/**"
       ]
+    },
+    {
+      // Tests mount real state owners through test-utils/appState instead of stubbing them
+      // (docs/workflows/testing.md). Never add an exemption.
+      "path": "./biome-plugins/no-owned-state-mocks.grit",
+      "includes": [
+        "**/src/**/*.test.{ts,tsx}",
+        // A benchmark times one component's own work, which real owners and StrictMode would
+        // add to.
+        "!**/src/**/*.benchmark.test.{ts,tsx}"
+      ]
     }
   ],
   // Overrides are narrow architectural boundaries, not general escape hatches. Keep the reason for
@@ -253,6 +278,19 @@
         "rules": {
           "correctness": {
             "noNodejsModules": "error"
+          }
+        }
+      }
+    },
+    {
+      // Temporary: Biome 2.6 made this rule recommended, and existing test probes and harnesses are
+      // defined inside test bodies and render helpers. The cleanup is tracked in docs/todo.md;
+      // remove this override when it lands. Production code stays under the rule.
+      "includes": ["src/**/*.test.*"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noComponentHookFactories": "off"
           }
         }
       }

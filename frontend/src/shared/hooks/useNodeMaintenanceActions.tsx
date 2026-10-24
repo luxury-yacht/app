@@ -18,12 +18,19 @@ import {
 } from '@shared/actions/objectActionClient';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import DrainNodeModal from '@shared/components/modals/DrainNodeModal';
-import { resolveNodeDrainOperationPermissions } from '@shared/hooks/nodeActionPermissions';
+import {
+  nodeActionPermissionInputs,
+  resolveNodeDrainOperationPermissions,
+} from '@shared/hooks/nodeActionPermissions';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
-import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
+import { useUserPermissions } from '@/core/capabilities';
+import {
+  acquireRefreshDomainLease,
+  releaseRefreshDomainLease,
+  requestRefreshDomain,
+} from '@/core/data-access';
 import { usePanelMutationGuard } from '@/core/panel-windows/usePanelMutationGuard';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { buildRefreshScope, CLUSTER_SELECTOR } from '@/core/refresh/scopeSelector';
 import { type DomainSnapshotState, useRefreshScopedDomainEntries } from '@/core/refresh/store';
 import type { NodeMaintenanceDrainJob, NodeMaintenanceSnapshotPayload } from '@/core/refresh/types';
 import { compareUtf16Strings } from '@/shared/utils/sort';
@@ -37,8 +44,6 @@ export interface NodeActionTarget {
 }
 
 type NodeMaintenanceSnapshotState = DomainSnapshotState<NodeMaintenanceSnapshotPayload>;
-
-const NODE_MAINTENANCE_AGGREGATE_SCOPE = 'aggregate';
 
 const normalizeWatchClusterIds = (clusterIds: string[] | undefined): string[] => {
   const seen = new Set<string>();
@@ -54,8 +59,9 @@ const normalizeWatchClusterIds = (clusterIds: string[] | undefined): string[] =>
   return result.sort(compareUtf16Strings);
 };
 
+// The cluster-wide maintenance snapshot: every drain job in the cluster.
 export const buildNodeMaintenanceAggregateScope = (clusterId: string): string =>
-  buildClusterScope(clusterId, NODE_MAINTENANCE_AGGREGATE_SCOPE);
+  buildRefreshScope('object-maintenance', { clusterId, selector: CLUSTER_SELECTOR });
 
 export const collectNodeMaintenanceDrains = (
   entries: Array<[string, NodeMaintenanceSnapshotState]>,
@@ -107,12 +113,14 @@ export const useNodeMaintenanceActions = ({
     [string, NodeMaintenanceSnapshotState]
   >;
 
+  // Leased, so the nodes view and a node panel watching the same cluster each
+  // keep the aggregate scope alive until both are gone.
   useEffect(() => {
     if (watchedAggregateScopes.length === 0) {
       return;
     }
     watchedAggregateScopes.forEach((scope) => {
-      setRefreshDomainEnabled({ domain: 'object-maintenance', scope, enabled: true });
+      acquireRefreshDomainLease({ domain: 'object-maintenance', scope });
       void requestRefreshDomain({
         domain: 'object-maintenance',
         scope,
@@ -121,7 +129,7 @@ export const useNodeMaintenanceActions = ({
     });
     return () => {
       watchedAggregateScopes.forEach((scope) => {
-        setRefreshDomainEnabled({ domain: 'object-maintenance', scope, enabled: false });
+        releaseRefreshDomainLease({ domain: 'object-maintenance', scope });
       });
     };
   }, [watchedAggregateScopes]);
@@ -158,23 +166,12 @@ export const useNodeMaintenanceActions = ({
     setDrainTarget(target);
   }, []);
 
+  // The drain checks are the generated node-action permission templates.
   const getDrainPermissions = useCallback(
     (clusterId: string) =>
-      resolveNodeDrainOperationPermissions({
-        nodeGet:
-          permissionMap.get(getPermissionKey('Node', 'get', null, null, clusterId, '', 'v1')) ??
-          null,
-        nodePatch:
-          permissionMap.get(getPermissionKey('Node', 'patch', null, null, clusterId, '', 'v1')) ??
-          null,
-        podEvictionCreate:
-          permissionMap.get(
-            getPermissionKey('Pod', 'create', null, 'eviction', clusterId, '', 'v1')
-          ) ?? null,
-        podDelete:
-          permissionMap.get(getPermissionKey('Pod', 'delete', null, null, clusterId, '', 'v1')) ??
-          null,
-      }),
+      resolveNodeDrainOperationPermissions(
+        nodeActionPermissionInputs(permissionMap, { clusterId })
+      ),
     [permissionMap]
   );
 

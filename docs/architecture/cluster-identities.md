@@ -45,8 +45,7 @@ or effective access.
   commits retained projections before notifying the snapshot invalidator and
   cluster-scoped subscribers. Completed deletions remove rows and references; a
   binding with only a deletion timestamp stays. The frontend refetches on change
-  signals, falls back to polling without a stream, and background refreshes
-  keep the inactive cluster's ID.
+  signals and falls back to polling without a stream.
 
 ## Identity panels
 
@@ -78,8 +77,9 @@ or effective access.
 - `backend/refresh/system/cluster_identities_test.go`: production registration
   and real REST LIST/watch intake through projection, invalidation, and
   subscriber delivery for both sources.
-- `backend/refresh/resourcestream/ingest_notify_test.go`: binding changes notify
-  Identities; ServiceAccount changes notify RBAC only.
+- `backend/refresh/system/ingest_fed_doorbell_test.go`: binding changes ring
+  Identities after the store applies them; ServiceAccount changes ring RBAC
+  only.
 - `ClusterViewIdentities.test.tsx` (query hook replaced by fixture rows):
   subjects open identity targets; bindings open complete object refs.
 - Sidebar and background-refresh tests cover route placement and cluster

@@ -9,10 +9,10 @@ import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useEffect, useMemo } from 'react';
 import { useViewState } from '@/core/contexts/ViewStateContext';
-import { requestRefreshDomain } from '@/core/data-access';
-import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
+import { requestRefreshDomain, useScopedRefreshDomainLifecycle } from '@/core/data-access';
+import { useRefreshScopedDomain } from '@/core/refresh';
 import { canActivateClusterOverviewRefresh } from '@/core/refresh/clusterOverviewLifecycle';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
 import type { ClusterOverviewMetrics } from '@/core/refresh/types';
 
 export const useClusterMetricsAvailability = (): ClusterOverviewMetrics | null => {
@@ -24,27 +24,28 @@ export const useClusterMetricsAvailability = (): ClusterOverviewMetrics | null =
 
   // Metrics for foreground UI should follow the active cluster only.
   const overviewScope = useMemo(
-    () => buildClusterScope(selectedClusterId ?? undefined, ''),
+    () => buildClusterRefreshScope('cluster-overview', selectedClusterId),
     [selectedClusterId]
   );
 
   const overviewDomain = useRefreshScopedDomain('cluster-overview', overviewScope);
 
+  // Keep cluster-overview running for all active views so diagnostics and background
+  // metrics stay current regardless of which view type is selected. preserveState keeps
+  // the retained overview painted when the lease moves between clusters.
+  const shouldEnable =
+    (viewType === 'overview' || viewType === 'namespace' || viewType === 'cluster') &&
+    canActivateOverviewRefresh;
+  useScopedRefreshDomainLifecycle({
+    domain: 'cluster-overview',
+    scope: overviewScope,
+    enabled: shouldEnable,
+    preserveState: true,
+  });
+
   useEffect(() => {
-    // Skip scoped calls when no clusters are connected (scope is empty).
-    if (!overviewScope) {
-      return;
-    }
-
-    // Keep cluster-overview running for all active views so diagnostics and background
-    // metrics stay current regardless of which view type is selected.
-    const shouldEnable =
-      (viewType === 'overview' || viewType === 'namespace' || viewType === 'cluster') &&
-      canActivateOverviewRefresh;
-    refreshOrchestrator.setScopedDomainEnabled('cluster-overview', overviewScope, shouldEnable);
-
-    const shouldTrigger = shouldEnable && viewType !== 'overview';
     // ClusterOverview handles its own initial refresh; only prime from non-overview views.
+    const shouldTrigger = Boolean(overviewScope) && shouldEnable && viewType !== 'overview';
     if (shouldTrigger && !overviewDomain.data && overviewDomain.status === 'idle') {
       void requestRefreshDomain({
         domain: 'cluster-overview',
@@ -52,17 +53,7 @@ export const useClusterMetricsAvailability = (): ClusterOverviewMetrics | null =
         reason: 'startup',
       });
     }
-  }, [
-    canActivateOverviewRefresh,
-    overviewDomain.data,
-    overviewDomain.status,
-    overviewScope,
-    viewType,
-  ]);
+  }, [overviewDomain.data, overviewDomain.status, overviewScope, shouldEnable, viewType]);
 
-  const metricsByCluster = overviewDomain.data?.metricsByCluster;
-  if (metricsByCluster) {
-    return selectedClusterId ? (metricsByCluster[selectedClusterId] ?? null) : null;
-  }
   return overviewDomain.data?.metrics ?? null;
 };

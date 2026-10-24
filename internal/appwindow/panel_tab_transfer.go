@@ -9,27 +9,24 @@ import (
 type panelTabTransfer struct {
 	request          panelwindow.TabTransferRequest
 	targetWindowName string
+	// release cancels the directory move begun at acceptance. Every tab transfer
+	// ends in removePanelTabTransferLocked, so a failed move cannot pin its panel.
+	release func()
 }
 
 func samePanelTab(left, right panelwindow.TabSnapshot) bool {
 	return left == right
 }
 
-func snapshotContainsPanelTab(snapshot PanelGroupSnapshot, tab panelwindow.TabSnapshot) bool {
-	for _, candidate := range snapshot.Tabs {
-		if samePanelTab(candidate, tab) {
-			return true
-		}
-	}
-	return false
-}
-
+// A fast check before any target is resolved or created. The directory repeats
+// it authoritatively when the source accepts; the dragged view need not have
+// been published.
 func (r *Registry) validatePanelTabTransferSource(request panelwindow.TabTransferRequest) error {
 	if !r.windowHasCluster(request.SourceWindowName, request.ClusterID) {
 		return fmt.Errorf("source window does not display the transfer cluster")
 	}
 	for _, panel := range r.workspace.Snapshot(request.ClusterID).Panels {
-		if panel.Tab == request.Tab && panel.Location.WindowName == request.SourceWindowName && panel.Location.GroupID == request.SourceGroupID {
+		if panel.Tab.SameIdentity(request.Tab) && panel.Location.WindowName == request.SourceWindowName {
 			return nil
 		}
 	}
@@ -147,26 +144,95 @@ func (r *Registry) AcceptPanelTabTransfer(callerWindowName, transferID string) e
 		r.tabTransferMu.Unlock()
 		return fmt.Errorf("panel tab transfer %q is not owned by %q", transferID, callerWindowName)
 	}
+	if err := r.beginPanelTabPlacementLocked(transfer); err != nil {
+		r.tabTransferMu.Unlock()
+		r.failPanelTabTransfer(transferID, err.Error())
+		return err
+	}
 	r.tabTransfers.accept(transferID)
 	r.resetPanelTabTransferTimeoutLocked(transfer)
 	r.tabTransferMu.Unlock()
+	return r.deliverPanelTabTransfer(request)
+}
 
+// A tear-off's directory move belongs to the new window's open transfer; every
+// other target gets a one-tab directory move tied to this transfer's terminal.
+func (r *Registry) beginPanelTabPlacementLocked(transfer *panelTabTransfer) error {
+	request := transfer.request
 	if request.TargetKind == panelwindow.TabTransferTargetNewWindow {
 		return nil
 	}
-	deliver := r.emitWindowEvent
+	kind := panelwindow.PanelLocationWindow
 	if request.TargetKind == panelwindow.TabTransferTargetWorkspace {
-		deliver = r.queueWorkspaceEvent
+		kind = panelwindow.PanelLocationDocked
 	}
-	if deliver(
+	if err := r.workspace.BeginGroupTransfer(panelwindow.GroupTransfer{
+		TransferID:   request.TransferID,
+		SourceWindow: request.SourceWindowName,
+		Target:       panelwindow.PanelLocation{Kind: kind, WindowName: request.TargetWindowName, GroupID: request.TargetGroupID, Index: request.TargetIndex},
+		Group:        panelwindow.WorkspaceGroup{ClusterID: request.ClusterID, Tabs: []panelwindow.TabSnapshot{request.Tab}, ActivePanelID: request.Tab.PanelID},
+	}); err != nil {
+		return err
+	}
+	directory := r.workspace
+	transfer.release = func() { directory.CancelGroupTransfer(request.TransferID) }
+	return nil
+}
+
+// App views learn of the move from their next directory read; a live native
+// target, which reads no directory, receives the request itself.
+func (r *Registry) deliverPanelTabTransfer(request panelwindow.TabTransferRequest) error {
+	switch request.TargetKind {
+	case panelwindow.TabTransferTargetNewWindow:
+		return nil
+	case panelwindow.TabTransferTargetWorkspace:
+		r.emitWorkspaceChanged(request.ClusterID)
+		return nil
+	}
+	if r.emitWindowEvent(
 		request.TargetWindowName,
 		panelwindow.TabTransferInsertRequestedEventName,
 		panelwindow.TabTransferInsertRequestedEvent{Request: request},
 	) {
 		return nil
 	}
-	r.failPanelTabTransfer(transferID, "target panel window is not available")
+	r.failPanelTabTransfer(request.TransferID, "target panel window is not available")
 	return fmt.Errorf("target panel window %q is not available", request.TargetWindowName)
+}
+
+func (r *Registry) hasPanelTabTransfer(transferID string) bool {
+	r.tabTransferMu.Lock()
+	defer r.tabTransferMu.Unlock()
+	return r.tabTransfers.get(transferID) != nil
+}
+
+// settlePanelTabTransfer commits the directory move once its target shows the
+// tab, or cancels it so the source keeps the tab.
+func (r *Registry) settlePanelTabTransfer(targetWindow, transferID string, mounted bool) error {
+	r.tabTransferMu.Lock()
+	transfer := r.tabTransfers.get(transferID)
+	if transfer == nil || !r.tabTransfers.awaiting(transferID, transferAwaitingTarget) ||
+		transfer.request.TargetKind == panelwindow.TabTransferTargetNewWindow ||
+		transfer.request.TargetWindowName != targetWindow {
+		r.tabTransferMu.Unlock()
+		return fmt.Errorf("window %q cannot settle panel tab transfer %q", targetWindow, transferID)
+	}
+	request := transfer.request
+	if !mounted {
+		r.tabTransferMu.Unlock()
+		r.failPanelTabTransfer(transferID, "panel tab transfer target rejected the panel")
+		return nil
+	}
+	if err := r.workspace.CommitGroupTransfer(transferID); err != nil {
+		r.tabTransferMu.Unlock()
+		r.failPanelTabTransfer(transferID, err.Error())
+		return err
+	}
+	r.removePanelTabTransferLocked(transferID)
+	r.tabTransferMu.Unlock()
+	r.emitPanelTabTransferEvent(request, panelwindow.TabTransferCommittedEventName, panelwindow.TabTransferCommittedEvent{Request: request})
+	r.emitWorkspaceChanged(request.ClusterID)
+	return nil
 }
 
 func (r *Registry) resolvePanelTabDockTarget(request panelwindow.TabTransferRequest) (panelwindow.TabTransferRequest, error) {
@@ -185,13 +251,6 @@ func (r *Registry) resolvePanelTabDockTarget(request panelwindow.TabTransferRequ
 		}
 	}
 	return request, nil
-}
-
-func (r *Registry) panelTabInsertionPending(request panelwindow.TabTransferRequest) bool {
-	r.tabTransferMu.Lock()
-	defer r.tabTransferMu.Unlock()
-	transfer := r.tabTransfers.get(request.TransferID)
-	return transfer != nil && r.tabTransfers.awaiting(request.TransferID, transferAwaitingTarget) && request.TargetKind != panelwindow.TabTransferTargetNewWindow && transfer.request == request
 }
 
 func (r *Registry) FailPanelTabTransfer(callerWindowName, transferID string) error {
@@ -219,50 +278,21 @@ func (r *Registry) removePanelTabTransfer(transferID string) *panelTabTransfer {
 }
 
 func (r *Registry) removePanelTabTransferLocked(transferID string) *panelTabTransfer {
-	return r.tabTransfers.finish(transferID)
+	transfer := r.tabTransfers.finish(transferID)
+	if transfer != nil && transfer.release != nil {
+		transfer.release()
+	}
+	return transfer
 }
 
-func (r *Registry) commitPanelTabTransfer(transferID string) {
+// A tear-off's directory move committed with its new window's readiness.
+func (r *Registry) finishOpenedPanelTabTransfer(transferID string) {
 	r.tabTransferMu.Lock()
-	transfer := r.tabTransfers.get(transferID)
-	if transfer == nil {
-		r.tabTransferMu.Unlock()
-		return
-	}
-	request := transfer.request
-	targetName := request.TargetWindowName
-	if request.TargetKind == panelwindow.TabTransferTargetNewWindow {
-		targetName = transfer.targetWindowName
-	}
-	if err := r.moveTransferredPanel(request, targetName); err != nil {
-		r.tabTransferMu.Unlock()
-		r.failPanelTabTransfer(transferID, err.Error())
-		return
-	}
-	r.removePanelTabTransferLocked(transferID)
+	transfer := r.removePanelTabTransferLocked(transferID)
 	r.tabTransferMu.Unlock()
-	r.emitPanelTabTransferEvent(request, panelwindow.TabTransferCommittedEventName, panelwindow.TabTransferCommittedEvent{Request: request})
-}
-
-func (r *Registry) moveTransferredPanel(request panelwindow.TabTransferRequest, targetWindowName string) error {
-	kind := panelwindow.PanelLocationWindow
-	if request.TargetKind == panelwindow.TabTransferTargetWorkspace {
-		kind = panelwindow.PanelLocationDocked
+	if transfer != nil {
+		r.emitPanelTabTransferEvent(transfer.request, panelwindow.TabTransferCommittedEventName, panelwindow.TabTransferCommittedEvent{Request: transfer.request})
 	}
-	target := panelwindow.PanelLocation{Kind: kind, WindowName: targetWindowName, GroupID: request.TargetGroupID, Index: request.TargetIndex, Active: true}
-	for _, panel := range r.workspace.Snapshot(request.ClusterID).Panels {
-		if panel.Tab.PanelID != request.Tab.PanelID {
-			continue
-		}
-		if panel.Tab == request.Tab && panel.Location.WindowName == targetWindowName && panel.Location.GroupID == request.TargetGroupID {
-			return nil
-		}
-		if panel.Location.WindowName != request.SourceWindowName || panel.Location.GroupID != request.SourceGroupID {
-			break
-		}
-		return r.workspace.Move(request.Tab, panel.Location, target)
-	}
-	return fmt.Errorf("panel transfer source is stale")
 }
 
 func (r *Registry) failPanelTabTransfer(transferID, reason string) {
@@ -277,10 +307,13 @@ func (r *Registry) failPanelTabTransfer(transferID, reason string) {
 		panelwindow.TabTransferFailedEventName,
 		event,
 	)
+	// An app target re-reads the directory and drops its provisional copy.
+	r.emitWorkspaceChanged(transfer.request.ClusterID)
 }
 
 func (r *Registry) beginPanelWindowOpenTransfer(
 	snapshot PanelGroupSnapshot,
+	reservation *panelwindow.WorkspaceReservation,
 ) (PanelWindowDescriptor, error) {
 	r.tabTransferMu.Lock()
 	defer r.tabTransferMu.Unlock()
@@ -313,6 +346,11 @@ func (r *Registry) beginPanelWindowOpenTransfer(
 	if err != nil {
 		return PanelWindowDescriptor{}, err
 	}
+	target := panelwindow.PanelLocation{Kind: panelwindow.PanelLocationWindow, WindowName: descriptor.WindowName, GroupID: snapshot.GroupID}
+	if err := r.beginGroupPlacement(descriptor.WindowName, snapshot, target, reservation); err != nil {
+		_ = r.panels.FailTransfer(descriptor.WindowName, snapshot.TransferID)
+		return PanelWindowDescriptor{}, err
+	}
 	if transfer != nil {
 		transfer.targetWindowName = descriptor.WindowName
 		r.tabTransfers.setTimeout(snapshot.TransferID, 0, nil)
@@ -327,7 +365,7 @@ func (r *Registry) abortOpeningPanelTabTarget(transfer *panelTabTransfer) {
 	}
 	descriptor, err := r.panels.Descriptor(transfer.targetWindowName)
 	if err != nil || descriptor.State != PanelWindowStateOpening ||
-		descriptor.Snapshot.TransferID != transfer.request.TransferID {
+		descriptor.TransferID != transfer.request.TransferID {
 		return
 	}
 	if err := r.panels.FailTransfer(descriptor.WindowName, transfer.request.TransferID); err != nil {
@@ -368,18 +406,17 @@ func (r *Registry) emitPanelTabTransferEvent(
 	}
 }
 
-func (r *Registry) completePanelTabTransferForOpenedWindow(descriptor PanelWindowDescriptor) {
+// A tear-off shares its ID with the window open it caused. The open validated
+// the tab and bound the transfer to this window, and the native index never
+// reuses an ID, so the ready window is always the tear-off's target.
+func (r *Registry) completePanelTabTransferForOpenedWindow(transferID string) {
 	r.tabTransferMu.Lock()
-	transfer := r.tabTransfers.get(descriptor.Snapshot.TransferID)
+	transfer := r.tabTransfers.get(transferID)
 	canCommit := transfer != nil &&
-		r.tabTransfers.awaiting(descriptor.Snapshot.TransferID, transferAwaitingTarget) &&
-		transfer.request.TargetKind == panelwindow.TabTransferTargetNewWindow &&
-		transfer.request.SourceWindowName == descriptor.Snapshot.SourceWindowName &&
-		transfer.request.ClusterID == descriptor.ClusterID &&
-		transfer.request.TargetGroupID == descriptor.GroupID &&
-		snapshotContainsPanelTab(descriptor.Snapshot, transfer.request.Tab)
+		r.tabTransfers.awaiting(transferID, transferAwaitingTarget) &&
+		transfer.request.TargetKind == panelwindow.TabTransferTargetNewWindow
 	r.tabTransferMu.Unlock()
 	if canCommit {
-		r.commitPanelTabTransfer(descriptor.Snapshot.TransferID)
+		r.finishOpenedPanelTabTransfer(transferID)
 	}
 }

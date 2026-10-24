@@ -61,15 +61,19 @@ import (
 
 const builtinStorageAPIGroup = "storage.k8s.io"
 
-// BuiltinResource describes one built-in Kubernetes resource identity.
-type BuiltinResource = resourcekind.Identity
+// BuiltinResource describes one built-in Kubernetes resource identity. Per-kind
+// behavior facets reach the frontend through the generated kind facets table
+// (internal/genkindfacets), not this identity contract.
+type BuiltinResource struct {
+	resourcekind.Identity
+}
 
 // BuiltinResources is the authoritative in-repo resource identity table for
 // built-ins that Luxury Yacht handles without dynamic discovery. Every row is
 // sourced from the owning kind package's resourcekind.Identity; the only
 // exceptions are catalog-only kinds with no resource package (Endpoints,
 // CSIDriver, CSINode, VolumeAttachment, Lease), declared inline here.
-var BuiltinResources = []BuiltinResource{
+var BuiltinResources = builtinResources([]resourcekind.Identity{
 	pods.Identity,
 	service.Identity,
 	configmap.Identity,
@@ -128,12 +132,20 @@ var BuiltinResources = []BuiltinResource{
 	builtin("coordination.k8s.io", "v1", "Lease", "leases", true), // catalog-only: no resource package
 
 	apiextensions.Identity,
+})
+
+func builtinResources(identities []resourcekind.Identity) []BuiltinResource {
+	out := make([]BuiltinResource, 0, len(identities))
+	for _, id := range identities {
+		out = append(out, BuiltinResource{Identity: id})
+	}
+	return out
 }
 
 // builtin declares a contract row inline, for catalog-only kinds that have no
 // resource package to own their identity.
-func builtin(group, version, kind, resource string, namespaced bool) BuiltinResource {
-	return BuiltinResource{
+func builtin(group, version, kind, resource string, namespaced bool) resourcekind.Identity {
+	return resourcekind.Identity{
 		Group:      group,
 		Version:    version,
 		Kind:       kind,

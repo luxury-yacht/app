@@ -86,7 +86,7 @@ func (a *RefreshCoordinator) runRefreshGenerationManager(
 		a.logger.Warn(fmt.Sprintf("Refresh manager for cluster %s stopped: %v", clusterID, err), logsources.Refresh, clusterID, clusterName)
 		return
 	}
-	// Start blocks until the factory-backed informer caches settle. Remove rows
+	// Start blocks until the reflector stores settle. Remove rows
 	// restored from spill when their objects disappeared while the app was closed.
 	if registry != nil {
 		registry.ReconcileMaintainedStores()
@@ -272,8 +272,7 @@ func (a *RefreshCoordinator) stopRefreshGenerationProducers(clusterID string, su
 	if a == nil || subsystem == nil {
 		return
 	}
-	// Catalog sync and its bridges retain this generation's informer and ingest
-	// producers. Join them first, without touching a replacement's catalog.
+	// Catalog sync and its bridges retain this generation's ingest producers. Join them first, without touching a replacement's catalog.
 	a.stopObjectCatalogEntry(a.removeObjectCatalogEntry(clusterID, subsystem))
 	runtime := a.takeRefreshGenerationRuntime(subsystem)
 	subsystem.CancelColdPreparation()
@@ -281,24 +280,19 @@ func (a *RefreshCoordinator) stopRefreshGenerationProducers(clusterID string, su
 	if runtime.permissionCancel != nil {
 		runtime.permissionCancel()
 	}
-	subsystem.StopDoorbellNotifiers()
-	if subsystem.ContainerLogs != nil {
-		subsystem.ContainerLogs.Stop()
-	}
+	// The resource stream is the generation's doorbell: Stop waits for running
+	// producer callbacks, so nothing rings or invalidates after it returns.
 	if subsystem.ResourceStream != nil {
 		subsystem.ResourceStream.Stop()
+	}
+	if subsystem.ContainerLogs != nil {
+		subsystem.ContainerLogs.Stop()
 	}
 	if runtime.managerCancel != nil {
 		runtime.managerCancel()
 	}
 	if subsystem.Manager != nil {
 		a.shutdownRefreshGenerationManager(clusterID, subsystem)
-		return
-	}
-	// A partially built generation may own an informer factory before manager
-	// construction completes. Clear it even when no manager can own shutdown.
-	if subsystem.InformerFactory != nil {
-		_ = subsystem.InformerFactory.Shutdown()
 	}
 }
 

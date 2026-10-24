@@ -53,7 +53,6 @@ type Edge struct {
 
 	Link                resourcemodel.ResourceLink // default target
 	CoreRef             *CoreRef                   // resolved by identity
-	PodsSelector        map[string]string          // pods matching this selector in the source namespace
 	PodsLabelSelector   *metav1.LabelSelector      // pods matching this label selector in the source namespace
 	ServiceSlices       bool                       // endpoint slices for this service (source namespace + name)
 	CoreObjectRef       *corev1.ObjectReference    // a core object reference (endpoints.targetRef)

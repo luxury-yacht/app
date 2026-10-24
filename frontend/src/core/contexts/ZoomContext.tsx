@@ -20,13 +20,15 @@ import {
 import { readZoomLevel, requestAppState } from '@/core/app-state-access';
 import { SetZoomLevel } from '@/core/backend-api';
 import { onEvent } from '@/core/desktop-runtime';
+import { ZOOM_LEVEL } from '@/core/settings/appPreferences.generated';
 import { reportOperationalError } from '@/utils/errorHandler';
 
-// Zoom constraints
-const MIN_ZOOM = 50;
-const MAX_ZOOM = 200;
+// Zoom constraints: the bounds and default come from the backend preference
+// schema; the step is a UI choice.
+const MIN_ZOOM: number = ZOOM_LEVEL.min;
+const MAX_ZOOM: number = ZOOM_LEVEL.max;
 const ZOOM_STEP = 10;
-const DEFAULT_ZOOM = 100;
+const DEFAULT_ZOOM: number = ZOOM_LEVEL.defaultValue;
 
 /**
  * Viewport dimensions adjusted for CSS zoom.

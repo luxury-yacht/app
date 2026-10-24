@@ -12,6 +12,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -52,7 +53,7 @@ func startLogSession(t *testing.T, setup sessionSetup) *logSession {
 	client := &stubClient{Clientset: baseClient, core: &logCore{
 		CoreV1Interface: baseClient.CoreV1(), overrides: map[string]*logPods{"default": logs},
 	}}
-	handler, err := NewHandler(client, applog.Noop, telemetry.NewRecorder())
+	handler, err := NewHandler(client, testLogTargets, applog.Noop, telemetry.NewRecorder())
 	require.NoError(t, err)
 	if setup.tune != nil {
 		setup.tune(handler.streamer)
@@ -312,7 +313,9 @@ func TestDeletedWorkloadEndsTheStreamWithAPermanentError(t *testing.T) {
 	payloads := session.conn.waitForPayloads(t, 1)
 	require.Len(t, payloads, 1)
 	require.Contains(t, payloads[0].Error, "not found")
-	require.False(t, payloads[0].Retryable)
+	require.False(t, payloads[0].Reconnect)
+	require.NotNil(t, payloads[0].ErrorDetails)
+	require.Equal(t, errorstatus.ReasonNotFound, payloads[0].ErrorDetails.Reason)
 }
 
 func TestTransientResolveFailureIsRetryable(t *testing.T) {
@@ -328,7 +331,7 @@ func TestTransientResolveFailureIsRetryable(t *testing.T) {
 	session.ended(t)
 	payload := session.conn.waitForPayloads(t, 1)[0]
 	require.NotEmpty(t, payload.Error)
-	require.True(t, payload.Retryable)
+	require.True(t, payload.Reconnect)
 }
 
 func forbidPods(verb string) func(*fake.Clientset) {
@@ -342,8 +345,10 @@ func forbidPods(verb string) func(*fake.Clientset) {
 func requirePodPermissionFailure(t *testing.T, payload EventPayload, verb string) {
 	t.Helper()
 	require.Contains(t, payload.Error, verb)
-	require.False(t, payload.Retryable)
+	require.False(t, payload.Reconnect)
 	require.NotNil(t, payload.ErrorDetails)
+	require.Equal(t, errorstatus.ReasonForbidden, payload.ErrorDetails.Reason)
+	require.NotNil(t, payload.ErrorDetails.Details)
 	require.Equal(t, "core/pods", payload.ErrorDetails.Details.Resource)
 }
 
@@ -379,7 +384,12 @@ func TestTargetLimitWarningFollowsANewPod(t *testing.T) {
 	selector := &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}}
 	objects := []runtime.Object{&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "web"}, Spec: appsv1.DeploymentSpec{Selector: selector}}}
 	for i := range containerlogs.DefaultPerScopeTargetLimit + 2 {
-		objects = append(objects, runningPod(fmt.Sprintf("web-%03d", i), "app"))
+		pod := runningPod(fmt.Sprintf("web-%03d", i), "app")
+		// Real pods carry a resource version, so the informer's first list is
+		// recognised as the pods the session already holds; the fake tracker
+		// does not set one.
+		pod.ResourceVersion = fmt.Sprint(100 + i)
+		objects = append(objects, pod)
 	}
 	var client *fake.Clientset
 	session := startLogSession(t, sessionSetup{

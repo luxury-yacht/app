@@ -168,6 +168,50 @@ describe('buildObjectActionItems', () => {
     expect(findAction(items, OBJECT_ACTION_IDS.diff)).toBeUndefined();
   });
 
+  it('offers Go to Namespace in the navigation section only for Namespace objects', () => {
+    let opened = false;
+    const handlers = {
+      onOpen: () => undefined,
+      onGoToNamespace: () => {
+        opened = true;
+      },
+    };
+    const namespaceItems = buildObjectActionItems({
+      object: {
+        kind: 'Namespace',
+        group: '',
+        version: 'v1',
+        name: 'payments',
+        clusterId: 'cluster-a',
+      },
+      context: 'gridtable',
+      handlers,
+      permissions: {},
+    });
+    const goToItem = findAction(namespaceItems, OBJECT_ACTION_IDS.goToNamespace);
+    expect(goToItem).toMatchObject({ label: 'Go to Namespace' });
+    expect(namespaceItems.indexOf(goToItem as ContextMenuItem)).toBeLessThan(
+      namespaceItems.findIndex((item) => item.actionId === OBJECT_ACTION_IDS.diff)
+    );
+    goToItem?.onClick?.();
+    expect(opened).toBe(true);
+
+    const podItems = buildObjectActionItems({
+      object: {
+        kind: 'Pod',
+        group: '',
+        version: 'v1',
+        name: 'api-123',
+        namespace: 'payments',
+        clusterId: 'cluster-a',
+      },
+      context: 'gridtable',
+      handlers,
+      permissions: {},
+    });
+    expect(findAction(podItems, OBJECT_ACTION_IDS.goToNamespace)).toBeUndefined();
+  });
+
   it('places the pending-permission header after the navigation divider', () => {
     const items = buildObjectActionItems({
       object: {

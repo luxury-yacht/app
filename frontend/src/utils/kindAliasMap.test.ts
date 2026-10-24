@@ -1,42 +1,33 @@
 /**
  * frontend/src/utils/kindAliasMap.test.ts
  *
- * Test suite for kindAliasMap.
- * Covers key behaviors and edge cases for kindAliasMap.
+ * Command-palette kind tokens resolve to their canonical kind: short names,
+ * kinds, resource plurals, and kubectl short names, all from the kind facets.
  */
 
-import { beforeEach, describe, expect, it } from 'vitest';
-import {
-  resetAppPreferencesCacheForTesting,
-  setAppPreferencesForTesting,
-} from '@/core/settings/appPreferences';
-import { getDisplayKind, getTypeAlias } from './kindAliasMap';
+import { describe, expect, it } from 'vitest';
+import { aliasToKindMap, canonicalKinds } from './kindAliasMap';
 
-describe('kindAliasMap utility', () => {
-  beforeEach(() => {
-    resetAppPreferencesCacheForTesting();
+describe('aliasToKindMap', () => {
+  it.each([
+    ['deploy', 'Deployment'],
+    ['deployments', 'Deployment'],
+    ['deploys', 'Deployment'],
+    ['po', 'Pod'],
+    ['cj', 'CronJob'],
+    ['cron', 'CronJob'],
+    ['np', 'NetworkPolicy'],
+    ['networkpolicies', 'NetworkPolicy'],
+    ['gtw', 'Gateway'],
+    ['crds', 'CustomResourceDefinition'],
+    ['ingressclasses', 'IngressClass'],
+    ['helm', 'HelmRelease'],
+  ])('resolves %s to %s', (token, kind) => {
+    expect(aliasToKindMap.get(token)).toBe(kind);
   });
 
-  it('returns undefined alias when short names are disabled', () => {
-    setAppPreferencesForTesting({ useShortResourceNames: false });
-    expect(getTypeAlias('Pod')).toBeUndefined();
-  });
-
-  it('returns short alias when short names are enabled', () => {
-    setAppPreferencesForTesting({ useShortResourceNames: true });
-    expect(getTypeAlias('Deployment')).toBe('deploy');
-    expect(getTypeAlias('UnknownKind')).toBeUndefined();
-  });
-
-  it('uses display overrides when short names disabled', () => {
-    setAppPreferencesForTesting({ useShortResourceNames: false });
-    expect(getDisplayKind('MutatingWebhookConfiguration')).toBe('MutatingWebhook');
-    expect(getDisplayKind('CustomResourceDefinition')).toBe('CustomResourceDefinition');
-  });
-
-  it('prefers explicit useShortNames parameter over preference setting', () => {
-    setAppPreferencesForTesting({ useShortResourceNames: false });
-    expect(getDisplayKind('Service', true)).toBe('svc');
-    expect(getDisplayKind('UnknownKind', true)).toBe('UnknownKind');
+  it('lists each canonical kind once, lowercased', () => {
+    expect(canonicalKinds).toContain('deployment');
+    expect(new Set(canonicalKinds).size).toBe(canonicalKinds.length);
   });
 });

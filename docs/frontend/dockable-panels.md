@@ -31,12 +31,22 @@ Tab rendering and drag payloads: [tabs.md](tabs.md). Keyboard:
   targets keep exact User/Group names and no object reference. Both target
   types use the `obj:` panel ID prefix for layout preferences; identity IDs
   encode cluster, subject kind, and name.
+- Every object target is built by `buildObjectPanelRef`, which gives a
+  registered kind its registry spelling. Object panel IDs ignore the kind's
+  case, and the directory refuses a known panel ID whose object reference
+  differs (`internal/panelwindow/workspace.go`), so a ref built any other way
+  breaks reopening from a lowercase link.
 - One native window holds one same-cluster group; clusters never share a group.
 - Renderers project the shared directory and acknowledge changes through its
   owner.
+- The directory is the only writer of which renderer and group hold a panel.
+  Each renderer writes only the order, activation, edge, and view of the panels
+  in its groups. Directory-owned arrangement was rejected: it needs a
+  `DockablePanelProvider` rewrite and a directory round trip on every reorder.
 - Docked and native renderers share group chrome and object content. Native
-  snapshots hold serializable identity and view state only: no React nodes,
-  refs, fetched data, credentials, drafts, or terminal buffers.
+  descriptors and arrangement reports hold serializable identity and view state
+  only: no React nodes, refs, fetched data, credentials, drafts, or terminal
+  buffers.
 - Panel windows reuse workspace chrome: `WindowHeader` is the drag/maximize
   surface; `DockablePanelHeader` holds only tab and panel controls. Workspace
   status, favorites, and command palette never render there.
@@ -83,8 +93,12 @@ Tab rendering and drag payloads: [tabs.md](tabs.md). Keyboard:
 - Panel-header Dock, Float, Maximize/Restore, and Close act on the whole group.
   Changing dock edge appends the whole group to an occupied destination, keeping
   source order and active tab.
+- Only object panels can float. The workspace owner supplies `canFloatPanel`;
+  the header offers Float only when every tab can float, so a group holding an
+  app-wide panel (Application Logs, Diagnostics) stays docked.
 - A panel tab's context menu acts on that tab only, even when inactive: docked
-  tabs offer the other edge and Float, native tabs both edges, all Close.
+  tabs offer the other edge and, for an object panel, Float; native tabs both
+  edges; all Close.
   Docking a native tab resolves a same-cluster app view and waits for its
   readiness; a cancelled transfer must not deliver a queued insertion later.
 - A same-cluster link in a child may join that group after owner authorization.
@@ -117,29 +131,59 @@ Tab rendering and drag payloads: [tabs.md](tabs.md). Keyboard:
   preparation, authenticated callers, placement commits, and rollback under
   their existing locks; the lifecycle adds no mutex or backend dependency, and
   timeouts re-enter the adapter's failure path.
-- Live native snapshots are separate from pending group operations; the
-  registry binds each pending operation to its window regardless of published
-  content.
-- For Float, dock-back, and panel-tab and cluster-tab moves: check source guards
-  and flush the latest source snapshot before acceptance; keep the source
-  mounted until the target reconstructs; the backend directory commits only
-  after destination readiness.
-- Targets stay provisional until the registry commits and must not claim source
-  panels. Existing targets publish the exact tab before commit; new native
-  targets acknowledge readiness. Failure or timeout removes provisional copies
-  and keeps source placement. A native source closes once its last tab commits
-  elsewhere.
-- Directory reads started before a target stages or settles a transfer must not
-  remove its reconstructed panels: invalidate them per cluster and refetch.
-  After settlement, later authoritative moves still evict the old copy.
+- The native index stores no copy of a window's group. A native window's
+  descriptor reads the directory (the tabs placed in it, or while it opens, the
+  tabs moving in), and its reports only arrange, like an app view's. Each
+  pending open or dock has one native lifecycle record (state, opening source,
+  timeout) that releases its directory move; the move alone records where the
+  panels go, including the dock target.
+- For every move: check source guards, keep the source mounted until the target
+  reconstructs, and commit directory placement only after destination readiness.
+- Whole-group Float and dock-back, and single panel-tab moves (drag between
+  windows, tear-off, tab-menu Float/Dock), are directory-owned: the source sends
+  an intent or accepts a request (no snapshot flush first), and the directory
+  records a pending move on each panel without changing placement. It checks
+  panel identity, not the published view, and places a dropped tab at its drop
+  index. Publications cannot move, delete, or claim a moving panel, and they
+  never commit a move.
+- Each transfer ends in one terminal (`panelIndex.finishLocked`,
+  `removePanelTabTransferLocked`, `removeClusterTransferLocked`) that releases
+  its uncommitted directory move. A path that skipped it would leave the panels
+  moving, and a moving panel cannot be closed. While a panel moves, close
+  intents ignore it, `Open` cannot reclaim it from retention, and deleting it
+  removes it from the move.
+- App-view targets mount provisional copies of the moves their directory reads
+  list for them; a live native target receives the tab request itself. Each
+  target settles the move with `acknowledgePanelTransfer`: mounted commits,
+  otherwise the source keeps the panels. An app target drops a copy when a later
+  read shows the move cancelled or its source gone. Native side effects (show,
+  close) precede the commit, so failure cancels the pending move with no
+  rollback.
+- Cluster-tab moves are directory-owned too. The source flushes its outbound
+  queue (so queued close intents land first), then sends only its view state. The directory moves every docked panel of that cluster in
+  the source view into the same edges of the target, after their existing tabs,
+  and the insert event names those panels. The target's panel projection mounts
+  them like any move; the cluster handoff, not `acknowledgePanelTransfer`,
+  commits once the view is restored and those panels are mounted.
+- Failure or timeout removes provisional copies and keeps source placement. A
+  native source closes once its last tab commits elsewhere.
 - Dock-back moves the whole same-cluster group to right or bottom, keeping order
   and active views; appending to an occupied group keeps existing tabs.
 - Incoming transfers reject a renderer frozen by another transaction, even for
   a cluster with no panels; a transaction may finish its own reconstruction
   while frozen.
-- Close and transfer flushes retry the latest failed publication once and
-  reject if that fails. Retained-panel notifications coalesce while claims run;
-  successful claims mount even if a later claim fails.
+- Close and transfer flushes (including a move target's flush before it
+  acknowledges) retry every failed close intent and the latest failed
+  publication once, and reject if any still fails. A newer publication
+  supersedes a failed one; a close intent stays pending until a retry lands.
+  Before a renderer asks the directory to open an object, that object's queued
+  close intent lands first; while it cannot, the open fails. A reopen therefore
+  never finds the panel it just closed, and a late retry can never delete the
+  reopened one. Other objects' failed closes do not affect the open. Retained-panel notifications coalesce while claims run; successful
+  claims mount even if a later claim fails.
+- Known limits: until a failed close intent lands, other views still see the
+  panel. A dock-back whose directory move fails to begin can leave behind the
+  app window it created for the cluster.
 
 ## Refresh and runtime state
 
@@ -149,8 +193,8 @@ Tab rendering and drag payloads: [tabs.md](tabs.md). Keyboard:
   events, map, and logs; shells reconnect by backend session identity. Unsaved
   YAML, saves, and mutations block renderer disposal. Native geometry is
   process-local.
-- Each renderer serializes its own snapshots (native: live; app: docked groups)
-  and flushes before moving or closing. Native panels never publish through an
+- Each renderer reports its own arrangement (native: its group once live; app:
+  docked groups) and flushes before moving or closing. Native panels never publish through an
   originating app window. Directory revisions drive app-view reconciliation and
   retained-panel restoration.
 
@@ -168,19 +212,24 @@ Backend surfaces:
   rollback) and keep content visible; a compact corner status appears only after
   500 ms, never blanking the window, and settlement clears it and any pending
   delay.
+- Publications report only a renderer's arrangement (edge, order, activation,
+  view) of the panels the directory places in it; they never open, close, claim,
+  or move a panel. Closing a tab is an intent (`closePanelWorkspaceObject`)
+  announced by `ObjectPanelStateContext.closePanel`/`onCloseObjectPanel`, never
+  by `removeOwnedPanel`, and queued with that renderer's publications; the
+  directory ignores a close for a panel it has since placed elsewhere or is
+  moving.
 - Before the backend removes an app view's cluster membership, shared-panel sync
   pauses that cluster's directory reads and object opens, drains admitted calls,
-  and flushes queued publications. Docked publications replace the whole
-  snapshot, so new ones wait until accepted closures reach the frontend
-  selection; rejected closes resume sync. The close-preparation lease keeps
-  input guarded through the transition; duplicate or stale close requests must
-  not reach the backend again.
+  and flushes queued publications and close intents. A closing cluster drops out
+  of later publications; other clusters keep publishing. The close-preparation
+  lease keeps input guarded through the transition; duplicate or stale close
+  requests must not reach the backend again.
 
 Sequences:
 
 - Panel tab: guard, get registry authorization, remove a non-final tab locally,
-  publish the remaining snapshot. A final tab stays until its window close
-  commits.
+  send its close intent. A final tab stays until its window close commits.
 - Panel window: guard the group, close the window, then dispose local state,
   remove shared entries, and release its runtime reference.
 - Cluster tab: guard and flush local docked panels. If another app window shows
@@ -190,7 +239,11 @@ Sequences:
   timeout, or a pending transfer keeps the tab; approved renderers stay frozen
   until settlement.
 - App window: guard and flush local docked panels, keep their shared
-  identities, release the view. Floating panels stay open.
+  identities, release the view. Floating panels stay open. Closing cancels the
+  transfers it takes part in, and the view declines every directory move
+  addressed to it (a dock-back included), so each source keeps its panels at
+  once rather than at the move's timeout. The per-protocol cancellation stays
+  because a request its source has not accepted yet is not in the directory.
 - Quit: preflight every ready app and panel renderer; close none until all
   approve. Approved renderers stay frozen while peers decide and through
   shutdown. Unanimous approval requests application Quit instead of closing
@@ -220,10 +273,13 @@ Sequences:
 ## Validation
 
 - Trace complete object identity from the initiating link or action through the
-  directory and snapshot. Prove the source stays live until target
+  directory. Prove the source stays live until target
   acknowledgement and unchanged on failure or timeout, and that panel visibility
   controls only its scoped demand. Add reducer/protocol and visible component
-  tests.
+  tests. Prove transfer contracts on the real `WorkspaceDirectory` and
+  registry; seed panels with `Open` (`seedPanels`, `seedNativeGroup` in
+  `internal/appwindow/registry_test.go`), since publications cannot create
+  them.
 - Exercise clean, unsaved-YAML, saving, and mutation-in-flight guards across
   move, tab close, titlebar close, cluster close, app-window close, and quit;
   cover both docks, Float, dock-back, group order, active tabs, uniqueness,
@@ -234,7 +290,8 @@ Sequences:
   several tabs into new and existing windows; occupied and empty docks (preview
   matches final placement, clears after drop or cancel); cross-cluster
   rejection incl. empty docks; identity, active view, phantom animation,
-  empty-source closure; failed or cancelled transfers keep the source. Linux:
+  empty-source closure; failed or cancelled transfers keep the source; closing
+  a dock-back's target app window returns the native window at once. Linux:
   drag-out deferred; test reorder, moves between existing panels, Float,
   dock-back.
 - One cluster in two app windows: find/focus shared panels from either; closing

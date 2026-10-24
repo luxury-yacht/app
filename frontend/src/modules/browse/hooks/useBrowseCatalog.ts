@@ -9,6 +9,7 @@
 import { walkQueryCursorPages } from '@modules/resource-grid/cursorPageWalk';
 import {
   executeQueryPageRequest,
+  failureOfState,
   type QueryPageRequestResult,
 } from '@modules/resource-grid/queryPageRequest';
 import {
@@ -18,6 +19,12 @@ import {
   useQuerySearch,
 } from '@modules/resource-grid/useCursorPageSession';
 import {
+  QUERY_WARMUP_RETRY_MS,
+  type QueryReadPhase,
+  useLiveQueryRead,
+  useLiveScope,
+} from '@modules/resource-grid/useLiveQueryRead';
+import {
   TABLE_PAGE_SIZE_OPTIONS,
   type TablePageSize,
 } from '@shared/components/tables/pageSizeOptions';
@@ -25,19 +32,15 @@ import { useStableSelectedValue } from '@shared/hooks/useStableSelectedValue';
 import { errorHandler } from '@utils/errorHandler';
 import type { MutableRefObject } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  type DataRequestReason,
-  requestRefreshDomainState,
-  useRefreshDomainHandle,
-} from '@/core/data-access';
+import { type DataRequestReason, requestRefreshDomainState } from '@/core/data-access';
 import { useCatalogDiagnostics } from '@/core/refresh/diagnostics/useCatalogDiagnostics';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
-import { useQueryStreamSignal } from '@/core/refresh/hooks/useStreamSignalRefetch';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
+import { type RefreshFailure, refreshFailureOf } from '@/core/refresh/refreshFailure';
+import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
-import { useDefaultTablePageSize } from '@/hooks/useDefaultTablePageSize';
+import { usePreference } from '@/core/settings/usePreference';
 import {
-  acceptsCatalogSnapshotScope,
   applyCatalogBaseline,
   applyCatalogPage,
   type BrowseFilterOptions,
@@ -72,8 +75,37 @@ const getCatalogPagePayload = (result: QueryPageRequestResult): CatalogSnapshotP
   return (result.data.data as CatalogSnapshotPayload | null) ?? null;
 };
 
+// What a page read came back with: a failure, nothing yet (warm-up), a
+// catalog still rebuilding (no rows yet — it must not replace a previously
+// served page; a final empty result still applies), a rejected cursor, or a
+// page.
+type PageReadOutcome =
+  | { kind: 'failed'; failure: RefreshFailure }
+  | { kind: 'warmup' }
+  | { kind: 'rebuilding' }
+  | { kind: 'cursor-invalid' }
+  | { kind: 'page'; payload: CatalogSnapshotPayload };
+
+const classifyPageResult = (result: QueryPageRequestResult): PageReadOutcome => {
+  const failure = result.status === 'executed' ? failureOfState(result.data) : null;
+  if (failure) {
+    return { kind: 'failed', failure };
+  }
+  const payload = getCatalogPagePayload(result);
+  if (!payload) {
+    return { kind: 'warmup' };
+  }
+  if (!isRenderableCatalogPayload(payload)) {
+    return { kind: 'rebuilding' };
+  }
+  return payload.cursorInvalid ? { kind: 'cursor-invalid' } : { kind: 'page', payload };
+};
+
+// Page one of the current query, or a cursor page of it.
+type BrowsePageDirection = 'first' | CursorPageDirection;
+
 // A numbered jump adopts the backend's self cursor. Walking back to page one
-// resumes the subscribed base scope instead of retaining a cursor request.
+// reads the query's first page instead of retaining a cursor request.
 const currentCatalogPageToken = (
   direction: CursorPageDirection,
   pageIndex: number,
@@ -92,19 +124,6 @@ const shouldBlockPageRequest = (
   userRequestInFlight: boolean
 ): boolean => (quiet ? anyRequestInFlight : userRequestInFlight);
 
-const isApplicableCatalogSnapshot = (
-  data: unknown,
-  status: string,
-  scope: string | undefined,
-  catalogScope: string,
-  pinnedNamespaces: string[]
-): data is CatalogSnapshotPayload =>
-  Boolean(
-    data &&
-      (status === 'ready' || status === 'updating') &&
-      acceptsCatalogSnapshotScope(scope, catalogScope, pinnedNamespaces)
-  );
-
 const markCatalogLoaded = (
   payload: CatalogSnapshotPayload,
   hasLoadedOnceRef: MutableRefObject<boolean>,
@@ -118,12 +137,10 @@ const markCatalogLoaded = (
 
 const selectFilterOptionsPayload = (
   metadataUsesActiveScope: boolean,
-  activeData: unknown,
-  metadataData: unknown
-): CatalogSnapshotPayload | null => {
-  const payload = metadataUsesActiveScope ? activeData : (metadataData ?? activeData);
-  return (payload as CatalogSnapshotPayload | null) ?? null;
-};
+  activePayload: CatalogSnapshotPayload | null,
+  metadataPayload: CatalogSnapshotPayload | null
+): CatalogSnapshotPayload | null =>
+  metadataUsesActiveScope ? activePayload : (metadataPayload ?? activePayload);
 
 /**
  * Options for the useBrowseCatalog hook.
@@ -190,7 +207,7 @@ export interface UseBrowseCatalogResult {
   /** Whether the catalog has loaded at least once */
   hasLoadedOnce: boolean;
   /** Catalog failure: the scoped domain's error, or a failed page navigation. */
-  error: string | null;
+  error: RefreshFailure | null;
   /** The continue token for pagination (null if no more pages) */
   continueToken: string | null;
   /** The previous token for pagination (null on the first page) */
@@ -272,8 +289,14 @@ export function useBrowseCatalog({
   const [totalCount, setTotalCount] = useState(0);
   const [unfilteredTotal, setUnfilteredTotal] = useState(0);
   const [totalIsExact, setTotalIsExact] = useState(true);
-  // Page-navigation failures; the scoped domain carries baseline/stream errors.
-  const [pageError, setPageError] = useState<string | null>(null);
+  // The current query's last failed read.
+  const [queryError, setQueryError] = useState<RefreshFailure | null>(null);
+  // The last applied page, which carries its query's filter facets, with the
+  // structural scope it was read for.
+  const [activePage, setActivePage] = useState<{
+    scopeIdentity: string;
+    payload: CatalogSnapshotPayload;
+  } | null>(null);
   // Last derived filter options, held across transient no-payload gaps so the
   // filter dropdowns never blank mid-interaction (see the filterOptions memo).
   const lastFilterOptionsRef = useRef<{
@@ -283,12 +306,12 @@ export function useBrowseCatalog({
   // Controlled page size: normalize the owner-provided value; no local mirror.
   // Views without a persisted page size fall back to the app-wide Default Page
   // Size preference (Settings ▸ Display ▸ Tables).
-  const defaultTablePageSize = useDefaultTablePageSize();
+  const defaultTablePageSize = usePreference('defaultTablePageSize');
   const pageLimit = useMemo(
     () => normalizeInitialPageLimit(pageLimitProp ?? defaultTablePageSize, defaultTablePageSize),
     [defaultTablePageSize, pageLimitProp]
   );
-  const [debouncedSearch, setDebouncedSearch] = useQuerySearch(search);
+  const [debouncedSearch, setDebouncedSearch] = useQuerySearch(search, enabled);
   const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
 
   const itemsRef = useRef<CatalogItem[]>([]);
@@ -302,6 +325,14 @@ export function useBrowseCatalog({
   const pageRequestInFlightRef = useRef(false);
   const userPageRequestInFlightRef = useRef(false);
   const pageRequestSeqRef = useRef(0);
+  // A change signalled while a page read was in flight; the current page is
+  // read again once that read settles.
+  const signalDuringReadRef = useRef(false);
+  // The query whose first page has been requested, and that read's phase
+  // (useLiveQueryRead QueryReadPhase).
+  const requestedQueryRef = useRef<string | null>(null);
+  const queryPhaseRef = useRef<QueryReadPhase>('reading');
+  const warmupRetryRef = useRef<number | null>(null);
 
   const queryFilters = useMemo<BrowseFilters>(
     () => ({
@@ -358,6 +389,7 @@ export function useBrowseCatalog({
     setUnfilteredTotal(0);
     setTotalIsExact(true);
     setAvailableNamespaces([]);
+    setActivePage(null);
     setDebouncedSearch(search);
   }
   const activeSort = catalogSortScope(sort);
@@ -389,150 +421,169 @@ export function useBrowseCatalog({
     ]
   );
 
-  // Read scoped state for the current catalog scope.
-  const { state: domain, refresh: refreshCatalogScope } = useRefreshDomainHandle({
-    domain: enabled ? 'catalog' : null,
-    scope: catalogScope,
-    enabled,
-    demand: 'query',
-  });
-  const { state: metadataDomain, refresh: refreshMetadataScope } = useRefreshDomainHandle({
-    domain: enabled && !metadataUsesActiveScope ? 'catalog' : null,
-    scope: metadataUsesActiveScope ? null : metadataScope,
-    enabled,
-    demand: 'query',
-  });
-  useCatalogDiagnostics(domain, diagnosticLabel);
-
-  // Apply query scope and refresh page 0 when the query changes
-  const previousScopeIdentityRef = useRef(plan.scopeIdentityKey);
-  useEffect(() => {
-    if (!enabled) {
-      return;
-    }
-
-    const scopeIdentityChanged = previousScopeIdentityRef.current !== plan.scopeIdentityKey;
-    previousScopeIdentityRef.current = plan.scopeIdentityKey;
-
-    // Reset pagination state on query change.
-    setIsRequestingMore(false);
-    resetPage();
-    currentPageTokenRef.current = null;
-    setPageError(null);
-    // Preserve the current dataset while filter-only queries refresh so the
-    // filter bar/dropdowns stay mounted and open menus don't lose their scroll
-    // position. We still clear eagerly when the structural scope changes
-    // (cluster/namespace mode) or before the first load.
-    if (scopeIdentityChanged || !hasLoadedOnceRef.current) {
-      itemsRef.current = [];
-      setItems([]);
-    }
-    if (scopeIdentityChanged) {
-      hasLoadedOnceRef.current = false;
-      setHasLoadedOnce(false);
-      lastFilterOptionsRef.current = null;
-    }
-
-    void refreshCatalogScope('startup');
-    if (!metadataUsesActiveScope) {
-      void refreshMetadataScope('startup');
-    }
-  }, [
-    enabled,
-    metadataUsesActiveScope,
-    plan.scopeIdentityKey,
-    refreshCatalogScope,
-    refreshMetadataScope,
-    resetPage,
-  ]);
-
-  // Apply incoming snapshots to local pagination state
-  useEffect(() => {
-    if (
-      !isApplicableCatalogSnapshot(
-        domain.data,
-        domain.status,
-        domain.scope,
-        catalogScope,
-        pinnedNamespaces
-      )
-    ) {
-      return;
-    }
-
-    const payload = domain.data;
-    // A rebuild with no rows yet must not replace a previously served page.
-    // A final empty result still applies so deletions and empty filters show.
-    if (!isRenderableCatalogPayload(payload)) {
-      return;
-    }
-    const currentLength = itemsRef.current.length;
-    const next = applyCatalogBaseline(itemsRef.current, payload);
-    if (currentPageTokenRef.current) {
-      setTotalCount(next.totalCount);
-      setUnfilteredTotal(next.unfilteredTotal);
-      setTotalIsExact(next.totalIsExact);
-      setIsRequestingMore(false);
-      markCatalogLoaded(payload, hasLoadedOnceRef, setHasLoadedOnce);
-      return;
-    }
-
-    itemsRef.current = next.items;
-    if (next.changed || currentLength === 0) {
-      setItems(next.items);
-    }
-
-    publishPage({ continueToken: next.continueToken, previousToken: next.previousToken });
-    setTotalCount(next.totalCount);
-    setUnfilteredTotal(next.unfilteredTotal);
-    setTotalIsExact(next.totalIsExact);
-    setIsRequestingMore(false);
-
-    markCatalogLoaded(payload, hasLoadedOnceRef, setHasLoadedOnce);
-  }, [domain.data, domain.scope, domain.status, catalogScope, pinnedNamespaces, publishPage]);
-
   // Cursor-page handler. Fetches a cursor page using a paginated scope and
   // replaces the current row window. The refresh store remains scoped by the
   // request that produced the data; Browse keeps only the current page/window.
   const catalogScopeRef = useRef(catalogScope);
   catalogScopeRef.current = catalogScope;
+  // Reads the page the user is on: page one, or the current cursor page.
+  const reReadCurrentPageRef = useRef<(reason: DataRequestReason) => void>(() => undefined);
+
+  // Like typed tables, Browse leases the cluster's catalog base scope, whose
+  // stream signals changes, and reads every query page (page one included) as
+  // a one-shot read that never joins the stream.
+  const handleLiveSignal = useCallback(() => {
+    // Before the query's first read is requested, that read covers the
+    // change; once it is out, the change is read after it (requestPage
+    // latches a signal that arrives mid-read).
+    if (requestedQueryRef.current === catalogScopeRef.current) {
+      reReadCurrentPageRef.current('stream-signal');
+    }
+  }, []);
+  const live = useLiveScope({
+    domain: 'catalog',
+    scope: clusterId ? buildClusterRefreshScope('catalog', clusterId) : '',
+    enabled,
+    onSignal: handleLiveSignal,
+  });
+  useCatalogDiagnostics(live.state, diagnosticLabel);
+  const liveReady = live.ready;
+
+  const applyPage = useCallback(
+    (
+      payload: CatalogSnapshotPayload,
+      direction: BrowsePageDirection,
+      token: string | null,
+      scopeIdentity: string
+    ) => {
+      const next = applyCatalogBaseline(itemsRef.current, payload);
+      itemsRef.current = next.items;
+      setQueryError(null);
+      setActivePage({ scopeIdentity, payload });
+      setItems(next.items);
+      setTotalCount(next.totalCount);
+      setUnfilteredTotal(next.unfilteredTotal);
+      setTotalIsExact(next.totalIsExact);
+      const tokens = { continueToken: next.continueToken, previousToken: next.previousToken };
+      if (direction === 'first') {
+        publishPage(tokens);
+        currentPageTokenRef.current = null;
+      } else {
+        const landedPage = publishPage(tokens, {
+          direction,
+          pageSize: pageLimit,
+          startRank: direction === 'jump' ? payload.pageStartRank : undefined,
+        });
+        currentPageTokenRef.current = currentCatalogPageToken(
+          direction,
+          landedPage,
+          token,
+          payload.self
+        );
+      }
+      markCatalogLoaded(payload, hasLoadedOnceRef, setHasLoadedOnce);
+    },
+    [pageLimit, publishPage]
+  );
+
+  const applyPageResult = useCallback(
+    (
+      result: QueryPageRequestResult,
+      direction: BrowsePageDirection,
+      token: string | null,
+      scopeIdentity: string,
+      readFirstPage: () => void
+    ): 'landed' | 'warmup' => {
+      const outcome = classifyPageResult(result);
+      switch (outcome.kind) {
+        case 'failed':
+          // The refresh layer already reported it; the current page stays
+          // and Browse shows the failure.
+          setQueryError(outcome.failure);
+          return 'landed';
+        case 'warmup':
+          return 'warmup';
+        case 'rebuilding':
+          return 'landed';
+        case 'cursor-invalid':
+          itemsRef.current = [];
+          setItems([]);
+          resetPage();
+          currentPageTokenRef.current = null;
+          readFirstPage();
+          return 'landed';
+        case 'page':
+          applyPage(outcome.payload, direction, token, scopeIdentity);
+          return 'landed';
+      }
+    },
+    [applyPage, resetPage]
+  );
+
+  // A first page that came back empty (the cluster is not serviceable yet, or
+  // reads are paused) is read again by the next signal or after a pause.
+  const warmUp = useCallback(() => {
+    if (queryPhaseRef.current === 'landed') {
+      return;
+    }
+    queryPhaseRef.current = 'warmup';
+    warmupRetryRef.current ??= window.setTimeout(() => {
+      warmupRetryRef.current = null;
+      if (queryPhaseRef.current === 'warmup') {
+        reReadCurrentPageRef.current('user');
+      }
+    }, QUERY_WARMUP_RETRY_MS);
+  }, []);
+  useEffect(
+    () => () => {
+      if (warmupRetryRef.current !== null) {
+        window.clearTimeout(warmupRetryRef.current);
+        warmupRetryRef.current = null;
+      }
+    },
+    []
+  );
 
   const requestPage = useCallback(
     (
       // A page address: a keyset token (next/previous/current) or a 0-based
       // startRank (numbered 'jump' — served by the bounded offset contract).
+      // Page one ('first') needs neither.
       address: { token?: string | null; startRank?: number },
-      direction: 'next' | 'previous' | 'current' | 'jump',
+      direction: BrowsePageDirection,
       reason: DataRequestReason = 'user'
     ) => {
       const token = address.token ?? null;
       const hasStartRank = typeof address.startRank === 'number';
-      if (!token && !hasStartRank) {
+      if (direction !== 'first' && !token && !hasStartRank) {
         return;
       }
-      // Doorbell-driven current-page refetches are QUIET: they must not flip
-      // the user-facing busy flag (which disables prev/next and spins the
-      // footer) — on a churning cluster doorbells ring continuously, and a
-      // busy window per ring means a permanently dead footer. Quiet requests
-      // coalesce (skip while ANY page request is in flight); user requests
-      // wait only on other USER requests and SUPERSEDE an in-flight quiet
-      // refetch via the sequence guard below.
+      // Doorbell-driven re-reads are QUIET: they must not flip the user-facing
+      // busy flag (which disables prev/next and spins the footer) — on a
+      // churning cluster doorbells ring continuously, and a busy window per
+      // ring means a permanently dead footer. A quiet read waits behind any
+      // read in flight and runs once it settles; navigation waits only on
+      // other navigation; a new query's first page supersedes every read in
+      // flight. The sequence guard drops superseded responses.
       const quiet = reason === 'stream-signal';
+      const supersedes = direction === 'first' && !quiet;
       if (
+        !supersedes &&
         shouldBlockPageRequest(
           quiet,
           pageRequestInFlightRef.current,
           userPageRequestInFlightRef.current
         )
       ) {
+        signalDuringReadRef.current ||= quiet;
         return;
       }
       const seq = ++pageRequestSeqRef.current;
       pageRequestInFlightRef.current = true;
-      if (!quiet) {
-        userPageRequestInFlightRef.current = true;
-        setIsRequestingMore(true);
-      }
+      userPageRequestInFlightRef.current = !quiet;
+      // Navigation shows the footer busy; a new query stays quiet (filtering
+      // never dims or spins the view).
+      setIsRequestingMore(!quiet && direction !== 'first');
 
       const normalizedScope = buildBrowseCatalogPageScope(
         plan,
@@ -547,71 +598,50 @@ export function useBrowseCatalog({
         token ?? '',
         address.startRank
       );
-      const baseScopeAtRequest = catalogScopeRef.current;
+      const queryAtRequest = catalogScopeRef.current;
       void executeQueryPageRequest(
         { domain: 'catalog', scope: normalizedScope, reason },
         {
           isCurrent: () =>
-            pageRequestSeqRef.current === seq && catalogScopeRef.current === baseScopeAtRequest,
-          acceptsError: () => catalogScopeRef.current === baseScopeAtRequest,
+            pageRequestSeqRef.current === seq && catalogScopeRef.current === queryAtRequest,
+          acceptsError: () => catalogScopeRef.current === queryAtRequest,
           onResult: (result) => {
-            const payload = getCatalogPagePayload(result);
-            if (!payload) {
-              return;
-            }
-            if (payload.cursorInvalid) {
-              itemsRef.current = [];
-              setItems([]);
-              resetPage();
-              currentPageTokenRef.current = null;
-              void refreshCatalogScope('user');
-              return;
-            }
-            const next = applyCatalogPage(payload);
-            itemsRef.current = next.items;
-            setPageError(null);
-            setItems(next.items);
-            setTotalCount(next.totalCount);
-            setUnfilteredTotal(next.unfilteredTotal);
-            setTotalIsExact(next.totalIsExact);
-            const landedPage = publishPage(
-              { continueToken: next.continueToken, previousToken: next.previousToken },
-              {
-                direction,
-                pageSize: pageLimit,
-                startRank: direction === 'jump' ? payload.pageStartRank : undefined,
-              }
+            const outcome = applyPageResult(result, direction, token, plan.scopeIdentityKey, () =>
+              reReadCurrentPageRef.current('user')
             );
-            currentPageTokenRef.current = currentCatalogPageToken(
-              direction,
-              landedPage,
-              token,
-              payload.self
-            );
-            markCatalogLoaded(payload, hasLoadedOnceRef, setHasLoadedOnce);
+            if (outcome === 'landed') {
+              queryPhaseRef.current = 'landed';
+            } else {
+              warmUp();
+            }
           },
           onError: (error) => {
-            const details = errorHandler.handleInline(error, {
+            queryPhaseRef.current = 'landed';
+            errorHandler.handleInline(error, {
               action: 'loadBrowseCatalogPage',
               source: 'useBrowseCatalog',
               clusterId,
             });
-            setPageError(details.message);
+            setQueryError(refreshFailureOf(error));
           },
           onSettled: () => {
             // A superseded request must not clear its successor's gates.
-            if (pageRequestSeqRef.current === seq) {
-              pageRequestInFlightRef.current = false;
-              if (!quiet) {
-                userPageRequestInFlightRef.current = false;
-                setIsRequestingMore(false);
-              }
+            if (pageRequestSeqRef.current !== seq) {
+              return;
+            }
+            pageRequestInFlightRef.current = false;
+            userPageRequestInFlightRef.current = false;
+            setIsRequestingMore(false);
+            if (signalDuringReadRef.current) {
+              signalDuringReadRef.current = false;
+              reReadCurrentPageRef.current('stream-signal');
             }
           },
         }
       );
     },
     [
+      applyPageResult,
       pageLimit,
       queryFilters,
       sort,
@@ -619,31 +649,67 @@ export function useBrowseCatalog({
       pinnedNamespaces,
       clusterId,
       customOnly,
-      refreshCatalogScope,
-      resetPage,
-      publishPage,
+      warmUp,
     ]
   );
 
-  useQueryStreamSignal(
-    'catalog',
-    domain,
-    () => {
-      if (!hasLoadedOnceRef.current) {
-        return;
-      }
+  const reReadCurrentPage = useCallback(
+    (reason: DataRequestReason) => {
       const currentPageToken = currentPageTokenRef.current;
       if (currentPageToken) {
-        requestPage({ token: currentPageToken }, 'current', 'stream-signal');
+        requestPage({ token: currentPageToken }, 'current', reason);
       } else {
-        void refreshCatalogScope('stream-signal');
-      }
-      if (!metadataUsesActiveScope) {
-        void refreshMetadataScope('stream-signal');
+        requestPage({}, 'first', reason);
       }
     },
-    enabled
+    [requestPage]
   );
+  reReadCurrentPageRef.current = reReadCurrentPage;
+
+  const metadata = useLiveQueryRead({
+    domain: 'catalog',
+    scope: metadataUsesActiveScope ? '' : metadataScope,
+    enabled: liveReady && !metadataUsesActiveScope,
+    liveDataVersion: live.liveDataVersion,
+    label: diagnosticLabel,
+  });
+
+  // Read page one of each new query once the live scope is ready.
+  const previousScopeIdentityRef = useRef(plan.scopeIdentityKey);
+  useEffect(() => {
+    if (!enabled) {
+      requestedQueryRef.current = null;
+      return;
+    }
+    if (!liveReady || requestedQueryRef.current === catalogScope) {
+      return;
+    }
+    requestedQueryRef.current = catalogScope;
+    queryPhaseRef.current = 'reading';
+
+    const scopeIdentityChanged = previousScopeIdentityRef.current !== plan.scopeIdentityKey;
+    previousScopeIdentityRef.current = plan.scopeIdentityKey;
+
+    // Reset pagination state on query change.
+    resetPage();
+    currentPageTokenRef.current = null;
+    setQueryError(null);
+    // Preserve the current dataset while filter-only queries refresh so the
+    // filter bar/dropdowns stay mounted and open menus don't lose their scroll
+    // position. We still clear eagerly when the structural scope changes
+    // (cluster/namespace mode) or before the first load.
+    if (scopeIdentityChanged || !hasLoadedOnceRef.current) {
+      itemsRef.current = [];
+      setItems([]);
+    }
+    if (scopeIdentityChanged) {
+      hasLoadedOnceRef.current = false;
+      setHasLoadedOnce(false);
+      lastFilterOptionsRef.current = null;
+    }
+
+    reReadCurrentPageRef.current('user');
+  }, [catalogScope, enabled, liveReady, plan.scopeIdentityKey, resetPage]);
 
   const handleLoadMore = useCallback(() => {
     requestPage({ token: continueToken }, 'next');
@@ -667,13 +733,8 @@ export function useBrowseCatalog({
   );
 
   const refreshCurrentQuery = useCallback(() => {
-    const currentPageToken = currentPageTokenRef.current;
-    if (currentPageToken) {
-      requestPage({ token: currentPageToken }, 'current');
-      return;
-    }
-    void refreshCatalogScope('user');
-  }, [refreshCatalogScope, requestPage]);
+    reReadCurrentPage('user');
+  }, [reReadCurrentPage]);
 
   // Filter items by scope (cluster-scoped vs namespace-scoped)
   // Note: Cluster isolation is handled by the backend via the scope prefix (e.g., 'cluster-1|...'),
@@ -691,8 +752,8 @@ export function useBrowseCatalog({
   // effect) so cluster/namespace switches never leak stale options.
   const filterOptionsPayload = selectFilterOptionsPayload(
     metadataUsesActiveScope,
-    domain.data,
-    metadataDomain.data
+    activePage?.scopeIdentity === plan.scopeIdentityKey ? activePage.payload : null,
+    metadata.payload
   );
   const filterOptionsResolved = Boolean(filterOptionsPayload);
   const filterOptions = useMemo<BrowseFilterOptions>(() => {
@@ -732,9 +793,7 @@ export function useBrowseCatalog({
   // or background — stay visually silent: the table keeps the current rows (or
   // the settled "no matches" state) until the new result lands, so filtering
   // never dims the view, swaps in a spinner, or unmounts the filter input.
-  const loading =
-    !hasLoadedOnce &&
-    (domain.status === 'loading' || domain.status === 'initialising' || items.length === 0);
+  const loading = !hasLoadedOnce && !queryError;
   const passiveLoadingState = applyPassiveLoadingPolicy({
     loading,
     hasLoaded: hasLoadedOnce,
@@ -842,7 +901,7 @@ export function useBrowseCatalog({
     fetchAllRows,
     loading: passiveLoadingState.loading,
     hasLoadedOnce,
-    error: domain.error ?? pageError ?? null,
+    error: queryError,
     continueToken,
     previousToken,
     isRequestingMore,

@@ -11,7 +11,7 @@ operations, permissions, and object actions for one cluster never affect another
   after data crosses a boundary. Missing, ambiguous, or stale cluster identity is
   an error, never a fallback to the current cluster.
 - Open inactive tabs are retained workspaces, not disposed views. Activation and
-  background refresh follow [data freshness](data-freshness.md); selection adds
+  inactive-tab demand follow [data freshness](data-freshness.md); selection adds
   no readiness delay and never turns inactive tabs into producer demand.
 - Refresh domains are single-cluster; cross-cluster views fan out over
   per-cluster state, never aggregate scopes.
@@ -19,6 +19,11 @@ operations, permissions, and object actions for one cluster never affect another
   selection transition (`openKubeconfig`, `closeKubeconfig`,
   `setSelectedKubeconfigs`). UI never splices selected clusters locally or calls
   generated backend selection/close commands.
+- A window sends its `ApplyClusterWorkspace` commands one at a time through
+  `KubeconfigContext`'s selection and visibility queues. Each command is its own
+  request with no sequence number, and the backend applies a window's commands
+  in arrival order, so the queues are what keep the last tab change last. Do
+  not remove them as duplicates of the backend's serialization.
 - Add/remove updates aggregate refresh handlers and object-catalog services via
   the live update path, not only initial setup. Removal cleans refresh
   subsystems, catalog state, runtime operations, stream subscriptions, and
@@ -34,8 +39,10 @@ operations, permissions, and object actions for one cluster never affect another
 `clusterId` is stable app identity for a selected kubeconfig context; the same
 context name in two kubeconfig files can be two clusters. Refresh scopes are
 cluster-prefixed (`clusterId|`, `clusterId|namespace:default`,
-`clusterId|<domain-specific-scope>`). Unsupported multi-cluster scope strings
-are parsed only to return validation errors; frontend code never produces them.
+`clusterId|<domain-specific-scope>`), built and decoded only by the scope
+codec ([refresh-system.md](refresh-system.md#scope-and-identity)). The prefix
+is one opaque `clusterId` (`<kubeconfig file>:<context>`, which may contain
+commas), never a list; unprefixed scope strings are rejected.
 
 ## Ownership
 

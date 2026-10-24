@@ -1,65 +1,23 @@
 /**
  * frontend/src/shared/components/tables/hooks/useGridTableHeaderContextMenu.test.tsx
  *
- * Integration tests for the header context menu items builder.
- * Renders a full GridTable with four column types, then right-clicks each
- * header to verify the menu items match the column's capabilities:
- *   - sortable + hideable
- *   - sortable + locked (non-hideable)
- *   - non-sortable + locked (neither sortable nor hideable)
- *   - non-sortable + hideable
+ * A column header's context menu offers what the column allows: sorting for a
+ * sortable column (with the current direction and Clear Sort disabled where
+ * they would do nothing), Hide Column for a hideable one, and a single disabled
+ * item for a column that allows neither. Its choices reach the table's sort and
+ * column visibility. Runs the real GridTable inside the production shell
+ * (keyboard and zoom owners) with only the backend boundary faked
+ * (test-utils/appState).
  */
 
-import { ZoomProvider } from '@core/contexts/ZoomContext';
-import GridTable, { type GridColumnDefinition } from '@shared/components/tables/GridTable';
-import { KeyboardProvider } from '@ui/shortcuts';
+import GridTable, {
+  type GridColumnDefinition,
+  type GridTableProps,
+} from '@shared/components/tables/GridTable';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { installAppStateHarness, type MountedApp } from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
-
-// ---------------------------------------------------------------------------
-// Mocks required by ContextMenu / GridTable internals
-// ---------------------------------------------------------------------------
-
-const runtimeMocks = vi.hoisted(() => ({
-  eventsOn: vi.fn(() => () => undefined),
-}));
-
-vi.mock('@core/desktop-runtime', () => ({
-  desktopRuntimeAvailable: () => false,
-  onEvent: runtimeMocks.eventsOn,
-}));
-
-vi.mock('@core/backend-api', () => ({
-  GetZoomLevel: vi.fn().mockResolvedValue(100),
-  SetZoomLevel: vi.fn().mockResolvedValue(undefined),
-}));
-
-// Mock useKeyboardContext to return no-op functions.
-// This avoids shortcut registration overhead that causes act() to hang in jsdom.
-vi.mock('@ui/shortcuts', async (importOriginal) => {
-  const original = await importOriginal<typeof import('@ui/shortcuts')>();
-  return {
-    ...original,
-    useKeyboardContext: () => ({
-      registerShortcut: () => 'mock-id',
-      unregisterShortcut: () => undefined,
-      getAvailableShortcuts: () => [],
-      isShortcutAvailable: () => false,
-      setEnabled: () => undefined,
-      isEnabled: true,
-      registerSurface: () => 'mock-surface-id',
-      unregisterSurface: () => undefined,
-      dispatchNativeAction: () => false,
-      hasActiveBlockingSurface: () => false,
-    }),
-  };
-});
-
-// ---------------------------------------------------------------------------
-// Row & column definitions
-// ---------------------------------------------------------------------------
 
 interface TestRow {
   id: string;
@@ -74,11 +32,11 @@ const testRows: TestRow[] = [
   { id: 'r2', status: 'Pending', name: 'pod-b', kind: 'Pod', namespace: 'kube-system' },
 ];
 
-// Four columns covering all capability combinations:
-//   status    - implicitly sortable + hideable (not in locked set)
-//   name      - sortable + locked   (explicitly non-hideable)
-//   kind      - non-sortable + locked (neither sortable nor hideable)
-//   namespace - non-sortable + hideable
+// Every capability combination:
+//   status    - sortable and hideable (the defaults)
+//   name      - sortable, always shown
+//   kind      - neither sortable nor hideable
+//   namespace - hideable, not sortable
 const testColumns: GridColumnDefinition<TestRow>[] = [
   { key: 'status', header: 'Status', render: (row) => row.status },
   { key: 'name', header: 'Name', sortable: true, hideable: false, render: (row) => row.name },
@@ -86,345 +44,134 @@ const testColumns: GridColumnDefinition<TestRow>[] = [
   { key: 'namespace', header: 'Namespace', sortable: false, render: (row) => row.namespace },
 ];
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+const app = installAppStateHarness();
+let view: MountedApp;
 
-/** Flush React's async scheduler. */
-const flushAsync = async () => {
-  await act(async () => {
-    await Promise.resolve();
-  });
-};
+beforeEach(async () => {
+  view = await app.render(null);
+});
 
-/** Close the open context menu by dispatching Escape on the menu element. */
-const closeMenu = async () => {
-  const menu = document.body.querySelector<HTMLDivElement>('.context-menu');
-  if (menu) {
-    await act(async () => {
-      menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-      await Promise.resolve();
-    });
-    await flushAsync();
-  }
-};
-
-/** Right-click a column header and flush React updates. */
-const rightClickHeader = async (container: HTMLElement, columnKey: string) => {
-  const header = container.querySelector<HTMLDivElement>(
-    `.grid-cell-header[data-column="${columnKey}"]`
+const showTable = (props: Partial<GridTableProps<TestRow>> = {}) =>
+  view.show(
+    <GridTable<TestRow>
+      data={testRows}
+      columns={testColumns}
+      keyExtractor={(item) => `cluster-a|${item.id}`}
+      virtualization={{ enabled: false }}
+      enableContextMenu
+      enableColumnVisibilityMenu
+      onSort={vi.fn()}
+      {...props}
+    />
   );
-  if (!header) {
-    throw new Error(`Header for column "${columnKey}" not found`);
-  }
+
+const openHeaderMenu = async (columnKey: string) => {
+  const header = requireValue(
+    view.container.querySelector<HTMLElement>(`th[data-column="${columnKey}"]`),
+    `header ${columnKey}`
+  );
   await act(async () => {
     header.dispatchEvent(
       new MouseEvent('contextmenu', { bubbles: true, clientX: 50, clientY: 50 })
     );
-    await Promise.resolve();
   });
-  await flushAsync();
+  await app.settle();
 };
 
-/** Return the currently-rendered context menu items from the portal. */
-const getMenuItems = () =>
-  Array.from(document.body.querySelectorAll<HTMLDivElement>('[role="menuitem"]'));
-
-/** Extract the label text of a menu item (from the .context-menu-label span). */
-const getItemLabel = (el: HTMLElement): string =>
-  el.querySelector('.context-menu-label')?.textContent?.trim() ?? '';
-
-/** Extract all menu item labels. */
-const getMenuLabels = () => getMenuItems().map(getItemLabel);
-
-/** Return the currently-rendered dividers from the portal. */
-const getMenuDividers = () =>
-  Array.from(document.body.querySelectorAll<HTMLDivElement>('.context-menu-divider'));
-
-// ---------------------------------------------------------------------------
-// Render helper
-// ---------------------------------------------------------------------------
-
-interface RenderOptions {
-  onSort?: (key: string, targetDirection?: 'asc' | 'desc' | null) => void;
-  sortConfig?: { key: string; direction: 'asc' | 'desc' | null };
-  onColumnVisibilityChange?: (visibility: Record<string, boolean>) => void;
-}
-
-function renderGridTable(options: RenderOptions = {}) {
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = ReactDOM.createRoot(container);
-
-  const props = {
-    data: testRows,
-    columns: testColumns,
-    keyExtractor: (item: TestRow) => `cluster-a|${item.id}`,
-    virtualization: { enabled: false } as const,
-    enableContextMenu: true,
-    enableColumnVisibilityMenu: true,
-    onSort: options.onSort ?? vi.fn(),
-    sortConfig: options.sortConfig,
-    onColumnVisibilityChange: options.onColumnVisibilityChange,
-    // Column capabilities are declared directly on testColumns.
-  };
-
-  act(() => {
-    root.render(
-      <ZoomProvider>
-        <KeyboardProvider>
-          <GridTable<TestRow> {...props} />
-        </KeyboardProvider>
-      </ZoomProvider>
-    );
+const closeMenu = async () => {
+  const menu = requireValue(document.body.querySelector<HTMLElement>('[role="menu"]'), 'menu');
+  await act(async () => {
+    menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   });
-
-  const rerender = (nextOptions: RenderOptions) => {
-    const nextProps = {
-      ...props,
-      onSort: nextOptions.onSort ?? props.onSort,
-      sortConfig: nextOptions.sortConfig ?? props.sortConfig,
-      onColumnVisibilityChange:
-        nextOptions.onColumnVisibilityChange ?? props.onColumnVisibilityChange,
-    };
-    act(() => {
-      root.render(
-        <ZoomProvider>
-          <KeyboardProvider>
-            <GridTable<TestRow> {...nextProps} />
-          </KeyboardProvider>
-        </ZoomProvider>
-      );
-    });
-  };
-
-  const cleanup = () => {
-    act(() => root.unmount());
-    container.remove();
-  };
-
-  return { container, rerender, cleanup };
-}
-
-// ---------------------------------------------------------------------------
-// Test cleanup helper - removes all child nodes from body safely
-// ---------------------------------------------------------------------------
-const cleanBody = () => {
-  while (document.body.firstChild) {
-    document.body.removeChild(document.body.firstChild);
-  }
+  await app.settle();
 };
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
+const menuItems = () =>
+  Array.from(document.body.querySelectorAll<HTMLElement>('[role="menu"] .context-menu-item'));
+const labelOf = (item: HTMLElement) =>
+  item.querySelector('.context-menu-label')?.textContent?.trim() ?? '';
+/** Each item as the user meets it: its label, and whether it can be chosen. */
+const shownItems = () =>
+  menuItems().map((item) => ({
+    label: labelOf(item),
+    enabled: item.getAttribute('aria-disabled') !== 'true',
+  }));
+const choose = async (label: string) => {
+  const item = requireValue(
+    menuItems().find((candidate) => labelOf(candidate) === label),
+    `menu item ${label}`
+  );
+  await act(async () => {
+    item.click();
+  });
+  await app.settle();
+};
 
-describe('header context menu integration', () => {
-  beforeEach(() => {
-    vi.useRealTimers();
+describe('GridTable header context menu', () => {
+  it.each([
+    {
+      column: 'status',
+      items: ['Sort Ascending', 'Sort Descending', 'Clear Sort', 'Hide Column'],
+    },
+    { column: 'name', items: ['Sort Ascending', 'Sort Descending', 'Clear Sort'] },
+    { column: 'namespace', items: ['Hide Column'] },
+  ])('offers the actions the $column column allows', async ({ column, items }) => {
+    await showTable();
+
+    await openHeaderMenu(column);
+
+    expect(shownItems().map(({ label }) => label)).toEqual(items);
   });
 
-  afterEach(async () => {
-    // Clean up any remaining React work and portal remnants.
-    await act(async () => {
-      await Promise.resolve();
-    });
-    cleanBody();
-    runtimeMocks.eventsOn.mockReset().mockReturnValue(() => undefined);
-  });
-
-  // 1. Sortable + hideable column (status)
-  it('shows sort items, divider, and Hide Column for a sortable+hideable column', async () => {
-    const { container, cleanup } = renderGridTable();
-    await flushAsync();
-
-    await rightClickHeader(container, 'status');
-
-    const dividers = getMenuDividers();
-    const labels = getMenuLabels();
-
-    // Should have: Sort Ascending, Sort Descending, Clear Sort, Hide Column
-    expect(labels).toContain('Sort Ascending');
-    expect(labels).toContain('Sort Descending');
-    expect(labels).toContain('Clear Sort');
-    expect(labels).toContain('Hide Column');
-
-    // There should be a divider between sort items and Hide Column
-    expect(dividers.length).toBeGreaterThanOrEqual(1);
-
-    await closeMenu();
-    cleanup();
-  });
-
-  // 2. Locked sortable column (name) - sort items but no Hide Column
-  it('shows sort items but NOT Hide Column for a locked sortable column', async () => {
-    const { container, cleanup } = renderGridTable();
-    await flushAsync();
-
-    await rightClickHeader(container, 'name');
-
-    const labels = getMenuLabels();
-
-    expect(labels).toContain('Sort Ascending');
-    expect(labels).toContain('Sort Descending');
-    expect(labels).toContain('Clear Sort');
-    expect(labels).not.toContain('Hide Column');
-
-    await closeMenu();
-    cleanup();
-  });
-
-  // 3. Locked non-sortable column (kind) - single disabled "No Actions"
-  it('shows a single disabled "No Actions" item for a locked non-sortable column', async () => {
-    const { container, cleanup } = renderGridTable();
-    await flushAsync();
-
-    await rightClickHeader(container, 'kind');
-
-    const items = getMenuItems();
-    expect(items).toHaveLength(1);
-    expect(getItemLabel(items[0])).toBe('No Actions');
-    expect(items[0].classList.contains('disabled')).toBe(true);
-
-    await closeMenu();
-    cleanup();
-  });
-
-  // 4. Non-sortable hideable column (namespace) - only Hide Column
-  it('shows only Hide Column for a non-sortable hideable column', async () => {
-    const { container, cleanup } = renderGridTable();
-    await flushAsync();
-
-    await rightClickHeader(container, 'namespace');
-
-    const labels = getMenuLabels();
-
-    expect(labels).toEqual(['Hide Column']);
-    // No sort items present
-    expect(labels).not.toContain('Sort Ascending');
-    expect(labels).not.toContain('Sort Descending');
-    expect(labels).not.toContain('Clear Sort');
-
-    await closeMenu();
-    cleanup();
-  });
-
-  // 5. Disabled states based on current sort
-  it('disables Sort Ascending when already sorted asc, and Clear Sort when not sorted', async () => {
-    // Render with status sorted ascending
-    const { container, cleanup } = renderGridTable({
-      sortConfig: { key: 'status', direction: 'asc' },
-    });
-    await flushAsync();
-
-    await rightClickHeader(container, 'status');
-
-    const items = getMenuItems();
-    const sortAsc = items.find((el) => getItemLabel(el) === 'Sort Ascending');
-    const sortDesc = items.find((el) => getItemLabel(el) === 'Sort Descending');
-    const clearSort = items.find((el) => getItemLabel(el) === 'Clear Sort');
-
-    // Sort Ascending should be disabled since we are already sorted asc
-    expect(sortAsc).toBeDefined();
-    expect(
-      requireValue(
-        sortAsc,
-        'expected test value in useGridTableHeaderContextMenu.test.tsx'
-      ).classList.contains('disabled')
-    ).toBe(true);
-
-    // Sort Descending should be enabled
-    expect(sortDesc).toBeDefined();
-    expect(
-      requireValue(
-        sortDesc,
-        'expected test value in useGridTableHeaderContextMenu.test.tsx'
-      ).classList.contains('disabled')
-    ).toBe(false);
-
-    // Clear Sort should be enabled since column IS sorted
-    expect(clearSort).toBeDefined();
-    expect(
-      requireValue(
-        clearSort,
-        'expected test value in useGridTableHeaderContextMenu.test.tsx'
-      ).classList.contains('disabled')
-    ).toBe(false);
-
-    await closeMenu();
-
-    // Now check a column that is NOT currently sorted (name)
-    await rightClickHeader(container, 'name');
-
-    const nameItems = getMenuItems();
-    const nameClearSort = nameItems.find((el) => getItemLabel(el) === 'Clear Sort');
-
-    // Clear Sort should be disabled since name is not the sorted column
-    expect(nameClearSort).toBeDefined();
-    expect(
-      requireValue(
-        nameClearSort,
-        'expected test value in useGridTableHeaderContextMenu.test.tsx'
-      ).classList.contains('disabled')
-    ).toBe(true);
-
-    await closeMenu();
-    cleanup();
-  });
-
-  // 6. Click handlers fire correctly
-  it('calls onSort with correct args when Sort Ascending is clicked', async () => {
-    const onSort = vi.fn();
-    const { container, cleanup } = renderGridTable({ onSort });
-    await flushAsync();
-
-    await rightClickHeader(container, 'status');
-
-    const items = getMenuItems();
-    const sortAsc = items.find((el) => getItemLabel(el) === 'Sort Ascending');
-    expect(sortAsc).toBeDefined();
-
-    await act(async () => {
-      requireValue(
-        sortAsc,
-        'expected test value in useGridTableHeaderContextMenu.test.tsx'
-      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    expect(onSort).toHaveBeenCalledWith('status', 'asc');
-
-    await closeMenu();
-    cleanup();
-  });
-
-  it('calls onColumnVisibilityChange when Hide Column is clicked', async () => {
+  it('shows one disabled item for a column that can be neither sorted nor hidden', async () => {
     const onColumnVisibilityChange = vi.fn();
-    const { container, cleanup } = renderGridTable({ onColumnVisibilityChange });
-    await flushAsync();
+    await showTable({ onColumnVisibilityChange });
 
-    await rightClickHeader(container, 'status');
+    await openHeaderMenu('kind');
+    expect(shownItems()).toEqual([{ label: 'No Actions', enabled: false }]);
+    await choose('No Actions');
 
-    const items = getMenuItems();
-    const hideColumn = items.find((el) => getItemLabel(el) === 'Hide Column');
-    expect(hideColumn).toBeDefined();
+    expect(onColumnVisibilityChange).not.toHaveBeenCalled();
+  });
 
-    await act(async () => {
-      requireValue(
-        hideColumn,
-        'expected test value in useGridTableHeaderContextMenu.test.tsx'
-      ).dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-    });
-    await flushAsync();
+  it('disables the current sort direction, and Clear Sort on a column that is not sorted', async () => {
+    await showTable({ sortConfig: { key: 'status', direction: 'asc' } });
 
-    // The visibility controller should call onColumnVisibilityChange with
-    // status set to false.
-    expect(onColumnVisibilityChange).toHaveBeenCalled();
-    const visibilityArg = onColumnVisibilityChange.mock.calls[0][0];
-    expect(visibilityArg.status).toBe(false);
-
+    await openHeaderMenu('status');
+    expect(shownItems()).toEqual([
+      { label: 'Sort Ascending', enabled: false },
+      { label: 'Sort Descending', enabled: true },
+      { label: 'Clear Sort', enabled: true },
+      { label: 'Hide Column', enabled: true },
+    ]);
     await closeMenu();
-    cleanup();
+
+    await openHeaderMenu('name');
+    expect(shownItems()).toContainEqual({ label: 'Clear Sort', enabled: false });
+  });
+
+  it.each([
+    { label: 'Sort Ascending', direction: 'asc' },
+    { label: 'Sort Descending', direction: 'desc' },
+  ])('sorts the column when $label is chosen', async ({ label, direction }) => {
+    const onSort = vi.fn();
+    await showTable({ onSort });
+
+    await openHeaderMenu('status');
+    await choose(label);
+
+    expect(onSort).toHaveBeenCalledWith('status', direction);
+  });
+
+  it('hides the column when Hide Column is chosen', async () => {
+    const onColumnVisibilityChange = vi.fn();
+    await showTable({ onColumnVisibilityChange });
+
+    await openHeaderMenu('status');
+    await choose('Hide Column');
+
+    expect(onColumnVisibilityChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: false })
+    );
   });
 });

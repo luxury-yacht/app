@@ -65,17 +65,15 @@ func TestSlowButHealthyPermissionReviewsStillBuildSubsystem(t *testing.T) {
 			DynamicClient:       dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
 			Logger:              applog.Noop, ObjectDetailsProvider: noopObjectDetailProvider{},
 			NodeMaintenanceStore: nodemaintenance.NewStore(5),
-			ResyncInterval:       time.Minute, MetricsInterval: time.Minute,
+			MetricsInterval:      time.Minute,
 		})
 		elapsed := time.Since(start)
 
 		require.NoError(t, err, "slow but successful reviews must not fail construction")
 		require.NotNil(t, subsystem)
 		t.Cleanup(func() {
-			subsystem.StopDoorbellNotifiers()
 			subsystem.ResourceStream.Stop()
 			subsystem.IngestManager.Stop()
-			_ = subsystem.InformerFactory.Shutdown()
 		})
 		require.Greater(t, elapsed, config.PermissionPreflightTimeout,
 			"the scenario must exceed the preflight budget to prove it bounds only priming")

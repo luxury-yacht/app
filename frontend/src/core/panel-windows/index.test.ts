@@ -13,14 +13,14 @@ const mocks = vi.hoisted(() => ({
     BeginPanelWindowOpen: vi.fn(),
     AcknowledgePanelWindowReady: vi.fn(),
     BeginPanelWindowDock: vi.fn(),
-    AcknowledgePanelWindowDock: vi.fn(),
+    AcknowledgePanelTransfer: vi.fn(),
     FailPanelWindowTransfer: vi.fn(),
     AcknowledgePanelWindowClose: vi.fn(),
     AcknowledgeWorkspaceWindowClose: vi.fn(),
     AcknowledgeApplicationQuitPreflight: vi.fn(),
     CloseClusterView: vi.fn(),
     AcknowledgeClusterPanelClose: vi.fn(),
-    UpdatePanelWindowSnapshot: vi.fn(),
+    PublishPanelWindowGroup: vi.fn(),
     RequestPanelTabClose: vi.fn(),
     RequestPanelTabTransfer: vi.fn(),
     AcceptPanelTabTransfer: vi.fn(),
@@ -38,8 +38,8 @@ import {
   acceptPanelTabTransfer,
   acknowledgeApplicationQuitPreflight,
   acknowledgeClusterPanelClose,
+  acknowledgePanelTransfer,
   acknowledgePanelWindowClose,
-  acknowledgePanelWindowDock,
   acknowledgePanelWindowReady,
   acknowledgePanelWorkspaceReady,
   acknowledgeWorkspaceWindowClose,
@@ -59,17 +59,16 @@ import {
   onPanelTabTransferRequested,
   onPanelWindowClosed,
   onPanelWindowCloseRequested,
-  onPanelWindowDockRequested,
   onPanelWindowFocusRequested,
   onPanelWindowOpened,
   onWorkspaceCloseRequested,
   openClusterWindow,
   openPanelWorkspaceObject,
   publishDockedPanels,
+  publishPanelWindowGroup,
   requestPanelTabClose,
   requestPanelTabTransfer,
   resolveNativeWindowDescriptor,
-  updatePanelWindowSnapshot,
 } from './index';
 
 const snapshot = {
@@ -164,18 +163,19 @@ describe('native panel-window transport', () => {
       'close-1',
       false
     );
+    const group = { clusterId: 'cluster-1', groupId: 'group-1', tabs: [], activePanelId: '' };
     await openPanelWorkspaceObject('workspace-2', tabTransfer.tab);
     await publishDockedPanels('workspace-2', []);
     await acknowledgePanelWorkspaceReady('workspace-2');
     await beginPanelWindowOpen('workspace-1', snapshot);
     await acknowledgePanelWindowReady('panel-1', 'transfer-1');
     await beginPanelWindowDock('panel-1', 'right', snapshot);
-    await acknowledgePanelWindowDock('workspace-1', 'panel-1', 'transfer-1');
+    await acknowledgePanelTransfer('workspace-1', 'transfer-1', true);
     await failPanelWindowTransfer('workspace-1', 'panel-1', 'transfer-1');
     await acknowledgePanelWindowClose('panel-1');
     await acknowledgeWorkspaceWindowClose('workspace-1');
     await acknowledgeApplicationQuitPreflight('workspace-1', 'quit-1', true);
-    await updatePanelWindowSnapshot('panel-1', snapshot);
+    await publishPanelWindowGroup('panel-1', group);
     await requestPanelTabClose('panel-1', 'panel-a');
     await requestPanelTabTransfer('workspace-1', tabTransfer);
     await acceptPanelTabTransfer('workspace-1', 'tab-transfer-1');
@@ -190,10 +190,10 @@ describe('native panel-window transport', () => {
     expect(mocks.backend.BeginPanelWindowOpen).toHaveBeenCalledWith('workspace-1', snapshot);
     expect(mocks.backend.AcknowledgePanelWindowReady).toHaveBeenCalledWith('panel-1', 'transfer-1');
     expect(mocks.backend.BeginPanelWindowDock).toHaveBeenCalledWith('panel-1', 'right', snapshot);
-    expect(mocks.backend.AcknowledgePanelWindowDock).toHaveBeenCalledWith(
+    expect(mocks.backend.AcknowledgePanelTransfer).toHaveBeenCalledWith(
       'workspace-1',
-      'panel-1',
-      'transfer-1'
+      'transfer-1',
+      true
     );
     expect(mocks.backend.FailPanelWindowTransfer).toHaveBeenCalledWith(
       'workspace-1',
@@ -207,7 +207,7 @@ describe('native panel-window transport', () => {
       'quit-1',
       true
     );
-    expect(mocks.backend.UpdatePanelWindowSnapshot).toHaveBeenCalledWith('panel-1', snapshot);
+    expect(mocks.backend.PublishPanelWindowGroup).toHaveBeenCalledWith('panel-1', group);
     expect(mocks.backend.RequestPanelTabClose).toHaveBeenCalledWith('panel-1', 'panel-a');
     expect(mocks.backend.RequestPanelTabTransfer).toHaveBeenCalledWith('workspace-1', tabTransfer);
     expect(mocks.backend.AcceptPanelTabTransfer).toHaveBeenCalledWith(
@@ -223,7 +223,6 @@ describe('native panel-window transport', () => {
       [onClusterPanelCloseRequested, 'cluster-panel-close:requested'],
       [onClusterPanelCloseSettled, 'cluster-panel-close:settled'],
       [onPanelWindowOpened, 'panel-window:opened'],
-      [onPanelWindowDockRequested, 'panel-window:dock-requested'],
       [onPanelWindowFocusRequested, 'panel-window:focus-requested'],
       [onPanelWindowCloseRequested, 'panel-window:close-requested'],
       [onPanelWindowClosed, 'panel-window:closed'],

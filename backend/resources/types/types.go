@@ -33,7 +33,8 @@ type WindowSettings struct {
 	Maximized bool `json:"maximized"`
 }
 
-// AppSettings represents the application settings
+// AppSettings represents the application settings. Each preference's default,
+// bounds, and allowed values are declared in backend/internal/preferenceschema.
 type AppSettings struct {
 	SidebarClusterResourcesExpanded          bool     `json:"sidebarClusterResourcesExpanded"`
 	SidebarClusterExtensionsExpanded         bool     `json:"sidebarClusterExtensionsExpanded"`
@@ -47,14 +48,13 @@ type AppSettings struct {
 	ExclusiveNamespaces                      bool     `json:"exclusiveNamespaces"`                      // Allow only one expanded namespace in the sidebar
 	ErrorReportingEnabled                    bool     `json:"errorReportingEnabled"`                    // Send production error reports
 	AutoRefreshEnabled                       bool     `json:"autoRefreshEnabled"`                       // Enable automatic refresh cycles
-	RefreshBackgroundClustersEnabled         bool     `json:"refreshBackgroundClustersEnabled"`         // Refresh inactive clusters in the background
 	MetricsRefreshIntervalMs                 int      `json:"metricsRefreshIntervalMs"`                 // Metrics refresh interval (ms)
 	KubernetesClientQPS                      int      `json:"kubernetesClientQPS"`                      // Per-cluster Kubernetes REST client QPS
 	KubernetesClientBurst                    int      `json:"kubernetesClientBurst"`                    // Per-cluster Kubernetes REST client burst allowance
 	PermissionSSRRFetchConcurrency           int      `json:"permissionSSRRFetchConcurrency"`           // Concurrent namespace SelfSubjectRulesReview fetches
-	ObjPanelLogsBufferMaxSize                int      `json:"objPanelLogsBufferMaxSize"`                // Max container log entries kept in memory per Object Panel Logs Tab (100-10000)
-	ObjPanelLogsTargetPerScopeLimit          int      `json:"objPanelLogsTargetPerScopeLimit"`          // Max pod/container Object Panel Logs Tab targets per Logs tab (1-1000)
-	ObjPanelLogsTargetGlobalLimit            int      `json:"objPanelLogsTargetGlobalLimit"`            // Max pod/container Object Panel Logs Tab targets across all log tabs (1-1000)
+	ObjPanelLogsBufferMaxSize                int      `json:"objPanelLogsBufferMaxSize"`                // Max container log entries kept in memory per Object Panel Logs Tab
+	ObjPanelLogsTargetPerScopeLimit          int      `json:"objPanelLogsTargetPerScopeLimit"`          // Max pod/container Object Panel Logs Tab targets per Logs tab
+	ObjPanelLogsTargetGlobalLimit            int      `json:"objPanelLogsTargetGlobalLimit"`            // Max pod/container Object Panel Logs Tab targets across all log tabs
 	ObjPanelLogsAPITimestampFormat           string   `json:"objPanelLogsApiTimestampFormat"`           // Day.js format for the Kubernetes API timestamp shown in container logs
 	ObjPanelLogsAPITimestampUseLocalTimeZone bool     `json:"objPanelLogsApiTimestampUseLocalTimeZone"` // Render the Kubernetes API timestamp in the user's local timezone instead of UTC
 	GridTablePersistenceMode                 string   `json:"gridTablePersistenceMode"`                 // "shared" or "namespaced"
@@ -64,37 +64,17 @@ type AppSettings struct {
 	ObjectPanelDockedBottomHeight            int      `json:"objectPanelDockedBottomHeight"`            // Default height when docked bottom (px)
 	ObjectPanelFloatingWidth                 int      `json:"objectPanelFloatingWidth"`                 // Default floating width (px)
 	ObjectPanelFloatingHeight                int      `json:"objectPanelFloatingHeight"`                // Default floating height (px)
-	PaletteHueLight                          int      `json:"paletteHueLight"`                          // Hue for gray palette tint in light mode (0-360)
-	PaletteSaturationLight                   int      `json:"paletteSaturationLight"`                   // Saturation intensity for gray palette tint in light mode (0-100)
-	PaletteBrightnessLight                   int      `json:"paletteBrightnessLight"`                   // Brightness offset for gray palette in light mode (-50 to +50)
-	PaletteHueDark                           int      `json:"paletteHueDark"`                           // Hue for gray palette tint in dark mode (0-360)
-	PaletteSaturationDark                    int      `json:"paletteSaturationDark"`                    // Saturation intensity for gray palette tint in dark mode (0-100)
-	PaletteBrightnessDark                    int      `json:"paletteBrightnessDark"`                    // Brightness offset for gray palette in dark mode (-50 to +50)
+	PaletteHueLight                          int      `json:"paletteHueLight"`                          // Hue for gray palette tint in light mode
+	PaletteSaturationLight                   int      `json:"paletteSaturationLight"`                   // Saturation intensity for gray palette tint in light mode
+	PaletteBrightnessLight                   int      `json:"paletteBrightnessLight"`                   // Brightness offset for gray palette in light mode
+	PaletteHueDark                           int      `json:"paletteHueDark"`                           // Hue for gray palette tint in dark mode
+	PaletteSaturationDark                    int      `json:"paletteSaturationDark"`                    // Saturation intensity for gray palette tint in dark mode
+	PaletteBrightnessDark                    int      `json:"paletteBrightnessDark"`                    // Brightness offset for gray palette in dark mode
 	AccentColorLight                         string   `json:"accentColorLight"`                         // Custom accent hex for light mode (empty = default)
 	AccentColorDark                          string   `json:"accentColorDark"`                          // Custom accent hex for dark mode (empty = default)
 	LinkColorLight                           string   `json:"linkColorLight"`                           // Custom link hex for light mode (empty = default)
 	LinkColorDark                            string   `json:"linkColorDark"`                            // Custom link hex for dark mode (empty = default)
 	Themes                                   []Theme  `json:"themes"`                                   // Saved theme library
-}
-
-// AppPreferenceSchema describes one persisted/runtime app preference the
-// frontend can edit through the settings contract.
-type AppPreferenceSchema struct {
-	Key               string   `json:"key"`
-	Type              string   `json:"type"`
-	DefaultValue      any      `json:"defaultValue"`
-	CurrentValue      any      `json:"currentValue"`
-	Min               *int     `json:"min,omitempty"`
-	Max               *int     `json:"max,omitempty"`
-	EnumOptions       []string `json:"enumOptions,omitempty"`
-	Validation        string   `json:"validation,omitempty"`
-	RuntimeSideEffect bool     `json:"runtimeSideEffect"`
-}
-
-// AppSettingsSchema describes the persisted/runtime settings contract.
-type AppSettingsSchema struct {
-	AnonymizedID string                `json:"anonymizedId"`
-	Preferences  []AppPreferenceSchema `json:"preferences"`
 }
 
 // AppPreferenceChange updates one persisted/runtime app preference.
@@ -179,11 +159,9 @@ type ContainerLogsFetchRequest struct {
 type ContainerLogsFetchResponse struct {
 	Entries  []ContainerLogsEntry    `json:"entries"`
 	Warnings []containerlogs.Warning `json:"warnings,omitempty"`
-	// Issues lists each container whose logs could not be read.
+	// Issues lists each container whose logs could not be read. When none
+	// could be read because of a real failure, the request fails instead.
 	Issues []containerlogs.TargetIssue `json:"issues,omitempty"`
-	// Error is set when the request failed as a whole, including when no
-	// container could be read.
-	Error string `json:"error,omitempty"`
 }
 
 // NodeLogSource represents a discovered node log source that can be fetched directly.
@@ -212,39 +190,57 @@ type NodeLogFetchRequest struct {
 type NodeLogFetchResponse struct {
 	Content    string        `json:"content,omitempty"`
 	Source     NodeLogSource `json:"source"`
-	Error      string        `json:"error,omitempty"`
 	SourcePath string        `json:"sourcePath,omitempty"`
 	Truncated  bool          `json:"truncated,omitempty"`
 }
 
-// ShellSessionRequest describes the namespace/pod/container to exec into.
+// ShellSessionRequest describes the pod and container to exec into.
 type ShellSessionRequest struct {
-	Namespace string   `json:"namespace"`
-	PodName   string   `json:"podName"`
-	Container string   `json:"container,omitempty"`
-	Command   []string `json:"command,omitempty"`
+	// Target is the complete identity of the Pod, including its cluster.
+	Target    ObjectRef `json:"target"`
+	Container string    `json:"container,omitempty"`
+	Command   []string  `json:"command,omitempty"`
+}
+
+// NodeShellSessionRequest describes a node shell: the equivalent of
+// `kubectl debug node/<name> --profile=sysadmin -it --image=<image> -- <command>`.
+type NodeShellSessionRequest struct {
+	// Target is the complete identity of the Node, including its cluster.
+	Target ObjectRef `json:"target"`
+	Image  string    `json:"image"`
+	// Command replaces the image entrypoint; empty runs the image default.
+	Command []string `json:"command,omitempty"`
 }
 
 // ShellSession contains details about an active exec session.
 type ShellSession struct {
-	SessionID  string   `json:"sessionId"`
-	Namespace  string   `json:"namespace"`
-	PodName    string   `json:"podName"`
-	Container  string   `json:"container"`
-	Command    []string `json:"command"`
-	Containers []string `json:"containers"`
+	SessionID string `json:"sessionId"`
+	// Target is the complete identity of the object the shell was opened for.
+	Target ObjectRef `json:"target"`
+	// DebugPod is the pod a node shell created and attached to; the app deletes
+	// it when the session ends. Pod shells leave it unset.
+	DebugPod   *ObjectRef `json:"debugPod,omitempty"`
+	Container  string     `json:"container"`
+	Command    []string   `json:"command"`
+	Containers []string   `json:"containers"`
 }
 
 // ShellSessionInfo describes a tracked shell exec session.
 type ShellSessionInfo struct {
-	SessionID   string      `json:"sessionId"`
-	ClusterID   string      `json:"clusterId"`
-	ClusterName string      `json:"clusterName"`
-	Namespace   string      `json:"namespace"`
-	PodName     string      `json:"podName"`
-	Container   string      `json:"container"`
-	Command     []string    `json:"command"`
-	StartedAt   metav1.Time `json:"startedAt"`
+	SessionID   string `json:"sessionId"`
+	ClusterID   string `json:"clusterId"`
+	ClusterName string `json:"clusterName"`
+	// Target is the complete identity of the object the shell was opened for.
+	Target ObjectRef `json:"target"`
+	// DebugPod is the pod a node shell created and attached to.
+	DebugPod  *ObjectRef  `json:"debugPod,omitempty"`
+	Container string      `json:"container"`
+	Command   []string    `json:"command"`
+	StartedAt metav1.Time `json:"startedAt"`
+	// Status is cleanup-failed while the session's stream has ended but its
+	// debug pod could not be deleted; empty while the session is open.
+	Status       ShellSessionStatus `json:"status,omitempty"`
+	StatusReason string             `json:"statusReason,omitempty"`
 }
 
 // DebugContainerRequest describes the parameters for creating an ephemeral debug container.
@@ -272,11 +268,29 @@ type ShellOutputEvent struct {
 
 // ShellStatusEvent reports lifecycle changes for a shell session.
 type ShellStatusEvent struct {
-	SessionID string `json:"sessionId"`
-	ClusterID string `json:"clusterId"`
-	Status    string `json:"status"`
-	Reason    string `json:"reason,omitempty"`
+	SessionID string             `json:"sessionId"`
+	ClusterID string             `json:"clusterId"`
+	Status    ShellSessionStatus `json:"status"`
+	Reason    string             `json:"reason,omitempty"`
 }
+
+// ShellSessionStatus is the lifecycle status a shell session reports. It is a
+// closed set so every emitter and the generated frontend enum agree.
+type ShellSessionStatus string
+
+const (
+	ShellSessionStatusOpen ShellSessionStatus = "open"
+	// ShellSessionStatusClosed means the shell exited or the app tore it down.
+	ShellSessionStatusClosed ShellSessionStatus = "closed"
+	// ShellSessionStatusEnded means a user asked to end the session, from any window.
+	ShellSessionStatusEnded   ShellSessionStatus = "ended"
+	ShellSessionStatusTimeout ShellSessionStatus = "timeout"
+	ShellSessionStatusError   ShellSessionStatus = "error"
+	// ShellSessionStatusCleanupFailed means the stream ended but the debug pod
+	// a node shell created could not be deleted; the session stays listed so
+	// ending it again retries the delete.
+	ShellSessionStatusCleanupFailed ShellSessionStatus = "cleanup-failed"
+)
 
 // PodSimpleInfo represents basic pod information for list views
 type PodSimpleInfo struct {

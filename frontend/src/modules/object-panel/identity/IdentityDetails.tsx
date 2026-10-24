@@ -17,6 +17,7 @@ import type { IdentityPanelRef } from '../panelTarget';
 import { useIdentityDetails } from './useIdentityDetails';
 import '../components/ObjectPanel/Details/Overview/shared/OverviewBlocks.css';
 import './IdentityDetails.css';
+import { failureMessage } from '@/core/refresh/refreshFailure';
 
 const noBindings: ClusterIdentityBinding[] = [];
 const partialFallbackLabel =
@@ -114,7 +115,8 @@ export function IdentityDetails({
     <div className="details-content">
       {!!query.error && (
         <div className="error-message" role="alert">
-          Error loading bindings: <ErrorSurface kind="reported" message={query.error} />
+          Error loading bindings:{' '}
+          <ErrorSurface kind="reported" message={failureMessage(query.error)} />
         </div>
       )}
       <div className="object-panel-section">

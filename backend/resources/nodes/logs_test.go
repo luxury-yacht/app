@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
 	"github.com/luxury-yacht/app/backend/testsupport"
 	"github.com/stretchr/testify/require"
@@ -57,6 +58,41 @@ func stubNodeFetchLogs(t *testing.T, responses map[string][]byte) {
 // (backend protobufRestConfig). Node log pages are plain text and HTML, and the
 // node answers 406 Not Acceptable when a request accepts neither, so node log
 // requests must accept text whatever the clientset prefers.
+// Node log requests carry options as a query string. The kubelet must receive
+// them as query parameters: sent as part of the path, an incremental read asks
+// for a file that does not exist and fails with NotFound.
+func TestNodeLogRequestsSendOptionsAsQueryParameters(t *testing.T) {
+	nodeName := "node-a"
+	since := "2026-10-12T03:00:00Z"
+	var seen []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Path+" "+r.URL.RawQuery)
+		switch {
+		case r.URL.Path == "/api/v1/nodes/node-a/proxy/logs/alternatives.log" && r.URL.Query().Get("sinceTime") == since:
+			_, _ = w.Write([]byte("new line"))
+		case r.URL.Path == "/api/v1/nodes/node-a/proxy/logs/" && r.URL.Query().Get("query") == "kubelet":
+			_, _ = w.Write([]byte("kubelet line"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	client, err := kubernetes.NewForConfig(&rest.Config{Host: server.URL})
+	require.NoError(t, err)
+	service := NewService(testsupport.NewResourceDependencies(testsupport.WithDepsKubeClient(client)))
+
+	incremental, err := service.FetchLogs(context.Background(), nodeName, restypes.NodeLogFetchRequest{
+		SourcePath: "alternatives.log",
+		SinceTime:  since,
+	})
+	require.NoError(t, err, "requests seen: %v", seen)
+	require.Equal(t, "new line", incremental.Content)
+
+	serviceLogs, err := service.FetchLogs(context.Background(), nodeName, restypes.NodeLogFetchRequest{SourcePath: "service:kubelet"})
+	require.NoError(t, err, "requests seen: %v", seen)
+	require.Equal(t, "kubelet line", serviceLogs.Content)
+}
+
 func TestNodeLogRequestsAcceptTextThroughAProtobufClientset(t *testing.T) {
 	nodeName := "node-a"
 	pages := map[string]string{
@@ -94,8 +130,8 @@ func TestNodeLogRequestsAcceptTextThroughAProtobufClientset(t *testing.T) {
 	require.True(t, discovery.Supported)
 	require.Equal(t, "journal/kubelet", discovery.Sources[0].Path)
 
-	logs := service.FetchLogs(context.Background(), nodeName, restypes.NodeLogFetchRequest{SourcePath: "journal/kubelet"})
-	require.Empty(t, logs.Error)
+	logs, err := service.FetchLogs(context.Background(), nodeName, restypes.NodeLogFetchRequest{SourcePath: "journal/kubelet"})
+	require.NoError(t, err)
 	require.Equal(t, "kubelet log line", logs.Content)
 }
 
@@ -282,8 +318,8 @@ func TestFetchLogsRejectsDirectorySources(t *testing.T) {
 		return []byte(`<!doctype html><pre><a href="kubelet">kubelet</a></pre>`), nil
 	}
 
-	resp := service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{SourcePath: "journal/"})
-	require.Contains(t, resp.Error, "directory")
+	_, err := service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{SourcePath: "journal/"})
+	require.ErrorContains(t, err, "directory")
 }
 
 func TestFetchLogsRejectsCompressedSources(t *testing.T) {
@@ -292,8 +328,9 @@ func TestFetchLogsRejectsCompressedSources(t *testing.T) {
 		testsupport.WithDepsKubeClient(client),
 	))
 
-	resp := service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{SourcePath: "journal/kubelet.log.gz"})
-	require.Contains(t, resp.Error, "compressed or binary")
+	_, err := service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{SourcePath: "journal/kubelet.log.gz"})
+	require.ErrorContains(t, err, "compressed or binary")
+	require.Equal(t, errorstatus.ReasonBadRequest, errorstatus.Classify(err).Reason)
 }
 
 func TestFetchLogsRejectsUnsafeSourcePaths(t *testing.T) {
@@ -319,8 +356,9 @@ func TestFetchLogsRejectsUnsafeSourcePaths(t *testing.T) {
 		"/api/v1/nodes/node-a/proxy/logs/journal/kubelet",
 		"service:kubelet/../../pods",
 	} {
-		resp := service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{SourcePath: sourcePath})
-		require.Contains(t, resp.Error, "invalid node log source path", sourcePath)
+		_, err := service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{SourcePath: sourcePath})
+		require.ErrorContains(t, err, "invalid node log source path", sourcePath)
+		require.Equal(t, errorstatus.ReasonBadRequest, errorstatus.Classify(err).Reason, sourcePath)
 	}
 }
 
@@ -340,8 +378,8 @@ func TestFetchLogsSupportsWellKnownServiceQueries(t *testing.T) {
 		return []byte("kubelet service log line"), nil
 	}
 
-	resp := service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{SourcePath: "service:kubelet"})
-	require.Empty(t, resp.Error)
+	resp, err := service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{SourcePath: "service:kubelet"})
+	require.NoError(t, err)
 	require.Equal(t, "kubelet service log line", resp.Content)
 	require.Equal(t, "service", resp.Source.Kind)
 	require.Equal(t, "services / kubelet", resp.Source.Label)
@@ -368,11 +406,11 @@ func TestFetchLogsForwardsSinceTimeQueryParameter(t *testing.T) {
 		return []byte("kubelet log line"), nil
 	}
 
-	resp := service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{
+	resp, err := service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{
 		SourcePath: "journal/kubelet",
 		SinceTime:  sinceTime,
 	})
-	require.Empty(t, resp.Error)
+	require.NoError(t, err)
 	require.Equal(t, "kubelet log line", resp.Content)
 }
 
@@ -399,8 +437,27 @@ func TestFetchLogsRejectsBinaryBodiesWithoutBinaryExtension(t *testing.T) {
 		return []byte{0x00, 0xff, 0x10, 0x1f, 0x00}, nil
 	}
 
-	resp := service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{SourcePath: "journal/opaque-leaf"})
-	require.Contains(t, resp.Error, "compressed or binary")
+	_, err := service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{SourcePath: "journal/opaque-leaf"})
+	require.ErrorContains(t, err, "compressed or binary")
+	require.Equal(t, errorstatus.ReasonBadRequest, errorstatus.Classify(err).Reason)
+}
+
+// A failed read fails the request with the API's status under a message the
+// Node Logs tab can show.
+func TestFetchLogsKeepsTheAPIStatusUnderItsMessage(t *testing.T) {
+	service := NewService(testsupport.NewResourceDependencies(testsupport.WithDepsKubeClient(fake.NewClientset())))
+	originalFetch := nodeLogFetchRawFunc
+	t.Cleanup(func() {
+		nodeLogFetchRawFunc = originalFetch
+	})
+	nodeLogFetchRawFunc = func(context.Context, rest.Interface, string) ([]byte, error) {
+		return nil, apierrors.NewForbidden(schema.GroupResource{Resource: "nodes/proxy"}, "node-a", errors.New("denied"))
+	}
+
+	_, err := service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{SourcePath: "journal/kubelet"})
+
+	require.EqualError(t, err, "node logs are not accessible with the current permissions")
+	require.Equal(t, errorstatus.ReasonForbidden, errorstatus.Classify(err).Reason)
 }
 
 func TestFetchLogsRejectsPodAndContainerSources(t *testing.T) {
@@ -409,11 +466,11 @@ func TestFetchLogsRejectsPodAndContainerSources(t *testing.T) {
 		testsupport.WithDepsKubeClient(client),
 	))
 
-	resp := service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{SourcePath: "pods/kube-system/coredns"})
-	require.Contains(t, resp.Error, "already available in the pod/workload logs views")
+	_, err := service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{SourcePath: "pods/kube-system/coredns"})
+	require.ErrorContains(t, err, "already available in the pod/workload logs views")
 
-	resp = service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{SourcePath: "containers/containerd.log"})
-	require.Contains(t, resp.Error, "already available in the pod/workload logs views")
+	_, err = service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{SourcePath: "containers/containerd.log"})
+	require.ErrorContains(t, err, "already available in the pod/workload logs views")
 }
 
 func TestFetchLogsTruncatesLargeResponses(t *testing.T) {
@@ -431,10 +488,11 @@ func TestFetchLogsTruncatesLargeResponses(t *testing.T) {
 		return []byte("line-a\nline-b\nline-c\n"), nil
 	}
 
-	resp := service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{
+	resp, err := service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{
 		SourcePath: "journal/kubelet",
 		TailBytes:  8,
 	})
+	require.NoError(t, err)
 	require.True(t, resp.Truncated)
 	require.Equal(t, "line-c\n", resp.Content)
 }

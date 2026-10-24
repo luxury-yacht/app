@@ -70,14 +70,14 @@ describe('broker read cluster identity', () => {
     );
   });
 
-  it('leaves cluster empty for reads with no single owning cluster', () => {
+  it('leaves cluster empty for reads without a cluster prefix', () => {
     const token = beginBrokerRead({
       broker: 'app-state-access',
       resource: 'favorites',
       adapter: 'persistence-read',
     });
     completeBrokerRead({ token, status: 'success' });
-    read('clusters=cluster-a,cluster-b|');
+    read('namespace:default');
 
     const rows = getBrokerReadDiagnosticsSnapshot();
     expect(rows.every((row) => !row.clusterId)).toBe(true);

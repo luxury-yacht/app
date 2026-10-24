@@ -4,7 +4,7 @@ import { getGroupForPanel, getGroupTabs } from '@ui/dockable/tabGroupState';
 import type { GroupKey } from '@ui/dockable/tabGroupTypes';
 import { useCallback } from 'react';
 import { PanelLifecycleClusterSurface } from '@/core/panel-windows/panelLifecycleGuards';
-import { getDefaultObjectPanelPosition } from '@/core/settings/appPreferences';
+import { getPreference } from '@/core/settings/appPreferences';
 import { ObjectPanelHeader } from '../components/ObjectPanel/ObjectPanelHeader';
 import { ObjectPanelTabs } from '../components/ObjectPanel/ObjectPanelTabs';
 import { resolveObjectPanelOpenTarget } from '../components/ObjectPanel/objectPanelOpenTarget';
@@ -33,7 +33,7 @@ export function IdentityPanel({
   const { closePanel } = useObjectPanelState();
   const { tabGroups, getPreferredOpenGroupKey } = useDockablePanelContext();
   const target = resolveObjectPanelOpenTarget(
-    defaultPosition ?? getDefaultObjectPanelPosition(),
+    defaultPosition ?? getPreference('defaultObjectPanelPosition'),
     defaultGroupKey,
     getPreferredOpenGroupKey
   );

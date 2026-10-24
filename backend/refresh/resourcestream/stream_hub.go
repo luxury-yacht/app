@@ -112,13 +112,9 @@ func (m *Manager) ResumeSelector(selector StreamSelector, since uint64) ([]Updat
 	return results, true
 }
 
-func (m *Manager) broadcast(domain string, scopes []string, update Update) {
-	m.invalidateSnapshotDomain(domain)
-	if m == nil || len(scopes) == 0 {
-		return
-	}
-
-	// Fan-out updates per scope and trigger a RESET when subscribers fall behind.
+// deliverScopes sends the update to every subscriber of the scopes, triggering
+// a RESET when subscribers fall behind. Ring has invalidated the domain first.
+func (m *Manager) deliverScopes(domain string, scopes []string, update Update) {
 	for _, scope := range uniqueScopes(scopes) {
 		result := m.broadcastScope(domain, scope, update)
 		m.recordBroadcastResult(domain, scope, result)

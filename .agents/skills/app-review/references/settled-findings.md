@@ -20,7 +20,32 @@ with current repository evidence that overturns its verdict.
 - The resource-kind registry drives the catalog, table rows, generated detail
   dispatch, object map, and stream summaries
   (`docs/architecture/resource-kind-registry.md`); remaining exceptions are
-  intentional facets.
+  intentional facets. Per-kind frontend decisions (panel tabs, pods scope,
+  metrics, short names) read the generated kind-facets table (#404).
+- Refresh scopes: each domain authors its `scopeContract`; one codec per layer
+  builds and decodes every scope, and both suites run every domain's examples
+  (`docs/architecture/refresh-system.md`, "Scope and identity"; #397). The old
+  hand-written scope parsers, including `normalizeNamespaceScope`, are gone.
+- The object-details payload is a tagged `ObjectDetail` union narrowed on
+  `detailType`; consumers never cast `details`
+  (`docs/frontend/component-structure.md`; #397).
+- Refresh demand: leases are the only demand signal; the orchestrator owns
+  them (`docs/architecture/refresh-system.md`; #398).
+- Change signals: maintained stores ring only after applying a change, through
+  one pipeline (`docs/architecture/data-freshness.md`; #399).
+- Feeds: every built-in kind, Events included, comes from an owned reflector;
+  the shared informer factory and the `IngestOwned` facet are removed
+  (`docs/architecture/data-layer.md`; #402).
+- Panel placement: the directory is the only writer of which renderer and group
+  hold a panel; windows publish arrangement reports
+  (`docs/frontend/dockable-panels.md`; #401).
+- App preferences: one typed store (`getPreference`, `subscribePreference`,
+  `usePreference`; #400), and the schema (keys, defaults, bounds) is generated
+  from Go with a Go-vs-TS parity fixture (`docs/architecture/app-preferences.md`;
+  #405).
+- Frontend tests run app state owners for real through
+  `installAppStateHarness()`; a Biome plugin fails a suite that mocks one
+  (`docs/workflows/testing.md`, "Frontend state: the real-state harness"; #403).
 
 ## Investigated and dismissed
 
@@ -42,8 +67,28 @@ with current repository evidence that overturns its verdict.
 - **Table configuration schema:** shared behavior already lives in
   `useGridTablePersistence`, `useGridTableBinding`, and
   `useResourceGridTableCommon`; public grid hooks are thin adapters.
-- **Namespace scope unification:** `normalizeNamespaceScope` has two consumers,
-  not enough to justify another abstraction.
+- **Generating Diagnostics from the domain contract (2026-10-20):** about 7,700
+  frontend lines mirror refresh internals by hand, with ~98 domain names, but
+  no drift was found. Revisit only with a concrete mismatch.
+- **Replacing `KubeconfigContext`'s selection and visibility queues:** they are
+  deliberate; commands carry no sequence number
+  (`docs/architecture/multi-cluster.md`). Replacing them needs per-window
+  command sequencing; revisit only if tab-switch races recur.
+- **Wails boundary facade (2026-10-20):** disciplined; one frontend file
+  bypasses `@core/backend-api`.
+- **Long-lived session lifecycle:** drains, port-forwards, and node shells
+  already share `runtimeOperationRegistry` with cleanup
+  (`backend/runtime_operations.go`).
+- **Cluster attention and overview:** large but cohesive; neither re-derives
+  pod or node health.
+- **Splitting the root `backend` package (2026-10-19):** the warm test rebuild
+  took 4.7 s, AST tests already enforce ownership, and the generated Wails
+  binding anchor must stay in package `backend`.
+- **Memory tiering (governor, spill, Cold mmap serving):** complex but
+  deliberate; no cost evidence found (2026-10-19).
+- **Appearance live preview:** palette, accent, and link controls keep their
+  drafts, so a failed save or another window's change shows after a light/dark
+  switch. Declined; documented in `docs/architecture/app-preferences.md`.
 
 ## Trigger-gated
 
@@ -51,3 +96,11 @@ with current repository evidence that overturns its verdict.
   paths before reviving it (its temporary plan was removed).
 - Persistent SQLite catalog store: only after a 100k-plus-object cluster shows
   Browse or custom-resource degradation.
+- Object-map build reuse (resolving edges only for reached objects, or one
+  index per cluster reused across scopes and polls): only if
+  `BenchmarkObjectMapBuild` exceeds 100 ms at 10k Pods. It measured about
+  57 ms on 2026-10-16.
+- Re-keying object-map's kind-keyed tables (`objectMapGraphByKind`,
+  `objectMapEdgeBuilders`) by full identity: the frontend map gate already
+  checks the full GVK, so no failure remains. Do it only when other work
+  touches those lines.

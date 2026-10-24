@@ -12,13 +12,13 @@ import {
   type NodeDrainOperationPermissions,
   resolveDrainStartPermissionStatus,
 } from '@shared/hooks/nodeActionPermissions';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { CancelDrainNodeJob } from '@/core/backend-api';
-import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
+import { requestRefreshDomain, useScopedRefreshDomainLifecycle } from '@/core/data-access';
 import { useRefreshScopedDomain } from '@/core/refresh';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
+import { buildRefreshScope } from '@/core/refresh/scopeSelector';
 import type { NodeMaintenanceSnapshotPayload } from '@/core/refresh/types';
 import { errorHandler } from '@/utils/errorHandler';
 import { DrainNodeModalView } from './DrainNodeModalView';
@@ -34,8 +34,6 @@ import {
 import { useModalFocusTrap } from './useModalFocusTrap';
 import './DrainNodeModal.css';
 
-const NODE_SCOPE_PREFIX = 'node:';
-
 interface DrainNodeModalProps {
   isOpen: boolean;
   clusterId: string;
@@ -45,9 +43,6 @@ interface DrainNodeModalProps {
   onClose: () => void;
   onMutationChange?: (inFlight: boolean) => void;
 }
-
-const toScope = (nodeName: string): string =>
-  `${NODE_SCOPE_PREFIX}${nodeName.trim().toLowerCase()}`;
 
 type NodeMaintenanceSnapshotPayloadState = ReturnType<typeof useRefreshScopedDomain> & {
   data: NodeMaintenanceSnapshotPayload | null;
@@ -93,7 +88,10 @@ const DrainNodeModal = ({
     if (!trimmedNode || !trimmedCluster) {
       return null;
     }
-    return buildClusterScope(trimmedCluster, toScope(trimmedNode));
+    return buildRefreshScope('object-maintenance', {
+      clusterId: trimmedCluster,
+      selector: { kind: 'node', node: trimmedNode },
+    });
   }, [clusterId, nodeName]);
 
   const snapshot = useRefreshScopedDomain(
@@ -101,20 +99,12 @@ const DrainNodeModal = ({
     scope ?? ''
   ) as NodeMaintenanceSnapshotPayloadState;
 
-  useEffect(() => {
-    if (!scope || !isOpen) {
-      return;
-    }
-    setRefreshDomainEnabled({ domain: 'object-maintenance', scope, enabled: true });
-    void requestRefreshDomain({
-      domain: 'object-maintenance',
-      scope,
-      reason: 'startup',
-    });
-    return () => {
-      setRefreshDomainEnabled({ domain: 'object-maintenance', scope, enabled: false });
-    };
-  }, [scope, isOpen]);
+  useScopedRefreshDomainLifecycle({
+    domain: 'object-maintenance',
+    scope,
+    enabled: Boolean(scope && isOpen),
+    fetchOnEnable: 'startup',
+  });
 
   const refreshMaintenance = useCallback(async () => {
     if (!scope) {

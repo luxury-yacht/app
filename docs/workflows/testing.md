@@ -79,6 +79,95 @@ Pruning keeps production behavior and test/coverage configuration unchanged.
 Investigate lost coverage of meaningful branches; a drop from removing
 presentation-only tests is acceptable.
 
+## Frontend state: the real-state harness
+
+Frontend suites never stub the app's state owners: the contexts, stores,
+refresh and data-access layers, capabilities, navigation, persistence hooks,
+dockable panels, and panel-window modules that
+[no-owned-state-mocks.grit](../../frontend/biome-plugins/no-owned-state-mocks.grit)
+lists. Biome fails a test file that mocks one; only `*.benchmark.test.*` files
+are exempt, because a benchmark times one component's own work. Run those
+owners for real with `installAppStateHarness()`
+([harness.tsx](../../frontend/src/test-utils/appState/harness.tsx)), which
+renders the production composition (`AppShell`, `PanelWindowShell`) after the
+same bootstrap as `main.ts`.
+
+**Only the boundary is faked.**
+
+- Backend RPCs: answer with `app.backend.answer`, park with `hold`, and assert
+  with `calls`. An unanswered method fails the test.
+- Refresh HTTP: snapshot reads (`app.snapshots.serve`, `fail`, `answer`,
+  `respond`, `reads`), refresh jobs, metrics activity, and telemetry
+  (`app.snapshots.telemetry`, or `failTelemetry` for an unreachable server).
+  A read nobody serves answers 503, which the app reports, so the test fails.
+  An aborted read rejects, as a real fetch does.
+- Streams: `app.streams` (`active`, `requests`, `acknowledge`, `ring`).
+- Runtime events: `app.events.emit`.
+- Permissions: `app.permissions`, `app.denyPermissions`. A decision of
+  `{ error }` is a check the cluster could not evaluate; the backend reports
+  it per check, never as a failed call.
+- Window identity and controls.
+- The jsdom gaps: `matchMedia`, scrolling, and hit testing.
+
+Suites may still stub `@core/backend-api` or `@core/desktop-runtime` when they
+use no harness, external packages, and child components jsdom cannot run, such
+as the object map's canvas renderer.
+
+**Mount modes.**
+
+- Full app (`app.mountApp`) is for anything under a route-owned or
+  panel-owned provider: views, object panels, and the layout.
+- Provider mode (`app.render(null)`, then `view.show(ui)`) is for hooks, owners'
+  own suites, and components whose ancestors add nothing the assertions
+  depend on.
+- Panel-window mode is for detached panel windows.
+
+The composition decides the mode, never speed.
+
+**Seeding.**
+
+- Declare fixtures before mounting: `app.cluster`, `namespaces`,
+  `startScreen`, `object`, `servePanel`, `serveTable`, `preferences`, and
+  `panelWindow`.
+- The window opens on its first open cluster; switch with
+  `view.selectCluster`.
+- A cluster's lifecycle, auth, and health at startup are fixture options. To
+  change them mid-test, use `app.setClusterState`: the backend's workspace
+  state keeps the change, so a later tab switch does not revert it, and the
+  window receives the backend's events for it.
+- A surface's refresh demand without the surface comes from `view.lease`,
+  which leases the way a mounted view does and resolves to its release.
+- State the app hydrates once at startup, such as saved table state or
+  favorites, comes from its RPC answer before the mount.
+- Use fake timers for debounces and stream teardown (500 ms).
+
+**Driving and asserting.**
+
+- Act as the user does: `view.goTo` clicks the sidebar, and keys, clicks, and
+  native events reach the real handlers.
+- Assert what leaves the boundary (RPC payloads, reads, stream requests) or
+  the real owners' state (`view.owners()`, `view.openPanels()`), with complete
+  object identity.
+- The harness records every error report. A test fails on one it did not
+  take with `app.errors.take`; expected permission denials are exempt.
+
+**Isolation.** Module state survives between tests in a file, so
+[moduleState.ts](../../frontend/src/test-utils/appState/moduleState.ts) resets
+every owner a mount can reach. When you add module-scope state that a mount
+reaches, reset it there:
+
+1. through the owner's public API;
+2. else through an existing test hook;
+3. else through a new, narrowly named `…ForTesting` export.
+
+Then add a reused-identity case to
+[harness.isolation.test.tsx](../../frontend/src/test-utils/appState/harness.isolation.test.tsx)
+that fails without the reset.
+
+Each test in a harness suite takes at most 1.0 s. Native behavior (dragging,
+window placement, focus across windows) still needs the native app; see the
+[completion gate](completion.md).
+
 ## Test environment
 
 Isolate the backend test process's config and cache directories before fixtures

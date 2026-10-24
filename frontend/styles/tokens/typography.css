@@ -21,6 +21,7 @@
 
   /* Font weights */
   --font-weight-normal: 400;
+  --font-weight-medium: 500;
   --font-weight-bold: 600;
   --font-weight-parsed-logs-header: 600;
   --font-weight-parsed-logs: 300;

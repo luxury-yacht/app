@@ -6,14 +6,13 @@
 
 import { describe, expect, it } from 'vitest';
 import { computeCollapseInfo, filterByCollapseInfo } from './objectMapCollapse';
-import { dedupeServiceEdges } from './objectMapDedupe';
-import { filterByDirectionalReachability } from './objectMapDirectionalFilter';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
 import { toObjectMapG6Data } from './objectMapG6Data';
 import { computeObjectMapLayout, routeObjectMapEdges } from './objectMapLayout';
 import { createObjectMapPerformanceFixture } from './objectMapPerformanceFixtures';
 import type { ObjectMapSelectionState } from './objectMapRendererTypes';
 import { computeObjectMapSelectionState } from './objectMapSelection';
+import { filterByLineage } from './objectMapTraversal';
 
 const EMPTY_SELECTION: ObjectMapSelectionState = {
   activeId: null,
@@ -89,24 +88,11 @@ const PALETTE: ObjectMapG6Palette = {
 
 const prepareFixture = (nodeCount: number, edgeCount: number) => {
   const payload = createObjectMapPerformanceFixture({ nodeCount, edgeCount });
-  const dedupedEdges = dedupeServiceEdges(payload.nodes, payload.edges);
-  const reachable = filterByDirectionalReachability(
-    payload.nodes,
-    dedupedEdges,
-    payload.nodes[0].id
-  );
-  const collapseInfo = computeCollapseInfo(
-    reachable.nodes,
-    reachable.edges,
-    payload.nodes[0].id,
-    new Set()
-  );
-  const visible = filterByCollapseInfo(
-    reachable.nodes,
-    reachable.edges,
-    collapseInfo.visibleNodeIds
-  );
-  const layout = computeObjectMapLayout(visible.nodes, visible.edges, payload.nodes[0].id);
+  const seedId = payload.nodes[0].id;
+  const collapseInfo = computeCollapseInfo(payload.nodes, payload.edges, seedId, new Set());
+  const collapsed = filterByCollapseInfo(payload.nodes, payload.edges, collapseInfo.visibleNodeIds);
+  const visible = filterByLineage(collapsed.nodes, collapsed.edges, seedId);
+  const layout = computeObjectMapLayout(visible.nodes, visible.edges, seedId);
   const graphData = toObjectMapG6Data(layout, EMPTY_SELECTION, () => null, PALETTE);
   return { payload, visible, layout, graphData };
 };
@@ -156,6 +142,16 @@ describe('object map performance fixtures', () => {
     expect(result.graphData.nodes).toHaveLength(1000);
     expect(result.graphData.edges).toHaveLength(2000);
     expect(durationMs).toBeLessThan(3000);
+  });
+
+  it('lays out a 1000 object map with no links without pathological growth', () => {
+    const payload = createObjectMapPerformanceFixture({ nodeCount: 1000, edgeCount: 999 });
+    const { result, durationMs } = measure(() =>
+      computeObjectMapLayout(payload.nodes, [], payload.nodes[0].id)
+    );
+
+    expect(result.nodes).toHaveLength(1000);
+    expect(durationMs).toBeLessThan(1000);
   });
 
   it('computes large-map selection highlighting within an interaction budget', () => {

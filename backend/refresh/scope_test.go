@@ -17,26 +17,6 @@ func TestJoinClusterScopePreservesEmptyScope(t *testing.T) {
 	}
 }
 
-func TestSplitClusterScopeListReturnsIDsAndScope(t *testing.T) {
-	ids, scope := SplitClusterScopeList("cluster-a,cluster-b|namespace:default")
-	if len(ids) != 2 || ids[0] != "cluster-a" || ids[1] != "cluster-b" {
-		t.Fatalf("unexpected cluster ids: %#v", ids)
-	}
-	if scope != "namespace:default" {
-		t.Fatalf("unexpected scope %q", scope)
-	}
-}
-
-func TestSplitClusterScopeListHandlesPrefixedSelectors(t *testing.T) {
-	ids, scope := SplitClusterScopeList("clusters=cluster-a, cluster-a , cluster-b|")
-	if len(ids) != 2 || ids[0] != "cluster-a" || ids[1] != "cluster-b" {
-		t.Fatalf("unexpected cluster ids: %#v", ids)
-	}
-	if scope != "" {
-		t.Fatalf("expected empty scope, got %q", scope)
-	}
-}
-
 func TestParseObjectScopeSupportsGVK(t *testing.T) {
 	identity, err := ParseObjectScope("cluster-a|default:apps/v1:deployment:web")
 	if err != nil {
@@ -50,6 +30,18 @@ func TestParseObjectScopeSupportsGVK(t *testing.T) {
 	}
 	if identity.Name != "web" {
 		t.Fatalf("expected name web, got %q", identity.Name)
+	}
+}
+
+// Object details, YAML, events, and logs decode their scope with
+// ParseObjectScope directly, so it must return the literal object name.
+func TestParseObjectScopeDecodesEscapedName(t *testing.T) {
+	identity, err := ParseObjectScope("cluster-a|team-a:rbac.authorization.k8s.io/v1:Role:reader%3Fteam")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if identity.Name != "reader?team" {
+		t.Fatalf("expected the literal name reader?team, got %q", identity.Name)
 	}
 }
 

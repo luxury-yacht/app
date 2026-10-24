@@ -7,17 +7,17 @@ import (
 	"os"
 	"path/filepath"
 	goruntime "runtime"
-	"strings"
+	"slices"
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
-	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
+	"github.com/luxury-yacht/app/backend/resources/helm"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/fake"
@@ -42,26 +42,16 @@ type refreshDomainContract struct {
 }
 
 type domainInventoryEntry struct {
-	BehaviorClass    string        `json:"behaviorClass"`
-	ScopeContract    scopeContract `json:"scopeContract"`
-	SingleCluster    bool          `json:"singleCluster"`
-	PayloadOwner     string        `json:"payloadOwner"`
-	CachePolicy      string        `json:"cachePolicy"`
-	StreamSemantics  []string      `json:"streamSemantics"`
-	CoverageContract string        `json:"coverageContract"`
-	CoverageStatus   string        `json:"coverageStatus"`
-}
-
-type scopeContract struct {
-	Kind              string   `json:"kind"`
-	ClusterPrefix     string   `json:"clusterPrefix"`
-	Parser            string   `json:"parser"`
-	FrontendBuilder   string   `json:"frontendBuilder"`
-	AcceptedEncodings []string `json:"acceptedEncodings"`
+	BehaviorClass    string   `json:"behaviorClass"`
+	SingleCluster    bool     `json:"singleCluster"`
+	PayloadOwner     string   `json:"payloadOwner"`
+	CachePolicy      string   `json:"cachePolicy"`
+	StreamSemantics  []string `json:"streamSemantics"`
+	CoverageContract string   `json:"coverageContract"`
+	CoverageStatus   string   `json:"coverageStatus"`
 }
 
 type streamDomainContract struct {
-	ScopeKind            string                 `json:"scopeKind"`
 	CompleteIsScopeLevel bool                   `json:"completeIsScopeLevel"`
 	RowProjection        string                 `json:"rowProjection,omitempty"`
 	PrimaryResources     []streamResourceRecord `json:"primaryResources"`
@@ -199,18 +189,6 @@ func TestDomainInventoryCoversAuthoredDomainsAndUsesKnownVocabulary(t *testing.T
 		"graph-payload",
 		"operation-state",
 	)
-	scopeKinds := setOf(
-		"cluster",
-		"optional-namespace",
-		"catalog-query",
-		"resource-stream-selector",
-		"namespace-scope",
-		"object-ref",
-		"helm-release",
-		"object-map",
-		"node-maintenance",
-		"log-stream-selector",
-	)
 	cachePolicies := setOf(
 		"snapshot-cache",
 		"snapshot-cache-with-merge",
@@ -247,13 +225,6 @@ func TestDomainInventoryCoversAuthoredDomainsAndUsesKnownVocabulary(t *testing.T
 	for domainID, inventory := range contract.DomainInventory {
 		require.Containsf(t, domainIDs, domainID, "inventory domain %q is not present in domains[]", domainID)
 		require.Containsf(t, behaviorClasses, inventory.BehaviorClass, "domain %q behaviorClass", domainID)
-		require.Containsf(t, scopeKinds, inventory.ScopeContract.Kind, "domain %q scope kind", domainID)
-		require.Equalf(t, "required", inventory.ScopeContract.ClusterPrefix, "domain %q cluster prefix", domainID)
-		require.NotEmptyf(t, inventory.ScopeContract.Parser, "domain %q parser owner", domainID)
-		require.NotEmptyf(t, inventory.ScopeContract.FrontendBuilder, "domain %q frontend builder owner", domainID)
-		requireSourcePathExists(t, inventory.ScopeContract.Parser)
-		requireSourcePathExists(t, inventory.ScopeContract.FrontendBuilder)
-		require.NotEmptyf(t, inventory.ScopeContract.AcceptedEncodings, "domain %q accepted encodings", domainID)
 		require.Truef(t, inventory.SingleCluster, "domain %q must stay single-cluster at refresh boundary", domainID)
 		require.NotEmptyf(t, inventory.PayloadOwner, "domain %q payload owner", domainID)
 		require.Containsf(t, cachePolicies, inventory.CachePolicy, "domain %q cachePolicy", domainID)
@@ -282,7 +253,6 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 		case true:
 			require.Containsf(t, contract.ResourceStream.Domains, domainID, "resource-stream domain %q must join resourceStream.domains", domainID)
 			require.Containsf(t, setOf("resource-stream-table", "complete-resync-stream"), inventory.BehaviorClass, "resource-stream domain %q behavior class", domainID)
-			require.Equalf(t, "resource-stream-selector", inventory.ScopeContract.Kind, "resource-stream domain %q scope kind", domainID)
 		case false:
 			require.NotContainsf(t, contract.ResourceStream.Domains, domainID, "non-resource-stream domain %q must not join resourceStream.domains", domainID)
 			require.NotContainsf(t, setOf("resource-stream-table", "complete-resync-stream"), inventory.BehaviorClass, "non-resource-stream domain %q behavior class", domainID)
@@ -311,7 +281,6 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 
 	catalog := contract.DomainInventory["catalog"]
 	require.Equal(t, "catalog-stream", catalog.BehaviorClass)
-	require.Equal(t, "catalog-query", catalog.ScopeContract.Kind)
 	require.Equal(t, "backend/objectcatalog.Service", catalog.PayloadOwner)
 	require.Equal(t, "external-catalog-cache", catalog.CachePolicy)
 	require.ElementsMatch(t, []string{"snapshot-replace", "change-signal"}, catalog.StreamSemantics)
@@ -319,7 +288,6 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 
 	catalogDiff := contract.DomainInventory["catalog-diff"]
 	require.Equal(t, "catalog-snapshot", catalogDiff.BehaviorClass)
-	require.Equal(t, "catalog-query", catalogDiff.ScopeContract.Kind)
 	require.Equal(t, "backend/objectcatalog.Service", catalogDiff.PayloadOwner)
 	require.Equal(t, "external-catalog-cache-with-merge", catalogDiff.CachePolicy)
 	require.Equal(t, []string{"snapshot-replace"}, catalogDiff.StreamSemantics)
@@ -328,14 +296,13 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 	// Event tables are doorbell-refetched snapshot tables whose doorbell rides the
 	// resource stream, like cluster-identities; their payload owner is the builder
 	// that serves the maintained store the doorbell is rung from.
-	for domainID, expected := range map[string]struct{ scopeKind, owner string }{
-		"cluster-events":   {scopeKind: "cluster", owner: "backend/refresh/snapshot.ClusterEventsBuilder"},
-		"namespace-events": {scopeKind: "namespace-scope", owner: "backend/refresh/snapshot.NamespaceEventsBuilder"},
+	for domainID, owner := range map[string]string{
+		"cluster-events":   "backend/refresh/snapshot.ClusterEventsBuilder",
+		"namespace-events": "backend/refresh/snapshot.NamespaceEventsBuilder",
 	} {
 		events := contract.DomainInventory[domainID]
 		require.Equal(t, "snapshot-table", events.BehaviorClass, domainID)
-		require.Equal(t, expected.scopeKind, events.ScopeContract.Kind, domainID)
-		require.Equal(t, expected.owner, events.PayloadOwner, domainID)
+		require.Equal(t, owner, events.PayloadOwner, domainID)
 		require.Equal(t, "snapshot-cache", events.CachePolicy, domainID)
 		require.Equal(t, []string{"snapshot-replace", "change-signal"}, events.StreamSemantics, domainID)
 		require.Equal(t, "snapshot-table-payload", events.CoverageContract, domainID)
@@ -343,29 +310,31 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 
 	objectEvents := contract.DomainInventory["object-events"]
 	require.Equal(t, "event-snapshot", objectEvents.BehaviorClass)
-	require.Equal(t, "object-ref", objectEvents.ScopeContract.Kind)
 	require.Equal(t, "backend/refresh/snapshot.ObjectEventsBuilder", objectEvents.PayloadOwner)
 	require.Equal(t, "snapshot-cache", objectEvents.CachePolicy)
 	require.ElementsMatch(t, []string{"snapshot-replace", "change-signal"}, objectEvents.StreamSemantics)
 	require.Equal(t, "event-snapshot-payload", objectEvents.CoverageContract)
 
-	for _, domainID := range []string{"object-details", "object-yaml"} {
+	// object-details also rings a change signal after its cached details are
+	// evicted; object-yaml only replaces snapshots.
+	for domainID, semantics := range map[string][]string{
+		"object-details": {"snapshot-replace", "change-signal"},
+		"object-yaml":    {"snapshot-replace"},
+	} {
 		detail := contract.DomainInventory[domainID]
 		require.Equal(t, "detail-payload", detail.BehaviorClass)
-		require.Equal(t, "object-ref", detail.ScopeContract.Kind)
 		if domainID == "object-details" {
 			require.Equal(t, "provider-cache", detail.CachePolicy)
 		} else {
 			require.Equal(t, "snapshot-cache-plus-provider-cache", detail.CachePolicy)
 		}
-		require.Equal(t, []string{"snapshot-replace"}, detail.StreamSemantics)
+		require.Equal(t, semantics, detail.StreamSemantics, domainID)
 		require.Equal(t, "detail-payload-shape", detail.CoverageContract)
 	}
 
 	for _, domainID := range []string{"object-helm-manifest", "object-helm-values"} {
 		helm := contract.DomainInventory[domainID]
 		require.Equal(t, "helm-content-payload", helm.BehaviorClass)
-		require.Equal(t, "helm-release", helm.ScopeContract.Kind)
 		require.Equal(t, "snapshot-cache-plus-provider-cache", helm.CachePolicy)
 		require.Equal(t, []string{"snapshot-replace"}, helm.StreamSemantics)
 		require.Equal(t, "helm-content-shape", helm.CoverageContract)
@@ -373,15 +342,13 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 
 	objectMap := contract.DomainInventory["object-map"]
 	require.Equal(t, "graph-payload", objectMap.BehaviorClass)
-	require.Equal(t, "object-map", objectMap.ScopeContract.Kind)
-	require.Equal(t, "backend/refresh/snapshot.ObjectMapBuilder", objectMap.PayloadOwner)
+	require.Equal(t, "backend/refresh/snapshot.objectMapBuilder", objectMap.PayloadOwner)
 	require.Equal(t, "snapshot-cache", objectMap.CachePolicy)
 	require.Equal(t, []string{"snapshot-replace"}, objectMap.StreamSemantics)
 	require.Equal(t, "graph-payload-identity", objectMap.CoverageContract)
 
 	objectMaintenance := contract.DomainInventory["object-maintenance"]
 	require.Equal(t, "operation-state", objectMaintenance.BehaviorClass)
-	require.Equal(t, "node-maintenance", objectMaintenance.ScopeContract.Kind)
 	require.Equal(t, "backend/refresh/snapshot.NodeMaintenanceBuilder", objectMaintenance.PayloadOwner)
 	require.Equal(t, "snapshot-cache-bypass", objectMaintenance.CachePolicy)
 	require.Equal(t, []string{"snapshot-replace"}, objectMaintenance.StreamSemantics)
@@ -389,7 +356,6 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 
 	containerLogs := contract.DomainInventory["container-logs"]
 	require.Equal(t, "log-stream", containerLogs.BehaviorClass)
-	require.Equal(t, "log-stream-selector", containerLogs.ScopeContract.Kind)
 	require.Equal(t, "backend/refresh/containerlogsstream", containerLogs.PayloadOwner)
 	require.Equal(t, "stream-only", containerLogs.CachePolicy)
 	require.Equal(t, []string{"line-stream"}, containerLogs.StreamSemantics)
@@ -418,8 +384,8 @@ func TestSnapshotAndAggregateDomainRegistrationContracts(t *testing.T) {
 		"no fallback: denial must serve the permission-denied domain, not a degraded list")
 	require.Equal(t, "core/namespaces", namespaces.listWatch.deniedReason)
 
-	// Cluster overview degrades per resource (issue #244): the informer path is
-	// gated only on namespaces (the one informer the builder still owns — nodes,
+	// Cluster overview degrades per resource (issue #244): the feed path is
+	// gated only on namespaces (the one list+watch the builder still requires — nodes,
 	// pods, and workload counts come from permission-skip-safe ingest stores),
 	// and the list fallback registers when ANY primary resource is listable, so
 	// an identity without node access still gets a partial overview.
@@ -437,7 +403,7 @@ func TestSnapshotAndAggregateDomainRegistrationContracts(t *testing.T) {
 	}, overview.listWatch.fallbackChecks)
 	require.True(t, overview.listWatch.fallbackAllowAny,
 		"any listable primary resource must be enough for the list fallback")
-	require.NotNil(t, overview.listWatch.registerInformer)
+	require.NotNil(t, overview.listWatch.registerListWatch)
 	require.NotNil(t, overview.listWatch.registerFallback)
 	require.Equal(t, "cluster overview requires nodes, pods, or namespaces", overview.listWatch.deniedReason)
 }
@@ -475,10 +441,7 @@ func TestStreamOnlyDomainsHaveEndpointWiring(t *testing.T) {
 	require.NotEmpty(t, streamOnlyDomains)
 
 	kubeClient := fake.NewClientset()
-	runtimePerms := permissions.NewChecker(kubeClient, "cluster-a", 0)
-	informerFactory := informer.New(context.Background(), kubeClient, nil, 0, runtimePerms)
 	containerLogsHandler, resourceManager, err := registerStreamHandlers(streamDeps{
-		informerFactory: informerFactory,
 		cfg: Config{
 			KubernetesClient: kubeClient,
 			ClusterID:        "cluster-a",
@@ -529,7 +492,6 @@ func TestResourceStreamDomainsMatchProjectionDescriptors(t *testing.T) {
 	for domain, descriptor := range descriptors {
 		entry, ok := contract.ResourceStream.Domains[domain]
 		require.Truef(t, ok, "resourceStream.domains.%s missing from refresh-domain-contract.json", domain)
-		require.Equalf(t, descriptor.ScopeKind, entry.ScopeKind, "domain %s scopeKind drift", domain)
 		require.Equalf(t, descriptor.CompleteIsScopeLevel, entry.CompleteIsScopeLevel, "domain %s completeIsScopeLevel drift", domain)
 		requireResourceSetEqual(t, domain, "primaryResources", descriptor.PrimaryResources, entry.PrimaryResources)
 		requireResourceSetEqual(t, domain, "relatedResources", descriptor.RelatedResources, entry.RelatedResources)
@@ -823,22 +785,10 @@ func setOf(values ...string) map[string]struct{} {
 	return result
 }
 
-func requireSourcePathExists(t *testing.T, owner string) {
-	t.Helper()
-	path, _, ok := strings.Cut(owner, ":")
-	require.Truef(t, ok, "source owner %q must be formatted as path:symbol", owner)
-	require.NotEmpty(t, path)
-	_, filename, _, ok := goruntime.Caller(0)
-	require.True(t, ok)
-	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", ".."))
-	_, err := os.Stat(filepath.Join(repoRoot, path))
-	require.NoErrorf(t, err, "source owner %q must reference an existing file", owner)
-}
-
 type fullObjectDetailProvider struct{}
 
-func (fullObjectDetailProvider) FetchObjectDetails(context.Context, schema.GroupVersionKind, string, string) (interface{}, error) {
-	return nil, nil
+func (fullObjectDetailProvider) FetchObjectDetails(context.Context, schema.GroupVersionKind, string, string) (snapshot.ObjectDetail, error) {
+	return snapshot.ObjectDetail{}, nil
 }
 
 func (fullObjectDetailProvider) FetchObjectYAML(context.Context, schema.GroupVersionKind, string, string) (string, error) {
@@ -849,8 +799,8 @@ func (fullObjectDetailProvider) FetchHelmManifest(context.Context, string, strin
 	return "", 0, nil
 }
 
-func (fullObjectDetailProvider) FetchHelmValues(context.Context, string, string) (map[string]interface{}, int, error) {
-	return nil, 0, nil
+func (fullObjectDetailProvider) FetchHelmValues(context.Context, string, string) (helm.HelmReleaseValues, int, error) {
+	return helm.HelmReleaseValues{}, 0, nil
 }
 
 func loadRefreshDomainContract(t *testing.T) refreshDomainContract {
@@ -925,17 +875,35 @@ func TestDomainReadinessResourcesUnionsDeclaredContracts(t *testing.T) {
 	require.Equal(t, []string{"core/namespaces"}, readiness["namespaces"])
 	require.Equal(t, []string{"core/pods"}, readiness["pods"])
 
-	// Domains with no declaration anywhere stay absent and keep the
-	// conservative factory-wide gate.
-	require.NotContains(t, readiness, "object-yaml")
-	require.NotContains(t, readiness, "object-details")
-	require.NotContains(t, readiness, "catalog")
-
-	// Every mapped domain has a non-empty, canonical (group/resource) key set.
+	// Every key is canonical (group/resource).
 	for domainName, keys := range readiness {
-		require.NotEmptyf(t, keys, "domain %q mapped with an empty readiness set", domainName)
 		for _, key := range keys {
 			require.Containsf(t, key, "/", "domain %q key %q is not canonical", domainName, key)
 		}
+	}
+}
+
+// Every domain declares which object feeds it waits on. A domain left out
+// would fall back to the whole-feed gate, which waits on every kind (so one
+// slow watch delays it) yet skips on-demand dynamic reflectors (so its first
+// build could serve one of those unsynced as empty). Domains whose payload
+// reads no object feed (catalog service, live GETs, metrics, maintenance)
+// declare an empty set and build without waiting.
+func TestEveryDomainDeclaresItsFeedReadiness(t *testing.T) {
+	registrations := domainRegistrations(context.Background(), registrationDeps{cfg: Config{}})
+	readiness := domainReadinessResources(registrations)
+
+	feedIndependent := []string{
+		"catalog", "catalog-diff", "namespace-metrics", "object-details",
+		"object-helm-manifest", "object-helm-values", "object-maintenance", "object-yaml",
+	}
+	for _, registration := range registrations {
+		keys, declared := readiness[registration.name]
+		require.Truef(t, declared, "domain %q declares no feed readiness", registration.name)
+		if slices.Contains(feedIndependent, registration.name) {
+			require.Emptyf(t, keys, "feed-independent domain %q must not wait on feeds", registration.name)
+			continue
+		}
+		require.NotEmptyf(t, keys, "domain %q reads object feeds but declares none", registration.name)
 	}
 }

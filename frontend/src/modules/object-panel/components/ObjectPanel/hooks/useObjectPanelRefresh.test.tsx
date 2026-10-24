@@ -1,345 +1,181 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelRefresh.test.tsx
+ *
+ * The panel's object-details lease and its derived state through the real
+ * data broker, refresh orchestrator, store, and auto-refresh preference,
+ * inside the app shell. Only the backend boundary is faked
+ * (test-utils/appState). Doorbell refetches, the 10 s backstop, and hidden
+ * panels are covered by objectDetailsDoorbell.test.tsx.
  */
 
-import type React from 'react';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { requireValue } from '@/test-utils/requireValue';
-import type { PanelObjectData } from '../types';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { getScopedDomainState } from '@/core/refresh/store';
+import type { ObjectDetailsSnapshotPayload } from '@/core/refresh/types';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { streamKey } from '@/test-utils/appState/transport';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
+import { objectDetailOf } from '@/test-utils/objectDetail';
 import { useObjectPanelRefresh } from './useObjectPanelRefresh';
 
-const hoistedMocks = vi.hoisted(() => ({
-  refreshManager: {
-    register: vi.fn(),
-    unregister: vi.fn(),
-  },
-  refreshOrchestrator: {
-    setScopedDomainEnabled: vi.fn(),
-    resetScopedDomain: vi.fn(),
-    fetchScopedDomain: vi.fn(),
-    updateContext: vi.fn(),
-  },
-  useRefreshScopedDomain: vi.fn(),
-  useRefreshWatcher: vi.fn(),
-  autoRefreshLoadingState: {
-    isPaused: false,
-    isManualRefreshActive: false,
-    suppressPassiveLoading: false,
-  },
-}));
+const app = installAppStateHarness();
 
-vi.mock('@/core/refresh', () => ({
-  refreshManager: hoistedMocks.refreshManager,
-  refreshOrchestrator: hoistedMocks.refreshOrchestrator,
-}));
+type RefreshResult = ReturnType<typeof useObjectPanelRefresh>;
 
-vi.mock('@/core/refresh/store', () => ({
-  useRefreshScopedDomain: (...args: unknown[]) => hoistedMocks.useRefreshScopedDomain(...args),
-}));
+let refresh: RefreshResult | null = null;
 
-vi.mock('@/core/refresh/hooks/useRefreshWatcher', () => ({
-  useRefreshWatcher: (...args: unknown[]) => hoistedMocks.useRefreshWatcher(...args),
-}));
+function DetailsProbe({ detailScope }: Readonly<{ detailScope: string | null }>) {
+  refresh = useObjectPanelRefresh({ detailScope, isOpen: true, resourceDeleted: false });
+  return null;
+}
 
-vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
-  useAutoRefreshLoadingState: () => hoistedMocks.autoRefreshLoadingState,
-}));
-
-vi.mock('@/core/settings/appPreferences', () => ({
-  getAutoRefreshEnabled: () => !hoistedMocks.autoRefreshLoadingState.isPaused,
-}));
-
-const mockRefreshManager = hoistedMocks.refreshManager;
-const mockRefreshOrchestrator = hoistedMocks.refreshOrchestrator;
-const mockUseRefreshScopedDomain = hoistedMocks.useRefreshScopedDomain;
-const mockUseRefreshWatcher = hoistedMocks.useRefreshWatcher;
-const autoRefreshLoadingState = hoistedMocks.autoRefreshLoadingState;
+const current = (): RefreshResult => {
+  if (!refresh) {
+    throw new Error('expected the details hook to render');
+  }
+  return refresh;
+};
 
 describe('useObjectPanelRefresh', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
-  const resultRef: { current: ReturnType<typeof useObjectPanelRefresh> | null } = { current: null };
+  let dev: TestCluster;
+  let view: MountedApp;
+  let detailScope: string;
 
-  const baseObjectData: PanelObjectData = {
-    kind: 'Deployment',
-    name: 'api',
-    namespace: 'team-a',
+  const start = async () => {
+    refresh = null;
+    dev = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, ['team-a']);
+    detailScope =
+      app.object(dev, {
+        group: 'apps',
+        version: 'v1',
+        kind: 'Deployment',
+        namespace: 'team-a',
+        name: 'api',
+      }).scopes.detailScope ?? '';
+    view = await app.render(null);
   };
 
-  const basePanelId = 'obj:cluster-a:apps/v1/deployment:team-a:api';
-  const expectedRefresherName = `object-deployment:${basePanelId}`;
-
-  const renderHook = async (
-    override: Partial<Parameters<typeof useObjectPanelRefresh>[0]> = {}
-  ) => {
-    const propsRef = {
-      current: {
-        detailScope: 'cluster-a|team-a:apps/v1:deployment:api',
-        objectKind: 'deployment',
-        objectData: baseObjectData,
-        panelId: basePanelId,
-        isOpen: true,
-        resourceDeleted: false,
-        ...override,
-      },
-    };
-
-    const HookHarness: React.FC = () => {
-      resultRef.current = useObjectPanelRefresh(propsRef.current);
-      return null;
-    };
-
-    await act(async () => {
-      root.render(<HookHarness />);
-      await Promise.resolve();
-    });
-
-    return {
-      getResult: () =>
-        requireValue(resultRef.current, 'expected test value in useObjectPanelRefresh.test.tsx'),
-      rerender: async (next?: Partial<Parameters<typeof useObjectPanelRefresh>[0]>) => {
-        propsRef.current = { ...propsRef.current, ...next };
-        await act(async () => {
-          root.render(<HookHarness />);
-          await Promise.resolve();
-        });
-      },
-    };
+  // backend object-details for the Deployment, as the snapshot API serves it.
+  const serveDetails = (overrides: Partial<ObjectDetailsSnapshotPayload> = {}) => {
+    app.snapshots.serve('object-details', detailScope, {
+      clusterId: dev.clusterId,
+      clusterName: dev.clusterName,
+      ...objectDetailOf('deployment', { desiredReplicas: 3 }),
+      ...overrides,
+    } as ObjectDetailsSnapshotPayload);
   };
-
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    resultRef.current = null;
-    mockRefreshManager.register.mockClear();
-    mockRefreshManager.unregister.mockClear();
-    mockRefreshOrchestrator.setScopedDomainEnabled.mockClear();
-    mockRefreshOrchestrator.resetScopedDomain.mockClear();
-    mockRefreshOrchestrator.fetchScopedDomain.mockClear();
-    mockRefreshOrchestrator.fetchScopedDomain.mockResolvedValue(undefined);
-    mockRefreshOrchestrator.updateContext.mockClear();
-    mockUseRefreshWatcher.mockClear();
-    mockUseRefreshScopedDomain.mockReset();
-    autoRefreshLoadingState.isPaused = false;
-    autoRefreshLoadingState.isManualRefreshActive = false;
-    autoRefreshLoadingState.suppressPassiveLoading = false;
-    mockUseRefreshScopedDomain.mockReturnValue({
-      data: { details: { replicas: 3 } },
-      status: 'ready',
-      error: null,
-    });
-  });
 
   afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
+    vi.useRealTimers();
   });
 
-  it('registers refreshers, enables scoped domains, and fetches on mount', async () => {
-    await renderHook();
+  const detailReads = () =>
+    app.snapshots.reads('object-details').filter((read) => read.scope === detailScope);
 
-    expect(mockRefreshManager.register).toHaveBeenCalledWith(
-      expect.objectContaining({ name: expectedRefresherName, interval: 5000 })
-    );
-    expect(mockUseRefreshWatcher).toHaveBeenCalledWith(
-      expect.objectContaining({ refresherName: expectedRefresherName, enabled: true })
-    );
-    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
-      'object-details',
-      'cluster-a|team-a:apps/v1:deployment:api',
-      true,
-      { preserveState: true }
-    );
-    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
-      'object-details',
-      'cluster-a|team-a:apps/v1:deployment:api',
-      expect.objectContaining({ isManual: false })
-    );
-    expect(mockRefreshOrchestrator.updateContext).not.toHaveBeenCalled();
-  });
-
-  it('cleans up refresh subscriptions on unmount but preserves cached state', async () => {
-    await renderHook();
-
-    act(() => {
-      root.unmount();
-    });
-
-    expect(mockRefreshManager.unregister).toHaveBeenCalledWith(expectedRefresherName);
-    // Tier 1 responsiveness: stop refreshing this scope but keep the
-    // cached snapshot in place. The cache is only freed via
-    // ObjectPanelStateContext.closePanel when the user actually closes
-    // the panel — this lets cluster-switch round-trips render instantly
-    // from cache.
-    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
-      'object-details',
-      'cluster-a|team-a:apps/v1:deployment:api',
-      false,
-      { preserveState: true }
-    );
-    expect(mockRefreshOrchestrator.resetScopedDomain).not.toHaveBeenCalledWith(
-      'object-details',
-      'cluster-a|team-a:apps/v1:deployment:api'
-    );
-  });
-
-  it('exposes fetch helper and derives loading/error state', async () => {
-    const { getResult } = await renderHook();
-    const { fetchResourceDetails, detailsLoading, detailsError, detailPayload } = getResult();
-
-    expect(detailsLoading).toBe(false);
-    expect(detailsError).toBeNull();
-    expect(detailPayload).toEqual({ replicas: 3 });
-
-    await fetchResourceDetails('user');
-    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
-      'object-details',
-      'cluster-a|team-a:apps/v1:deployment:api',
-      expect.objectContaining({ isManual: true })
-    );
-  });
-
-  it('exposes deletion metadata from the object-details envelope', async () => {
+  it('reads the details when shown and exposes them with their deletion metadata', async () => {
+    await start();
     const deletion = {
       deletionTimestamp: '2026-08-09T12:34:56Z',
       finalizers: ['example.com/cleanup'],
     };
-    mockUseRefreshScopedDomain.mockReturnValue({
-      data: { details: { replicas: 3 }, deletion },
-      status: 'ready',
-      error: null,
+    serveDetails({ deletion });
+
+    await view.show(<DetailsProbe detailScope={detailScope} />);
+
+    expect(detailReads()).not.toEqual([]);
+    expect(current().detail).toMatchObject({
+      detailType: 'deployment',
+      details: { desiredReplicas: 3 },
     });
-
-    const { getResult } = await renderHook();
-
-    expect(getResult().deletion).toEqual(deletion);
+    expect(current().deletion).toEqual(deletion);
+    expect(current().detailsLoading).toBe(false);
+    expect(current().detailsError).toBeNull();
   });
 
-  it('surfaces detail errors while suppressing unsupported-provider errors', async () => {
-    mockUseRefreshScopedDomain.mockReturnValue({
-      data: null,
-      status: 'error',
-      error: 'fetch failed',
-    });
-    const { getResult, rerender } = await renderHook();
-    expect(getResult().detailsError).toBe('fetch failed');
+  it('keeps the cached details when the panel unmounts', async () => {
+    vi.useFakeTimers();
+    await start();
+    serveDetails();
+    await view.show(<DetailsProbe detailScope={detailScope} />);
 
-    mockUseRefreshScopedDomain.mockReturnValue({
-      data: null,
-      status: 'error',
-      error: 'object detail provider not implemented for Widget',
+    view.clear();
+    // Past the stream's unsubscribe debounce, when a released lease stops.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
     });
-    await rerender();
-    expect(getResult().detailsError).toBeNull();
+
+    expect(app.streams.active()).not.toContain(streamKey('object-details', detailScope));
+    // A cluster-switch round trip repaints from this cache; only closing the
+    // panel frees it (ObjectPanelStateContext closePanel).
+    expect(getScopedDomainState('object-details', detailScope).data).toMatchObject({
+      details: { desiredReplicas: 3 },
+    });
   });
 
-  it('runs watcher refreshes and ignores an aborted watcher signal', async () => {
-    await renderHook();
-    const watcherCall =
-      mockUseRefreshWatcher.mock.calls[mockUseRefreshWatcher.mock.calls.length - 1];
-    const watcher = watcherCall?.[0] as {
-      onRefresh: (isManual: boolean, signal: AbortSignal) => Promise<void>;
-    };
-    mockRefreshOrchestrator.fetchScopedDomain.mockClear();
+  it('reads the details again on a user refresh', async () => {
+    await start();
+    serveDetails();
+    await view.show(<DetailsProbe detailScope={detailScope} />);
+    serveDetails(objectDetailOf('deployment', { desiredReplicas: 5 }));
+    const readsBefore = detailReads().length;
 
-    await watcher.onRefresh(false, new AbortController().signal);
-    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
+    await act(async () => {
+      await current().fetchResourceDetails('user');
+    });
+    await app.settle();
+
+    expect(detailReads().length).toBeGreaterThan(readsBefore);
+    expect(current().detail).toMatchObject({ details: { desiredReplicas: 5 } });
+  });
+
+  it('surfaces a detail read failure', async () => {
+    await start();
+    app.snapshots.fail(
       'object-details',
-      'cluster-a|team-a:apps/v1:deployment:api',
-      expect.objectContaining({ isManual: false })
+      detailScope,
+      makeErrorStatus('InternalError', 'details unavailable')
     );
 
-    const controller = new AbortController();
-    controller.abort();
-    mockRefreshOrchestrator.fetchScopedDomain.mockClear();
-    await watcher.onRefresh(true, controller.signal);
-    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
+    await view.show(<DetailsProbe detailScope={detailScope} />);
+
+    expect(current().detail).toBeNull();
+    expect(current().detailsError).toMatchObject({
+      kind: 'backend',
+      status: { reason: 'InternalError', message: 'details unavailable' },
+    });
+    // An unexpected backend failure is also raised to the user.
+    expect(
+      app.errors
+        .take((record) => record.kinds.includes('toast'))
+        .map(({ error }) => (error instanceof Error ? error.message : String(error)))
+    ).toEqual(['details unavailable']);
   });
 
   it('keeps the fetch helper inert without an object scope', async () => {
-    const { getResult } = await renderHook({
-      detailScope: null,
-      objectKind: null,
-      objectData: null,
-      panelId: null,
-    });
-    mockRefreshOrchestrator.fetchScopedDomain.mockClear();
-
-    await getResult().fetchResourceDetails('user');
-
-    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
-    expect(mockRefreshManager.register).not.toHaveBeenCalled();
-  });
-
-  it('suppresses passive detail loading while auto-refresh is paused', async () => {
-    autoRefreshLoadingState.isPaused = true;
-    autoRefreshLoadingState.suppressPassiveLoading = true;
-    mockUseRefreshScopedDomain.mockReturnValue({
-      data: null,
-      status: 'loading',
-      error: null,
-    });
-
-    const { getResult } = await renderHook();
-
-    expect(getResult().detailsLoading).toBe(false);
-    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
-  });
-
-  it('registers a distinct refresher per panel so same-kind panels never clobber each other', async () => {
-    // Two simultaneously-open Deployment panels (the dockable multi-panel
-    // model mounts one ObjectPanel per open object). With a kind-only
-    // refresher name the second registration replaced the first and either
-    // panel's unmount unregistered the survivor's refresher + subscribers.
-    const otherPanelId = 'obj:cluster-a:apps/v1/deployment:team-a:web';
-    // Stable per-panel objectData, mirroring production where the panel ref
-    // identity does not change across renders.
-    const panelObjects: Record<string, PanelObjectData> = {
-      api: { ...baseObjectData, name: 'api' },
-      web: { ...baseObjectData, name: 'web' },
-    };
-    const PanelHarness: React.FC<{ panelId: string; name: string }> = ({ panelId, name }) => {
-      useObjectPanelRefresh({
-        detailScope: `cluster-a|team-a:apps/v1:deployment:${name}`,
-        objectKind: 'deployment',
-        objectData: panelObjects[name],
-        panelId,
-        isOpen: true,
-        resourceDeleted: false,
-      });
-      return null;
-    };
+    await start();
+    await view.show(<DetailsProbe detailScope={null} />);
 
     await act(async () => {
-      root.render(
-        <>
-          <PanelHarness key="api" panelId={basePanelId} name="api" />
-          <PanelHarness key="web" panelId={otherPanelId} name="web" />
-        </>
-      );
-      await Promise.resolve();
+      await current().fetchResourceDetails('user');
     });
 
-    const registeredNames = mockRefreshManager.register.mock.calls.map(
-      (call) => (call[0] as { name: string }).name
-    );
-    expect(registeredNames).toContain(`object-deployment:${basePanelId}`);
-    expect(registeredNames).toContain(`object-deployment:${otherPanelId}`);
-    expect(new Set(registeredNames).size).toBe(registeredNames.length);
+    expect(app.snapshots.reads('object-details')).toEqual([]);
+    expect(current().detail).toBeNull();
+  });
 
-    // Unmounting one panel must only unregister ITS refresher.
-    await act(async () => {
-      root.render(<PanelHarness key="api" panelId={basePanelId} name="api" />);
-      await Promise.resolve();
-    });
-    expect(mockRefreshManager.unregister).toHaveBeenCalledWith(`object-deployment:${otherPanelId}`);
-    expect(mockRefreshManager.unregister).not.toHaveBeenCalledWith(
-      `object-deployment:${basePanelId}`
-    );
+  it('shows no passive loading and reads nothing while auto-refresh is paused', async () => {
+    app.preferences({ autoRefreshEnabled: false });
+    await start();
+    serveDetails();
+
+    await view.show(<DetailsProbe detailScope={detailScope} />);
+
+    expect(current().detailsLoading).toBe(false);
+    expect(app.snapshots.reads('object-details')).toEqual([]);
   });
 });

@@ -47,7 +47,7 @@ func TestTeardownRefreshSubsystemUnpublishesBeforeManagerShutdown(t *testing.T) 
 	setRefreshServiceReadyForTest(app.Refresh)
 	app.Refresh.refreshAggregates.Store(&refreshAggregateHandlers{})
 
-	hub := &blockingShutdownInformerHub{
+	hub := &blockingShutdownFeedHub{
 		shutdownStarted: make(chan struct{}),
 		releaseShutdown: make(chan struct{}),
 	}

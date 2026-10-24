@@ -8,6 +8,7 @@ import { useSyncExternalStore } from 'react';
 import type { SnapshotStats } from './client';
 import { parseClusterScope } from './clusterScope';
 import type { RefreshSourceClock } from './domainRegistry';
+import type { RefreshFailure } from './refreshFailure';
 import type { DomainPayloadMap, RefreshDomain } from './types';
 
 export type DomainStatus = 'idle' | 'loading' | 'initialising' | 'updating' | 'ready' | 'error';
@@ -29,6 +30,7 @@ export interface DomainSnapshotState<TPayload> {
   // The backend refused this scope for lack of RBAC permission (typed 403).
   // Background refetches skip denied scopes until manual refresh or the owning
   // cluster's auth/scope/permission recovery starts a new permission epoch.
+  // Kept apart from `error`, which stream resets clear.
   permissionDenied?: boolean;
   checksum?: string;
   etag?: string;
@@ -48,7 +50,8 @@ export interface DomainSnapshotState<TPayload> {
   lastUpdated?: number;
   lastManualRefresh?: number;
   lastAutoRefresh?: number;
-  error?: string | null;
+  // Why the last fetch failed.
+  error?: RefreshFailure | null;
   isManual?: boolean;
   droppedAutoRefreshes: number;
   scope?: string;

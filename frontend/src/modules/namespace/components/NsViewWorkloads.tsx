@@ -7,14 +7,12 @@
 
 import './NsViewWorkloads.css';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import NsViewPods from '@modules/namespace/components/NsViewPods';
+import { PodsTable } from '@modules/namespace/components/NsViewPods';
 import {
   appendWorkloadTokens,
   type WorkloadData,
 } from '@modules/namespace/components/NsViewWorkloads.helpers';
-import type { PodWorkloadFilterRequest } from '@modules/namespace/components/podOwnerFilter';
 import useWorkloadTableColumns from '@modules/namespace/components/useWorkloadTableColumns';
-import WorkloadsPodsSplit from '@modules/namespace/components/WorkloadsPodsSplit';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
@@ -23,22 +21,26 @@ import {
   RESOURCE_STATUS_QUERY_FACET_KEYS,
   selectPayloadRows,
 } from '@modules/resource-grid/typedResourceQueryScope';
+import { useClearHiddenRowSelection } from '@modules/resource-grid/useClearHiddenRowSelection';
+import { useOpenRowDetails } from '@modules/resource-grid/useOpenRowDetails';
 import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import type { IconBarItem } from '@shared/components/IconBar/IconBar';
-import { CloseIcon } from '@shared/components/icons/SharedIcons';
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import type {
+  GridColumnDefinition,
+  GridTableRowDetail,
+} from '@shared/components/tables/GridTable.types';
+import type { RowDetailToggleOptions } from '@shared/components/tables/rowDetailToggle';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
+import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
   type ClusterObjectReference,
 } from '@shared/utils/objectIdentity';
-import { FavoritePaneGroup } from '@ui/favorites/FavToggle';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { NamespaceWorkloadSnapshotPayload, PodMetricsInfo } from '@/core/refresh/types';
-import { useShortNames } from '@/hooks/useShortNames';
+import { usePreference } from '@/core/settings/usePreference';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { buildWorkloadActionReference } from './workloadActionReference';
 
@@ -48,32 +50,43 @@ interface WorkloadsViewProps {
   metrics?: PodMetricsInfo | null;
 }
 
-const WORKLOAD_FAVORITE_PANES = ['workloads', 'pods'] as const;
-const CLEAR_POD_WORKLOAD_FILTER_REQUEST: PodWorkloadFilterRequest = { type: 'clear' };
-
 interface WorkloadsTableProps extends WorkloadsViewProps {
   clusterId?: string | null;
+  /** The highlighted row. */
   selectedWorkloadKey?: string | null;
+  /** The rows whose pods are open under them. */
+  openWorkloadKeys?: readonly string[];
   onWorkloadSelect?: (workload: WorkloadData) => void;
   onWorkloadSelectionClear?: () => void;
+  onWorkloadPodsToggle?: (workload: WorkloadData) => void;
+  /** Closes these rows' pods. */
+  onWorkloadPodsClose?: (rowKeys: readonly string[]) => void;
+  renderWorkloadPods?: (workload: WorkloadData) => React.ReactNode;
 }
 
+const NO_ROW_KEYS: readonly string[] = [];
+const WORKLOADS_VIEW_ID = 'namespace-workloads';
+
 /**
- * GridTable component for namespace workloads without nested pod expansion
+ * GridTable of namespace workloads; a workload's pods open under its row.
  */
-export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
+const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
   ({
     namespace,
     clusterId,
     showNamespaceColumn = false,
     metrics = null,
     selectedWorkloadKey = null,
+    openWorkloadKeys = NO_ROW_KEYS,
     onWorkloadSelect,
     onWorkloadSelectionClear,
+    onWorkloadPodsToggle,
+    onWorkloadPodsClose,
+    renderWorkloadPods,
   }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
-    const useShortResourceNames = useShortNames();
+    const useShortResourceNames = usePreference('useShortResourceNames');
     const { selectedClusterId, selectedClusterName } = useKubeconfig();
     const queryClusterId = clusterId ?? selectedClusterId;
     const [tableMetricsInfo, setTableMetricsInfo] = useState<PodMetricsInfo | null>(null);
@@ -115,34 +128,46 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
       [queryClusterId]
     );
 
+    const podsToggle = useMemo<RowDetailToggleOptions<WorkloadData> | undefined>(
+      () =>
+        onWorkloadPodsToggle
+          ? {
+              getRowKey: keyExtractor,
+              isOpen: (row) => openWorkloadKeys.includes(keyExtractor(row)),
+              onToggle: onWorkloadPodsToggle,
+              getLabel: (row, open) =>
+                `${open ? 'Hide' : 'Show'} pods for ${row.ref.name} (${row.ready ?? 'no'} ready)`,
+              getText: (row) => row.ready ?? '—',
+            }
+          : undefined,
+      [keyExtractor, onWorkloadPodsToggle, openWorkloadKeys]
+    );
+
     const tableColumns = useWorkloadTableColumns({
       handleWorkloadClick,
       onAltClick: handleWorkloadAltClick,
       showNamespaceColumn,
       useShortResourceNames,
+      podsToggle,
       metrics: metricsInfo ?? null,
     });
+
+    const rowDetail = useMemo<GridTableRowDetail<WorkloadData> | undefined>(
+      () =>
+        renderWorkloadPods
+          ? {
+              openRowKeys: openWorkloadKeys,
+              render: renderWorkloadPods,
+              getLabel: (row) => `Pods for ${row.ref.name}`,
+              getGroupClassName: (row) => getKindColorClass(row.ref.kind),
+            }
+          : undefined,
+      [openWorkloadKeys, renderWorkloadPods]
+    );
 
     const isAllNamespaces = namespace === ALL_NAMESPACES_SCOPE;
     const showNamespaceFilter = isAllNamespaces;
     const diagnosticsLabel = isAllNamespaces ? 'All Namespaces Workloads' : 'Namespace Workloads';
-    const viewActions = useMemo<IconBarItem[]>(
-      () => [
-        ...(selectedWorkloadKey && onWorkloadSelectionClear
-          ? [
-              {
-                type: 'action' as const,
-                id: 'clear-workload-selection',
-                icon: <CloseIcon width={18} height={18} />,
-                onClick: onWorkloadSelectionClear,
-                title: 'Clear selected workload',
-              },
-            ]
-          : []),
-      ],
-      [onWorkloadSelectionClear, selectedWorkloadKey]
-    );
-
     const getRowSearchValues = useCallback((row: WorkloadData) => {
       const tokens: string[] = [];
       appendWorkloadTokens(tokens, row);
@@ -162,7 +187,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
       excludedQueryFacetKeys: RESOURCE_STATUS_QUERY_FACET_KEYS,
       label: diagnosticsLabel,
       selectRows: selectPayloadRows,
-      viewId: 'namespace-workloads',
+      viewId: WORKLOADS_VIEW_ID,
       namespace,
       columns: tableColumns as unknown as GridColumnDefinition<WorkloadData>[],
       keyExtractor,
@@ -177,8 +202,6 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
       showNamespaceFilters: showNamespaceFilter,
       diagnosticsLabel,
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
-      viewActions,
-      favoritePane: { id: 'workloads', label: 'Workloads' },
     });
 
     // The base query payload carries the poller freshness block for the usage
@@ -186,6 +209,23 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
     useEffect(() => {
       setTableMetricsInfo(queryPayload?.metrics ?? null);
     }, [queryPayload?.metrics]);
+
+    const selectedWorkloadKeys = useMemo(
+      () => (selectedWorkloadKey ? [selectedWorkloadKey] : NO_ROW_KEYS),
+      [selectedWorkloadKey]
+    );
+    useClearHiddenRowSelection({
+      selectedKeys: selectedWorkloadKeys,
+      source,
+      keyExtractor,
+      onClear: onWorkloadSelectionClear,
+    });
+    useClearHiddenRowSelection({
+      selectedKeys: openWorkloadKeys,
+      source,
+      keyExtractor,
+      onClear: onWorkloadPodsClose,
+    });
 
     const getContextMenuItems = useCallback(
       (row: WorkloadData): ContextMenuItem[] => {
@@ -220,34 +260,33 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
     );
 
     return (
-      <div className="workloads-pods-table-surface">
-        <div className="workloads-pods-table-surface__table">
-          <ResourceInventoryTable
-            source={source}
-            gridTableProps={resolvedGridTableProps}
-            spinnerMessage="Loading workloads..."
-            updatingMessage="Updating workloads…"
-            allowPartial
-            favModal={favModal}
-            columns={tableColumns}
-            diagnosticsLabel={diagnosticsLabel}
-            diagnosticsMode="live"
-            onRowClick={handleWorkloadClick}
-            onRowPointerClick={onWorkloadSelect}
-            onRowSelectionToggle={onWorkloadSelect}
-            onRowSelectionClear={selectedWorkloadKey ? onWorkloadSelectionClear : undefined}
-            getRowClassName={getRowClassName}
-            isRowSelected={isRowSelected}
-            tableClassName="gridtable-workloads"
-            enableContextMenu={true}
-            getCustomContextMenuItems={getContextMenuItems}
-            emptyMessage={emptyMessage}
-            enableColumnVisibilityMenu
-          />
-        </div>
+      <>
+        <ResourceInventoryTable
+          source={source}
+          gridTableProps={resolvedGridTableProps}
+          spinnerMessage="Loading workloads..."
+          updatingMessage="Updating workloads…"
+          allowPartial
+          favModal={favModal}
+          columns={tableColumns}
+          diagnosticsLabel={diagnosticsLabel}
+          diagnosticsMode="live"
+          onRowClick={handleWorkloadClick}
+          onRowPointerClick={onWorkloadSelect}
+          onRowExpandToggle={onWorkloadPodsToggle}
+          onRowSelectionClear={selectedWorkloadKey ? onWorkloadSelectionClear : undefined}
+          getRowClassName={getRowClassName}
+          isRowSelected={isRowSelected}
+          rowDetail={rowDetail}
+          tableClassName="gridtable-workloads"
+          enableContextMenu={true}
+          getCustomContextMenuItems={getContextMenuItems}
+          emptyMessage={emptyMessage}
+          enableColumnVisibilityMenu
+        />
 
         {objectActions.modals}
-      </div>
+      </>
     );
   }
 );
@@ -258,6 +297,17 @@ interface ScopedWorkloadsViewProps extends WorkloadsViewProps {
   selectedClusterId?: string | null;
 }
 
+// The highlight lives only in this mounted view and only for the current
+// cluster and namespace scope.
+const refInScope = (
+  ref: ClusterObjectReference | null,
+  clusterId: string | null | undefined,
+  namespace: string
+) =>
+  ref === null ||
+  (ref.clusterId === clusterId &&
+    (namespace === ALL_NAMESPACES_SCOPE || ref.namespace === namespace));
+
 const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
   namespace,
   showNamespaceColumn = false,
@@ -266,87 +316,99 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
 }) => {
   const { selectedClusterName } = useKubeconfig();
   const [selectedWorkload, setSelectedWorkload] = useState<ClusterObjectReference | null>(null);
-  const [podFilterRequest, setPodFilterRequest] = useState<PodWorkloadFilterRequest>();
-  const [podsCollapsed, setPodsCollapsed] = useState(false);
-
-  // Keep selection provenance across a scope change long enough to remove only
-  // its Owner facet from shared persistence. Manual and favorite Owner filters
-  // have no selected workload and remain ordinary persisted table state.
-  const selectedWorkloadMatchesScope =
-    selectedWorkload === null ||
-    (selectedWorkload.clusterId === selectedClusterId &&
-      (namespace === ALL_NAMESPACES_SCOPE || selectedWorkload.namespace === namespace));
-  const scopedSelectedWorkload = selectedWorkloadMatchesScope ? selectedWorkload : null;
-  const scopedPodFilterRequest = selectedWorkloadMatchesScope
-    ? podFilterRequest
-    : CLEAR_POD_WORKLOAD_FILTER_REQUEST;
+  const selectionInScope = refInScope(selectedWorkload, selectedClusterId, namespace);
+  const scopedSelectedWorkload = selectionInScope ? selectedWorkload : null;
 
   useEffect(() => {
-    if (selectedWorkloadMatchesScope) {
-      return;
+    if (!selectionInScope) {
+      setSelectedWorkload(null);
     }
-    setSelectedWorkload(null);
-    setPodFilterRequest(CLEAR_POD_WORKLOAD_FILTER_REQUEST);
-    setPodsCollapsed(false);
-  }, [selectedWorkloadMatchesScope]);
+  }, [selectionInScope]);
 
-  const handleWorkloadSelect = useCallback(
-    (workload: WorkloadData) => {
-      const ref = buildRequiredObjectReference(
+  const toReference = useCallback(
+    (workload: WorkloadData) =>
+      buildRequiredObjectReference(
         { ...workload.ref, clusterName: selectedClusterName },
         { fallbackClusterId: selectedClusterId }
-      );
-      setSelectedWorkload(ref);
-      // A collapsed Pods pane stays collapsed; it shows this workload's pods once expanded.
-      setPodFilterRequest({ type: 'set', workload: ref });
-    },
+      ),
     [selectedClusterId, selectedClusterName]
   );
-
-  const selectedWorkloadKey = useMemo(
-    () =>
-      scopedSelectedWorkload
-        ? buildRequiredCanonicalObjectRowKey(scopedSelectedWorkload, {
-            fallbackClusterId: selectedClusterId,
-          })
-        : null,
-    [scopedSelectedWorkload, selectedClusterId]
+  const rowKeyOf = useCallback(
+    (ref: ClusterObjectReference) =>
+      buildRequiredCanonicalObjectRowKey(ref, { fallbackClusterId: selectedClusterId }),
+    [selectedClusterId]
   );
-  const handleWorkloadSelectionClear = useCallback(() => {
-    setSelectedWorkload(null);
-    setPodFilterRequest(CLEAR_POD_WORKLOAD_FILTER_REQUEST);
-  }, []);
+  const {
+    openRefs: openWorkloads,
+    openKeys: openWorkloadKeys,
+    toggle: toggleWorkloadPods,
+    close: closeWorkloadPods,
+    closeKeys: closeWorkloadPodsByKey,
+  } = useOpenRowDetails({
+    clusterId: selectedClusterId ?? '',
+    viewId: WORKLOADS_VIEW_ID,
+    namespace,
+    keyOf: rowKeyOf,
+  });
+
+  const handleWorkloadSelect = useCallback(
+    (workload: WorkloadData) => setSelectedWorkload(toReference(workload)),
+    [toReference]
+  );
+  const handleWorkloadSelectionClear = useCallback(() => setSelectedWorkload(null), []);
+  // The Pods count and Space open or close a workload's pods and highlight it.
+  const handleWorkloadPodsToggle = useCallback(
+    (workload: WorkloadData) => {
+      const ref = toReference(workload);
+      setSelectedWorkload(ref);
+      toggleWorkloadPods(ref);
+    },
+    [toReference, toggleWorkloadPods]
+  );
+  // Each attached table follows its open reference, not the row object, so a
+  // workload refresh never rebuilds its query.
+  const renderWorkloadPods = useCallback(
+    (workload: WorkloadData) => {
+      const attachedTo = openWorkloads.get(rowKeyOf(toReference(workload)));
+      return attachedTo ? (
+        <PodsTable
+          namespace={namespace}
+          clusterId={selectedClusterId}
+          viewId="namespace-workload-pods"
+          namespaceLinkView="workloads"
+          showNamespaceColumn={showNamespaceColumn}
+          metrics={metrics}
+          attachedTo={attachedTo}
+          onClose={closeWorkloadPods}
+        />
+      ) : null;
+    },
+    [
+      closeWorkloadPods,
+      metrics,
+      namespace,
+      openWorkloads,
+      rowKeyOf,
+      selectedClusterId,
+      showNamespaceColumn,
+      toReference,
+    ]
+  );
+
   return (
-    <FavoritePaneGroup primaryPaneId="workloads" expectedPaneIds={WORKLOAD_FAVORITE_PANES}>
-      <WorkloadsPodsSplit
-        collapsed={podsCollapsed}
-        upper={
-          <WorkloadsTable
-            namespace={namespace}
-            clusterId={selectedClusterId}
-            showNamespaceColumn={showNamespaceColumn}
-            metrics={metrics}
-            selectedWorkloadKey={selectedWorkloadKey}
-            onWorkloadSelect={handleWorkloadSelect}
-            onWorkloadSelectionClear={handleWorkloadSelectionClear}
-          />
-        }
-        lower={
-          <NsViewPods
-            namespace={namespace}
-            showNamespaceColumn={showNamespaceColumn}
-            metrics={metrics}
-            workloadFilterRequest={scopedPodFilterRequest}
-            onWorkloadFilterMismatch={() => {
-              setSelectedWorkload(null);
-              setPodFilterRequest(undefined);
-            }}
-            collapsed={podsCollapsed}
-            onPodsCollapsedChange={setPodsCollapsed}
-          />
-        }
-      />
-    </FavoritePaneGroup>
+    <WorkloadsTable
+      namespace={namespace}
+      clusterId={selectedClusterId}
+      showNamespaceColumn={showNamespaceColumn}
+      metrics={metrics}
+      selectedWorkloadKey={scopedSelectedWorkload ? rowKeyOf(scopedSelectedWorkload) : null}
+      openWorkloadKeys={openWorkloadKeys}
+      onWorkloadSelect={handleWorkloadSelect}
+      onWorkloadSelectionClear={handleWorkloadSelectionClear}
+      onWorkloadPodsToggle={handleWorkloadPodsToggle}
+      onWorkloadPodsClose={closeWorkloadPodsByKey}
+      renderWorkloadPods={renderWorkloadPods}
+    />
   );
 };
 

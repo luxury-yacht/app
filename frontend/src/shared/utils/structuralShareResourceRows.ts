@@ -27,7 +27,9 @@ const canonicalRefsEqual = (left: CanonicalResourceRef, right: CanonicalResource
   left.name === right.name &&
   left.uid === right.uid;
 
-const enumerableValuesEqual = (left: unknown, right: unknown): boolean => {
+// Deep equality of JSON-shaped values: arrays by position, objects by their
+// own enumerable keys, everything else by Object.is.
+export const enumerableValuesEqual = (left: unknown, right: unknown): boolean => {
   if (Object.is(left, right)) {
     return true;
   }

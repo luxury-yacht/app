@@ -9,15 +9,15 @@
  * resync, so without this heal those rows would keep the unresolved owner until
  * the pod's next watch event — leaving the Deployment's workload-scoped pods
  * query empty and its doorbell silent. The resource-stream manager applies the
- * heal from the ReplicaSet informer's event handler via
+ * heal from the ReplicaSet store's bundle sink via
  * ProjectingStore.RewriteBundlesByIndex.
  *
  * The rewrite mirrors, field for field, what a fresh projection with a synced
  * lister produces: the Table half's owner triple (resolvePodOwner) and the
- * Aggregate half's WorkloadKind (workloadKindForPod). OwnerKey and the bundle
- * Indexes use the lister-independent name-suffix collapse, so they are already
- * correct and stay untouched. Equivalence with a fresh projection is pinned by
- * pod_owner_heal_test.go.
+ * Aggregate half's WorkloadKind (workloadKindForPod). It also sets the Aggregate
+ * half's OwnerKey to the Deployment's key; the store derives the owner-key index
+ * from it (PodOwnerKeyIndexValues), so the healed pod moves in that index.
+ * Equivalence with a fresh projection is pinned by pod_owner_heal_test.go.
  */
 
 package snapshot
@@ -31,8 +31,9 @@ import (
 )
 
 // PodOwnerKeyIndexName is the pod bundle secondary index keyed by the row's
-// owner-workload key (podAggregateBundleIndexes), exported so the resource-stream
-// manager can address the pods needing an owner heal without a store scan.
+// owner-workload key (PodOwnerKeyIndexValues), exported so the system can register
+// it and the resource-stream manager can address the pods needing an owner heal
+// without a store scan.
 const PodOwnerKeyIndexName = podOwnerKeyIndexName
 
 // PodOwnerHealIndexValues returns the owner-key index values under which a
@@ -78,7 +79,6 @@ func HealPodBundleReplicaSetOwner(
 		aggregate.WorkloadKind = deploymentpkg.Identity.Kind
 		aggregate.OwnerKey = WorkloadOwnerKey(deploymentpkg.Identity.Kind, namespace, deploymentName)
 		bundle.Aggregate = aggregate
-		bundle.Indexes = podAggregateBundleIndexes(aggregate)
 	}
 	return bundle, true
 }

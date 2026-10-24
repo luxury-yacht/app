@@ -1,62 +1,21 @@
 /**
  * frontend/src/core/refresh/permissionErrors.ts
  *
- * Helpers for parsing and formatting structured permission-denied payloads.
+ * Recognizes and formats the refresh layer's permission denials.
  */
 
-import type { PermissionDeniedStatus } from './types';
+import { errorStatusOf } from '@utils/errorStatus';
+import type { ErrorStatus } from './types';
 
-// Match the snapshot error marker without importing the HTTP client.
+// A refresh request the backend refused for lack of RBAC permission: a settled
+// answer for that scope, so automatic retries stop.
 export const isSnapshotPermissionDenied = (error: unknown): boolean =>
-  error instanceof Error && (error as { permissionDenied?: boolean }).permissionDenied === true;
+  errorStatusOf(error)?.reason === 'Forbidden';
 
-const isPlainObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
+const permissionDeniedBaseMessage = (status: ErrorStatus): string =>
+  status.message.trim() || 'Permission denied';
 
-const optionalFieldsHaveTypes = (
-  value: Record<string, unknown>,
-  fields: ReadonlyArray<readonly [string, 'string' | 'number']>
-): boolean =>
-  fields.every(([field, expectedType]) =>
-    value[field] === undefined ? true : typeof value[field] === expectedType
-  );
-
-const STATUS_FIELDS = [
-  ['kind', 'string'],
-  ['apiVersion', 'string'],
-  ['message', 'string'],
-  ['reason', 'string'],
-  ['code', 'number'],
-] as const;
-
-const DETAIL_FIELDS = [
-  ['domain', 'string'],
-  ['resource', 'string'],
-  ['kind', 'string'],
-  ['name', 'string'],
-] as const;
-
-const permissionDetailsAreValid = (details: unknown): boolean =>
-  details === undefined ||
-  (isPlainObject(details) && optionalFieldsHaveTypes(details, DETAIL_FIELDS));
-
-// isPermissionDeniedStatus validates the Status-like shape used for RBAC errors.
-export const isPermissionDeniedStatus = (value: unknown): value is PermissionDeniedStatus => {
-  if (!isPlainObject(value)) {
-    return false;
-  }
-  if (!optionalFieldsHaveTypes(value, STATUS_FIELDS) || !permissionDetailsAreValid(value.details)) {
-    return false;
-  }
-  return value.reason === 'Forbidden' || value.code === 403;
-};
-
-const permissionDeniedBaseMessage = (status: PermissionDeniedStatus): string => {
-  const message = typeof status.message === 'string' ? status.message.trim() : '';
-  return message || 'Permission denied';
-};
-
-const permissionDeniedDetailParts = (status: PermissionDeniedStatus, base: string): string[] => {
+const permissionDeniedDetailParts = (status: ErrorStatus, base: string): string[] => {
   const parts: string[] = [];
   const domain = status.details?.domain?.trim();
   const resource = status.details?.resource?.trim();
@@ -78,18 +37,19 @@ const permissionDeniedDetailParts = (status: PermissionDeniedStatus, base: strin
 };
 
 // formatPermissionDeniedStatus builds a user-facing message with available details.
-export const formatPermissionDeniedStatus = (status: PermissionDeniedStatus): string => {
+export const formatPermissionDeniedStatus = (status: ErrorStatus): string => {
   const base = permissionDeniedBaseMessage(status);
   const detailParts = permissionDeniedDetailParts(status, base);
   return detailParts.length === 0 ? base : `${base} (${detailParts.join(', ')})`;
 };
 
-// resolvePermissionDeniedMessage prefers structured payloads when available.
+// resolvePermissionDeniedMessage names what a denial denied; any other
+// failure keeps its own message.
 export const resolvePermissionDeniedMessage = (
   fallback: string | null | undefined,
-  status: unknown
+  status: ErrorStatus | null | undefined
 ): string | null => {
-  if (isPermissionDeniedStatus(status)) {
+  if (status?.reason === 'Forbidden') {
     return formatPermissionDeniedStatus(status);
   }
   return fallback ?? null;

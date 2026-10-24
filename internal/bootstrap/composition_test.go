@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http/httptest"
@@ -87,6 +88,35 @@ func TestApplicationCompositionOwnsPeerWindowRegistryMenuAndService(t *testing.T
 	require.NotNil(t, config.SingleInstance)
 	require.Equal(t, testSingleInstanceID(), config.SingleInstance.UniqueID)
 	require.NotNil(t, config.SingleInstance.OnSecondInstanceLaunch)
+}
+
+// The registered DesktopService marshals every returned error as a typed status,
+// so the frontend never classifies a binding failure from its message text.
+func TestDesktopServiceBindingErrorsCarryStatus(t *testing.T) {
+	composition := sharedTestComposition(t)
+	services := composition.application.Config().Services
+	require.Len(t, services, 1)
+
+	bindings := application.NewBindings(nil, nil)
+	require.NoError(t, bindings.Add(services[0]))
+	bound := bindings.Get(&application.CallOptions{
+		MethodName: "github.com/luxury-yacht/app/backend.DesktopService.GetObjectYAMLByGVK",
+	})
+	require.NotNil(t, bound)
+
+	args := []json.RawMessage{
+		json.RawMessage(`{"clusterId":"missing-cluster","group":"","version":"v1","kind":"Pod","namespace":"default","name":"web"}`),
+	}
+	_, err := bound.Call(context.Background(), args)
+	var callErr *application.CallError
+	require.ErrorAs(t, err, &callErr)
+	cause, ok := callErr.Cause.(json.RawMessage)
+	require.True(t, ok, "binding error cause = %T", callErr.Cause)
+	var status map[string]any
+	require.NoError(t, json.Unmarshal(cause, &status))
+	require.Equal(t, "Status", status["kind"])
+	require.NotEmpty(t, status["reason"])
+	require.NotEmpty(t, status["category"])
 }
 
 func TestSingleInstanceUniqueIDDefaultsToProductIdentifier(t *testing.T) {

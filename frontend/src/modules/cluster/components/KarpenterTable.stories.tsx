@@ -6,7 +6,6 @@ import GridTable from '@shared/components/tables/GridTable';
 import type { Meta, StoryObj } from '@storybook/react';
 import { SidebarProvidersDecorator } from '../../../../.storybook/decorators/SidebarProvidersDecorator';
 import { karpenterColumns } from './karpenterColumns';
-import './ClusterViewCustom.css';
 
 const ref = { clusterId: 'story-cluster', group: 'karpenter.sh', version: 'v1', namespace: '' };
 const nodeClassRef = {

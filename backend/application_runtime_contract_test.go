@@ -376,19 +376,11 @@ func TestProductionFilesBelongToOneStateOwner(t *testing.T) {
 		"OperationsCoordinator": {}, "PreferencesService": {}, "RefreshCoordinator": {},
 		"ResourceGateway": {}, "UIStateStore": {}, "UpdateCoordinator": {}, "WorkspaceCoordinator": {},
 	}
-	allowed := map[string]struct{}{
-		// The generator deliberately emits the internal resource owner and its
-		// sole Wails transport projection from one resource-kind registry.
-		"resource_details_generated.go": {},
-	}
 	paths, err := filepath.Glob("*.go")
 	require.NoError(t, err)
 	var violations []string
 	for _, path := range paths {
 		if strings.HasSuffix(path, "_test.go") {
-			continue
-		}
-		if _, ok := allowed[filepath.Base(path)]; ok {
 			continue
 		}
 		parsed, parseErr := parser.ParseFile(token.NewFileSet(), path, nil, 0)

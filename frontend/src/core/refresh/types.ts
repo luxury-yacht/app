@@ -17,8 +17,7 @@ import type {
   ContainerLogsTargetIssue,
   ContainerLogsWarning,
   ContainerLogsWireEntry,
-  RefreshPermissionDeniedDetails,
-  RefreshPermissionDeniedStatus,
+  ErrorStatus,
 } from './types.generated';
 
 /** Test-fixture patch shape for canonical rows whose required ref is assembled by a builder. */
@@ -26,19 +25,6 @@ export type CanonicalRowTestOverrides<T extends { ref: CanonicalResourceRef }> =
   Partial<T>,
   'ref'
 > & { ref?: Partial<CanonicalResourceRef> };
-
-// Error parsing also accepts Kubernetes Status-shaped details that do not
-// originate in the refresh server. Keep that permissive input boundary
-// separate from the exact generated refresh error DTO.
-export interface PermissionDeniedDetails extends Partial<RefreshPermissionDeniedDetails> {
-  kind?: string;
-  name?: string;
-}
-
-export interface PermissionDeniedStatus
-  extends Partial<Omit<RefreshPermissionDeniedStatus, 'details'>> {
-  details?: PermissionDeniedDetails;
-}
 
 // The backend owns the log-line wire fields. `_seq` is assigned by the
 // frontend reducer to provide stable rendering keys.
@@ -53,7 +39,7 @@ export type ContainerLogsStreamPhase =
   | { status: 'awaiting-snapshot' }
   | { status: 'live' }
   | { status: 'reconnecting'; attempt: number; reason: string }
-  | { status: 'failed'; reason: string; permissionDenied: boolean; retryable: boolean }
+  | { status: 'failed'; reason: string; failure: ErrorStatus | null }
   | { status: 'stopping' };
 
 export interface ContainerLogsSnapshotPayload {

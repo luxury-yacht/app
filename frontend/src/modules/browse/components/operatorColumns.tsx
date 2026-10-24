@@ -28,7 +28,6 @@ function referenceColumn(
     },
     openReference: parts.openReference,
     navigateReference: parts.navigateReference,
-    clusterName: parts.selectedClusterName,
   });
 }
 

@@ -86,7 +86,6 @@ export function useGridTableLocalPagination<T>({
     shouldRenderTablePaginationControls({
       pageSizeOptions: config.pageSizeOptions,
       totalCount: data.length,
-      totalIsExact: true,
       hasPrevious: canPagePrevious,
       hasNext: canPageNext,
     });

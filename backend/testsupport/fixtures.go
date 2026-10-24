@@ -1,21 +1,15 @@
 package testsupport
 
 import (
-	"strings"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
-	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	"k8s.io/utils/ptr"
 )
 
@@ -66,13 +60,6 @@ func DeploymentFixture(namespace, name string, opts ...DeploymentOption) *appsv1
 func DeploymentWithReplicas(replicas int32) DeploymentOption {
 	return func(d *appsv1.Deployment) {
 		d.Spec.Replicas = ptr.To[int32](replicas)
-	}
-}
-
-// DeploymentWithStrategy allows overriding the rollout strategy.
-func DeploymentWithStrategy(strategy appsv1.DeploymentStrategy) DeploymentOption {
-	return func(d *appsv1.Deployment) {
-		d.Spec.Strategy = strategy
 	}
 }
 
@@ -408,143 +395,4 @@ func PodWithLabels(labels map[string]string) PodOption {
 			pod.Labels[k] = v
 		}
 	}
-}
-
-// HPAOption mutates a horizontal pod autoscaler fixture.
-type HPAOption func(*autoscalingv2.HorizontalPodAutoscaler)
-
-// HPAFixture creates a basic autoscaling/v2 HPA referencing a deployment.
-func HPAFixture(namespace, name, targetName string, opts ...HPAOption) *autoscalingv2.HorizontalPodAutoscaler {
-	hpa := &autoscalingv2.HorizontalPodAutoscaler{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
-		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
-			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{
-				APIVersion: "apps/v1",
-				Kind:       "Deployment",
-				Name:       targetName,
-			},
-			MinReplicas: ptr.To[int32](1),
-			MaxReplicas: 3,
-			Metrics: []autoscalingv2.MetricSpec{{
-				Type: autoscalingv2.ResourceMetricSourceType,
-				Resource: &autoscalingv2.ResourceMetricSource{
-					Name: corev1.ResourceCPU,
-					Target: autoscalingv2.MetricTarget{
-						Type:               autoscalingv2.UtilizationMetricType,
-						AverageUtilization: ptr.To[int32](75),
-					},
-				},
-			}},
-		},
-		Status: autoscalingv2.HorizontalPodAutoscalerStatus{
-			CurrentReplicas: 1,
-			DesiredReplicas: 1,
-		},
-	}
-
-	for _, opt := range opts {
-		opt(hpa)
-	}
-	return hpa
-}
-
-// CRDOption mutates a CRD fixture.
-type CRDOption func(*apiextensionsv1.CustomResourceDefinition)
-
-// CRDFixture produces a namespaced v1 CRD with the given plural/kind.
-func CRDFixture(name, plural, kind string, opts ...CRDOption) *apiextensionsv1.CustomResourceDefinition {
-	crd := &apiextensionsv1.CustomResourceDefinition{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-		},
-		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
-			Group: "example.com",
-			Scope: apiextensionsv1.NamespaceScoped,
-			Names: apiextensionsv1.CustomResourceDefinitionNames{
-				Plural:     plural,
-				Singular:   singularName(plural),
-				Kind:       kind,
-				ShortNames: []string{singularName(plural)},
-			},
-			Versions: []apiextensionsv1.CustomResourceDefinitionVersion{{
-				Name:    "v1",
-				Served:  true,
-				Storage: true,
-				Schema: &apiextensionsv1.CustomResourceValidation{
-					OpenAPIV3Schema: &apiextensionsv1.JSONSchemaProps{
-						Type:                   "object",
-						XPreserveUnknownFields: ptr.To(true),
-					},
-				},
-				Subresources: &apiextensionsv1.CustomResourceSubresources{
-					Status: &apiextensionsv1.CustomResourceSubresourceStatus{},
-				},
-			}},
-		},
-	}
-
-	for _, opt := range opts {
-		opt(crd)
-	}
-	return crd
-}
-
-// ObjectSlice clones runtime objects to avoid shared references between tests.
-func ObjectSlice(objects ...runtime.Object) []runtime.Object {
-	out := make([]runtime.Object, len(objects))
-	for i, obj := range objects {
-		if obj == nil {
-			continue
-		}
-		out[i] = obj.DeepCopyObject()
-	}
-	return out
-}
-
-// DeploymentLabelSelector returns the labels expected by a deployment fixture.
-func DeploymentLabelSelector(deployment *appsv1.Deployment) labels.Selector {
-	if deployment == nil || deployment.Spec.Selector == nil {
-		return labels.Nothing()
-	}
-	return labels.Set(deployment.Spec.Selector.MatchLabels).AsSelector()
-}
-
-// PodMetricsOption mutates pod metrics fixtures.
-type PodMetricsOption func(*metricsv1beta1.PodMetrics)
-
-// PodMetricsFixture produces a PodMetrics object with a single container.
-func PodMetricsFixture(namespace, name string, cpuMilli, memoryBytes int64, opts ...PodMetricsOption) *metricsv1beta1.PodMetrics {
-	metric := &metricsv1beta1.PodMetrics{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
-		Timestamp: metav1.NewTime(time.Now()),
-		Window:    metav1.Duration{Duration: time.Minute},
-		Containers: []metricsv1beta1.ContainerMetrics{{
-			Name: "app",
-			Usage: corev1.ResourceList{
-				corev1.ResourceCPU:    *resource.NewMilliQuantity(cpuMilli, resource.DecimalSI),
-				corev1.ResourceMemory: *resource.NewQuantity(memoryBytes, resource.BinarySI),
-			},
-		}},
-	}
-
-	for _, opt := range opts {
-		opt(metric)
-	}
-	return metric
-}
-
-func singularName(plural string) string {
-	if plural == "" {
-		return plural
-	}
-	if strings.HasSuffix(plural, "s") && len(plural) > 1 {
-		return strings.TrimSuffix(plural, "s")
-	}
-	return plural
 }

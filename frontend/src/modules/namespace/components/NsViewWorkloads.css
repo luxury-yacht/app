@@ -1,37 +1,6 @@
 /* Import shared GridTable styles */
 @import "@styles/components/gridtables.css";
 
-.workloads-pods-table-surface {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.workloads-pods-table-surface__table {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-}
-
-.pods-collapsed-filter-bar {
-  box-sizing: border-box;
-  width: 100%;
-}
-
-.pods-collapsed-filter-bar__label {
-  color: var(--color-text-secondary);
-}
-
-.gridtable-workloads .gridtable-row--selected {
-  border-left-color: var(--color-accent);
-}
-
-.gridtable-workloads .gridtable-row--selected .grid-cell {
-  background-color: var(--color-bg-secondary);
-}
-
 .gridtable-workloads .gridtable-row--pod {
   background-color: var(--color-bg-secondary);
 }

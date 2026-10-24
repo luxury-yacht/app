@@ -6,6 +6,9 @@
 import * as appupdates$0 from "./internal/appupdates/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as errorstatus$0 from "./internal/errorstatus/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as resourcemodel$0 from "./resourcemodel/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -151,19 +154,6 @@ export interface AppLogsAddedEvent {
  */
 export type AppSettings = types$0.AppSettings;
 
-/**
- * Per-kind detail DTOs are no longer re-exported here. The generated
- * ResourceGateway.Get<Kind> methods (resource_details_generated.go) reference
- * each kind's DTO by its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
- * nested sub-type through those parent structs — so no package-backend alias is
- * needed for any kind DTO or its sub-types. What remains is app-level and shared
- * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose detail binding is
- * hand-written and therefore still named in package backend (HelmReleaseDetails,
- * PodDetailInfo, CustomResourceDefinitionDetails).
- */
-export type AppSettingsSchema = types$0.AppSettingsSchema;
-
 export interface AppearanceModeChangedEvent {
     "mode": string;
 }
@@ -210,15 +200,6 @@ export enum ApplicationMenuCommand {
     ApplicationMenuCommandAbout = "about",
     ApplicationMenuCommandCheckForUpdates = "check-for-updates",
 };
-
-export interface BackendErrorEvent {
-    "clusterId": string;
-    "resourceKind"?: string;
-    "identifier"?: string;
-    "message": string;
-    "error"?: string;
-    "source"?: string;
-}
 
 /**
  * CatalogQueryCSVExport describes a file-backed catalog query export.
@@ -333,9 +314,13 @@ export interface ClusterWorkspaceCommand {
     "visibleClusterId": string;
 }
 
+/**
+ * ClusterWorkspaceResult returns the latest coherent workspace state even when
+ * the command failed; Error is the failure's status.
+ */
 export interface ClusterWorkspaceResult {
     "state": ClusterWorkspaceState;
-    "error"?: string;
+    "error"?: errorstatus$0.Status | null;
 }
 
 export interface ClusterWorkspaceState {
@@ -436,7 +421,8 @@ export interface Favorite {
     "viewType": string;
     "view": string;
     "namespace": string;
-    "panes": { [_ in string]?: FavoritePaneState } | null;
+    "filters": FavoriteFilters;
+    "tableState": FavoriteTableState;
     "order": number;
 }
 
@@ -459,14 +445,6 @@ export interface FavoriteFilters {
     "clusters": FavoriteFilterSelection;
     "queryFacets"?: { [_ in string]?: FavoriteFilterSelection } | null;
     "includeMetadata": boolean;
-}
-
-/**
- * FavoritePaneState holds the complete GridTable state for one named pane.
- */
-export interface FavoritePaneState {
-    "filters": FavoriteFilters;
-    "tableState": FavoriteTableState;
 }
 
 /**
@@ -597,6 +575,19 @@ export type NodeLogFetchRequest = types$0.NodeLogFetchRequest;
  */
 export type NodeLogFetchResponse = types$0.NodeLogFetchResponse;
 
+/**
+ * Per-kind detail DTOs are no longer re-exported here. The generated
+ * ResourceGateway.Get<Kind> methods (resource_details_generated.go) reference
+ * each kind's DTO by its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
+ * nested sub-type through those parent structs — so no package-backend alias is
+ * needed for any kind DTO or its sub-types. What remains is app-level and shared
+ * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
+ * sub-types in resources/types) plus the three DTOs whose detail binding is
+ * hand-written and therefore still named in package backend (HelmReleaseDetails,
+ * PodDetailInfo, CustomResourceDefinitionDetails).
+ */
+export type NodeShellSessionRequest = types$0.NodeShellSessionRequest;
+
 export interface ObjectActionDebugContainerOptions {
     "image": string;
     "targetContainer"?: string;
@@ -634,6 +625,19 @@ export interface ObjectActionResponse {
 export type ObjectActionTargetRef = resourcemodel$0.ResourceRef;
 
 /**
+ * ObjectYAMLConflict is a YAML-editor outcome the user resolves in the editor:
+ * the edited object changed or was replaced since editing began. It carries the
+ * live YAML, so it is returned as a result and never as error text.
+ */
+export interface ObjectYAMLConflict {
+    "code": string;
+    "message": string;
+    "causes"?: string[] | null;
+    "currentYaml"?: string;
+    "currentResourceVersion"?: string;
+}
+
+/**
  * ObjectYAMLMutationRequest captures the payload required to validate or apply object YAML.
  */
 export interface ObjectYAMLMutationRequest {
@@ -648,10 +652,12 @@ export interface ObjectYAMLMutationRequest {
 }
 
 /**
- * ObjectYAMLMutationResponse returns basic metadata after a validation/apply attempt.
+ * ObjectYAMLMutationResponse returns basic metadata after a validation/apply
+ * attempt, or the conflict that stopped it.
  */
 export interface ObjectYAMLMutationResponse {
     "resourceVersion": string;
+    "yamlConflict"?: ObjectYAMLConflict | null;
 }
 
 /**
@@ -660,6 +666,12 @@ export interface ObjectYAMLMutationResponse {
  */
 export interface ObjectYAMLOwnershipCheckResponse {
     "conflicts": ObjectYAMLOwnershipConflict[] | null;
+
+    /**
+     * YAMLConflict is set when the edited object changed or was replaced since
+     * editing began; the check stays advisory and the save goes on to Apply.
+     */
+    "yamlConflict"?: ObjectYAMLConflict | null;
 }
 
 /**
@@ -695,6 +707,12 @@ export interface ObjectYAMLReloadMergeResponse {
     "mergedYAML": string;
     "currentYAML": string;
     "resourceVersion": string;
+
+    /**
+     * YAMLConflict is set when the merge cannot be completed automatically;
+     * it carries the live YAML for manual review.
+     */
+    "yamlConflict"?: ObjectYAMLConflict | null;
 }
 
 /**
@@ -730,14 +748,19 @@ export interface PortForwardSession {
     "id": string;
     "clusterId": string;
     "clusterName": string;
-    "namespace": string;
+
+    /**
+     * Target is the complete identity of the object the user forwarded.
+     */
+    "target": types$0.ObjectRef;
+
+    /**
+     * PodName is the pod currently serving the forward. It changes when a
+     * workload or Service forward reconnects to a replacement pod.
+     */
     "podName": string;
     "containerPort": number;
     "localPort": number;
-    "targetKind": string;
-    "targetGroup": string;
-    "targetVersion": string;
-    "targetName": string;
     "status": PortForwardStatus;
     "statusReason"?: string;
     "startedAt": string;
@@ -996,8 +1019,8 @@ export interface UpdateInfo {
 }
 
 /**
- * BindingModelAnchor keeps object-detail DTOs reachable by the Wails generator
- * without exporting the backend-only Get<Kind> wrappers to TypeScript.
+ * BindingModelAnchor keeps object-detail DTOs reachable by the Wails generator;
+ * the object-details refresh domain returns them untyped.
  */
 export interface BindingModelAnchor {
     "BackendTLSPolicy": backendtlspolicy$0.BackendTLSPolicyDetails | null;

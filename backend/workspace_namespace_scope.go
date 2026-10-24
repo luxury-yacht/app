@@ -6,8 +6,6 @@ import (
 	"strings"
 
 	"k8s.io/apimachinery/pkg/util/validation"
-
-	"github.com/luxury-yacht/app/backend/internal/logsources"
 )
 
 // Per-cluster namespace scope ("accessible namespaces",
@@ -57,22 +55,6 @@ func clusterSettingsSectionEmpty(section settingsClusterSection) bool {
 	return len(section.AllowedNamespaces) == 0 &&
 		(section.Attention == nil ||
 			(len(section.Attention.ObjectFindings) == 0 && len(section.Attention.FindingTypes) == 0))
-}
-
-// allowedNamespacesForCluster is the subsystem-construction read of the
-// persisted scope. A settings read failure degrades to cluster-wide (empty)
-// with a warning — the same degradation every settings consumer applies when
-// settings.json is unreadable — rather than failing the whole cluster build.
-func (a *WorkspaceCoordinator) allowedNamespacesForCluster(clusterID string) []string {
-	namespaces, err := a.GetClusterAllowedNamespaces(clusterID)
-	if err != nil {
-		a.logger.Warn(
-			fmt.Sprintf("Could not read allowed namespaces for cluster %s (running cluster-wide): %v", clusterID, err),
-			logsources.Settings, clusterID, clusterID,
-		)
-		return nil
-	}
-	return namespaces
 }
 
 // requestClusterScopeRebuild rebuilds one cluster's refresh subsystem so a

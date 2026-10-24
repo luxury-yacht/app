@@ -48,7 +48,7 @@ import { formatActiveViewHeaderTitle, getActiveViewTab } from '@/core/navigation
 import { shouldShowActiveClusterAuthFailure } from '@/core/navigation/workspace';
 import { PanelLifecycleClusterSurface } from '@/core/panel-windows/panelLifecycleGuards';
 import { DiagnosticsPanel } from '@/core/refresh/components/DiagnosticsPanel';
-import { getDefaultObjectPanelPosition } from '@/core/settings/appPreferences';
+import { getPreference } from '@/core/settings/appPreferences';
 import {
   getSidebarWidthFromKey,
   SIDEBAR_MAX_WIDTH,
@@ -350,7 +350,7 @@ export const AppLayout: React.FC = () => {
       {Array.from(openPanels.entries()).map(([panelId, objectRef]) => {
         const mountTarget = resolveObjectPanelMountTarget(
           getGroupForPanel(tabGroups, panelId),
-          getDefaultObjectPanelPosition(),
+          getPreference('defaultObjectPanelPosition'),
           pendingNativeOpenPanelIds.has(panelId) ? panelId : undefined
         );
         return (

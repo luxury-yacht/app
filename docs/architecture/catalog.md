@@ -39,8 +39,8 @@ Typed refresh rows are enrichments, not competing identity systems.
 
 ## Lifecycle
 
-- A running catalog belongs to the exact refresh subsystem whose informer and
-  ingest feeds it reads. Generation retirement cancels and joins the catalog and
+- A running catalog belongs to the exact refresh subsystem whose ingest feeds
+  it reads. Generation retirement cancels and joins the catalog and
   its bridges before stopping the feeds. Replacing an entry stops the displaced
   run; retiring an older generation cannot stop the new catalog.
 - `runLoop` owns the notifier. Register reactive handlers outside the resync
@@ -48,28 +48,24 @@ Typed refresh rows are enrichments, not competing identity systems.
   after an incomplete initial sync. Notifier admission and the full-resync
   safety-net interval share one reactive-mode condition, including catalogs
   whose only watch source is custom resources.
-- Retirement cancels the notifier before joining it, removes informer handlers,
-  and detaches static and dynamic ingest subscriptions; detachment joins
+- Retirement cancels the notifier before joining it and detaches static and
+  dynamic ingest subscriptions; detachment joins
   in-flight delivery without stopping the generation's producers.
 
 ## Startup collection
 
 After discovery and permission preflight, collection waits (one startup
-deadline) for the sources the discovery result reads: tracked ingest-owned GVRs
-and the informers behind shared, Gateway API, and CRD kinds. The set is not the
-permission-allowed subset; sources outside it (e.g. the Event informer) never
-gate.
+deadline) for the tracked ingest stores of the kinds the discovery result reads
+(`waitForCaches`, `backend/objectcatalog/sync.go`). Events are not catalog kinds
+(`CatalogNone`; discovery excludes them), so their store never gates collection
+and the catalog does not subscribe to their rows.
 
-- Informers gate on the factory's settle contract (synced, permanently failed,
-  or past its sync deadline), never raw client-go sync: the shared factory
-  always starts cluster-wide ReplicaSet, HPA v1, and Event informers, which a
-  namespace-only identity can never sync.
-- Read an informer cache only after sync; a settled-but-unsynced empty cache is
-  not authoritative absence. Per `ResourceReadiness`, an unavailable informer
-  (forbidden watch, or created after factory start) is replaced by a live LIST,
-  as for a permission denial; a pending or degraded informer fails its kind
-  like an unsynced ingest store.
-- Rejected: live-LISTing a still-syncing informer — it duplicates the initial
+- Stores gate on `HasSyncedFor` (synced, permission-skipped, or degraded past
+  the ingest sync deadline), never raw sync: a partition a namespace-only
+  identity cannot read never syncs.
+- Read a store only after it settles; a settled-but-unsynced store is not
+  authoritative absence, so its kind reports an incomplete collect.
+- Rejected: live-LISTing a still-syncing source — it duplicates the initial
   LIST on large clusters, and a row deleted before sync survives until resync.
 - On deadline expiry, continue with settled resources, report unsynced
   descriptors via the partial-sync diagnostic, and enter the failed-sync retry
@@ -87,15 +83,17 @@ gate.
   namespace/kind counts, and finalizer findings before broadcasting. Recreation
   removes the prior UID. Only full collection and initial source replay replace
   the query baseline; replay defers publication and signals until every kind
-  has replayed.
+  has replayed, then reconciles every kind by partition and publishes once.
 - Hold the catalog read lock across a query's page, counts, and facets so they
   describe one publication (a publisher may wait on a running query). Source
   callbacks and query-engine operations never take these locks in reverse.
 - Ingest callbacks may run with their source store write-locked, so they never
-  wait for the catalog sync/publication lock (full sync reads those stores). On
-  contention, coalesce reconciliation by GVR, take publication ownership, then
-  reread the authoritative kind store — for incremental changes and whole-kind
-  replacement, including changes after a full sync collected that kind.
+  wait for the catalog sync/publication lock (full sync reads those stores). A
+  whole-kind delivery (replay or relist) always, and an incremental change on
+  contention, coalesces reconciliation by GVR, takes publication ownership,
+  then rereads the authoritative kind store by partition, including changes
+  after a full sync collected that kind. A whole-kind delivery carries only the
+  watched partitions, so it never replaces the kind's rows directly.
   Shutdown drains this worker before signaling completion.
 
 ## Watch-to-query ordering
@@ -103,14 +101,16 @@ gate.
 - Runtime-discovered watches belong to the refresh generation's ingest manager
   ([data-layer](data-layer.md) owns admission). Confirmed generic CRDs are
   admitted regardless of object count; non-CRD APIs and resources without
-  visible CRD definitions keep the 5,000-object promotion threshold. Registry,
-  shared-informer, and Gateway sources take precedence.
+  visible CRD definitions keep the 5,000-object promotion threshold. Registry
+  (ingest-owned) sources take precedence.
 - Catalog supplies the preferred served version but never owns or stops a
   watch. During a version change the watch may use another served version;
   translate its group/resource to the catalog descriptor for query identity.
   Streaming consumes catalog signals; catalog never reads stream-manager caches.
 - Subscribe before initial collection. Read only synced namespace partitions
-  from ingest; pending or LIST-only partitions use catalog's paginated LIST with
+  from ingest, for built-in and runtime-discovered kinds alike (a built-in
+  kind first waits for its store to settle); pending, degraded, or LIST-only
+  partitions use catalog's paginated LIST with
   `ResourceFetchCallTimeout` per request, renewed per page and retry. The
   multi-namespace collection has no overall deadline; caller cancellation
   still stops it.
@@ -128,13 +128,16 @@ gate.
   establishment invalidates discovery and requests collection through the
   full-resync boundary (its recovery and atomic publication). A CRD Add waits
   for Established (that update supplies the request). Routine metadata,
-  schema, and status-reason updates change only the CRD's own row. Confirmed deletion retires the definition UID and
-  reconciles rows, counts, facets, and finalizer findings.
+  schema, and status-reason updates change only the CRD's own row. The hook is
+  a sink on the CRD ingest store that remembers each UID's last definition
+  (bundle sinks see no previous row) and diffs a relist against it. Confirmed
+  deletion retires the definition UID and reconciles rows, counts, facets, and
+  finalizer findings.
 - Before adding affected-kind collection, measure a warm full pass at realistic
   object counts, recording API LISTs (including aggregated APIs) separately
   from in-memory work.
-- Gateway API collection and handlers derive from the same resource registry
-  and reuse the Gateway informer factory. Publish membership, counts/facets, and
+- Gateway API kinds are ingest-owned: collection and changes come from their
+  owned reflectors' catalog sinks, like every other registry kind. Publish membership, counts/facets, and
   finalizer findings before the bridge invalidates snapshot caches and emits the
   catalog signal; another domain's notification never establishes catalog
   freshness.
@@ -152,8 +155,11 @@ gate.
 - `backend/refresh/snapshot/catalog.go`: the `catalog` Browse domain; doorbells
   via `backend/refresh/resourcestream`. Delivery diagnostics are the `catalog`
   domain of the unified `resources` stream (no standalone catalog stream).
-- `frontend/src/modules/browse/hooks/useBrowseCatalog.ts`: page-query and
-  metadata/facet scopes share the cluster's one catalog doorbell subscription.
+- `frontend/src/modules/browse/hooks/useBrowseCatalog.ts`: leases the
+  cluster's base catalog scope, whose one doorbell subscription signals
+  changes; page and metadata/facet queries are one-shot reads that never
+  subscribe (`useLiveScope`/`useLiveQueryRead` in
+  `frontend/src/modules/resource-grid/useLiveQueryRead.ts`).
 
 ## Required tests
 
@@ -167,10 +173,9 @@ gate.
   registration, cancellation, and publication-before-signal through the real
   owners; table consumption meets the
   [freshness evidence](data-freshness.md#required-evidence-for-resource-source-changes).
-- Restricted-identity changes: a namespace-only identity denied the cluster-wide
-  ReplicaSet, HPA, and Event informers, through the production subsystem, still
-  completes first collection and publishes its readable rows. Custom-resource
-  permission tests alone do not prove startup.
+- Restricted-identity changes: a namespace-only identity, through the
+  production subsystem, still completes first collection and publishes its
+  readable rows. Custom-resource permission tests alone do not prove startup.
 
 ## Discovered resource families
 

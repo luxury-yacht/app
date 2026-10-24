@@ -403,7 +403,6 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
   if (!applyQueueRef.current) {
     applyQueueRef.current = createObjectMapG6ApplyQueue({
       getGraph: () => graphRef.current,
-      getCurrentLayout: () => layoutRef.current,
       getCurrentSelectionState: () => selectionStateRef.current,
       getHoveredEdgeId: () => hoveredEdgeIdRef.current,
       getPreserveViewportNodeId: () => preserveViewportNodeIdRef.current,
@@ -567,8 +566,8 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     if (!graph || graph.destroyed || !palette) {
       return;
     }
-    scheduleGraphData(data);
-  }, [data, palette, scheduleGraphData]);
+    scheduleGraphData(data, layout);
+  }, [data, layout, palette, scheduleGraphData]);
 
   useEffect(() => {
     publishRendererDebugSnapshot();
@@ -634,8 +633,8 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
     if (!graph || graph.destroyed) {
       return;
     }
-    scheduleSelectionState(layout, selectionState);
-  }, [layout, scheduleSelectionState, selectionState]);
+    scheduleSelectionState(selectionState);
+  }, [scheduleSelectionState, selectionState]);
 
   useObjectMapG6Viewport({
     appZoomLevel: zoomLevel,

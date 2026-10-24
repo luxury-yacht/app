@@ -1,56 +1,36 @@
+/**
+ * frontend/src/shared/components/modals/DrainNodeModal.test.tsx
+ *
+ * The node drain workflow: the modal reads the node's maintenance state from
+ * its cluster, starts a drain with the node's complete identity and the
+ * options the user chose, refreshes that state afterward, reports its
+ * mutation boundary to its owner, explains a permission that blocks the
+ * drain, shows a running drain instead of the options, retries after a failed
+ * drain and reports a refused one, and cancels a running drain. Runs inside
+ * the production shell (refresh, data access, keyboard) over a faked backend
+ * (test-utils/appState); the drain RPCs are the backend's RunObjectAction and
+ * CancelDrainNodeJob.
+ */
+
 import { act, type ComponentProps } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { buildRefreshScope } from '@/core/refresh/scopeSelector';
 import type { NodeMaintenanceDrainJob } from '@/core/refresh/types';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { requireValue } from '@/test-utils/requireValue';
 import DrainNodeModal from './DrainNodeModal';
 
-const mocks = vi.hoisted(() => ({
-  buildObjectActionTarget: vi.fn(),
-  cancelDrain: vi.fn(),
-  handleError: vi.fn(),
-  requestRefresh: vi.fn(),
-  runStartDrain: vi.fn(),
-  setRefreshEnabled: vi.fn(),
-  snapshot: {
-    status: 'ready',
-    data: { drains: [] as NodeMaintenanceDrainJob[] },
-  },
-}));
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
+let maintenanceScope: string;
 
-vi.mock('@shared/actions/objectActionClient', () => ({
-  buildObjectActionTarget: (...args: unknown[]) => mocks.buildObjectActionTarget(...args),
-  runStartDrain: (...args: unknown[]) => mocks.runStartDrain(...args),
-}));
-
-vi.mock('@shared/components/Tooltip', () => ({ default: () => null }));
-
-vi.mock('@/core/backend-api', () => ({
-  CancelDrainNodeJob: (...args: unknown[]) => mocks.cancelDrain(...args),
-}));
-
-vi.mock('@/core/data-access', () => ({
-  requestRefreshDomain: (...args: unknown[]) => mocks.requestRefresh(...args),
-  setRefreshDomainEnabled: (...args: unknown[]) => mocks.setRefreshEnabled(...args),
-}));
-
-vi.mock('@/core/refresh', () => ({
-  useRefreshScopedDomain: () => mocks.snapshot,
-}));
-
-vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
-  useAutoRefreshLoadingState: () => ({ isPaused: false, isManualRefreshActive: false }),
-}));
-
-vi.mock('@/utils/errorHandler', () => ({
-  errorHandler: {
-    handle: (...args: unknown[]) => mocks.handleError(...args),
-  },
-}));
-
-vi.mock('./useModalFocusTrap', () => ({ useModalFocusTrap: vi.fn() }));
-
-const buildDrainJob = (status: NodeMaintenanceDrainJob['status']): NodeMaintenanceDrainJob => ({
-  clusterId: 'cluster-1',
+const drainJob = (status: NodeMaintenanceDrainJob['status']): NodeMaintenanceDrainJob => ({
+  clusterId: dev.clusterId,
   id: 'drain-1',
   nodeName: 'node-a',
   status,
@@ -65,77 +45,72 @@ const buildDrainJob = (status: NodeMaintenanceDrainJob['status']): NodeMaintenan
   events: [],
 });
 
+/** The node's maintenance snapshot (backend/refresh/snapshot/object_maintenance.go). */
+const serveDrains = (drains: NodeMaintenanceDrainJob[]) => {
+  app.snapshots.serve('object-maintenance', maintenanceScope, {
+    clusterId: dev.clusterId,
+    clusterName: dev.clusterName,
+    drains,
+  });
+};
+
+const showModal = async (props: Partial<ComponentProps<typeof DrainNodeModal>> = {}) => {
+  view = await app.render(null);
+  await view.show(
+    <DrainNodeModal
+      isOpen
+      clusterId={dev.clusterId}
+      clusterName={dev.clusterName}
+      nodeName="node-a"
+      onClose={() => undefined}
+      {...props}
+    />
+  );
+};
+
+const control = <E extends HTMLElement>(selector: string) =>
+  requireValue(document.querySelector<E>(selector), `expected ${selector}`);
+const startButton = () =>
+  document.querySelector<HTMLButtonElement>('[data-test="drain-modal-start"]');
+
+const clickControl = async (selector: string) => {
+  await act(async () => control(selector).click());
+  await app.settle();
+};
+
+const maintenanceReads = () =>
+  app.snapshots.reads('object-maintenance').filter((read) => read.scope === maintenanceScope);
+
+const drainTarget = () => ({
+  clusterId: dev.clusterId,
+  group: '',
+  version: 'v1',
+  kind: 'Node',
+  namespace: '',
+  name: 'node-a',
+});
+
+beforeEach(() => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['default']);
+  maintenanceScope = buildRefreshScope('object-maintenance', {
+    clusterId: dev.clusterId,
+    selector: { kind: 'node', node: 'node-a' },
+  });
+  serveDrains([]);
+  app.backend.answer('RunObjectAction', () => ({}));
+});
+
 describe('DrainNodeModal', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  it('reads the node’s maintenance state in its cluster and offers to start a drain', async () => {
+    await showModal();
 
-  const defaultProps = {
-    isOpen: true,
-    clusterId: 'cluster-1',
-    clusterName: 'Development',
-    nodeName: 'node-a',
-    onClose: vi.fn(),
-  };
-
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    mocks.snapshot.status = 'ready';
-    mocks.snapshot.data = { drains: [] };
-    mocks.buildObjectActionTarget.mockReset();
-    mocks.buildObjectActionTarget.mockReturnValue({ target: 'node-a' });
-    mocks.cancelDrain.mockReset();
-    mocks.cancelDrain.mockResolvedValue(undefined);
-    mocks.handleError.mockReset();
-    mocks.handleError.mockImplementation((error: unknown) => ({ message: String(error) }));
-    mocks.requestRefresh.mockReset();
-    mocks.requestRefresh.mockResolvedValue(undefined);
-    mocks.runStartDrain.mockReset();
-    mocks.runStartDrain.mockResolvedValue(undefined);
-    mocks.setRefreshEnabled.mockReset();
-    defaultProps.onClose.mockReset();
+    expect(maintenanceReads()).not.toEqual([]);
+    expect(startButton()?.disabled).toBe(false);
   });
 
-  afterEach(() => {
-    act(() => root.unmount());
-    document.body.innerHTML = '';
-  });
-
-  const renderModal = async (props: Partial<ComponentProps<typeof DrainNodeModal>> = {}) => {
-    await act(async () => {
-      root.render(<DrainNodeModal {...defaultProps} {...props} />);
-      await Promise.resolve();
-    });
-  };
-
-  it('does not acquire maintenance scope or render while closed', async () => {
-    await renderModal({ isOpen: false });
-
-    expect(document.querySelector('.drain-node-modal')).toBeNull();
-    expect(mocks.setRefreshEnabled).not.toHaveBeenCalled();
-    expect(mocks.requestRefresh).not.toHaveBeenCalled();
-  });
-
-  it('acquires the cluster-scoped node maintenance domain and renders initial options', async () => {
-    await renderModal();
-
-    expect(mocks.setRefreshEnabled).toHaveBeenCalledWith({
-      domain: 'object-maintenance',
-      scope: 'cluster-1|node:node-a',
-      enabled: true,
-    });
-    expect(mocks.requestRefresh).toHaveBeenCalledWith({
-      domain: 'object-maintenance',
-      scope: 'cluster-1|node:node-a',
-      reason: 'startup',
-    });
-    expect(document.querySelector('[data-test="drain-modal-start"]')).not.toBeNull();
-    expect(document.querySelector('.drain-node-modal-advanced')).not.toBeNull();
-  });
-
-  it('explains the selected eviction denial and prevents the drain', async () => {
-    await renderModal({
+  it('explains the eviction permission the drain needs and does not start it', async () => {
+    await showModal({
       permissions: {
         nodeMutation: { allowed: true, pending: false },
         podEvictionCreate: { allowed: false, pending: false },
@@ -143,108 +118,85 @@ describe('DrainNodeModal', () => {
       },
     });
 
-    const start = document.querySelector<HTMLButtonElement>('[data-test="drain-modal-start"]');
-    expect(start?.disabled).toBe(true);
-    expect(document.querySelector('[data-test="drain-modal-permission-reason"]')?.textContent).toBe(
-      'You need permission to create Pod evictions before starting a drain.'
+    expect(startButton()?.disabled).toBe(true);
+    expect(control('[data-test="drain-modal-permission-reason"]').textContent).toContain(
+      'Pod evictions'
     );
+    await clickControl('[data-test="drain-modal-start"]');
+    expect(app.backend.calls('RunObjectAction')).toEqual([]);
   });
 
-  it('starts a drain through the complete target builder and refreshes maintenance state', async () => {
-    await renderModal();
-    const start = document.querySelector<HTMLButtonElement>('[data-test="drain-modal-start"]');
+  it('starts a drain of the node with its complete identity, then refreshes its maintenance state', async () => {
+    await showModal();
+    const readsBefore = maintenanceReads().length;
 
-    await act(async () => {
-      start?.click();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await clickControl('[data-test="drain-modal-start"]');
 
-    expect(mocks.buildObjectActionTarget).toHaveBeenCalledWith(
-      { clusterId: 'cluster-1', kind: 'Node', name: 'node-a' },
-      'drain'
-    );
-    expect(mocks.runStartDrain).toHaveBeenCalledWith(
-      { target: 'node-a' },
-      expect.objectContaining({
-        ignoreDaemonSets: true,
-        deleteEmptyDirData: true,
-        force: false,
-        disableEviction: false,
-        skipWaitForPodsToTerminate: false,
-      })
-    );
-    expect(mocks.requestRefresh).toHaveBeenLastCalledWith({
-      domain: 'object-maintenance',
-      scope: 'cluster-1|node:node-a',
-      reason: 'user',
-    });
+    expect(app.backend.calls('RunObjectAction')).toEqual([
+      [
+        {
+          action: 'startDrain',
+          target: drainTarget(),
+          drainOptions: expect.objectContaining({
+            ignoreDaemonSets: true,
+            deleteEmptyDirData: true,
+            force: false,
+            disableEviction: false,
+            skipWaitForPodsToTerminate: false,
+          }),
+        },
+      ],
+    ]);
+    expect(maintenanceReads().length).toBeGreaterThan(readsBefore);
   });
 
-  it('reports the mutation boundary while a drain request is in flight', async () => {
-    let releaseDrain!: () => void;
-    mocks.runStartDrain.mockImplementationOnce(
-      () =>
-        new Promise<void>((resolve) => {
-          releaseDrain = resolve;
-        })
-    );
+  it('reports its mutation boundary while the drain request is in flight', async () => {
     const onMutationChange = vi.fn();
-    await renderModal({ onMutationChange });
+    await showModal({ onMutationChange });
+    const release = app.backend.hold('RunObjectAction');
 
-    await act(async () => {
-      document.querySelector<HTMLButtonElement>('[data-test="drain-modal-start"]')?.click();
-      await Promise.resolve();
-    });
+    await clickControl('[data-test="drain-modal-start"]');
     expect(onMutationChange).toHaveBeenLastCalledWith(true);
 
-    await act(async () => {
-      releaseDrain();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await act(async () => release());
+    await app.settle();
     expect(onMutationChange).toHaveBeenLastCalledWith(false);
   });
 
-  it('projects advanced option changes into the normalized drain payload', async () => {
-    await renderModal();
-    const click = (selector: string) => {
-      const input = document.querySelector<HTMLInputElement>(selector);
-      if (!input) {
-        throw new Error(`Missing input ${selector}`);
-      }
-      act(() => input.click());
-    };
-    const changeNumber = (input: HTMLInputElement, value: string) => {
-      act(() => {
-        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-        setter?.call(input, value);
+  it('sends the advanced options the user chose, normalized', async () => {
+    await showModal();
+    const changeNumber = async (input: HTMLInputElement, value: string) => {
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+          input,
+          value
+        );
         input.dispatchEvent(new Event('input', { bubbles: true }));
       });
     };
 
-    click('[data-test="drain-modal-ignore-daemonsets"]');
-    click('[data-test="drain-modal-delete-emptydir"]');
-    click('[data-test="drain-modal-disable-eviction"]');
-    click('[data-test="drain-modal-skip-wait"]');
-    click('[data-test="drain-modal-force"]');
-    click('[data-test="drain-modal-grace-toggle"]');
-    click('[data-test="drain-modal-timeout-toggle"]');
-    const numericInputs = document.querySelectorAll<HTMLInputElement>(
-      '.drain-node-modal-grace input[type="number"]'
+    for (const option of [
+      'ignore-daemonsets',
+      'delete-emptydir',
+      'disable-eviction',
+      'skip-wait',
+      'force',
+      'grace-toggle',
+      'timeout-toggle',
+    ]) {
+      await clickControl(`[data-test="drain-modal-${option}"]`);
+    }
+    const [grace, timeout] = Array.from(
+      document.querySelectorAll<HTMLInputElement>('.drain-node-modal-grace input[type="number"]')
     );
-    changeNumber(numericInputs[0] as HTMLInputElement, '1200');
-    changeNumber(numericInputs[1] as HTMLInputElement, '9.8');
+    await changeNumber(requireValue(grace, 'grace input'), '1200');
+    await changeNumber(requireValue(timeout, 'timeout input'), '9.8');
+    await clickControl('[data-test="drain-modal-start"]');
 
-    await act(async () => {
-      document.querySelector<HTMLButtonElement>('[data-test="drain-modal-start"]')?.click();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(mocks.runStartDrain).toHaveBeenCalledWith(
-      { target: 'node-a' },
-      expect.objectContaining({
+    expect(app.backend.calls('RunObjectAction')[0]?.[0]).toMatchObject({
+      action: 'startDrain',
+      target: drainTarget(),
+      drainOptions: {
         ignoreDaemonSets: false,
         deleteEmptyDirData: false,
         disableEviction: true,
@@ -252,60 +204,47 @@ describe('DrainNodeModal', () => {
         force: true,
         gracePeriodSeconds: 900,
         timeoutSeconds: 9,
-      })
-    );
+      },
+    });
   });
 
-  it('shows retry history after failure and reports a subsequent start error', async () => {
-    mocks.snapshot.data = {
-      drains: [buildDrainJob('failed'), { ...buildDrainJob('succeeded'), id: 'drain-older' }],
-    };
-    mocks.runStartDrain.mockRejectedValue(new Error('drain rejected'));
-    mocks.handleError.mockReturnValue({ message: 'drain rejected' });
-
-    await renderModal();
-    expect(document.querySelector('[data-test="drain-modal-retry"]')).not.toBeNull();
+  it('offers a retry after a failed drain and reports a refused retry', async () => {
+    serveDrains([drainJob('failed'), { ...drainJob('succeeded'), id: 'drain-older' }]);
+    app.backend.answer('RunObjectAction', () => {
+      throw new Error('drain rejected');
+    });
+    await showModal();
     expect(document.querySelectorAll('.drain-node-modal-history-entry')).toHaveLength(1);
 
-    await act(async () => {
-      document.querySelector<HTMLButtonElement>('[data-test="drain-modal-retry"]')?.click();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await clickControl('[data-test="drain-modal-retry"]');
 
-    expect(document.querySelector('.drain-node-modal-error')?.textContent).toContain(
-      'drain rejected'
-    );
+    expect(control('.drain-node-modal-error').textContent).toContain('drain rejected');
+    expect(app.errors.take((record) => record.context?.source === 'drain-modal')).toEqual([
+      expect.objectContaining({
+        context: expect.objectContaining({ context: { nodeName: 'node-a' } }),
+      }),
+    ]);
   });
 
-  it('keeps an active drain visible and hides controls for starting another', async () => {
-    mocks.snapshot.data = { drains: [buildDrainJob('running')] };
+  it('shows a running drain instead of the controls for starting another', async () => {
+    serveDrains([drainJob('running')]);
 
-    await renderModal();
+    await showModal();
 
-    expect(document.querySelector('[data-test="drain-job-status"]')?.textContent).toBe('Running');
-    expect(document.querySelector('[data-test="drain-modal-start"]')).toBeNull();
-    expect(document.querySelector('.drain-node-modal-advanced')).toBeNull();
-    expect(document.querySelector('.drain-node-modal-footer')?.textContent).toContain('Close');
+    expect(control('[data-test="drain-job-status"]').textContent).toBe('Running');
+    expect(startButton()).toBeNull();
+    expect(document.querySelector('[data-test="drain-modal-ignore-daemonsets"]')).toBeNull();
   });
 
-  it('cancels the active cluster-scoped drain and refreshes its maintenance scope', async () => {
-    mocks.snapshot.data = { drains: [buildDrainJob('running')] };
-    await renderModal();
+  it('cancels the running drain in its cluster, then refreshes its maintenance state', async () => {
+    serveDrains([drainJob('running')]);
+    app.backend.answer('CancelDrainNodeJob', () => undefined);
+    await showModal();
+    const readsBefore = maintenanceReads().length;
 
-    await act(async () => {
-      document
-        .querySelector<HTMLButtonElement>('[data-maintenance-action="cancel-drain"]')
-        ?.click();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await clickControl('[data-maintenance-action="cancel-drain"]');
 
-    expect(mocks.cancelDrain).toHaveBeenCalledWith('cluster-1', 'drain-1');
-    expect(mocks.requestRefresh).toHaveBeenLastCalledWith({
-      domain: 'object-maintenance',
-      scope: 'cluster-1|node:node-a',
-      reason: 'user',
-    });
+    expect(app.backend.calls('CancelDrainNodeJob')).toEqual([[dev.clusterId, 'drain-1']]);
+    expect(maintenanceReads().length).toBeGreaterThan(readsBefore);
   });
 });

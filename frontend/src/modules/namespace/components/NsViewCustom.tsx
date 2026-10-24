@@ -94,7 +94,6 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       return cf.withNamespaceColumn(baseColumns, {
         afterColumnKey: 'name',
         accessor: (resource) => resource.ref.namespace,
-        sortValue: (resource) => (resource.ref.namespace || '').toLowerCase(),
         ...namespaceColumnLink,
       });
     }, [

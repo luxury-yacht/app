@@ -6,7 +6,13 @@ runtime operations ([operation-lifecycle.md](operation-lifecycle.md)).
 
 ## Agent Contract
 
-- Targets carry the pod's identity plus the container selection.
+- Targets carry the pod's identity plus the container selection. The start
+  request and session DTOs (`ShellSessionRequest`, `ShellSession`,
+  `ShellSessionInfo`) carry the complete target `ResourceRef`, cluster included;
+  `StartShellSession` rejects any target that is not a core/v1 Pod and
+  `StartNodeShellSession` any that is not a core/v1 Node. Shell tab reattach
+  and Sessions navigation match and open that reference instead of rebuilding
+  one from namespace and pod name.
 - Debug container creation and shell attachment are separate steps; failure in
   either must not leave ambiguous session state.
 - Capability gating distinguishes regular exec, debug container creation,
@@ -14,21 +20,55 @@ runtime operations ([operation-lifecycle.md](operation-lifecycle.md)).
   ([permissions.md](../architecture/permissions.md)).
 - Sessions register with the runtime-operation registry. Terminal streams must
   not leak after tab close, panel close, cluster removal, or app shutdown.
+- Closing the Shell tab or panel detaches without ending the session. Users end
+  it with the Shell tab's End Session control or the Sessions-list Stop action,
+  both of which call `CloseShellSession`. The backend reports that close with
+  the `ended` `ShellSessionStatus`, so a Shell tab in any window treats it as a
+  normal close, never a failed connection, even right after connecting.
 - Reattach and backlog stay scoped to the originating cluster and session.
 - Ephemeral debug containers persist on the Pod until Pod deletion; the app
   does not remove them.
+- Node shell (`StartNodeShellSession`) is `kubectl debug node/<name>
+  --profile=sysadmin -it`: the backend creates kubectl's node debug pod
+  (`nodes.NewDebugPod`, pinned to kubectl v0.37.1's spec except the
+  `app.kubernetes.io/managed-by: luxury-yacht` label) in `default`, waits for
+  its `debugger` container, and attaches to it. It runs with the user's
+  kubeconfig credentials, so RBAC and admission (Pod Security, policy webhooks)
+  decide it as they would for kubectl. The session targets the Node and carries
+  the pod as `debugPod`.
+- Before creating the pod, node shell checks pods create, get, and delete plus
+  pods/attach get or create in `default`; the Node panel's Shell tab uses the
+  same set (`NODE_SHELL_PERMISSIONS`, queried for `default` by the panel).
+- The app owns a debug pod from before the create call until a delete
+  succeeds (`nodeDebugPodOwner`):
+  - A start registers with the coordinator before creating anything. Cluster
+    removal and shutdown cancel it and wait, bounded, until it has deleted its
+    pod.
+  - A create that fails without a 4xx answer (lost response, timeout, 5xx) may
+    have committed, so the start deletes the pod by its generated name.
+    `AlreadyExists` names another owner's pod and is never deleted.
+  - Every path that ends the session (End Session, Sessions Stop, shell exit,
+    timeout) and every failed start deletes the pod with its own bounded
+    context. A failed delete keeps the session registered as `cleanup-failed`
+    (Sessions row in an error state with the reason; the Shell tab shows a
+    notice instead of reattaching); ending it again retries, and End Session
+    reports the failure. Cluster removal and shutdown make one final attempt
+    and log a pod they could not delete.
 - Start order: `DesktopService` routes shell commands directly to
   `OperationsCoordinator`, which resolves the caller's explicit `clusterId`
   through its narrow cluster-access collaborator, checks exec permission,
   registers the session in the runtime-operation envelope, and only then starts
   the stream. A start finishing against an older operation epoch is rejected
-  instead of publishing a stale session.
+  instead of publishing a stale session; a rejected node shell deletes its
+  debug pod.
 
 ## Ownership
 
 - Shell sessions, lifecycle, backlog, executor factories, and cleanup:
   `backend.OperationsCoordinator`, implemented by `backend/shell_sessions*.go`
 - Debug container creation: `backend/resources/pods/debug.go`
+- Node shell debug pods (build, wait, delete): `backend/resources/nodes/debug_pod.go`;
+  start and cleanup wiring: `backend/shell_sessions_node.go`
 - Object-panel shell/debug UI: `frontend/src/modules/object-panel`
 
 ## Validation

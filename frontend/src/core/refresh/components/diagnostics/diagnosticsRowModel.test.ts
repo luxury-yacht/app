@@ -8,6 +8,7 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import type { PermissionQueryDiagnostics, PermissionStatus } from '@/core/capabilities';
 import { getPermissionKey, PERMISSION_FEATURES } from '@/core/capabilities';
+import { localFailure } from '@/core/refresh/refreshFailure';
 import { makeTelemetrySummary } from '../../refreshContractTestBuilders';
 import type { TelemetrySummary } from '../../types';
 import type { DiagnosticsRow } from './diagnosticsPanelTypes';
@@ -676,7 +677,7 @@ describe('diagnosticsRowModel', () => {
               status: 'error',
               data: null,
               stats: null,
-              error: 'failed',
+              error: localFailure('failed'),
               droppedAutoRefreshes: 0,
             },
           ],

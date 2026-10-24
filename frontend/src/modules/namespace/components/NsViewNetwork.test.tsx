@@ -1,596 +1,149 @@
 /**
  * frontend/src/modules/namespace/components/NsViewNetwork.test.tsx
  *
- * Test suite for NsViewNetwork.
- * Covers key behaviors and edge cases for NsViewNetwork.
+ * What the namespace Network view shows beyond the aggregated namespace table
+ * it shares with Config (covered in NsViewConfig.test.tsx): each object's
+ * backend detail segments from the namespace-network query split by slot into
+ * the Context, Network, and Summary columns, sorting offered only where the
+ * backend can sort, and a linked class segment that opens its object in a
+ * panel with full identity. Segment rendering itself is covered in
+ * shared/components/tables/detailSegmentsColumn.test.tsx. Runs in the full
+ * app, navigated through the sidebar, over a faked backend (test-utils/appState).
  */
 
-import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
-import type ConfirmationModal from '@shared/components/modals/ConfirmationModal';
-import type { GridTableProps } from '@shared/components/tables/GridTable';
-import { withStableListKeys } from '@shared/utils/stableListKeys';
-import React, { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CanonicalRowTestOverrides } from '@/core/refresh/types';
-import { makeResourceRef } from '@/test-utils/makeResourceRef';
-import { requireReactElement } from '@/test-utils/requireReactElement';
+import { act } from 'react';
+import { beforeEach, describe, expect, it } from 'vitest';
+import type { NamespaceNetworkSummary } from '@/core/refresh/types';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
 
-vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
-  useNamespaceColumnLink: () => ({
-    onClick: vi.fn(),
-    getClassName: () => 'object-panel-link',
-    isInteractive: () => true,
-  }),
-}));
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
 
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedKubeconfig: 'path:context', selectedClusterId: 'cluster-a' }),
-}));
-
-import NsViewNetwork, { type NetworkData } from '@modules/namespace/components/NsViewNetwork';
-
-type CapturedGridTableProps = GridTableProps<NetworkData> & {
-  getCustomContextMenuItems: NonNullable<GridTableProps<NetworkData>['getCustomContextMenuItems']>;
-};
-type ConfirmationProps = React.ComponentProps<typeof ConfirmationModal>;
-
-const {
-  gridTablePropsRef,
-  confirmationPropsRef,
-  openWithObjectMock,
-  runObjectActionMock,
-  permissionState,
-  errorHandlerMock,
-  requestRefreshDomainStateMock,
-} = vi.hoisted(() => ({
-  gridTablePropsRef: { current: null as unknown as CapturedGridTableProps },
-  confirmationPropsRef: { current: null as unknown as ConfirmationProps },
-  openWithObjectMock: vi.fn(),
-  runObjectActionMock: vi.fn().mockResolvedValue(undefined),
-  permissionState: new Map<string, { allowed: boolean; pending: boolean }>(),
-  errorHandlerMock: { handle: vi.fn() },
-  requestRefreshDomainStateMock: vi.fn(),
-}));
-
-const renderOutputToText = (output: React.ReactNode): string => {
-  if (typeof output === 'string') {
-    return output;
-  }
-  if (Array.isArray(output)) {
-    return output.map(renderOutputToText).join('');
-  }
-  if (output === null || output === undefined) {
-    return '';
-  }
-  return renderToStaticMarkup(output);
-};
-
-vi.mock('@core/contexts/FavoritesContext', () => ({
-  useFavorites: () => ({
-    favorites: [],
-
-    addFavorite: vi.fn(),
-    updateFavorite: vi.fn(),
-    deleteFavorite: vi.fn(),
-    reorderFavorites: vi.fn(),
-  }),
-  FavoritesProvider: ({ children }: { children: React.ReactNode }) => children,
-}));
-
-vi.mock('@ui/favorites/FavToggle', () => ({
-  useFavToggle: () => ({
-    type: 'toggle',
-    id: 'favorite',
-    icon: null,
-    active: false,
-    onClick: () => undefined,
-    title: 'Save as favorite',
-  }),
-}));
-
-vi.mock('@shared/components/tables/GridTable', async () => {
-  const actual = await vi.importActual<typeof import('@shared/components/tables/GridTable')>(
-    '@shared/components/tables/GridTable'
-  );
-  return {
-    ...actual,
-    default: (props: CapturedGridTableProps) => {
-      gridTablePropsRef.current = props;
-      return (
-        <table data-testid="grid-table">
-          <tbody>
-            {withStableListKeys(props.data, (row) => JSON.stringify(row)).map(
-              ({ key, value: row }) => (
-                <tr key={key}>
-                  <td>{row.ref.name}</td>
-                </tr>
-              )
-            )}
-          </tbody>
-        </table>
-      );
-    },
-  };
-});
-
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: openWithObjectMock }),
-}));
-
-vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: vi.fn() }),
-}));
-
-vi.mock('@shared/components/modals/ConfirmationModal', () => ({
-  default: (props: ConfirmationProps) => {
-    confirmationPropsRef.current = props;
-    return null;
+const ingress = (name: string): NamespaceNetworkSummary => ({
+  ref: {
+    clusterId: dev.clusterId,
+    group: 'networking.k8s.io',
+    version: 'v1',
+    kind: 'Ingress',
+    resource: 'ingresses',
+    namespace: 'team-a',
+    name,
+    uid: `${name}-uid`,
   },
-}));
-
-vi.mock('@core/backend-api', () => ({
-  RunObjectAction: (...args: unknown[]) => runObjectActionMock(...args),
-}));
-
-vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (data: NetworkData[]) => ({
-    sortedData: data,
-    sortConfig: { key: 'name', direction: 'asc' },
-    handleSort: vi.fn(),
-  }),
-}));
-
-vi.mock('@/hooks/useShortNames', () => ({
-  useShortNames: () => false,
-}));
-
-// Single-namespace network tables are query-backed now, so the table renders the typed query rows.
-// Mock the typed-query data path (and its readiness gates) so the query can settle in tests.
-vi.mock('@/core/data-access', () => ({
-  requestRefreshDomainState: (...args: unknown[]) => requestRefreshDomainStateMock(...args),
-  useScopedRefreshDomainLifecycle: vi.fn(),
-}));
-
-vi.mock('@/core/refresh', () => ({
-  useRefreshScopedDomain: () => ({
-    status: 'ready',
-    data: { rows: [] },
-    stats: null,
-    version: 1,
-    checksum: '',
-    lastUpdated: 1,
-    droppedAutoRefreshes: 0,
-  }),
-  refreshManager: { triggerManualRefresh: vi.fn() },
-}));
-
-vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
-  useGridTablePersistence: () => ({
-    storageKey: 'gridtable:v1:cluster-a:namespace-network',
-    sortConfig: { key: 'name', direction: 'asc' },
-    setSortConfig: vi.fn(),
-    columnWidths: null,
-    setColumnWidths: vi.fn(),
-    columnVisibility: null,
-    setColumnVisibility: vi.fn(),
-    filters: {
-      search: '',
-      kinds: [],
-      namespaces: [],
-      includeMetadata: false,
-    },
-    setFilters: vi.fn(),
-    pageSize: null,
-    setPageSize: vi.fn(),
-    resetState: vi.fn(),
-    hydrated: true,
-  }),
-}));
-
-vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
-  default: ({ children }: { children: React.ReactNode }) => children,
-}));
-
-vi.mock('@shared/components/icons/SharedIcons', () => ({
-  DiffIcon: () => <span>diff</span>,
-  OpenIcon: () => <span>open</span>,
-  ObjectMapIcon: () => <span>map</span>,
-  DeleteIcon: () => <span>delete</span>,
-  MetadataIcon: () => <span>metadata</span>,
-}));
-
-vi.mock('@/core/capabilities', () => ({
-  getPermissionKey: (kind: string, action: string, namespace: string) =>
-    `${kind}:${action}:${namespace}`,
-  useUserPermissions: () => permissionState,
-}));
-
-vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => {
-  const state = { columnWidths: {} as NonNullable<CapturedGridTableProps['columnWidths']> };
-  return {
-    useNamespaceGridTablePersistence: () => ({
-      sortConfig: { key: 'name', direction: 'asc' },
-      onSortChange: vi.fn(),
-      columnWidths: state.columnWidths,
-      setColumnWidths: (next: NonNullable<CapturedGridTableProps['columnWidths']>) => {
-        state.columnWidths = next;
-        if (gridTablePropsRef.current) {
-          gridTablePropsRef.current = { ...gridTablePropsRef.current, columnWidths: next };
-        }
+  details: [
+    {
+      slot: 'reference',
+      label: 'Class',
+      value: 'nginx',
+      link: {
+        ref: {
+          clusterId: dev.clusterId,
+          group: 'networking.k8s.io',
+          version: 'v1',
+          kind: 'IngressClass',
+          resource: 'ingressclasses',
+          name: 'nginx',
+        },
       },
-      columnVisibility: null,
-      setColumnVisibility: vi.fn(),
-      filters: { search: '', kinds: [], namespaces: [] },
-      setFilters: vi.fn(),
-      isNamespaceScoped: true,
-      resetState: vi.fn(),
-    }),
-  };
+    },
+    {
+      slot: 'address',
+      label: 'Hosts',
+      value: 'web.example.com +1',
+      search: 'web.example.com, api.example.com',
+    },
+    { slot: 'counts', label: 'Rules', value: '2' },
+  ],
+  age: '3h',
 });
 
-vi.mock('@utils/errorHandler', () => ({
-  errorHandler: errorHandlerMock,
-}));
+const start = async (rows: NamespaceNetworkSummary[]) => {
+  app.startScreen(dev);
+  app.serveTable(dev, 'namespace-network', { rows });
+  view = await app.mountApp();
+  await view.goTo({ namespace: 'team-a', view: 'network' });
+};
+
+const cellOf = (name: string, column: string) => {
+  const row = requireValue(
+    Array.from(view.container.querySelectorAll<HTMLElement>('.gridtable-row')).find((candidate) =>
+      candidate.textContent?.includes(name)
+    ),
+    `expected the ${name} row`
+  );
+  return requireValue(
+    row.querySelector<HTMLElement>(`.grid-cell[data-column="${column}"]`),
+    `expected the ${column} cell of ${name}`
+  );
+};
+
+beforeEach(() => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['team-a']);
+});
 
 describe('NsViewNetwork', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  it('splits each object’s details into the Context, Network, and Summary columns by slot', async () => {
+    await start([ingress('web-gateway')]);
 
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    gridTablePropsRef.current = null as unknown as CapturedGridTableProps;
-    confirmationPropsRef.current = null as unknown as ConfirmationProps;
-    openWithObjectMock.mockReset();
-    runObjectActionMock.mockReset();
-    runObjectActionMock.mockResolvedValue(undefined);
-    permissionState.clear();
-    errorHandlerMock.handle.mockClear();
-    requestRefreshDomainStateMock.mockReset();
-    requestRefreshDomainStateMock.mockResolvedValue({
-      status: 'executed',
-      data: {
-        status: 'ready',
-        data: {
-          rows: [],
-          total: 0,
-          totalIsExact: true,
-          namespaces: ['team-a', 'team-b'],
-          kinds: ['Ingress'],
-          facetsExact: true,
-        },
-      },
-    });
+    // The export text is the cell's flattened data (what a table export writes).
+    const exported = (column: string) =>
+      cellOf('web-gateway', column)
+        .querySelector<HTMLElement>('[data-gridtable-export-text]')
+        ?.getAttribute('data-gridtable-export-text');
+    expect(['context', 'network', 'summary'].map(exported)).toEqual([
+      'Class: nginx',
+      'Hosts: web.example.com +1',
+      'Rules: 2',
+    ]);
   });
 
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
+  it('offers sorting by Context and Network but not by Summary, which the backend cannot sort', async () => {
+    await start([ingress('web-gateway')]);
+
+    // The backend sorts context and network by slot text and has no summary
+    // sort (backend/refresh/snapshot/static_table_query.go networkTableQueryAdapter).
+    const sortControls = Array.from(
+      view.container.querySelectorAll<HTMLButtonElement>('.grid-cell-header button[aria-label]'),
+      (button) => button.getAttribute('aria-label')
+    );
+    expect(sortControls).toEqual(expect.arrayContaining(['Sort by Context', 'Sort by Network']));
+    expect(sortControls).not.toContain('Sort by Summary');
   });
 
-  const baseNetwork = (overrides: CanonicalRowTestOverrides<NetworkData> = {}): NetworkData => {
-    const { ref, ...row } = overrides;
-    const kind = ref?.kind ?? 'Ingress';
-    const identity =
-      kind === 'Service'
-        ? { group: '', resource: 'services' }
-        : kind === 'EndpointSlice'
-          ? { group: 'discovery.k8s.io', resource: 'endpointslices' }
-          : { group: 'networking.k8s.io', resource: 'ingresses' };
-    return {
-      ref: {
-        ...makeResourceRef({
-          group: identity.group,
-          kind,
-          resource: identity.resource,
-          namespace: 'team-a',
-          name: 'web-gateway',
-        }),
-        ...ref,
-      },
-      kindAlias: 'Ingress',
-      details: [
-        {
-          slot: 'reference',
-          label: 'Class',
-          value: 'nginx',
-          link: {
-            ref: {
-              clusterId: 'alpha:ctx',
-              group: 'networking.k8s.io',
-              version: 'v1',
-              kind: 'IngressClass',
-              resource: 'ingressclasses',
-              name: 'nginx',
-            },
-          },
-        },
-        {
-          slot: 'address',
-          label: 'Hosts',
-          value: 'web.example.com +1',
-          search: 'web.example.com, api.example.com',
-        },
-        { slot: 'counts', label: 'Rules', value: '2' },
-      ],
-      age: '3h',
-      ...row,
-    };
-  };
-
-  const renderNetworkView = async (
-    overrides: Partial<React.ComponentProps<typeof NsViewNetwork>> = {}
-  ) => {
-    await act(async () => {
-      root.render(<NsViewNetwork namespace="team-a" showNamespaceColumn={true} {...overrides} />);
-      await Promise.resolve();
+  it('opens a linked class segment’s object in its panel with full identity', async () => {
+    app.servePanel(dev, {
+      group: 'networking.k8s.io',
+      version: 'v1',
+      kind: 'IngressClass',
+      namespace: '',
+      name: 'nginx',
     });
-    return gridTablePropsRef.current;
-  };
-
-  const getColumn = (key: string) =>
-    requireValue(
-      gridTablePropsRef.current.columns.find((column) => column.key === key),
-      `expected the network ${key} column`
+    await start([ingress('web-gateway')]);
+    const classLink = requireValue(
+      cellOf('web-gateway', 'context').querySelector<HTMLButtonElement>('button'),
+      'expected the class link'
     );
 
-  it('opens object panel through context menu', async () => {
-    permissionState.set('Ingress:delete:team-a', { allowed: true, pending: false });
-    const entry = baseNetwork();
-    // Query-backed single-namespace table: feed the typed query the row so it renders in the table.
-    requestRefreshDomainStateMock.mockResolvedValue({
-      status: 'executed',
-      data: {
-        status: 'ready',
-        data: {
-          rows: [entry],
-          total: 1,
-          totalIsExact: true,
-          namespaces: ['team-a'],
-          kinds: ['Ingress'],
-          facetsExact: true,
-        },
-      },
-    });
-    const props = await renderNetworkView();
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await act(async () => classLink.click());
+    await app.settle();
 
-    expect(gridTablePropsRef.current.data).toHaveLength(1);
-    const menu = props.getCustomContextMenuItems(entry, 'name');
-    const openItem = menu.find((item) => item.actionId === OBJECT_ACTION_IDS.viewDetails);
-    expect(openItem).toBeTruthy();
-
-    act(() => {
-      openItem?.onClick?.();
-    });
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'Ingress',
-        name: 'web-gateway',
-        namespace: 'team-a',
-        clusterId: 'alpha:ctx',
-      })
-    );
-  });
-
-  it.each([
-    ['Ingress', 'networking.k8s.io', 'v1'],
-    ['Service', '', 'v1'],
-    ['EndpointSlice', 'discovery.k8s.io', 'v1'],
-  ])('opens the Map from %s context menu', async (kind, group, version) => {
-    const entry = baseNetwork({
-      ref: { kind, name: `${kind.toLowerCase()}-object` },
-
-      kindAlias: kind,
-    });
-    const props = await renderNetworkView();
-
-    const menu = props.getCustomContextMenuItems(entry, 'name');
-    const objectMapItem = menu.find((item) => item.actionId === OBJECT_ACTION_IDS.viewMap);
-    expect(objectMapItem).toBeTruthy();
-
-    act(() => {
-      objectMapItem?.onClick?.();
-    });
-
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind,
-        name: `${kind.toLowerCase()}-object`,
-        namespace: 'team-a',
-        clusterId: 'alpha:ctx',
-        group,
-        version,
-      }),
-      { initialTab: 'map' }
-    );
-  });
-
-  it('gates delete option on permissions and confirms deletion', async () => {
-    const entry = baseNetwork();
-    permissionState.set('Ingress:delete:team-a', { allowed: true, pending: false });
-    const props = await renderNetworkView();
-
-    const menu = props.getCustomContextMenuItems(entry, 'name');
-    const deleteItem = menu.find((item) => item.label === 'Delete');
-    expect(deleteItem).toBeTruthy();
-
-    act(() => {
-      deleteItem?.onClick?.();
-    });
-    expect(confirmationPropsRef.current?.isOpen).toBe(true);
-
-    await act(async () => {
-      await confirmationPropsRef.current?.onConfirm?.();
-    });
-
-    expect(runObjectActionMock).toHaveBeenCalledWith({
-      action: 'delete',
-      target: {
-        clusterId: 'alpha:ctx',
+    expect(view.openPanels()).toEqual([
+      {
+        clusterId: dev.clusterId,
+        clusterName: dev.clusterName,
         group: 'networking.k8s.io',
         version: 'v1',
-        kind: 'Ingress',
-        namespace: 'team-a',
-        name: 'web-gateway',
+        kind: 'IngressClass',
+        namespace: '',
+        name: 'nginx',
       },
-    });
-  });
-
-  it('hides delete action while permission is pending', async () => {
-    const entry = baseNetwork();
-    permissionState.set('Ingress:delete:team-a', { allowed: true, pending: true });
-    const props = await renderNetworkView();
-
-    const menu = props.getCustomContextMenuItems(entry, 'name');
-    const deleteItem = menu.find((item) => item.label === 'Delete');
-    expect(deleteItem).toBeUndefined();
-  });
-
-  it('omits delete option entirely when permission is denied', async () => {
-    const entry = baseNetwork();
-    // Simulate denied capability by not registering key
-    const props = await renderNetworkView();
-    const menu = props.getCustomContextMenuItems(entry, 'name');
-    const deleteItem = menu.find((item) => item.label === 'Delete');
-    expect(deleteItem).toBeUndefined();
-  });
-
-  it('renders stable context, network, and summary columns', async () => {
-    permissionState.set('Ingress:delete:team-a', { allowed: true, pending: false });
-    const entry = baseNetwork();
-    await renderNetworkView();
-
-    const contextColumn = getColumn('context');
-    expect(contextColumn.header).toBe('Context');
-    const contextCell = requireReactElement<{ className?: string }>(
-      contextColumn.render(entry),
-      'expected the context cell element'
-    );
-    expect(renderOutputToText(contextCell)).toContain('nginx');
-    expect(renderOutputToText(contextCell)).toContain('Class:');
-    expect(contextCell.props.className).toBe('detail-segments');
-
-    const networkColumn = getColumn('network');
-    expect(networkColumn.header).toBe('Network');
-    const networkCell = requireReactElement<{
-      title?: string;
-      'data-gridtable-export-text'?: string;
-    }>(networkColumn.render(entry), 'expected the network cell element');
-    expect(renderOutputToText(networkCell)).toContain('web.example.com +1');
-    expect(networkCell.props.title).toBe('Hosts: web.example.com, api.example.com');
-    expect(networkCell.props['data-gridtable-export-text']).toBe('Hosts: web.example.com +1');
-
-    const summaryColumn = getColumn('summary');
-    expect(summaryColumn.header).toBe('Summary');
-    expect(summaryColumn.sortable).toBe(false);
-    const summaryCell = requireReactElement<{ className?: string }>(
-      summaryColumn.render(entry),
-      'expected the summary cell element'
-    );
-    const summaryMarkup = renderOutputToText(summaryCell);
-    expect(summaryCell.props.className).toBe('detail-segments');
-    expect(summaryMarkup).not.toContain('class="detail-segment"');
-    expect(summaryMarkup).toContain('Rules:');
-
-    const warningSummary = renderOutputToText(
-      summaryColumn.render(
-        baseNetwork({
-          details: [
-            { slot: 'counts', label: 'Ready', value: '2' },
-            { slot: 'counts', label: 'Not ready', value: '1', presentation: 'warning' },
-          ],
-        })
-      )
-    );
-    expect(warningSummary).toContain('detail-segment-separator');
-    expect(warningSummary).toContain('detail-segment-value status-text warning');
-
-    // A row with no address segments renders the shared no-value marker.
-    const bare = baseNetwork({ details: [{ slot: 'counts', label: 'Targets', value: '1' }] });
-    expect(networkColumn.render(bare)).toBe('-');
-  });
-
-  it('renders kind and name from the canonical resource reference', async () => {
-    const entry = baseNetwork();
-    await renderNetworkView();
-
-    expect(renderOutputToText(getColumn('kind').render(entry))).toContain('Ingress');
-    expect(renderOutputToText(getColumn('name').render(entry))).toContain('web-gateway');
-  });
-
-  it('opens a linked class segment in the object panel', async () => {
-    const entry = baseNetwork();
-    await renderNetworkView();
-    const detailsColumn = getColumn('context');
-    const rendered = detailsColumn.render(entry);
-
-    const findButton = (node: React.ReactNode): React.ReactElement | undefined => {
-      if (Array.isArray(node)) {
-        for (const child of node) {
-          const match = findButton(child);
-          if (match) {
-            return match;
-          }
-        }
-        return undefined;
-      }
-      if (!React.isValidElement(node)) {
-        return undefined;
-      }
-      if (node.type === 'button') {
-        return node;
-      }
-      return findButton((node.props as { children?: React.ReactNode }).children);
-    };
-
-    const button = requireValue(findButton(rendered), 'expected the linked segment button');
-    const props = button.props as {
-      onClick: (event: {
-        altKey: boolean;
-        preventDefault: () => void;
-        stopPropagation: () => void;
-      }) => void;
-    };
-
-    act(() => {
-      props.onClick({ altKey: false, preventDefault: vi.fn(), stopPropagation: vi.fn() });
-    });
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'IngressClass', name: 'nginx', clusterId: 'alpha:ctx' })
-    );
-  });
-
-  it('handles delete failure with errorHandler', async () => {
-    runObjectActionMock.mockRejectedValueOnce(new Error('boom'));
-    permissionState.set('Ingress:delete:team-a', { allowed: true, pending: false });
-    const entry = baseNetwork();
-    const props = await renderNetworkView();
-    const deleteItem = props
-      .getCustomContextMenuItems(entry, 'name')
-      .find((item) => item.label === 'Delete');
-
-    act(() => {
-      deleteItem?.onClick?.();
-    });
-
-    await act(async () => {
-      await confirmationPropsRef.current?.onConfirm?.();
-    });
-
-    expect(errorHandlerMock.handle).toHaveBeenCalledWith(expect.any(Error), {
-      action: 'delete',
-      kind: 'Ingress',
-      name: 'web-gateway',
-    });
+    ]);
   });
 });

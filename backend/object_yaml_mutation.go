@@ -18,6 +18,7 @@ import (
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/objectyaml"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -34,23 +35,35 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-const objectYAMLErrorPrefix = "ObjectYAMLError:"
 const objectYAMLFieldManager = "luxury-yacht-yaml-editor"
 
-type objectYAMLError struct {
+// ObjectYAMLConflict is a YAML-editor outcome the user resolves in the editor:
+// the edited object changed or was replaced since editing began. It carries the
+// live YAML, so it is returned as a result and never as error text.
+type ObjectYAMLConflict struct {
 	Code                   string   `json:"code"`
 	Message                string   `json:"message"`
+	Causes                 []string `json:"causes,omitempty"`
 	CurrentYAML            string   `json:"currentYaml,omitempty"`
 	CurrentResourceVersion string   `json:"currentResourceVersion,omitempty"`
-	Causes                 []string `json:"causes,omitempty"`
 }
 
-func (e *objectYAMLError) Error() string {
-	payload, err := json.Marshal(e)
-	if err != nil {
-		return objectYAMLErrorPrefix + `{"code":"Unknown","message":"failed to encode error"}`
+// yamlConflictError carries a conflict out of the shared preparation path;
+// the YAML bindings turn it into a result.
+type yamlConflictError struct {
+	conflict ObjectYAMLConflict
+}
+
+func (e *yamlConflictError) Error() string { return e.conflict.Message }
+
+// yamlConflictOf returns the conflict carried by err, if any.
+func yamlConflictOf(err error) (*ObjectYAMLConflict, bool) {
+	var conflictErr *yamlConflictError
+	if !errors.As(err, &conflictErr) {
+		return nil, false
 	}
-	return objectYAMLErrorPrefix + string(payload)
+	conflict := conflictErr.conflict
+	return &conflict, true
 }
 
 // ObjectYAMLMutationRequest captures the payload required to validate or apply object YAML.
@@ -65,9 +78,11 @@ type ObjectYAMLMutationRequest struct {
 	ResourceVersion string `json:"resourceVersion"`
 }
 
-// ObjectYAMLMutationResponse returns basic metadata after a validation/apply attempt.
+// ObjectYAMLMutationResponse returns basic metadata after a validation/apply
+// attempt, or the conflict that stopped it.
 type ObjectYAMLMutationResponse struct {
-	ResourceVersion string `json:"resourceVersion"`
+	ResourceVersion string              `json:"resourceVersion"`
+	YAMLConflict    *ObjectYAMLConflict `json:"yamlConflict,omitempty"`
 }
 
 type mutationContext struct {
@@ -81,42 +96,26 @@ func (g *ResourceGateway) mutationContext() (context.Context, context.CancelFunc
 	return common.WithDefaultTimeout(g.CtxOrBackground(), config.ObjectYAMLMutationRequestTimeout)
 }
 
-// ValidateObjectYaml performs a dry-run kubectl-edit-style patch to ensure the YAML is valid and safe to apply.
-func (g *ResourceGateway) ValidateObjectYaml(clusterID string, req ObjectYAMLMutationRequest) (*ObjectYAMLMutationResponse, error) {
-	deps, _, err := g.resolveClusterDependencies(clusterID)
-	if err != nil {
-		return nil, err
-	}
-
-	ctx, cancel := g.mutationContext()
-	defer cancel()
-
-	mc, err := g.prepareAuthorizedYAMLMutation(ctx, deps, req)
-	if err != nil {
-		return nil, err
-	}
-	result, err := mc.resource.Patch(
-		ctx,
-		req.Name,
-		mc.patchType,
-		mc.patch,
-		metav1.PatchOptions{
-			DryRun:       []string{metav1.DryRunAll},
-			FieldManager: objectYAMLFieldManager,
-		},
-	)
-	if err != nil {
-		return nil, wrapKubernetesError(err, "validation failed")
-	}
-
-	return &ObjectYAMLMutationResponse{
-		ResourceVersion: result.GetResourceVersion(),
-	}, nil
-}
-
 // ApplyObjectYaml performs a kubectl-edit-style patch using the original editor
 // baseline plus the user's edited YAML.
 func (g *ResourceGateway) ApplyObjectYaml(clusterID string, req ObjectYAMLMutationRequest) (*ObjectYAMLMutationResponse, error) {
+	response, err := g.applyObjectYaml(clusterID, req)
+	if conflict, ok := yamlConflictOf(err); ok {
+		return &ObjectYAMLMutationResponse{YAMLConflict: conflict}, nil
+	}
+	return response, errorstatus.UserAction(objectYAMLStatusRef(clusterID, req), err)
+}
+
+// objectYAMLStatusRef is the edited object as an error-status object reference.
+func objectYAMLStatusRef(clusterID string, req ObjectYAMLMutationRequest) errorstatus.ObjectRef {
+	gvk := schema.FromAPIVersionAndKind(req.APIVersion, req.Kind)
+	return errorstatus.ObjectRef{
+		ClusterID: clusterID, Group: gvk.Group, Version: gvk.Version,
+		Kind: gvk.Kind, Namespace: req.Namespace, Name: req.Name,
+	}
+}
+
+func (g *ResourceGateway) applyObjectYaml(clusterID string, req ObjectYAMLMutationRequest) (*ObjectYAMLMutationResponse, error) {
 	deps, selectionKey, err := g.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
@@ -160,7 +159,7 @@ func (g *ResourceGateway) prepareAuthorizedYAMLMutation(
 	}
 	base, desired, err := parseMutationObjects(req)
 	if err != nil {
-		return nil, err
+		return nil, errorstatus.BadRequest(err)
 	}
 
 	gvk := schema.FromAPIVersionAndKind(req.APIVersion, req.Kind)
@@ -278,12 +277,12 @@ func validateCurrentMutationObject(
 		if err != nil {
 			return err
 		}
-		return &objectYAMLError{
+		return &yamlConflictError{conflict: ObjectYAMLConflict{
 			Code:                   "ObjectUIDMismatch",
 			Message:                fmt.Sprintf("object identity changed since editing began: current uid is %s, editor tracked %s", current.GetUID(), req.UID),
 			CurrentYAML:            currentYAML,
 			CurrentResourceVersion: current.GetResourceVersion(),
-		}
+		}}
 	}
 	if isNamespaced && current.GetNamespace() != desired.GetNamespace() {
 		return fmt.Errorf("live object namespace %s does not match YAML namespace %s", namespaceLabel(current.GetNamespace()), namespaceLabel(desired.GetNamespace()))
@@ -464,50 +463,14 @@ func isDocEmpty(doc map[string]interface{}) bool {
 	return len(doc) == 0
 }
 
+// wrapKubernetesError keeps an API error unchanged, so its status (reason and
+// field causes) reaches the frontend; other errors gain the operation name.
 func wrapKubernetesError(err error, defaultMessage string) error {
-	var statusErr *apierrors.StatusError
-	if errors.As(err, &statusErr) {
-		code := string(statusErr.ErrStatus.Reason)
-		if code == "" {
-			code = "KubernetesError"
-		}
-
-		causes := make([]string, 0)
-		if statusErr.ErrStatus.Details != nil {
-			for _, cause := range statusErr.ErrStatus.Details.Causes {
-				formatted := formatStatusCause(cause)
-				if formatted == "" {
-					continue
-				}
-				causes = append(causes, formatted)
-			}
-		}
-
-		return &objectYAMLError{
-			Code:    code,
-			Message: summarizeStatusError(statusErr),
-			Causes:  causes,
-		}
+	var status apierrors.APIStatus
+	if errors.As(err, &status) {
+		return err
 	}
-
 	return fmt.Errorf("%s: %w", defaultMessage, err)
-}
-
-func summarizeStatusError(statusErr *apierrors.StatusError) string {
-	if statusErr == nil {
-		return ""
-	}
-
-	if statusErr.ErrStatus.Reason == metav1.StatusReasonConflict &&
-		statusHasCauseType(statusErr.ErrStatus.Details, metav1.CauseTypeFieldManagerConflict) {
-		return "Server-side apply found field ownership conflicts. Reload the latest object or remove the conflicting field edits listed below."
-	}
-
-	if statusErr.ErrStatus.Message != "" {
-		return statusErr.ErrStatus.Message
-	}
-
-	return statusErr.Error()
 }
 
 func statusHasCauseType(details *metav1.StatusDetails, expected metav1.CauseType) bool {
@@ -520,34 +483,4 @@ func statusHasCauseType(details *metav1.StatusDetails, expected metav1.CauseType
 		}
 	}
 	return false
-}
-
-func formatStatusCause(cause metav1.StatusCause) string {
-	if cause.Message == "" && cause.Field == "" {
-		return ""
-	}
-
-	if cause.Type == metav1.CauseTypeFieldManagerConflict {
-		switch {
-		case cause.Field != "" && cause.Message != "":
-			return fmt.Sprintf("%s: %s", cause.Field, cause.Message)
-		case cause.Field != "":
-			return fmt.Sprintf("%s: owned by another field manager", cause.Field)
-		default:
-			return cause.Message
-		}
-	}
-
-	builder := strings.Builder{}
-	if cause.Field != "" {
-		builder.WriteString(cause.Field)
-		builder.WriteString(": ")
-	}
-	if cause.Message != "" {
-		builder.WriteString(cause.Message)
-	}
-	if cause.Type != "" {
-		builder.WriteString(fmt.Sprintf(" (%s)", cause.Type))
-	}
-	return builder.String()
 }

@@ -7,7 +7,7 @@
 
 import type { ObjectMapReference } from '@core/refresh/types';
 import { findObjectMapG6Node } from './objectMapG6RendererOptions';
-import type { ObjectMapLayout } from './objectMapLayout';
+import type { ObjectMapLayout, PositionedNode } from './objectMapLayout';
 import {
   beginObjectMapNodeGesture,
   consumeObjectMapSuppressedClick,
@@ -181,14 +181,7 @@ export const handleObjectMapG6NodeClick = (
   }
 
   context.markNodeClickHandled();
-  const {
-    badgeForNode,
-    onOpenObjectMap,
-    onOpenPanel,
-    onNavigateView,
-    onSelectNode,
-    onToggleGroup,
-  } = context.handlers;
+  const { badgeForNode, onSelectNode, onToggleGroup } = context.handlers;
 
   if (isObjectMapG6BadgeEvent(event)) {
     const badge = badgeForNode(id);
@@ -200,19 +193,36 @@ export const handleObjectMapG6NodeClick = (
   if (consumeObjectMapSuppressedClick(context.gestureState, id)) {
     return;
   }
-  if (event.metaKey || event.ctrlKey) {
-    onOpenPanel?.(node.ref as ObjectMapReference);
-    return;
-  }
-  if (event.shiftKey) {
-    onOpenObjectMap?.(node.ref as ObjectMapReference);
-    return;
-  }
-  if (event.altKey) {
-    onNavigateView?.(node.ref as ObjectMapReference);
+  if (handleObjectMapG6ModifierClick(context.handlers, node, event)) {
     return;
   }
   onSelectNode(id);
+};
+
+// Modifier clicks open the object's panel, its map, or its table view. A
+// missing object has nothing to open, so a modifier click only selects it.
+const handleObjectMapG6ModifierClick = (
+  handlers: ObjectMapG6NodeInteractionHandlers,
+  node: PositionedNode,
+  event: ObjectMapG6ElementPointerEvent
+): boolean => {
+  if (node.missing) {
+    return false;
+  }
+  const ref = node.ref as ObjectMapReference;
+  if (event.metaKey || event.ctrlKey) {
+    handlers.onOpenPanel?.(ref);
+    return true;
+  }
+  if (event.shiftKey) {
+    handlers.onOpenObjectMap?.(ref);
+    return true;
+  }
+  if (event.altKey) {
+    handlers.onNavigateView?.(ref);
+    return true;
+  }
+  return false;
 };
 
 export const handleObjectMapG6NodeContextMenu = (

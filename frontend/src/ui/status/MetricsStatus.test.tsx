@@ -1,128 +1,132 @@
 /**
  * frontend/src/ui/status/MetricsStatus.test.tsx
  *
- * Verifies the header metrics indicator maps availability state to the right
- * StatusIndicator severity/message — in particular that a permanently disabled
- * poller reads as amber (degraded) with its reason, not a stuck "collecting".
+ * The header metrics indicator reads the visible cluster's overview metrics:
+ * it is inactive until they arrive, healthy when they are fresh, and amber
+ * (degraded) with the reason when the backend disabled metrics collection,
+ * never a stuck "collecting"; its popover ages the last collection from the
+ * seconds-based collectedAt and shows no age for a zero-time one. Runs in the
+ * full app over the faked backend (test-utils/appState).
  */
 
-import type { MetricsAvailability, MetricsBannerInfo } from '@shared/utils/metricsAvailability';
-import type { ReactNode } from 'react';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { makeClusterOverviewSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
+import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
+import type { ClusterOverviewMetrics } from '@/core/refresh/types';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { requireValue } from '@/test-utils/requireValue';
 
-let mockMetricsInfo: MetricsAvailability | null = null;
-let mockBannerInfo: MetricsBannerInfo | null = null;
+const app = installAppStateHarness();
+let view: MountedApp;
+let dev: TestCluster;
 
-vi.mock('@/core/refresh/hooks/useMetricsAvailability', () => ({
-  useClusterMetricsAvailability: () => mockMetricsInfo,
-}));
+const indicator = () =>
+  requireValue(
+    view.container.querySelector<HTMLElement>('[role="button"][aria-label^="Metrics:"]'),
+    'expected the metrics indicator'
+  );
+const severity = () =>
+  indicator().querySelector('.status-indicator-dot')?.getAttribute('data-status');
 
-vi.mock('@shared/hooks/useMetricsBannerInfo', () => ({
-  useMetricsBannerInfo: () => mockBannerInfo,
-}));
+/** Opens the indicator's popover from the keyboard and returns its text. */
+const popoverText = async () => {
+  await act(async () => {
+    indicator().dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    );
+  });
+  await app.settle();
+  return requireValue(
+    document.getElementById(indicator().getAttribute('aria-controls') ?? ''),
+    'expected the metrics popover'
+  ).textContent;
+};
 
-vi.mock('@shared/components/status/StatusIndicator', () => ({
-  __esModule: true,
-  default: ({ status, message }: { status: string; message: ReactNode }) => (
-    <div data-testid="indicator" data-status={status}>
-      {message}
-    </div>
-  ),
-}));
+/** The visible cluster's overview reports these metrics. */
+const start = async (metrics: ClusterOverviewMetrics) => {
+  app.snapshots.serve(
+    'cluster-overview',
+    buildClusterRefreshScope('cluster-overview', dev.clusterId),
+    makeClusterOverviewSnapshotPayload({
+      clusterId: dev.clusterId,
+      clusterName: dev.clusterName,
+      metrics,
+    })
+  );
+  view = await app.mountApp();
+};
 
-import MetricsStatus from './MetricsStatus';
+beforeEach(() => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['default']);
+  app.startScreen(dev);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('MetricsStatus', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  it('is inactive until the overview’s metrics arrive', async () => {
+    // The overview read stays in flight until the app abandons it.
+    app.snapshots.respond((request) =>
+      request.domain === 'cluster-overview'
+        ? new Promise<Response>((_resolve, reject) => {
+            request.signal?.addEventListener('abort', () =>
+              reject(new DOMException('aborted', 'AbortError'))
+            );
+          })
+        : undefined
+    );
+    view = await app.mountApp();
 
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    mockMetricsInfo = null;
-    mockBannerInfo = null;
+    expect(severity()).toBe('inactive');
+    expect(indicator().getAttribute('aria-label')).toBe('Metrics: Awaiting metrics data...');
   });
 
-  afterEach(() => {
-    act(() => root.unmount());
-    container.remove();
-    vi.useRealTimers();
+  it('is healthy when metrics are fresh', async () => {
+    await start({ stale: false, successCount: 3, failureCount: 0 });
+
+    expect(severity()).toBe('healthy');
   });
 
-  const render = () => {
-    act(() => {
-      root.render(<MetricsStatus />);
-    });
-    return container.querySelector('[data-testid="indicator"]');
-  };
-
-  it('shows amber (degraded) with the reason when metrics are disabled', () => {
-    // A DisabledPoller (no metrics permission / metrics-server absent) is a
-    // restriction, not an app fault: amber, not alarming red — and never a stuck
-    // "Collecting metrics…".
-    mockMetricsInfo = {
+  it('shows amber with the reason, not a stuck collection, when metrics are disabled', async () => {
+    // A disabled poller (no metrics permission, or no metrics-server) is a
+    // restriction, not an app fault.
+    await start({
       disabled: true,
       lastError: 'Insufficient permissions for Metrics API',
       stale: true,
       successCount: 0,
       failureCount: 0,
-    };
-    mockBannerInfo = {
-      message: 'Insufficient permissions for Metrics API',
-      tooltip: 'Insufficient permissions for Metrics API',
-    };
+    });
 
-    const indicator = render();
-    expect(indicator?.getAttribute('data-status')).toBe('degraded');
-    expect(indicator?.textContent).toContain('Insufficient permissions for Metrics API');
+    expect(severity()).toBe('degraded');
+    expect(indicator().getAttribute('aria-label')).toBe(
+      'Metrics: Insufficient permissions for Metrics API'
+    );
   });
 
-  it('is healthy when there is no banner info', () => {
-    mockMetricsInfo = { stale: false, successCount: 3, failureCount: 0 };
-    mockBannerInfo = null;
-
-    const indicator = render();
-    expect(indicator?.getAttribute('data-status')).toBe('healthy');
-  });
-
-  it('shows the age of the last collection from the seconds-based collectedAt', () => {
-    // collectedAt is Unix seconds; reading it as milliseconds would render a
-    // 1970-era age instead of the real one.
-    vi.useFakeTimers();
+  it('ages the last collection from the seconds-based collectedAt', async () => {
+    // collectedAt is Unix seconds; read as milliseconds it would age from 1970.
+    const collectedAt = Date.parse('2026-09-30T12:00:00Z') / 1000;
+    await start({ stale: false, successCount: 3, failureCount: 0, collectedAt });
+    vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-09-30T12:00:04Z'));
-    mockMetricsInfo = {
-      stale: false,
-      successCount: 3,
-      failureCount: 0,
-      collectedAt: Date.parse('2026-09-30T12:00:00Z') / 1000,
-    };
 
-    const indicator = render();
-    expect(indicator?.textContent).toMatch(/collected 4s ago/);
+    expect(await popoverText()).toMatch(/collected 4s ago/);
   });
 
-  it('shows no collection age for a legacy zero-time collectedAt', () => {
+  it('shows no collection age for a zero-time collectedAt', async () => {
     // Older backends serialized Go's zero time instead of omitting it; that is
     // "never collected", not a collection decades ago.
-    mockMetricsInfo = {
-      stale: false,
-      successCount: 3,
-      failureCount: 0,
-      collectedAt: -62135596800,
-    };
+    await start({ stale: false, successCount: 3, failureCount: 0, collectedAt: -62135596800 });
 
-    const indicator = render();
-    expect(indicator?.textContent).not.toMatch(/collected/i);
-  });
-
-  it('is inactive when no metrics payload has arrived', () => {
-    mockMetricsInfo = null;
-    mockBannerInfo = null;
-
-    const indicator = render();
-    expect(indicator?.getAttribute('data-status')).toBe('inactive');
+    expect(await popoverText()).not.toMatch(/collected/i);
   });
 });

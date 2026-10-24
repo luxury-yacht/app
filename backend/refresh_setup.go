@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/lifecycle"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
+	"github.com/luxury-yacht/app/backend/internal/preferenceschema"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
@@ -21,7 +21,7 @@ import (
 
 func (r *RefreshCoordinator) resolveMetricsInterval() time.Duration {
 	if r == nil {
-		return time.Duration(defaultMetricsIntervalMs()) * time.Millisecond
+		return time.Duration(preferenceschema.DefaultMetricsRefreshIntervalMs) * time.Millisecond
 	}
 	r.metricsIntervalMu.RLock()
 	defer r.metricsIntervalMu.RUnlock()
@@ -202,7 +202,7 @@ func (a *RefreshCoordinator) buildRefreshSubsystems(
 		return nil, nil, errors.New("no kubeconfig selections available")
 	}
 
-	// Subsystem construction (informer wiring, permission preflight, spill restore)
+	// Subsystem construction (reflector wiring, permission preflight, spill restore)
 	// is the expensive per-cluster step; build the selections concurrently so N
 	// clusters do not pay it serially. Outcomes are assembled in selection order, so
 	// clusterOrder is exactly what the serial loop produced. Per-cluster internal
@@ -281,11 +281,9 @@ func (a *RefreshCoordinator) buildRefreshSubsystemForSelection(
 		KubernetesClient:           clients.client,
 		MetricsClient:              clients.metricsClient,
 		RestConfig:                 clients.restConfig,
-		ResyncInterval:             config.RefreshResyncInterval,
 		MetricsInterval:            a.resolveMetricsInterval(),
 		APIExtensionsClient:        clients.apiextensionsClient,
 		GatewayClient:              clients.gatewayClient,
-		GatewayInformerFactory:     clients.gatewayInformerFactory,
 		GatewayAPIPresence:         clients.gatewayAPIPresence,
 		DynamicClient:              clients.dynamicClient,
 		ObjectDetailsProvider:      a.resources.objectDetailProvider(),
@@ -299,7 +297,7 @@ func (a *RefreshCoordinator) buildRefreshSubsystemForSelection(
 		AttentionIgnoreRules:       a.attention.attentionIgnoreRulesForCluster(clusterMeta.ID),
 		AttentionIgnoredObjectPruner: func(ref resourcemodel.ResourceRef) {
 			if err := a.attention.pruneClusterAttentionIgnoredObject(clusterMeta.ID, ref); err != nil {
-				a.logger.Warn(fmt.Sprintf("Could not prune obsolete Attention ignore for cluster %s: %v", clusterMeta.ID, err), logsources.Settings, clusterMeta.ID, clusterMeta.ID)
+				a.logger.Warn(fmt.Sprintf("Could not prune obsolete Attention ignore for cluster %s: %v", clusterMeta.ID, err), logsources.Settings, clusterMeta.ID, clusterMeta.Name)
 			}
 		},
 	}
@@ -314,8 +312,9 @@ func (a *RefreshCoordinator) buildRefreshSubsystemForSelection(
 		return nil, err
 	}
 
-	// Watch informer updates to invalidate cached detail/YAML/helm responses.
-	a.resources.registerResponseCacheInvalidation(subsystem, clusterMeta.ID)
+	// Evict cached detail/YAML/helm responses on ingest changes,
+	// then ring the object-details doorbell.
+	a.registerResponseCacheInvalidation(subsystem, clusterMeta.ID)
 
 	// Cluster-Ready self-build rides the namespaces doorbell; wired here so
 	// selector-opened and auth-recovery subsystems get it too.
@@ -348,7 +347,7 @@ func (r *RefreshCoordinator) sharedContainerLogsTargetLimiter() *containerlogsst
 	r.containerLogsTargetLimiterMu.Lock()
 	defer r.containerLogsTargetLimiterMu.Unlock()
 	if r.containerLogsTargetLimiter == nil {
-		r.containerLogsTargetLimiter = containerlogsstream.NewGlobalTargetLimiter(defaultObjPanelLogsTargetGlobalLimit)
+		r.containerLogsTargetLimiter = containerlogsstream.NewGlobalTargetLimiter(preferenceschema.DefaultObjPanelLogsTargetGlobalLimit)
 	}
 	return r.containerLogsTargetLimiter
 }
@@ -403,7 +402,6 @@ func (a *RefreshCoordinator) buildRefreshMux(
 		ManualQueue:     aggregateQueue,
 		Telemetry:       aggregateTelemetryHandler,
 		Metrics:         aggregateMetrics,
-		HealthHub:       nil, // Health is per-cluster, not global.
 	})
 	aggregates := &refreshAggregateHandlers{
 		snapshot:      aggregateService,

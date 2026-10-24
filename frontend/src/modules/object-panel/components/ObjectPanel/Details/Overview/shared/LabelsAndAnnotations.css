@@ -31,9 +31,6 @@
   align-items: baseline;
   gap: var(--spacing-sm);
   padding: var(--spacing-xs) 0;
-  background: var(--bg-secondary);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-subtle);
   flex-wrap: wrap;
 }
 
@@ -73,5 +70,5 @@
 }
 
 .metadata-value.clickable:hover {
-  color: var(--color-link);
+  color: var(--color-object-panel-link-hover);
 }

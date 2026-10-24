@@ -12,6 +12,7 @@
 
 import type { GridTableVirtualizationOptions } from '@shared/components/tables/GridTable.types';
 import { useGridTableViewport } from '@shared/components/tables/hooks/useGridTableViewport';
+import { getAppZoomFactor } from '@shared/utils/appZoom';
 import {
   type RefObject,
   useCallback,
@@ -39,6 +40,8 @@ export interface UseGridTableVirtualizationParams<T> {
   stopFrameSampler: (reason: 'timeout' | 'manual' | 'unmount') => void;
   updateColumnWindowRange: () => void;
   hideHeader: boolean;
+  /** Open rows' detail heights by row key; each such row's span grows by its height. */
+  detailHeights?: ReadonlyMap<string, number>;
 }
 
 /**
@@ -83,6 +86,8 @@ function findRowAtOffset(positions: Float64Array, target: number): number {
   return Math.max(0, lo - 1);
 }
 
+const NO_DETAIL_HEIGHTS: ReadonlyMap<string, number> = new Map();
+
 export function useGridTableVirtualization<T>({
   data,
   virtualization,
@@ -98,6 +103,7 @@ export function useGridTableVirtualization<T>({
   stopFrameSampler,
   updateColumnWindowRange,
   hideHeader,
+  detailHeights = NO_DETAIL_HEIGHTS,
 }: UseGridTableVirtualizationParams<T>): UseGridTableVirtualizationResult<T> {
   const virtualizationConfig = useMemo(
     () => ({
@@ -146,19 +152,20 @@ export function useGridTableVirtualization<T>({
   const [heightCacheVersion, setHeightCacheVersion] = useState(0);
 
   // Ref callback invoked by every rendered row. Measures height via
-  // getBoundingClientRect and updates the cache if it changed.
+  // getBoundingClientRect and updates the cache if it changed. Rects are in
+  // zoomed pixels under the app's page zoom; row positions are CSS pixels.
   const measureRowRef: MeasureRowRefFn = useCallback(
     (rowKey: string, node: HTMLDivElement | null) => {
       if (!node) {
         return;
       }
-      const rect = node.getBoundingClientRect();
-      if (rect.height <= 0) {
+      const height = node.getBoundingClientRect().height / getAppZoomFactor();
+      if (height <= 0) {
         return;
       }
       const cached = rowHeightCacheRef.current.get(rowKey);
-      if (cached === undefined || Math.abs(cached - rect.height) > 0.5) {
-        rowHeightCacheRef.current.set(rowKey, rect.height);
+      if (cached === undefined || Math.abs(cached - height) > 0.5) {
+        rowHeightCacheRef.current.set(rowKey, height);
         setHeightCacheVersion((v) => v + 1);
       }
     },
@@ -217,12 +224,18 @@ export function useGridTableVirtualization<T>({
     const fallback = virtualizationConfig.estimateRowHeight;
     for (let i = 0; i < n; i++) {
       const key = keyExtractor(data[i], i);
-      const h = cache.get(key) ?? fallback;
+      const h = (cache.get(key) ?? fallback) + (detailHeights.get(key) ?? 0);
       pos[i + 1] = pos[i] + h;
     }
     return pos;
     // heightCacheVersion is included so positions recompute after measurements.
-  }, [data, keyExtractor, virtualizationConfig.estimateRowHeight, heightCacheVersion]);
+  }, [
+    data,
+    keyExtractor,
+    virtualizationConfig.estimateRowHeight,
+    heightCacheVersion,
+    detailHeights,
+  ]);
 
   // Reset scroll position when filters change
   useEffect(() => {

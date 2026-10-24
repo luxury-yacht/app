@@ -7,10 +7,11 @@
 
 import { recordBlockedBrokerRead, runBrokerRead } from '@/core/read-diagnostics';
 import { refreshOrchestrator } from '@/core/refresh';
+import { runsWhilePaused } from '@/core/refresh/refreshIntent';
 import type { RefreshDemand } from '@/core/refresh/refreshRuntime';
 import { getScopedDomainState } from '@/core/refresh/store';
 import type { RefreshDomain } from '@/core/refresh/types';
-import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
+import { getPreference } from '@/core/settings/appPreferences';
 import type {
   ContextRefreshRequest,
   DataReadRequest,
@@ -22,15 +23,11 @@ import type {
   RefreshDomainStateResult,
 } from './types';
 
-const isReasonAllowedWhilePaused = (reason: DataRequestReason): boolean => {
-  return reason === 'foreground' || reason === 'user';
-};
-
 export const isDataAccessBlocked = (
   reason: DataRequestReason,
-  autoRefreshEnabled: boolean = getAutoRefreshEnabled()
+  autoRefreshEnabled: boolean = getPreference('autoRefreshEnabled')
 ): boolean => {
-  return !autoRefreshEnabled && !isReasonAllowedWhilePaused(reason);
+  return !autoRefreshEnabled && !runsWhilePaused(reason);
 };
 
 export const requestData = async <T>({
@@ -79,8 +76,7 @@ const performRefreshDomainRequest = async (
     read: async (requestId) => {
       await refreshOrchestrator.fetchScopedDomain(domain, scope, {
         ...(coalesce ? { coalesce: true } : {}),
-        isManual: reason === 'user',
-        streamSignal: reason === 'stream-signal',
+        intent: reason,
         ...(requestId ? { correlationId: requestId } : {}),
       });
     },
@@ -100,14 +96,11 @@ export const requestRefreshDomainState = async <K extends RefreshDomain>({
   scope,
   reason,
   label,
-  cleanup = true,
   preserveState = false,
 }: RefreshDomainStateRequest<K>): Promise<RefreshDomainStateResult<K>> => {
-  if (cleanup) {
-    acquireRefreshDomainLease({ domain, scope, preserveState });
-  } else {
-    setRefreshDomainEnabled({ domain, scope, enabled: true, preserveState });
-  }
+  // The read holds its own lease through completion, so it never disables a
+  // scope another consumer leases.
+  acquireRefreshDomainLease({ domain, scope, preserveState });
 
   try {
     const result = await performRefreshDomainRequest({ domain, scope, reason, label }, true);
@@ -120,31 +113,11 @@ export const requestRefreshDomainState = async <K extends RefreshDomain>({
 
     return {
       status: 'executed',
-      data: readRefreshDomainState(domain, scope),
+      data: getScopedDomainState(domain, scope),
     };
   } finally {
-    if (cleanup) {
-      releaseRefreshDomainLease({ domain, scope, preserveState });
-    }
+    releaseRefreshDomainLease({ domain, scope, preserveState });
   }
-};
-
-export const setRefreshDomainEnabled = ({
-  domain,
-  scope,
-  enabled,
-  preserveState = false,
-}: {
-  domain: RefreshDomain;
-  scope: string;
-  enabled: boolean;
-  preserveState?: boolean;
-}): void => {
-  if (preserveState) {
-    refreshOrchestrator.setScopedDomainEnabled(domain, scope, enabled, { preserveState });
-    return;
-  }
-  refreshOrchestrator.setScopedDomainEnabled(domain, scope, enabled);
 };
 
 interface RefreshDomainLease {
@@ -165,9 +138,8 @@ const refreshDomainLeaseOptions = ({
 };
 
 // Reference-counted lease that keeps a scoped refresh domain enabled while any
-// mounted consumer holds it. Use this instead of setRefreshDomainEnabled for
-// component lifecycles so a remounting/concurrent owner is not torn down by an
-// old owner's cleanup.
+// mounted consumer holds it, so a remounting or concurrent owner is never torn
+// down by an old owner's cleanup. Leases are the only way to enable a scope.
 export const acquireRefreshDomainLease = (lease: RefreshDomainLease): void => {
   refreshOrchestrator.acquireScopedDomainLease(
     lease.domain,
@@ -184,16 +156,16 @@ export const releaseRefreshDomainLease = (lease: RefreshDomainLease): void => {
   );
 };
 
+// Clears a scope's retained state; while another holder still leases the
+// scope, the reset waits for its last release.
 export const resetRefreshDomain = (domain: RefreshDomain, scope: string): void => {
   refreshOrchestrator.resetScopedDomain(domain, scope);
 };
 
-export const readRefreshDomainState = <K extends RefreshDomain>(domain: K, scope: string) =>
-  getScopedDomainState(domain, scope);
-
+// Manual refresh of what the named cluster shows: every scope it leases.
 export const requestContextRefresh = async ({
   reason,
-  context,
+  clusterId,
   resource = 'refresh-context',
   label,
   scope,
@@ -205,8 +177,9 @@ export const requestContextRefresh = async ({
     label: label ?? 'refresh-context',
     scope,
     read: async () => {
+      // Only an explicit user request refreshes; nothing else is manual.
       if (reason === 'user') {
-        await refreshOrchestrator.triggerManualRefreshForContext(context);
+        await refreshOrchestrator.refreshCluster(clusterId);
       }
     },
   });

@@ -1,10 +1,11 @@
 import refreshDomainContractJson from '../../../../backend/refresh/domain/refresh-domain-contract.json';
-import type { StaticRefresherName } from './refresherTypes';
 import {
   type GeneratedRefreshCachePolicy,
   type GeneratedRefreshDiagnosticsStream,
   type GeneratedRefreshDomainCategory,
   type GeneratedRefreshOrchestratorKind,
+  type GeneratedRefreshScopeQuery,
+  type GeneratedRefreshScopeSelector,
   type GeneratedRefreshSourceClock,
   REFRESH_DOMAIN_POLICIES,
   type RefreshDomain,
@@ -14,17 +15,17 @@ export type DomainCategory = GeneratedRefreshDomainCategory;
 
 export type StreamTelemetryName = GeneratedRefreshDiagnosticsStream;
 
-export interface RefresherTiming {
+// A domain's poll cadence: one read every `interval` ms after the last one
+// settles, each read bounded by `timeout` seconds.
+export interface RefreshTiming {
   interval: number;
-  cooldown: number;
   timeout: number;
 }
 
 export interface RefreshDomainDescriptor<D extends RefreshDomain = RefreshDomain> {
   domain: D;
-  refresherName: StaticRefresherName;
   category: DomainCategory;
-  timing: RefresherTiming;
+  timing: RefreshTiming;
   diagnosticsStream?: StreamTelemetryName;
   priority?: number;
 }
@@ -44,18 +45,6 @@ export type RefreshBehaviorClass =
   | 'helm-content-payload'
   | 'graph-payload'
   | 'operation-state';
-
-export type RefreshScopeContractKind =
-  | 'cluster'
-  | 'optional-namespace'
-  | 'catalog-query'
-  | 'resource-stream-selector'
-  | 'namespace-scope'
-  | 'object-ref'
-  | 'helm-release'
-  | 'object-map'
-  | 'node-maintenance'
-  | 'log-stream-selector';
 
 export type RefreshCachePolicy = GeneratedRefreshCachePolicy;
 
@@ -80,12 +69,13 @@ export type RefreshCoverageContract =
   | 'operation-state-transitions'
   | 'aggregate-snapshot-permission-fallback';
 
+// One domain's scope language. `valid`/`invalid` are canonical scope tails
+// (after "<clusterId>|") that the scope codec must accept or reject.
 export interface ScopeContract {
-  kind: RefreshScopeContractKind;
-  clusterPrefix: 'required';
-  parser: string;
-  frontendBuilder: string;
-  acceptedEncodings: string[];
+  selectors: GeneratedRefreshScopeSelector[];
+  query: GeneratedRefreshScopeQuery;
+  valid: string[];
+  invalid?: string[];
 }
 
 export interface DomainInventoryEntry {
@@ -109,13 +99,11 @@ export interface RefreshDomainContractEntry<D extends RefreshDomain = RefreshDom
     resourceStream: boolean;
   };
   frontend: {
-    refresherName: StaticRefresherName;
     orchestrator: RefreshOrchestratorKind;
     diagnosticsStream: StreamTelemetryName | null;
-    timing: RefresherTiming;
+    timing: RefreshTiming;
     priority?: number;
     registrationOrder: number;
-    scheduled?: boolean;
   };
 }
 
@@ -134,29 +122,11 @@ export type RefreshSourceClock = GeneratedRefreshSourceClock;
 export type ResourceStreamDomain = keyof typeof refreshDomainContractJson.resourceStream.domains;
 
 export interface StreamDomainContractEntry {
-  scopeKind: 'pod' | 'namespace' | 'cluster';
   completeIsScopeLevel: boolean;
   rowProjection?: 'scope-level-complete-only';
   primaryResources: StreamResourceContractRecord[];
   relatedResources: StreamResourceContractRecord[];
   syntheticRowKind?: StreamResourceContractRecord;
-}
-
-export interface StreamScopeExample {
-  scope: string;
-}
-
-export interface StreamScopeValidExample extends StreamScopeExample {
-  canonical: string;
-}
-
-export interface StreamScopeInvalidExample extends StreamScopeExample {
-  errorContains: string;
-}
-
-export interface StreamScopeExamples {
-  valid: StreamScopeValidExample[];
-  invalid: StreamScopeInvalidExample[];
 }
 
 export interface RefreshDomainContract {
@@ -170,7 +140,6 @@ export interface RefreshDomainContract {
       completeSemantics: 'scope-level-resync';
       completeIdentity: 'diagnostic-only';
     };
-    scopeExamples: Record<'pod' | 'namespace' | 'cluster', StreamScopeExamples>;
     domains: Record<string, StreamDomainContractEntry>;
   };
   domains: RefreshDomainContractEntry[];
@@ -190,7 +159,6 @@ export const REFRESH_DOMAIN_DESCRIPTORS = Object.fromEntries(
   REFRESH_DOMAIN_POLICIES.map((policy) => {
     const descriptor: RefreshDomainDescriptor = {
       domain: policy.domain,
-      refresherName: policy.frontend.refresherName,
       category: policy.category,
       timing: { ...policy.frontend.timing },
     };
@@ -212,10 +180,6 @@ export const getRefreshDomainDescriptor = <D extends RefreshDomain>(
   domain: D
 ): RefreshDomainDescriptor<D> => REFRESH_DOMAIN_DESCRIPTORS[domain] as RefreshDomainDescriptor<D>;
 
-export const DOMAIN_REFRESHER_MAP = Object.fromEntries(
-  refreshDomainDescriptors.map((descriptor) => [descriptor.domain, descriptor.refresherName])
-) as Record<RefreshDomain, StaticRefresherName>;
-
 export const DOMAIN_STREAM_MAP = Object.fromEntries(
   refreshDomainDescriptors
     .filter((descriptor) => descriptor.diagnosticsStream)
@@ -229,7 +193,3 @@ export const PRIORITY_DOMAINS = refreshDomainDescriptors
   )
   .sort((left, right) => left.priority - right.priority)
   .map((descriptor) => descriptor.domain);
-
-export const REFRESHER_TIMING_BY_NAME = Object.fromEntries(
-  refreshDomainDescriptors.map((descriptor) => [descriptor.refresherName, descriptor.timing])
-) as Partial<Record<StaticRefresherName, RefresherTiming>>;

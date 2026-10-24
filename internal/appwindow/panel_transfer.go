@@ -11,7 +11,6 @@ type PanelTabSnapshot = panelwindow.TabSnapshot
 type PanelGroupSnapshot = panelwindow.GroupSnapshot
 
 const PanelWindowOpenedEventName = panelwindow.WindowOpenedEventName
-const PanelWindowDockRequestedEventName = panelwindow.WindowDockRequestedEventName
 
 func ValidatePanelGroupSnapshot(snapshot PanelGroupSnapshot) error {
 	return panelwindow.ValidateGroupSnapshot(snapshot)

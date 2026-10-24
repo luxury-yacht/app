@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
 
@@ -14,16 +14,16 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/hpa"
 )
 
-func hpaObj(ns, name, rv, target string, maxReplicas int32) *autoscalingv1.HorizontalPodAutoscaler {
+func hpaObj(ns, name, rv, target string, maxReplicas int32) *autoscalingv2.HorizontalPodAutoscaler {
 	min := int32(1)
-	return &autoscalingv1.HorizontalPodAutoscaler{
+	return &autoscalingv2.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name, ResourceVersion: rv},
-		Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
-			ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{Kind: "Deployment", Name: target},
+		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{Kind: "Deployment", Name: target},
 			MinReplicas:    &min,
 			MaxReplicas:    maxReplicas,
 		},
-		Status: autoscalingv1.HorizontalPodAutoscalerStatus{CurrentReplicas: 2},
+		Status: autoscalingv2.HorizontalPodAutoscalerStatus{CurrentReplicas: 2},
 	}
 }
 
@@ -47,7 +47,7 @@ func autoscalingDescriptor(t *testing.T, resource string) streamspec.Descriptor 
 	return streamspec.Descriptor{}
 }
 
-// TestAutoscalingMaintainedStoreIngestion proves the informer-fed store reflects
+// TestAutoscalingMaintainedStoreIngestion proves the reflector-fed store reflects
 // Add/Update/Delete (incl. tombstone), tracks the max resourceVersion, and projects
 // rows identically to a direct BuildStreamSummary.
 func TestAutoscalingMaintainedStoreIngestion(t *testing.T) {
@@ -93,7 +93,7 @@ func TestAutoscalingMaintainedStoreMatchesListPath(t *testing.T) {
 	meta := ClusterMeta{ClusterID: "c1", ClusterName: "cluster-one"}
 	hpaDesc := autoscalingDescriptor(t, "horizontalpodautoscalers")
 
-	hpas := []*autoscalingv1.HorizontalPodAutoscaler{
+	hpas := []*autoscalingv2.HorizontalPodAutoscaler{
 		hpaObj("default", "alpha", "1", "api", 4),
 		hpaObj("default", "beta", "2", "web", 6),
 		hpaObj("kube-system", "gamma", "3", "ctrl", 2),
@@ -126,7 +126,7 @@ func TestAutoscalingMaintainedStoreMatchesListPath(t *testing.T) {
 func TestNamespaceAutoscalingBuilderMaintainedMatchesListPath(t *testing.T) {
 	hpaDesc := autoscalingDescriptor(t, "horizontalpodautoscalers")
 
-	hpas := []*autoscalingv1.HorizontalPodAutoscaler{
+	hpas := []*autoscalingv2.HorizontalPodAutoscaler{
 		hpaObj("default", "alpha", "1", "api", 4),
 		hpaObj("default", "beta", "2", "web", 6),
 		hpaObj("kube-system", "gamma", "3", "ctrl", 2),
@@ -140,8 +140,8 @@ func TestNamespaceAutoscalingBuilderMaintainedMatchesListPath(t *testing.T) {
 	}
 
 	collect := autoscalingCollectIndexer(hpaIdx)
-	listBuilder := &NamespaceAutoscalingBuilder{collectIndexer: collect}
-	maintainedBuilder := &NamespaceAutoscalingBuilder{collectIndexer: collect, maintained: maintained}
+	listBuilder := newTypedTableListOracle(namespaceAutoscalingDomainSpec(), collect)
+	maintainedBuilder := &NamespaceAutoscalingBuilder{available: availableFromIndexers(collect), maintained: maintained}
 
 	scopes := []string{
 		"namespace:default",

@@ -17,6 +17,11 @@ data-access/action boundaries.
   focused primitives for text, markers, keyboard handling, and diagnostics.
 - Line wrapping defaults on; callers may expose the `lineWrapping` option as a
   user toggle.
+- Caller-specific decorations, such as the Helm Values override gutter
+  (`ObjectPanel/Helm/helmValuesOverrideGutter.ts`), go through `extraExtensions`
+  and must stay sparse. Always-on decoration of a common condition was
+  rejected (see [YAML editing](../architecture/yaml-editing.md#rejected-approaches)).
+  Render non-text rows as widgets so copy and search still see only the YAML.
 - Register as an `editor` keyboard surface when the editor needs key ownership.
 - Read-only editors stay focusable (content carries a tabindex): clipboard and
   select-all shortcuts route to the surface containing focus, so an

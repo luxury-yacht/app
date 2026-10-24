@@ -21,27 +21,28 @@ import ClusterViewRBAC from '@modules/cluster/components/ClusterViewRBAC';
 import ClusterViewStorage from '@modules/cluster/components/ClusterViewStorage';
 import type { ClusterViewType } from '@ui/navigation/types';
 import React from 'react';
+import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 
 interface ClusterResourcesViewsProps {
   // Each resource view is query-backed (sourced from its own typed query + replay
   // cache), so it needs only the per-view error (for the empty-state text) and, for
   // kind-filtered views, the available kinds. Custom is catalog-backed and also takes
   // its loading/loaded.
-  nodesError?: string | null;
+  nodesError?: RefreshFailure | null;
 
-  configError?: string | null;
+  configError?: RefreshFailure | null;
 
-  crdsError?: string | null;
+  crdsError?: RefreshFailure | null;
 
   customLoading?: boolean;
-  customError?: string | null;
+  customError?: RefreshFailure | null;
   customLoaded?: boolean;
 
-  eventsError?: string | null;
+  eventsError?: RefreshFailure | null;
 
-  rbacError?: string | null;
+  rbacError?: RefreshFailure | null;
 
-  storageError?: string | null;
+  storageError?: RefreshFailure | null;
 
   // Tab control from parent
   activeTab?: ClusterViewType | null;

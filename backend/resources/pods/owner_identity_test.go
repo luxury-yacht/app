@@ -59,7 +59,15 @@ func TestReplicaSetCollapseRequiresBuiltinDeploymentParent(t *testing.T) {
 			pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod", Namespace: "ns", OwnerReferences: []metav1.OwnerReference{{
 				APIVersion: "apps/v1", Kind: "ReplicaSet", Name: "rs", Controller: ptr.To(true),
 			}}}}
-			row := BuildStreamSummary(streamrows.ClusterMeta{ClusterID: "cluster-a"}, pod, appslisters.NewReplicaSetLister(indexer), nil)
+			lister := appslisters.NewReplicaSetLister(indexer)
+			rsOwners := func(namespace, name string) (metav1.OwnerReference, bool) {
+				rs, err := lister.ReplicaSets(namespace).Get(name)
+				if err != nil {
+					return metav1.OwnerReference{}, false
+				}
+				return *metav1.GetControllerOfNoCopy(rs), true
+			}
+			row := BuildStreamSummary(streamrows.ClusterMeta{ClusterID: "cluster-a"}, pod, rsOwners, nil)
 			if apiVersion == "apps/v1" {
 				require.Equal(t, "parent", mapping["rs"])
 				require.Equal(t, "Deployment", row.OwnerKind)

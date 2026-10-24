@@ -6,6 +6,7 @@
  */
 
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import { queryOwnGridTableElements } from '@shared/components/tables/GridTable.utils';
 import {
   clampAutoSizeColumnWidth,
   getColumnMinWidth,
@@ -58,7 +59,7 @@ const createVisibleColumnSignature = (
   if (!table) {
     return null;
   }
-  const nodes = Array.from(table.querySelectorAll<HTMLElement>('.grid-cell[data-column]'))
+  const nodes = queryOwnGridTableElements(table, '.grid-cell[data-column]')
     .filter((cell) => cell.dataset.column === columnKey)
     .map((cell) => cell.querySelector<HTMLElement>('.grid-cell-content'))
     .filter((node): node is HTMLElement => node !== null && node !== undefined);
@@ -323,6 +324,12 @@ export function useDirtyQueue<T>({
   flushDirtyColumnsRef.current = flushDirtyColumns;
 
   useEffect(() => {
+    // A re-run effect (StrictMode in development) re-arms the queue after its cleanup,
+    // including the flush the cleanup cancelled for columns still queued.
+    isMountedRef.current = true;
+    if (dirtyColumnsRef.current.size > 0) {
+      scheduleDirtyFlush();
+    }
     return () => {
       isMountedRef.current = false;
       if (
@@ -333,7 +340,7 @@ export function useDirtyQueue<T>({
         window.clearTimeout(dirtyTimerRef.current);
       }
     };
-  }, []);
+  }, [dirtyColumnsRef, scheduleDirtyFlush]);
 
   return {
     markColumnsDirty,

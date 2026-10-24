@@ -9,18 +9,21 @@ package helm
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
-	"gopkg.in/yaml.v2"
 	"helm.sh/helm/v3/pkg/action"
+	"helm.sh/helm/v3/pkg/chart"
+	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/cli"
 	"helm.sh/helm/v3/pkg/release"
+	"helm.sh/helm/v3/pkg/storage/driver"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -80,44 +83,64 @@ func (s *Service) ReleaseDetails(ctx context.Context, namespace, name string) (*
 	return details, nil
 }
 
-// ReleaseManifest returns the rendered manifest for a Helm release.
-func (s *Service) ReleaseManifest(namespace, name string) (string, error) {
+// ReleaseManifest returns the rendered manifest and revision of a Helm release.
+func (s *Service) ReleaseManifest(namespace, name string) (string, int, error) {
 	_, release, err := s.getRelease(namespace, name)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 
-	return release.Manifest, nil
+	return release.Manifest, release.Version, nil
 }
 
-// ReleaseValues returns chart defaults, merged values, and user overrides for a Helm release.
-func (s *Service) ReleaseValues(namespace, name string) (map[string]interface{}, error) {
-	actionConfig, release, err := s.getRelease(namespace, name)
+// HelmReleaseValues holds the Values tab's three views of one release revision.
+type HelmReleaseValues struct {
+	// Defaults are the chart's own values, including subchart defaults.
+	Defaults map[string]interface{}
+	// Merged are the values Helm rendered with (`helm get values --all`).
+	Merged map[string]interface{}
+	// Overrides are the user-supplied values (`helm get values`).
+	Overrides map[string]interface{}
+	// SubchartPaths locate each subchart's values, nested subcharts included.
+	// Helm copies the parent's `global` values into every one of them.
+	SubchartPaths [][]string
+}
+
+// ReleaseValues returns a release's chart defaults, merged values, and user
+// overrides, all computed from the single stored revision it reads.
+func (s *Service) ReleaseValues(namespace, name string) (HelmReleaseValues, int, error) {
+	_, release, err := s.getRelease(namespace, name)
 	if err != nil {
-		return nil, err
+		return HelmReleaseValues{}, 0, err
 	}
 
-	defaults := release.Chart.Values
-
-	valuesClient := action.NewGetValues(actionConfig)
-	valuesClient.AllValues = true
-	mergedValues, err := valuesClient.Run(name)
+	defaults, err := chartutil.CoalesceValues(release.Chart, map[string]interface{}{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get values for release %s: %w", name, err)
+		return HelmReleaseValues{}, 0, fmt.Errorf("failed to compute chart defaults for release %s: %w", name, err)
+	}
+	merged, err := chartutil.CoalesceValues(release.Chart, release.Config)
+	if err != nil {
+		return HelmReleaseValues{}, 0, fmt.Errorf("failed to get values for release %s: %w", name, err)
 	}
 
-	userClient := action.NewGetValues(actionConfig)
-	userClient.AllValues = false
-	userValues, err := userClient.Run(name)
-	if err != nil {
-		userValues = map[string]interface{}{}
-	}
+	return HelmReleaseValues{
+		Defaults:      defaults,
+		Merged:        merged,
+		Overrides:     release.Config,
+		SubchartPaths: subchartPaths(release.Chart, nil),
+	}, release.Version, nil
+}
 
-	return map[string]interface{}{
-		"defaultValues": defaults,
-		"allValues":     mergedValues,
-		"userValues":    userValues,
-	}, nil
+// subchartPaths lists dependency value paths in the order Helm coalesces them:
+// a subchart's values live under its name inside its parent's values.
+func subchartPaths(ch *chart.Chart, parent []string) [][]string {
+	var paths [][]string
+	for _, dependency := range ch.Dependencies() {
+		path := append(append([]string{}, parent...), dependency.Name())
+		paths = append(paths, path)
+		paths = append(paths, subchartPaths(dependency, path)...)
+	}
+	return paths
 }
 
 // getRelease keeps the client, configuration, and release-read policy shared by
@@ -132,26 +155,37 @@ func (s *Service) getRelease(namespace, name string) (*action.Configuration, *re
 	}
 	value, err := action.NewGet(actionConfig).Run(name)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get release %s: %w", name, err)
+		err = fmt.Errorf("failed to get release %s: %w", name, err)
+		if IsReleaseNotFound(err) {
+			err = errorstatus.NotFound(err)
+		}
+		return nil, nil, err
 	}
 	return actionConfig, value, nil
 }
 
+// IsReleaseNotFound reports that Helm storage has no record of the release:
+// it was uninstalled. Failures reaching the cluster, even API 404s, are not.
+func IsReleaseNotFound(err error) bool {
+	return errors.Is(err, driver.ErrReleaseNotFound)
+}
+
 // DeleteRelease removes a Helm release.
 func (s *Service) DeleteRelease(namespace, name string) error {
+	failure := fmt.Sprintf("Failed to delete Helm release %s/%s", namespace, name)
 	if err := s.ensureClient(); err != nil {
-		return err
+		return s.logDeleteError(err, failure, name)
 	}
 
 	settings := s.helmSettings()
 	actionConfig, err := s.initActionConfig(settings, namespace)
 	if err != nil {
-		return err
+		return s.logDeleteError(err, failure, name)
 	}
 
 	client := action.NewUninstall(actionConfig)
 	if _, err := client.Run(name); err != nil {
-		err = s.logDeleteError(err, fmt.Sprintf("Failed to delete Helm release %s/%s", namespace, name), name)
+		err = s.logDeleteError(err, failure, name)
 		return fmt.Errorf("failed to delete Helm release: %w", err)
 	}
 
@@ -191,156 +225,26 @@ func (s *Service) initActionConfig(settings *cli.EnvSettings, namespace string) 
 }
 
 func (s *Service) extractResourcesFromManifest(ctx context.Context, manifest, defaultNamespace string) []HelmResource {
-	resources := newManifestResourceAccumulator(s, defaultNamespace)
-	for _, document := range splitManifestDocuments(manifest) {
-		if object, ok := parseManifestDocument(document); ok {
-			resources.addObject(ctx, object)
-		}
+	var resources []HelmResource
+	for _, resource := range ParseManifestResources(manifest, defaultNamespace) {
+		identity := resourcemodel.ResolveHelmManifestResourceIdentityWithResolver(
+			ctx,
+			s.deps.Common.ResourceResolver,
+			resource.APIVersion,
+			resource.Kind,
+			resource.Namespace,
+			resource.Name,
+			resource.NamespaceExplicit,
+		)
+		resources = append(resources, HelmResource{
+			Kind:       resource.Kind,
+			APIVersion: resource.APIVersion,
+			Name:       resource.Name,
+			Namespace:  identity.Namespace,
+			Scope:      string(identity.Scope),
+		})
 	}
-	return resources.items
-}
-
-type manifestResourceKey struct {
-	apiVersion string
-	kind       string
-	namespace  string
-	name       string
-}
-
-type manifestResourceAccumulator struct {
-	service          *Service
-	defaultNamespace string
-	seen             map[manifestResourceKey]struct{}
-	items            []HelmResource
-}
-
-func newManifestResourceAccumulator(service *Service, defaultNamespace string) *manifestResourceAccumulator {
-	return &manifestResourceAccumulator{
-		service:          service,
-		defaultNamespace: defaultNamespace,
-		seen:             make(map[manifestResourceKey]struct{}),
-	}
-}
-
-func splitManifestDocuments(manifest string) []string {
-	trimmed := strings.TrimPrefix(strings.TrimSpace(manifest), "---")
-	return strings.Split(trimmed, "\n---")
-}
-
-func parseManifestDocument(document string) (map[string]interface{}, bool) {
-	document = strings.TrimSpace(document)
-	if document == "" || document == "---" {
-		return nil, false
-	}
-	var object map[string]interface{}
-	if err := yaml.Unmarshal([]byte(document), &object); err != nil {
-		return nil, false
-	}
-	return object, object != nil
-}
-
-func (resources *manifestResourceAccumulator) addObject(ctx context.Context, object map[string]interface{}) {
-	kind, _ := object["kind"].(string)
-	if kind == "" {
-		return
-	}
-	// apiVersion is the wire-form "group/version" (or just "version" for core
-	// resources), allowing Helm-managed CRDs to retain their complete GVK.
-	apiVersion, _ := object["apiVersion"].(string)
-	if strings.HasSuffix(kind, "List") {
-		resources.addListItems(ctx, object, apiVersion)
-		return
-	}
-	resources.addResource(ctx, object, apiVersion, kind)
-}
-
-func (resources *manifestResourceAccumulator) addListItems(ctx context.Context, object map[string]interface{}, inheritedAPIVersion string) {
-	items, ok := object["items"].([]interface{})
-	if !ok {
-		return
-	}
-	for _, item := range items {
-		resources.addListItem(ctx, item, inheritedAPIVersion)
-	}
-}
-
-func (resources *manifestResourceAccumulator) addListItem(ctx context.Context, item interface{}, inheritedAPIVersion string) {
-	object, ok := toStringMap(item)
-	if !ok {
-		return
-	}
-	kind, _ := object["kind"].(string)
-	if kind == "" {
-		return
-	}
-	apiVersion, _ := object["apiVersion"].(string)
-	if apiVersion == "" {
-		apiVersion = inheritedAPIVersion
-	}
-	resources.addResource(ctx, object, apiVersion, kind)
-}
-
-func (resources *manifestResourceAccumulator) addResource(ctx context.Context, object map[string]interface{}, apiVersion, kind string) {
-	name, namespace, namespaceExplicit := extractNameNamespace(object, resources.defaultNamespace)
-	if name == "" {
-		return
-	}
-	key := manifestResourceKey{apiVersion: apiVersion, kind: kind, namespace: namespace, name: name}
-	if _, exists := resources.seen[key]; exists {
-		return
-	}
-	resources.seen[key] = struct{}{}
-	identity := resourcemodel.ResolveHelmManifestResourceIdentityWithResolver(
-		ctx,
-		resources.service.deps.Common.ResourceResolver,
-		apiVersion,
-		kind,
-		namespace,
-		name,
-		namespaceExplicit,
-	)
-	resources.items = append(resources.items, HelmResource{
-		Kind:       kind,
-		APIVersion: apiVersion,
-		Name:       name,
-		Namespace:  identity.Namespace,
-		Scope:      string(identity.Scope),
-	})
-}
-
-func extractNameNamespace(obj map[string]interface{}, defaultNamespace string) (string, string, bool) {
-	metadata, ok := toStringMap(obj["metadata"])
-	if !ok {
-		return "", defaultNamespace, false
-	}
-
-	name, _ := metadata["name"].(string)
-	namespace := defaultNamespace
-	namespaceExplicit := false
-	if ns, ok := metadata["namespace"].(string); ok && ns != "" {
-		namespace = ns
-		namespaceExplicit = true
-	}
-	return name, namespace, namespaceExplicit
-}
-
-func toStringMap(value interface{}) (map[string]interface{}, bool) {
-	switch typed := value.(type) {
-	case map[string]interface{}:
-		return typed, true
-	case map[interface{}]interface{}:
-		result := make(map[string]interface{}, len(typed))
-		for k, v := range typed {
-			key, ok := k.(string)
-			if !ok {
-				continue
-			}
-			result[key] = v
-		}
-		return result, true
-	default:
-		return nil, false
-	}
+	return resources
 }
 
 func helmUpdatedAge(updated *metav1.Time) string {
@@ -364,7 +268,7 @@ func (s *Service) logWarn(msg string) {
 
 func (s *Service) logDeleteError(err error, msg string, privateResourceNames ...string) error {
 	operation := common.DynamicResourceRequestOperation(common.DynamicResourceRequestSpec{
-		Action: "delete", Group: "helm.sh", Version: "v3", Resource: "releases", Namespaced: true,
+		Action: "delete", Group: resourcemodel.HelmReleaseGVK.Group, Version: resourcemodel.HelmReleaseGVK.Version, Resource: releaseResource, Namespaced: true,
 	}).WithPrivateResourceNames(privateResourceNames...)
 	return s.deps.Common.LogRequestFailure(
 		err,

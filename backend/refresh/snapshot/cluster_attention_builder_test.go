@@ -16,8 +16,8 @@ import (
 func TestClusterAttentionBuilderQueriesCatalogDiscoveredKinds(t *testing.T) {
 	now := time.Date(2026, time.August, 10, 12, 0, 0, 0, time.UTC)
 	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}
-	index := newClusterAttentionIndex(meta, func() time.Time { return now })
-	t.Cleanup(index.Stop)
+	index := newTestAttentionIndex(meta, func() time.Time { return now })
+	t.Cleanup(index.stopForTest)
 	index.ReplaceFinalizerBlockers([]objectcatalog.FinalizerBlocker{{
 		Ref: resourcemodel.ResourceRef{
 			ClusterID: meta.ClusterID, Group: "example.com", Version: "v1", Kind: "Widget", Resource: "widgets",
@@ -63,8 +63,8 @@ func TestAttentionQueryAdapterUsesFindingLabelsForSearchAndSort(t *testing.T) {
 func TestClusterAttentionBuilderServesQueryBackedPages(t *testing.T) {
 	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
 	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}
-	index := newClusterAttentionIndex(meta, func() time.Time { return now })
-	t.Cleanup(index.Stop)
+	index := newTestAttentionIndex(meta, func() time.Time { return now })
+	t.Cleanup(index.stopForTest)
 	for _, name := range []string{"zeta", "alpha"} {
 		index.UpsertSource("pods", attentionSourceRecord{
 			Ref: attentionTestRef("Pod", "payments", name), Source: attentionSourcePod,
@@ -87,8 +87,8 @@ func TestClusterAttentionBuilderServesQueryBackedPages(t *testing.T) {
 
 func TestClusterAttentionBuilderFiltersRowsByAnyFindingCause(t *testing.T) {
 	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}
-	index := newClusterAttentionIndex(meta, time.Now)
-	t.Cleanup(index.Stop)
+	index := newTestAttentionIndex(meta, time.Now)
+	t.Cleanup(index.stopForTest)
 	for _, row := range []AttentionFinding{
 		{Ref: attentionTestRef("Pod", "payments", "crash"),
 			Severity: AttentionSeverityError, Status: "CrashLoopBackOff",
@@ -122,8 +122,8 @@ func TestClusterAttentionBuilderFiltersRowsByAnyFindingCause(t *testing.T) {
 func TestClusterAttentionBuilderReturnsTransientNotReadyPodForOverviewFilters(t *testing.T) {
 	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
 	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}
-	index := newClusterAttentionIndex(meta, func() time.Time { return now })
-	t.Cleanup(index.Stop)
+	index := newTestAttentionIndex(meta, func() time.Time { return now })
+	t.Cleanup(index.stopForTest)
 	index.UpsertSource("pods", attentionSourceRecord{
 		Ref: attentionTestRef("Pod", "payments", "checkout-0"), Source: attentionSourcePod,
 		Status: "Running", StatusState: "Running", StatusPresentation: "ready", Ready: "0/1",
@@ -145,8 +145,8 @@ func TestClusterAttentionBuilderReturnsTransientNotReadyPodForOverviewFilters(t 
 func TestClusterAttentionBuilderSortsSeverityByOperationalPriority(t *testing.T) {
 	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
 	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}
-	index := newClusterAttentionIndex(meta, func() time.Time { return now })
-	t.Cleanup(index.Stop)
+	index := newTestAttentionIndex(meta, func() time.Time { return now })
+	t.Cleanup(index.stopForTest)
 	for _, test := range []struct {
 		name     string
 		severity AttentionSeverity
@@ -179,8 +179,8 @@ func TestClusterAttentionBuilderSortsSeverityByOperationalPriority(t *testing.T)
 func TestClusterAttentionBuilderPublishesFullSeverityCounts(t *testing.T) {
 	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
 	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}
-	index := newClusterAttentionIndex(meta, func() time.Time { return now })
-	t.Cleanup(index.Stop)
+	index := newTestAttentionIndex(meta, func() time.Time { return now })
+	t.Cleanup(index.stopForTest)
 	for _, test := range []struct {
 		name     string
 		severity AttentionSeverity
@@ -226,8 +226,8 @@ func TestClusterAttentionBuilderPublishesFullSeverityCounts(t *testing.T) {
 
 func TestClusterAttentionBuilderPublishesIgnoreRulesAndFindingTypeCatalog(t *testing.T) {
 	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}
-	index := newClusterAttentionIndex(meta, time.Now)
-	t.Cleanup(index.Stop)
+	index := newTestAttentionIndex(meta, time.Now)
+	t.Cleanup(index.stopForTest)
 	ignored := attentionTestRef("Deployment", "payments", "checkout")
 	index.SetIgnoreRules(AttentionIgnoreRules{
 		ObjectFindings:      []AttentionObjectFindingIgnore{{Ref: ignored, FindingType: "replica-mismatch"}},

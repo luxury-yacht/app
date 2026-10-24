@@ -1,4 +1,10 @@
+import {
+  buildNodeActionPermissionDescriptorMap,
+  type ObjectActionIdentitySource,
+  objectActionPermissionStatus,
+} from '@shared/actions/objectActionContract';
 import type { PermissionStatus } from '@shared/hooks/useObjectActions';
+import type { PermissionMap } from '@/core/capabilities';
 
 export interface NodeActionPermissionInputs {
   nodeGet: PermissionStatus | null;
@@ -88,3 +94,17 @@ export const resolveDrainStartPermissionStatus = ({
   disableEviction,
 }: DrainStartPermissionInputs): PermissionStatus | null =>
   combineRequiredPermissions([nodeMutation, disableEviction ? podDelete : podEvictionCreate]);
+
+/** The node-action permission answers for a node, read with the generated node permissions. */
+export const nodeActionPermissionInputs = (
+  permissionMap: PermissionMap,
+  node: ObjectActionIdentitySource
+): NodeActionPermissionInputs => {
+  const descriptors = buildNodeActionPermissionDescriptorMap(node);
+  return {
+    nodeGet: objectActionPermissionStatus(permissionMap, descriptors.nodeGet),
+    nodePatch: objectActionPermissionStatus(permissionMap, descriptors.nodePatch),
+    podEvictionCreate: objectActionPermissionStatus(permissionMap, descriptors.podEvictionCreate),
+    podDelete: objectActionPermissionStatus(permissionMap, descriptors.podDelete),
+  };
+};

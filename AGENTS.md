@@ -74,9 +74,9 @@ source contract is unclear.
 - Reuse existing selectors, helpers, hooks, services, classes, and boundaries.
 - Add plain-language comments only where logic is not self-evident.
 - The object catalog owns object existence, discovery, GVK/GVR identity,
-  Browse, namespace metadata, and cluster listings. The informer-backed,
-  permission-gated `namespaces` refresh domain owns namespace LIST rows; list
-  denial fails explicitly and there is no catalog-inference fallback.
+  Browse, namespace metadata, and cluster listings. The ingest-backed (owned
+  reflector), permission-gated `namespaces` refresh domain owns namespace LIST
+  rows; list denial fails explicitly and there is no catalog-inference fallback.
 - Run repository tools through `mise exec --` when Mise is not already active.
 
 ## Validation
@@ -112,10 +112,14 @@ source contract is unclear.
   may format files. Report exact failures. Documentation/comment-only work is
   exempt and must at least pass `git diff --check`; Markdown guidance changes
   also run `mise exec -- wails3 task qc:docs`.
-- Rendered Wails UI validation uses the standalone Playwright MCP when
-  available. Start the app with `mise exec -- wails3 dev`, use the emitted URL,
-  and exercise relevant loading, error, empty, populated, navigation, and
-  interaction states. Follow `.agents/setup/browser-automation.md`.
+- Rendered UI validation exercises the relevant loading, error, empty,
+  populated, navigation, and interaction states. Backend-backed views render
+  only in the native window `mise exec -- wails3 dev` opens; the Vite URL it
+  prints serves frontend assets only, so a browser or Playwright on that URL
+  gets no backend data, bindings, or streams and is not app evidence. Drive
+  the native window through the Wails MCP server (`EXTRA_TAGS=mcp`), and use
+  Storybook for component visuals. Ask the user which cluster the app may
+  reach before launching it. Follow `.agents/setup/browser-automation.md`.
 
 ## Routing and documentation
 

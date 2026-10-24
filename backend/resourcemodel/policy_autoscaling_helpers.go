@@ -1,7 +1,9 @@
 package resourcemodel
 
 import (
+	"maps"
 	"math"
+	"slices"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -91,11 +93,13 @@ func DisruptedPodsFromMap(clusterID, namespace string, pods map[string]metav1.Ti
 	if len(pods) == 0 {
 		return nil
 	}
+	// Sorted by name: the status is a map, so iteration order would reshuffle the list on every read.
+	names := slices.Sorted(maps.Keys(pods))
 	result := make([]DisruptedPodFacts, 0, len(pods))
-	for name, disruptionTime := range pods {
+	for _, name := range names {
 		result = append(result, DisruptedPodFacts{
 			Pod:            podDisruptedPodLink(clusterID, namespace, name),
-			DisruptionTime: disruptionTime,
+			DisruptionTime: pods[name],
 		})
 	}
 	return result

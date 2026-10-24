@@ -8,18 +8,18 @@ import "github.com/luxury-yacht/app/backend/kind/kindspec"
 
 var MutatingDescriptor = kindspec.Descriptor{
 	Identity:        MutatingIdentity,
+	Display:         kindspec.Display{ShortName: "mwc", Label: "MutatingWebhook"},
 	CatalogSource:   kindspec.CatalogDynamic,
 	DetailCacheable: true,
-	IngestOwned:     true,
 	Stream:          &MutatingStreamDescriptor,
 	Binding:         &MutatingDetailBinding,
 }
 
 var ValidatingDescriptor = kindspec.Descriptor{
 	Identity:        ValidatingIdentity,
+	Display:         kindspec.Display{ShortName: "vwc", Label: "ValidatingWebhook"},
 	CatalogSource:   kindspec.CatalogDynamic,
 	DetailCacheable: true,
-	IngestOwned:     true,
 	Stream:          &ValidatingStreamDescriptor,
 	Binding:         &ValidatingDetailBinding,
 }

@@ -1,159 +1,132 @@
-import { boundedRowsSource } from '@modules/resource-grid/boundedRowsSource';
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
-import { KeyboardProvider } from '@ui/shortcuts';
+/**
+ * frontend/src/modules/cluster/components/ClusterViewIdentities.test.tsx
+ *
+ * The cluster Identities view lists the users and groups the visible
+ * cluster's bindings name, from the backend's cluster-identities query. A
+ * subject's Kind badge or name opens its identity panel with the subject's
+ * exact name (never an object panel), and its Bindings count lists the
+ * bindings that grant it, each opening its binding with complete identity.
+ * Runs in the full app, navigated through the sidebar, over a faked backend
+ * (test-utils/appState).
+ */
+
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ClusterIdentity } from '@/core/refresh/types';
-import ClusterResourcesViews from './ClusterResourcesViews';
+import { describe, expect, it } from 'vitest';
+import type { ClusterIdentity, ClusterIdentityBinding } from '@/core/refresh/types';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type ObjectIdentity,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { requireValue } from '@/test-utils/requireValue';
 
-const state = vi.hoisted(() => ({
-  clusterId: 'cluster-a',
-  rows: [] as ClusterIdentity[],
-  open: vi.fn(),
-  openIdentity: vi.fn(),
-  navigate: vi.fn(),
-}));
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedClusterId: state.clusterId }),
-}));
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: state.open, openWithIdentity: state.openIdentity }),
-}));
-vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ available: true, navigateToView: state.navigate }),
-}));
-vi.mock('@core/contexts/ZoomContext', () => ({ useZoom: () => ({ zoomLevel: 100 }) }));
-vi.mock('@ui/shortcuts', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@ui/shortcuts')>()),
-  useKeyboardContext: () => ({
-    registerShortcut: () => 'id',
-    unregisterShortcut: () => undefined,
-    getAvailableShortcuts: () => [],
-    isShortcutAvailable: () => false,
-    setEnabled: () => undefined,
-    isEnabled: true,
-    registerSurface: () => 'surface',
-    unregisterSurface: () => undefined,
-    dispatchNativeAction: () => false,
-    hasActiveBlockingSurface: () => false,
-  }),
-}));
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
 
-// Replace the query transport/lifecycle, but render the real table, columns,
-// tooltip, and object links to exercise identity-specific operational decisions.
-vi.mock('@modules/resource-grid/useQueryBackedResourceGridTable', () => ({
-  useQueryBackedClusterResourceGridTable: (params: {
-    keyExtractor: (row: ClusterIdentity) => string;
-    columns: GridColumnDefinition<ClusterIdentity>[];
-  }) => ({
-    source: boundedRowsSource({ rows: state.rows }),
-    favModal: null,
-    gridTableProps: {
-      data: state.rows,
-      keyExtractor: params.keyExtractor,
-      columns: params.columns,
-      virtualization: { enabled: false },
-      sortConfig: { key: 'name', direction: 'asc' },
-      onSort: vi.fn(),
-    },
-  }),
-}));
+const readers: ObjectIdentity = {
+  group: 'rbac.authorization.k8s.io',
+  version: 'v1',
+  kind: 'RoleBinding',
+  namespace: 'payments',
+  name: 'readers',
+};
+
+const readersBinding = (): ClusterIdentityBinding => ({
+  ...readers,
+  clusterId: dev.clusterId,
+  resource: 'rolebindings',
+});
+
+// Subject names are opaque: the view passes them on exactly as the bindings name them.
+const subjects = (): ClusterIdentity[] => [
+  {
+    clusterId: dev.clusterId,
+    kind: 'User',
+    name: ' alice ',
+    bindings: [readersBinding()],
+    grantScopes: ['payments'],
+  },
+  { clusterId: dev.clusterId, kind: 'Group', name: 'developers', bindings: [], grantScopes: [] },
+];
+
+const start = async () => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['payments']);
+  app.startScreen(dev);
+  // The view's query and an opened identity panel's subject query.
+  app.serveTable(dev, 'cluster-identities', { rows: subjects() });
+  view = await app.mountApp();
+  await view.goTo({ clusterView: 'identities' });
+};
+
+const rowOf = (name: string) =>
+  requireValue(
+    Array.from(view.container.querySelectorAll<HTMLElement>('.gridtable-row')).find((row) =>
+      row.textContent?.includes(name)
+    ),
+    `expected the ${name} row`
+  );
+
+const click = async (element: HTMLElement) => {
+  await act(async () => element.click());
+  await app.settle();
+};
+
+const identityTarget = (kind: string, name: string) => ({
+  targetType: 'identity',
+  clusterId: dev.clusterId,
+  kind,
+  name,
+});
 
 describe('ClusterViewIdentities', () => {
-  let host: HTMLDivElement;
-  let root: ReactDOM.Root;
-  const binding = {
-    clusterId: 'cluster-a',
-    group: 'rbac.authorization.k8s.io',
-    version: 'v1',
-    kind: 'RoleBinding',
-    resource: 'rolebindings',
-    namespace: 'payments',
-    name: 'readers',
-  };
-  beforeEach(() => {
-    host = document.createElement('div');
-    document.body.appendChild(host);
-    root = ReactDOM.createRoot(host);
-    state.open.mockClear();
-    state.openIdentity.mockClear();
-    state.navigate.mockClear();
-    state.clusterId = 'cluster-a';
-    state.rows = [
-      {
-        clusterId: 'cluster-a',
-        kind: 'User',
-        name: 'alice',
-        bindings: [binding],
-        grantScopes: ['payments'],
-      },
-      {
-        clusterId: 'cluster-a',
-        kind: 'Group',
-        name: 'developers',
-        bindings: [],
-        grantScopes: [],
-      },
-    ];
-  });
-  afterEach(() => {
-    act(() => root.unmount());
-    host.remove();
-  });
+  it('opens a subject’s identity panel from its Kind badge and its name', async () => {
+    await start();
 
-  it('opens User and Group identity targets from badges and names without object actions', async () => {
-    state.rows[0].name = ' alice ';
-    state.rows[0].clusterId = 'cluster-b';
-    await act(async () =>
-      root.render(
-        <KeyboardProvider>
-          <ClusterResourcesViews activeTab="identities" />
-        </KeyboardProvider>
+    await click(
+      requireValue(
+        rowOf('alice').querySelector<HTMLButtonElement>('button[data-kind-value="User"]'),
+        'expected the User badge'
       )
     );
-    const user = host.querySelector<HTMLButtonElement>('button[data-kind-value="User"]');
-    expect(user).not.toBeNull();
-    act(() => user?.click());
-    expect(state.openIdentity).toHaveBeenLastCalledWith({
-      targetType: 'identity',
-      clusterId: 'cluster-b',
-      kind: 'User',
-      name: ' alice ',
-    });
-    const group = [...host.querySelectorAll('button')].find(
-      (button) => button.textContent === 'developers'
-    );
-    expect(group).toBeDefined();
-    act(() => group?.click());
-    expect(state.openIdentity).toHaveBeenLastCalledWith({
-      targetType: 'identity',
-      clusterId: 'cluster-a',
-      kind: 'Group',
-      name: 'developers',
-    });
-    expect(state.open).not.toHaveBeenCalled();
-  });
-
-  it('opens source bindings with their complete object identity', async () => {
-    await act(async () =>
-      root.render(
-        <KeyboardProvider>
-          <ClusterResourcesViews activeTab="identities" />
-        </KeyboardProvider>
+    await click(
+      requireValue(
+        Array.from(rowOf('developers').querySelectorAll<HTMLButtonElement>('button')).find(
+          (button) => button.textContent === 'developers'
+        ),
+        'expected the developers name link'
       )
     );
-    expect(host.textContent).toContain('alice');
-    expect(host.textContent).toContain('developers');
-    expect(state.open).not.toHaveBeenCalled();
-    const count = host.querySelector<HTMLElement>('[aria-label="Bindings for alice"]');
-    expect(count).not.toBeNull();
-    await act(async () => count?.click());
-    const link = [...document.querySelectorAll('button')].find((el) =>
-      el.textContent?.includes('payments/readers')
+
+    expect(view.openPanels()).toEqual([
+      identityTarget('User', ' alice '),
+      identityTarget('Group', 'developers'),
+    ]);
+  });
+
+  it('opens a binding that grants a subject with complete identity', async () => {
+    await start();
+    app.servePanel(dev, readers);
+
+    await click(
+      requireValue(
+        rowOf('alice').querySelector<HTMLElement>('[aria-label="Bindings for  alice "]'),
+        'expected the Bindings count'
+      )
     );
-    expect(link).toBeDefined();
-    act(() => link?.click());
-    expect(state.open).toHaveBeenLastCalledWith(binding);
+    await click(
+      requireValue(
+        Array.from(document.body.querySelectorAll<HTMLButtonElement>('button')).find((button) =>
+          button.textContent?.includes('payments/readers')
+        ),
+        'expected the readers binding link'
+      )
+    );
+
+    expect(view.openPanels()).toEqual([
+      { clusterId: dev.clusterId, clusterName: dev.clusterName, ...readers },
+    ]);
   });
 });

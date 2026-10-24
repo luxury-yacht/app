@@ -7,11 +7,11 @@ import "github.com/luxury-yacht/app/backend/kind/kindspec"
 // subsystem reads. This is the one place backendtlspolicy hands itself to the app.
 
 var Descriptor = kindspec.Descriptor{
-	Identity:         Identity,
-	CatalogSource:    kindspec.CatalogGateway,
-	DetailCacheable:  true,
-	Stream:           &StreamDescriptor,
-	GatewayCollector: &ObjectMapNode,
-	Edges:            ObjectMapEdges,
-	Binding:          &DetailBinding,
+	Identity:        Identity,
+	Display:         kindspec.Display{ShortName: "btls"},
+	DetailCacheable: true,
+	Stream:          &StreamDescriptor,
+	Collector:       &ObjectMapNode,
+	Edges:           ObjectMapEdges,
+	Binding:         &DetailBinding,
 }

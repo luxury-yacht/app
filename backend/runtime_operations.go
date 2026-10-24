@@ -77,6 +77,23 @@ func (r *runtimeOperationRegistry) remove(id string) bool {
 	return true
 }
 
+// setStatus updates a registered operation's status and keeps its cleanup.
+func (r *runtimeOperationRegistry) setStatus(id, status, reason string) bool {
+	if r == nil {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	entry, ok := r.operations[id]
+	if !ok {
+		return false
+	}
+	entry.operation.Status = status
+	entry.operation.StatusReason = reason
+	r.operations[id] = entry
+	return true
+}
+
 func (r *runtimeOperationRegistry) removeCluster(clusterID string) []runtimeOperationEntry {
 	if r == nil {
 		return nil
@@ -179,6 +196,12 @@ func (o *OperationsCoordinator) unregisterRuntimeOperation(id string) {
 	}
 }
 
+func (o *OperationsCoordinator) setRuntimeOperationStatus(id, status, reason string) {
+	if registry := o.ensureRuntimeOperationRegistry(); registry != nil && registry.setStatus(id, status, reason) {
+		o.emitRuntimeOperationsList()
+	}
+}
+
 func (o *OperationsCoordinator) ListRuntimeOperations() []RuntimeOperation {
 	registry := o.ensureRuntimeOperationRegistry()
 	if registry == nil {
@@ -208,15 +231,11 @@ func (o *OperationsCoordinator) stopCluster(clusterID, reason string) {
 	for _, entry := range removed {
 		shellRemoved = shellRemoved || entry.operation.Type == RuntimeOperationShell
 		portForwardRemoved = portForwardRemoved || entry.operation.Type == RuntimeOperationPortForward
-		if entry.cleanup == nil {
-			continue
-		}
-		if err := entry.cleanup(reason); err != nil {
-			if o.logger != nil {
-				o.logger.Warn(fmt.Sprintf("Failed to clean up %s operation %s for cluster %s: %v", entry.operation.Type, entry.operation.ID, trimmedClusterID, err), logsources.App)
-			}
-		}
+		o.cleanUpRuntimeOperation(trimmedClusterID, entry, reason)
 	}
+	// Starts still creating or waiting for a debug pod are not registered yet;
+	// cancel them and wait until they have deleted it.
+	o.stopShellStarts(trimmedClusterID)
 	if shellRemoved {
 		o.shellSessionLifecycle().emitList()
 	}
@@ -225,6 +244,17 @@ func (o *OperationsCoordinator) stopCluster(clusterID, reason string) {
 	}
 
 	o.emitRuntimeOperationsList()
+}
+
+// cleanUpRuntimeOperation runs a removed operation's cleanup and logs a
+// failure, which nothing can retry once its cluster is gone.
+func (o *OperationsCoordinator) cleanUpRuntimeOperation(clusterID string, entry runtimeOperationEntry, reason string) {
+	if entry.cleanup == nil {
+		return
+	}
+	if err := entry.cleanup(reason); err != nil && o.logger != nil {
+		o.logger.Warn(fmt.Sprintf("Failed to clean up %s operation %s for cluster %s: %v", entry.operation.Type, entry.operation.ID, clusterID, err), logsources.App)
+	}
 }
 
 func (o *OperationsCoordinator) runtimeOperationClusterIDs() []string {
@@ -245,6 +275,7 @@ func (o *OperationsCoordinator) Shutdown() {
 	for _, clusterID := range o.runtimeOperationClusterIDs() {
 		o.stopCluster(clusterID, "app shutdown")
 	}
+	o.stopShellStarts("")
 }
 
 func runtimeOperationTarget(clusterID, group, version, kind, namespace, name string) *RuntimeOperationTargetRef {

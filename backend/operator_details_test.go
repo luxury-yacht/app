@@ -35,7 +35,8 @@ func TestOperatorDetailsAndHydrationResolveReferencesFromClusterDiscovery(t *tes
 	provider := gateway.objectDetailProvider()
 	raw, err := provider.FetchObjectDetails(ctx, certificate.GroupVersionKind(), "team-a", "tls")
 	require.NoError(t, err)
-	require.NotNil(t, raw.(*customresource.Details).CertManager.Issuer.Display)
+	require.Equal(t, customResourceDetailType, raw.Type)
+	require.NotNil(t, raw.Details.(*customresource.Details).CertManager.Issuer.Display)
 	catalog := objectcatalog.NewService(objectcatalog.Dependencies{ClusterID: "a", Common: common.Dependencies{KubernetesClient: client}}, nil)
 	_, found, err := catalog.ResolveResourceForGVK(ctx, schema.GroupVersionKind{Group: "cert-manager.io", Version: "v1", Kind: "ClusterIssuer"})
 	require.NoError(t, err)
@@ -49,14 +50,14 @@ func TestOperatorDetailsAndHydrationResolveReferencesFromClusterDiscovery(t *tes
 	require.Len(t, rows, 2)
 	raw, err = provider.FetchObjectDetails(ctx, certificate.GroupVersionKind(), "team-a", "tls")
 	require.NoError(t, err)
-	certificateFacts := raw.(*customresource.Details).CertManager
+	certificateFacts := raw.Details.(*customresource.Details).CertManager
 	require.Equal(t, rows[0].CertManager.Issuer, certificateFacts.Issuer)
 	require.Equal(t, "v1", certificateFacts.Issuer.Ref.Version)
 	require.Equal(t, "a", certificateFacts.Issuer.Ref.ClusterID)
 	require.Empty(t, certificateFacts.Issuer.Ref.Namespace)
 	raw, err = provider.FetchObjectDetails(ctx, secret.GroupVersionKind(), "team-a", "db")
 	require.NoError(t, err)
-	secretFacts := raw.(*customresource.Details).ExternalSecrets.ExternalSecret
+	secretFacts := raw.Details.(*customresource.Details).ExternalSecrets.ExternalSecret
 	require.Equal(t, rows[1].ExternalSecrets.Store, secretFacts.Store)
 	require.Equal(t, "team-a", secretFacts.Store.Ref.Namespace)
 	require.Equal(t, "db", secretFacts.Target.Ref.Name)

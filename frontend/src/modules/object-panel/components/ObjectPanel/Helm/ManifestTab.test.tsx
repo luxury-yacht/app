@@ -1,260 +1,74 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Helm/ManifestTab.test.tsx
  *
- * Verifies Helm manifest loading through scoped refresh-domain state.
+ * The Helm Manifest tab reads its release's manifest when it opens, and reads
+ * nothing while cluster data is paused. Runs inside the real app shell over a
+ * faked backend (test-utils/appState); only the code editor is stubbed, to
+ * read the text it shows.
  */
 
-import React, { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-const searchShortcutMocks = vi.hoisted(() => ({
-  useSearchShortcutTarget: vi.fn(),
-  useKeyboardSurface: vi.fn(),
-}));
-
-const refreshMocks = vi.hoisted(() => ({
-  setScopedDomainEnabled: vi.fn(),
-  acquireScopedDomainLease: vi.fn(),
-  releaseScopedDomainLease: vi.fn(),
-  fetchScopedDomain: vi.fn(() => Promise.resolve()),
-}));
-
-const refreshStoreMocks = vi.hoisted(() => ({
-  useRefreshScopedDomain: vi.fn(),
-  getScopedDomainState: vi.fn(),
-}));
-
-const autoRefreshLoadingState = vi.hoisted(() => ({
-  isPaused: false,
-  isManualRefreshActive: false,
-  suppressPassiveLoading: false,
-}));
-
-const codeMirrorState = {
-  editorView: {
-    state: {
-      selection: { main: { from: 0, to: 0 } },
-      sliceDoc: vi.fn(() => ''),
-    },
-    dispatch: vi.fn(),
-    focus: vi.fn(),
-  },
-};
-
-interface CapturedCodeMirrorProps {
-  value: string;
-  onCreateEditor?: (view: unknown) => void;
-  ref?: React.Ref<unknown>;
-}
-
-const CodeMirrorMock = ({ ref, ...props }: CapturedCodeMirrorProps) => {
-  const { onCreateEditor, value } = props;
-  if (ref && typeof ref === 'object') {
-    (ref as React.RefObject<{ view: typeof codeMirrorState.editorView } | null>).current = {
-      view: codeMirrorState.editorView,
-    };
-  }
-  React.useEffect(() => {
-    onCreateEditor?.(codeMirrorState.editorView);
-  }, [onCreateEditor]);
-  return <div data-testid="code-mirror">{value}</div>;
-};
-CodeMirrorMock.displayName = 'CodeMirrorMock';
-
-const themeMocks = vi.hoisted(() => ({
-  buildCodeTheme: vi.fn(() => ({ theme: 'dark', highlight: 'highlight-ext' })),
-}));
-
-const searchModuleMocks = vi.hoisted(() => ({
-  createSearchExtensions: vi.fn(() => ['search-ext']),
-  closeSearchPanel: vi.fn(),
-}));
-
-const codemirrorSearchMocks = vi.hoisted(() => {
-  class SearchQuery {
-    search!: string;
-    constructor(options: Record<string, unknown>) {
-      Object.assign(this, options);
-    }
-  }
-  return {
-    SearchQuery,
-    findNext: vi.fn(),
-    findPrevious: vi.fn(),
-    getSearchQuery: vi.fn(() => ({
-      search: '',
-      caseSensitive: false,
-      literal: false,
-      regexp: false,
-      wholeWord: false,
-      replace: '',
-    })),
-    setSearchQuery: { of: vi.fn((q: unknown) => q) },
-  };
-});
-
-vi.mock('@ui/shortcuts', () => ({
-  useKeyboardSurface: (config: unknown) => searchShortcutMocks.useKeyboardSurface(config),
-  useSearchShortcutTarget: (config: unknown) => searchShortcutMocks.useSearchShortcutTarget(config),
-}));
-
-vi.mock('@/core/refresh', () => ({
-  refreshOrchestrator: refreshMocks,
-  useRefreshScopedDomain: refreshStoreMocks.useRefreshScopedDomain,
-}));
-
-vi.mock('@/core/refresh/store', () => ({
-  useRefreshScopedDomain: refreshStoreMocks.useRefreshScopedDomain,
-  getScopedDomainState: refreshStoreMocks.getScopedDomainState,
-}));
-
-vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
-  useAutoRefreshLoadingState: () => autoRefreshLoadingState,
-}));
-
-vi.mock('@/core/settings/appPreferences', () => ({
-  getAutoRefreshEnabled: () => !autoRefreshLoadingState.isPaused,
-}));
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import ManifestTab from './ManifestTab';
 
 vi.mock('@uiw/react-codemirror', () => ({
   __esModule: true,
-  default: CodeMirrorMock,
+  default: ({ value }: { value: string }) => <pre data-testid="code-mirror">{value}</pre>,
 }));
 
-vi.mock('@codemirror/lang-yaml', () => ({
-  yaml: () => 'yaml-extension',
-}));
+const app = installAppStateHarness();
 
-vi.mock('@codemirror/view', () => ({
-  EditorView: Object.assign(class EditorViewMock {}, {
-    contentAttributes: {
-      of: (attrs: unknown) => ({ type: 'contentAttributes', attrs }),
-    },
-    domEventHandlers(handlers: unknown) {
-      return handlers;
-    },
-    lineWrapping: 'lineWrapping',
-  }),
-  keymap: {
-    of: (bindings: unknown) => bindings,
-  },
-}));
-
-vi.mock('@codemirror/search', () => ({
-  SearchQuery: codemirrorSearchMocks.SearchQuery,
-  findNext: codemirrorSearchMocks.findNext,
-  findPrevious: codemirrorSearchMocks.findPrevious,
-  getSearchQuery: codemirrorSearchMocks.getSearchQuery,
-  setSearchQuery: codemirrorSearchMocks.setSearchQuery,
-}));
-
-vi.mock('@/core/codemirror/theme', () => ({
-  buildCodeTheme: themeMocks.buildCodeTheme,
-}));
-
-vi.mock('@/core/codemirror/search', () => ({
-  createSearchExtensions: searchModuleMocks.createSearchExtensions,
-  closeSearchPanel: searchModuleMocks.closeSearchPanel,
-}));
-
-vi.mock('@shared/components/LoadingSpinner', () => ({
-  __esModule: true,
-  default: ({ message }: { message: string }) => <div data-testid="spinner">{message}</div>,
-}));
-
-type SnapshotStatus = 'idle' | 'loading' | 'ready' | 'updating' | 'initialising' | 'error';
-type Snapshot = {
-  status: SnapshotStatus;
-  data?: { manifest?: string | null } | null;
-  error?: string | null;
-};
-
-const snapshotState: { current: Snapshot } = {
-  current: {
-    status: 'ready',
-    data: { manifest: 'apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: demo\n' },
-    error: null,
-  },
-};
-
-refreshStoreMocks.useRefreshScopedDomain.mockImplementation(() => snapshotState.current);
-
-const renderManifestTab = async (
-  props: Partial<{ scope: string | null; isActive: boolean }> = {}
-) => {
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = ReactDOM.createRoot(container);
-
-  const defaultProps = { scope: 'ns:helmrelease:demo', isActive: true };
-
-  await act(async () => {
-    const { default: ManifestTab } = await import('./ManifestTab');
-    root.render(<ManifestTab {...defaultProps} {...props} />);
-  });
-
-  return {
-    container,
-    unmount: async () => {
-      await act(async () => {
-        root.unmount();
-      });
-      container.remove();
-    },
-  };
-};
+const MANIFEST = 'apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: demo\n';
 
 describe('ManifestTab', () => {
+  let dev: TestCluster;
+  let scope: string;
+  let view: MountedApp;
+
   beforeEach(() => {
-    snapshotState.current = {
-      status: 'ready',
-      data: { manifest: 'kind: ConfigMap\nmetadata:\n  name: demo\n' },
-      error: null,
-    };
-    refreshMocks.setScopedDomainEnabled.mockClear();
-    refreshMocks.fetchScopedDomain.mockClear();
-    autoRefreshLoadingState.isPaused = false;
-    autoRefreshLoadingState.isManualRefreshActive = false;
-    autoRefreshLoadingState.suppressPassiveLoading = false;
+    dev = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, ['team-a']);
+    scope =
+      app.object(dev, {
+        group: 'helm.sh',
+        version: 'v3',
+        kind: 'HelmRelease',
+        namespace: 'team-a',
+        name: 'demo',
+      }).scopes.helmScope ?? '';
   });
 
-  afterEach(() => {
-    document.body.textContent = '';
+  const showTab = async () => {
+    view = await app.render(null);
+    await view.show(<ManifestTab scope={scope} isActive />);
+  };
+
+  const manifestReads = () => app.snapshots.reads('object-helm-manifest').map((read) => read.scope);
+
+  it('reads the release manifest when the tab opens and shows it', async () => {
+    app.snapshots.serve('object-helm-manifest', scope, {
+      clusterId: dev.clusterId,
+      clusterName: dev.clusterName,
+      manifest: MANIFEST,
+    });
+
+    await showTab();
+
+    expect(manifestReads()).toContain(scope);
+    expect(view.container.querySelector('[data-testid="code-mirror"]')?.textContent).toBe(MANIFEST);
   });
 
-  it('enables the scoped domain and uses startup fetch intent on mount', async () => {
-    const { unmount } = await renderManifestTab();
+  it('reads nothing and says data is paused while auto-refresh is off', async () => {
+    app.preferences({ autoRefreshEnabled: false });
 
-    expect(refreshMocks.acquireScopedDomainLease).toHaveBeenCalledWith(
-      'object-helm-manifest',
-      'ns:helmrelease:demo',
-      { preserveState: true }
-    );
-    expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
-      'object-helm-manifest',
-      'ns:helmrelease:demo',
-      expect.objectContaining({
-        isManual: false,
-        streamSignal: false,
-        correlationId: expect.any(String),
-      })
-    );
+    await showTab();
 
-    await unmount();
-  });
-
-  it('suppresses passive loading while paused and blocks startup fetches', async () => {
-    autoRefreshLoadingState.isPaused = true;
-    autoRefreshLoadingState.suppressPassiveLoading = true;
-    snapshotState.current = { status: 'loading', data: null, error: null };
-
-    const { container, unmount } = await renderManifestTab();
-
-    expect(container.textContent).not.toContain('Loading manifest...');
-    expect(container.textContent).toContain('Auto-refresh is disabled');
-    expect(refreshMocks.fetchScopedDomain).not.toHaveBeenCalled();
-
-    await unmount();
+    expect(view.container.textContent).not.toContain('Loading manifest...');
+    expect(view.container.textContent).toContain('Auto-refresh is disabled');
+    expect(manifestReads()).toEqual([]);
   });
 });

@@ -101,7 +101,7 @@ describe('createDetailSegmentsColumn', () => {
   it('renders a resolvable link segment as a button that opens and alt-navigates', () => {
     const openReference = vi.fn();
     const navigateReference = vi.fn();
-    const column = buildColumn({ openReference, navigateReference, clusterName: 'Prod' });
+    const column = buildColumn({ openReference, navigateReference });
     const cell = column.render({
       details: [{ label: 'Class', value: 'nginx', link: ingressClassLink }],
     });

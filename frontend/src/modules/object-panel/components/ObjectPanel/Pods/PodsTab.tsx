@@ -44,7 +44,7 @@ import { useObjectActionController } from '@shared/hooks/useObjectActionControll
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { podNamespacePermissionTargets, podOwnerReference } from '@shared/utils/podTableModel';
-import { buildObjectPanelPodsScope } from './objectPanelPodsScope';
+import { buildObjectPanelPodsSelector } from './objectPanelPodsScope';
 
 interface PodsTabProps {
   isActive: boolean;
@@ -100,10 +100,6 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
   });
   const { open: openPod, navigate: navigatePodForWorkspace } = podIdentity;
   const navigatePod = navigationAvailable ? navigatePodForWorkspace : undefined;
-  const getOwnerReference = useCallback(
-    (pod: PodSnapshotEntry) => podOwnerReference(pod, objectData?.clusterName),
-    [objectData?.clusterName]
-  );
   const handleNamespaceSelect = useCallback(
     (pod: PodSnapshotEntry) => {
       if (!pod.ref.namespace || !viewState) {
@@ -119,8 +115,8 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
 
   // Scope the pods query to the panel's workload/node. Null for objects we
   // cannot scope, which keeps the query gated off (see queryClusterId).
-  const podsScope = useMemo(
-    () => buildObjectPanelPodsScope(objectData ?? null, objectData?.kind ?? null),
+  const podsSelector = useMemo(
+    () => buildObjectPanelPodsSelector(objectData ?? null),
     [objectData]
   );
 
@@ -129,7 +125,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
   // "no fetch + no subscription", so this preserves the previous "only fetch
   // while the pods tab is open" behavior and avoids fanning out to a
   // cluster-wide pods fetch when the object has no resolvable pod scope.
-  const queryClusterId = isActive && podsScope ? (objectData?.clusterId ?? null) : null;
+  const queryClusterId = isActive && podsSelector ? (objectData?.clusterId ?? null) : null;
 
   const columns = useMemo<GridColumnDefinition<PodSnapshotEntry>[]>(() => {
     // Match workloads warning styling when restarts are non-zero.
@@ -161,15 +157,14 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
         (pod) => formatRestartCount(pod.restarts),
         {
           alignData: 'right',
-          sortValue: (pod) => pod.restarts ?? 0,
           getTitle: (pod) => `${pod.restarts ?? 0} restarts`,
           getClassName: getRestartsClassName,
         }
       ),
       createTextColumn<PodSnapshotEntry>('owner', 'Owner', workloadNameFromOwner, {
-        ...objectLink(getOwnerReference),
-        isInteractive: (pod) => Boolean(getOwnerReference(pod)),
-        getClassName: (pod) => (getOwnerReference(pod) ? 'object-panel-link' : undefined),
+        ...objectLink(podOwnerReference),
+        isInteractive: (pod) => Boolean(podOwnerReference(pod)),
+        getClassName: (pod) => (podOwnerReference(pod) ? 'object-panel-link' : undefined),
       }),
       createTextColumn<PodSnapshotEntry>('node', 'Node', (pod) => pod.node || '—', {
         ...objectLink((pod) =>
@@ -233,7 +228,6 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
     objectData?.clusterId,
     objectData?.clusterName,
     objectLink,
-    getOwnerReference,
     navigatePod,
     viewState,
   ]);
@@ -248,7 +242,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
     domain: 'pods',
     excludedQueryFacetKeys: RESOURCE_STATUS_QUERY_FACET_KEYS,
     label: 'Object Panel Pods',
-    baseScope: podsScope ?? undefined,
+    baseSelector: podsSelector ?? undefined,
     selectRows: selectPayloadRows,
     viewId: 'object-panel-pods',
     columns,

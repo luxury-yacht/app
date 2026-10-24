@@ -3,6 +3,46 @@
 // Backend Go DTOs and refresh-domains.json are the sources of truth.
 // Regenerate with: go generate ./backend
 
+import type {
+  admission,
+  apiextensions,
+  backendtlspolicy,
+  clusterrole,
+  clusterrolebinding,
+  configmap,
+  cronjob,
+  daemonset,
+  deployment,
+  endpointslice,
+  events,
+  gateway,
+  gatewayclass,
+  helm,
+  hpa,
+  ingress,
+  ingressclass,
+  job,
+  limitrange,
+  listenerset,
+  namespaces,
+  networkpolicy,
+  nodes,
+  persistentvolume,
+  persistentvolumeclaim,
+  poddisruptionbudget,
+  referencegrant,
+  replicaset,
+  resourcequota,
+  role,
+  rolebinding,
+  secret,
+  service,
+  serviceaccount,
+  statefulset,
+  storageclass,
+  types,
+} from '@core/backend-api/models';
+
 export type DrainEventKind = 'info' | 'pod' | 'error';
 
 export type DrainEventPhase =
@@ -90,6 +130,48 @@ export type ContainerLogsWarningKind = 'targetLimit' | 'dropped';
 export type ContainerLogsLimitScope = 'perTab' | 'global';
 
 export type ContainerLogsIssueState = 'unavailable' | 'forbidden' | 'failed';
+
+export type RefreshJobState = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+
+export const ERROR_STATUS_REASONS = [
+  'Unauthorized',
+  'Forbidden',
+  'NotFound',
+  'AlreadyExists',
+  'Conflict',
+  'Gone',
+  'Invalid',
+  'BadRequest',
+  'Timeout',
+  'ServerTimeout',
+  'TooManyRequests',
+  'InternalError',
+  'ServiceUnavailable',
+  'CredentialsRejected',
+  'ClusterUnreachable',
+  'ClusterNotReady',
+  'RefreshUnavailable',
+  'DeadlineExceeded',
+  'Canceled',
+  'Unknown',
+] as const;
+
+export type ErrorStatusReason = (typeof ERROR_STATUS_REASONS)[number];
+
+export const ERROR_STATUS_CATEGORIES = [
+  'NETWORK',
+  'AUTHENTICATION',
+  'PERMISSION',
+  'NOT_FOUND',
+  'VALIDATION',
+  'CONFLICT',
+  'TIMEOUT',
+  'RATE_LIMIT',
+  'SERVER_ERROR',
+  'UNKNOWN',
+] as const;
+
+export type ErrorStatusCategory = (typeof ERROR_STATUS_CATEGORIES)[number];
 
 export interface ArgoCDApplicationFacts {
   spec: ArgoCDApplicationSpec;
@@ -726,8 +808,6 @@ export interface ClusterOverviewSnapshotPayload {
   clusterName: string;
   overview: ClusterOverviewPayload;
   metrics: ClusterOverviewMetrics;
-  metricsByCluster?: Record<string, ClusterOverviewMetrics>;
-  overviewByCluster?: Record<string, ClusterOverviewPayload>;
 }
 
 export interface ClusterRBACEntry {
@@ -837,8 +917,8 @@ export interface ContainerLogsStreamEventPayload {
   warnings?: Array<ContainerLogsWarning> | null;
   issues?: Array<ContainerLogsTargetIssue> | null;
   error?: string;
-  errorDetails?: RefreshPermissionDeniedStatus;
-  retryable?: boolean;
+  errorDetails?: ErrorStatus;
+  reconnect?: boolean;
 }
 
 export interface ContainerLogsStreamRequest {
@@ -949,6 +1029,37 @@ export interface DrainNodeOptionsPayload {
   skipWaitForPodsToTerminate: boolean;
 }
 
+export interface ErrorStatus {
+  kind: string;
+  apiVersion: string;
+  code: number;
+  reason: ErrorStatusReason;
+  category: ErrorStatusCategory;
+  message: string;
+  retryable: boolean;
+  expected: boolean;
+  ref?: ErrorStatusObjectRef;
+  details?: ErrorStatusDetails;
+}
+
+export interface ErrorStatusDetails {
+  domain?: string;
+  resource?: string;
+  group?: string;
+  kind?: string;
+  name?: string;
+  causes?: Array<string>;
+}
+
+export interface ErrorStatusObjectRef {
+  clusterId: string;
+  group: string;
+  version: string;
+  kind: string;
+  namespace?: string;
+  name: string;
+}
+
 export interface ExternalSecretFacts {
   storeName?: string;
   storeKind?: string;
@@ -1042,6 +1153,14 @@ export interface ExternalsecretsRemoteRef {
 export interface ExternalsecretsRetrySettings {
   maxRetries?: number;
   retryInterval?: string;
+}
+
+export interface GenericObjectDetails {
+  kind: string;
+  name: string;
+  group?: string;
+  version?: string;
+  namespace?: string;
 }
 
 export interface KarpenterBudget {
@@ -1563,15 +1682,14 @@ export interface ObjectDeletionMetadata {
   finalizers?: Array<string>;
 }
 
-export interface ObjectDetailsSnapshotPayload {
+export type ObjectDetailsSnapshotPayload = {
   clusterId: string;
   clusterName: string;
-  details: unknown;
   creationTimestamp?: string;
   lastModified?: string;
   deletion?: ObjectDeletionMetadata;
   resourceModel?: ResourceModel;
-}
+} & ObjectDetail;
 
 export interface ObjectEventSummary {
   ref: CanonicalResourceRef;
@@ -1608,7 +1726,10 @@ export interface ObjectHelmManifestSnapshotPayload {
 export interface ObjectHelmValuesSnapshotPayload {
   clusterId: string;
   clusterName: string;
-  values: Record<string, unknown> | null;
+  defaults: Record<string, unknown> | null;
+  merged: Record<string, unknown> | null;
+  overrides: Record<string, unknown> | null;
+  subchartPaths: Array<Array<string> | null> | null;
   revision?: number;
 }
 
@@ -1636,6 +1757,7 @@ export interface ObjectMapNode {
   creationTimestamp?: string;
   status?: ObjectMapStatus;
   actionFacts?: ObjectMapActionFacts;
+  missing?: boolean;
 }
 
 export interface ObjectMapReference {
@@ -1656,7 +1778,6 @@ export interface ObjectMapSnapshotPayload {
   seed: ObjectMapReference;
   nodes: Array<ObjectMapNode> | null;
   edges: Array<ObjectMapEdge> | null;
-  maxDepth: number;
   maxNodes: number;
   truncated: boolean;
   warnings?: Array<string>;
@@ -1861,18 +1982,17 @@ export interface RecentEventEntry {
   objectUid: string;
 }
 
-export interface RefreshPermissionDeniedDetails {
-  domain?: string;
-  resource?: string;
-}
-
-export interface RefreshPermissionDeniedStatus {
-  kind: string;
-  apiVersion: string;
-  message: string;
-  reason: string;
-  details: RefreshPermissionDeniedDetails;
-  code: number;
+export interface RefreshManualJob {
+  jobId: string;
+  domain: string;
+  scope?: string;
+  reason?: string;
+  state: RefreshJobState;
+  queuedAt: number;
+  startedAt?: number;
+  finishedAt?: number;
+  error?: ErrorStatus;
+  latestVersion?: number;
 }
 
 export interface ResourceFamilies {
@@ -2018,7 +2138,7 @@ export interface ResourceStreamServerMessage {
   sequence?: string;
   ref?: ResourceRef;
   error?: string;
-  errorDetails?: RefreshPermissionDeniedStatus;
+  errorDetails?: ErrorStatus;
 }
 
 export interface ResourceTableMetadata {
@@ -2110,7 +2230,7 @@ export interface TelemetrySnapshotStatus {
   lastBatchSize?: number;
   isFinalBatch?: boolean;
   timeToFirstBatchMs?: number;
-  maxInformerSyncWaitMs?: number;
+  maxSyncWaitMs?: number;
 }
 
 export interface TelemetryStreamStatus {
@@ -2168,6 +2288,58 @@ export interface RefreshSnapshot<TPayload> {
   payload: TPayload;
   stats: SnapshotStats;
 }
+
+export interface ObjectDetailTypes {
+  backendtlspolicy: backendtlspolicy.BackendTLSPolicyDetails;
+  clusterrole: clusterrole.ClusterRoleDetails;
+  clusterrolebinding: clusterrolebinding.ClusterRoleBindingDetails;
+  configmap: configmap.ConfigMapDetails;
+  cronjob: cronjob.CronJobDetails;
+  customresourcedefinition: apiextensions.CustomResourceDefinitionDetails;
+  daemonset: daemonset.DaemonSetDetails;
+  deployment: deployment.DeploymentDetails;
+  endpointslice: endpointslice.EndpointSliceDetails;
+  event: events.EventDetails;
+  gateway: gateway.GatewayDetails;
+  gatewayclass: gatewayclass.GatewayClassDetails;
+  grpcroute: types.GRPCRouteDetails;
+  helmrelease: helm.HelmReleaseDetails;
+  horizontalpodautoscaler: hpa.HorizontalPodAutoscalerDetails;
+  httproute: types.HTTPRouteDetails;
+  ingress: ingress.IngressDetails;
+  ingressclass: ingressclass.IngressClassDetails;
+  job: job.JobDetails;
+  limitrange: limitrange.LimitRangeDetails;
+  listenerset: listenerset.ListenerSetDetails;
+  mutatingwebhookconfiguration: admission.MutatingWebhookConfigurationDetails;
+  namespace: namespaces.NamespaceDetails;
+  networkpolicy: networkpolicy.NetworkPolicyDetails;
+  node: nodes.NodeDetails;
+  persistentvolume: persistentvolume.PersistentVolumeDetails;
+  persistentvolumeclaim: persistentvolumeclaim.PersistentVolumeClaimDetails;
+  pod: types.PodDetailInfo;
+  poddisruptionbudget: poddisruptionbudget.PodDisruptionBudgetDetails;
+  referencegrant: referencegrant.ReferenceGrantDetails;
+  replicaset: replicaset.ReplicaSetDetails;
+  resourcequota: resourcequota.ResourceQuotaDetails;
+  role: role.RoleDetails;
+  rolebinding: rolebinding.RoleBindingDetails;
+  secret: secret.SecretDetails;
+  service: service.ServiceDetails;
+  serviceaccount: serviceaccount.ServiceAccountDetails;
+  statefulset: statefulset.StatefulSetDetails;
+  storageclass: storageclass.StorageClassDetails;
+  tlsroute: types.TLSRouteDetails;
+  validatingwebhookconfiguration: admission.ValidatingWebhookConfigurationDetails;
+  customresource: CustomResourceDetails;
+  generic: GenericObjectDetails;
+}
+
+export type ObjectDetailType = keyof ObjectDetailTypes;
+
+export type ObjectDetail<K extends ObjectDetailType = ObjectDetailType> = {
+  [P in K]: { detailType: P; details: ObjectDetailTypes[P] };
+}[K];
 
 export type ClusterNodeRow = ClusterNodeSnapshotEntry;
 
@@ -2241,6 +2413,17 @@ export type GeneratedRefreshDiagnosticsStream =
   | 'resources'
   | 'container-logs';
 
+export type GeneratedRefreshScopeSelector =
+  | 'cluster'
+  | 'namespace'
+  | 'all-namespaces'
+  | 'node'
+  | 'workload'
+  | 'object'
+  | 'helm-release';
+
+export type GeneratedRefreshScopeQuery = 'none' | 'typed-table' | 'object-map' | 'catalog';
+
 export interface GeneratedRefreshDomainPolicy {
   domain: RefreshDomain;
   category: GeneratedRefreshDomainCategory;
@@ -2253,13 +2436,15 @@ export interface GeneratedRefreshDomainPolicy {
     bypassSingleflight: boolean;
   };
   frontend: {
-    refresherName: string;
     orchestrator: GeneratedRefreshOrchestratorKind;
     diagnosticsStream: GeneratedRefreshDiagnosticsStream | null;
-    timing: { interval: number; cooldown: number; timeout: number };
+    timing: { interval: number; timeout: number };
     priority: number | null;
     registrationOrder: number;
-    scheduled: boolean;
+  };
+  scope: {
+    selectors: ReadonlyArray<GeneratedRefreshScopeSelector>;
+    query: GeneratedRefreshScopeQuery;
   };
 }
 
@@ -2271,14 +2456,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: ['object'],
     backend: { registration: 'listWatch', permission: 'runtime', resourceStream: false, bypassSingleflight: false },
     frontend: {
-      refresherName: 'namespaces',
       orchestrator: 'doorbell-snapshot',
       diagnosticsStream: 'resources',
-      timing: { interval: 2000, cooldown: 1000, timeout: 10 },
+      timing: { interval: 2000, timeout: 10 },
       priority: 0,
       registrationOrder: 0,
-      scheduled: true,
     },
+    scope: { selectors: ['cluster'], query: 'none' },
   },
   {
     domain: 'namespace-metrics',
@@ -2287,14 +2471,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: ['metric'],
     backend: { registration: 'direct', permission: 'exempt', resourceStream: false, bypassSingleflight: false },
     frontend: {
-      refresherName: 'namespace-metrics',
       orchestrator: 'doorbell-snapshot',
       diagnosticsStream: 'resources',
-      timing: { interval: 5000, cooldown: 1000, timeout: 10 },
+      timing: { interval: 5000, timeout: 10 },
       priority: 0,
       registrationOrder: 1,
-      scheduled: true,
     },
+    scope: { selectors: ['cluster'], query: 'none' },
   },
   {
     domain: 'cluster-overview',
@@ -2303,14 +2486,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: ['metric'],
     backend: { registration: 'listWatch', permission: 'runtime', resourceStream: false, bypassSingleflight: false },
     frontend: {
-      refresherName: 'cluster-overview',
       orchestrator: 'doorbell-snapshot',
       diagnosticsStream: 'resources',
-      timing: { interval: 10000, cooldown: 1000, timeout: 10 },
+      timing: { interval: 10000, timeout: 10 },
       priority: 3,
       registrationOrder: 3,
-      scheduled: true,
     },
+    scope: { selectors: ['cluster'], query: 'none' },
   },
   {
     domain: 'cluster-identities',
@@ -2319,14 +2501,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: ['object'],
     backend: { registration: 'list', permission: 'runtime', resourceStream: false, bypassSingleflight: false },
     frontend: {
-      refresherName: 'cluster-identities',
       orchestrator: 'doorbell-snapshot',
       diagnosticsStream: 'resources',
-      timing: { interval: 10000, cooldown: 1000, timeout: 10 },
+      timing: { interval: 10000, timeout: 10 },
       priority: null,
       registrationOrder: 30,
-      scheduled: true,
     },
+    scope: { selectors: ['cluster'], query: 'typed-table' },
   },
   {
     domain: 'cluster-attention',
@@ -2335,14 +2516,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: ['attention'],
     backend: { registration: 'list', permission: 'runtime', resourceStream: false, bypassSingleflight: false },
     frontend: {
-      refresherName: 'cluster-attention',
       orchestrator: 'doorbell-snapshot',
       diagnosticsStream: 'resources',
-      timing: { interval: 5000, cooldown: 500, timeout: 10 },
+      timing: { interval: 5000, timeout: 10 },
       priority: 1,
       registrationOrder: 4,
-      scheduled: true,
     },
+    scope: { selectors: ['cluster'], query: 'typed-table' },
   },
   {
     domain: 'catalog',
@@ -2351,14 +2531,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: ['catalog'],
     backend: { registration: 'direct', permission: 'exempt', resourceStream: false, bypassSingleflight: false },
     frontend: {
-      refresherName: 'catalog',
       orchestrator: 'catalog-stream',
       diagnosticsStream: 'resources',
-      timing: { interval: 15000, cooldown: 1500, timeout: 30 },
+      timing: { interval: 15000, timeout: 30 },
       priority: 4,
       registrationOrder: 13,
-      scheduled: true,
     },
+    scope: { selectors: ['cluster'], query: 'catalog' },
   },
   {
     domain: 'catalog-diff',
@@ -2367,14 +2546,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: [],
     backend: { registration: 'direct', permission: 'exempt', resourceStream: false, bypassSingleflight: false },
     frontend: {
-      refresherName: 'catalog-diff',
       orchestrator: 'snapshot',
       diagnosticsStream: null,
-      timing: { interval: 15000, cooldown: 1500, timeout: 30 },
+      timing: { interval: 15000, timeout: 30 },
       priority: null,
       registrationOrder: 14,
-      scheduled: true,
     },
+    scope: { selectors: ['cluster'], query: 'catalog' },
   },
   {
     domain: 'nodes',
@@ -2383,14 +2561,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: ['object', 'metric'],
     backend: { registration: 'listWatch', permission: 'runtime', resourceStream: true, bypassSingleflight: false },
     frontend: {
-      refresherName: 'cluster-nodes',
       orchestrator: 'resource-stream',
       diagnosticsStream: 'resources',
-      timing: { interval: 5000, cooldown: 1000, timeout: 10 },
+      timing: { interval: 5000, timeout: 10 },
       priority: 1,
       registrationOrder: 16,
-      scheduled: true,
     },
+    scope: { selectors: ['cluster'], query: 'typed-table' },
   },
   {
     domain: 'cluster-config',
@@ -2399,14 +2576,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: ['object'],
     backend: { registration: 'list', permission: 'runtime', resourceStream: true, bypassSingleflight: false },
     frontend: {
-      refresherName: 'cluster-config',
       orchestrator: 'resource-stream',
       diagnosticsStream: 'resources',
-      timing: { interval: 10000, cooldown: 1000, timeout: 10 },
+      timing: { interval: 10000, timeout: 10 },
       priority: null,
       registrationOrder: 19,
-      scheduled: true,
     },
+    scope: { selectors: ['cluster'], query: 'typed-table' },
   },
   {
     domain: 'cluster-crds',
@@ -2415,14 +2591,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: ['object'],
     backend: { registration: 'listWatch', permission: 'runtime', resourceStream: true, bypassSingleflight: false },
     frontend: {
-      refresherName: 'cluster-crds',
       orchestrator: 'resource-stream',
       diagnosticsStream: 'resources',
-      timing: { interval: 15000, cooldown: 1000, timeout: 60 },
+      timing: { interval: 15000, timeout: 60 },
       priority: null,
       registrationOrder: 20,
-      scheduled: true,
     },
+    scope: { selectors: ['cluster'], query: 'typed-table' },
   },
   {
     domain: 'cluster-events',
@@ -2431,14 +2606,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: ['event'],
     backend: { registration: 'direct', permission: 'runtime', resourceStream: false, bypassSingleflight: false },
     frontend: {
-      refresherName: 'cluster-events',
       orchestrator: 'doorbell-snapshot',
       diagnosticsStream: 'resources',
-      timing: { interval: 3000, cooldown: 1000, timeout: 10 },
+      timing: { interval: 3000, timeout: 10 },
       priority: null,
       registrationOrder: 15,
-      scheduled: true,
     },
+    scope: { selectors: ['cluster'], query: 'typed-table' },
   },
   {
     domain: 'cluster-rbac',
@@ -2447,14 +2621,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: ['object'],
     backend: { registration: 'list', permission: 'runtime', resourceStream: true, bypassSingleflight: false },
     frontend: {
-      refresherName: 'cluster-rbac',
       orchestrator: 'resource-stream',
       diagnosticsStream: 'resources',
-      timing: { interval: 10000, cooldown: 1000, timeout: 10 },
+      timing: { interval: 10000, timeout: 10 },
       priority: null,
       registrationOrder: 17,
-      scheduled: true,
     },
+    scope: { selectors: ['cluster'], query: 'typed-table' },
   },
   {
     domain: 'cluster-storage',
@@ -2463,14 +2636,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: ['object'],
     backend: { registration: 'listWatch', permission: 'runtime', resourceStream: true, bypassSingleflight: false },
     frontend: {
-      refresherName: 'cluster-storage',
       orchestrator: 'resource-stream',
       diagnosticsStream: 'resources',
-      timing: { interval: 10000, cooldown: 1000, timeout: 10 },
+      timing: { interval: 10000, timeout: 10 },
       priority: null,
       registrationOrder: 18,
-      scheduled: true,
     },
+    scope: { selectors: ['cluster'], query: 'typed-table' },
   },
   {
     domain: 'namespace-workloads',
@@ -2479,14 +2651,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: ['object', 'metric'],
     backend: { registration: 'list', permission: 'runtime', resourceStream: true, bypassSingleflight: false },
     frontend: {
-      refresherName: 'workloads',
       orchestrator: 'resource-stream',
       diagnosticsStream: 'resources',
-      timing: { interval: 5000, cooldown: 500, timeout: 10 },
+      timing: { interval: 5000, timeout: 10 },
       priority: 5,
       registrationOrder: 22,
-      scheduled: true,
     },
+    scope: { selectors: ['namespace', 'all-namespaces'], query: 'typed-table' },
   },
   {
     domain: 'namespace-autoscaling',
@@ -2495,14 +2666,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: ['object'],
     backend: { registration: 'direct', permission: 'runtime', resourceStream: true, bypassSingleflight: false },
     frontend: {
-      refresherName: 'autoscaling',
       orchestrator: 'resource-stream',
       diagnosticsStream: 'resources',
-      timing: { interval: 5000, cooldown: 1000, timeout: 10 },
+      timing: { interval: 5000, timeout: 10 },
       priority: null,
       registrationOrder: 27,
-      scheduled: true,
     },
+    scope: { selectors: ['namespace', 'all-namespaces'], query: 'typed-table' },
   },
   {
     domain: 'namespace-config',
@@ -2511,14 +2681,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: ['object'],
     backend: { registration: 'list', permission: 'runtime', resourceStream: true, bypassSingleflight: false },
     frontend: {
-      refresherName: 'config',
       orchestrator: 'resource-stream',
       diagnosticsStream: 'resources',
-      timing: { interval: 5000, cooldown: 1000, timeout: 10 },
+      timing: { interval: 5000, timeout: 10 },
       priority: null,
       registrationOrder: 23,
-      scheduled: true,
     },
+    scope: { selectors: ['namespace', 'all-namespaces'], query: 'typed-table' },
   },
   {
     domain: 'namespace-events',
@@ -2527,14 +2696,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: ['event'],
     backend: { registration: 'direct', permission: 'runtime', resourceStream: false, bypassSingleflight: false },
     frontend: {
-      refresherName: 'events',
       orchestrator: 'doorbell-snapshot',
       diagnosticsStream: 'resources',
-      timing: { interval: 3000, cooldown: 1000, timeout: 10 },
+      timing: { interval: 3000, timeout: 10 },
       priority: null,
       registrationOrder: 21,
-      scheduled: true,
     },
+    scope: { selectors: ['namespace', 'all-namespaces'], query: 'typed-table' },
   },
   {
     domain: 'namespace-helm',
@@ -2543,14 +2711,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: ['object'],
     backend: { registration: 'direct', permission: 'runtime', resourceStream: true, bypassSingleflight: false },
     frontend: {
-      refresherName: 'helm',
       orchestrator: 'resource-stream',
       diagnosticsStream: 'resources',
-      timing: { interval: 10000, cooldown: 1000, timeout: 10 },
+      timing: { interval: 10000, timeout: 10 },
       priority: null,
       registrationOrder: 29,
-      scheduled: true,
     },
+    scope: { selectors: ['namespace', 'all-namespaces'], query: 'typed-table' },
   },
   {
     domain: 'namespace-network',
@@ -2559,14 +2726,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: ['object'],
     backend: { registration: 'list', permission: 'runtime', resourceStream: true, bypassSingleflight: false },
     frontend: {
-      refresherName: 'network',
       orchestrator: 'resource-stream',
       diagnosticsStream: 'resources',
-      timing: { interval: 5000, cooldown: 1000, timeout: 10 },
+      timing: { interval: 5000, timeout: 10 },
       priority: null,
       registrationOrder: 24,
-      scheduled: true,
     },
+    scope: { selectors: ['namespace', 'all-namespaces'], query: 'typed-table' },
   },
   {
     domain: 'namespace-quotas',
@@ -2575,14 +2741,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: ['object'],
     backend: { registration: 'list', permission: 'runtime', resourceStream: true, bypassSingleflight: false },
     frontend: {
-      refresherName: 'quotas',
       orchestrator: 'resource-stream',
       diagnosticsStream: 'resources',
-      timing: { interval: 10000, cooldown: 1000, timeout: 10 },
+      timing: { interval: 10000, timeout: 10 },
       priority: null,
       registrationOrder: 28,
-      scheduled: true,
     },
+    scope: { selectors: ['namespace', 'all-namespaces'], query: 'typed-table' },
   },
   {
     domain: 'namespace-rbac',
@@ -2591,14 +2756,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: ['object'],
     backend: { registration: 'list', permission: 'runtime', resourceStream: true, bypassSingleflight: false },
     frontend: {
-      refresherName: 'rbac',
       orchestrator: 'resource-stream',
       diagnosticsStream: 'resources',
-      timing: { interval: 10000, cooldown: 1000, timeout: 10 },
+      timing: { interval: 10000, timeout: 10 },
       priority: null,
       registrationOrder: 25,
-      scheduled: true,
     },
+    scope: { selectors: ['namespace', 'all-namespaces'], query: 'typed-table' },
   },
   {
     domain: 'namespace-storage',
@@ -2607,14 +2771,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: ['object'],
     backend: { registration: 'direct', permission: 'runtime', resourceStream: true, bypassSingleflight: false },
     frontend: {
-      refresherName: 'storage',
       orchestrator: 'resource-stream',
       diagnosticsStream: 'resources',
-      timing: { interval: 10000, cooldown: 1000, timeout: 10 },
+      timing: { interval: 10000, timeout: 10 },
       priority: null,
       registrationOrder: 26,
-      scheduled: true,
     },
+    scope: { selectors: ['namespace', 'all-namespaces'], query: 'typed-table' },
   },
   {
     domain: 'pods',
@@ -2623,30 +2786,28 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: ['object', 'metric'],
     backend: { registration: 'direct', permission: 'runtime', resourceStream: true, bypassSingleflight: false },
     frontend: {
-      refresherName: 'unified-pods',
       orchestrator: 'resource-stream',
       diagnosticsStream: 'resources',
-      timing: { interval: 5000, cooldown: 1000, timeout: 30 },
+      timing: { interval: 5000, timeout: 30 },
       priority: null,
       registrationOrder: 12,
-      scheduled: true,
     },
+    scope: { selectors: ['namespace', 'all-namespaces', 'node', 'workload'], query: 'typed-table' },
   },
   {
     domain: 'object-details',
     category: 'system',
     cachePolicy: 'provider-cache',
-    sourceClocks: [],
+    sourceClocks: ['object'],
     backend: { registration: 'direct', permission: 'exempt', resourceStream: false, bypassSingleflight: false },
     frontend: {
-      refresherName: 'object-details',
-      orchestrator: 'snapshot',
-      diagnosticsStream: null,
-      timing: { interval: 10000, cooldown: 1000, timeout: 10 },
+      orchestrator: 'doorbell-snapshot',
+      diagnosticsStream: 'resources',
+      timing: { interval: 10000, timeout: 10 },
       priority: null,
       registrationOrder: 6,
-      scheduled: false,
     },
+    scope: { selectors: ['object'], query: 'none' },
   },
   {
     domain: 'object-yaml',
@@ -2655,14 +2816,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: [],
     backend: { registration: 'direct', permission: 'exempt', resourceStream: false, bypassSingleflight: false },
     frontend: {
-      refresherName: 'object-yaml',
       orchestrator: 'snapshot',
       diagnosticsStream: null,
-      timing: { interval: 5000, cooldown: 1000, timeout: 10 },
+      timing: { interval: 5000, timeout: 10 },
       priority: null,
       registrationOrder: 8,
-      scheduled: true,
     },
+    scope: { selectors: ['object'], query: 'none' },
   },
   {
     domain: 'object-helm-manifest',
@@ -2671,14 +2831,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: [],
     backend: { registration: 'direct', permission: 'exempt', resourceStream: false, bypassSingleflight: false },
     frontend: {
-      refresherName: 'object-helm-manifest',
       orchestrator: 'snapshot',
       diagnosticsStream: null,
-      timing: { interval: 5000, cooldown: 1000, timeout: 10 },
+      timing: { interval: 5000, timeout: 10 },
       priority: null,
       registrationOrder: 9,
-      scheduled: true,
     },
+    scope: { selectors: ['helm-release'], query: 'none' },
   },
   {
     domain: 'object-helm-values',
@@ -2687,14 +2846,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: [],
     backend: { registration: 'direct', permission: 'exempt', resourceStream: false, bypassSingleflight: false },
     frontend: {
-      refresherName: 'object-helm-values',
       orchestrator: 'snapshot',
       diagnosticsStream: null,
-      timing: { interval: 5000, cooldown: 1000, timeout: 10 },
+      timing: { interval: 5000, timeout: 10 },
       priority: null,
       registrationOrder: 10,
-      scheduled: true,
     },
+    scope: { selectors: ['helm-release'], query: 'none' },
   },
   {
     domain: 'object-events',
@@ -2703,14 +2861,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: ['event'],
     backend: { registration: 'direct', permission: 'runtime', resourceStream: false, bypassSingleflight: false },
     frontend: {
-      refresherName: 'object-events',
       orchestrator: 'doorbell-snapshot',
       diagnosticsStream: 'resources',
-      timing: { interval: 10000, cooldown: 1000, timeout: 10 },
+      timing: { interval: 3000, timeout: 10 },
       priority: null,
       registrationOrder: 2,
-      scheduled: true,
     },
+    scope: { selectors: ['object'], query: 'none' },
   },
   {
     domain: 'object-map',
@@ -2719,14 +2876,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: [],
     backend: { registration: 'direct', permission: 'runtime', resourceStream: false, bypassSingleflight: false },
     frontend: {
-      refresherName: 'object-map',
       orchestrator: 'snapshot',
       diagnosticsStream: null,
-      timing: { interval: 5000, cooldown: 1000, timeout: 10 },
+      timing: { interval: 5000, timeout: 10 },
       priority: null,
       registrationOrder: 7,
-      scheduled: true,
     },
+    scope: { selectors: ['object', 'namespace'], query: 'object-map' },
   },
   {
     domain: 'object-maintenance',
@@ -2735,14 +2891,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: [],
     backend: { registration: 'direct', permission: 'exempt', resourceStream: false, bypassSingleflight: true },
     frontend: {
-      refresherName: 'object-maintenance',
       orchestrator: 'snapshot',
       diagnosticsStream: null,
-      timing: { interval: 5000, cooldown: 1000, timeout: 10 },
+      timing: { interval: 5000, timeout: 10 },
       priority: 2,
       registrationOrder: 5,
-      scheduled: true,
     },
+    scope: { selectors: ['cluster', 'node'], query: 'none' },
   },
   {
     domain: 'container-logs',
@@ -2751,14 +2906,13 @@ export const REFRESH_DOMAIN_POLICIES = [
     sourceClocks: [],
     backend: { registration: 'streamOnly', permission: 'stream-specific', resourceStream: false, bypassSingleflight: false },
     frontend: {
-      refresherName: 'container-logs',
       orchestrator: 'container-logs-stream',
       diagnosticsStream: 'container-logs',
-      timing: { interval: 5000, cooldown: 1000, timeout: 10 },
+      timing: { interval: 5000, timeout: 10 },
       priority: null,
       registrationOrder: 11,
-      scheduled: false,
     },
+    scope: { selectors: ['object'], query: 'none' },
   },
 ] as const satisfies ReadonlyArray<GeneratedRefreshDomainPolicy>;
 
@@ -2916,7 +3070,7 @@ const telemetrySummarySchema: RefreshContractSchema = { kind: 'object', fields: 
     lastBatchSize: { optional: true, schema: { kind: 'number' } },
     isFinalBatch: { optional: true, schema: { kind: 'boolean' } },
     timeToFirstBatchMs: { optional: true, schema: { kind: 'number' } },
-    maxInformerSyncWaitMs: { optional: true, schema: { kind: 'number' } },
+    maxSyncWaitMs: { optional: true, schema: { kind: 'number' } },
   } }, nullable: true } },
   clusterMetrics: { optional: false, schema: { kind: 'array', items: { kind: 'object', fields: {
     clusterId: { optional: false, schema: { kind: 'string' } },

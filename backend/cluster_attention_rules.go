@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
@@ -174,7 +175,7 @@ func (s *ClusterAttentionService) syncTarget(clusterID string, target attentionI
 	rules, err := s.GetClusterAttentionIgnoreRules(clusterID)
 	if err != nil {
 		if s.logger != nil {
-			s.logger.Warn(fmt.Sprintf("Could not read Attention ignores for cluster %s: %v", clusterID, err), logsources.Settings, clusterID, clusterID)
+			s.logger.Warn(fmt.Sprintf("Could not read Attention ignores for cluster %s: %v", clusterID, err), logsources.Settings, clusterID, s.clusterName(clusterID))
 		}
 		return
 	}
@@ -197,7 +198,7 @@ func (s *ClusterAttentionService) attentionIgnoreRulesForCluster(clusterID strin
 	rules, err := s.GetClusterAttentionIgnoreRules(clusterID)
 	if err != nil {
 		if s.logger != nil {
-			s.logger.Warn(fmt.Sprintf("Could not read Attention ignores for cluster %s: %v", clusterID, err), logsources.Settings, clusterID, clusterID)
+			s.logger.Warn(fmt.Sprintf("Could not read Attention ignores for cluster %s: %v", clusterID, err), logsources.Settings, clusterID, s.clusterName(clusterID))
 		}
 		return snapshot.AttentionIgnoreRules{}
 	}
@@ -254,16 +255,16 @@ func clusterAttentionIgnoreRulesEmpty(rules settingsClusterAttentionRules) bool 
 func validateAttentionIgnoredObject(clusterID string, ref resourcemodel.ResourceRef) error {
 	clusterID = strings.TrimSpace(clusterID)
 	if clusterID == "" {
-		return fmt.Errorf("clusterID is required")
+		return errorstatus.BadRequest(fmt.Errorf("clusterID is required"))
 	}
 	if ref.ClusterID != clusterID {
-		return fmt.Errorf("object clusterId %q does not match clusterID %q", ref.ClusterID, clusterID)
+		return errorstatus.BadRequest(fmt.Errorf("object clusterId %q does not match clusterID %q", ref.ClusterID, clusterID))
 	}
 	for field, value := range map[string]string{
 		"version": ref.Version, "kind": ref.Kind, "resource": ref.Resource, "name": ref.Name, "uid": ref.UID,
 	} {
 		if strings.TrimSpace(value) == "" {
-			return fmt.Errorf("object %s is required", field)
+			return errorstatus.BadRequest(fmt.Errorf("object %s is required", field))
 		}
 	}
 	return nil
@@ -271,10 +272,10 @@ func validateAttentionIgnoredObject(clusterID string, ref resourcemodel.Resource
 
 func validateAttentionFindingType(clusterID, findingType string) error {
 	if strings.TrimSpace(clusterID) == "" {
-		return fmt.Errorf("clusterID is required")
+		return errorstatus.BadRequest(fmt.Errorf("clusterID is required"))
 	}
 	if !snapshot.IsAttentionFindingType(findingType) {
-		return fmt.Errorf("unknown Attention finding type %q", findingType)
+		return errorstatus.BadRequest(fmt.Errorf("unknown Attention finding type %q", findingType))
 	}
 	return nil
 }

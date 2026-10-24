@@ -8,14 +8,16 @@
 package backend
 
 import (
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/nodes"
 )
 
-func (g *ResourceGateway) DiscoverNodeLogs(clusterID, nodeName string) NodeLogDiscoveryResponse {
-	if err := requireObjectName(nodeName); err != nil {
+func (g *ResourceGateway) DiscoverNodeLogs(target resourcemodel.ResourceRef) NodeLogDiscoveryResponse {
+	if err := requireNodeLogTarget(target); err != nil {
 		return NodeLogDiscoveryResponse{Reason: err.Error()}
 	}
-	deps, _, err := g.resolveClusterDependencies(clusterID)
+	nodeName := target.Name
+	deps, _, err := g.resolveClusterDependencies(target.ClusterID)
 	if err != nil {
 		return NodeLogDiscoveryResponse{Reason: err.Error()}
 	}
@@ -31,13 +33,14 @@ func (g *ResourceGateway) DiscoverNodeLogs(clusterID, nodeName string) NodeLogDi
 	}
 	return nodes.NewService(deps).DiscoverLogs(ctx, nodeName)
 }
-func (g *ResourceGateway) FetchNodeLogs(clusterID, nodeName string, req NodeLogFetchRequest) NodeLogFetchResponse {
-	if err := requireObjectName(nodeName); err != nil {
-		return NodeLogFetchResponse{Error: err.Error(), SourcePath: req.SourcePath}
+func (g *ResourceGateway) FetchNodeLogs(target resourcemodel.ResourceRef, req NodeLogFetchRequest) (NodeLogFetchResponse, error) {
+	if err := requireNodeLogTarget(target); err != nil {
+		return NodeLogFetchResponse{}, err
 	}
-	deps, _, err := g.resolveClusterDependencies(clusterID)
+	nodeName := target.Name
+	deps, _, err := g.resolveClusterDependencies(target.ClusterID)
 	if err != nil {
-		return NodeLogFetchResponse{Error: err.Error(), SourcePath: req.SourcePath}
+		return NodeLogFetchResponse{}, err
 	}
 	ctx := g.CtxOrBackground()
 	if err := requireResourcePermission(ctx, deps, resourcePermissionCheck{
@@ -47,7 +50,15 @@ func (g *ResourceGateway) FetchNodeLogs(clusterID, nodeName string, req NodeLogF
 		Verb:        "get",
 		Subresource: "proxy",
 	}); err != nil {
-		return NodeLogFetchResponse{Error: err.Error(), SourcePath: req.SourcePath}
+		return NodeLogFetchResponse{}, err
 	}
 	return nodes.NewService(deps).FetchLogs(ctx, nodeName, req)
+}
+
+// requireNodeLogTarget accepts only a named core/v1 Node.
+func requireNodeLogTarget(target resourcemodel.ResourceRef) error {
+	if err := requireTargetIdentity(target, nodes.Identity); err != nil {
+		return err
+	}
+	return requireObjectName(target.Name)
 }

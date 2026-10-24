@@ -1,3 +1,6 @@
-Feature ideas
-
-- Read-only mode
+- Clean up test probes for Biome's `noComponentHookFactories` rule, then remove its test-file override in `frontend/biome.jsonc`.
+    - Biome 2.6.2 made the rule recommended. On 2026-10-21 it reported 277 errors in 107 test files, so it was turned off for `src/**/*.test.*` to keep the gate green. Production code stays under the rule.
+    - Most errors are probe or harness components defined inside `it`/`describe` bodies or render helpers. 172 of them only capture a hook result, and 24 files have their own copy of a local `renderHook` helper. The options are one shared `renderHook` test helper plus moving the rest to module level, or moving every probe to module level.
+    - Seven tests call a render helper twice on the same root, so React remounts the hook instead of rerendering it. Decide per test whether it should rerender or unmount between calls: `useObjectPanelCapabilities.test.tsx:163` and `:647` (cluster switch), `useObjectPanelTabs.test.tsx:236` and `:295`, `useLogKeyboardShortcuts.test.tsx:129`, `useLogPresentation.test.tsx:150`, `ApplicationMenuShortcuts.test.tsx:122`.
+    - Mocks named like components (`IsWindows` in `wailsDragRuntime.test.helpers.ts`, the constructors in `ShellTab.test.tsx`) pass the rule as `vi.fn(() => …)` or an anonymous `function`.
+    - `--only` runs the rule even where the config turns it off. To count the remaining errors, temporarily remove the override and run `biome lint --reporter=summary .` from `frontend/`.

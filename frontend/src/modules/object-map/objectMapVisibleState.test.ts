@@ -1,7 +1,7 @@
 /**
  * frontend/src/modules/object-map/objectMapVisibleState.test.ts
  *
- * Tests visible object-map state derivation for filters, focus, search, and legend.
+ * Tests visible object-map state derivation for filters, pins, search, and legend.
  */
 
 import type { ObjectMapEdge, ObjectMapNode, ObjectMapReference } from '@core/refresh/types';
@@ -61,29 +61,29 @@ const derive = ({
   edges,
   seedId = nodes[0]?.id ?? '',
   activeNodeId = null,
-  focusMode = false,
   selectedKinds = ALL_MULTISELECT_FILTER,
   enabledEdgeTypes = null,
   searchQuery = '',
+  pinnedPositions = new Map(),
 }: {
   nodes: ObjectMapNode[];
   edges: ObjectMapEdge[];
   seedId?: string;
   activeNodeId?: string | null;
-  focusMode?: boolean;
   selectedKinds?: MultiSelectFilterSelection;
   enabledEdgeTypes?: Set<string> | null;
   searchQuery?: string;
+  pinnedPositions?: ReadonlyMap<string, { x: number; y: number }>;
 }) =>
   deriveObjectMapVisibleState({
     layout: computeObjectMapLayout(nodes, edges, seedId),
     seedNodeId: seedId,
     activeNodeId,
-    focusMode,
     selectedKinds,
     enabledEdgeTypes,
     searchQuery,
     useShortResourceNames: false,
+    pinnedPositions,
   });
 
 describe('deriveObjectMapVisibleState', () => {
@@ -172,65 +172,63 @@ describe('deriveObjectMapVisibleState', () => {
     expect(selected.visibleSelectionState.activeId).toBe('pod-b');
   });
 
-  it('focuses recursively related visible objects', () => {
+  it('keeps pinned objects where the user dropped them in every view', () => {
+    const nodes = [
+      node('deploy', 'Deployment', 'web', 0),
+      node('rs', 'ReplicaSet', 'web-rs', 1),
+      node('pod', 'Pod', 'web-pod', 2),
+    ];
+    const edges = [
+      edge('deploy-rs', 'deploy', 'rs', 'owner'),
+      edge('rs-pod', 'rs', 'pod', 'owner'),
+    ];
+    const base = computeObjectMapLayout(nodes, edges, 'deploy');
+    const at = (layout: typeof base, id: string) =>
+      requireValue(
+        layout.nodes.find((n) => n.id === id),
+        `node ${id}`
+      );
+    const pin = { x: at(base, 'pod').x + 500, y: at(base, 'pod').y + 300 };
+    const pinnedPositions = new Map([['pod', pin]]);
+    const views = {
+      unfiltered: {},
+      kindFilter: {
+        selectedKinds: {
+          mode: 'some',
+          values: ['Deployment', 'ReplicaSet', 'Pod'],
+        } as MultiSelectFilterSelection,
+      },
+    };
+
+    for (const [view, options] of Object.entries(views)) {
+      const visible = derive({ nodes, edges, pinnedPositions, ...options }).visibleLayout;
+      expect({ view, x: at(visible, 'pod').x, y: at(visible, 'pod').y }).toEqual({ view, ...pin });
+      const podEdge = requireValue(
+        visible.edges.find((e) => e.id === 'rs-pod'),
+        'rs-pod edge'
+      );
+      expect(podEdge.d.endsWith(`${pin.x} ${pin.y + at(visible, 'pod').height / 2}`), view).toBe(
+        true
+      );
+    }
+  });
+
+  it('keeps a missing object marked missing when the kind filter re-lays out the map', () => {
     const result = derive({
       nodes: [
         node('deploy', 'Deployment', 'web', 0),
-        node('pod-a', 'Pod', 'web-a', 1),
-        node('pod-b', 'Pod', 'web-b', 1),
-        node('config', 'ConfigMap', 'web-config', 2),
-        node('secret', 'Secret', 'web-secret', 3),
+        { ...node('cm', 'ConfigMap', 'web-settings', 0), missing: true },
+        node('svc', 'Service', 'web', 0),
       ],
-      edges: [
-        edge('deploy-pod-a', 'deploy', 'pod-a', 'owner'),
-        edge('deploy-pod-b', 'deploy', 'pod-b', 'owner'),
-        edge('pod-config', 'pod-a', 'config', 'uses'),
-        edge('config-secret', 'config', 'secret', 'uses'),
-      ],
-      activeNodeId: 'pod-a',
-      focusMode: true,
+      edges: [],
+      seedId: '',
+      selectedKinds: { mode: 'some', values: ['Deployment', 'ConfigMap'] },
     });
 
-    expect(result.visibleLayout.nodes.map((n) => n.id).sort(compareUtf16Strings)).toEqual([
-      'config',
-      'deploy',
-      'pod-a',
-      'secret',
-    ]);
-    expect(result.visibleLayout.edges.map((e) => e.id).sort(compareUtf16Strings)).toEqual([
-      'config-secret',
-      'deploy-pod-a',
-      'pod-config',
-    ]);
-  });
-
-  it('keeps the active object at the same map coordinate in focus mode', () => {
-    const nodes = [
-      node('deploy', 'Deployment', 'web', 0),
-      node('pod-a', 'Pod', 'web-a', 1),
-      node('pod-b', 'Pod', 'web-b', 1),
-      node('config', 'ConfigMap', 'web-config', 2),
-      node('secret', 'Secret', 'web-secret', 3),
-    ];
-    const edges = [
-      edge('deploy-pod-a', 'deploy', 'pod-a', 'owner'),
-      edge('deploy-pod-b', 'deploy', 'pod-b', 'owner'),
-      edge('pod-config', 'pod-a', 'config', 'uses'),
-      edge('config-secret', 'config', 'secret', 'uses'),
-    ];
-    const unselected = derive({ nodes, edges });
-    const focused = derive({
-      nodes,
-      edges,
-      activeNodeId: 'pod-a',
-      focusMode: true,
-    });
-    const unselectedActiveNode = unselected.visibleLayout.nodes.find((n) => n.id === 'pod-a');
-    const focusedActiveNode = focused.visibleLayout.nodes.find((n) => n.id === 'pod-a');
-
-    expect(focusedActiveNode).toBeTruthy();
-    expect(focusedActiveNode?.x).toBe(unselectedActiveNode?.x);
-    expect(focusedActiveNode?.y).toBe(unselectedActiveNode?.y);
+    const visible = result.visibleLayout.nodes;
+    expect(visible.map((n) => n.id).sort(compareUtf16Strings)).toEqual(['cm', 'deploy']);
+    expect(visible.find((n) => n.id === 'cm')?.missing).toBe(true);
+    expect(visible.find((n) => n.id === 'deploy')?.missing).toBeFalsy();
   });
 
   it('searches only visible nodes', () => {

@@ -1,115 +1,95 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/index.test.tsx
+ *
+ * An opened object panel's Overview: it renders the kind's registered
+ * descriptor (or the generic overview for an unregistered kind) and hands the
+ * panel's object, replica counts, and lifecycle to the actions menu. The
+ * Overview reads the open panel's object, so the suite mounts the full app and
+ * opens real panels; only the backend boundary is faked (test-utils/appState).
+ * The actions menu and generic overview are stubbed to capture what they are
+ * given.
  */
 
-import type { ClusterObjectReference } from '@shared/utils/objectIdentity';
-import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
-import type React from 'react';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import Overview from './index';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type ObjectIdentity,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { requireValue } from '@/test-utils/requireValue';
 
-const renderComponentMock = vi.fn();
-const descriptorMock = vi.hoisted(() =>
-  vi.fn<typeof import('./descriptorRegistry').getOverviewDescriptor>()
-);
-
-vi.mock('./GenericOverview', () => ({
-  GenericOverview: (props: unknown) => renderComponentMock(props),
+const captured = vi.hoisted(() => ({
+  actionsMenu: [] as Array<Record<string, unknown>>,
+  genericOverview: [] as Array<Record<string, unknown>>,
 }));
-
-// Most cases isolate action wiring through the generic path; the dispatch case
-// below uses the real descriptor registry and renderer.
-vi.mock('./descriptorRegistry', () => ({
-  getOverviewDescriptor: descriptorMock,
-}));
-
-const actionsMenuMock = vi.fn((props: unknown) => {
-  void props;
-  return <div data-testid="actions-menu" />;
-});
 
 vi.mock('@shared/components/kubernetes/ActionsMenu', () => ({
-  ActionsMenu: (props: unknown) => actionsMenuMock(props),
+  ActionsMenu: (props: Record<string, unknown>) => {
+    captured.actionsMenu.push(props);
+    return <div data-testid="actions-menu" />;
+  },
 }));
 
-const objectPanelState = vi.hoisted(() => ({
-  objectData: null as ClusterObjectReference | null,
+vi.mock('./GenericOverview', () => ({
+  GenericOverview: (props: Record<string, unknown>) => {
+    captured.genericOverview.push(props);
+    return <div data-testid="generic-overview" />;
+  },
 }));
 
-// Mock useObjectPanel to avoid needing ObjectPanelStateProvider
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({
-    objectData: objectPanelState.objectData,
-    isOpen: true,
-    setOpen: vi.fn(),
-    openWithObject: vi.fn(),
-    close: vi.fn(),
-    navigate: vi.fn(),
-  }),
-}));
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
 
-describe('Overview component', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+const lastActionsMenu = () => captured.actionsMenu[captured.actionsMenu.length - 1];
 
-  const renderComponent = async (props: React.ComponentProps<typeof Overview>) => {
-    objectPanelState.objectData = buildRequiredObjectReference({
-      kind: props.kind,
-      name: props.name,
-      namespace: props.namespace,
-      clusterId: 'test-cluster',
-      clusterName: 'Test Cluster',
-    });
-    await act(async () => {
-      root.render(<Overview {...props} />);
-      await Promise.resolve();
-    });
-  };
+/** Serves the panel's reads (test-utils/appState), with these details. */
+const servePanel = (identity: ObjectIdentity, detailType: string, details: object) =>
+  app.servePanel(dev, identity, { detailType, details } as never);
 
-  beforeEach(() => {
-    renderComponentMock.mockReset();
-    descriptorMock.mockReset();
-    actionsMenuMock.mockClear();
-
-    renderComponentMock.mockReturnValue(<div data-testid="overview-content">Overview body</div>);
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
+const openPanel = async (object: ReturnType<typeof servePanel>) => {
+  view = await app.mountApp();
+  await act(async () => {
+    view.owners().objectPanel.openWithObject(object.ref);
   });
+  await app.settle();
+};
 
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-  });
+const workload = (kind: string, name: string): ObjectIdentity => ({
+  group: 'apps',
+  version: 'v1',
+  kind,
+  namespace: 'default',
+  name,
+});
 
-  it('renders overview content and passes object data to ActionsMenu', async () => {
-    await renderComponent({
-      kind: 'Deployment',
-      objectKind: 'deployment',
+beforeEach(() => {
+  captured.actionsMenu = [];
+  captured.genericOverview = [];
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['default']);
+  app.startScreen(dev);
+  app.backend.answer('IsWorkloadHPAManaged', () => false);
+});
+
+describe('an opened panel’s Overview', () => {
+  it('hands the panel’s object and desired replicas to the actions menu', async () => {
+    const deployment = servePanel(workload('Deployment', 'demo'), 'deployment', {
       name: 'demo',
+      namespace: 'default',
       desiredReplicas: 5,
-      actionLoading: false,
+      replicas: '5/5',
+      ready: '5/5',
     });
 
-    expect(renderComponentMock).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'Deployment', name: 'demo' })
-    );
-    expect(container.querySelector('[data-testid="overview-content"]')).not.toBeNull();
+    await openPanel(deployment);
 
-    expect(actionsMenuMock).toHaveBeenCalledTimes(1);
-    const calls = actionsMenuMock.mock.calls as Array<[Record<string, unknown>]>;
-    const firstCall = calls[0];
-    if (!firstCall) {
-      throw new Error('ActionsMenu was not called');
-    }
-    const actionProps = firstCall[0];
-    // ActionsMenu now receives object prop with kind/name/namespace
-    expect(actionProps).toMatchObject({
+    expect(view.container.querySelector('[data-testid="actions-menu"]')).not.toBeNull();
+    expect(lastActionsMenu()).toMatchObject({
       object: expect.objectContaining({
+        clusterId: dev.clusterId,
         kind: 'Deployment',
         name: 'demo',
       }),
@@ -117,97 +97,105 @@ describe('Overview component', () => {
     });
   });
 
-  it('renders the registered raw detail and switches to generic metadata for an unregistered kind', async () => {
-    const registry =
-      await vi.importActual<typeof import('./descriptorRegistry')>('./descriptorRegistry');
-    descriptorMock.mockImplementation(registry.getOverviewDescriptor);
-    await renderComponent({
-      kind: 'ConfigMap',
-      name: 'action-target',
-      activeDetail: { kind: 'ConfigMap', name: 'raw-detail-name', usedBy: [] },
+  // Only a built-in scalable workload can be HPA-managed; a custom resource that
+  // shares the Deployment kind name is not asked about.
+  it('asks whether an HPA manages a scalable workload, not a custom resource named like one', async () => {
+    const deployment = servePanel(workload('Deployment', 'demo'), 'deployment', {
+      name: 'demo',
+      namespace: 'default',
     });
-    expect(container.textContent).toContain('raw-detail-name');
-    expect(renderComponentMock).not.toHaveBeenCalled();
-    objectPanelState.objectData = buildRequiredObjectReference({
-      clusterId: 'test-cluster',
-      group: 'example.test',
-      version: 'v1',
-      kind: 'Widget',
-      name: 'custom-target',
-    });
-    await act(async () => {
-      root.render(<Overview kind="Widget" name="custom-target" labels={{ owner: 'team-a' }} />);
-    });
-    expect(renderComponentMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'Widget',
-        name: 'custom-target',
-        group: 'example.test',
-        labels: { owner: 'team-a' },
-      })
+    await openPanel(deployment);
+    const deploymentQueries = app.backend.calls('IsWorkloadHPAManaged').length;
+    expect(deploymentQueries).toBeGreaterThan(0);
+
+    const lookalike = servePanel(
+      {
+        group: 'example.com',
+        version: 'v1',
+        kind: 'Deployment',
+        namespace: 'default',
+        name: 'look',
+      },
+      'customresource',
+      { name: 'look', namespace: 'default' }
     );
+    await act(async () => {
+      view.owners().objectPanel.openWithObject(lookalike.ref);
+    });
+    await app.settle();
+
+    expect(app.backend.calls('IsWorkloadHPAManaged')).toHaveLength(deploymentQueries);
   });
 
-  it('passes replica string desired count to ActionsMenu when desiredReplicas is missing', async () => {
-    await renderComponent({
-      kind: 'ReplicaSet',
-      objectKind: 'replicaset',
+  it('hands a ReplicaSet’s desired replicas from its detail to the actions menu', async () => {
+    const replicaSet = servePanel(workload('ReplicaSet', 'rs-demo'), 'replicaset', {
       name: 'rs-demo',
+      namespace: 'default',
+      desiredReplicas: 4,
       replicas: '2/4',
       ready: '2/4',
-      actionLoading: false,
     });
 
-    const calls = actionsMenuMock.mock.calls as Array<[Record<string, unknown>]>;
-    const actionProps = calls[0]?.[0];
+    await openPanel(replicaSet);
 
-    expect(actionProps).toMatchObject({
-      object: expect.objectContaining({
-        kind: 'ReplicaSet',
-        name: 'rs-demo',
-        ready: '2/4',
-      }),
+    expect(lastActionsMenu()).toMatchObject({
+      object: expect.objectContaining({ kind: 'ReplicaSet', name: 'rs-demo', ready: '2/4' }),
       currentReplicas: 4,
     });
   });
 
-  it('passes lifecycle callbacks to ActionsMenu for the controller', async () => {
-    const onAfterDelete = vi.fn();
-    const onAfterAction = vi.fn();
-
-    await renderComponent({
-      kind: 'StatefulSet',
-      objectKind: 'statefulset',
+  it('closes the panel once the actions menu deletes its object', async () => {
+    const statefulSet = servePanel(workload('StatefulSet', 'stateful-1'), 'statefulset', {
       name: 'stateful-1',
-      onAfterDelete,
-      onAfterAction,
+      namespace: 'default',
     });
+    await openPanel(statefulSet);
+    expect(view.openPanels()).toHaveLength(1);
 
-    expect(actionsMenuMock).toHaveBeenCalledTimes(1);
-    const calls = actionsMenuMock.mock.calls as Array<[Record<string, unknown>]>;
-    const actionMenuArgs = calls[0];
-    if (!actionMenuArgs) {
-      throw new Error('ActionsMenu was not called');
-    }
-    const actionMenuProps = actionMenuArgs[0];
-    // ActionsMenu receives the object data + the panel lifecycle callbacks; the
-    // shared controller owns execution and modals from here.
-    expect(actionMenuProps).toMatchObject({
-      object: expect.objectContaining({
-        kind: 'StatefulSet',
-        name: 'stateful-1',
-      }),
-      onAfterDelete,
-      onAfterAction,
+    const onAfterDelete = requireValue(lastActionsMenu(), 'actions menu')
+      .onAfterDelete as () => void;
+    await act(async () => {
+      onAfterDelete();
     });
+    await app.settle();
+
+    expect(view.openPanels()).toEqual([]);
   });
 
-  it('always renders overview content', async () => {
-    await renderComponent({ kind: 'Pod', objectKind: 'pod', name: 'api' });
+  it('renders a registered kind’s descriptor from its detail', async () => {
+    const configMap = servePanel(
+      { group: '', version: 'v1', kind: 'ConfigMap', namespace: 'default', name: 'action-target' },
+      'configmap',
+      { kind: 'ConfigMap', name: 'raw-detail-name', namespace: 'default', usedBy: [] }
+    );
 
-    expect(container.querySelector('[data-testid="overview-content"]')).not.toBeNull();
-    expect(container.querySelector('.object-panel-section-title')?.textContent).toContain(
-      'Overview'
+    await openPanel(configMap);
+
+    expect(view.container.textContent).toContain('raw-detail-name');
+    expect(view.container.querySelector('[data-testid="generic-overview"]')).toBeNull();
+  });
+
+  it('renders the generic overview, with the object’s group, for an unregistered kind', async () => {
+    const widget = servePanel(
+      {
+        group: 'example.test',
+        version: 'v1',
+        kind: 'Widget',
+        namespace: '',
+        name: 'custom-target',
+      },
+      'unstructured',
+      { kind: 'Widget', name: 'custom-target', labels: { owner: 'team-a' } }
+    );
+
+    await openPanel(widget);
+
+    expect(captured.genericOverview).toContainEqual(
+      expect.objectContaining({
+        kind: 'Widget',
+        name: 'custom-target',
+        group: 'example.test',
+      })
     );
   });
 });

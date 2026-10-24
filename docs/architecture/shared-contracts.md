@@ -23,10 +23,18 @@ docs only name the rule and where to start.
 - Refresh domain metadata and `refreshPayloadType` mappings:
   `backend/refresh/domain/refresh-domain-contract.json`
   ([refresh-system.md](refresh-system.md#domain-contract))
+- Refresh scope grammar: `scopeContract` in the same file, executed by both
+  scope codecs ([refresh-system.md](refresh-system.md#scope-and-identity))
 - Refresh HTTP/stream DTOs and snapshot envelope:
   `backend/internal/genrefreshcontracts/registry.go`, generated as
   `frontend/src/core/refresh/types.generated.ts`
+- Error status (binding `cause`, refresh HTTP body, stream `errorDetails`):
+  `backend/internal/errorstatus`, generated as `ErrorStatus*` in
+  `types.generated.ts` ([error-reporting.md](error-reporting.md#error-status-contract))
 - Resource identities: `backend/resourcecontract/builtin-resource-identities.json`
+- Per-kind facets (tabs, logs/metrics/list sources, actions, display names):
+  `frontend/src/shared/kinds/kindFacets.generated.ts`, from the kind registry
+  ([resource-kind-registry.md](resource-kind-registry.md))
 - Wails DTOs: `frontend/bindings`
 - Reader wrappers: `frontend/src/core/data-access/readers.ts`,
   `frontend/src/core/app-state-access/readers.ts`

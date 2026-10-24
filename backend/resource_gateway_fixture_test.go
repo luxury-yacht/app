@@ -7,6 +7,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/internal/preferenceschema"
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
@@ -18,17 +19,15 @@ import (
 // resourceGatewayFixture implements the cluster-runtime capabilities used by
 // ResourceGateway without constructing the application composition root.
 type resourceGatewayFixture struct {
-	gateway          *ResourceGateway
-	clustersMu       sync.Mutex
-	clusters         map[string]*clusterClients
-	resolvers        map[string]common.ResourceResolver
-	context          context.Context
-	logger           *Logger
-	telemetry        *telemetry.Recorder
-	emitEvent        func(string, ...interface{})
-	transportSuccess func(string)
-	transportFailure func(string, string, error)
-	nodeMaintenance  *nodemaintenance.Store
+	gateway         *ResourceGateway
+	clustersMu      sync.Mutex
+	clusters        map[string]*clusterClients
+	resolvers       map[string]common.ResourceResolver
+	context         context.Context
+	logger          *Logger
+	telemetry       *telemetry.Recorder
+	emitEvent       func(string, ...interface{})
+	nodeMaintenance *nodemaintenance.Store
 }
 
 func newResourceGatewayFixture() *resourceGatewayFixture {
@@ -58,38 +57,18 @@ func newResourceGatewayFixture() *resourceGatewayFixture {
 		resolveClusterDependencies:       fixture.ResolveClusterDependencies,
 		resourceDependenciesForClusterID: fixture.resourceDependenciesForClusterID,
 		context:                          func() context.Context { return fixture.context },
-		emitEvent: func(name string, args ...interface{}) {
-			if fixture.emitEvent != nil {
-				fixture.emitEvent(name, args...)
-			}
-		},
-		logger:      fixture.logger,
-		clusterName: fixture.clusterName,
-		recordTransportSuccess: func(clusterID string) {
-			if fixture.transportSuccess != nil {
-				fixture.transportSuccess(clusterID)
-			}
-		},
-		recordTransportFailure: func(clusterID, reason string, err error) {
-			if fixture.transportFailure != nil {
-				fixture.transportFailure(clusterID, reason, err)
-			}
-		},
+		logger:                           fixture.logger,
+		clusterName:                      fixture.clusterName,
 		resourceResolverForCluster: func(clusterID string) common.ResourceResolver {
 			return fixture.resourceResolver(clusterID)
 		},
 		refreshProjection:            refreshProjection,
-		permissionFetchPolicy:        NewPermissionFetchPolicy(defaultPermissionSSRRFetchConcurrency),
-		containerLogsSelectionPolicy: NewContainerLogsSelectionPolicy(defaultObjPanelLogsTargetPerScopeLimit),
+		permissionFetchPolicy:        NewPermissionFetchPolicy(preferenceschema.DefaultPermissionSSRRFetchConcurrency),
+		containerLogsSelectionPolicy: NewContainerLogsSelectionPolicy(preferenceschema.DefaultObjPanelLogsTargetPerScopeLimit),
 		nodeMaintenanceStore:         fixture.nodeMaintenance,
 		operations:                   operations,
 	})
 	return fixture
-}
-
-func (f *resourceGatewayFixture) setTelemetryRecorder(recorder *telemetry.Recorder) {
-	f.telemetry = recorder
-	f.gateway.refreshProjection.publishTelemetry(recorder)
 }
 
 func (f *resourceGatewayFixture) setCluster(clusterID string, clients *clusterClients) {
@@ -224,5 +203,8 @@ func (f *resourceGatewayFixture) FetchPodWithRetry(
 	target string,
 	fetch func(context.Context) (*corev1.Pod, error),
 ) (*corev1.Pod, error) {
-	return executeWithRetry(ctx, f.gateway.resourceRetryDependencies(), clusterID, "pod-shell", target, fetch)
+	return executeWithRetry(ctx, resourceRetryDependencies{
+		telemetry: func() resourceRetryTelemetry { return f.telemetry },
+		logger:    f.logger,
+	}, clusterID, "pod-shell", target, fetch)
 }

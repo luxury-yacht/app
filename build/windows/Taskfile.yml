@@ -61,6 +61,17 @@ tasks:
       - task: build
         vars:
           ARCH: '{{.ARCH}}'
+    cmds:
+      - task: package:from-built
+        vars:
+          ARCH: '{{.ARCH}}'
+    vars:
+      ARCH: '{{.ARCH | default ARCH}}'
+
+  package:from-built:
+    summary: Creates both installers and the updater artifact from the existing Windows binary
+    # Release CI signs the binary between building and packaging, so this must not rebuild it.
+    deps:
       - task: common:prepare:build-manifests
     cmds:
       - task: create:updater:from-built

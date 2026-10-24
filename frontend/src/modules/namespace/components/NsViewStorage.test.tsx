@@ -1,492 +1,137 @@
 /**
  * frontend/src/modules/namespace/components/NsViewStorage.test.tsx
  *
- * Test suite for NsViewStorage.
- * Covers key behaviors and edge cases for NsViewStorage.
+ * What the namespace Storage view shows beyond the aggregated namespace table
+ * it shares with Config (covered in NsViewConfig.test.tsx): each claim's
+ * status, capacity, and storage class from the backend's namespace-storage
+ * query, a storage class that opens its StorageClass in a panel with full
+ * identity (and no link for a claim that names none), and no kind filter,
+ * since the view lists only claims. Runs in the full app, navigated through
+ * the sidebar, over a faked backend (test-utils/appState).
  */
 
-import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
-import type ConfirmationModal from '@shared/components/modals/ConfirmationModal';
-import type { GridTableProps } from '@shared/components/tables/GridTable';
-import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { makeResourceRef } from '@/test-utils/makeResourceRef';
-import { requireReactElement } from '@/test-utils/requireReactElement';
+import { beforeEach, describe, expect, it } from 'vitest';
+import type { NamespaceStorageSummary } from '@/core/refresh/types';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
 
-vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
-  useNamespaceColumnLink: () => ({
-    onClick: vi.fn(),
-    getClassName: () => 'object-panel-link',
-    isInteractive: () => true,
-  }),
-}));
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
 
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedKubeconfig: 'path:context', selectedClusterId: 'cluster-a' }),
-}));
-
-import NsViewStorage, { type StorageData } from '@modules/namespace/components/NsViewStorage';
-
-type CapturedGridTableProps = GridTableProps<StorageData> & {
-  getCustomContextMenuItems: NonNullable<GridTableProps<StorageData>['getCustomContextMenuItems']>;
-};
-type ConfirmationProps = React.ComponentProps<typeof ConfirmationModal>;
-
-const {
-  gridTablePropsRef,
-  confirmationPropsRef,
-  openWithObjectMock,
-  runObjectActionMock,
-  errorHandlerMock,
-} = vi.hoisted(() => ({
-  gridTablePropsRef: { current: null as unknown as CapturedGridTableProps },
-  confirmationPropsRef: { current: null as unknown as ConfirmationProps },
-  openWithObjectMock: vi.fn(),
-  runObjectActionMock: vi.fn().mockResolvedValue(undefined),
-  errorHandlerMock: { handle: vi.fn() },
-}));
-
-const renderOutputToText = (output: React.ReactNode): string => {
-  if (typeof output === 'string') {
-    return output;
-  }
-  if (Array.isArray(output)) {
-    return output.map(renderOutputToText).join('');
-  }
-  if (output === null || output === undefined) {
-    return '';
-  }
-  return renderToStaticMarkup(output);
-};
-
-vi.mock('@core/contexts/FavoritesContext', () => ({
-  useFavorites: () => ({
-    favorites: [],
-
-    addFavorite: vi.fn(),
-    updateFavorite: vi.fn(),
-    deleteFavorite: vi.fn(),
-    reorderFavorites: vi.fn(),
-  }),
-  FavoritesProvider: ({ children }: { children: React.ReactNode }) => children,
-}));
-
-vi.mock('@ui/favorites/FavToggle', () => ({
-  useFavToggle: () => ({
-    type: 'toggle',
-    id: 'favorite',
-    icon: null,
-    active: false,
-    onClick: () => undefined,
-    title: 'Save as favorite',
-  }),
-}));
-
-vi.mock('@shared/components/tables/GridTable', async () => {
-  const actual = await vi.importActual<typeof import('@shared/components/tables/GridTable')>(
-    '@shared/components/tables/GridTable'
-  );
-  return {
-    ...actual,
-    default: (props: CapturedGridTableProps) => {
-      gridTablePropsRef.current = props;
-      return (
-        <table data-testid="grid-table">
-          <tbody>
-            {withStableListKeys(props.data, (row) => JSON.stringify(row)).map(
-              ({ key, value: row }) => (
-                <tr key={key}>
-                  <td>{row.ref.name}</td>
-                </tr>
-              )
-            )}
-          </tbody>
-        </table>
-      );
-    },
-  };
+const claim = (
+  name: string,
+  fields: Partial<Omit<NamespaceStorageSummary, 'ref'>> = {}
+): NamespaceStorageSummary => ({
+  ref: {
+    clusterId: dev.clusterId,
+    group: '',
+    version: 'v1',
+    kind: 'PersistentVolumeClaim',
+    resource: 'persistentvolumeclaims',
+    namespace: 'team-a',
+    name,
+    uid: `${name}-uid`,
+  },
+  status: 'Bound',
+  statusPresentation: 'ready',
+  capacity: '10Gi',
+  storageClass: 'fast-ssd',
+  age: '4h',
+  ...fields,
 });
 
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: openWithObjectMock }),
-}));
+const start = async (rows: NamespaceStorageSummary[]) => {
+  app.startScreen(dev);
+  app.serveTable(dev, 'namespace-storage', { rows });
+  view = await app.mountApp();
+  await view.goTo({ namespace: 'team-a', view: 'storage' });
+};
 
-vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: vi.fn() }),
-}));
+const rowOf = (name: string) =>
+  requireValue(
+    Array.from(view.container.querySelectorAll<HTMLElement>('.gridtable-row')).find((row) =>
+      row.textContent?.includes(name)
+    ),
+    `expected the ${name} row`
+  );
 
-vi.mock('@shared/components/modals/ConfirmationModal', () => ({
-  default: (props: ConfirmationProps) => {
-    confirmationPropsRef.current = props;
-    return null;
-  },
-}));
+const cellOf = (name: string, column: string) =>
+  requireValue(
+    rowOf(name).querySelector<HTMLElement>(`.grid-cell[data-column="${column}"]`),
+    `expected the ${column} cell of ${name}`
+  );
 
-vi.mock('@core/backend-api', () => ({
-  RunObjectAction: (...args: unknown[]) => runObjectActionMock(...args),
-}));
-
-vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (data: StorageData[]) => ({
-    sortedData: data,
-    sortConfig: { key: 'name', direction: 'asc' },
-    handleSort: vi.fn(),
-  }),
-}));
-
-vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
-  useNamespaceGridTablePersistence: () => ({
-    sortConfig: { key: 'name', direction: 'asc' },
-    onSortChange: vi.fn(),
-    columnWidths: null,
-    setColumnWidths: vi.fn(),
-    columnVisibility: null,
-    setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [] },
-    setFilters: vi.fn(),
-    isNamespaceScoped: true,
-    resetState: vi.fn(),
-  }),
-}));
-
-vi.mock('@/hooks/useShortNames', () => ({
-  useShortNames: () => false,
-}));
-
-vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
-  default: ({ children }: { children: React.ReactNode }) => children,
-}));
-
-vi.mock('@shared/components/icons/SharedIcons', () => ({
-  DiffIcon: () => <span>diff</span>,
-  OpenIcon: () => <span>open</span>,
-  ObjectMapIcon: () => <span>map</span>,
-  DeleteIcon: () => <span>delete</span>,
-  MetadataIcon: () => <span>metadata</span>,
-}));
-
-vi.mock('@utils/errorHandler', () => ({
-  errorHandler: errorHandlerMock,
-}));
-
-vi.mock('@/core/capabilities', () => ({
-  useUserPermissions: () =>
-    new Map([
-      ['PersistentVolumeClaim:delete', { allowed: true, pending: false }],
-      ['VolumeAttachment:delete', { allowed: true, pending: false }],
-    ]),
-  getPermissionKey: (kind: string, action: string) => `${kind}:${action}`,
-}));
+beforeEach(() => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['team-a']);
+});
 
 describe('NsViewStorage', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
-
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    gridTablePropsRef.current = null as unknown as CapturedGridTableProps;
-    confirmationPropsRef.current = null as unknown as ConfirmationProps;
-    openWithObjectMock.mockReset();
-    runObjectActionMock.mockReset();
-    runObjectActionMock.mockResolvedValue(undefined);
-    errorHandlerMock.handle.mockClear();
-  });
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-  });
-
-  const baseStorage = (overrides: Partial<StorageData> = {}): StorageData => ({
-    ref: {
-      ...makeResourceRef({
-        kind: 'PersistentVolumeClaim',
-        resource: 'persistentvolumeclaims',
-        namespace: 'team-a',
-        name: 'pvc-data',
+  it('shows each claim’s status, capacity, and storage class, marking what the claim lacks', async () => {
+    await start([
+      claim('pvc-data'),
+      claim('pvc-pending', {
+        status: 'Pending',
+        statusPresentation: 'warning',
+        capacity: '',
+        storageClass: '',
       }),
-      kind: 'PersistentVolumeClaim',
-      name: 'pvc-data',
-      namespace: 'team-a',
-      clusterId: 'alpha:ctx',
-    },
-    status: 'Bound',
-    statusState: 'Bound',
-    statusPresentation: 'ready',
-    capacity: '10Gi',
-    storageClass: 'fast-ssd',
-    age: '4h',
-    ...overrides,
+    ]);
+
+    const cells = (name: string) =>
+      ['status', 'capacity', 'storageClass'].map((column) =>
+        cellOf(name, column).textContent?.trim()
+      );
+    expect(cells('pvc-data')).toEqual(['Bound', '10Gi', 'fast-ssd']);
+    // A claim not yet bound has no capacity and falls back to the default class.
+    expect(cells('pvc-pending')).toEqual(['Pending', '-', 'default']);
   });
 
-  const renderStorageView = async (
-    overrides: Partial<React.ComponentProps<typeof NsViewStorage>> = {}
-  ) => {
-    await act(async () => {
-      root.render(<NsViewStorage namespace="team-a" showNamespaceColumn={true} {...overrides} />);
-      await Promise.resolve();
+  it('opens a claim’s storage class in its panel with full identity, and offers no link for the default class', async () => {
+    app.servePanel(dev, {
+      group: 'storage.k8s.io',
+      version: 'v1',
+      kind: 'StorageClass',
+      namespace: '',
+      name: 'fast-ssd',
     });
-    return gridTablePropsRef.current;
-  };
+    await start([claim('pvc-data'), claim('pvc-default', { storageClass: '' })]);
 
-  const getColumn = (key: string) => {
-    const props = gridTablePropsRef.current;
-    return requireValue(
-      props.columns.find((column) => column.key === key),
-      `expected the storage ${key} column`
+    expect(cellOf('pvc-default', 'storageClass').querySelector('button')).toBeNull();
+    const link = requireValue(
+      cellOf('pvc-data', 'storageClass').querySelector<HTMLButtonElement>('button'),
+      'expected the storage class link'
     );
-  };
+    await act(async () => link.click());
+    await app.settle();
 
-  it('invokes object panel for resource actions', async () => {
-    const entry = baseStorage();
-    const props = await renderStorageView();
-
-    const menu = props.getCustomContextMenuItems(entry, 'name');
-    const openItem = menu.find((item) => item.actionId === OBJECT_ACTION_IDS.viewDetails);
-    expect(openItem).toBeTruthy();
-
-    act(() => {
-      openItem?.onClick?.();
-    });
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'PersistentVolumeClaim',
-        name: 'pvc-data',
-        namespace: 'team-a',
-        clusterId: 'alpha:ctx',
-        group: '',
+    expect(view.openPanels()).toEqual([
+      {
+        clusterId: dev.clusterId,
+        clusterName: dev.clusterName,
+        group: 'storage.k8s.io',
         version: 'v1',
-      })
-    );
-
-    const objectMapItem = menu.find((item) => item.actionId === OBJECT_ACTION_IDS.viewMap);
-    expect(objectMapItem).toBeTruthy();
-
-    act(() => {
-      objectMapItem?.onClick?.();
-    });
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'PersistentVolumeClaim',
-        name: 'pvc-data',
-        namespace: 'team-a',
-        clusterId: 'alpha:ctx',
-        group: '',
-        version: 'v1',
-      }),
-      { initialTab: 'map' }
-    );
-  });
-
-  it('leaves the kind options to the backend-published vocabulary (no frontend list)', async () => {
-    const props = await renderStorageView({ namespace: 'team-a' });
-    // No query payload applies in this harness, so there is no vocabulary yet
-    // (only the empty row-derived fallback): the kind options come ONLY from
-    // the backend capabilities on the payload (see the NsViewWorkloads
-    // end-to-end pin), never from a frontend constant.
-    expect(props.filters?.options?.kinds).toEqual([]);
-  });
-
-  it.each([
-    ['a selected namespace', 'team-a'],
-    ['All Namespaces', ALL_NAMESPACES_SCOPE],
-  ])('does not show a Kind dropdown for %s', async (_label, namespace) => {
-    const props = await renderStorageView({ namespace });
-
-    expect(props.filters?.options?.showKindDropdown).toBe(false);
-  });
-
-  it('uses canonical object identity for row keys', async () => {
-    const entry = baseStorage();
-    const props = await renderStorageView();
-
-    expect(props.keyExtractor(entry, 0)).toBe(
-      'alpha:ctx|/v1/PersistentVolumeClaim/team-a/pvc-data'
-    );
-  });
-
-  it('exposes delete action and calls backend on confirmation', async () => {
-    const entry = baseStorage();
-    const props = await renderStorageView();
-
-    const deleteItem = props
-      .getCustomContextMenuItems(entry, 'name')
-      .find((item) => item.label === 'Delete');
-    expect(deleteItem).toBeTruthy();
-
-    act(() => {
-      deleteItem?.onClick?.();
-    });
-    expect(confirmationPropsRef.current?.isOpen).toBe(true);
-
-    await act(async () => {
-      await confirmationPropsRef.current?.onConfirm?.();
-    });
-    expect(runObjectActionMock).toHaveBeenCalledWith({
-      action: 'delete',
-      target: {
-        clusterId: 'alpha:ctx',
-        group: '',
-        version: 'v1',
-        kind: 'PersistentVolumeClaim',
-        namespace: 'team-a',
-        name: 'pvc-data',
+        kind: 'StorageClass',
+        namespace: '',
+        name: 'fast-ssd',
       },
-    });
+    ]);
   });
 
-  it('navigates to storage class when storage column is activated', async () => {
-    const entry = baseStorage();
-    const props = await renderStorageView();
+  it('offers no kind filter, since every row is a claim', async () => {
+    await start([claim('pvc-data')]);
 
-    const storageColumn = requireValue(
-      props.columns.find((column) => column.key === 'storageClass'),
-      'expected the storage-class column'
+    const filters = Array.from(
+      view.container.querySelectorAll<HTMLElement>('[data-gridtable-filter-role]'),
+      (filter) => filter.dataset.gridtableFilterRole
     );
-
-    const renderedCell = requireReactElement<{
-      className?: string;
-      onClick: (event: { stopPropagation: () => void }) => void;
-    }>(storageColumn.render(entry), 'expected the storage-class cell element');
-    expect(renderedCell.props.className).toContain('storage-class-link');
-
-    act(() => {
-      renderedCell.props.onClick({ stopPropagation: () => undefined });
-    });
-
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'StorageClass',
-        name: 'fast-ssd',
-        clusterId: 'alpha:ctx',
-      })
-    );
-  });
-
-  it('falls back to the selected cluster for defensive rows without clusterId', async () => {
-    const entryWithoutCluster = baseStorage();
-    const entry = {
-      ...entryWithoutCluster,
-      ref: { ...entryWithoutCluster.ref, clusterId: '' },
-    } as StorageData;
-    const props = await renderStorageView();
-
-    expect(props.keyExtractor(entry, 0)).toBe(
-      'cluster-a|/v1/PersistentVolumeClaim/team-a/pvc-data'
-    );
-
-    const storageColumn = requireValue(
-      props.columns.find((column) => column.key === 'storageClass'),
-      'expected the storage-class column'
-    );
-    const renderedCell = requireReactElement<{
-      onClick: (event: { stopPropagation: () => void }) => void;
-    }>(storageColumn.render(entry), 'expected the storage-class cell element');
-
-    act(() => {
-      renderedCell.props.onClick({ stopPropagation: () => undefined });
-    });
-
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'StorageClass',
-        name: 'fast-ssd',
-        clusterId: 'cluster-a',
-      })
-    );
-  });
-
-  it('applies status and capacity classes based on resource state', async () => {
-    const pending = baseStorage({
-      status: 'Pending',
-      statusState: 'Pending',
-      statusPresentation: 'warning',
-      capacity: '',
-    });
-    const failed = baseStorage({
-      status: 'Lost',
-      statusState: 'Lost',
-      statusPresentation: 'error',
-      capacity: undefined,
-    });
-    await renderStorageView({ showNamespaceColumn: true });
-
-    const statusColumn = getColumn('status');
-    expect(statusColumn).toBeTruthy();
-    const capacityColumn = getColumn('capacity');
-    expect(capacityColumn).toBeTruthy();
-
-    const pendingStatus = requireReactElement<{ className?: string }>(
-      statusColumn.render(pending),
-      'expected the pending storage status element'
-    );
-    const failedStatus = requireReactElement<{ className?: string }>(
-      statusColumn.render(failed),
-      'expected the failed storage status element'
-    );
-    expect(renderOutputToText(pendingStatus)).toContain('Pending');
-    expect(pendingStatus.props.className).toContain('warning');
-    expect(failedStatus.props.className).toContain('error');
-
-    const capacityFilled = requireReactElement<{ className?: string }>(
-      capacityColumn.render(baseStorage()),
-      'expected the storage capacity element'
-    );
-    expect(capacityFilled.props.className).toContain('capacity');
-
-    const noCapacity = capacityColumn.render(pending);
-    expect(typeof noCapacity).toBe('string');
-  });
-
-  it('renders default storage class when absent without triggering navigation', async () => {
-    const entry = baseStorage({ storageClass: undefined });
-    await renderStorageView();
-    const storageColumn = getColumn('storageClass');
-    const renderedCell = requireReactElement<{
-      className?: string;
-      onClick?: (event: { stopPropagation: () => void }) => void;
-    }>(storageColumn.render(entry), 'expected the default storage-class cell element');
-
-    expect(renderOutputToText(renderedCell)).toContain('default');
-    expect(renderedCell.props.className).toContain('default-class');
-
-    act(() => {
-      renderedCell.props.onClick?.({ stopPropagation: () => undefined });
-    });
-    expect(openWithObjectMock).not.toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'StorageClass' })
-    );
-  });
-
-  it('handles delete failure with errorHandler', async () => {
-    runObjectActionMock.mockRejectedValueOnce(new Error('boom'));
-    const entry = baseStorage();
-    const props = await renderStorageView();
-    const deleteItem = props
-      .getCustomContextMenuItems(entry, 'name')
-      .find((item) => item.label === 'Delete');
-
-    act(() => {
-      deleteItem?.onClick?.();
-    });
-
-    await act(async () => {
-      await confirmationPropsRef.current?.onConfirm?.();
-    });
-
-    expect(errorHandlerMock.handle).toHaveBeenCalledWith(expect.any(Error), {
-      action: 'delete',
-      kind: 'PersistentVolumeClaim',
-      name: 'pvc-data',
-    });
+    expect(filters).toContain('search');
+    expect(filters).not.toContain('kind');
   });
 });

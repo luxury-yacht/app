@@ -11,26 +11,34 @@ causes Kubernetes API work. Mechanics and transport live in
 1. **Paint retained data immediately.** Selecting a tab or view reads that
    cluster and scope's retained snapshot in the same render; never clear it,
    wait for readiness, or show a loading screen before requesting fresh data.
-2. **Reconcile immediately after activation.** Foreground activation starts one
-   non-manual refresh for the newly visible scopes; its result replaces the
-   retained data. While a cooled backend re-establishes producers, every domain
-   and dispatch path (scheduled, stream-triggered, stream-only) waits on the
+2. **Reconcile immediately after activation.** A newly leased scope starts one
+   non-manual read, from its stream start or its `fetchOnEnable` request; the
+   result replaces the retained data. While a cooled backend re-establishes
+   producers, every domain and dispatch path (polled, stream-triggered,
+   stream-only) waits on the
    activation boundary instead of surfacing transient service-unavailable
    errors. Backend cool/re-warm transitions are serialized so the boundary
    cannot complete against a half-cooled subsystem.
-3. **Keep background work passive.** An open inactive cluster keeps snapshots
-   and object-change subscriptions, but does not poll snapshots, start metrics
-   collection, or produce manual-refresh errors because its tab is open.
+3. **Keep background work passive.** Only leases create demand. An open
+   inactive cluster keeps its retained snapshots and its `namespaces` lease,
+   which reads on that list's doorbell and polls only while its stream is
+   down. Nothing else reads the cluster, starts metrics collection, or
+   produces manual-refresh errors because its tab is open.
 4. **Push represents change.** A healthy stream rings a doorbell only when its
    declared source changes. The signal names cluster, domain, scope, source
    clock, and version; the snapshot/query path owns rows.
-5. **Polling is recovery.** A domain with a reliable push source pauses its
-   timer while the stream is healthy; its authored interval is the stream-down
-   fallback. A domain whose producer may stay silent must explicitly keep
-   polling (`pollingContinuesWhileStreaming`).
+5. **Polling is recovery.** Every leased scope polls at its contract interval,
+   scheduled after the previous poll settles. While the scope's stream is
+   healthy the poll skips its read, so the interval is the stream-down
+   fallback. A domain whose producer may stay silent reads on every poll
+   (`pollingContinuesWhileStreaming`: `cluster-overview` and
+   `object-details`). Polls stop while auto-refresh is off or the window is
+   hidden.
 6. **Manual means the user asked.** Buttons and commands use manual jobs.
    Startup, foreground, stream signals, and fallback polling are non-manual and
-   never surface manual-job timeout errors.
+   never surface manual-job timeout errors. Only manual refresh emits
+   `refresh:start`/`refresh:complete`, which drive the connectivity
+   indicator's refreshing state; polls and signal refetches stay quiet.
 
 ## Request intents
 
@@ -38,17 +46,21 @@ causes Kubernetes API work. Mechanics and transport live in
 | --- | --- | --- |
 | `startup` | First passive acquisition of a scope | No |
 | `foreground` | A retained scope became visible | Yes |
-| `background` | Scheduler/fallback upkeep | No |
-| `stream-signal` | A declared source clock changed | Yes |
+| `background` | Poll or fallback upkeep | No |
+| `stream-signal` | A declared source clock changed | No; the scope stays pending and reconciles on the first allowed read |
 | `user` | Explicit user action/manual refresh | Yes |
 
-- Foreground is not manual: it bypasses passive pauses and cooldowns but uses
-  the ordinary snapshot/stream reconciliation path, never a ManualQueue job.
-  Navigation updates orchestrator context and lets the scheduler issue it.
-- Doorbell refetches must use `stream-signal`, which bypasses the
+- Foreground is not manual: it bypasses the passive pause but uses the
+  ordinary snapshot/stream reconciliation path, never a ManualQueue job.
+  Activation reads come from the lease (a stream start or `fetchOnEnable`),
+  never from navigation; the orchestrator holds no navigation context.
+- The orchestrator refetches every scope with snapshot demand when its
+  doorbell advances a declared clock (`refresh:stream-signal`). Doorbell
+  refetches must use `stream-signal`, which bypasses the
   skip-while-stream-healthy gate; that gate silently swallows a `background`
-  refetch.
-- Context-wide manual refresh accepts only `user`.
+  refetch. Query-only demand reconciles through `useQueryStreamSignal`.
+- Manual refresh (`refreshCluster`) reads every leased scope of one cluster
+  and accepts only `user`.
 
 ## Retention and leases
 
@@ -78,7 +90,10 @@ causes Kubernetes API work. Mechanics and transport live in
   initial `RESET` advances an acknowledgement identity that causes one
   acknowledged page read; a response for an older query identity cannot
   overwrite a newer page. This closes the send/registration race without a
-  second retained row snapshot.
+  second retained row snapshot. A streamed scope stays `initialising` while
+  its cluster cannot serve, so readers gated on `isLiveDomainInitialLoadPending`
+  do not read until the cluster serves. A change signalled while a reader's
+  read is out, the first included, is read once that read settles.
 - The scheduler never satisfies query-only fallback or global manual refresh by
   fetching the bounded base snapshot. While the stream is unhealthy, or on
   global manual refresh, it advances a query-reconciliation identity and the
@@ -103,23 +118,63 @@ The authored domain contract declares which clocks can change a payload:
 - Stream messages never carry table rows, query state, positions, or cursors.
 - A source advances only the payload it owns: a metric tick never advances an
   object clock or makes an object snapshot appear changed.
-- A producer invalidates the affected snapshot/query cache before broadcasting
-  the new clock; otherwise the signal-triggered read can consume the
-  pre-change cached page and no later signal arrives.
+- Every producer rings the cluster generation's doorbell (`doorbell.Bell`,
+  implemented by `resourcestream.Manager`). `Ring` invalidates the domain's
+  snapshot/query cache before delivering the new clock, even when no view is
+  subscribed; otherwise a signal-triggered read, or a view reopened before the
+  cache expires, can consume the pre-change cached page and no later signal
+  arrives. The bell exists before any producer is built and accepts
+  rings from construction; rings during initial sync reach only existing
+  subscribers. `Ring` takes only leaf locks and never calls back into a store,
+  so stores may ring under their own write lock.
 - Signals that collide with an in-flight read latch exactly one trailing
   `stream-signal` read (`latchTrailingStreamSignal`); never drop them or
   repeatedly abort-and-replace.
+- A stream resync follows the same rule. A non-forced resync requested during
+  another resync or inside the resync cooldown latches one trailing resync,
+  which runs when the cooldown ends (`latchTrailingResync`,
+  `resourceStreamProtocol.ts`). Complete-resync domains such as
+  `namespace-helm` depend on this: a Helm upgrade rings several times within
+  milliseconds, and only the last ring carries the final status.
 - A healthy transport does not prove every collection supplies changes. A
   table's declared source must carry Kubernetes changes through the actual
   snapshot owner to the signal that table consumes, at any object count; prove
   it with real state owners, not separate mocked producer and consumer tests.
-- An informer-fed maintained store rings from its own handler after applying
-  the change. client-go runs each handler on its own goroutine, so a second
-  handler on the same informer can ring before the store holds the change.
-  Adds, real updates, and deletes ring; resync echoes (unchanged
-  `resourceVersion`, `backend/refresh/snapshot/informer_echo.go`) do not. Events
-  tables use the `changed` hook of `registerMaintainedInformerHandler`;
-  namespaced tables ring both `namespace:<name>` and `namespace:all`.
+- A store's own mutation path is the only place its domain rings. A
+  maintained store rings from its ingest sink after its querypage mutation
+  returns (`backend/refresh/snapshot/store_doorbell.go`; the Events tables
+  through their debounced notifier, `event_ingest.go`). `resourcestream`
+  registers no ringing handler or sink. Its ReplicaSet and Job
+  owner heals only rewrite pod bundles, which the pods store then publishes.
+  A LIST-fallback domain has no maintained store, so the ingest store of the
+  kind it lists rings it: the Nodes fallback (no pod access) rings from the node
+  ingest store.
+- A domain that joins an ingest store at serve time (pod aggregates for
+  workloads and nodes, Identities' bindings) rings from inside that store's
+  sink fan-out, under its write lock, so a read that starts after the ring
+  waits for the commit.
+- A change rings the union of the row's scopes before and after it, for its
+  domain and every derived domain, so a row that leaves a scope (a pod whose
+  owner changes) refreshes the window it left. Object rings carry a complete
+  `Ref`; derived rings carry none. Namespaced tables ring both
+  `namespace:<name>` and `namespace:all`; the Events tables ring the
+  involved-object namespace of every row they add, change, or remove.
+- Only real changes ring. Reflectors run without resync; a re-delivered row
+  with an unchanged `resourceVersion` (`ResourceVersionUnchanged`,
+  `backend/refresh/snapshot/util.go`) still applies but does not ring. An
+  Events relist rings only the namespaces whose rows it changed.
+- A relist rings each affected scope once, after its commit. `ProjectingStore`
+  brackets `Replace` and `ReplacePartition` with `RelistBoundary`, and each
+  source registration's sink collects its own relist's scopes: a namespace
+  partition never rings a sibling namespace, and an unscoped bulk relist rings
+  every subscribed scope of the domain and its derived domains. One source's
+  relist never delays, flushes, or clears another source's rings.
+- Timed producer callbacks (debounce flushes, re-arms, attention deadlines)
+  run through `Bell.AfterFunc`. `Manager.Stop` is a barrier: it rejects new
+  rings and callbacks, cancels pending timers, and waits for running ones
+  before closing subscriptions. After it returns nothing invalidates or
+  delivers for that generation, and a cooled generation keeps serving its
+  cached snapshots.
 - `namespaces` advances its `object` clock when a Namespace add, update, or
   delete can change the list, invalidating its cache first; every leased
   consumer performs one `stream-signal` reconciliation.
@@ -156,6 +211,13 @@ Payload shape and presentation: [resource-metrics.md](resource-metrics.md).
 
 - Retained data stays visible through refresh and transient failure with the
   refresh/error state attached; never replace it with an empty payload.
+- Retries are per scope. A failed read keeps that scope pending and its next
+  poll retries after a backoff (immediate, then 1 s doubling to 60 s); a failed
+  stream start retries on its own timer (1 s doubling to 30 s). One scope's
+  failures never delay another's reads. A poll that outlives its contract
+  timeout is a failed read (`TimeoutError`) and backs off like any other; a
+  read its owner cancels (release, kubeconfig or selection change, view reset,
+  foreground activation) records nothing.
 - Foreground activation is a per-cluster dispatch boundary. Beginning it stops
   that cluster's streams and aborts its in-flight snapshots before the backend
   replaces or re-warms producers. Visible leased work is replayed afterwards

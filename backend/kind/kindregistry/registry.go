@@ -15,6 +15,7 @@ package kindregistry
 
 import (
 	"github.com/luxury-yacht/app/backend/kind/kindspec"
+	"github.com/luxury-yacht/app/backend/kind/logspec"
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/resources/admission"
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
@@ -55,6 +56,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/statefulset"
 	"github.com/luxury-yacht/app/backend/resources/storageclass"
 	"github.com/luxury-yacht/app/backend/resources/tlsroute"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // All is the single source of truth for every built-in kind. Order groups kinds
@@ -108,7 +110,7 @@ var All = []kindspec.Descriptor{
 }
 
 // StreamDescriptors returns every directly-streamed kind's stream descriptor, in
-// registry order. Resource-stream loops this to register informers and project
+// registry order. Resource-stream loops this to register reflectors and project
 // rows; it never names a kind itself.
 func StreamDescriptors() []streamspec.Descriptor {
 	out := make([]streamspec.Descriptor, 0, len(All))
@@ -130,4 +132,27 @@ func StreamDescriptorsForDomain(domain string) []streamspec.Descriptor {
 		}
 	}
 	return out
+}
+
+// LogTargets is the container-log target table: every kind with a Logs target,
+// keyed by its identity. Both container-log paths (fetch and stream) read logs
+// through it, so they cannot disagree about which objects have logs.
+func LogTargets() (logspec.Targets, error) {
+	entries := map[schema.GroupVersionKind]logspec.Target{}
+	for _, d := range All {
+		if d.Logs != nil {
+			entries[d.Identity.GVK()] = *d.Logs
+		}
+	}
+	return logspec.NewTargets(entries)
+}
+
+// MustLogTargets is LogTargets for composition roots; a key collision is a
+// registry programming error (pinned by the registry tests).
+func MustLogTargets() logspec.Targets {
+	targets, err := LogTargets()
+	if err != nil {
+		panic(err)
+	}
+	return targets
 }

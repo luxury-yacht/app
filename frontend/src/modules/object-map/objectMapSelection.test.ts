@@ -40,6 +40,24 @@ describe('computeObjectMapSelectionState', () => {
     expect(state.connectedEdgeIds).toEqual(new Set(['edge-parent', 'edge-child']));
   });
 
+  it('highlights every link between the selected lineage, not only the links walked', () => {
+    const state = computeObjectMapSelectionState(
+      [
+        edge('deploy-rs', 'deployment', 'replicaset'),
+        edge('rs-pod', 'replicaset', 'pod'),
+        edge('pod-config', 'pod', 'configmap'),
+        edge('deploy-config', 'deployment', 'configmap'),
+      ],
+      'pod'
+    );
+
+    expect(state.connectedIds).toEqual(new Set(['replicaset', 'deployment', 'configmap']));
+    expect(state.connectedEdgeIds).toEqual(
+      new Set(['deploy-rs', 'rs-pod', 'pod-config', 'deploy-config'])
+    );
+    expect(isObjectMapEdgeDimmedBySelection(state, 'deploy-config')).toBe(false);
+  });
+
   it('returns an empty selection when no node is active', () => {
     const state = computeObjectMapSelectionState([edge('edge-1', 'a', 'b')], null);
 

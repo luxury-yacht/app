@@ -19,12 +19,12 @@ func TestLogStreamRejectsUnsupportedGVKBeforeConnecting(t *testing.T) {
 		"cluster-a|default:batch/v1beta1:CronJob:demo",
 	} {
 		t.Run(scope, func(t *testing.T) {
-			_, err := parseRequest(Request{Scope: scope})
+			_, err := parseRequest(Request{Scope: scope}, testLogTargets)
 			require.Error(t, err)
 		})
 	}
 	client := fake.NewClientset()
-	handler, err := NewHandler(client, nil, nil)
+	handler, err := NewHandler(client, testLogTargets, nil, nil)
 	require.NoError(t, err)
 	conn := newNativeLogStreamConn()
 	handler.Handle(context.Background(), conn, Request{Scope: "cluster-a|default:example.io/v1:Pod:demo"})

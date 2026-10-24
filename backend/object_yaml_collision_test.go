@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/capabilities"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
@@ -245,7 +246,7 @@ func TestGetObjectYAMLByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 	app := newCollidingDBInstanceCluster(t, clusterID)
 
 	t.Run("ACK DBInstance returns ack-rds YAML", func(t *testing.T) {
-		yamlStr, err := app.gateway.GetObjectYAMLByGVK(clusterID, "rds.services.k8s.aws/v1alpha1", "DBInstance", "default", "my-db")
+		yamlStr, err := app.gateway.GetObjectYAMLByGVK(resourcemodel.ResourceRef{ClusterID: clusterID, Group: "rds.services.k8s.aws", Version: "v1alpha1", Kind: "DBInstance", Namespace: "default", Name: "my-db"})
 		if err != nil {
 			t.Fatalf("GetObjectYAMLByGVK returned error for ACK: %v", err)
 		}
@@ -258,7 +259,7 @@ func TestGetObjectYAMLByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 	})
 
 	t.Run("kinda.rocks DbInstance returns db-operator YAML", func(t *testing.T) {
-		yamlStr, err := app.gateway.GetObjectYAMLByGVK(clusterID, "kinda.rocks/v1beta1", "DbInstance", "default", "my-db")
+		yamlStr, err := app.gateway.GetObjectYAMLByGVK(resourcemodel.ResourceRef{ClusterID: clusterID, Group: "kinda.rocks", Version: "v1beta1", Kind: "DbInstance", Namespace: "default", Name: "my-db"})
 		if err != nil {
 			t.Fatalf("GetObjectYAMLByGVK returned error for kinda.rocks: %v", err)
 		}
@@ -271,7 +272,7 @@ func TestGetObjectYAMLByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 	})
 
 	t.Run("missing name returns boundary error", func(t *testing.T) {
-		_, err := app.gateway.GetObjectYAMLByGVK(clusterID, "kinda.rocks/v1beta1", "DbInstance", "default", "")
+		_, err := app.gateway.GetObjectYAMLByGVK(resourcemodel.ResourceRef{ClusterID: clusterID, Group: "kinda.rocks", Version: "v1beta1", Kind: "DbInstance", Namespace: "default", Name: ""})
 		if err == nil {
 			t.Fatal("expected error when name is empty")
 		}
@@ -279,6 +280,25 @@ func TestGetObjectYAMLByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 			t.Errorf("expected error to mention missing name, got %v", err)
 		}
 	})
+
+	// Without a kind or version the lookup could resolve the wrong resource, and
+	// an unknown cluster must not fall back to another cluster's objects.
+	for _, tc := range []struct {
+		name    string
+		ref     resourcemodel.ResourceRef
+		wantErr string
+	}{
+		{"missing kind", resourcemodel.ResourceRef{ClusterID: clusterID, Group: "kinda.rocks", Version: "v1beta1", Namespace: "default", Name: "my-db"}, "kind is required"},
+		{"missing version", resourcemodel.ResourceRef{ClusterID: clusterID, Group: "kinda.rocks", Kind: "DbInstance", Namespace: "default", Name: "my-db"}, "version is required"},
+		{"unknown cluster", resourcemodel.ResourceRef{ClusterID: "missing-cluster", Group: "kinda.rocks", Version: "v1beta1", Kind: "DbInstance", Namespace: "default", Name: "my-db"}, "missing-cluster"},
+	} {
+		t.Run(tc.name+" returns boundary error", func(t *testing.T) {
+			_, err := app.gateway.GetObjectYAMLByGVK(tc.ref)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("expected error mentioning %q, got %v", tc.wantErr, err)
+			}
+		})
+	}
 }
 
 // TestQueryPermissionsDisambiguatesCollidingDBInstances is the step-4

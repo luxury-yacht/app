@@ -1,17 +1,13 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanelContent.tsx
  *
- * Routes the active object-panel tab to its concrete tab component and owns
- * tab-level cleanup for scoped refresh domains that should pause and preserve
- * cached state when panel content is torn down.
+ * Routes the active object-panel tab to its concrete tab component. Each tab
+ * leases its own refresh scopes while the panel is the active dock tab; panel
+ * removal evicts their retained state (ObjectPanelStateContext).
  */
 
 import type { types } from '@core/backend-api/models';
 import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
-import {
-  type ObjectPanelScopedDomainRef,
-  useObjectPanelScopedDomainCleanups,
-} from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelScopedDomainLifecycle';
 import type { NodeLogSource } from '@modules/object-panel/components/ObjectPanel/NodeLogs/nodeLogsApi';
 import type {
   CapabilityReasons,
@@ -24,7 +20,8 @@ import { loadObjectPanelDetails } from '@modules/object-panel/objectPanelDetails
 import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
-import React, { lazy, type ReactNode, useMemo } from 'react';
+import { lookupKindFacets } from '@shared/kinds/kindFacets';
+import React, { lazy, type ReactNode } from 'react';
 
 const DetailsTab = lazy(loadObjectPanelDetails);
 const EventsTab = lazy(
@@ -142,7 +139,6 @@ interface ObjectPanelContentProps {
   mapScope: string | null;
   helmScope: string | null;
   objectData: PanelObjectData | null;
-  objectKind: string | null;
   resourceDeleted: boolean;
   deletedResourceName: string;
   onClosePanel?: () => void;
@@ -159,7 +155,6 @@ interface RetainedLogsTabProps {
   isVisible: boolean;
   isAvailable: boolean;
   isPanelOpen: boolean;
-  objectKind: string | null;
   objectData: PanelObjectData | null;
   containerLogsScope: string | null;
   activePodNames: string[] | null;
@@ -172,7 +167,6 @@ const RetainedLogsTab = ({
   isVisible,
   isAvailable,
   isPanelOpen,
-  objectKind,
   objectData,
   containerLogsScope,
   activePodNames,
@@ -189,9 +183,12 @@ const RetainedLogsTab = ({
   const name = objectData?.name ?? '';
   const namespace = objectData?.namespace ?? '';
   const clusterId = objectData?.clusterId ?? null;
+  // The Logs tab exists only for a logs source (useObjectPanelTabs), so a kind
+  // that does not read node logs reads its containers.
+  const logsSource = lookupKindFacets(objectData)?.panel.logs;
   return (
     <RetainedTabFrame isVisible={isVisible}>
-      {objectKind !== 'node' ? (
+      {logsSource !== 'node' ? (
         <PanelTabBoundary
           scope="panel-logs"
           resetKeys={[name, namespace].filter(Boolean)}
@@ -200,7 +197,8 @@ const RetainedLogsTab = ({
         >
           <LogViewer
             isActive={isActive}
-            resourceKind={objectKind || 'pod'}
+            target={logsSource === 'pod' ? 'pod' : 'owned-pods'}
+            resourceKind={objectData?.kind ?? ''}
             containerLogsScope={containerLogsScope}
             activePodNames={activePodNames}
             clusterId={clusterId}
@@ -266,13 +264,18 @@ const transientTabs = new Map<ViewType, React.ComponentType<ObjectPanelContentPr
           loadingName="shell"
         >
           <ShellTab
-            namespace={objectData?.namespace || ''}
-            resourceName={objectData?.name || ''}
+            target={{
+              clusterId: objectData.clusterId ?? '',
+              group: objectData.group ?? '',
+              version: objectData.version ?? '',
+              kind: objectData.kind ?? '',
+              namespace: objectData.namespace ?? undefined,
+              name: objectData.name ?? '',
+            }}
             isActive={isPanelOpen}
             disabledReason={capabilityReasons.shell}
             debugDisabledReason={capabilityReasons.debug}
             availableContainers={availableContainers}
-            clusterId={objectData?.clusterId ?? null}
           />
         </PanelTabBoundary>
       );
@@ -280,7 +283,7 @@ const transientTabs = new Map<ViewType, React.ComponentType<ObjectPanelContentPr
   ],
   [
     'events',
-    ({ objectData, isPanelOpen, eventsScope, panelId }) => {
+    ({ objectData, isPanelOpen, eventsScope }) => {
       return (
         <PanelTabBoundary
           scope="panel-events"
@@ -288,12 +291,7 @@ const transientTabs = new Map<ViewType, React.ComponentType<ObjectPanelContentPr
           tabName="Events"
           loadingName="events"
         >
-          <EventsTab
-            objectData={objectData}
-            isActive={isPanelOpen}
-            eventsScope={eventsScope}
-            panelId={panelId}
-          />
+          <EventsTab objectData={objectData} isActive={isPanelOpen} eventsScope={eventsScope} />
         </PanelTabBoundary>
       );
     },
@@ -316,10 +314,7 @@ const transientTabs = new Map<ViewType, React.ComponentType<ObjectPanelContentPr
   [
     'jobs',
     ({ objectData, isPanelOpen, detailTabProps }) => {
-      const cronJobDetails =
-        detailTabProps?.detailModel.objectKind === 'cronjob'
-          ? (detailTabProps.detailModel.activeDetail as { jobs?: types.JobSimpleInfo[] } | null)
-          : null;
+      const ownedJobs = detailTabProps?.detailModel.ownedJobs ?? null;
       return (
         <PanelTabBoundary
           scope="panel-jobs"
@@ -328,8 +323,8 @@ const transientTabs = new Map<ViewType, React.ComponentType<ObjectPanelContentPr
           loadingName="jobs"
         >
           <JobsTab
-            jobs={cronJobDetails?.jobs ?? EMPTY_JOBS}
-            loading={!cronJobDetails && !!detailTabProps?.detailsLoading}
+            jobs={ownedJobs ?? EMPTY_JOBS}
+            loading={!ownedJobs && !!detailTabProps?.detailsLoading}
             isActive={isPanelOpen}
             clusterId={objectData?.clusterId}
             clusterName={objectData?.clusterName}
@@ -370,7 +365,7 @@ const transientTabs = new Map<ViewType, React.ComponentType<ObjectPanelContentPr
   ],
   [
     'values',
-    ({ helmScope, isPanelOpen }) => {
+    ({ helmScope, isPanelOpen, panelId }) => {
       return (
         <PanelTabBoundary
           scope="panel-values"
@@ -378,7 +373,7 @@ const transientTabs = new Map<ViewType, React.ComponentType<ObjectPanelContentPr
           tabName="Values"
           loadingName="values"
         >
-          <ValuesTab scope={helmScope} isActive={isPanelOpen} />
+          <ValuesTab scope={helmScope} isActive={isPanelOpen} panelId={panelId} />
         </PanelTabBoundary>
       );
     },
@@ -395,12 +390,8 @@ export function ObjectPanelContent(props: Readonly<ObjectPanelContentProps>) {
     nodeLogsState,
     nodeLogSources,
     detailScope,
-    eventsScope,
     containerLogsScope,
-    mapScope,
-    helmScope,
     objectData,
-    objectKind,
     resourceDeleted,
     deletedResourceName,
     onClosePanel,
@@ -411,19 +402,6 @@ export function ObjectPanelContent(props: Readonly<ObjectPanelContentProps>) {
   const yamlShown = useShownOnce(showYaml);
   const showMetrics = activeTab === 'metrics';
   const metricsShown = useShownOnce(showMetrics);
-  const scopedDomainCleanups = useMemo<readonly ObjectPanelScopedDomainRef[]>(
-    () => [
-      { domain: 'object-events', scope: eventsScope },
-      { domain: 'object-yaml', scope: detailScope },
-      { domain: 'object-helm-manifest', scope: helmScope },
-      { domain: 'object-helm-values', scope: helmScope },
-      { domain: 'container-logs', scope: containerLogsScope },
-      { domain: 'object-map', scope: mapScope },
-    ],
-    [containerLogsScope, detailScope, eventsScope, helmScope, mapScope]
-  );
-  // Transient unmounts retain snapshots; committed panel removal owns full eviction.
-  useObjectPanelScopedDomainCleanups(scopedDomainCleanups, isPanelOpen);
   if (resourceDeleted) {
     return <DeletedObjectContent name={deletedResourceName} onClose={onClosePanel} />;
   }
@@ -435,7 +413,6 @@ export function ObjectPanelContent(props: Readonly<ObjectPanelContentProps>) {
         isVisible={activeTab === 'logs' && logsAvailable}
         isAvailable={logsAvailable}
         isPanelOpen={isPanelOpen}
-        objectKind={objectKind}
         objectData={objectData}
         containerLogsScope={containerLogsScope}
         activePodNames={detailTabProps?.detailModel.activePodNames ?? null}

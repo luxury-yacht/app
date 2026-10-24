@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
@@ -40,7 +41,7 @@ func TestAggregateSnapshotServiceBuildRequiresClusterScope(t *testing.T) {
 		},
 		"cluster-b": stubSnapshotService{
 			build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
-				return nil, refresh.NewPermissionDeniedError(domain, "")
+				return nil, errorstatus.NewPermissionDenied(domain, "")
 			},
 		},
 	}
@@ -53,29 +54,26 @@ func TestAggregateSnapshotServiceBuildRequiresClusterScope(t *testing.T) {
 	require.Nil(t, snap)
 }
 
-func TestAggregateSnapshotServiceBuildRejectsMultiClusterScope(t *testing.T) {
-	services := map[string]refresh.SnapshotBuilder{
-		"cluster-a": stubSnapshotService{
-			build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
-				t.Fatalf("multi-cluster snapshot request should not reach a cluster service")
-				return nil, nil
-			},
-		},
-		"cluster-b": stubSnapshotService{
-			build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
-				t.Fatalf("multi-cluster snapshot request should not reach a cluster service")
-				return nil, nil
-			},
-		},
-	}
+// A kubeconfig file or context name may contain a comma; the cluster prefix
+// is one cluster ID and routes to that cluster's service.
+func TestAggregateSnapshotServiceRoutesClusterIDContainingComma(t *testing.T) {
+	const clusterID = "prod,eu.yaml:ctx"
+	var builtScope string
 	aggregate := &aggregateSnapshotService{
-		services: services,
+		services: map[string]refresh.SnapshotBuilder{
+			clusterID: stubSnapshotService{
+				build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
+					builtScope = scope
+					return &refresh.Snapshot{Domain: domain, Scope: scope}, nil
+				},
+			},
+		},
 	}
 
-	snap, err := aggregate.Build(context.Background(), "namespaces", "clusters=cluster-a,cluster-b|")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "single cluster scope")
-	require.Nil(t, snap)
+	snap, err := aggregate.Build(context.Background(), "pods", clusterID+"|namespace:default")
+	require.NoError(t, err)
+	require.NotNil(t, snap)
+	require.Equal(t, clusterID+"|namespace:default", builtScope)
 }
 
 func TestAggregateSnapshotServiceNamespaceSnapshotTriggersLifecycleCallback(t *testing.T) {
@@ -255,7 +253,7 @@ func TestAggregateSnapshotServicePermissionDeniedNamespacesStillSignalsReadiness
 	services := map[string]refresh.SnapshotBuilder{
 		"cluster-a": stubSnapshotService{
 			build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
-				return nil, refresh.NewPermissionDeniedError(domain, "core/namespaces")
+				return nil, errorstatus.NewPermissionDenied(domain, "core/namespaces")
 			},
 		},
 	}
@@ -270,7 +268,7 @@ func TestAggregateSnapshotServicePermissionDeniedNamespacesStillSignalsReadiness
 
 	_, err := aggregate.Build(context.Background(), "namespaces", "cluster-a|")
 	require.Error(t, err, "the permission error must still reach the client")
-	require.True(t, refresh.IsPermissionDenied(err))
+	require.True(t, errorstatus.IsPermissionDenied(err))
 	require.Equal(t, []string{"cluster-a"}, called,
 		"permission-denied namespaces must still signal readiness")
 }
@@ -616,7 +614,7 @@ func TestAggregateSnapshotServiceBuildReturnsErrorWhenClusterFails(t *testing.T)
 	services := map[string]refresh.SnapshotBuilder{
 		"cluster-a": stubSnapshotService{
 			build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
-				return nil, refresh.NewPermissionDeniedError(domain, "")
+				return nil, errorstatus.NewPermissionDenied(domain, "")
 			},
 		},
 	}
@@ -626,7 +624,7 @@ func TestAggregateSnapshotServiceBuildReturnsErrorWhenClusterFails(t *testing.T)
 
 	snap, err := aggregate.Build(context.Background(), "namespaces", "cluster-a|")
 	require.Error(t, err)
-	require.True(t, refresh.IsPermissionDenied(err))
+	require.True(t, errorstatus.IsPermissionDenied(err))
 	require.Nil(t, snap)
 }
 
@@ -644,6 +642,15 @@ func TestAggregateSnapshotServiceBuildReturnsErrorWhenClusterUnavailable(t *test
 
 	snap, err := aggregate.Build(context.Background(), "namespaces", "cluster-b|")
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "no active clusters available")
+	require.Contains(t, err.Error(), "cluster cluster-b not active")
+	require.Equal(t, errorstatus.ReasonClusterNotReady, errorstatus.Classify(err).Reason)
 	require.Nil(t, snap)
+}
+
+// A request without a cluster is the caller's mistake, not a cluster that is
+// still starting.
+func TestAggregateSnapshotServiceRejectsScopeWithoutACluster(t *testing.T) {
+	aggregate := &aggregateSnapshotService{services: map[string]refresh.SnapshotBuilder{}}
+	_, err := aggregate.Build(context.Background(), "pods", "namespace:default")
+	require.Equal(t, errorstatus.ReasonBadRequest, errorstatus.Classify(err).Reason)
 }

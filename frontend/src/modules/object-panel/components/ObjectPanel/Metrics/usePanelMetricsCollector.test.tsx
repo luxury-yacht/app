@@ -1,178 +1,216 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Metrics/usePanelMetricsCollector.test.tsx
+ *
+ * The panel's metrics collector through the real live-metrics lease, refresh
+ * orchestrator, store, stream manager, and auto-refresh preference, inside the
+ * app shell. Only the backend boundary is faked (test-utils/appState): the
+ * Pod's `pods` scope as the backend serves it after each metrics poll, its
+ * `metric` doorbell, and the panel buffer's append RPC.
  */
 
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ResourceMetricsResult } from '@/core/resource-metrics';
+import {
+  makePodSnapshotEntry,
+  makePodSnapshotPayload,
+} from '@/core/refresh/refreshContractTestBuilders';
+import { buildRefreshScope } from '@/core/refresh/scopeSelector';
+import { usePreference } from '@/core/settings/usePreference';
+import {
+  buildObjectPanelRef,
+  type ObjectPanelRef,
+  objectPanelId,
+} from '@/modules/object-panel/objectPanelRef';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  setAutoRefresh,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { usePanelMetricsCollector } from './usePanelMetricsCollector';
 
-const hoisted = vi.hoisted(() => ({
-  result: null as ResourceMetricsResult | null,
-  calls: [] as Array<{ objectData: unknown; enabled: boolean | undefined }>,
-  appended: [] as Array<{ clusterId: string; panelId: string; t: number; cpu: unknown }>,
-  appendError: null as Error | null,
-  reported: [] as unknown[],
-}));
+const app = installAppStateHarness();
 
-vi.mock('@/core/resource-metrics', () => ({
-  useResourceMetrics: (objectData: unknown, enabled?: boolean) => {
-    hoisted.calls.push({ objectData, enabled });
-    return hoisted.result;
-  },
-}));
+// Unix seconds, as metrics-server stamps a collection.
+const T0 = 1_800_000_000;
 
-vi.mock('./panelMetricSamples', () => ({
-  appendPanelMetricSample: async (
-    clusterId: string,
-    panelId: string,
-    sample: { t: number; cpu?: unknown }
-  ) => {
-    if (hoisted.appendError) {
-      throw hoisted.appendError;
-    }
-    hoisted.appended.push({ clusterId, panelId, t: sample.t, cpu: sample.cpu });
-  },
-}));
+const pod = { group: '', version: 'v1', kind: 'Pod', namespace: 'podinfo', name: 'api' };
 
-vi.mock('@/utils/errorHandler', () => ({
-  reportOperationalError: (error: unknown) => {
-    hoisted.reported.push(error);
-  },
-}));
+// As ObjectPanel mounts it: collecting while auto-refresh is on.
+function CollectorProbe({ panel }: Readonly<{ panel: ObjectPanelRef }>) {
+  usePanelMetricsCollector(objectPanelId(panel), panel, usePreference('autoRefreshEnabled'));
+  return null;
+}
 
-const PANEL_ID = 'obj:dev:dev-cluster:/v1/pod:podinfo:podinfo-66888d8d86-5lpbr';
-const pod = {
-  clusterId: 'dev:dev-cluster',
-  group: '',
-  version: 'v1',
-  kind: 'Pod',
-  namespace: 'podinfo',
-  name: 'podinfo-66888d8d86-5lpbr',
-};
-const podResolution: ResourceMetricsResult['resolution'] = {
-  kind: 'domain',
-  ref: pod,
-  source: 'pods',
-  domain: 'pods',
-  scope: 'dev:dev-cluster|namespace:podinfo',
+const advance = async (ms: number) => {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+  await app.settle();
 };
 
-// One poller collection as the Pod's `pods` scope serves it (collectedAt is unix seconds).
-const collection = (collectedAt: number, cpu: number): ResourceMetricsResult => ({
-  status: 'available',
-  metrics: {
-    source: 'pods',
-    cpu: { usage: cpu, limit: 500 },
-    memory: { usage: cpu * 1_000_000 },
-    freshness: { collectedAt, stale: false },
-  },
-  resolution: podResolution,
-});
+const appendedTimes = () =>
+  app.backend.calls('AppendPanelMetricSample').map(([, , sample]) => sample.t);
 
 describe('usePanelMetricsCollector', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  let dev: TestCluster;
+  let panel: ObjectPanelRef;
+  let view: MountedApp;
+  let podsScope: string;
+  let ringVersion = 0;
+  let appendFails = false;
 
-  const Harness = ({ enabled }: { enabled: boolean }) => {
-    usePanelMetricsCollector(PANEL_ID, pod, enabled);
-    return null;
+  // The Pod's namespace scope after a metrics poll (collectedAt is unix seconds).
+  const serveCollection = (collectedAt: number, cpu: number) => {
+    app.snapshots.serve(
+      'pods',
+      podsScope,
+      makePodSnapshotPayload({
+        clusterId: dev.clusterId,
+        clusterName: dev.clusterName,
+        rows: [
+          makePodSnapshotEntry({
+            clusterId: dev.clusterId,
+            namespace: pod.namespace,
+            name: pod.name,
+            cpuUsageMilli: cpu,
+            cpuLimitMilli: 500,
+          }),
+        ],
+        metrics: { collectedAt, stale: false, successCount: 1, failureCount: 0 },
+      })
+    );
   };
 
-  const render = async (enabled: boolean, result: ResourceMetricsResult | null) => {
-    hoisted.result = result;
-    await act(async () => root.render(<Harness enabled={enabled} />));
+  // The backend rings a clock of the scope; the panel's lease refetches it.
+  const ring = async (clock: 'metric' | 'object') => {
+    ringVersion += 1;
+    app.streams.ring('pods', podsScope, clock, String(ringVersion));
+    await advance(500);
   };
 
-  const unmount = () => {
-    act(() => root.unmount());
-    root = ReactDOM.createRoot(container);
+  const collect = async (collectedAt: number, cpu: number) => {
+    serveCollection(collectedAt, cpu);
+    await ring('metric');
   };
 
-  const appendedTimes = () => hoisted.appended.map((sample) => sample.t);
+  const showCollector = async (target: ObjectPanelRef = panel) => {
+    await view.show(<CollectorProbe panel={target} />);
+  };
 
-  beforeEach(() => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    container = document.createElement('div');
-    root = ReactDOM.createRoot(container);
-    hoisted.calls = [];
-    hoisted.appended = [];
-    hoisted.appendError = null;
-    hoisted.reported = [];
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(T0 * 1000);
+    appendFails = false;
+    dev = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, [pod.namespace]);
+    panel = buildObjectPanelRef(app.object(dev, pod).ref);
+    podsScope = buildRefreshScope('pods', {
+      clusterId: dev.clusterId,
+      selector: { kind: 'namespace', namespace: pod.namespace },
+    });
+    // backend/panel_metrics_service.go AppendPanelMetricSample for an open panel.
+    app.backend.answer('AppendPanelMetricSample', () => {
+      if (appendFails) {
+        throw new Error('backend unavailable');
+      }
+    });
+    view = await app.render(null);
   });
 
   afterEach(() => {
-    act(() => root.unmount());
     vi.useRealTimers();
   });
 
-  it('sends one sample per poller collection, not per render, for the panel', async () => {
-    vi.setSystemTime(1_000_000);
-    await render(true, collection(1_000, 10));
-    await render(true, collection(1_000, 10));
-    await render(true, collection(1_005, 12));
+  it('sends one sample per metrics collection, not per refetch, for the panel', async () => {
+    serveCollection(T0, 10);
+    await showCollector();
+    expect(appendedTimes()).toEqual([T0 * 1000]);
 
-    expect(appendedTimes()).toEqual([1_000_000, 1_005_000]);
-    expect(hoisted.appended[1]).toMatchObject({
-      clusterId: 'dev:dev-cluster',
-      panelId: PANEL_ID,
-      cpu: { usage: 12, limit: 500 },
-    });
-    expect(hoisted.calls[hoisted.calls.length - 1]).toEqual({ objectData: pod, enabled: true });
+    // An object change refetches the same collection.
+    const readsBeforeObjectChange = app.snapshots.reads('pods').length;
+    await ring('object');
+    expect(app.snapshots.reads('pods').length).toBeGreaterThan(readsBeforeObjectChange);
+    expect(appendedTimes()).toEqual([T0 * 1000]);
+
+    await collect(T0 + 5, 12);
+
+    expect(appendedTimes()).toEqual([T0 * 1000, (T0 + 5) * 1000]);
+    expect(app.backend.calls('AppendPanelMetricSample')[1]).toMatchObject([
+      dev.clusterId,
+      objectPanelId(panel),
+      { t: (T0 + 5) * 1000, cpu: { usage: 12, limit: 500 } },
+    ]);
   });
 
   it('skips data retained from before it started collecting', async () => {
-    vi.setSystemTime(2_000_000);
-    await render(true, collection(1_000, 10));
+    serveCollection(T0 - 3_600, 10);
+    await showCollector();
     expect(appendedTimes()).toEqual([]);
 
-    await render(true, collection(2_005, 12));
-    expect(appendedTimes()).toEqual([2_005_000]);
+    await collect(T0 + 5, 12);
+
+    expect(appendedTimes()).toEqual([(T0 + 5) * 1000]);
   });
 
-  it('stops sending while paused and resumes afterwards', async () => {
-    vi.setSystemTime(3_000_000);
-    await render(true, collection(3_000, 10));
-    await render(false, collection(3_005, 11));
-    expect(hoisted.calls[hoisted.calls.length - 1]?.enabled).toBe(false);
-    expect(appendedTimes()).toEqual([3_000_000]);
+  it('stops sending while auto-refresh is paused and resumes afterwards', async () => {
+    serveCollection(T0, 10);
+    await showCollector();
 
-    vi.setSystemTime(3_100_000);
-    await render(true, collection(3_105, 13));
-    expect(appendedTimes()).toEqual([3_000_000, 3_105_000]);
+    await act(async () => {
+      setAutoRefresh(false);
+    });
+    const readsBeforePause = app.snapshots.reads('pods').length;
+    await collect(T0 + 5, 11);
+    expect(app.snapshots.reads('pods')).toHaveLength(readsBeforePause);
+    expect(appendedTimes()).toEqual([T0 * 1000]);
+
+    await advance(100_000);
+    serveCollection(T0 + 105, 13);
+    await act(async () => {
+      setAutoRefresh(true);
+    });
+    await app.settle();
+
+    expect(appendedTimes()).toEqual([T0 * 1000, (T0 + 105) * 1000]);
   });
 
   it('resumes after the panel remounts for a cluster switch', async () => {
-    vi.setSystemTime(4_000_000);
-    await render(true, collection(4_000, 10));
-    unmount();
+    serveCollection(T0, 10);
+    await showCollector();
+    view.clear();
 
-    vi.setSystemTime(4_200_000);
-    await render(true, collection(4_205, 11));
-    expect(appendedTimes()).toEqual([4_000_000, 4_205_000]);
+    await advance(200_000);
+    serveCollection(T0 + 205, 11);
+    await showCollector();
+
+    expect(appendedTimes()).toEqual([T0 * 1000, (T0 + 205) * 1000]);
   });
 
   it('reports a failing send once, not on every collection', async () => {
-    vi.setSystemTime(5_000_000);
-    hoisted.appendError = new Error('backend unavailable');
-    await render(true, collection(5_000, 10));
-    await render(true, collection(5_005, 11));
-    expect(hoisted.reported).toHaveLength(1);
+    const reportedFailures = () =>
+      app.errors.take((record) => record.context?.source === 'usePanelMetricsCollector');
+    appendFails = true;
+    serveCollection(T0, 10);
+    await showCollector();
+    await collect(T0 + 5, 11);
+    expect(reportedFailures()).toHaveLength(1);
 
-    hoisted.appendError = null;
-    await render(true, collection(5_010, 12));
-    hoisted.appendError = new Error('backend unavailable');
-    await render(true, collection(5_015, 13));
-    expect(hoisted.reported).toHaveLength(2);
+    appendFails = false;
+    await collect(T0 + 10, 12);
+    appendFails = true;
+    await collect(T0 + 15, 13);
+
+    expect(reportedFailures()).toHaveLength(1);
+    expect(appendedTimes()).toHaveLength(4);
   });
 
   it('sends nothing for an object without live metrics', async () => {
-    await render(true, {
-      status: 'unsupported',
-      metrics: null,
-      resolution: { kind: 'unsupported', reason: 'unsupported-kind' },
-    });
-    expect(hoisted.appended).toEqual([]);
+    await showCollector(
+      buildObjectPanelRef(app.object(dev, { ...pod, kind: 'ConfigMap', name: 'settings' }).ref)
+    );
+
+    expect(app.snapshots.reads('pods')).toEqual([]);
+    expect(app.backend.calls('AppendPanelMetricSample')).toEqual([]);
   });
 });

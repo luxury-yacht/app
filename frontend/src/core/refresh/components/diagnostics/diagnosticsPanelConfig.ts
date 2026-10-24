@@ -19,10 +19,9 @@ import {
 } from '../../domainRegistry';
 import type { RefreshDomain } from '../../types';
 
-export { DOMAIN_REFRESHER_MAP, DOMAIN_STREAM_MAP } from '../../domainRegistry';
+export { DOMAIN_STREAM_MAP } from '../../domainRegistry';
 
 export const STALE_THRESHOLD_MS = 45_000;
-export const CLUSTER_SCOPE = '__cluster__';
 
 export const STREAM_ONLY_DOMAINS = new Set<RefreshDomain>(
   Object.entries(refreshDomainContract.domainInventory)
@@ -72,6 +71,7 @@ const NAMESPACE_FEATURE_MAP: Record<NamespaceViewType, readonly PermissionFeatur
   browse: [], // Empty = show all namespace-scoped permissions (browse spans all resource types).
   map: [PERMISSION_FEATURES.objectMapResources],
   workloads: [PERMISSION_FEATURES.namespaceWorkloads, PERMISSION_FEATURES.namespacePods],
+  pods: [PERMISSION_FEATURES.namespacePods],
   config: [PERMISSION_FEATURES.namespaceConfig],
   network: [PERMISSION_FEATURES.namespaceNetwork],
   rbac: [PERMISSION_FEATURES.namespaceRBAC],

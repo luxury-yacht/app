@@ -20,13 +20,15 @@ type ClusterAttentionService struct {
 	mu          sync.Mutex
 	preferences clusterAttentionRepository
 	logger      *Logger
+	clusterName func(string) string
 	targets     map[string]attentionIgnoreRulesSetter
 }
 
-func NewClusterAttentionService(preferences clusterAttentionRepository, logger *Logger) *ClusterAttentionService {
+func NewClusterAttentionService(preferences clusterAttentionRepository, logger *Logger, clusterName func(string) string) *ClusterAttentionService {
 	return &ClusterAttentionService{
 		preferences: preferences,
 		logger:      logger,
+		clusterName: clusterName,
 		targets:     make(map[string]attentionIgnoreRulesSetter),
 	}
 }

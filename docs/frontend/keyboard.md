@@ -46,7 +46,9 @@ Owners: `frontend/src/ui/shortcuts/{context.tsx,surfaces.ts,hooks.ts}`
   including programmatic focus after pointer use. Editable fields need the
   shared keyboard marker so clicking does not tint them; typing clears it until
   the next keyboard focus move. Dropdown/context-menu backgrounds and option
-  colors, YAML editors, and log output are excluded. Forced-color mode keeps a
+  colors, YAML editors, log output, and region roots (main content and panel
+  groups) are excluded; WebKit focuses an open panel `<dialog>` as
+  `:focus-visible` when its native window becomes key. Forced-color mode keeps a
   system outline.
 - The first Tab after pointer use and each region change briefly outline the
   destination region. `ui/shortcuts/regionFocusIndicator.ts` waits for the
@@ -96,11 +98,24 @@ Implementation: `ui/layout/{appFocusRegions.ts,AppRegionNavigation.tsx,AppLayout
   focused tab's action buttons); consumers keep one roving tab stop and no
   competing walkers. From a pointer-focused read-only body, resume at the
   nearest preceding/following control in DOM order.
+- GridTable's own focus moves pass `{ preventScroll: true }`, and it reveals
+  only the highlighted row with `revealVertically` (nearest edge, scrollTop
+  only), never `scrollIntoView`. Under app zoom, bounding rects are zoomed
+  while scroll sizes are not, so it divides rect values by
+  `getAppZoomFactor()`. WebKit reveals a focused table's whole box, including
+  rows clipped by its own scroller, so entering an expanded table jumps the
+  parent vertically; and its `scrollIntoView` lines up a row wider than an
+  ancestor scroller with that ancestor's left edge, so a nested row shifts the
+  parent sideways on every key press. Chromium does neither, so Chromium-only
+  checks miss both.
 - Virtualized tables keep DOM focus on the native table element while shared
   state marks the active row, so recycling never unmounts focus. Tab enters
   only the current keyed row's links/buttons; Escape, or the focused control
   disappearing or becoming unavailable, restores the table; embedded controls
-  keep Enter/Space independent of row activation.
+  keep Enter/Space independent of row activation. With row details, one row
+  highlight moves in screen order through the parent's rows and the expanded
+  tables' rows; Tab, Shift+Tab, and Cmd/Ctrl+F follow the table holding it
+  ([row detail](gridtable-interaction.md#row-detail)).
 - Panels and table regions own focused keys without blocking the whole app.
 - Manually added namespace removal shows on row focus; removal restores the
   stable namespace selector; the inline Add editor restores its button on

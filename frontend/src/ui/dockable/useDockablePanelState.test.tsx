@@ -8,39 +8,34 @@
 import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { installAppStateHarness } from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
-
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: vi.fn(() => ({
-    selectedClusterId: 'cluster-a',
-    selectedClusterIds: ['cluster-a'],
-  })),
-}));
-
 import { DockablePanelProvider } from './DockablePanelProvider';
 import { createPanelLayoutStore } from './panelLayoutStore';
 import { PanelLayoutStoreContext } from './panelLayoutStoreContext';
 import { addPanelToGroup } from './tabGroupState';
 import { useDockablePanelState } from './useDockablePanelState';
 
+// Provider-backed cases run inside the production shell (real cluster
+// selection); store-only cases read a layout store directly.
+const app = installAppStateHarness();
+
 type HookResult = ReturnType<typeof useDockablePanelState>;
 
 interface HookHarness {
   get current(): HookResult;
   update: (updater: (state: HookResult) => void | Promise<void>) => Promise<void>;
-  rerender: () => Promise<void>;
-  unmount: () => Promise<void>;
+  unmount: () => void;
 }
 
 const renderHook = async (
   panelId: string,
   defaultPosition: 'right' | 'bottom' = 'right'
 ): Promise<HookHarness> => {
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = ReactDOM.createRoot(container);
-
+  const dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['default']);
+  const view = await app.render(null);
   const result: { current?: HookResult } = {};
 
   const HookConsumer: React.FC<{ id: string }> = ({ id }) => {
@@ -48,14 +43,11 @@ const renderHook = async (
     return null;
   };
 
-  await act(async () => {
-    root.render(
-      <DockablePanelProvider>
-        <HookConsumer id={panelId} />
-      </DockablePanelProvider>
-    );
-    await Promise.resolve();
-  });
+  await view.show(
+    <DockablePanelProvider>
+      <HookConsumer id={panelId} />
+    </DockablePanelProvider>
+  );
 
   return {
     get current() {
@@ -69,25 +61,10 @@ const renderHook = async (
         await updater(
           requireValue(result.current, 'expected test value in useDockablePanelState.test.tsx')
         );
-        await Promise.resolve();
       });
+      await app.settle();
     },
-    rerender: async () => {
-      await act(async () => {
-        root.render(
-          <DockablePanelProvider>
-            <HookConsumer id={panelId} />
-          </DockablePanelProvider>
-        );
-        await Promise.resolve();
-      });
-    },
-    unmount: async () => {
-      await act(async () => {
-        root.unmount();
-      });
-      container.remove();
-    },
+    unmount: () => view.clear(),
   };
 };
 
@@ -198,7 +175,7 @@ describe('useDockablePanelState', () => {
     expect(hook.current.position).toBe('bottom');
     expect(hook.current.isOpen).toBe(false);
 
-    await hook.unmount();
+    hook.unmount();
   });
 
   it('toggles panel open state', async () => {
@@ -216,6 +193,6 @@ describe('useDockablePanelState', () => {
     });
     expect(hook.current.isOpen).toBe(false);
 
-    await hook.unmount();
+    hook.unmount();
   });
 });

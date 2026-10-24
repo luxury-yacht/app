@@ -36,16 +36,19 @@ func TestFetchContainerLogsReadsEveryContainerOfASlowPod(t *testing.T) {
 			clusterID: {meta: ClusterMeta{ID: clusterID, Name: "ctx"}, kubeconfigPath: "/path", kubeconfigContext: "ctx", client: client},
 		}
 
-		resp := app.gateway.FetchContainerLogs(clusterID, ContainerLogsFetchRequest{
+		resp, err := app.gateway.FetchContainerLogs(clusterID, ContainerLogsFetchRequest{
 			Scope:    clusterID + "|default:/v1:pod:web",
 			Previous: true,
 		})
+		if err != nil {
+			t.Fatalf("expected every container to be read, got %v", err)
+		}
 
 		if len(resp.Issues) != 0 {
 			t.Fatalf("expected every container to be read, got issues %+v", resp.Issues)
 		}
 		if len(resp.Entries) != containerCount {
-			t.Fatalf("expected %d entries, got %d (error %q)", containerCount, len(resp.Entries), resp.Error)
+			t.Fatalf("expected %d entries, got %d", containerCount, len(resp.Entries))
 		}
 	})
 }

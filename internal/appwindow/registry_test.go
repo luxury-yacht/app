@@ -728,13 +728,14 @@ func TestRegistryRoutesOpenToSourceAndDockToAnAppDisplayingTheCluster(t *testing
 	dockSnapshot.SourceWindowName = descriptor.WindowName
 	dockSnapshot.TransferID = "transfer-dock"
 	require.NoError(t, registry.BeginPanelWindowDock(descriptor.WindowName, "right", dockSnapshot))
-	require.Len(t, events, 2)
-	require.Equal(t, owner.Name(), events[1].windowName)
-	require.Equal(t, PanelWindowDockRequestedEventName, events[1].eventName)
+	require.Len(t, events, 1, "the dock target learns of the move from the directory")
+	pending := registry.workspace.Snapshot(snapshot.ClusterID).Panels[0]
+	require.Equal(t, owner.Name(), pending.Transfer.Target.WindowName)
+	require.Equal(t, "right", pending.Transfer.Target.GroupID)
 
 	require.NoError(
 		t,
-		registry.AcknowledgePanelWindowDock(owner.Name(), descriptor.WindowName, dockSnapshot.TransferID),
+		registry.AcknowledgePanelTransfer(owner.Name(), dockSnapshot.TransferID, true),
 	)
 	require.Equal(t, []string{descriptor.WindowName}, closed)
 	require.Equal(t, PanelWindowStateMissing, registry.panels.State(descriptor.WindowName))
@@ -759,9 +760,7 @@ func TestRegistryFailedDockCloseLeavesNativeSourceLive(t *testing.T) {
 	require.NoError(t, registry.BeginPanelWindowDock(descriptor.WindowName, "bottom", dockSnapshot))
 	registry.closeWindow = func(string) bool { return false }
 
-	err = registry.AcknowledgePanelWindowDock(
-		owner.Name(), descriptor.WindowName, dockSnapshot.TransferID,
-	)
+	err = registry.AcknowledgePanelTransfer(owner.Name(), dockSnapshot.TransferID, true)
 	require.ErrorContains(t, err, "not available")
 	require.Equal(t, PanelWindowStateLive, registry.panels.State(descriptor.WindowName))
 }
@@ -858,7 +857,7 @@ func TestRegistryValidatesDockAcknowledgementBeforeClosingThePanelWindow(t *test
 		return true
 	}
 
-	err = registry.AcknowledgePanelWindowDock(owner.Name(), descriptor.WindowName, "stale-transfer")
+	err = registry.AcknowledgePanelTransfer(owner.Name(), "stale-transfer", true)
 
 	require.ErrorContains(t, err, "stale")
 	require.Empty(t, closed)
@@ -889,9 +888,7 @@ func TestRegistrySerializesDockCommitAgainstTransferFailure(t *testing.T) {
 	}
 	acknowledged := make(chan error, 1)
 	go func() {
-		acknowledged <- registry.AcknowledgePanelWindowDock(
-			owner.Name(), descriptor.WindowName, dockSnapshot.TransferID,
-		)
+		acknowledged <- registry.AcknowledgePanelTransfer(owner.Name(), dockSnapshot.TransferID, true)
 	}()
 	<-closeStarted
 	failed := make(chan error, 1)
@@ -1029,19 +1026,16 @@ func TestRegistryRejectsPanelCommandsAcrossOwnerAndTransportBoundaries(t *testin
 		require.ErrorContains(t, registry.RoutePanelWindowCommand(descriptor.WindowName, panelwindow.WorkspaceCommandOpenSettings), "not available")
 	})
 
-	t.Run("snapshot and tab commands fail closed on invalid state or delivery", func(t *testing.T) {
+	t.Run("arrangement and tab commands fail closed on invalid state or delivery", func(t *testing.T) {
 		registry, _, descriptor, snapshot := setup(t)
-		invalid := snapshot
-		invalid.TransferID = ""
-		require.Error(t, registry.UpdatePanelWindowSnapshot(descriptor.WindowName, invalid))
+		require.ErrorContains(t, registry.PublishPanelWindowGroup(descriptor.WindowName, nativeGroup(snapshot)), "state", "an opening window cannot report an arrangement")
 		require.ErrorContains(t, registry.RequestPanelTabClose(descriptor.WindowName, "panel-missing"), "not in window")
 		registry.showWindow = func(string) bool { return true }
 		registry.emitWindowEvent = func(string, string, any) bool { return true }
 		_, err := registry.AcknowledgePanelWindowReady(descriptor.WindowName, snapshot.TransferID)
 		require.NoError(t, err)
 		registry.emitWindowEvent = func(string, string, any) bool { return false }
-		snapshot.SourceWindowName = descriptor.WindowName
-		require.NoError(t, registry.UpdatePanelWindowSnapshot(descriptor.WindowName, snapshot))
+		require.NoError(t, registry.PublishPanelWindowGroup(descriptor.WindowName, nativeGroup(snapshot)))
 		require.ErrorContains(t, registry.RequestPanelTabClose(descriptor.WindowName, snapshot.ActivePanelID), "not available")
 	})
 
@@ -1290,6 +1284,30 @@ func TestCascadedCoordinateKeepsWindowsInsideTheWorkArea(t *testing.T) {
 	}
 }
 
+// seedPanels opens panels at a placement the way renderers obtain them (Open
+// or a directory move). Publications only arrange panels that already exist.
+func seedPanels(t *testing.T, directory *panelwindow.WorkspaceDirectory, windowName string, kind panelwindow.PanelLocationKind, groups []panelwindow.WorkspaceGroup) {
+	t.Helper()
+	for _, group := range groups {
+		for index, tab := range group.Tabs {
+			location := panelwindow.PanelLocation{Kind: kind, WindowName: windowName, GroupID: group.GroupID, Index: index, Active: tab.PanelID == group.ActivePanelID}
+			_, _, err := directory.Open(tab, location)
+			require.NoError(t, err)
+		}
+	}
+}
+
+// nativeGroup is the arrangement a native window holding snapshot reports.
+func nativeGroup(snapshot PanelGroupSnapshot) panelwindow.WorkspaceGroup {
+	return panelwindow.WorkspaceGroup{ClusterID: snapshot.ClusterID, GroupID: snapshot.GroupID, Tabs: snapshot.Tabs, ActivePanelID: snapshot.ActivePanelID}
+}
+
+// seedNativeGroup places a live native window's group in the directory.
+func seedNativeGroup(t *testing.T, directory *panelwindow.WorkspaceDirectory, windowName string, snapshot PanelGroupSnapshot) {
+	t.Helper()
+	seedPanels(t, directory, windowName, panelwindow.PanelLocationWindow, []panelwindow.WorkspaceGroup{nativeGroup(snapshot)})
+}
+
 // Native lifecycle fixtures start with panels already mounted in their source
 // renderer. Invalid snapshots and unknown sources still reach the real boundary.
 func beginTestPanelWindow(t *testing.T, registry *Registry, snapshot PanelGroupSnapshot) (PanelWindowDescriptor, error) {
@@ -1317,11 +1335,11 @@ func (b *recordingLifecycleBackend) StageClusterViewTransfer(source, target, clu
 	b.windowClusters[target] = append(existing, clusterID)
 	return false, nil
 }
-func (b *recordingLifecycleBackend) CommitClusterViewTransfer(source, target, clusterID string, groups []panelwindow.WorkspaceGroup) error {
+func (b *recordingLifecycleBackend) CommitClusterViewTransfer(source, target, clusterID, transferID string) error {
 	if b.commitClusterTransferError != nil {
 		return b.commitClusterTransferError
 	}
-	if err := b.PanelWorkspaceDirectory().TransferClusterView(source, target, clusterID, groups); err != nil {
+	if err := b.PanelWorkspaceDirectory().CommitGroupTransfer(transferID); err != nil {
 		return err
 	}
 	if b.windowClusters != nil {

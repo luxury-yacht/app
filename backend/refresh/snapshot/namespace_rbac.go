@@ -2,18 +2,14 @@ package snapshot
 
 import (
 	"context"
-	"fmt"
 	"sort"
-
-	informers "k8s.io/client-go/informers"
-	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
-	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resources/role"
@@ -27,8 +23,8 @@ const namespaceRBACDomainName = "namespace-rbac"
 // ServiceAccount) for a namespace via the shared typed-table domain skeleton
 // (typed_table_domain.go).
 type NamespaceRBACBuilder struct {
-	collectIndexer func(streamspec.Descriptor) cache.Indexer
-	// maintained, when set, is an informer-fed store the builder serves rows from
+	available kindAvailability
+	// maintained, when set, is a reflector-fed store the builder serves rows from
 	// instead of listing + re-projecting per request. nil falls back to the list path.
 	maintained *typedMaintainedStore[RBACSummary]
 }
@@ -72,38 +68,37 @@ func namespaceRBACDomainSpec() typedTableDomainSpec[RBACSummary] {
 		schema:           rbacQuerypageSchema(),
 		capabilities:     namespaceRBACQueryCapabilities(),
 		sortRows:         sortRBACSummaries,
+		payload: func(meta ClusterMeta, envelope ResourceQueryEnvelope, rows []RBACSummary) any {
+			return NamespaceRBACSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: envelope, Rows: rows}
+		},
 	}
 }
 
 // RegisterNamespaceRBACDomain registers the namespace RBAC domain. The kinds it
-// serves, their informers, and their row builders all come from the shared stream
-// descriptor registry; only informers for permitted resources are registered, so
+// serves, their reflectors, and their row builders all come from the shared stream
+// descriptor registry; only permitted resources are read, so
 // denied resources are skipped gracefully.
 //
-// Role, RoleBinding, and ServiceAccount are owned-reflector ingest kinds (IngestOwned):
-// when ingestManager is non-nil their maintained-store feed comes from the ingest
-// reflectors' Table-half Sink and registerMaintainedHandlers skips them (the shared
-// factory no longer caches them). When ingestManager is nil (a unit test) the store has
-// no feed for the cut kinds.
+// Role, RoleBinding, and ServiceAccount feed the maintained store from their owned
+// reflectors' Table-half sinks. When ingestManager is nil (a unit test) the store has
+// no feed.
 func RegisterNamespaceRBACDomain(
 	reg *domain.Registry,
-	factory informers.SharedInformerFactory,
 	allowed domainpermissions.AllowedResources,
 	clusterMeta ClusterMeta,
 	ingestManager *ingest.IngestManager,
+	bell doorbell.Bell,
 ) error {
-	if factory == nil {
-		return fmt.Errorf("shared informer factory is nil")
-	}
-	collectIndexer := sharedFactoryIndexers(factory, allowed, namespaceRBACDomainName, ingestManager)
-	maintained, err := newRegisteredTypedTableStore(reg, namespaceRBACDomainSpec(), clusterMeta, collectIndexer, factory, nil, ingestManager)
+	available := ingestAvailability(allowed, namespaceRBACDomainName, ingestManager)
+	maintained, err := newRegisteredTypedTableStore(reg, namespaceRBACDomainSpec(), clusterMeta,
+		ingestManager, bell)
 	if err != nil {
 		return err
 	}
 
 	builder := &NamespaceRBACBuilder{
-		collectIndexer: collectIndexer,
-		maintained:     maintained,
+		available:  available,
+		maintained: maintained,
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceRBACDomainName,
@@ -114,10 +109,7 @@ func RegisterNamespaceRBACDomain(
 // Build assembles roles, bindings, and service accounts for the namespace by
 // looping the kind collectors. An empty namespace lists all namespaces.
 func (b *NamespaceRBACBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	return buildTypedTableSnapshot(ctx, scope, namespaceRBACDomainSpec(), b.collectIndexer, b.maintained,
-		func(meta ClusterMeta, envelope ResourceQueryEnvelope, rows []RBACSummary) any {
-			return NamespaceRBACSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: envelope, Rows: rows}
-		})
+	return buildTypedTableSnapshot(ctx, scope, namespaceRBACDomainSpec(), b.available, b.maintained)
 }
 
 func sortRBACSummaries(resources []RBACSummary) {

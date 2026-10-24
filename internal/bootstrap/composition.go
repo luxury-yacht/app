@@ -47,12 +47,12 @@ func windowRuntimeOptions(
 		BeginPanelWindowOpen:       bridge.BeginPanelWindowOpen,
 		AcknowledgePanelReady:      bridge.AcknowledgePanelReady,
 		BeginPanelWindowDock:       bridge.BeginPanelWindowDock,
-		AcknowledgePanelDock:       bridge.AcknowledgePanelDock,
+		AcknowledgePanelTransfer:   bridge.AcknowledgePanelTransfer,
 		FailPanelTransfer:          bridge.FailPanelTransfer,
 		AcknowledgePanelClose:      bridge.AcknowledgePanelClose,
 		AcknowledgeWorkspaceClose:  bridge.AcknowledgeWorkspaceClose,
 		RoutePanelCommand:          bridge.RoutePanelCommand,
-		UpdatePanelSnapshot:        bridge.UpdatePanelSnapshot,
+		PublishPanelGroup:          bridge.PublishPanelGroup,
 		RequestPanelTabClose:       bridge.RequestPanelTabClose,
 		RequestPanelTabTransfer:    bridge.RequestPanelTabTransfer,
 		AcceptPanelTabTransfer:     bridge.AcceptPanelTabTransfer,
@@ -133,7 +133,7 @@ func newApplicationComposition(assets fs.FS, reporter sentryreporting.Reporter, 
 	wailsApp.HandleStream(backend.RefreshContainerLogsStreamName, backendRuntime.Refresh.HandleContainerLogsStream)
 	wailsApp.RegisterService(application.NewServiceWithOptions(
 		desktopService,
-		application.ServiceOptions{Route: "/api/v2"},
+		application.ServiceOptions{Route: "/api/v2", MarshalError: backend.MarshalBindingError},
 	))
 
 	nativeMenu := backend.CreateMenu(desktopShell)

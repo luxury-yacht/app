@@ -7,6 +7,7 @@
  */
 
 import type { capabilities, types } from '@core/backend-api/models';
+import { parseApiVersion } from '@shared/constants/builtinGroupVersions';
 import {
   DiscoverNodeLogs,
   FetchContainerLogs,
@@ -48,35 +49,38 @@ export interface ObjectYAMLReadTarget {
 
 const namespaceOrEmpty = (namespace: string | null | undefined): string => namespace ?? '';
 
-const apiVersionForTarget = (target: ObjectYAMLReadTarget): string => {
-  const apiVersion = target.apiVersion?.trim();
-  if (apiVersion) {
-    return apiVersion;
-  }
-  const version = target.version?.trim();
+// The backend reference for an object read target: one complete identity.
+const resourceRefForTarget = (target: ObjectReadTarget) => ({
+  clusterId: target.clusterId,
+  group: target.group,
+  version: target.version,
+  kind: target.kind,
+  namespace: namespaceOrEmpty(target.namespace),
+  name: target.name,
+});
+
+// YAML targets may carry a wire apiVersion instead of group and version.
+const groupVersionForTarget = (
+  target: ObjectYAMLReadTarget
+): { group: string; version: string } => {
+  const parsed = parseApiVersion(target.apiVersion);
+  const version = (parsed.version ?? target.version)?.trim();
   if (!version) {
     throw new Error(`Object identity for ${target.kind}/${target.name} is missing version`);
   }
-  const group = target.group?.trim();
-  return group ? `${group}/${version}` : version;
+  const group = (parsed.version ? parsed.group : target.group)?.trim() ?? '';
+  return { group, version };
 };
 
 export const readTargetPortsForRef = (target: ObjectReadTarget) =>
-  GetTargetPorts(
-    target.clusterId,
-    namespaceOrEmpty(target.namespace),
-    target.kind,
-    target.group,
-    target.version,
-    target.name
-  );
+  GetTargetPorts(resourceRefForTarget(target));
 
 /** An object panel's metric samples newer than afterT (unix ms), from the backend panel buffer. */
 export const readPanelMetricSeries = (clusterId: string, panelId: string, afterT: number) =>
   GetPanelMetricSeries(clusterId, panelId, afterT);
 
-export const readPodContainers = (clusterId: string, namespace: string, resourceName: string) =>
-  GetPodContainers(clusterId, namespace, resourceName);
+export const readPodContainers = (target: ObjectReadTarget) =>
+  GetPodContainers(resourceRefForTarget(target));
 
 export const readContainerLogsScopeContainers = (clusterId: string, scope: string) =>
   GetContainerLogsScopeContainers(clusterId, scope);
@@ -84,33 +88,17 @@ export const readContainerLogsScopeContainers = (clusterId: string, scope: strin
 export const readContainerLogs = (clusterId: string, request: types.ContainerLogsFetchRequest) =>
   FetchContainerLogs(clusterId, request);
 
-export const readNodeLogDiscovery = (clusterId: string, nodeName: string) =>
-  DiscoverNodeLogs(clusterId, nodeName);
+export const readNodeLogDiscovery = (target: ObjectReadTarget) =>
+  DiscoverNodeLogs(resourceRefForTarget(target));
 
-export const readNodeLogs = (
-  clusterId: string,
-  nodeName: string,
-  request: types.NodeLogFetchRequest
-) => FetchNodeLogs(clusterId, nodeName, request);
+export const readNodeLogs = (target: ObjectReadTarget, request: types.NodeLogFetchRequest) =>
+  FetchNodeLogs(resourceRefForTarget(target), request);
 
 export const readObjectYAMLForRef = (target: ObjectYAMLReadTarget) =>
-  GetObjectYAMLByGVK(
-    target.clusterId,
-    apiVersionForTarget(target),
-    target.kind,
-    namespaceOrEmpty(target.namespace),
-    target.name
-  );
+  GetObjectYAMLByGVK(resourceRefForTarget({ ...target, ...groupVersionForTarget(target) }));
 
 export const readCatalogObjectMatchForRef = (target: ObjectReadTarget) =>
-  FindCatalogObjectMatch(
-    target.clusterId,
-    namespaceOrEmpty(target.namespace),
-    target.group,
-    target.version,
-    target.kind,
-    target.name
-  );
+  FindCatalogObjectMatch(resourceRefForTarget(target));
 
 export const readCatalogObjectByUID = (clusterId: string, uid: string) =>
   FindCatalogObjectByUID(clusterId, uid);
@@ -147,24 +135,10 @@ export const readHydratedCustomCatalogRows = (
 ) => HydrateCatalogCustomRows(clusterId, rows);
 
 export const readRevisionHistoryForRef = (target: ObjectReadTarget) =>
-  GetRevisionHistory(
-    target.clusterId,
-    namespaceOrEmpty(target.namespace),
-    target.group,
-    target.version,
-    target.kind,
-    target.name
-  );
+  GetRevisionHistory(resourceRefForTarget(target));
 
 export const readWorkloadHPAManagedForRef = (target: ObjectReadTarget) =>
-  IsWorkloadHPAManaged(
-    target.clusterId,
-    namespaceOrEmpty(target.namespace),
-    target.group,
-    target.version,
-    target.kind,
-    target.name
-  );
+  IsWorkloadHPAManaged(resourceRefForTarget(target));
 
 export const readQueryPermissions = async <T>(
   queries: capabilities.PermissionQuery[]

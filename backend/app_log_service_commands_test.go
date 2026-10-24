@@ -1,7 +1,10 @@
 package backend
 
 import (
+	"fmt"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/stretchr/testify/require"
@@ -57,22 +60,44 @@ func TestGetAppLogsSinceHandlesTrimmedBuffer(t *testing.T) {
 	require.Equal(t, "third", logs[1].Message)
 }
 
-func TestAppLogsAddedEventIncludesSequence(t *testing.T) {
+// Like container log lines, writes reach the panel in batches: a burst sends one
+// app-logs:added carrying the newest sequence, and the panel reads every entry
+// after the last one it has.
+func TestAppLogsAddedEventsBatchBurstsOfWrites(t *testing.T) {
 	logsService := newTestAppLogService()
-	var eventName string
-	var eventPayload AppLogsAddedEvent
+	logsService.logger.addedEvents.window = 20 * time.Millisecond
+	var mu sync.Mutex
+	var names []string
+	var sequences []uint64
 	logsService.logger.SetEventEmitter(func(name string, args ...interface{}) {
-		eventName = name
-		require.Len(t, args, 1)
-		var ok bool
-		eventPayload, ok = args[0].(AppLogsAddedEvent)
-		require.True(t, ok)
+		mu.Lock()
+		defer mu.Unlock()
+		names = append(names, name)
+		if len(args) == 1 {
+			if payload, ok := args[0].(AppLogsAddedEvent); ok {
+				sequences = append(sequences, payload.Sequence)
+			}
+		}
 	})
+	sent := func() []uint64 {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]uint64(nil), sequences...)
+	}
 
-	logsService.logger.Info("hello")
+	for i := range 50 {
+		logsService.logger.Info(fmt.Sprintf("line %d", i))
+	}
+	require.Eventually(t, func() bool { return len(sent()) > 0 }, time.Second, time.Millisecond)
+	time.Sleep(60 * time.Millisecond)
+	require.Equal(t, []uint64{50}, sent())
 
-	require.Equal(t, "app-logs:added", eventName)
-	require.Equal(t, uint64(1), eventPayload.Sequence)
+	logsService.logger.Info("later")
+	require.Eventually(t, func() bool { return len(sent()) == 2 }, time.Second, time.Millisecond)
+	require.Equal(t, []uint64{50, 51}, sent())
+	mu.Lock()
+	require.Equal(t, []string{"app-logs:added", "app-logs:added"}, names)
+	mu.Unlock()
 }
 
 func TestGetAppLogsReturnsClusterMetadata(t *testing.T) {

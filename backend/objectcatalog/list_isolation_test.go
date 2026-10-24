@@ -43,7 +43,7 @@ func TestCatalogListBudgetRenewsForEveryPageAndNamespace(t *testing.T) {
 	client, err := dynamic.NewForConfig(&rest.Config{Host: server.URL})
 	require.NoError(t, err)
 	source := newFakeDynamicIngestSource()
-	svc := NewService(Dependencies{ClusterID: "c1", Common: common.Dependencies{DynamicClient: client}, IngestSource: source}, &Options{ListRequestTimeout: 250 * time.Millisecond, NamespaceWorkers: 1, InformerPromotionThreshold: 3})
+	svc := NewService(Dependencies{ClusterID: "c1", Common: common.Dependencies{DynamicClient: client}, IngestSource: source}, &Options{ListRequestTimeout: 250 * time.Millisecond, NamespaceWorkers: 1, ReflectorPromotionThreshold: 3})
 	rows, err := svc.collectResource(t.Context(), widgetDesc(), []string{"a", "b"}, nil)
 	require.NoError(t, err, "four healthy pages must not share one 250 ms collection deadline")
 	require.Len(t, rows, 4)

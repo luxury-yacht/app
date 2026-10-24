@@ -65,7 +65,7 @@ func TestNewPodIngestProjectorBundleMatchesLivePaths(t *testing.T) {
 		},
 	}
 
-	project := NewPodIngestProjector(meta, PodOwnerSources{ReplicaSets: rsLister})
+	project := NewPodIngestProjector(meta, PodOwnerSources{ReplicaSetOwner: testsupport.ReplicaSetOwnerLookup(rsLister)})
 
 	streamMeta := meta // ClusterMeta is a type alias of streamrows.ClusterMeta
 	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, podres.Identity)
@@ -81,17 +81,14 @@ func TestNewPodIngestProjectorBundleMatchesLivePaths(t *testing.T) {
 			t.Fatalf("projector returned %T, want ingest.Bundle", raw)
 		}
 
-		wantTable := podres.BuildStreamSummary(streamMeta, pod, rsLister, nil)
+		wantTable := podres.BuildStreamSummary(streamMeta, pod, testsupport.ReplicaSetOwnerLookup(rsLister), nil)
 		if gotTable, ok := bundle.Table.(streamrows.PodSummary); !ok || gotTable != wantTable {
 			t.Fatalf("Table half mismatch for %s/%s:\n got=%#v\nwant=%#v", pod.Namespace, pod.Name, bundle.Table, wantTable)
 		}
 
-		wantAgg := projectPodAggregate(pod, PodOwnerSources{ReplicaSets: rsLister})
+		wantAgg := projectPodAggregate(pod, PodOwnerSources{ReplicaSetOwner: testsupport.ReplicaSetOwnerLookup(rsLister)})
 		if gotAgg, ok := bundle.Aggregate.(streamrows.PodAggregate); !ok || gotAgg != wantAgg {
 			t.Fatalf("Aggregate half mismatch for %s/%s:\n got=%#v\nwant=%#v", pod.Namespace, pod.Name, bundle.Aggregate, wantAgg)
-		}
-		if wantIndexes := podAggregateBundleIndexes(wantAgg); !reflect.DeepEqual(bundle.Indexes, wantIndexes) {
-			t.Fatalf("Indexes mismatch for %s/%s:\n got=%#v\nwant=%#v", pod.Namespace, pod.Name, bundle.Indexes, wantIndexes)
 		}
 
 		wantCatalog, ok := catalogProject(pod).(objectcatalog.Summary)

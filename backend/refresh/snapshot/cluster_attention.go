@@ -11,20 +11,16 @@ import (
 	"sync"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	informers "k8s.io/client-go/informers"
-	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
-	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
-	eventres "github.com/luxury-yacht/app/backend/resources/events"
 )
 
 const (
@@ -306,23 +302,22 @@ type clusterAttentionIndex struct {
 	maintained *typedMaintainedStore[AttentionFinding]
 	now        func() time.Time
 
-	mu                  sync.Mutex
-	sources             map[string]attentionSourceState
-	owners              map[string]map[string]struct{}
-	ownerKinds          map[string]map[string]struct{}
-	unavailableOwners   map[string]struct{}
-	healthFindings      map[string]AttentionFinding
-	finalizerFindings   map[string]AttentionFinding
-	findings            map[string]AttentionFinding
-	deadlines           attentionDeadlineHeap
-	timer               *time.Timer
-	notify              *time.Timer
-	broadcast           func(version string)
+	mu                sync.Mutex
+	sources           map[string]attentionSourceState
+	owners            map[string]map[string]struct{}
+	ownerKinds        map[string]map[string]struct{}
+	unavailableOwners map[string]struct{}
+	healthFindings    map[string]AttentionFinding
+	finalizerFindings map[string]AttentionFinding
+	findings          map[string]AttentionFinding
+	deadlines         attentionDeadlineHeap
+	// bell rings the Attention doorbell and owns the index's timers, so
+	// stopping the cluster generation cancels or joins them.
+	bell                doorbell.Bell
+	timer               doorbell.Timer
+	notify              doorbell.Timer
 	dirty               bool
 	revision            uint64
-	stopped             bool
-	eventRows           func() []attentionSourceRecord
-	eventRowsSynced     func() bool
 	ignoreRules         AttentionIgnoreRules
 	ignoredObjectPruner func(resourcemodel.ResourceRef)
 }
@@ -331,13 +326,14 @@ type clusterAttentionIndex struct {
 // cluster Attention domain.
 type ClusterAttentionIndex = clusterAttentionIndex
 
-func newClusterAttentionIndex(meta ClusterMeta, now func() time.Time) *clusterAttentionIndex {
+func newClusterAttentionIndex(meta ClusterMeta, now func() time.Time, bell doorbell.Bell) *clusterAttentionIndex {
 	if now == nil {
 		now = time.Now
 	}
 	index := &clusterAttentionIndex{
 		meta:              meta,
 		now:               now,
+		bell:              bell,
 		sources:           make(map[string]attentionSourceState),
 		owners:            make(map[string]map[string]struct{}),
 		ownerKinds:        make(map[string]map[string]struct{}),
@@ -364,9 +360,6 @@ func (i *clusterAttentionIndex) SetIgnoreRules(rules AttentionIgnoreRules) {
 	}
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	if i.stopped {
-		return
-	}
 	rules = normalizeAttentionIgnoreRules(rules)
 	rulesChanged := !reflect.DeepEqual(i.ignoreRules, rules)
 	i.ignoreRules = rules
@@ -558,10 +551,6 @@ func (i *clusterAttentionIndex) UpsertSource(owner string, record attentionSourc
 		return
 	}
 	i.mu.Lock()
-	if i.stopped {
-		i.mu.Unlock()
-		return
-	}
 	pruned := i.upsertSourceLocked(owner, record, i.now())
 	pruner := i.ignoredObjectPruner
 	i.armTimerLocked()
@@ -578,10 +567,6 @@ func (i *clusterAttentionIndex) replaceSource(owner string, records []attentionS
 		return
 	}
 	i.mu.Lock()
-	if i.stopped {
-		i.mu.Unlock()
-		return
-	}
 	replacement := newAttentionSourceReplacement(records, i.now(), pruneMissingIgnores)
 	i.upsertReplacementRecords(owner, records, replacement)
 	i.removeMissingReplacementSources(owner, replacement)
@@ -753,6 +738,10 @@ func (i *clusterAttentionIndex) SwapToMmap(path string) (func() error, error) {
 	return i.maintained.SwapToMmap(path)
 }
 
+// The Attention index is the one maintained store with rows a relist does not
+// remove (findings from sources that are now unavailable), so re-warm must reach it.
+var _ domain.Reconciler = (*clusterAttentionIndex)(nil)
+
 func (i *clusterAttentionIndex) Reconcile() {
 	if i == nil {
 		return
@@ -762,14 +751,9 @@ func (i *clusterAttentionIndex) Reconcile() {
 	for owner := range i.unavailableOwners {
 		unavailableOwners = append(unavailableOwners, owner)
 	}
-	eventRows := i.eventRows
-	eventRowsSynced := i.eventRowsSynced
 	i.mu.Unlock()
 	for _, owner := range unavailableOwners {
 		i.replaceSource(owner, nil, false)
-	}
-	if eventRows != nil && (eventRowsSynced == nil || eventRowsSynced()) {
-		i.ReplaceSource("events", eventRows())
 	}
 }
 
@@ -778,10 +762,6 @@ func (i *clusterAttentionIndex) DeleteSource(owner string, ref resourcemodel.Res
 		return
 	}
 	i.mu.Lock()
-	if i.stopped {
-		i.mu.Unlock()
-		return
-	}
 	i.deleteSourceLocked(owner, attentionRefKey(ref))
 	pruned := !i.finalizerConfirmsObjectLocked(ref) && i.pruneIgnoredObjectLocked(ref)
 	pruner := i.ignoredObjectPruner
@@ -799,21 +779,9 @@ func (i *clusterAttentionIndex) ReplaceFinalizerBlockers(blockers []objectcatalo
 	if i == nil {
 		return
 	}
-	next := make(map[string]AttentionFinding, len(blockers))
-	clusterID := strings.TrimSpace(i.meta.ClusterID)
-	for _, blocker := range blockers {
-		key, finding, valid := finalizerFindingForCluster(clusterID, blocker)
-		if !valid {
-			continue
-		}
-		next[key] = finding
-	}
+	next := finalizerFindingsForCluster(strings.TrimSpace(i.meta.ClusterID), blockers)
 
 	i.mu.Lock()
-	if i.stopped {
-		i.mu.Unlock()
-		return
-	}
 	keys := make(map[string]struct{}, len(i.finalizerFindings)+len(next))
 	pruned := make([]resourcemodel.ResourceRef, 0)
 	for key, previous := range i.finalizerFindings {
@@ -855,6 +823,19 @@ func (i *clusterAttentionIndex) ReplaceReportedStatuses(statuses []objectcatalog
 
 func attentionRefBelongsToCluster(ref resourcemodel.ResourceRef, clusterID string) bool {
 	return completeAttentionRef(ref) && ref.ClusterID == strings.TrimSpace(clusterID)
+}
+
+// finalizerFindingsForCluster keys the cluster's valid blockers by finding key.
+func finalizerFindingsForCluster(clusterID string, blockers []objectcatalog.FinalizerBlocker) map[string]AttentionFinding {
+	next := make(map[string]AttentionFinding, len(blockers))
+	for _, blocker := range blockers {
+		key, finding, valid := finalizerFindingForCluster(clusterID, blocker)
+		if !valid {
+			continue
+		}
+		next[key] = finding
+	}
+	return next
 }
 
 func finalizerFindingForCluster(clusterID string, blocker objectcatalog.FinalizerBlocker) (string, AttentionFinding, bool) {
@@ -935,11 +916,29 @@ func supersededAttentionObject(ignored, live resourcemodel.ResourceRef) bool {
 
 func (i *clusterAttentionIndex) deleteSourceLocked(owner, key string) {
 	state, exists := i.sources[key]
-	if !exists || state.owner != owner {
+	if !exists {
+		i.deleteRestoredFindingLocked(owner, key)
+		return
+	}
+	if state.owner != owner {
 		return
 	}
 	delete(i.sources, key)
 	delete(i.owners[owner], key)
+	i.applyHealthFindingLocked(key, nil)
+}
+
+// deleteRestoredFindingLocked removes a finding restored from spill that has
+// no source record, because its store could not rebuild one on restore, when
+// the owner reports the object deleted.
+func (i *clusterAttentionIndex) deleteRestoredFindingLocked(owner, key string) {
+	finding, exists := i.healthFindings[key]
+	if !exists {
+		return
+	}
+	if _, ownedKind := i.ownerKinds[owner][finding.Ref.Kind]; !ownedKind {
+		return
+	}
 	i.applyHealthFindingLocked(key, nil)
 }
 
@@ -1036,9 +1035,6 @@ func (i *clusterAttentionIndex) EvaluateDue(now time.Time) {
 	}
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	if i.stopped {
-		return
-	}
 	for {
 		i.pruneDeadlinesLocked()
 		if len(i.deadlines) == 0 || i.deadlines[0].at.After(now) {
@@ -1076,61 +1072,34 @@ func (i *clusterAttentionIndex) Revision() uint64 {
 	return i.revision
 }
 
-func (i *clusterAttentionIndex) Stop() {
-	if i == nil {
-		return
-	}
-	i.mu.Lock()
-	i.stopped = true
-	timer := i.timer
-	notify := i.notify
-	i.timer = nil
-	i.notify = nil
-	i.mu.Unlock()
-	if timer != nil {
-		timer.Stop()
-	}
-	if notify != nil {
-		notify.Stop()
-	}
-}
-
-func (i *clusterAttentionIndex) SetBroadcast(broadcast func(version string)) {
-	if i == nil {
-		return
-	}
-	i.mu.Lock()
-	i.broadcast = broadcast
-	if i.dirty {
-		i.armNotifyLocked()
-	}
-	i.mu.Unlock()
-}
-
 func (i *clusterAttentionIndex) markDirtyLocked() {
 	i.dirty = true
 	i.armNotifyLocked()
 }
 
 func (i *clusterAttentionIndex) armNotifyLocked() {
-	if i.stopped || i.notify != nil || i.broadcast == nil {
+	if i.notify != nil {
 		return
 	}
-	i.notify = time.AfterFunc(attentionNotifyDebounce, i.flushNotify)
+	i.notify = i.bell.AfterFunc(attentionNotifyDebounce, i.flushNotify)
 }
 
 func (i *clusterAttentionIndex) flushNotify() {
 	i.mu.Lock()
 	i.notify = nil
-	if i.stopped || !i.dirty || i.broadcast == nil {
+	if !i.dirty {
 		i.mu.Unlock()
 		return
 	}
 	i.dirty = false
 	version := fmt.Sprintf("attention-%d", i.revision)
-	broadcast := i.broadcast
 	i.mu.Unlock()
-	broadcast(version)
+	i.bell.Ring(doorbell.Change{
+		Domain:  clusterAttentionDomainName,
+		Source:  doorbell.SourceAttention,
+		Target:  doorbell.Subscribed(),
+		Version: version,
+	})
 }
 
 func (i *clusterAttentionIndex) pruneDeadlinesLocked() {
@@ -1149,9 +1118,6 @@ func (i *clusterAttentionIndex) armTimerLocked() {
 		i.timer.Stop()
 		i.timer = nil
 	}
-	if i.stopped {
-		return
-	}
 	i.pruneDeadlinesLocked()
 	if len(i.deadlines) == 0 {
 		return
@@ -1160,7 +1126,7 @@ func (i *clusterAttentionIndex) armTimerLocked() {
 	if delay < 0 {
 		delay = 0
 	}
-	i.timer = time.AfterFunc(delay, func() { i.EvaluateDue(i.now()) })
+	i.timer = i.bell.AfterFunc(delay, func() { i.EvaluateDue(i.now()) })
 }
 
 func attentionRefKey(ref resourcemodel.ResourceRef) string {
@@ -1301,16 +1267,16 @@ type attentionIngestRegistration struct {
 
 func RegisterClusterAttentionDomain(
 	reg *domain.Registry,
-	factory informers.SharedInformerFactory,
 	permissions ClusterAttentionPermissions,
 	meta ClusterMeta,
 	ingestManager *ingest.IngestManager,
 	options ClusterAttentionOptions,
+	bell doorbell.Bell,
 ) (*ClusterAttentionIndex, error) {
 	if reg == nil {
 		return nil, fmt.Errorf("%s registry is nil", clusterAttentionDomainName)
 	}
-	index := newClusterAttentionIndex(meta, time.Now)
+	index := newClusterAttentionIndex(meta, time.Now, bell)
 	index.SetIgnoreRules(options.IgnoreRules)
 	index.SetIgnoredObjectPruner(options.IgnoredObjectPruner)
 	sources := clusterAttentionSources(permissions)
@@ -1322,18 +1288,14 @@ func RegisterClusterAttentionDomain(
 		{JobGVR, attentionSourceWorkload, permissions.IncludeJobs},
 		{CronJobGVR, attentionSourceWorkload, permissions.IncludeCronJobs},
 		{NodeGVR, attentionSourceNode, permissions.IncludeNodes},
+		{EventGVR, attentionSourceEvent, permissions.IncludeEvents},
 	})
-	if err := registerAttentionEventSource(index, factory, permissions.IncludeEvents, meta); err != nil {
-		index.Stop()
-		return nil, err
-	}
 	reg.RegisterMaintainedStore(clusterAttentionDomainName, index)
 	if err := reg.Register(refresh.DomainConfig{
 		Name: clusterAttentionDomainName, BuildSnapshot: (&ClusterAttentionBuilder{
 			index: index, sources: sources, catalogService: options.CatalogService,
 		}).Build,
 	}); err != nil {
-		index.Stop()
 		return nil, err
 	}
 	return index, nil
@@ -1364,55 +1326,14 @@ func registerAttentionIngestSources(index *ClusterAttentionIndex, ingestManager 
 	}
 }
 
-func registerAttentionEventSource(index *ClusterAttentionIndex, factory informers.SharedInformerFactory, include bool, meta ClusterMeta) error {
-	index.registerOwnerKind("events", "Event")
-	if !include {
-		index.markOwnerUnavailable("events")
-		return nil
-	}
-	if factory == nil {
-		return fmt.Errorf("%s shared informer factory is nil", clusterAttentionDomainName)
-	}
-	events := factory.Core().V1().Events().Informer()
-	index.eventRowsSynced = events.HasSynced
-	index.eventRows = func() []attentionSourceRecord {
-		return attentionEventRows(meta, events.GetIndexer().List())
-	}
-	_, err := events.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) { index.upsertEvent(meta, obj) },
-		UpdateFunc: func(oldObj, newObj interface{}) {
-			if !informerUpdateIsEcho(oldObj, newObj) {
-				index.upsertEvent(meta, newObj)
-			}
-		},
-		DeleteFunc: func(obj interface{}) { index.deleteEvent(meta, obj) },
-	})
-	if err != nil {
-		return fmt.Errorf("%s: register events handler: %w", clusterAttentionDomainName, err)
-	}
-	return nil
-}
-
-func attentionEventRows(meta ClusterMeta, objects []interface{}) []attentionSourceRecord {
-	rows := make([]attentionSourceRecord, 0, len(objects))
-	for _, object := range objects {
-		event, ok := object.(*corev1.Event)
-		if !ok {
-			continue
-		}
-		if record, keep := attentionRecordFromEvent(meta, event); keep {
-			rows = append(rows, record)
-		}
-	}
-	return rows
-}
-
 func attentionKindForSource(source attentionSource, gvr schema.GroupVersionResource) string {
 	switch source {
 	case attentionSourcePod:
 		return "Pod"
 	case attentionSourceNode:
 		return "Node"
+	case attentionSourceEvent:
+		return "Event"
 	case attentionSourceWorkload:
 		for _, workload := range workloadStoreGVRKinds {
 			if workload.GVR == gvr {
@@ -1444,37 +1365,69 @@ func (s attentionBundleSink) DeleteBundle(bundle ingest.Bundle) {
 }
 
 func (s attentionBundleSink) ReplaceBundles(bundles []ingest.Bundle) {
+	s.index.ReplaceSource(s.owner, attentionRecordsFromBundles(s.source, bundles))
+}
+
+// SeedBundles rebuilds the owner's source records from the bundles restored
+// from spill. Attention restores its findings from its own spill, but expiry
+// and deletes need the source record behind each finding, and a resumed watch
+// delivers no relist to rebuild them. Restored bundles do not prove which
+// objects were deleted since, so saved ignores are kept. A store that drops
+// the Table half after intake (workloads, nodes) keeps too little to rebuild a
+// record, so its restored findings are left as they are.
+func (s attentionBundleSink) SeedBundles(bundles []ingest.Bundle) {
+	for _, bundle := range bundles {
+		if !attentionBundleCarriesSource(s.source, bundle) {
+			return
+		}
+	}
+	s.index.replaceSource(s.owner, attentionRecordsFromBundles(s.source, bundles), false)
+}
+
+// attentionBundleCarriesSource reports whether a stored bundle still holds
+// the half attentionRecordFromBundle reads for source: the Event's slim fact,
+// or every other source's Table row.
+func attentionBundleCarriesSource(source attentionSource, bundle ingest.Bundle) bool {
+	if source == attentionSourceEvent {
+		return bundle.Aggregate != nil
+	}
+	return bundle.Table != nil
+}
+
+func attentionRecordsFromBundles(source attentionSource, bundles []ingest.Bundle) []attentionSourceRecord {
 	records := make([]attentionSourceRecord, 0, len(bundles))
 	for _, bundle := range bundles {
-		if record, ok := attentionRecordFromBundle(s.source, bundle); ok {
+		if record, ok := attentionRecordFromBundle(source, bundle); ok {
 			records = append(records, record)
 		}
 	}
-	s.index.ReplaceSource(s.owner, records)
+	return records
 }
 
-func (i *clusterAttentionIndex) upsertEvent(meta ClusterMeta, obj interface{}) {
-	event, ok := maintainedUnwrap(obj).(*corev1.Event)
-	if !ok {
-		return
-	}
-	if record, keep := attentionRecordFromEvent(meta, event); keep {
-		i.UpsertSource("events", record)
-	}
-}
+var (
+	_ ingest.BundleReplacer = attentionBundleSink{}
+	_ ingest.BundleSeeder   = attentionBundleSink{}
+)
 
-func (i *clusterAttentionIndex) deleteEvent(meta ClusterMeta, obj interface{}) {
-	event, ok := maintainedUnwrap(obj).(*corev1.Event)
-	if !ok {
-		return
+// fillEventAttentionRecord fills an Event's attention fields from its slim fact
+// and its catalog Summary's lifecycle. The finding's display namespace is the
+// involved object's; Ref stays the Event's own identity.
+func fillEventAttentionRecord(record *attentionSourceRecord, catalog objectcatalog.Summary, aggregate interface{}) bool {
+	fact, typed := aggregate.(*EventFact)
+	if !typed || fact == nil {
+		return false
 	}
-	record, valid := attentionRecordFromEvent(meta, event)
-	if valid {
-		i.DeleteSource("events", record.Ref)
+	record.objectNamespace = fact.InvolvedNamespace
+	record.Status = fact.Type
+	record.StatusReason = fact.Reason
+	record.Message = fact.Message
+	record.AgeTimestamp = fact.lastObserved().UnixMilli()
+	if blocker, blocked := catalog.FinalizerBlocker(); blocked {
+		record.FinalizerBlocked = true
+		record.DeletionTimestamp = blocker.DeletionTimestamp
 	}
+	return true
 }
-
-var _ ingest.BundleReplacer = attentionBundleSink{}
 
 func evaluateAttentionSource(record attentionSourceRecord, now time.Time) attentionEvaluation {
 	if !completeAttentionRef(record.Ref) {
@@ -1539,42 +1492,12 @@ func attentionRecordFromBundle(source attentionSource, bundle ingest.Bundle) (at
 		record.StatusReason = row.StatusReason
 		record.Restarts = row.Restarts
 		record.AgeTimestamp = row.AgeTimestamp
+	case attentionSourceEvent:
+		if !fillEventAttentionRecord(&record, catalog, bundle.Aggregate) {
+			return attentionSourceRecord{}, false
+		}
 	default:
 		return attentionSourceRecord{}, false
-	}
-	return record, completeAttentionRef(record.Ref)
-}
-
-func attentionRecordFromEvent(meta ClusterMeta, event *corev1.Event) (attentionSourceRecord, bool) {
-	if event == nil {
-		return attentionSourceRecord{}, false
-	}
-	timestamp := eventres.EventTimestamp(event).Time
-	lifecycle := resourcemodel.ObjectLifecycle(event.ObjectMeta)
-	deletionTimestamp := int64(0)
-	if event.DeletionTimestamp != nil {
-		deletionTimestamp = event.DeletionTimestamp.UnixMilli()
-	}
-	record := attentionSourceRecord{
-		Ref: resourcemodel.ResourceRef{
-			ClusterID: meta.ClusterID,
-			Group:     "",
-			Version:   "v1",
-			Kind:      "Event",
-			Resource:  "events",
-			Namespace: event.Namespace,
-			Name:      event.Name,
-			UID:       string(event.UID),
-		},
-		Metadata:          streamrows.NewResourceMetadata(event),
-		Source:            attentionSourceEvent,
-		objectNamespace:   event.InvolvedObject.Namespace,
-		Status:            event.Type,
-		StatusReason:      event.Reason,
-		Message:           event.Message,
-		AgeTimestamp:      timestamp.UnixMilli(),
-		FinalizerBlocked:  lifecycle.FinalizerBlocked,
-		DeletionTimestamp: deletionTimestamp,
 	}
 	return record, completeAttentionRef(record.Ref)
 }

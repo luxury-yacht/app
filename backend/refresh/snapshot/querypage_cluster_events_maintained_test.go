@@ -8,8 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	corelisters "k8s.io/client-go/listers/core/v1"
-	"k8s.io/client-go/tools/cache"
 )
 
 // clusterEventObj builds a namespaced Event involving a cluster-scoped object (empty
@@ -40,10 +38,10 @@ func namespacedEventObj(name, rv string) *corev1.Event {
 	}
 }
 
-// TestClusterEventsBuilderMaintainedMatchesListPath is the cluster-events maintained-store
-// cutover gate: a builder serving from the informer-fed store must produce the byte-identical
-// ClusterEventsSnapshot the list path produces across window + query scopes. Both paths skip
-// namespaced events via the shared projectClusterEventEntry.
+// TestClusterEventsBuilderMaintainedMatchesListPath is the cluster-events sink gate: a
+// builder serving from the store its events sink fills must produce the byte-identical
+// ClusterEventsSnapshot a store of directly projected rows produces, across window +
+// query scopes. Both skip namespaced events via the shared clusterEventEntry.
 func TestClusterEventsBuilderMaintainedMatchesListPath(t *testing.T) {
 	meta := ClusterMeta{}
 	events := []*corev1.Event{
@@ -53,16 +51,8 @@ func TestClusterEventsBuilderMaintainedMatchesListPath(t *testing.T) {
 		namespacedEventObj("pod-started.4", "6"), // dropped on both paths
 	}
 
-	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
-	maintained := newTypedMaintainedStore(meta, clusterEventsQuerypageSchema(), clusterEventTableQueryAdapter())
-	for _, e := range events {
-		require.NoError(t, indexer.Add(e))
-		if entry, ok := projectClusterEventEntry(meta, e); ok {
-			maintained.upsertRow(entry, e)
-		}
-	}
-	listBuilder := &ClusterEventsBuilder{eventLister: corelisters.NewEventLister(indexer)}
-	maintainedBuilder := &ClusterEventsBuilder{maintained: maintained}
+	listBuilder := clusterEventsProjectedBuilder(meta, events...)
+	maintainedBuilder := clusterEventsBuilderFor(t, meta, events...)
 
 	scopes := []string{
 		"",
@@ -81,6 +71,7 @@ func TestClusterEventsBuilderMaintainedMatchesListPath(t *testing.T) {
 			listSnap.Payload.(ClusterEventsSnapshot),
 			maintSnap.Payload.(ClusterEventsSnapshot),
 			"scope %q: maintained Build payload must equal the list Build payload", scope)
-		require.Equal(t, listSnap.Version, maintSnap.Version, "scope %q: version", scope)
+		// Version is not compared: the sink-fed store's version counts its
+		// changes, while the projected reference reports the max resourceVersion.
 	}
 }

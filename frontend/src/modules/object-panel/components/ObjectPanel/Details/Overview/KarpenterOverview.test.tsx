@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { CustomResourceDetails } from '@/core/refresh/types';
-import { getOverviewDescriptor } from './descriptorRegistry';
+import { resolveOverviewDescriptor } from './descriptorRegistry';
 import { OverviewRenderer } from './OverviewRenderer';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
@@ -49,8 +49,8 @@ const detail: CustomResourceDetails = {
   ],
 };
 
-function requireDescriptor(kind: string, data: CustomResourceDetails) {
-  const descriptor = getOverviewDescriptor(kind, data);
+function requireDescriptor(data: CustomResourceDetails) {
+  const descriptor = resolveOverviewDescriptor({ detailType: 'customresource', details: data });
   if (!descriptor) {
     throw new Error('Karpenter descriptor missing');
   }
@@ -81,10 +81,8 @@ describe('Karpenter overview', () => {
         { type: 'Ready', status: 'False', reason: 'UnhealthyDependents', lastTransitionTime: null },
       ],
     };
-    const descriptor = requireDescriptor('NodePool', data);
-    const html = renderToStaticMarkup(
-      <OverviewRenderer descriptor={descriptor} data={data as never} />
-    );
+    const descriptor = requireDescriptor(data);
+    const html = renderToStaticMarkup(<OverviewRenderer descriptor={descriptor} data={data} />);
     const dom = document.createElement('div');
     dom.innerHTML = html;
     // Readiness leads the pool view and conditions no longer trail it as a section.
@@ -102,21 +100,17 @@ describe('Karpenter overview', () => {
   });
   it('omits empty sections for a newly created object', () => {
     const data = { ...detail, karpenter: {}, conditions: [] };
-    const descriptor = requireDescriptor('NodePool', data);
-    const html = renderToStaticMarkup(
-      <OverviewRenderer descriptor={descriptor} data={data as never} />
-    );
+    const descriptor = requireDescriptor(data);
+    const html = renderToStaticMarkup(<OverviewRenderer descriptor={descriptor} data={data} />);
     expect(html).not.toContain('<h3');
   });
   it('renders backend resource fields including zero values and controller conditions', () => {
-    const descriptor = getOverviewDescriptor('nodepool', detail);
+    const descriptor = resolveOverviewDescriptor({ detailType: 'customresource', details: detail });
     expect(descriptor).toBeDefined();
     if (!descriptor) {
       throw new Error('Karpenter descriptor missing');
     }
-    const html = renderToStaticMarkup(
-      <OverviewRenderer descriptor={descriptor} data={detail as never} />
-    );
+    const html = renderToStaticMarkup(<OverviewRenderer descriptor={descriptor} data={detail} />);
     for (const value of [
       'NodePool',
       'default',
@@ -171,13 +165,11 @@ describe('Karpenter overview', () => {
         },
       ],
     };
-    const descriptor = getOverviewDescriptor('NodeClaim', claim);
+    const descriptor = resolveOverviewDescriptor({ detailType: 'customresource', details: claim });
     if (!descriptor) {
       throw new Error('Karpenter descriptor missing');
     }
-    const html = renderToStaticMarkup(
-      <OverviewRenderer descriptor={descriptor} data={claim as never} />
-    );
+    const html = renderToStaticMarkup(<OverviewRenderer descriptor={descriptor} data={claim} />);
     for (const value of [
       'linked-pool',
       'display-class',
@@ -221,11 +213,9 @@ describe('Karpenter overview', () => {
         tags: { team: 'platform' },
       },
     };
-    const descriptor = requireDescriptor('EC2NodeClass', data);
+    const descriptor = requireDescriptor(data);
     const dom = document.createElement('div');
-    dom.innerHTML = renderToStaticMarkup(
-      <OverviewRenderer descriptor={descriptor} data={data as never} />
-    );
+    dom.innerHTML = renderToStaticMarkup(<OverviewRenderer descriptor={descriptor} data={data} />);
     expect([...dom.querySelectorAll('h3')].map((heading) => heading.textContent)).toEqual([
       'Networking',
       'Images',
@@ -251,11 +241,9 @@ describe('Karpenter overview', () => {
         startupTaints: [{ key: 'initializing', effect: 'NoSchedule' }],
       },
     };
-    const descriptor = requireDescriptor('NodePool', data);
+    const descriptor = requireDescriptor(data);
     const dom = document.createElement('div');
-    dom.innerHTML = renderToStaticMarkup(
-      <OverviewRenderer descriptor={descriptor} data={data as never} />
-    );
+    dom.innerHTML = renderToStaticMarkup(<OverviewRenderer descriptor={descriptor} data={data} />);
     expect(dom.querySelectorAll('.karpenter-budget')).toHaveLength(2);
     for (const value of ['30s', '48h', '10%', 'Underutilized', '0 9 * * *', '1h']) {
       expect(dom.textContent).toContain(value);
@@ -270,13 +258,18 @@ describe('Karpenter overview', () => {
       },
     };
     dom.innerHTML = renderToStaticMarkup(
-      <OverviewRenderer descriptor={descriptor} data={overlay as never} />
+      <OverviewRenderer descriptor={descriptor} data={overlay} />
     );
     expect(dom.textContent).toContain('Weight0');
     expect(dom.textContent).toContain('-10%');
     expect(dom.textContent).toContain('min values: 0');
   });
   it('keeps colliding unknown kinds on the generic overview', () => {
-    expect(getOverviewDescriptor('NodePool', { ...detail, resourceFamily: '' })).toBeUndefined();
+    expect(
+      resolveOverviewDescriptor({
+        detailType: 'customresource',
+        details: { ...detail, resourceFamily: '' },
+      })
+    ).toBeUndefined();
   });
 });

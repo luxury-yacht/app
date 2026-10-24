@@ -13,6 +13,10 @@ features to reusable building blocks.
 | `shared/` | Reusable components, hooks, icons, actions, constants, and pure utilities |
 | `styles/` | Global and shared CSS loaded by the app |
 
+- Style with the tokens in `styles/tokens/` and `styles/appearance-modes/`. A
+  `var(--name)` without a fallback must name a property something defines; an
+  undefined one silently drops the declaration. `cssCascadeContracts.test.ts`
+  enforces this.
 - `shared/` never depends on a feature module and holds rendering primitives
   only when they are independent of module state. Feature-local `hooks/`,
   `utils/`, and `types/` stay local; promote only when the dependency direction
@@ -75,8 +79,9 @@ resolved placement with a deferred module.
 - Trigger text comes from `multiSelectFilterTriggerLabel`
   (`shared/components/dropdowns/multiSelectFilterSelection.ts`): the bare label
   when everything is selected, else `Label (N)` including `Label (0)`, so an
-  empty selection never looks unfiltered. Column-visibility menus keep their
-  `Columns` text.
+  empty selection never looks unfiltered. Column-visibility menus are named
+  `Columns` instead; the GridTable one opens from an icon toolbar button
+  (`iconTrigger`) rather than the value field.
 - Each multi-select row has an `only` shortcut (`enableOnlyAction`, default on)
   that collapses the selection to that option, revealed on hover or keyboard
   highlight and reachable via `Alt+Enter`. It is a click region inside the
@@ -111,20 +116,31 @@ Files under `modules/object-panel/components/ObjectPanel/Details/`:
   `{kind:'widget'}` for irreducible UI. Panel-only values (hpaManaged, drain,
   cluster identity) come from the `OverviewContext` argument, not hooks. Use a
   field's `hidden(dto)` predicate to hide empty rows without layout jitter.
-- `Overview/descriptorRegistry.ts` — single kind → descriptor map for dispatch
-  and drift check; register new kinds here.
+- `Overview/descriptorRegistry.ts` — maps each payload `detailType` to its
+  descriptor for dispatch and the drift check. Every built-in detail type needs
+  an entry typed against its own DTO (a missing or mistyped descriptor fails
+  typecheck); custom resources resolve by their family facts.
 - `Overview/driftCheck.test.ts` — every field of `new DtoClass({})` must be
   covered (schema field, `derivedFrom`, status item, widget `consumes`, or
   `coveredElsewhere`); a new DTO field fails by name until placed.
 - `Overview/GenericOverview.tsx` — fallback for custom/unregistered resources.
-- `objectDetailModel.ts` — builds the single `activeDetail` (raw DTO) plus the
-  sibling sections `DetailsTab` composes (Containers, RBAC rules,
-  ConfigMap/Secret data, active pods, port-forward availability, scale
-  replicas, CronJob suspend). These are capability-gated per kind via
-  `DETAIL_KIND_CONFIG`, never inferred from field presence, because names are
-  overloaded (`rules` on Ingress/Webhook vs RBAC, `containers` on Job,
-  `desiredReplicas` on HPA, `pods` on Node); `objectDetailModel.test.ts` locks
-  those four exclusions.
+- `objectDetailModel.ts` — builds `activeDetail` (the tagged `ObjectDetail`)
+  plus the sibling sections the panel composes. Each reads one detail type's
+  DTO, never inferred from field presence, because names are overloaded
+  (`rules` on Ingress/Webhook vs RBAC, `containers` on Job, `desiredReplicas`
+  on HPA, `pods` on Node); `objectDetailModel.test.ts` locks those exclusions.
+  - Presentation sections (Containers, container names, ConfigMap/Secret data,
+    RBAC rules, Namespace finalization) are declared per detail type in
+    `DETAIL_DERIVATIONS`.
+  - Sections a kind has because of a kind facet (active pods, scale replicas,
+    port-forward availability, suspend state, owned Jobs) are mapped types over
+    `DetailTypesWhere<…>` from `shared/kinds/kindFacets`, so they must cover
+    exactly the detail types whose kind has the facet. Change the facet in the
+    kind's backend descriptor, then add or remove the accessor TypeScript asks
+    for.
+- The object-details payload is `{…} & ObjectDetail`: `detailType` selects the
+  generated `ObjectDetailTypes` DTO of `details`. Consumers narrow on
+  `detailType` or index a tag-keyed table; they never cast `details`.
 
 Per-kind parity lives in each `*Overview.test.tsx`, which renders
 `OverviewRenderer(descriptor, dto)` directly.

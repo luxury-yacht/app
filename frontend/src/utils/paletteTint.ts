@@ -6,6 +6,13 @@
  * the precomputed payload from appearanceBootstrap.ts.
  */
 
+import { APP_PREFERENCE_SPECS } from '@/core/settings/appPreferences.generated';
+
+// The palette preferences' ranges (backend preference schema): saturation runs
+// 0..PALETTE_SATURATION_RANGE and brightness ±PALETTE_BRIGHTNESS_RANGE.
+export const PALETTE_SATURATION_RANGE: number = APP_PREFERENCE_SPECS.paletteSaturationLight.max;
+export const PALETTE_BRIGHTNESS_RANGE: number = APP_PREFERENCE_SPECS.paletteBrightnessLight.max;
+
 // Gray scale token definitions with their original lightness values.
 // Lightness is derived from the neutral hex values in colors.css (:root).
 export const GRAY_STEPS: { token: string; lightness: number }[] = [
@@ -22,12 +29,13 @@ export const GRAY_STEPS: { token: string; lightness: number }[] = [
   { token: '--color-base-50', lightness: 96 },
 ];
 
-// Maximum CSS saturation percentage when saturation is at 100.
+// Maximum CSS saturation percentage when saturation is at its maximum.
 // 20% is enough to tint without losing the "gray" feel.
 export const MAX_SATURATION = 20;
 
-// Maximum lightness offset in percentage points when brightness is at ±50.
-// brightness * (MAX_BRIGHTNESS_OFFSET / 50) gives the actual offset.
+// Maximum lightness offset in percentage points when brightness is at its
+// extreme; brightness * (MAX_BRIGHTNESS_OFFSET / PALETTE_BRIGHTNESS_RANGE) gives
+// the actual offset.
 export const MAX_BRIGHTNESS_OFFSET = 10;
 
 /**
@@ -42,7 +50,7 @@ export function isPaletteActive(saturation: number, brightness: number): boolean
  * Generates an array of tinted palette entries from hue, saturation, and brightness values.
  * Each entry contains the CSS custom property token and its HSL value string.
  *
- * @param brightness - Lightness offset (-50 to +50). Maps to ±MAX_BRIGHTNESS_OFFSET
+ * @param brightness - Lightness offset (±PALETTE_BRIGHTNESS_RANGE). Maps to ±MAX_BRIGHTNESS_OFFSET
  *                     percentage points of lightness. Each step is clamped to 1-99%.
  */
 export function generateTintedPalette(
@@ -50,8 +58,8 @@ export function generateTintedPalette(
   saturation: number,
   brightness: number = 0
 ): { token: string; value: string }[] {
-  const saturationOffset = (saturation / 100) * MAX_SATURATION;
-  const lightnessOffset = (brightness / 50) * MAX_BRIGHTNESS_OFFSET;
+  const saturationOffset = (saturation / PALETTE_SATURATION_RANGE) * MAX_SATURATION;
+  const lightnessOffset = (brightness / PALETTE_BRIGHTNESS_RANGE) * MAX_BRIGHTNESS_OFFSET;
   return GRAY_STEPS.map(({ token, lightness }) => {
     // Clamp adjusted lightness to 1-99% to avoid pure black/white.
     const adjusted = Math.min(99, Math.max(1, lightness + lightnessOffset));

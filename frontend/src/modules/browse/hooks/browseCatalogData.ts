@@ -5,9 +5,8 @@ import {
   normalizeCatalogScope,
   parseContinueToken,
   reconcileByUID,
-  splitClusterScope,
 } from '@modules/browse/utils/browseUtils';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { compareUtf16Strings } from '@/shared/utils/sort';
 
@@ -122,7 +121,7 @@ export const buildBrowseCatalogPlan = ({
   });
   const catalogScope =
     normalizeCatalogScope(baseScope, pageLimit, pinnedNamespaces, clusterId) ??
-    buildClusterScope(clusterId ?? undefined, baseScope);
+    buildClusterRefreshScope('catalog', clusterId);
 
   const metadataNamespaces = catalogNamespaces(clusterScopedOnly, pinnedNamespaces, [], []);
 
@@ -140,7 +139,7 @@ export const buildBrowseCatalogPlan = ({
   });
   const metadataScope =
     normalizeCatalogScope(metadataBaseScope, 1, pinnedNamespaces, clusterId) ??
-    buildClusterScope(clusterId ?? undefined, metadataBaseScope);
+    buildClusterRefreshScope('catalog', clusterId);
 
   return {
     resourceFamily,
@@ -190,7 +189,7 @@ export const buildBrowseCatalogPageScope = (
   });
   return (
     normalizeCatalogScope(pageScope, input.pageLimit, input.pinnedNamespaces, input.clusterId) ??
-    buildClusterScope(input.clusterId ?? undefined, pageScope)
+    buildClusterRefreshScope('catalog', input.clusterId)
   );
 };
 
@@ -203,25 +202,6 @@ export const catalogSortScope = (
     return {};
   }
   return { sort: key, sortDirection: direction };
-};
-
-export const acceptsCatalogSnapshotScope = (
-  scope: string | undefined,
-  fallbackScope: string,
-  pinnedNamespaces: string[]
-): boolean => {
-  if (pinnedNamespaces.length === 0) {
-    return true;
-  }
-  const incomingScopeParams = new URLSearchParams(
-    splitClusterScope(scope ?? fallbackScope).scope.replace(/^\?/, '')
-  );
-  const incomingNamespaces = incomingScopeParams.getAll('namespace').sort(compareUtf16Strings);
-  const expectedNamespaces = pinnedNamespaces.slice().sort(compareUtf16Strings);
-  return (
-    incomingNamespaces.length === expectedNamespaces.length &&
-    incomingNamespaces.every((ns, index) => ns === expectedNamespaces[index])
-  );
 };
 
 export const applyCatalogBaseline = (

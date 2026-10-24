@@ -14,7 +14,6 @@ import (
 
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
-	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 )
 
@@ -42,9 +41,8 @@ func permissionGateFixture(t *testing.T, allow map[string]bool, errOn map[string
 	})
 
 	checker := permissions.NewChecker(client, "test-cluster", time.Minute)
-	factory := informer.New(context.Background(), client, nil, 0, checker)
 	registry := domain.New()
-	gate := newPermissionGate(registry, factory,
+	gate := newPermissionGate(registry, permissions.NewGrants(checker),
 		func(domain, resource string, errs ...error) {},
 		func(domain, group, resource string) {})
 	return gate, registry
@@ -59,13 +57,13 @@ func TestRegisterListWatchDomainFallbackAllowAnyRegistersOnSingleAllowedResource
 		nil,
 	)
 
-	informerRegistered := false
+	listWatchRegistered := false
 	fallbackRegistered := false
 	err := gate.registerListWatchDomain(context.Background(), listWatchDomainConfig{
 		name:   "test-overview",
 		checks: []listWatchCheck{{group: "", resource: "namespaces"}},
-		registerInformer: func() error {
-			informerRegistered = true
+		registerListWatch: func() error {
+			listWatchRegistered = true
 			return nil
 		},
 		fallbackChecks: []listCheck{
@@ -82,7 +80,7 @@ func TestRegisterListWatchDomainFallbackAllowAnyRegistersOnSingleAllowedResource
 	})
 
 	require.NoError(t, err)
-	require.False(t, informerRegistered)
+	require.False(t, listWatchRegistered)
 	require.True(t, fallbackRegistered, "one allowed fallback resource must be enough with fallbackAllowAny")
 	require.False(t, registry.IsPermissionDenied("test-overview"))
 }
@@ -99,7 +97,7 @@ func TestRegisterListWatchDomainFallbackAllowAnyToleratesOtherResourceErrors(t *
 	err := gate.registerListWatchDomain(context.Background(), listWatchDomainConfig{
 		name:   "test-overview",
 		checks: []listWatchCheck{{group: "", resource: "namespaces"}},
-		registerInformer: func() error {
+		registerListWatch: func() error {
 			return nil
 		},
 		fallbackChecks: []listCheck{
@@ -128,7 +126,7 @@ func TestRegisterListWatchDomainFallbackAllowAnyDeniesWhenNothingAllowed(t *test
 	err := gate.registerListWatchDomain(context.Background(), listWatchDomainConfig{
 		name:   "test-overview",
 		checks: []listWatchCheck{{group: "", resource: "namespaces"}},
-		registerInformer: func() error {
+		registerListWatch: func() error {
 			return nil
 		},
 		fallbackChecks: []listCheck{
@@ -183,7 +181,7 @@ func TestRegisterListWatchDomainFallbackDefaultStillRequiresAllResources(t *test
 	err := gate.registerListWatchDomain(context.Background(), listWatchDomainConfig{
 		name:   "test-nodes",
 		checks: []listWatchCheck{{group: "", resource: "nodes"}, {group: "", resource: "pods"}},
-		registerInformer: func() error {
+		registerListWatch: func() error {
 			return nil
 		},
 		fallbackChecks: []listCheck{

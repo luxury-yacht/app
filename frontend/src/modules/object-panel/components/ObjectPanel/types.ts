@@ -6,6 +6,7 @@
  */
 import type { ResourceRef } from '@core/refresh/types';
 import type { MultiSelectFilterSelection } from '@shared/components/dropdowns/multiSelectFilterSelection';
+import type { KindPanelLogs, KindPanelShell } from '@shared/kinds/kindFacets';
 
 type NullableResourceRefFields = {
   [K in keyof ResourceRef]?: ResourceRef[K] | null;
@@ -16,62 +17,29 @@ export type PanelObjectData = NullableResourceRefFields & {
   clusterName?: string | null;
 };
 
-export type ResourceCapability = {
-  objPanelLogs?: boolean;
-  nodeLogs?: boolean;
-  delete?: boolean;
-  restart?: boolean;
-  scale?: boolean;
-  edit?: boolean;
-  shell?: boolean;
-  debug?: boolean;
-  trigger?: boolean;
-  suspend?: boolean;
-};
-
+/** The panel features the object's kind supports, from its kind facets. */
 export type FeatureSupport = {
-  objPanelLogs: boolean;
-  nodeLogs: boolean;
-  manifest: boolean;
-  values: boolean;
-  delete: boolean;
-  restart: boolean;
-  scale: boolean;
-  edit: boolean;
-  shell: boolean;
+  logs: KindPanelLogs;
+  shell: KindPanelShell;
   debug: boolean;
-  trigger: boolean;
-  suspend: boolean;
+  edit: boolean;
 };
 
 export type ComputedCapabilities = {
   hasObjPanelLogs: boolean;
-  hasNodeLogs: boolean;
   hasShell: boolean;
-  hasManifest: boolean;
-  hasValues: boolean;
-  canDelete: boolean;
-  canRestart: boolean;
-  canScale: boolean;
   canEditYaml: boolean;
-  canTrigger: boolean;
-  canSuspend: boolean;
 };
 
 export type CapabilityIdMap = {
   viewYaml?: string;
   editYaml?: string;
   viewObjPanelLogs?: string;
-  viewManifest?: string;
-  viewValues?: string;
-  delete?: string;
-  restart?: string;
-  scale?: string;
-  trigger?: string;
-  suspend?: string;
   shell?: string;
-  shellExecGet?: string;
-  shellExecCreate?: string;
+  /** Shell permission ids that must all be allowed. */
+  shellAllOf: string[];
+  /** Shell permission ids of which one must be allowed (alternative stream verbs). */
+  shellAnyOf: string[];
   debug?: string;
   removeFinalizer?: string;
   removeNamespaceFinalizer?: string;
@@ -86,13 +54,6 @@ export type CapabilityState = {
 export type CapabilityStates = {
   viewYaml: CapabilityState;
   editYaml: CapabilityState;
-  viewManifest: CapabilityState;
-  viewValues: CapabilityState;
-  delete: CapabilityState;
-  restart: CapabilityState;
-  scale: CapabilityState;
-  trigger: CapabilityState;
-  suspend: CapabilityState;
   shell: CapabilityState;
   debug: CapabilityState;
   removeFinalizer: CapabilityState;
@@ -101,11 +62,6 @@ export type CapabilityStates = {
 
 export type CapabilityReasons = {
   nodeLogs?: string;
-  delete?: string;
-  restart?: string;
-  scale?: string;
-  trigger?: string;
-  suspend?: string;
   editYaml?: string;
   shell?: string;
   debug?: string;
@@ -115,14 +71,9 @@ export const createEmptyCapabilityIdMap = (): CapabilityIdMap => ({
   viewYaml: undefined,
   editYaml: undefined,
   viewObjPanelLogs: undefined,
-  viewManifest: undefined,
-  viewValues: undefined,
-  delete: undefined,
-  restart: undefined,
-  scale: undefined,
   shell: undefined,
-  shellExecGet: undefined,
-  shellExecCreate: undefined,
+  shellAllOf: [],
+  shellAnyOf: [],
   debug: undefined,
   removeFinalizer: undefined,
   removeNamespaceFinalizer: undefined,
@@ -145,11 +96,6 @@ export type LogDisplayMode = 'raw' | 'pretty' | 'parsed';
 
 /** What the text filter does: show every line, only matching lines, or only the others. */
 export type LogFilterMode = 'all' | 'filtered' | 'invert';
-
-export interface LogScrollPosition {
-  scrollTop: number;
-  isTailFollowing: boolean;
-}
 
 /**
  * Persistent subset of LogViewerState — the user-facing view preferences

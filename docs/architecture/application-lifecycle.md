@@ -59,8 +59,8 @@ close sequences: [dockable-panels.md](../frontend/dockable-panels.md).
   saved geometry. New app windows' readiness waits for cluster hydration and
   coordinator subscriptions.
 - A panel window's runtime-ready event only lets that webview bootstrap its
-  immutable descriptor; the panel stays hidden until its reconstructed group
-  acknowledges readiness. It never initializes or releases a workspace,
+  descriptor (identity plus the group the directory moves into it); the panel
+  stays hidden until its reconstructed group acknowledges readiness. It never initializes or releases a workspace,
   restores workspace geometry, or counts toward last-workspace quit.
 - `windowOptionsForPlatform`: macOS/Windows peers start hidden until runtime
   ready; Linux starts visible.
@@ -147,8 +147,8 @@ close sequences: [dockable-panels.md](../frontend/dockable-panels.md).
   resets the macOS menu after runtime-ready state changes such as sidebar or
   panel visibility. Windows/Linux use neutral labels.
 - `AppearanceModeContext` subscribes to the dark-scheme `matchMedia` query and
-  the settings event bus after mount, applies system changes only while the
-  preference is `system`, and unsubscribes on unmount.
+  the `appearanceMode` preference after mount, applies system changes only while
+  the preference is `system`, and unsubscribes on unmount.
 
 ## Frontend runtime boundary
 
@@ -159,6 +159,9 @@ close sequences: [dockable-panels.md](../frontend/dockable-panels.md).
 - Copy with `writeClipboardText`: the WebView refuses click-initiated browser
   clipboard writes, so `navigator.clipboard` fails from a button or menu but
   works from a shortcut. The `no-direct-clipboard-write` Biome plugin enforces it.
+- Paste with `readClipboardText`: the WebView gates `navigator.clipboard`
+  reads behind a "Paste" callout the user must click. The
+  `no-direct-clipboard-read` Biome plugin enforces it.
 
 ## Cluster-owned panel workspaces
 
@@ -178,10 +181,17 @@ close sequences: [dockable-panels.md](../frontend/dockable-panels.md).
 - Panel-lifetime state owners (such as the panel metrics buffer) register a
   removal handler and drop state when a panel leaves every window; moves and
   retained placements are not removals.
-- A successful publication and an individual tab-transfer commit share one
-  directory mutation. Whole-group and cluster-view transfers validate complete
-  source sets before moving anything. The registry commits placement only after
-  the destination acknowledges reconstruction
+- Publications report only a renderer's own arrangement; they never open,
+  close, claim, or move a panel. A renderer closes a panel with an explicit
+  intent (`ClosePanelWorkspaceObject`), which removes it only if the directory
+  still places it in that renderer and is not moving it. Whole-group Float and dock-back and single panel-tab
+  moves record a pending move in the directory (`BeginGroupTransfer`); a
+  cluster-view transfer records one for every docked panel the directory places
+  in the source view (`BeginViewTransfer`). Publications and `Open` cannot
+  change a pending move, and the owning transfer's terminal cancels it unless
+  it committed. The registry commits placement only after the destination
+  acknowledges reconstruction (`AcknowledgePanelTransfer`, or the cluster-view
+  handoff, whose commit runs inside the selection mutation)
   ([renderer protocol](../frontend/dockable-panels.md#acknowledged-handoffs)).
 - Opening another app view of a cluster uses the move's cluster-selection
   admission and seeded window factory without committing source removal.
@@ -208,7 +218,7 @@ Lock ordering:
 
 | Close | Wails surface | Backend contract |
 | --- | --- | --- |
-| App window | Cancellable `events.Common.WindowClosing` starts a renderer preflight | Denial keeps it open. Releases only that view's cluster tabs and foreground demand; docked panel identities stay in the directory; floating panels stay live. |
+| App window | Cancellable `events.Common.WindowClosing` starts a renderer preflight | Denial keeps it open. Releases only that view's cluster tabs and foreground demand; docked panel identities stay in the directory; floating panels stay live. Cancels the transfers it takes part in and declines every directory move addressed to it. |
 | Cluster tab | `KubeconfigContext` preflight calls the registry's cluster-panel close transaction | Requests and acknowledgements carry cluster, window, and transaction identity; denial, cancellation, unavailable windows, or changed participants abort. |
 | Panel window | Cancellable native hook sends a guard request to that renderer | Closes through the registry, removes its shared entries, releases the native and any unused shared-panel reference; failure keeps the source. |
 | Application quit | `application.Options.ShouldQuit` asks every ready app and panel renderer to acknowledge one preflight | Unanimous approval requests Wails Quit; its `ShouldQuit` reentry runs the once-only persistence flush before teardown. Denial, timeout, delivery failure, or rejected handoff cancels; settlement reaches the original participants without holding the quit mutex. |

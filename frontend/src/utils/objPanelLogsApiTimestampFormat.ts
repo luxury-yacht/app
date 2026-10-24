@@ -1,9 +1,11 @@
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
+import { APP_PREFERENCE_SPECS } from '@/core/settings/appPreferences.generated';
 
 dayjs.extend(utc);
 
-export const DEFAULT_OBJ_PANEL_LOGS_API_TIMESTAMP_FORMAT = 'YYYY-MM-DDTHH:mm:ss.SSS[Z]';
+export const DEFAULT_OBJ_PANEL_LOGS_API_TIMESTAMP_FORMAT: string =
+  APP_PREFERENCE_SPECS.objPanelLogsApiTimestampFormat.defaultValue;
 export const DEFAULT_LOCAL_OBJ_PANEL_LOGS_API_TIMESTAMP_FORMAT = 'YYYY-MM-DDTHH:mm:ss.SSSZ';
 
 const SUPPORTED_DAYJS_TOKENS = [

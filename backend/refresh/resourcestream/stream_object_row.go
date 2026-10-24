@@ -4,10 +4,8 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-// objectAs decodes an informer event payload to the requested type, unwrapping
-// delete tombstones. It is the generic replacement for the per-kind
-// <kind>FromObject decoders. Descriptor-driven streaming uses it via
-// broadcastObjectFromDescriptor (see stream_descriptor_dispatch.go).
+// objectAs decodes a watch event payload to the requested type, unwrapping
+// delete tombstones.
 func objectAs[T any](obj interface{}) (T, bool) {
 	if typed, ok := obj.(T); ok {
 		return typed, true

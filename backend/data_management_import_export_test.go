@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/internal/appupdates"
+	"github.com/luxury-yacht/app/backend/internal/preferenceschema"
 	"github.com/stretchr/testify/require"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -20,9 +21,12 @@ func dataManagementFavorite(id, name string) Favorite {
 		ViewType:  "global",
 		View:      "attention",
 		Namespace: "",
-		Panes: map[string]FavoritePaneState{
-			"main": defaultFavoritePaneState(),
+		Filters: FavoriteFilters{
+			Kinds:      FavoriteFilterSelection{Mode: "all"},
+			Namespaces: FavoriteFilterSelection{Mode: "all"},
+			Clusters:   FavoriteFilterSelection{Mode: "all"},
 		},
+		TableState: FavoriteTableState{SortColumn: "name", SortDirection: "asc", ColumnVisibility: map[string]bool{}},
 	}
 }
 
@@ -139,7 +143,7 @@ func TestImportSettingsReplacesPortableSettingsAndPreservesSessionState(t *testi
 			UseShortResourceNames:    true,
 			DimInactiveNamespaces:    boolPtr(false),
 			ExclusiveNamespaces:      boolPtr(false),
-			Refresh:                  &settingsRefresh{Auto: false, Background: false, MetricsIntervalMs: 9000},
+			Refresh:                  &settingsRefresh{Auto: false, MetricsIntervalMs: 9000},
 			GridTablePersistenceMode: "namespaced",
 			DefaultTablePageSize:     100,
 		},
@@ -249,6 +253,33 @@ func TestFavoritesExportImportRoundTripReplacesLibrary(t *testing.T) {
 	require.Equal(t, []int{0, 1}, []int{got[0].Order, got[1].Order})
 }
 
+// Version 1 exports hold schema v3 favorites with one table state per pane of
+// a split view. Importing keeps each favorite's own view table.
+func TestDecodeFavoritesDataFileFlattensPanedExports(t *testing.T) {
+	pane := func(search string) string {
+		return `{"filters":{"search":"` + search + `","kinds":{"mode":"all"},"namespaces":{"mode":"all"},"clusters":{"mode":"all"}},` +
+			`"tableState":{"sortColumn":"name","sortDirection":"asc","columnVisibility":{}}}`
+	}
+	export := func(favorites string) []byte {
+		return []byte(`{"format":"` + favoritesDataFormat + `","schemaVersion":1,"favorites":[` + favorites + `]}`)
+	}
+
+	document, err := decodeFavoritesDataFile(export(
+		`{"id":"nodes","name":"Nodes","viewType":"cluster","view":"nodes","panes":{"nodes":` + pane("worker") + `,"pods":` + pane("pods") + `}},` +
+			`{"id":"events","name":"Events","viewType":"cluster","view":"events","panes":{"main":` + pane("warn") + `}}`,
+	))
+	require.NoError(t, err)
+	require.Equal(t, []string{"worker", "warn"}, []string{
+		document.Favorites[0].Filters.Search, document.Favorites[1].Filters.Search,
+	})
+	require.Equal(t, []int{0, 1}, []int{document.Favorites[0].Order, document.Favorites[1].Order})
+
+	_, err = decodeFavoritesDataFile(export(
+		`{"id":"lost","name":"Lost","viewType":"cluster","view":"nodes","panes":{"pods":` + pane("pods") + `,"other":` + pane("x") + `}}`,
+	))
+	require.ErrorContains(t, err, `favorite "lost" has no table state for its view`)
+}
+
 func TestImportFavoritesRejectsDuplicateIDsWithoutChangingLibrary(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newSettingsEffectsTestFixture(t)
@@ -353,8 +384,8 @@ func TestFactoryResetClearsEveryAppOwnedArtifactAndRestoresRuntimePolicyDefaults
 	require.FileExists(t, externalKubeconfigPath, "Factory Reset must preserve user-owned kubeconfig files")
 	require.FileExists(t, siblingStatePath, "Factory Reset must preserve other applications' state")
 	require.Nil(t, app.Preferences.appSettings)
-	require.Equal(t, defaultPermissionSSRRFetchConcurrency, app.PermissionFetchPolicy.Concurrency())
-	require.Equal(t, defaultObjPanelLogsTargetPerScopeLimit, app.ContainerLogsPolicy.Limit())
+	require.Equal(t, preferenceschema.DefaultPermissionSSRRFetchConcurrency, app.PermissionFetchPolicy.Concurrency())
+	require.Equal(t, preferenceschema.DefaultObjPanelLogsTargetPerScopeLimit, app.ContainerLogsPolicy.Limit())
 	require.Equal(t, 2, updateState.resetCalls)
 	require.Equal(t, 2, searchPathResets)
 }
@@ -415,6 +446,41 @@ func TestReadDataImportFileRejectsOversizedFiles(t *testing.T) {
 	require.ErrorContains(t, err, "import file exceeds")
 }
 
+// Integer settings are Go ints on disk, so a fractional value in an import
+// fails to parse before validation and the import changes nothing.
+func TestImportSettingsRejectsFractionalIntegerWithoutChangingSettings(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newSettingsEffectsTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	require.NoError(t, app.Preferences.saveSettingsFile(defaultSettingsFile()))
+	settingsPath, err := app.Preferences.getSettingsFilePath()
+	require.NoError(t, err)
+	before, err := os.ReadFile(settingsPath)
+	require.NoError(t, err)
+
+	encoded, err := json.Marshal(settingsDataFile{
+		Format:                settingsDataFormat,
+		SchemaVersion:         settingsDataSchemaVersion,
+		Preferences:           defaultSettingsFile().Preferences,
+		KubeconfigSearchPaths: []string{"/portable/kubeconfigs"},
+	})
+	require.NoError(t, err)
+	var document map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &document))
+	document["preferences"].(map[string]any)["defaultTablePageSize"] = 25.5
+	encoded, err = json.Marshal(document)
+	require.NoError(t, err)
+	importPath := filepath.Join(t.TempDir(), "settings.json")
+	require.NoError(t, os.WriteFile(importPath, encoded, 0o600))
+	installDataManagementDialogs(t, app, "", importPath)
+
+	_, err = app.DataManagement.ImportSettings()
+	require.ErrorContains(t, err, "parse settings import")
+	after, err := os.ReadFile(settingsPath)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+}
+
 func TestDecodeSettingsDataFileRejectsInvalidPortableSettings(t *testing.T) {
 	makeDocument := func() settingsDataFile {
 		return settingsDataFile{
@@ -450,6 +516,16 @@ func TestDecodeSettingsDataFileRejectsInvalidPortableSettings(t *testing.T) {
 		require.NoError(t, err)
 		_, _, err = decodeSettingsDataFile(data)
 		require.ErrorContains(t, err, "invalid appearance mode")
+	})
+
+	// Reading settings repairs a malformed color; an import still rejects it.
+	t.Run("color", func(t *testing.T) {
+		document := makeDocument()
+		document.Preferences.AccentColorLight = "#zzz"
+		data, err := json.Marshal(document)
+		require.NoError(t, err)
+		_, _, err = decodeSettingsDataFile(data)
+		require.ErrorContains(t, err, "invalid color format")
 	})
 
 	t.Run("theme", func(t *testing.T) {
@@ -511,18 +587,6 @@ func TestDecodeFavoritesDataFileRejectsInvalidFavorites(t *testing.T) {
 				Favorites:     []Favorite{dataManagementFavorite("favorite", " ")},
 			},
 			message: "missing a name",
-		},
-		{
-			name: "missing panes",
-			document: favoritesDataFile{
-				Format:        favoritesDataFormat,
-				SchemaVersion: favoritesDataSchemaVersion,
-				Favorites: []Favorite{{
-					ID:   "favorite",
-					Name: "Favorite",
-				}},
-			},
-			message: "at least one named pane",
 		},
 		{
 			name: "duplicate name",

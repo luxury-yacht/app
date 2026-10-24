@@ -27,7 +27,7 @@ type ownerRow struct {
 const ownerIndexName = "test:owner"
 
 // projectOwnerBundle projects a ConfigMap into a Bundle whose Table half carries
-// an owner read from the "owner" annotation and whose index tracks that owner.
+// an owner read from the "owner" annotation.
 func projectOwnerBundle(obj interface{}) (interface{}, error) {
 	cm, ok := obj.(*corev1.ConfigMap)
 	if !ok {
@@ -37,8 +37,18 @@ func projectOwnerBundle(obj interface{}) (interface{}, error) {
 	return Bundle{
 		Table:   ownerRow{NS: cm.Namespace, Name: cm.Name, Owner: owner},
 		Catalog: row{NS: cm.Namespace, Name: cm.Name},
-		Indexes: map[string][]string{ownerIndexName: {owner}},
 	}, nil
+}
+
+// newOwnerIndexedStore returns a retain-table store indexed by the Table half's
+// owner, the shape of the pod store's owner-key index.
+func newOwnerIndexedStore() *ProjectingStore {
+	store := NewProjectingStore(projectOwnerBundle)
+	store.SetRetainTable(true)
+	store.AddIndex(ownerIndexName, func(b Bundle) []string {
+		return []string{b.Table.(ownerRow).Owner}
+	})
+	return store
 }
 
 func ownedConfigMap(ns, name, owner string) *corev1.ConfigMap {
@@ -65,8 +75,9 @@ type captureTableSink struct {
 func (s *captureTableSink) Upsert(tableRow interface{}) { s.upserts = append(s.upserts, tableRow) }
 func (s *captureTableSink) Delete(tableRow interface{}) { s.deletes = append(s.deletes, tableRow) }
 
-// rewriteOwner returns a rewrite func that retargets rows owned by from to to,
-// updating the Table half and the owner index — the shape the pod heal uses.
+// rewriteOwner returns a rewrite func that retargets rows owned by from to to by
+// changing only the Table half — the shape the pod heal uses. The owner index
+// follows because it derives from that half.
 func rewriteOwner(from, to string) func(Bundle) (Bundle, bool) {
 	return func(b Bundle) (Bundle, bool) {
 		table, ok := b.Table.(ownerRow)
@@ -75,14 +86,12 @@ func rewriteOwner(from, to string) func(Bundle) (Bundle, bool) {
 		}
 		table.Owner = to
 		b.Table = table
-		b.Indexes = map[string][]string{ownerIndexName: {to}}
 		return b, true
 	}
 }
 
 func TestRewriteBundlesByIndexUpdatesStoreSinksAndIndexes(t *testing.T) {
-	store := NewProjectingStore(projectOwnerBundle)
-	store.SetRetainTable(true)
+	store := newOwnerIndexedStore()
 
 	if err := store.Add(ownedConfigMap("default", "app-1", "rs-1")); err != nil {
 		t.Fatalf("Add: %v", err)
@@ -150,8 +159,7 @@ func TestRewriteBundlesByIndexUpdatesStoreSinksAndIndexes(t *testing.T) {
 }
 
 func TestRewriteBundlesByIndexNoMatchIsNoOp(t *testing.T) {
-	store := NewProjectingStore(projectOwnerBundle)
-	store.SetRetainTable(true)
+	store := newOwnerIndexedStore()
 	if err := store.Add(ownedConfigMap("default", "app-1", "rs-1")); err != nil {
 		t.Fatalf("Add: %v", err)
 	}

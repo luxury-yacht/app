@@ -27,9 +27,8 @@ Applies to Go code under `backend/`.
     status/facts/DTOs live in `backend/resources/<kind>/`. Before adding or
     changing resource status, relationship links, object references, capability
     integration, or fact slots, follow `docs/architecture/shared-resource-model.md`.
-  - The implementation-only `ResourceGateway.Get<Kind>` detail methods and the
-    object-panel detail-fetcher dispatch map are generated from each kind's
-    `appbinding.Spec`; run
+  - The object-panel detail-fetcher dispatch map and the binding-model anchor
+    are generated from each kind's `appbinding.Spec`; run
     `mise exec -- go generate ./backend` after adding or changing a kind, and never hand-edit
     `resource_details_generated.go` / `object_detail_fetchers_generated.go`.
 - Manual refreshes and streaming domains belong to the backend refresh registry + ManualQueue; avoid bespoke refresh/streaming code.

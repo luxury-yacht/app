@@ -5,7 +5,10 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { findGridTableRowByKey } from '@shared/components/tables/GridTable.utils';
+import {
+  findGridTableRowByKey,
+  isInNestedRowDetail,
+} from '@shared/components/tables/GridTable.utils';
 import type { RefObject } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -24,6 +27,12 @@ type FocusNavigationOptions<T> = {
   updateHoverForElement: (element: HTMLDivElement | null) => void;
   getRowClassName?: (item: T, index: number) => string | null | undefined;
   shouldIgnoreRowClick: (event: React.MouseEvent) => boolean;
+  /**
+   * False while a table nested in one of this table's row details (or another
+   * row of the table this one is nested in) holds the keyboard; the focused
+   * row then shows no highlight, so one row is lit at a time.
+   */
+  holdsKeyboard?: boolean;
 };
 
 type FocusNavigationResult<T> = {
@@ -58,6 +67,7 @@ export function useGridTableFocusNavigation<T>({
   updateHoverForElement,
   getRowClassName,
   shouldIgnoreRowClick,
+  holdsKeyboard = true,
 }: FocusNavigationOptions<T>): FocusNavigationResult<T> {
   const [isWrapperFocused, setIsWrapperFocused] = useState(false);
   const [isShortcutsSuppressed, setIsShortcutsSuppressed] = useState(false);
@@ -89,6 +99,11 @@ export function useGridTableFocusNavigation<T>({
 
   const handleWrapperFocus = useCallback(
     (event: React.FocusEvent<HTMLElement>) => {
+      // Focus inside a row detail belongs to the table nested there.
+      if (wrapperRef.current && isInNestedRowDetail(wrapperRef.current, event.target)) {
+        setIsWrapperFocused(false);
+        return;
+      }
       const shouldSuppress = isShortcutOptOutTarget(event.target);
       setIsWrapperFocused(true);
       setIsShortcutsSuppressed(shouldSuppress);
@@ -119,7 +134,7 @@ export function useGridTableFocusNavigation<T>({
         });
       }
     },
-    [isShortcutOptOutTarget, keyExtractor, tableData]
+    [isShortcutOptOutTarget, keyExtractor, tableData, wrapperRef]
   );
 
   const handleWrapperBlur = useCallback((_event: React.FocusEvent<HTMLElement>) => {
@@ -165,7 +180,7 @@ export function useGridTableFocusNavigation<T>({
   const getRowClassNameWithFocus = useCallback(
     (item: T, index: number) => {
       const base = getRowClassName?.(item, index) ?? '';
-      if (!focusedRowKey || isFocusedRowHighlightSuppressed) {
+      if (!focusedRowKey || isFocusedRowHighlightSuppressed || !holdsKeyboard) {
         return base;
       }
       const rowKey = keyExtractor(item, index);
@@ -174,7 +189,7 @@ export function useGridTableFocusNavigation<T>({
       }
       return [base, 'gridtable-row--focused'].filter(Boolean).join(' ');
     },
-    [focusedRowKey, isFocusedRowHighlightSuppressed, keyExtractor, getRowClassName]
+    [focusedRowKey, holdsKeyboard, isFocusedRowHighlightSuppressed, keyExtractor, getRowClassName]
   );
 
   useEffect(() => {
@@ -185,7 +200,10 @@ export function useGridTableFocusNavigation<T>({
     if (!wrapper) {
       return;
     }
-    const handlePointerDown = () => {
+    const handlePointerDown = (event: PointerEvent) => {
+      if (isInNestedRowDetail(wrapper, event.target)) {
+        return;
+      }
       pendingPointerFocusRef.current = true;
       lastNavigationMethodRef.current = 'pointer';
     };

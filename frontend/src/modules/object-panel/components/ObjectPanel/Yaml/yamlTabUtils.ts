@@ -12,7 +12,6 @@ import {
   CheckObjectYamlOwnership,
   MergeObjectYamlWithLatest,
 } from '@/core/backend-api';
-import type { ObjectYamlMutationResponse } from './yamlErrors';
 import { YAML_STRINGIFY_OPTIONS } from './yamlTabConfig';
 import type { ObjectIdentity } from './yamlValidation';
 
@@ -78,6 +77,8 @@ export const applyYamlOnServer = async (
   return response;
 };
 
+export type ObjectYamlConflict = backend.ObjectYAMLConflict;
+export type ObjectYamlMutationResponse = backend.ObjectYAMLMutationResponse;
 export type ObjectYamlOwnershipConflict = backend.ObjectYAMLOwnershipConflict;
 export type ObjectYamlOwnershipCheckResponse = backend.ObjectYAMLOwnershipCheckResponse;
 

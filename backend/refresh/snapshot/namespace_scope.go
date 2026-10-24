@@ -2,12 +2,11 @@ package snapshot
 
 import (
 	"errors"
-	"strings"
+	"fmt"
 
 	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/domain"
 )
-
-const namespaceSnapshotScopePrefix = "namespace:"
 
 // NamespaceSnapshotScope is the parsed identity for namespace-scoped snapshot
 // builders. Namespace is empty only when AllNamespaces is true.
@@ -18,59 +17,27 @@ type NamespaceSnapshotScope struct {
 	CanonicalScope string
 }
 
-func parseNamespaceSnapshotScope(scope, requiredMessage string) (NamespaceSnapshotScope, error) {
-	clusterID, trimmed := refresh.SplitClusterScope(scope)
-	trimmed = strings.TrimSpace(trimmed)
-	if trimmed == "" {
+// parseNamespaceSnapshotScope decodes a namespace table's base scope (its
+// selector, without the query) with the scope codec.
+func parseNamespaceSnapshotScope(domainName, clusterID, baseScope, requiredMessage string) (NamespaceSnapshotScope, error) {
+	if baseScope == "" {
 		return NamespaceSnapshotScope{}, errors.New(requiredMessage)
 	}
-
-	if isAllNamespaceScope(trimmed) {
-		return NamespaceSnapshotScope{
-			ClusterID:      clusterID,
-			AllNamespaces:  true,
-			CanonicalScope: refresh.JoinClusterScope(clusterID, namespaceSnapshotScopePrefix+"all"),
-		}, nil
-	}
-
-	namespace, err := parseNamespaceScopeValue(trimmed, requiredMessage)
+	selector, err := domain.ParseDomainSelector(domainName, baseScope)
 	if err != nil {
 		return NamespaceSnapshotScope{}, err
 	}
-	return NamespaceSnapshotScope{
+	parsed := NamespaceSnapshotScope{
 		ClusterID:      clusterID,
-		Namespace:      namespace,
-		CanonicalScope: refresh.JoinClusterScope(clusterID, namespaceSnapshotScopePrefix+namespace),
-	}, nil
-}
-
-func parseNamespaceScopeValue(scope, requiredMessage string) (string, error) {
-	_, scopeValue := refresh.SplitClusterScope(scope)
-	namespace := strings.TrimSpace(scopeValue)
-	if strings.HasPrefix(namespace, namespaceSnapshotScopePrefix) {
-		namespace = strings.TrimPrefix(namespace, namespaceSnapshotScopePrefix)
-		namespace = strings.TrimLeft(namespace, ":")
+		CanonicalScope: refresh.JoinClusterScope(clusterID, selector.String()),
 	}
-	namespace = strings.TrimSpace(namespace)
-	if namespace == "" {
-		return "", errors.New(requiredMessage)
-	}
-	return namespace, nil
-}
-
-func isAllNamespaceScope(scope string) bool {
-	_, scopeValue := refresh.SplitClusterScope(scope)
-	value := strings.TrimSpace(strings.ToLower(scopeValue))
-	if value == "" {
-		return false
-	}
-	if strings.HasPrefix(value, namespaceSnapshotScopePrefix) {
-		value = strings.TrimLeft(strings.TrimPrefix(value, namespaceSnapshotScopePrefix), ":")
-	}
-	switch value {
-	case "all", "*":
-		return true
+	switch selector.Kind {
+	case refresh.ScopeSelectorAllNamespaces:
+		parsed.AllNamespaces = true
+	case refresh.ScopeSelectorNamespace:
+		parsed.Namespace = selector.Namespace
 	default:
-		return false
+		return NamespaceSnapshotScope{}, fmt.Errorf("%s scope %q does not name a namespace", domainName, baseScope)
 	}
+	return parsed, nil
 }

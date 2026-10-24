@@ -1,25 +1,22 @@
 /*
- * backend/resources_helm.go
+ * backend/helm_actions.go
  *
- * App-level Helm resource wrappers.
- * - Fetches Helm release details, manifests, and values.
+ * Helm release object actions.
  */
 
 package backend
 
 import (
-	"context"
-	"strings"
-
 	configmappkg "github.com/luxury-yacht/app/backend/resources/configmap"
 	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/helm"
 )
 
 func (g *ResourceGateway) deleteHelmReleaseAction(target ObjectActionTargetRef) error {
-	if target.Group != "helm.sh" || target.Version != "v3" || !strings.EqualFold(target.Kind, "HelmRelease") {
-		return errUnsupportedActionTarget(ObjectActionDelete, target, "helm.sh/v3", "HelmRelease")
+	if !resourcemodel.IsHelmReleaseGVK(objectActionTargetGVK(target)) {
+		return errUnsupportedActionTarget(ObjectActionDelete, target, resourcemodel.HelmReleaseGVK.GroupVersion().String(), resourcemodel.HelmReleaseGVK.Kind)
 	}
 	if err := requireNamespacedObject(target.Namespace, target.Name); err != nil {
 		return err
@@ -45,11 +42,7 @@ func (g *ResourceGateway) deleteHelmReleaseAction(target ObjectActionTargetRef) 
 	); err != nil {
 		return err
 	}
-	_, err = FetchResourceWithSelection(g, selectionKey, "", "HelmDelete", target.Namespace+"/"+target.Name, func(context.Context) (struct{}, error) {
-		service := helm.NewService(helm.Dependencies{Common: deps})
-		return struct{}{}, service.DeleteRelease(target.Namespace, target.Name)
-	})
-	if err != nil {
+	if err := helm.NewService(helm.Dependencies{Common: deps}).DeleteRelease(target.Namespace, target.Name); err != nil {
 		return err
 	}
 	g.invalidateHelmCache(selectionKey, target.Namespace, target.Name)

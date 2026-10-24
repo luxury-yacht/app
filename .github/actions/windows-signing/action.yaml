@@ -1,0 +1,80 @@
+name: Sign Windows files with SignPath
+description: Submits files to SignPath, replaces them with the signed copies, and checks each signature.
+
+inputs:
+  path:
+    description: File or wildcard to sign; all matches must be in one directory
+    required: true
+  artifact-name:
+    description: Name of the temporary workflow artifact submitted to SignPath
+    required: true
+  artifact-configuration:
+    description: SignPath artifact configuration slug
+    required: true
+  signing-policy:
+    description: SignPath signing policy slug (test-signing or release-signing)
+    required: true
+  version:
+    description: Product version checked by the artifact configuration's metadata restrictions
+    required: true
+  api-token:
+    description: SignPath API token of a submitter on the signing policy
+    required: true
+  organization-id:
+    description: SignPath organization identifier
+    required: true
+  project:
+    description: SignPath project slug
+    required: false
+    default: app
+
+runs:
+  using: composite
+  steps:
+    # SignPath fetches the files from this run's artifacts, which is how it
+    # verifies that they were built by this workflow.
+    - name: Upload unsigned files
+      id: upload
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.path }}
+        if-no-files-found: error
+        overwrite: true
+        retention-days: 1
+
+    - name: Submit signing request
+      uses: signpath/github-action-submit-signing-request@v3
+      with:
+        api-token: ${{ inputs.api-token }}
+        organization-id: ${{ inputs.organization-id }}
+        project-slug: ${{ inputs.project }}
+        signing-policy-slug: ${{ inputs.signing-policy }}
+        artifact-configuration-slug: ${{ inputs.artifact-configuration }}
+        github-artifact-id: ${{ steps.upload.outputs.artifact-id }}
+        # Release signing waits here for manual approval in SignPath.
+        wait-for-completion-timeout-in-seconds: 3600
+        output-artifact-directory: ${{ runner.temp }}/signpath/${{ inputs.artifact-name }}
+        parameters: |
+          version: ${{ toJSON(inputs.version) }}
+
+    - name: Replace files with signed copies
+      shell: pwsh
+      env:
+        FILES: ${{ inputs.path }}
+        SIGNED_DIR: ${{ runner.temp }}/signpath/${{ inputs.artifact-name }}
+        SIGNING_POLICY: ${{ inputs.signing-policy }}
+      run: |
+        $files = @(Get-ChildItem -Path $env:FILES -File)
+        if ($files.Count -eq 0) { throw "No files match $env:FILES" }
+        foreach ($file in $files) {
+          $signed = Join-Path $env:SIGNED_DIR $file.Name
+          Copy-Item -LiteralPath $signed -Destination $file.FullName -Force
+          $signature = Get-AuthenticodeSignature -LiteralPath $file.FullName
+          if ($null -eq $signature.SignerCertificate) { throw "$($file.Name) is not signed" }
+          # The test certificate is untrusted, so only release signatures must validate.
+          if ($env:SIGNING_POLICY -eq 'release-signing' -and $signature.Status -ne 'Valid') {
+            throw "$($file.Name) signature status is $($signature.Status)"
+          }
+          Write-Output "$($file.Name): signed by $($signature.SignerCertificate.Subject) ($($signature.Status))"
+        }

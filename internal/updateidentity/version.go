@@ -31,6 +31,12 @@ func (version ReleaseVersion) Tag() string {
 	return "v" + version.Version
 }
 
+// Compare orders two release versions by semantic-version precedence, so a
+// beta prerelease sorts before the stable release of the same version.
+func (version ReleaseVersion) Compare(other ReleaseVersion) int {
+	return semver.Compare("v"+version.Version, "v"+other.Version)
+}
+
 func HasUpdaterTarget(targets []string, platform Platform, architecture string) bool {
 	want := strings.ToLower(strings.TrimSpace(string(platform))) + "/" +
 		strings.ToLower(strings.TrimSpace(architecture))

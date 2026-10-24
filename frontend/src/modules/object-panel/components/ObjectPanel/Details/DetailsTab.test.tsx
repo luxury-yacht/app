@@ -5,37 +5,26 @@
  * sections (Containers, RBACRules, DataSection), each gated by the derived
  * ObjectDetailModel. Per-kind FIELD rendering is covered by the descriptor tests + driftCheck; this
  * suite covers the composition contract: what DetailsTab passes to Overview and which sibling
- * sections appear.
+ * sections appear. It renders inside the production shell (keyboard, zoom, and the real object
+ * action controller); only the backend boundary is faked (test-utils/appState). The sibling
+ * sections are stubbed to capture what they are given.
  */
 
-import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ObjectDetail } from '@/core/refresh/types';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { objectDetailOf } from '@/test-utils/objectDetail';
 import type { DetailsTabProps } from './DetailsTab';
 import { buildObjectDetailModel } from './objectDetailModel';
 
-const useShortcutMock = vi.fn();
 const overviewMock = vi.fn();
 const containersMock = vi.fn();
 const rbacRulesMock = vi.fn();
 const dataMock = vi.fn();
-
-vi.mock('@core/contexts/ZoomContext', () => ({
-  useZoom: () => ({ zoomLevel: 100 }),
-}));
-
-vi.mock('@ui/shortcuts', () => ({
-  useShortcut: (options: unknown) => useShortcutMock(options),
-  useSearchShortcutTarget: () => undefined,
-}));
-
-vi.mock('@shared/hooks/useObjectActionController', () => ({
-  useObjectActionController: () => ({
-    getMenuItems: () => [],
-    modals: null,
-    requestFinalizerRemoval: vi.fn(),
-  }),
-}));
 
 vi.mock('@modules/object-panel/components/ObjectPanel/Details/Overview', () => ({
   __esModule: true,
@@ -71,21 +60,13 @@ vi.mock('./DetailsTabData', () => ({
 
 import DetailsTab from './DetailsTab';
 
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
+
 const renderDetailsTab = async (props: DetailsTabProps) => {
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = ReactDOM.createRoot(container);
-  await act(async () => {
-    root.render(<DetailsTab {...props} />);
-    await Promise.resolve();
-  });
-  return {
-    container,
-    cleanup: () => {
-      act(() => root.unmount());
-      container.remove();
-    },
-  };
+  await view.show(<DetailsTab {...props} />);
+  return { container: view.container, cleanup: () => view.clear() };
 };
 
 type TestObjectData = Pick<NonNullable<DetailsTabProps['objectData']>, 'kind' | 'name'> &
@@ -93,21 +74,17 @@ type TestObjectData = Pick<NonNullable<DetailsTabProps['objectData']>, 'kind' | 
 
 const createBaseProps = (
   objectData: TestObjectData,
-  detail: Parameters<typeof buildObjectDetailModel>[2] = null
+  detail: ObjectDetail | null = null
 ): DetailsTabProps => {
   const completeObjectData: NonNullable<DetailsTabProps['objectData']> = {
-    clusterId: 'test-cluster',
+    clusterId: dev.clusterId,
     group: '',
     version: 'v1',
     ...objectData,
   };
   return {
     objectData: completeObjectData,
-    detailModel: buildObjectDetailModel(
-      completeObjectData,
-      completeObjectData.kind.toLowerCase(),
-      detail ?? null
-    ),
+    detailModel: buildObjectDetailModel(completeObjectData, detail),
     isActive: true,
     detailsLoading: false,
     detailsError: null,
@@ -125,22 +102,24 @@ const createBaseProps = (
 const overviewProps = () => overviewMock.mock.calls[0]?.[0] as Record<string, unknown>;
 
 describe('DetailsTab', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    dev = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, ['default']);
+    view = await app.render(null);
     overviewMock.mockClear();
     containersMock.mockClear();
     rbacRulesMock.mockClear();
     dataMock.mockClear();
-    useShortcutMock.mockClear();
   });
 
   it('passes object identity, the active detail, and lifecycle callbacks to Overview', async () => {
-    const detail = {
+    const detail = objectDetailOf('pod', {
       status: 'Running',
       ready: '1/1',
       containers: [{ name: 'app', image: 'example/app:1.0.0' }],
       cpuUsage: '100m',
       memUsage: '128Mi',
-    };
+    });
     const props = createBaseProps({ kind: 'Pod', name: 'pod-1', namespace: 'default' }, detail);
 
     const { cleanup } = await renderDetailsTab(props);
@@ -163,14 +142,14 @@ describe('DetailsTab', () => {
   it('renders the Containers section for pods/workloads and leaves utilization to the Metrics tab', async () => {
     const props = createBaseProps(
       { kind: 'Pod', name: 'pod-1', namespace: 'default' },
-      {
+      objectDetailOf('pod', {
         containers: [{ name: 'app', image: 'example/app:1.0.0' }],
         initContainers: [{ name: 'init', image: 'busybox' }],
         cpuUsage: '100m',
         cpuRequest: '50m',
         memUsage: '128Mi',
         memRequest: '64Mi',
-      }
+      })
     );
 
     const { container, cleanup } = await renderDetailsTab(props);
@@ -187,7 +166,7 @@ describe('DetailsTab', () => {
   it('passes port-forward availability false for pods with no forwardable ports', async () => {
     const props = createBaseProps(
       { kind: 'Pod', name: 'pod-1', namespace: 'default' },
-      { containers: [{ name: 'app', image: 'i', ports: ['53/UDP'] }] }
+      objectDetailOf('pod', { containers: [{ name: 'app', image: 'i', ports: ['53/UDP'] }] })
     );
     const { cleanup } = await renderDetailsTab(props);
     expect(overviewProps()).toMatchObject({ portForwardAvailable: false });
@@ -197,7 +176,7 @@ describe('DetailsTab', () => {
   it('passes port-forward availability false for services with no TCP ports', async () => {
     const props = createBaseProps(
       { kind: 'Service', name: 'svc-1', namespace: 'default' },
-      { ports: [{ name: 'dns', port: 53, protocol: 'UDP' }] }
+      objectDetailOf('service', { ports: [{ name: 'dns', port: 53, protocol: 'UDP' }] })
     );
     const { cleanup } = await renderDetailsTab(props);
     expect(overviewProps()).toMatchObject({ portForwardAvailable: false });
@@ -208,7 +187,7 @@ describe('DetailsTab', () => {
     const cfg = await renderDetailsTab(
       createBaseProps(
         { kind: 'ConfigMap', name: 'cfg', namespace: 'default' },
-        { data: { key: 'value' }, binaryData: {} }
+        objectDetailOf('configmap', { data: { key: 'value' }, binaryData: {} })
       )
     );
     expect(dataMock).toHaveBeenCalledWith(expect.objectContaining({ isSecret: false }));
@@ -216,7 +195,10 @@ describe('DetailsTab', () => {
 
     dataMock.mockClear();
     const sec = await renderDetailsTab(
-      createBaseProps({ kind: 'Secret', name: 's', namespace: 'default' }, { data: { t: 'x' } })
+      createBaseProps(
+        { kind: 'Secret', name: 's', namespace: 'default' },
+        objectDetailOf('secret', { data: { t: 'x' } })
+      )
     );
     expect(dataMock).toHaveBeenCalledWith(expect.objectContaining({ isSecret: true }));
     sec.cleanup();
@@ -225,14 +207,14 @@ describe('DetailsTab', () => {
   it('omits containers and utilization for nodes', async () => {
     const props = createBaseProps(
       { kind: 'Node', name: 'node-a', namespace: '' },
-      {
+      objectDetailOf('node', {
         cpuUsage: '2',
         cpuCapacity: '4',
         memoryUsage: '8Gi',
         memoryCapacity: '16Gi',
         podsCount: 50,
         podsCapacity: '110',
-      }
+      })
     );
     const { container, cleanup } = await renderDetailsTab(props);
     expect(container.querySelector('.resource-bar-container')).toBeNull();
@@ -243,7 +225,7 @@ describe('DetailsTab', () => {
   it('renders the RBAC rules section for roles', async () => {
     const props = createBaseProps(
       { kind: 'Role', name: 'role', namespace: 'ci' },
-      { rules: [{ apiGroups: [''], resources: ['pods'], verbs: ['list'] }] }
+      objectDetailOf('role', { rules: [{ apiGroups: [''], resources: ['pods'], verbs: ['list'] }] })
     );
     const { cleanup } = await renderDetailsTab(props);
     expect(rbacRulesMock).toHaveBeenCalledWith(
@@ -257,7 +239,7 @@ describe('DetailsTab', () => {
   it('omits the Containers section for Jobs (even though Job details carry containers)', async () => {
     const props = createBaseProps(
       { kind: 'Job', name: 'job', namespace: 'batch' },
-      { containers: [{ name: 'app', image: 'i' }], duration: '1m' }
+      objectDetailOf('job', { containers: [{ name: 'app', image: 'i' }], duration: '1m' })
     );
     const { cleanup } = await renderDetailsTab(props);
     expect(containersMock).not.toHaveBeenCalled();
@@ -268,7 +250,7 @@ describe('DetailsTab', () => {
     const deploy = await renderDetailsTab(
       createBaseProps(
         { kind: 'Deployment', name: 'web', namespace: 'apps' },
-        { desiredReplicas: 4 }
+        objectDetailOf('deployment', { desiredReplicas: 4 })
       )
     );
     expect(overviewProps()).toMatchObject({ desiredReplicas: 4 });
@@ -276,7 +258,10 @@ describe('DetailsTab', () => {
 
     overviewMock.mockClear();
     const cron = await renderDetailsTab(
-      createBaseProps({ kind: 'CronJob', name: 'c', namespace: 'batch' }, { suspend: true })
+      createBaseProps(
+        { kind: 'CronJob', name: 'c', namespace: 'batch' },
+        objectDetailOf('cronjob', { suspend: true })
+      )
     );
     expect(overviewProps()).toMatchObject({ suspend: true });
     cron.cleanup();
@@ -338,7 +323,7 @@ describe('DetailsTab', () => {
     const props: DetailsTabProps = {
       ...createBaseProps(
         { kind: 'Namespace', name: 'apps', namespace: '' },
-        {
+        objectDetailOf('namespace', {
           finalizers: ['kubernetes'],
           conditions: [
             {
@@ -348,7 +333,7 @@ describe('DetailsTab', () => {
               message: 'unable to retrieve the complete list of server APIs',
             },
           ],
-        }
+        })
       ),
       deletion: { deletionTimestamp: '2026-08-09T12:34:56Z' },
     };

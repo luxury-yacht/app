@@ -1,259 +1,174 @@
 /**
  * frontend/src/modules/cluster/components/ClusterViewStorage.test.tsx
  *
- * Test suite for ClusterViewStorage.
- * Covers key behaviors and edge cases for ClusterViewStorage.
+ * The cluster Storage view lists the visible cluster's PersistentVolumes from
+ * the backend's cluster-storage query and opens what its own columns link to
+ * with complete identity: a volume's claim (a namespaced
+ * PersistentVolumeClaim), its StorageClass, and the volume's Map from its row
+ * menu. The aggregated table it shares with the other aggregated views is
+ * covered once by NsViewConfig.test.tsx. Runs in the full app, navigated
+ * through the sidebar, over a faked backend (test-utils/appState).
  */
 
-import ClusterViewStorage from '@modules/cluster/components/ClusterViewStorage';
-import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
-import type { GridTableProps } from '@shared/components/tables/GridTable';
+import { objectPanelId } from '@modules/object-panel/objectPanelRef';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { ClusterStorageEntry } from '@/core/refresh/types';
-import { requireReactElement } from '@/test-utils/requireReactElement';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type ObjectIdentity,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
 
-vi.mock('@core/contexts/FavoritesContext', () => ({
-  useFavorites: () => ({
-    favorites: [],
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
 
-    addFavorite: vi.fn(),
-    updateFavorite: vi.fn(),
-    deleteFavorite: vi.fn(),
-    reorderFavorites: vi.fn(),
-  }),
-  FavoritesProvider: ({ children }: { children: React.ReactNode }) => children,
-}));
-
-vi.mock('@ui/favorites/FavToggle', () => ({
-  useFavToggle: () => ({
-    type: 'toggle',
-    id: 'favorite',
-    icon: null,
-    active: false,
-    onClick: () => undefined,
-    title: 'Save as favorite',
-  }),
-}));
-
-type StorageRow = ClusterStorageEntry;
-const gridTablePropsRef: { current: GridTableProps<StorageRow> | null } = { current: null };
-const openWithObjectMock = vi.hoisted(() => vi.fn());
-
-vi.mock('@shared/components/tables/GridTable', async () => {
-  const actual = await vi.importActual<typeof import('@shared/components/tables/GridTable')>(
-    '@shared/components/tables/GridTable'
-  );
-  return {
-    ...actual,
-    default: (props: GridTableProps<StorageRow>) => {
-      gridTablePropsRef.current = props;
-      return <div data-testid="grid-table" />;
-    },
-  };
-});
-
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: openWithObjectMock }),
-}));
-
-vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: vi.fn() }),
-}));
-
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedKubeconfig: 'path:context' }),
-}));
-
-vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
-  __esModule: true,
-  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
-
-vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (data: unknown[]) => ({
-    sortedData: data,
-    sortConfig: { key: 'name', direction: 'asc' },
-    handleSort: vi.fn(),
-  }),
-}));
-
-vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
-  useGridTablePersistence: () => ({
-    sortConfig: { key: 'name', direction: 'asc' },
-    setSortConfig: vi.fn(),
-    columnWidths: null,
-    setColumnWidths: vi.fn(),
-    columnVisibility: null,
-    setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [] },
-    setFilters: vi.fn(),
-    resetState: vi.fn(),
-    hydrated: true,
-    storageKey: 'gridtable:v1:test',
-  }),
-}));
-
-vi.mock('@/hooks/useShortNames', () => ({
-  useShortNames: () => false,
-}));
-
-vi.mock('@core/backend-api', () => ({
-  RunObjectAction: vi.fn(),
-}));
-
-const basePV = {
-  ref: {
-    clusterId: 'cluster-a',
-    group: '',
-    version: 'v1',
-    kind: 'PersistentVolume',
-    resource: 'persistentvolumes',
-    namespace: '',
-    name: 'pv-1',
-  },
+const volume: ObjectIdentity = {
+  group: '',
+  version: 'v1',
   kind: 'PersistentVolume',
-  name: 'pv-1',
-  clusterId: 'cluster-a',
-  clusterName: 'Cluster A',
-  capacity: '10Gi',
-  accessModes: 'ReadWriteOnce',
-  status: 'Bound',
-  statusState: 'Bound',
-  statusPresentation: 'ready',
-  claim: 'team-a/claim',
-  storageClass: 'standard',
-  age: '1d',
+  namespace: '',
+  name: 'pv-data',
 };
 
-const getGridTableProps = () =>
+const volumeRow = (): ClusterStorageEntry => ({
+  ref: { ...volume, clusterId: dev.clusterId, resource: 'persistentvolumes', uid: 'pv-uid' },
+  capacity: '10Gi',
+  accessModes: 'RWO',
+  status: 'Bound',
+  statusPresentation: 'ready',
+  claim: 'team-a/data',
+  storageClass: 'fast-ssd',
+  age: '1d',
+});
+
+const start = async () => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['team-a']);
+  app.startScreen(dev);
+  app.serveTable(dev, 'cluster-storage', { rows: [volumeRow()] });
+  view = await app.mountApp();
+  await view.goTo({ clusterView: 'storage' });
+};
+
+const rowOf = (name: string) =>
   requireValue(
-    gridTablePropsRef.current,
-    'expected captured GridTable props in ClusterViewStorage.test.tsx'
+    Array.from(view.container.querySelectorAll<HTMLElement>('.gridtable-row')).find((row) =>
+      row.textContent?.includes(name)
+    ),
+    `expected the ${name} row`
   );
 
+const cellText = (row: HTMLElement, column: string) =>
+  row.querySelector(`[data-column="${column}"]`)?.textContent?.trim();
+
+const clickLink = async (row: HTMLElement, text: string) => {
+  const link = requireValue(
+    Array.from(row.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent?.trim() === text
+    ),
+    `expected the ${text} link`
+  );
+  await act(async () => link.click());
+  await app.settle();
+};
+
+const openRowMenu = async (name: string) => {
+  const cell = requireValue(
+    rowOf(name).querySelector<HTMLElement>('.grid-cell'),
+    `expected a cell in the ${name} row`
+  );
+  await act(async () => {
+    cell.dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 })
+    );
+  });
+  await app.settle();
+};
+
+const clickMenuItem = async (label: string) => {
+  const item = requireValue(
+    Array.from(
+      document.body.querySelectorAll<HTMLElement>('[role="menu"] .context-menu-item')
+    ).find(
+      (candidate) => candidate.querySelector('.context-menu-label')?.textContent?.trim() === label
+    ),
+    `expected the ${label} menu item`
+  );
+  await act(async () => item.click());
+  await app.settle();
+};
+
+const inCluster = (identity: ObjectIdentity) => ({
+  clusterId: dev.clusterId,
+  clusterName: dev.clusterName,
+  ...identity,
+});
+
 describe('ClusterViewStorage', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  it('lists the cluster’s PersistentVolumes from the backend query in the visible cluster', async () => {
+    await start();
 
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    gridTablePropsRef.current = null;
-    openWithObjectMock.mockClear();
-  });
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-  });
-
-  it('uses canonical object identity for row keys', async () => {
-    await act(async () => {
-      root.render(<ClusterViewStorage />);
-      await Promise.resolve();
-    });
-
-    const props = getGridTableProps();
+    const row = rowOf('pv-data');
     expect(
-      props.keyExtractor({ ...basePV, ref: { ...basePV.ref, clusterId: 'alpha:ctx' } }, 0)
-    ).toBe('alpha:ctx|/v1/PersistentVolume//pv-1');
-  });
-
-  it('leaves the kind options to the backend-published vocabulary (no frontend list)', async () => {
-    await act(async () => {
-      root.render(<ClusterViewStorage />);
-      await Promise.resolve();
-    });
-
-    // No query payload applies in this harness, so there is no vocabulary yet
-    // (only the empty row-derived fallback): the kind options come ONLY from
-    // the backend capabilities on the payload (see the NsViewWorkloads
-    // end-to-end pin), never from a frontend constant.
-    const props = getGridTableProps();
-    expect(props.filters?.options?.kinds).toEqual([]);
-  });
-
-  it('does not show a Kind dropdown for its single-kind resource family', async () => {
-    await act(async () => {
-      root.render(<ClusterViewStorage />);
-      await Promise.resolve();
-    });
-
-    expect(getGridTableProps().filters?.options?.showKindDropdown).toBe(false);
-  });
-
-  it('leads with the identity columns followed by Status', async () => {
-    await act(async () => {
-      root.render(<ClusterViewStorage />);
-      await Promise.resolve();
-    });
-
-    expect(getGridTableProps().columns.map((column) => column.key)).toEqual([
-      'kind',
-      'name',
-      'status',
-      'capacity',
-      'accessModes',
-      'storageClass',
-      'claim',
-      'age',
-    ]);
-  });
-
-  it('uses backend statusPresentation for PersistentVolume status styling', async () => {
-    await act(async () => {
-      root.render(<ClusterViewStorage />);
-      await Promise.resolve();
-    });
-
-    const statusColumn = requireValue(
-      getGridTableProps().columns.find((column) => column.key === 'status'),
-      'expected status column in ClusterViewStorage.test.tsx'
+      ['status', 'capacity', 'accessModes', 'storageClass', 'claim'].map((column) =>
+        cellText(row, column)
+      )
+    ).toEqual(['Bound', '10Gi', 'RWO', 'fast-ssd', 'team-a/data']);
+    const read = requireValue(
+      app.snapshots.reads('cluster-storage').slice(-1)[0],
+      'expected a cluster-storage read'
     );
-    const cell = requireReactElement<{ className?: string }>(
-      statusColumn.render({
-        ...basePV,
-        status: 'Released',
-        statusState: 'Released',
-        statusPresentation: 'warning',
-      }),
-      'expected status cell in ClusterViewStorage.test.tsx'
-    );
-    expect(cell.props.className).toBe('status-text warning');
+    expect(read.scope.startsWith(`${dev.clusterId}|`)).toBe(true);
   });
 
-  it('opens the Map for PersistentVolume rows', async () => {
-    await act(async () => {
-      root.render(<ClusterViewStorage />);
-      await Promise.resolve();
+  it('opens a volume’s claim and StorageClass with complete identity', async () => {
+    const claim: ObjectIdentity = {
+      group: '',
+      version: 'v1',
+      kind: 'PersistentVolumeClaim',
+      namespace: 'team-a',
+      name: 'data',
+    };
+    const storageClass: ObjectIdentity = {
+      group: 'storage.k8s.io',
+      version: 'v1',
+      kind: 'StorageClass',
+      namespace: '',
+      name: 'fast-ssd',
+    };
+    await start();
+    app.servePanel(dev, claim);
+    app.servePanel(dev, storageClass);
+
+    await clickLink(rowOf('pv-data'), 'team-a/data');
+    await clickLink(rowOf('pv-data'), 'fast-ssd');
+
+    expect(view.openPanels()).toEqual([inCluster(claim), inCluster(storageClass)]);
+  });
+
+  it('opens a volume’s Map from its row menu', async () => {
+    await start();
+    const panel = app.servePanel(dev, volume);
+    app.snapshots.serve('object-map', requireValue(panel.scopes.mapScope, 'expected a map scope'), {
+      clusterId: dev.clusterId,
+      clusterName: dev.clusterName,
+      seed: { clusterId: dev.clusterId, ...volume },
+      nodes: [],
+      edges: [],
+      maxNodes: 250,
+      truncated: false,
     });
 
-    const props = getGridTableProps();
-    const objectMapItem = requireValue(
-      props.getCustomContextMenuItems,
-      'expected context-menu factory in ClusterViewStorage.test.tsx'
-    )(basePV, 'name').find((item) => item.actionId === OBJECT_ACTION_IDS.viewMap);
-    expect(objectMapItem).toBeTruthy();
+    await openRowMenu('pv-data');
+    await clickMenuItem('Open Map');
 
-    act(() => {
-      objectMapItem?.onClick?.();
-    });
-
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'PersistentVolume',
-        name: 'pv-1',
-        clusterId: 'cluster-a',
-        group: '',
-        version: 'v1',
-      }),
-      { initialTab: 'map' }
-    );
+    expect(view.openPanels()).toEqual([inCluster(volume)]);
+    expect(
+      view.owners().objectPanels.getOwnedPanel(dev.clusterId, objectPanelId(panel.ref))?.activeView
+    ).toBe('map');
   });
 });

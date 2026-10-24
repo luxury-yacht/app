@@ -1,318 +1,210 @@
 /**
  * frontend/src/modules/cluster/components/ClusterViewConfig.test.tsx
  *
- * Test suite for ClusterViewConfig.
- * Covers key behaviors and edge cases for ClusterViewConfig.
+ * The cluster Config view, and through it the cluster-scoped aggregated table
+ * it shares with the cluster CRDs, RBAC, and Storage views
+ * (ClusterAggregatedResourceGridView in
+ * modules/resource-grid/AggregatedResourceGridView.tsx). It lists the
+ * cluster's config objects from the backend's cluster-scoped query in the
+ * visible cluster, shows its loading state rather than an empty table until
+ * that query first answers, and opens a row's object on its Map tab only for
+ * kinds the object map supports. The row identity, menu, and delete path the
+ * cluster and namespace tables share is covered once by NsViewConfig.test.tsx.
+ * Runs in the full app, navigated through the sidebar, over a faked backend
+ * (test-utils/appState).
  */
 
-import ClusterViewConfig from '@modules/cluster/components/ClusterViewConfig';
-import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
-import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import type { ClusterConfigEntry, ClusterConfigSnapshotPayload } from '@/core/refresh/types';
+import { objectPanelId } from '@/modules/object-panel/objectPanelRef';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type ObjectIdentity,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
+import { snapshotResponse } from '@/test-utils/appState/transport';
 import { requireValue } from '@/test-utils/requireValue';
 
-type ConfigRow = Record<string, unknown>;
-interface LoadingBoundaryCapture {
-  children: React.ReactNode;
-  loading?: boolean;
-  hasLoaded?: boolean;
-  dataLength?: number;
-  spinnerMessage?: string;
-}
+const app = installAppStateHarness();
+let dev: TestCluster;
+let view: MountedApp;
 
-const requestRefreshDomainStateMock = vi.hoisted(() => vi.fn());
-
-vi.mock('@core/contexts/FavoritesContext', () => ({
-  useFavorites: () => ({
-    favorites: [],
-
-    addFavorite: vi.fn(),
-    updateFavorite: vi.fn(),
-    deleteFavorite: vi.fn(),
-    reorderFavorites: vi.fn(),
-  }),
-  FavoritesProvider: ({ children }: { children: React.ReactNode }) => children,
-}));
-
-vi.mock('@ui/favorites/FavToggle', () => ({
-  useFavToggle: () => ({
-    type: 'toggle',
-    id: 'favorite',
-    icon: null,
-    active: false,
-    onClick: () => undefined,
-    title: 'Save as favorite',
-  }),
-}));
-
-const gridTablePropsRef: { current: GridTableProps<ConfigRow> | null } = { current: null };
-const loadingBoundaryPropsRef: { current: LoadingBoundaryCapture | null } = { current: null };
-const openWithObjectMock = vi.fn();
-
-vi.mock('@shared/components/tables/GridTable', async () => {
-  const actual = await vi.importActual<typeof import('@shared/components/tables/GridTable')>(
-    '@shared/components/tables/GridTable'
-  );
-  return {
-    ...actual,
-    default: (props: GridTableProps<ConfigRow>) => {
-      gridTablePropsRef.current = props;
-      return <div data-testid="grid-table" />;
-    },
-  };
-});
-
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: openWithObjectMock }),
-}));
-
-vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: vi.fn() }),
-}));
-
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedKubeconfig: 'path:context', selectedClusterId: 'cluster-a' }),
-}));
-
-vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
-  __esModule: true,
-  default: (props: LoadingBoundaryCapture) => {
-    loadingBoundaryPropsRef.current = props;
-    return <>{props.children}</>;
-  },
-}));
-
-vi.mock('@/hooks/useTableSort', () => ({
-  useTableSort: (data: unknown[]) => ({
-    sortedData: data,
-    sortConfig: { key: 'name', direction: 'asc' },
-    handleSort: vi.fn(),
-  }),
-}));
-
-vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
-  useGridTablePersistence: () => ({
-    sortConfig: { key: 'name', direction: 'asc' },
-    setSortConfig: vi.fn(),
-    columnWidths: null,
-    setColumnWidths: vi.fn(),
-    columnVisibility: null,
-    setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [] },
-    setFilters: vi.fn(),
-    resetState: vi.fn(),
-    hydrated: true,
-    storageKey: 'gridtable:v1:test',
-  }),
-}));
-
-vi.mock('@/hooks/useShortNames', () => ({
-  useShortNames: () => false,
-}));
-
-vi.mock('@/core/data-access', async (importOriginal) => {
-  const actual = (await importOriginal()) as Record<string, unknown>;
-  return {
-    ...actual,
-    requestRefreshDomainState: (request: unknown) => requestRefreshDomainStateMock(request),
-  };
-});
-
-vi.mock('@core/backend-api', () => ({
-  RunObjectAction: vi.fn(),
-}));
-
-vi.mock('@/core/capabilities', () => ({
-  getPermissionKey: (kind: string, verb: string, ns?: string) => `${kind}:${verb}:${ns || ''}`,
-  useUserPermissions: () => new Map(),
-}));
-
-const baseConfig = {
-  ref: {
-    clusterId: 'cluster-a',
-    group: 'storage.k8s.io',
-    version: 'v1',
-    kind: 'StorageClass',
-    resource: 'storageclasses',
-    namespace: '',
-    name: 'standard',
-  },
+const storageClass: ObjectIdentity = {
+  group: 'storage.k8s.io',
+  version: 'v1',
   kind: 'StorageClass',
+  namespace: '',
   name: 'standard',
-  clusterId: 'cluster-a',
-  age: '1d',
+};
+const webhook: ObjectIdentity = {
+  group: 'admissionregistration.k8s.io',
+  version: 'v1',
+  kind: 'ValidatingWebhookConfiguration',
+  namespace: '',
+  name: 'policy-hook',
 };
 
-const getGridTableProps = () =>
-  requireValue(gridTablePropsRef.current, 'expected GridTable props in ClusterViewConfig.test.tsx');
+/** A cluster-config row as backend/refresh/snapshot/cluster_config.go projects it. */
+const configRow = (identity: ObjectIdentity, resource: string): ClusterConfigEntry => ({
+  ref: { ...identity, clusterId: dev.clusterId, resource, uid: `${identity.name}-uid` },
+  details: '',
+  age: '1d',
+});
 
-const getContextMenuItems = (row: ConfigRow, columnKey: string) =>
+const rows = () => [
+  configRow(storageClass, 'storageclasses'),
+  configRow(webhook, 'validatingwebhookconfigurations'),
+];
+
+/** The backend's answer to a cluster-config query: the typed-resource envelope and its rows. */
+const configPage = (): ClusterConfigSnapshotPayload => ({
+  clusterId: dev.clusterId,
+  clusterName: dev.clusterName,
+  provider: 'typed-resource',
+  table: 'cluster-config',
+  total: rows().length,
+  unfilteredTotal: rows().length,
+  totalIsExact: true,
+  facetsExact: true,
+  capabilities: {
+    sortableFields: [],
+    filterableFields: [],
+    searchableFields: [],
+    kindVocabulary: [],
+  },
+  rows: rows(),
+});
+
+/** Parks every cluster-config read until the returned release answers it. */
+const holdConfigReads = () => {
+  const parked: Array<() => void> = [];
+  app.snapshots.respond(({ domain, scope }) =>
+    domain === 'cluster-config'
+      ? new Promise<Response>((resolve) => {
+          parked.push(() =>
+            resolve(snapshotResponse({ domain, scope, version: 100, payload: configPage() }))
+          );
+        })
+      : undefined
+  );
+  return async () => {
+    app.snapshots.respond(null);
+    await act(async () => {
+      parked.splice(0).forEach((answer) => {
+        answer();
+      });
+    });
+    await app.settle();
+  };
+};
+
+const start = async () => {
+  app.serveTable(dev, 'cluster-config', configPage());
+  view = await app.mountApp();
+  await view.goTo({ clusterView: 'config' });
+};
+
+const tableRows = () => Array.from(view.container.querySelectorAll<HTMLElement>('.gridtable-row'));
+
+const rowOf = (name: string) =>
   requireValue(
-    getGridTableProps().getCustomContextMenuItems,
-    'expected context-menu factory in ClusterViewConfig.test.tsx'
-  )(row, columnKey);
+    tableRows().find((row) => row.textContent?.includes(name)),
+    `expected the ${name} row`
+  );
+
+const menuItems = () =>
+  Array.from(document.body.querySelectorAll<HTMLElement>('[role="menu"] .context-menu-item'));
+const menuLabel = (item: HTMLElement) =>
+  item.querySelector('.context-menu-label')?.textContent?.trim();
+
+/** Right-clicks the row, as the user opens its menu, and returns the menu's labels. */
+const openRowMenu = async (name: string) => {
+  const cell = requireValue(
+    rowOf(name).querySelector<HTMLElement>('.grid-cell'),
+    `expected a cell in the ${name} row`
+  );
+  await act(async () => {
+    cell.dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 })
+    );
+  });
+  await app.settle();
+  return menuItems().map(menuLabel);
+};
+
+beforeEach(() => {
+  dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['team-a']);
+  app.startScreen(dev);
+});
 
 describe('ClusterViewConfig', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  it('lists the cluster’s config objects from the cluster-scoped query of the visible cluster', async () => {
+    await start();
 
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-    gridTablePropsRef.current = null;
-    loadingBoundaryPropsRef.current = null;
-    openWithObjectMock.mockReset();
-    requestRefreshDomainStateMock.mockReset();
-    requestRefreshDomainStateMock.mockResolvedValue({
-      status: 'executed',
-      data: {
-        status: 'ready',
-        data: {
-          resources: [],
-          total: 0,
-          totalIsExact: true,
-          kinds: [],
-          facetsExact: true,
-        },
-      },
-    });
+    expect(tableRows().map((row) => row.textContent)).toEqual([
+      expect.stringContaining('standard'),
+      expect.stringContaining('policy-hook'),
+    ]);
+    const read = requireValue(
+      app.snapshots.reads('cluster-config').slice(-1)[0],
+      'expected a cluster-config read'
+    );
+    // A cluster-scoped query carries the cluster and no namespace selector.
+    expect(read.scope.startsWith(`${dev.clusterId}|?`)).toBe(true);
   });
 
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
+  it('shows its loading state, not an empty table, until the first query answers', async () => {
+    const release = holdConfigReads();
+    await start();
+
+    expect(tableRows()).toEqual([]);
+    expect(view.container.textContent).toContain('Loading configuration resources');
+    expect(view.container.textContent).not.toContain('No cluster-scoped config objects found');
+
+    await release();
+
+    expect(tableRows()).toHaveLength(2);
   });
 
-  it('keeps initial empty query-backed cluster config behind the loading boundary', async () => {
-    requestRefreshDomainStateMock.mockImplementation(() => new Promise(() => undefined));
-
-    await act(async () => {
-      root.render(<ClusterViewConfig />);
-      await Promise.resolve();
-      await Promise.resolve();
+  it('opens a row’s object on its Map tab with full identity from the row menu', async () => {
+    const panel = app.servePanel(dev, storageClass);
+    // The Map tab reads the object's map (backend/refresh/snapshot/object_map.go).
+    app.snapshots.serve('object-map', panel.scopes.detailScope ?? '', {
+      clusterId: dev.clusterId,
+      clusterName: dev.clusterName,
+      seed: { ...storageClass, clusterId: dev.clusterId },
+      nodes: [],
+      edges: [],
+      maxNodes: 250,
+      truncated: false,
     });
+    await start();
 
-    expect(loadingBoundaryPropsRef.current).toEqual(
-      expect.objectContaining({
-        loading: true,
-        hasLoaded: false,
-        dataLength: 0,
-        spinnerMessage: 'Loading configuration resources...',
-      })
+    expect(await openRowMenu('standard')).toContain('Open Map');
+    await act(async () =>
+      requireValue(
+        menuItems().find((item) => menuLabel(item) === 'Open Map'),
+        'expected the Open Map item'
+      ).click()
     );
-  });
+    await app.settle();
 
-  it('does not expose local partial copy for query-backed cluster config', async () => {
-    await act(async () => {
-      root.render(<ClusterViewConfig />);
-      await Promise.resolve();
-    });
-
-    expect(getGridTableProps().filters?.options?.partialDataLabel).toBeUndefined();
-  });
-
-  it('opens a StorageClass directly to the map tab from the context menu', async () => {
-    await act(async () => {
-      root.render(<ClusterViewConfig />);
-      await Promise.resolve();
-    });
-
-    const props = getGridTableProps();
-    expect(props).toBeTruthy();
-    const contextItems = getContextMenuItems(baseConfig, 'kind');
-    const mapItem = contextItems.find(
-      (item: { actionId?: string; onClick?: () => void }) =>
-        item.actionId === OBJECT_ACTION_IDS.viewMap
-    );
-
-    expect(mapItem).toBeTruthy();
-    mapItem?.onClick?.();
-
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'StorageClass',
-        name: 'standard',
-        group: 'storage.k8s.io',
-        version: 'v1',
-        clusterId: 'cluster-a',
-      }),
-      { initialTab: 'map' }
-    );
-  });
-
-  it('opens an IngressClass directly to the map tab from the context menu', async () => {
-    const ingressClass = {
-      ...baseConfig,
-      ref: {
-        ...baseConfig.ref,
-        group: 'networking.k8s.io',
-        kind: 'IngressClass',
-        resource: 'ingressclasses',
-        name: 'public',
-      },
-      kind: 'IngressClass',
-      name: 'public',
-    };
-
-    await act(async () => {
-      root.render(<ClusterViewConfig />);
-      await Promise.resolve();
-    });
-
-    const props = getGridTableProps();
-    expect(props).toBeTruthy();
-    const contextItems = getContextMenuItems(ingressClass, 'kind');
-    const mapItem = contextItems.find(
-      (item: { actionId?: string; onClick?: () => void }) =>
-        item.actionId === OBJECT_ACTION_IDS.viewMap
-    );
-
-    expect(mapItem).toBeTruthy();
-    mapItem?.onClick?.();
-
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'IngressClass',
-        name: 'public',
-        group: 'networking.k8s.io',
-        version: 'v1',
-        clusterId: 'cluster-a',
-      }),
-      { initialTab: 'map' }
-    );
-  });
-
-  it('does not offer object map for unsupported cluster config rows', async () => {
-    await act(async () => {
-      root.render(<ClusterViewConfig />);
-      await Promise.resolve();
-    });
-
-    const props = getGridTableProps();
-    expect(props).toBeTruthy();
-    const contextItems = getContextMenuItems(
-      {
-        ...baseConfig,
-        ref: {
-          ...baseConfig.ref,
-          group: 'admissionregistration.k8s.io',
-          kind: 'ValidatingWebhookConfiguration',
-          resource: 'validatingwebhookconfigurations',
-        },
-        kind: 'ValidatingWebhookConfiguration',
-      },
-      'kind'
-    );
-
+    expect(view.openPanels()).toEqual([
+      { ...storageClass, clusterId: dev.clusterId, clusterName: dev.clusterName },
+    ]);
     expect(
-      contextItems.some(
-        (item: { actionId?: string }) => item.actionId === OBJECT_ACTION_IDS.viewMap
-      )
-    ).toBe(false);
+      view.owners().objectPanels.getOwnedPanel(dev.clusterId, objectPanelId(panel.ref))?.activeView
+    ).toBe('map');
+  });
+
+  it('offers no Map for a kind the object map does not support', async () => {
+    await start();
+
+    const labels = await openRowMenu('policy-hook');
+    expect(labels).toContain('Open Details');
+    expect(labels).not.toContain('Open Map');
   });
 });

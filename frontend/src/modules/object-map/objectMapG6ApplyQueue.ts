@@ -153,6 +153,7 @@ const nodeChanged = (previous: NodeData, next: NodeData): boolean => {
   return (
     previous.type !== next.type ||
     fieldsChanged(previousStyle, nextStyle, NODE_STYLE_FIELDS) ||
+    lineDashChanged(previousStyle.lineDash, nextStyle.lineDash) ||
     sizeChanged
   );
 };
@@ -267,7 +268,8 @@ const createGraphApplySlot = <T>(
   getGraph: () => Graph | null,
   isReady: () => boolean,
   apply: (graph: Graph, value: T, isCurrent: () => boolean) => Promise<void>,
-  onError?: (error: unknown) => void
+  onError?: (error: unknown) => void,
+  onIdle?: () => void
 ) => {
   let latest: T | null = null;
   let activeRun: object | null = null;
@@ -297,13 +299,16 @@ const createGraphApplySlot = <T>(
         if (activeRun === run) {
           activeRun = null;
           flush();
+          if (!activeRun) {
+            onIdle?.();
+          }
         }
       });
   };
 
   return {
     flush,
-    hasPending: () => latest !== null,
+    isIdle: () => activeRun === null && latest === null,
     schedule: (value: T) => {
       const graph = getGraph();
       if (!graph || graph.destroyed) {
@@ -337,7 +342,6 @@ export interface ObjectMapG6SelectionStateTiming {
 
 export interface ObjectMapG6ApplyQueueOptions {
   getGraph: () => Graph | null;
-  getCurrentLayout: () => ObjectMapLayout;
   getCurrentSelectionState: () => ObjectMapSelectionState;
   getHoveredEdgeId: () => string | null;
   getPreserveViewportNodeId: () => string | null;
@@ -355,17 +359,19 @@ export interface ObjectMapG6ApplyQueue {
   getRenderedData: () => GraphData | null;
   isReady: () => boolean;
   setReady: (ready: boolean) => void;
-  setRenderedData: (data: GraphData | null) => void;
-  scheduleGraphData: (data: GraphData) => void;
-  scheduleSelectionState: (
-    layout: ObjectMapLayout,
-    selectionState: ObjectMapSelectionState
-  ) => void;
+  setRenderedData: (data: GraphData, layout: ObjectMapLayout) => void;
+  scheduleGraphData: (data: GraphData, layout: ObjectMapLayout) => void;
+  scheduleSelectionState: (selectionState: ObjectMapSelectionState) => void;
+}
+
+// The graph data G6 holds, paired with the layout it was built from.
+interface RenderedGraph {
+  data: GraphData;
+  layout: ObjectMapLayout;
 }
 
 export const createObjectMapG6ApplyQueue = ({
   getGraph,
-  getCurrentLayout,
   getCurrentSelectionState,
   getHoveredEdgeId,
   getPreserveViewportNodeId,
@@ -378,40 +384,45 @@ export const createObjectMapG6ApplyQueue = ({
   applySelectionStateFn = applySelectionState,
 }: ObjectMapG6ApplyQueueOptions): ObjectMapG6ApplyQueue => {
   let graphReady = false;
-  let renderedData: GraphData | null = null;
-  const selectionApply = createGraphApplySlot<{
-    layout: ObjectMapLayout;
-    selectionState: ObjectMapSelectionState;
-  }>(
+  let rendered: RenderedGraph | null = null;
+  // G6 rejects element state for ids missing from its data, so selection waits
+  // for queued data and targets only the layout the graph holds.
+  const selectionApply = createGraphApplySlot<ObjectMapSelectionState>(
     getGraph,
-    () => graphReady,
-    async (graph, latest, isCurrent) => {
+    () => graphReady && rendered !== null && dataApply.isIdle(),
+    async (graph, selectionState, isCurrent) => {
+      if (!rendered) {
+        return;
+      }
+      const { layout } = rendered;
       const startedAt = objectMapApplyTimingNow();
-      await applySelectionStateFn(graph, latest.layout, latest.selectionState, getHoveredEdgeId());
+      await applySelectionStateFn(graph, layout, selectionState, getHoveredEdgeId());
       if (isCurrent()) {
         onSelectionStateTiming?.({
           durationMs: objectMapApplyTimingNow() - startedAt,
-          nodes: latest.layout.nodes.length,
-          edges: latest.layout.edges.length,
+          nodes: layout.nodes.length,
+          edges: layout.edges.length,
         });
       }
     },
     onSelectionStateError
   );
 
-  const scheduleSelectionState = (
-    layout: ObjectMapLayout,
-    selectionState: ObjectMapSelectionState
-  ) => selectionApply.schedule({ layout, selectionState });
+  const scheduleSelectionState = (selectionState: ObjectMapSelectionState) =>
+    selectionApply.schedule(selectionState);
 
-  const dataApply = createGraphApplySlot<{ data: GraphData; draggedNodeId: string | null }>(
+  const dataApply = createGraphApplySlot<{
+    data: GraphData;
+    layout: ObjectMapLayout;
+    draggedNodeId: string | null;
+  }>(
     getGraph,
     () => graphReady,
     async (graph, latest, isCurrent) => {
       const startedAt = objectMapApplyTimingNow();
-      const mode = renderedData ? 'update' : 'initial-render';
-      if (renderedData) {
-        await applyGraphDataFn(graph, renderedData, latest.data, {
+      const mode = rendered ? 'update' : 'initial-render';
+      if (rendered) {
+        await applyGraphDataFn(graph, rendered.data, latest.data, {
           preserveViewportNodeId: getPreserveViewportNodeId(),
           draggedNodeId: latest.draggedNodeId,
         });
@@ -428,41 +439,40 @@ export const createObjectMapG6ApplyQueue = ({
         nodes: latest.data.nodes?.length ?? 0,
         edges: latest.data.edges?.length ?? 0,
       });
-      renderedData = latest.data;
-      scheduleSelectionState(getCurrentLayout(), getCurrentSelectionState());
+      rendered = { data: latest.data, layout: latest.layout };
+      // Setting data resets element state; reapply it once the queue drains.
+      scheduleSelectionState(getCurrentSelectionState());
     },
-    onGraphDataError
+    onGraphDataError,
+    () => selectionApply.flush()
   );
 
   // Capture the drag with its payload: the gesture can end before this update
   // applies, and reading it then would wrongly restore viewport preservation.
-  const scheduleGraphData = (data: GraphData) => {
-    dataApply.schedule({ data, draggedNodeId: getDraggedNodeId?.() ?? null });
+  const scheduleGraphData = (data: GraphData, layout: ObjectMapLayout) => {
+    dataApply.schedule({ data, layout, draggedNodeId: getDraggedNodeId?.() ?? null });
   };
 
   const setReady = (ready: boolean) => {
     graphReady = ready;
-    if (dataApply.hasPending()) {
-      dataApply.flush();
-    } else {
-      selectionApply.flush();
-    }
+    dataApply.flush();
+    selectionApply.flush();
   };
 
   const clear = () => {
     graphReady = false;
-    renderedData = null;
+    rendered = null;
     selectionApply.clear();
     dataApply.clear();
   };
 
   return {
     clear,
-    getRenderedData: () => renderedData,
+    getRenderedData: () => rendered?.data ?? null,
     isReady: () => graphReady,
     setReady,
-    setRenderedData: (data) => {
-      renderedData = data;
+    setRenderedData: (data, layout) => {
+      rendered = { data, layout };
     },
     scheduleGraphData,
     scheduleSelectionState,

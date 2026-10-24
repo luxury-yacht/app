@@ -24,20 +24,16 @@ func TestAppFavoritesRoundTrip(t *testing.T) {
 		ViewType:         "namespace",
 		View:             "pods",
 		Namespace:        "default",
-		Panes: map[string]FavoritePaneState{
-			"main": {
-				Filters: FavoriteFilters{
-					Search:     "nginx",
-					Kinds:      FavoriteFilterSelection{Mode: "some", Values: []string{"Pod"}},
-					Namespaces: FavoriteFilterSelection{Mode: "some", Values: []string{""}},
-					QueryFacets: map[string]FavoriteFilterSelection{
-						"apiGroups":      {Mode: "some", Values: []string{"apps"}},
-						"resourceScopes": {Mode: "some", Values: []string{"Namespace"}},
-					},
-				},
-				TableState: FavoriteTableState{SortColumn: "name", SortDirection: "asc", ColumnOrder: []string{"kind", "name", "age"}},
+		Filters: FavoriteFilters{
+			Search:     "nginx",
+			Kinds:      FavoriteFilterSelection{Mode: "some", Values: []string{"Pod"}},
+			Namespaces: FavoriteFilterSelection{Mode: "some", Values: []string{""}},
+			QueryFacets: map[string]FavoriteFilterSelection{
+				"apiGroups":      {Mode: "some", Values: []string{"apps"}},
+				"resourceScopes": {Mode: "some", Values: []string{"Namespace"}},
 			},
 		},
+		TableState: FavoriteTableState{SortColumn: "name", SortDirection: "asc", ColumnOrder: []string{"kind", "name", "age"}},
 	}
 	added, err := app.Favorites.AddFavorite(fav)
 	require.NoError(t, err)
@@ -50,8 +46,9 @@ func TestAppFavoritesRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, favs, 1)
 	require.Equal(t, added.ID, favs[0].ID)
-	require.Equal(t, fav.Panes["main"].Filters.QueryFacets, favs[0].Panes["main"].Filters.QueryFacets)
-	require.Equal(t, FavoriteFilterSelection{Mode: "some", Values: []string{""}}, favs[0].Panes["main"].Filters.Namespaces)
+	require.Equal(t, fav.Filters.QueryFacets, favs[0].Filters.QueryFacets)
+	require.Equal(t, FavoriteFilterSelection{Mode: "some", Values: []string{""}}, favs[0].Filters.Namespaces)
+	require.Equal(t, []string{"kind", "name", "age"}, favs[0].TableState.ColumnOrder)
 
 	// Update the name.
 	added.Name = "Renamed"
@@ -67,54 +64,13 @@ func TestAppFavoritesRoundTrip(t *testing.T) {
 	require.Empty(t, favs)
 }
 
-func TestAppFavoritesRoundTripNamedPanes(t *testing.T) {
-	setTestConfigEnv(t)
-	app := newPersistenceTestFixture()
-	favorite := Favorite{
-		Name:      "Workloads and pods",
-		ViewType:  "namespace",
-		View:      "workloads",
-		Namespace: "default",
-		Panes: map[string]FavoritePaneState{
-			"workloads": {
-				Filters:    FavoriteFilters{Kinds: FavoriteFilterSelection{Mode: "some", Values: []string{"Deployment"}}},
-				TableState: FavoriteTableState{SortColumn: "name", SortDirection: "asc"},
-			},
-			"pods": {
-				Filters: FavoriteFilters{QueryFacets: map[string]FavoriteFilterSelection{
-					"owners": {Mode: "some", Values: []string{"apps/v1/Deployment/default/api"}},
-				}},
-				TableState: FavoriteTableState{SortColumn: "node", SortDirection: "desc"},
-			},
-		},
-	}
-
-	_, err := app.Favorites.AddFavorite(favorite)
-	require.NoError(t, err)
-	loaded, err := app.Favorites.GetFavorites()
-	require.NoError(t, err)
-	require.Len(t, loaded, 1)
-	require.Equal(t, favorite.Panes["pods"].Filters.QueryFacets, loaded[0].Panes["pods"].Filters.QueryFacets)
-	require.Equal(t, "node", loaded[0].Panes["pods"].TableState.SortColumn)
-}
-
-func TestAppAddFavoriteRequiresNamedPane(t *testing.T) {
-	setTestConfigEnv(t)
-	app := newPersistenceTestFixture()
-
-	_, err := app.Favorites.AddFavorite(Favorite{Name: "Missing state", ViewType: "cluster", View: "nodes"})
-
-	require.EqualError(t, err, "favorite must contain at least one named pane")
-}
-
 func TestAppAddFavoriteRejectsDuplicateName(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newPersistenceTestFixture()
-	pane := map[string]FavoritePaneState{"main": {}}
 
-	_, err := app.Favorites.AddFavorite(Favorite{Name: "My Favorite", ViewType: "cluster", View: "nodes", Panes: pane})
+	_, err := app.Favorites.AddFavorite(Favorite{Name: "My Favorite", ViewType: "cluster", View: "nodes"})
 	require.NoError(t, err)
-	_, err = app.Favorites.AddFavorite(Favorite{Name: "  My Favorite  ", ViewType: "cluster", View: "events", Panes: pane})
+	_, err = app.Favorites.AddFavorite(Favorite{Name: "  My Favorite  ", ViewType: "cluster", View: "events"})
 
 	require.EqualError(t, err, `favorite name "My Favorite" already exists`)
 	favorites, getErr := app.Favorites.GetFavorites()
@@ -130,7 +86,6 @@ func TestAppAddFavoriteRejectsEmptyName(t *testing.T) {
 		Name:     "   ",
 		ViewType: "cluster",
 		View:     "nodes",
-		Panes:    map[string]FavoritePaneState{"main": {}},
 	})
 
 	require.EqualError(t, err, "favorite name must not be empty")
@@ -139,10 +94,9 @@ func TestAppAddFavoriteRejectsEmptyName(t *testing.T) {
 func TestAppUpdateFavoriteRejectsAnotherFavoritesName(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newPersistenceTestFixture()
-	pane := map[string]FavoritePaneState{"main": {}}
-	first, err := app.Favorites.AddFavorite(Favorite{Name: "First", ViewType: "cluster", View: "nodes", Panes: pane})
+	first, err := app.Favorites.AddFavorite(Favorite{Name: "First", ViewType: "cluster", View: "nodes"})
 	require.NoError(t, err)
-	second, err := app.Favorites.AddFavorite(Favorite{Name: "Second", ViewType: "cluster", View: "events", Panes: pane})
+	second, err := app.Favorites.AddFavorite(Favorite{Name: "Second", ViewType: "cluster", View: "events"})
 	require.NoError(t, err)
 	second.Name = first.Name
 
@@ -221,11 +175,11 @@ func TestLoadFavoritesFileMigratesV2FavoritesIndividually(t *testing.T) {
 	first := favorites[0]
 	require.Equal(t, "alpha:context", first.ClusterID)
 	require.Equal(t, "alpha", first.ClusterName)
-	require.Equal(t, "deploy", first.Panes["main"].Filters.Search)
-	require.Equal(t, FavoriteFilterSelection{Mode: "some", Values: []string{"Deployment"}}, first.Panes["main"].Filters.Kinds)
-	require.Equal(t, FavoriteFilterSelection{Mode: "some", Values: []string{"apps"}}, first.Panes["main"].Filters.QueryFacets["apiGroups"])
-	require.Equal(t, "kind", first.Panes["main"].TableState.SortColumn)
-	require.Equal(t, map[string]bool{"namespace": false}, first.Panes["main"].TableState.ColumnVisibility)
+	require.Equal(t, "deploy", first.Filters.Search)
+	require.Equal(t, FavoriteFilterSelection{Mode: "some", Values: []string{"Deployment"}}, first.Filters.Kinds)
+	require.Equal(t, FavoriteFilterSelection{Mode: "some", Values: []string{"apps"}}, first.Filters.QueryFacets["apiGroups"])
+	require.Equal(t, "kind", first.TableState.SortColumn)
+	require.Equal(t, map[string]bool{"namespace": false}, first.TableState.ColumnVisibility)
 
 	rewritten, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -237,55 +191,60 @@ func TestLoadFavoritesFileMigratesV2FavoritesIndividually(t *testing.T) {
 	require.NotContains(t, string(rewritten), "caseSensitive")
 }
 
-func TestLoadFavoritesFileMigratesV2WorkloadsAndPodsIntoBothPanes(t *testing.T) {
+// Schema v3 stored one table state per pane of a split view. Each favorite
+// keeps only its own view's table; the extra panes are dropped.
+func TestLoadFavoritesFileFlattensV3PanesToTheViewsOwnTable(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newPersistenceTestFixture()
 	path, err := app.Favorites.getFavoritesFilePath()
 	require.NoError(t, err)
+	pane := func(search, sort string) string {
+		return `{"filters":{"search":"` + search + `","kinds":{"mode":"all"},"namespaces":{"mode":"all"},"clusters":{"mode":"all"}},` +
+			`"tableState":{"sortColumn":"` + sort + `","sortDirection":"asc","columnVisibility":{}}}`
+	}
 	writeTestFileWithParents(t, path, []byte(`{
-		"schemaVersion": 2,
+		"schemaVersion": 3,
 		"favorites": [
-			{
-				"id":"workloads","name":"Workloads","viewType":"namespace","view":"workloads","namespace":"team-a",
-				"filters":{"search":"api","kinds":{"mode":"some","values":["Deployment"]},"namespaces":{"mode":"all"},"clusters":{"mode":"all"}},
-				"tableState":{"sortColumn":"kind","sortDirection":"desc","columnVisibility":{"cpu":false}},"order":0
-			},
-			{
-				"id":"pods","name":"Pods","viewType":"namespace","view":"pods","namespace":"team-a",
-				"filters":{"search":"worker","kinds":{"mode":"all"},"namespaces":{"mode":"all"},"clusters":{"mode":"all"},"queryFacets":{"nodes":{"mode":"some","values":["node-a"]}}},
-				"tableState":{"sortColumn":"node","sortDirection":"asc","columnVisibility":{"memory":false}},"order":1
-			}
+			{"id":"workloads","name":"Workloads","viewType":"namespace","view":"workloads","namespace":"team-a",
+			 "panes":{"workloads":`+pane("api", "kind")+`,"pods":`+pane("pod-filter", "node")+`},"order":0},
+			{"id":"nodes","name":"Nodes","viewType":"cluster","view":"nodes",
+			 "panes":{"nodes":`+pane("worker", "cpu")+`,"pods":`+pane("pod-filter", "age")+`},"order":1},
+			{"id":"pods-view","name":"Pods view","viewType":"namespace","view":"pods","namespace":"team-a",
+			 "panes":{"pods":`+pane("crash", "restarts")+`},"order":2},
+			{"id":"legacy-pods","name":"Legacy Pods","viewType":"namespace","view":"pods","namespace":"team-a",
+			 "panes":{"main":`+pane("legacy", "node")+`},"order":3},
+			{"id":"events","name":"Events","viewType":"cluster","view":"events",
+			 "panes":{"main":`+pane("warn", "age")+`},"order":4},
+			{"id":"unknown","name":"Unknown","viewType":"cluster","view":"config",
+			 "panes":{"a":`+pane("a", "name")+`,"b":`+pane("b", "name")+`},"order":5}
 		]
 	}`), 0o644)
 
-	state, err := app.Favorites.loadFavoritesFile()
+	favorites, err := app.Favorites.GetFavorites()
 	require.NoError(t, err)
-	require.Len(t, state.Favorites, 2)
-	defaultPane := FavoritePaneState{
-		Filters: FavoriteFilters{
-			Kinds:      FavoriteFilterSelection{Mode: "all"},
-			Namespaces: FavoriteFilterSelection{Mode: "all"},
-			Clusters:   FavoriteFilterSelection{Mode: "all"},
-		},
-		TableState: FavoriteTableState{
-			SortColumn:       "name",
-			SortDirection:    "asc",
-			ColumnVisibility: map[string]bool{},
-		},
+
+	type flat struct{ id, search, sort string }
+	got := make([]flat, 0, len(favorites))
+	for _, favorite := range favorites {
+		got = append(got, flat{favorite.ID, favorite.Filters.Search, favorite.TableState.SortColumn})
 	}
+	require.Equal(t, []flat{
+		{"workloads", "api", "kind"},
+		{"nodes", "worker", "cpu"},
+		{"pods-view", "crash", "restarts"},
+		{"legacy-pods", "legacy", "node"},
+		{"events", "warn", "age"},
+	}, got, "a favorite with no table for its view is dropped")
+	require.Equal(t, []int{0, 1, 2, 3, 4}, []int{
+		favorites[0].Order, favorites[1].Order, favorites[2].Order, favorites[3].Order, favorites[4].Order,
+	})
 
-	workloads := state.Favorites[0]
-	require.Equal(t, "workloads", workloads.View)
-	require.Equal(t, "api", workloads.Panes["workloads"].Filters.Search)
-	require.Equal(t, "kind", workloads.Panes["workloads"].TableState.SortColumn)
-	require.Equal(t, defaultPane, workloads.Panes["pods"])
-
-	pods := state.Favorites[1]
-	require.Equal(t, "workloads", pods.View)
-	require.Equal(t, "worker", pods.Panes["pods"].Filters.Search)
-	require.Equal(t, FavoriteFilterSelection{Mode: "some", Values: []string{"node-a"}}, pods.Panes["pods"].Filters.QueryFacets["nodes"])
-	require.Equal(t, "node", pods.Panes["pods"].TableState.SortColumn)
-	require.Equal(t, defaultPane, pods.Panes["workloads"])
+	rewritten, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.NotContains(t, string(rewritten), `"panes"`)
+	rewrittenState := favoritesFile{}
+	require.NoError(t, json.Unmarshal(rewritten, &rewrittenState))
+	require.Equal(t, favoritesSchemaVersion, rewrittenState.SchemaVersion)
 }
 
 func TestLoadFavoritesFileMigratesV1FavoritesLeftOnDiskByV2(t *testing.T) {
@@ -356,17 +315,17 @@ func TestLoadFavoritesFileMigratesV1FavoritesLeftOnDiskByV2(t *testing.T) {
 	require.Equal(t, []int{0, 1}, []int{state.Favorites[0].Order, state.Favorites[1].Order})
 
 	pods := state.Favorites[0]
-	require.Equal(t, "workloads", pods.View)
+	require.Equal(t, "pods", pods.View)
 	require.Equal(t, "alpha:context", pods.ClusterID)
-	require.Equal(t, FavoriteFilterSelection{Mode: "all"}, pods.Panes["pods"].Filters.Kinds)
-	require.Equal(t, FavoriteFilterSelection{Mode: "some", Values: []string{"team-a"}}, pods.Panes["pods"].Filters.Namespaces)
-	require.Equal(t, FavoriteFilterSelection{Mode: "some", Values: []string{"node-a"}}, pods.Panes["pods"].Filters.QueryFacets["nodes"])
-	require.Equal(t, "node", pods.Panes["pods"].TableState.SortColumn)
+	require.Equal(t, FavoriteFilterSelection{Mode: "all"}, pods.Filters.Kinds)
+	require.Equal(t, FavoriteFilterSelection{Mode: "some", Values: []string{"team-a"}}, pods.Filters.Namespaces)
+	require.Equal(t, FavoriteFilterSelection{Mode: "some", Values: []string{"node-a"}}, pods.Filters.QueryFacets["nodes"])
+	require.Equal(t, "node", pods.TableState.SortColumn)
 
 	config := state.Favorites[1]
-	require.Equal(t, FavoriteFilterSelection{Mode: "some", Values: []string{"ConfigMap"}}, config.Panes["main"].Filters.Kinds)
-	require.Equal(t, FavoriteFilterSelection{Mode: "all"}, config.Panes["main"].Filters.Namespaces)
-	require.Equal(t, FavoriteFilterSelection{Mode: "all"}, config.Panes["main"].Filters.QueryFacets["apiGroups"])
+	require.Equal(t, FavoriteFilterSelection{Mode: "some", Values: []string{"ConfigMap"}}, config.Filters.Kinds)
+	require.Equal(t, FavoriteFilterSelection{Mode: "all"}, config.Filters.Namespaces)
+	require.Equal(t, FavoriteFilterSelection{Mode: "all"}, config.Filters.QueryFacets["apiGroups"])
 
 	rewritten, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -391,10 +350,9 @@ func TestAppFavoritesOrdering(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newPersistenceTestFixture()
 
-	pane := map[string]FavoritePaneState{"main": {}}
-	a, _ := app.Favorites.AddFavorite(Favorite{Name: "A", ViewType: "cluster", View: "nodes", Panes: pane})
-	b, _ := app.Favorites.AddFavorite(Favorite{Name: "B", ViewType: "cluster", View: "rbac", Panes: pane})
-	c, _ := app.Favorites.AddFavorite(Favorite{Name: "C", ViewType: "namespace", View: "pods", Namespace: "default", Panes: pane})
+	a, _ := app.Favorites.AddFavorite(Favorite{Name: "A", ViewType: "cluster", View: "nodes"})
+	b, _ := app.Favorites.AddFavorite(Favorite{Name: "B", ViewType: "cluster", View: "rbac"})
+	c, _ := app.Favorites.AddFavorite(Favorite{Name: "C", ViewType: "namespace", View: "pods", Namespace: "default"})
 
 	// Reorder: C, A, B
 	require.NoError(t, app.Favorites.SetFavoriteOrder([]string{c.ID, a.ID, b.ID}))
@@ -421,7 +379,7 @@ func TestAppUpdateFavoriteNotFound(t *testing.T) {
 	app := newPersistenceTestFixture()
 
 	err := app.Favorites.UpdateFavorite(Favorite{ID: "nonexistent", Name: "X"})
-	require.Error(t, err)
+	require.EqualError(t, err, `favorite "nonexistent" not found`)
 }
 
 func TestAppClusterTabOrderRoundTrip(t *testing.T) {
@@ -528,7 +486,7 @@ func TestFavoriteOrderIgnoresRepeatedAndMissingIDs(t *testing.T) {
 	app := newPersistenceTestFixture()
 	var ids []string
 	for _, name := range []string{"A", "B", "C"} {
-		favorite, err := app.Favorites.AddFavorite(Favorite{Name: name, ViewType: "cluster", View: "nodes", Panes: map[string]FavoritePaneState{"main": {}}})
+		favorite, err := app.Favorites.AddFavorite(Favorite{Name: name, ViewType: "cluster", View: "nodes"})
 		require.NoError(t, err)
 		ids = append(ids, favorite.ID)
 	}
@@ -545,15 +503,15 @@ func TestFavoriteOrderIgnoresRepeatedAndMissingIDs(t *testing.T) {
 func TestFavoriteFiltersPreserveClusterIdentityAndEmptyValues(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newPersistenceTestFixture()
-	favorite := Favorite{Name: "Exact cluster filters", ViewType: "cluster", View: "nodes", Panes: map[string]FavoritePaneState{"main": {Filters: FavoriteFilters{
+	favorite := Favorite{Name: "Exact cluster filters", ViewType: "cluster", View: "nodes", Filters: FavoriteFilters{
 		Clusters:    FavoriteFilterSelection{Mode: "some", Values: []string{"Prod:context", "prod:context", " Prod:context "}},
 		QueryFacets: map[string]FavoriteFilterSelection{"team": {Mode: "some", Values: []string{"", "__empty__", "__EMPTY__"}}},
-	}}}}
+	}}
 	_, err := app.Favorites.AddFavorite(favorite)
 	require.NoError(t, err)
 	favorites, err := app.Favorites.GetFavorites()
 	require.NoError(t, err)
-	filters := favorites[0].Panes["main"].Filters
+	filters := favorites[0].Filters
 	require.Equal(t, []string{"Prod:context", "prod:context"}, filters.Clusters.Values)
 	require.Equal(t, []string{"", "__empty__"}, filters.QueryFacets["team"].Values)
 }
@@ -567,5 +525,5 @@ func TestFavoriteV1MigrationPreservesCaseDistinctClusters(t *testing.T) {
 	favorites, err := app.Favorites.GetFavorites()
 	require.NoError(t, err)
 	require.Len(t, favorites, 1)
-	require.Equal(t, []string{"Prod:context", "prod:context"}, favorites[0].Panes["main"].Filters.Clusters.Values)
+	require.Equal(t, []string{"Prod:context", "prod:context"}, favorites[0].Filters.Clusters.Values)
 }

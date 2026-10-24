@@ -16,23 +16,17 @@ import (
 // that payload exposes poller health, without advertising a fresh sample to the
 // other domains. A pristine zero revision does not broadcast.
 func TestMetricsSignalObserverBroadcastsMetricDoorbells(t *testing.T) {
-	manager := resourcestream.NewManager(
-		nil,
-		nil,
-		nil,
-		snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-
-		nil,
-	)
+	manager := resourcestream.NewManager(nil, nil, snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, nil)
+	defer manager.Stop()
 	podsSelector, err := resourcestream.ParseStreamSelector("c1", "pods", "namespace:prod")
 	require.NoError(t, err)
 	podsSub, err := manager.SubscribeSelector(podsSelector)
 	require.NoError(t, err)
-	nodesSelector, err := resourcestream.ParseStreamSelector("c1", "nodes", "cluster")
+	nodesSelector, err := resourcestream.ParseStreamSelector("c1", "nodes", "")
 	require.NoError(t, err)
 	nodesSub, err := manager.SubscribeSelector(nodesSelector)
 	require.NoError(t, err)
-	namespaceMetricsSelector, err := resourcestream.ParseStreamSelector("c1", "namespace-metrics", "cluster")
+	namespaceMetricsSelector, err := resourcestream.ParseStreamSelector("c1", "namespace-metrics", "")
 	require.NoError(t, err)
 	namespaceMetricsSub, err := manager.SubscribeSelector(namespaceMetricsSelector)
 	require.NoError(t, err)

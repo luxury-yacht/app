@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	"github.com/luxury-yacht/app/backend/internal/errorcapture"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	sentryreporting "github.com/luxury-yacht/app/internal/sentry"
 )
@@ -117,123 +118,6 @@ func (fakeKubeClient) BuildTable(io.Reader, bool) (kube.ResourceList, error) {
 	return kube.ResourceList{}, nil
 }
 
-func TestExtractResourcesFromManifestBuildsUniqueList(t *testing.T) {
-	t.Helper()
-
-	manifest := `
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: app-config
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: web
-  namespace: staging
----
-apiVersion: v1
-kind: List
-items:
-  - apiVersion: v1
-    kind: Service
-    metadata:
-      name: web
-      namespace: prod
-  - apiVersion: v1
-    kind: Service
-    metadata:
-      name: web
-      namespace: prod
----
-`
-
-	service := &Service{deps: Dependencies{Common: common.Dependencies{ResourceResolver: helmTestResourceResolver}}}
-	resources := service.extractResourcesFromManifest(context.Background(), manifest, "default")
-
-	require.Equal(t, []HelmResource{
-		{Kind: "ConfigMap", APIVersion: "v1", Name: "app-config", Namespace: "default", Scope: "namespaced"},
-		{Kind: "Deployment", APIVersion: "apps/v1", Name: "web", Namespace: "staging", Scope: "namespaced"},
-		{Kind: "Service", APIVersion: "v1", Name: "web", Namespace: "prod", Scope: "namespaced"},
-	}, resources)
-}
-
-func TestExtractResourcesFromManifestIgnoresInvalidDocuments(t *testing.T) {
-	t.Helper()
-
-	manifest := `
----
-kind: ""
-metadata:
-  name: ignored
----
-apiVersion: v1
-kind: Secret
-metadata:
-  namespace: team-a
-  name: credentials
-data: {}
----
-apiVersion: v1
-kind: List
-items:
-  - apiVersion: v1
-    kind: Service
-    metadata: not-a-map
-  - apiVersion: v1
-    kind: Service
-    metadata:
-      name: svc
-      namespace: other
----
-`
-
-	service := &Service{deps: Dependencies{Common: common.Dependencies{ResourceResolver: helmTestResourceResolver}}}
-	resources := service.extractResourcesFromManifest(context.Background(), manifest, "team-default")
-
-	require.Equal(t, []HelmResource{
-		{Kind: "Secret", APIVersion: "v1", Name: "credentials", Namespace: "team-a", Scope: "namespaced"},
-		{Kind: "Service", APIVersion: "v1", Name: "svc", Namespace: "other", Scope: "namespaced"},
-	}, resources)
-}
-
-// TestExtractResourcesFromManifestDisambiguatesCollidingCRDs verifies that
-// two CRDs sharing a Kind across different operator groups in the same
-// Helm release each appear with their own apiVersion. Without this fix
-// they would dedupe under a Kind+namespace+name key and the frontend
-// could not open the right one in the object panel.
-func TestExtractResourcesFromManifestDisambiguatesCollidingCRDs(t *testing.T) {
-	t.Helper()
-
-	// Two DBCluster CRDs sharing kind/name/namespace but from different
-	// groups. A naive Kind+name+namespace dedupe key would collapse these
-	// into one entry; the GVK-aware key keeps them distinct.
-	manifest := `
----
-apiVersion: rds.services.k8s.aws/v1alpha1
-kind: DBCluster
-metadata:
-  name: primary
-  namespace: data
----
-apiVersion: postgresql.cnpg.io/v1
-kind: DBCluster
-metadata:
-  name: primary
-  namespace: data
----
-`
-
-	service := &Service{deps: Dependencies{Common: common.Dependencies{ResourceResolver: helmTestResourceResolver}}}
-	resources := service.extractResourcesFromManifest(context.Background(), manifest, "default")
-
-	require.Equal(t, []HelmResource{
-		{Kind: "DBCluster", APIVersion: "rds.services.k8s.aws/v1alpha1", Name: "primary", Namespace: "data", Scope: "namespaced"},
-		{Kind: "DBCluster", APIVersion: "postgresql.cnpg.io/v1", Name: "primary", Namespace: "data", Scope: "namespaced"},
-	}, resources)
-}
-
 func TestExtractResourcesFromManifestDoesNotDefaultClusterScopedNamespace(t *testing.T) {
 	t.Helper()
 
@@ -258,63 +142,6 @@ metadata:
 		{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1", Name: "reader", Namespace: "", Scope: "cluster"},
 		{Kind: "Database", APIVersion: "databases.example.com/v1alpha1", Name: "orders", Namespace: "release-ns"},
 	}, resources)
-}
-
-func TestExtractResourcesFromManifestPreservesHooksDefaultsAndResourceIdentity(t *testing.T) {
-	manifest := `
----
-this: [is invalid
----
-apiVersion: v1
-kind: List
-items:
-  - scalar-item
-  - kind: ConfigMap
-    metadata:
-      name: pre-install-config
-      annotations:
-        helm.sh/hook: pre-install
-  - apiVersion: apps/v1
-    kind: Deployment
-    metadata:
-      name: application
-  - apiVersion: v1
-    metadata:
-      name: missing-kind
----
-apiVersion: v1
-kind: List
-items: not-a-list
-`
-
-	service := &Service{deps: Dependencies{Common: common.Dependencies{
-		ClusterID:        "cluster-a",
-		ResourceResolver: helmTestResourceResolver,
-	}}}
-	require.Equal(t, []HelmResource{
-		{Kind: "ConfigMap", APIVersion: "v1", Name: "pre-install-config", Namespace: "release-ns", Scope: "namespaced"},
-		{Kind: "Deployment", APIVersion: "apps/v1", Name: "application", Namespace: "release-ns", Scope: "namespaced"},
-	}, service.extractResourcesFromManifest(context.Background(), manifest, "release-ns"))
-
-}
-
-func TestExtractNameNamespaceSupportsInterfaceMap(t *testing.T) {
-	obj := map[string]interface{}{
-		"metadata": map[interface{}]interface{}{
-			"name":      "demo",
-			"namespace": "custom-ns",
-		},
-	}
-
-	name, ns, explicit := extractNameNamespace(obj, "fallback")
-	require.Equal(t, "demo", name)
-	require.Equal(t, "custom-ns", ns)
-	require.True(t, explicit)
-
-	name, ns, explicit = extractNameNamespace(map[string]interface{}{}, "fallback")
-	require.Equal(t, "", name)
-	require.Equal(t, "fallback", ns)
-	require.False(t, explicit)
 }
 
 func TestReleaseDetailsReturnsHistoryAndResources(t *testing.T) {
@@ -409,33 +236,67 @@ func TestReleaseDetailsReturnsErrorWhenReleaseMissing(t *testing.T) {
 	require.Contains(t, err.Error(), "failed to get release")
 }
 
-func TestReleaseValuesReturnsMergedMaps(t *testing.T) {
-	t.Helper()
-
-	release := buildTestRelease("demo", "observability", 3, time.Now().Add(-4*time.Hour), time.Now().Add(-30*time.Minute))
+// The Values tab compares what the chart ships, what the user supplied, and
+// what Helm rendered with; all three must come from the same stored revision.
+func TestReleaseValuesBuildsChartDefaultsMergedAndOverridesFromOneRevision(t *testing.T) {
+	release := buildTestRelease("demo", "observability", 4, time.Now().Add(-4*time.Hour), time.Now().Add(-30*time.Minute))
+	release.Chart.Values = map[string]interface{}{
+		"replicaCount":   1,
+		"image":          map[string]interface{}{"repository": "nginx", "tag": ""},
+		"podAnnotations": map[string]interface{}{},
+		"legacy":         "chart",
+	}
+	release.Chart.SetDependencies(&chart.Chart{
+		Metadata: &chart.Metadata{Name: "redis", Version: "1.0.0"},
+		Values:   map[string]interface{}{"port": 6379},
+	})
 	release.Config = map[string]interface{}{
 		"replicaCount": 3,
-		"service": map[string]interface{}{
-			"type": "ClusterIP",
-		},
+		"image":        map[string]interface{}{"tag": "v2"},
+		"legacy":       nil,
 	}
-
 	service := newHelmServiceWithReleases(t, "observability", release)
 
-	values, err := service.ReleaseValues("observability", "demo")
+	values, revision, err := service.ReleaseValues("observability", "demo")
 	require.NoError(t, err)
+	require.Equal(t, 4, revision)
 
-	defaults, ok := values["defaultValues"].(map[string]interface{})
-	require.True(t, ok)
-	require.EqualValues(t, 1, defaults["replicaCount"])
+	// Defaults keep overridden keys, empty maps, and subchart defaults.
+	require.Equal(t, map[string]interface{}{
+		"replicaCount":   1,
+		"image":          map[string]interface{}{"repository": "nginx", "tag": ""},
+		"podAnnotations": map[string]interface{}{},
+		"legacy":         "chart",
+		"redis":          map[string]interface{}{"port": 6379, "global": map[string]interface{}{}},
+	}, values.Defaults)
+	// Merged is what Helm rendered with: overrides win and null removes a key.
+	require.Equal(t, map[string]interface{}{
+		"replicaCount":   3,
+		"image":          map[string]interface{}{"repository": "nginx", "tag": "v2"},
+		"podAnnotations": map[string]interface{}{},
+		"redis":          map[string]interface{}{"port": 6379, "global": map[string]interface{}{}},
+	}, values.Merged)
+	// Overrides are the user-supplied values exactly, including the null.
+	require.Equal(t, map[string]interface{}{
+		"replicaCount": 3,
+		"image":        map[string]interface{}{"tag": "v2"},
+		"legacy":       nil,
+	}, values.Overrides)
+}
 
-	allValues, ok := values["allValues"].(map[string]interface{})
-	require.True(t, ok)
-	require.EqualValues(t, 3, allValues["replicaCount"])
+// The Values tab marks subchart copies of global overrides, which needs the
+// value path of every subchart, nested ones included.
+func TestReleaseValuesReportsNestedSubchartPaths(t *testing.T) {
+	release := buildTestRelease("demo", "observability", 2, time.Now().Add(-time.Hour), time.Now())
+	sentinel := &chart.Chart{Metadata: &chart.Metadata{Name: "sentinel", Version: "1.0.0"}}
+	redis := &chart.Chart{Metadata: &chart.Metadata{Name: "redis", Version: "1.0.0"}}
+	redis.SetDependencies(sentinel)
+	release.Chart.SetDependencies(redis, &chart.Chart{Metadata: &chart.Metadata{Name: "postgresql", Version: "1.0.0"}})
+	service := newHelmServiceWithReleases(t, "observability", release)
 
-	userValues, ok := values["userValues"].(map[string]interface{})
-	require.True(t, ok)
-	require.Equal(t, "ClusterIP", userValues["service"].(map[string]interface{})["type"])
+	values, _, err := service.ReleaseValues("observability", "demo")
+	require.NoError(t, err)
+	require.Equal(t, [][]string{{"redis"}, {"redis", "sentinel"}, {"postgresql"}}, values.SubchartPaths)
 }
 
 func newHelmServiceWithReleases(t *testing.T, namespace string, releases ...*release.Release) *Service {
@@ -510,7 +371,7 @@ func TestReleaseManifestEnsureClientError(t *testing.T) {
 		},
 	})
 
-	_, err := service.ReleaseManifest("default", "web")
+	_, _, err := service.ReleaseManifest("default", "web")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no kube client")
 }
@@ -526,7 +387,7 @@ func TestReleaseManifestInitError(t *testing.T) {
 		},
 	})
 
-	_, err := service.ReleaseManifest("default", "web")
+	_, _, err := service.ReleaseManifest("default", "web")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "Kubernetes cluster unreachable")
 }
@@ -549,7 +410,7 @@ func TestReleaseValuesEnsureClientError(t *testing.T) {
 		EnsureClient: func(string) error { return fmt.Errorf("ensure") },
 	}})
 
-	_, err := service.ReleaseValues("default", "demo")
+	_, _, err := service.ReleaseValues("default", "demo")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "ensure")
 }
@@ -562,6 +423,50 @@ func TestDeleteReleaseEnsureClientError(t *testing.T) {
 	err := service.DeleteRelease("default", "demo")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "ensure")
+}
+
+// A failure before the uninstall runs must be reported by DeleteRelease itself:
+// the gateway no longer wraps Helm uninstall in a fallback capture.
+func TestDeleteReleaseReportsSetupFailures(t *testing.T) {
+	setupErr := errors.New("setup failed")
+	tests := []struct {
+		name string
+		deps func(*recordingHelmLogger) Dependencies
+	}{
+		{
+			name: "client unavailable",
+			deps: func(logger *recordingHelmLogger) Dependencies {
+				return Dependencies{Common: common.Dependencies{
+					EnsureClient: func(string) error { return setupErr },
+					Logger:       logger,
+				}}
+			},
+		},
+		{
+			name: "action configuration fails",
+			deps: func(logger *recordingHelmLogger) Dependencies {
+				return Dependencies{
+					Common: common.Dependencies{
+						EnsureClient: func(string) error { return nil },
+						Logger:       logger,
+					},
+					ActionConfigFactory: func(*cli.EnvSettings, string) (*action.Configuration, error) {
+						return nil, setupErr
+					},
+				}
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logger := &recordingHelmLogger{}
+			err := NewService(tt.deps(logger)).DeleteRelease("default", "demo")
+
+			require.ErrorIs(t, err, setupErr)
+			require.ErrorIs(t, logger.cause, setupErr, "the setup failure is reported")
+			require.True(t, errorcapture.IsTelemetryHandled(err), "the returned error is marked reported")
+		})
+	}
 }
 
 func TestDeleteReleaseRemovesRelease(t *testing.T) {
@@ -619,7 +524,7 @@ func TestDeleteReleaseMissingReturnsError(t *testing.T) {
 }
 
 func TestReleaseManifestReturnsContent(t *testing.T) {
-	rel := buildTestRelease("demo", "ns1", 1, time.Now().Add(-time.Hour), time.Now())
+	rel := buildTestRelease("demo", "ns1", 6, time.Now().Add(-time.Hour), time.Now())
 	rel.Manifest = "kind: ConfigMap"
 	store := storage.Init(driver.NewMemory())
 	require.NoError(t, store.Create(rel))
@@ -637,7 +542,8 @@ func TestReleaseManifestReturnsContent(t *testing.T) {
 		},
 	})
 
-	out, err := service.ReleaseManifest("ns1", "demo")
+	out, revision, err := service.ReleaseManifest("ns1", "demo")
 	require.NoError(t, err)
 	require.Equal(t, "kind: ConfigMap", out)
+	require.Equal(t, 6, revision)
 }

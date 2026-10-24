@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/luxury-yacht/app/backend/internal/preferenceschema"
 )
 
 func TestNewApplicationRuntimeHasNoProcessGlobalSideEffects(t *testing.T) {
@@ -46,16 +48,13 @@ func TestOwnerConstructorsRejectIncompleteDependencyGraphs(t *testing.T) {
 		return RefreshCoordinatorDependencies{
 			ClusterRuntime: fixture.ClusterRuntime, ClusterWorkspace: fixture.ClusterWorkspace,
 			Attention: fixture.Attention, Logger: fixture.AppLogs.Logger(),
-			AllowedNamespaces: func(clusterID string) []string {
-				namespaces, _ := fixture.Preferences.clusterAllowedNamespaces(clusterID)
-				return namespaces
-			},
-			Preferences: fixture.Preferences, ContainerLogsPolicy: fixture.ContainerLogsPolicy,
+			AllowedNamespaces: fixture.Preferences.clusterAllowedNamespaces, Preferences: fixture.Preferences,
+			ContainerLogsPolicy:   fixture.ContainerLogsPolicy,
 			PermissionFetchPolicy: fixture.PermissionFetchPolicy, Resources: fixture.Resources,
 			Context: fixture.Lifecycle.CtxOrBackground, RuntimeAvailable: fixture.Lifecycle.runtimeAvailable,
 			EmitEvent: fixture.Lifecycle.emitEvent, ResourceProjection: newRefreshResourceProjection(),
 			NodeMaintenanceStore: fixture.NodeMaintenanceStore,
-			SettingsBridge:       newRefreshSettingBridge(defaultObjPanelLogsTargetGlobalLimit, defaultMetricsIntervalMs()),
+			SettingsBridge:       newRefreshSettingBridge(preferenceschema.DefaultObjPanelLogsTargetGlobalLimit, preferenceschema.DefaultMetricsRefreshIntervalMs),
 		}
 	}
 	refreshCases := []struct {

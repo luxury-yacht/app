@@ -14,6 +14,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 func TestAttentionRecordFromBundleUsesCatalogIdentityAndTypedSummary(t *testing.T) {
@@ -67,8 +68,8 @@ func TestDeletingPodBlockedByFinalizerProjectsIntoAttentionCategory(t *testing.T
 	require.True(t, ok)
 	blocker, blocked := catalog.FinalizerBlocker()
 	require.True(t, blocked)
-	index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time { return now })
-	t.Cleanup(index.Stop)
+	index := newTestAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time { return now })
+	t.Cleanup(index.stopForTest)
 	index.ReplaceFinalizerBlockers([]objectcatalog.FinalizerBlocker{blocker})
 	rows := index.Snapshot()
 	require.Len(t, rows, 1)
@@ -125,7 +126,7 @@ func TestDaemonSetNoEligibleNodesProjectsConsistentlyIntoAttention(t *testing.T)
 	require.Equal(t, meta.ClusterID, evaluation.Finding.Ref.ClusterID)
 }
 
-func TestAttentionRecordFromEventUsesEventIdentityNotInvolvedObjectIdentity(t *testing.T) {
+func TestAttentionRecordFromEventBundleUsesEventIdentityNotInvolvedObjectIdentity(t *testing.T) {
 	observedAt := time.Date(2026, time.July, 16, 11, 0, 0, 0, time.UTC)
 	event := &corev1.Event{
 		ObjectMeta:     metav1.ObjectMeta{Name: "checkout.abc", Namespace: "payments", UID: "event-uid"},
@@ -134,7 +135,7 @@ func TestAttentionRecordFromEventUsesEventIdentityNotInvolvedObjectIdentity(t *t
 		LastTimestamp: metav1.NewTime(observedAt),
 	}
 
-	record, ok := attentionRecordFromEvent(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, event)
+	record, ok := attentionRecordFromBundle(attentionSourceEvent, eventBundleOf(t, ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, event))
 	require.True(t, ok)
 	require.Equal(t, "Event", record.Ref.Kind)
 	require.Equal(t, "events", record.Ref.Resource)
@@ -142,11 +143,11 @@ func TestAttentionRecordFromEventUsesEventIdentityNotInvolvedObjectIdentity(t *t
 	require.Equal(t, "event-uid", record.Ref.UID)
 	require.Equal(t, observedAt.UnixMilli(), record.AgeTimestamp)
 
-	index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time {
+	index := newTestAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time {
 		return observedAt.Add(time.Hour)
 	})
-	t.Cleanup(index.Stop)
-	index.UpsertSource("events", record)
+	t.Cleanup(index.stopForTest)
+	index.UpsertSource(EventGVR.String(), record)
 	rows := index.Snapshot()
 	require.Len(t, rows, 1)
 	require.Equal(t, "payments", rows[0].Ref.Namespace)
@@ -161,15 +162,15 @@ func TestAttentionFindingForClusterScopedEventHasNoDisplayNamespace(t *testing.T
 		LastTimestamp: metav1.NewTime(observedAt),
 	}
 
-	record, ok := attentionRecordFromEvent(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, event)
+	record, ok := attentionRecordFromBundle(attentionSourceEvent, eventBundleOf(t, ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, event))
 	require.True(t, ok)
 	require.Equal(t, "default", record.Ref.Namespace, "event identity must retain the Event object's namespace")
 
-	index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time {
+	index := newTestAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time {
 		return observedAt.Add(time.Hour)
 	})
-	t.Cleanup(index.Stop)
-	index.UpsertSource("events", record)
+	t.Cleanup(index.stopForTest)
+	index.UpsertSource(EventGVR.String(), record)
 
 	rows := index.Snapshot()
 	require.Len(t, rows, 1)
@@ -189,7 +190,7 @@ func TestDeletingEventWithFinalizerAppearsWithoutWarningEventStatus(t *testing.T
 		LastTimestamp: metav1.NewTime(now.Add(-time.Hour)),
 	}
 
-	record, ok := attentionRecordFromEvent(ClusterMeta{ClusterID: "cluster-a"}, event)
+	record, ok := attentionRecordFromBundle(attentionSourceEvent, eventBundleOf(t, ClusterMeta{ClusterID: "cluster-a"}, event))
 	require.True(t, ok)
 	evaluation := evaluateEventAttention(record, now)
 	require.NotNil(t, evaluation.Finding)
@@ -201,11 +202,61 @@ func TestDeletingEventWithFinalizerAppearsWithoutWarningEventStatus(t *testing.T
 func TestClusterAttentionDomainDelegatesOpenKindPermissionsToCatalog(t *testing.T) {
 	registry := domain.New()
 	index, err := RegisterClusterAttentionDomain(
-		registry, nil, ClusterAttentionPermissions{}, ClusterMeta{ClusterID: "cluster-a"}, nil, ClusterAttentionOptions{},
+		registry, ClusterAttentionPermissions{}, ClusterMeta{ClusterID: "cluster-a"}, nil, ClusterAttentionOptions{},
+		newRecordingBell(),
 	)
 	require.NoError(t, err)
-	t.Cleanup(index.Stop)
+	t.Cleanup(index.stopForTest)
 	config, exists := registry.Get(clusterAttentionDomainName)
 	require.True(t, exists)
 	require.False(t, config.RuntimePolicyExempt)
+}
+
+// A re-warm restores Attention findings from their own spill, but the source
+// records behind them come only from the restored Events. Seeding the sink
+// rebuilds them: an Event that expired while the cluster was Cold loses its
+// finding, and a later delete of a live Event clears its finding.
+func TestAttentionEventSinkSeedRebuildsRestoredSources(t *testing.T) {
+	meta := ClusterMeta{ClusterID: "cluster-a"}
+	spilledAt := time.Date(2026, time.October, 1, 12, 0, 0, 0, time.UTC)
+	warning := func(name string, observed time.Time) ingest.Bundle {
+		return eventBundleOf(t, meta, &corev1.Event{
+			ObjectMeta:     metav1.ObjectMeta{Name: name, Namespace: "default", UID: "uid-" + types.UID(name)},
+			InvolvedObject: corev1.ObjectReference{APIVersion: "v1", Kind: "Node", Name: "node-a"},
+			Reason:         "NodeNotReady",
+			Type:           corev1.EventTypeWarning,
+			LastTimestamp:  metav1.NewTime(observed),
+		})
+	}
+	expiring := warning("expiring", spilledAt.Add(-2*time.Hour))
+	live := warning("live", spilledAt)
+	owner := EventGVR.String()
+	findingNames := func(index *clusterAttentionIndex) []string {
+		names := make([]string, 0)
+		for _, finding := range index.Snapshot() {
+			names = append(names, finding.Ref.Name)
+		}
+		return names
+	}
+
+	original := newTestAttentionIndex(meta, func() time.Time { return spilledAt })
+	original.registerOwnerKind(owner, "Event")
+	attentionBundleSink{index: original, owner: owner, source: attentionSourceEvent}.ReplaceBundles([]ingest.Bundle{expiring, live})
+	require.ElementsMatch(t, []string{"expiring", "live"}, findingNames(original))
+	spillPath := t.TempDir() + "/attention.spill"
+	require.NoError(t, original.SpillTo(spillPath))
+	original.stopForTest()
+
+	// The cluster re-warms 23 hours later: the expiring Event is now past the
+	// lookback, the live one is not.
+	restored := newTestAttentionIndex(meta, func() time.Time { return spilledAt.Add(23 * time.Hour) })
+	t.Cleanup(restored.stopForTest)
+	restored.registerOwnerKind(owner, "Event")
+	require.NoError(t, restored.RestoreFrom(spillPath))
+	sink := attentionBundleSink{index: restored, owner: owner, source: attentionSourceEvent}
+	sink.SeedBundles([]ingest.Bundle{expiring, live})
+	require.Equal(t, []string{"live"}, findingNames(restored))
+
+	sink.DeleteBundle(live)
+	require.Empty(t, findingNames(restored))
 }

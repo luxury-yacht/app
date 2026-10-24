@@ -1,12 +1,17 @@
 /**
  * frontend/src/core/refresh/streaming/resourceStreamManager.test.ts
  *
- * Test suite for resource stream helpers.
+ * The resource stream manager, driven only through its public surface: scopes
+ * start and stop as the orchestrator starts them, the server's frames arrive
+ * through `handleMessage` or the fake socket, and app-wide changes (a
+ * kubeconfig switch, the window hiding or showing) arrive as the app's events.
+ * The snapshot client, logging, and error reporting are stubbed at the
+ * boundary.
  */
 
 import { afterEach, beforeEach, describe, expect, it, test, vi } from 'vitest';
-
 import { eventBus } from '@/core/events';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 
 const fetchSnapshotMock = vi.hoisted(() => vi.fn());
 const logAppLogsDebugMock = vi.hoisted(() => vi.fn());
@@ -36,7 +41,7 @@ vi.mock('@/core/logging/appLogsClient', () => ({
   logAppLogsWarn: logAppLogsWarnMock,
 }));
 
-import { buildClusterScope } from '../clusterScope';
+import { testScope } from '@/test-utils/refreshScope';
 import {
   makeNamespaceAutoscalingSnapshotPayload,
   makeNamespaceConfigSnapshotPayload,
@@ -44,7 +49,8 @@ import {
   makePodSnapshotPayload,
 } from '../refreshContractTestBuilders';
 import { getScopedDomainState, resetAllScopedDomainStates, setScopedDomainState } from '../store';
-import { normalizeResourceScope, ResourceStreamManager } from './resourceStreamManager';
+import type { DoorbellDomain } from './resourceStreamDomains';
+import { ResourceStreamManager } from './resourceStreamManager';
 
 class FakeJSONSocket {
   static OPEN = 1;
@@ -82,6 +88,35 @@ const installFakeJSONSocket = (): void => {
 const flushPromises = async () => {
   await Promise.resolve();
   await Promise.resolve();
+};
+
+/**
+ * The server answers a subscribe without a resume token, as every fresh or
+ * resynced subscription sends: an ACK, then the baseline RESET (backend
+ * streammux handler.go).
+ */
+const answerSubscribe = (manager: ResourceStreamManager, domain: DoorbellDomain, scope: string) => {
+  const separator = scope.indexOf('|');
+  const frame = { domain, scope: scope.slice(separator + 1), clusterId: scope.slice(0, separator) };
+  manager.handleMessage(JSON.stringify({ type: 'ACK', ...frame }));
+  manager.handleMessage(JSON.stringify({ type: 'RESET', ...frame }));
+};
+
+// A manager's stream connection opens once, with its first subscription.
+const openConnections = new WeakSet<ResourceStreamManager>();
+
+/**
+ * Subscribes a scope the way the orchestrator does (`start`) on an open
+ * connection, and the server answers it. Every stream message the tests
+ * deliver arrives in this steady state.
+ */
+const subscribe = (manager: ResourceStreamManager, domain: DoorbellDomain, scope: string) => {
+  manager.start(domain, scope);
+  if (!openConnections.has(manager)) {
+    openConnections.add(manager);
+    manager.handleConnectionOpen();
+  }
+  answerSubscribe(manager, domain, scope);
 };
 
 const resourceRef = ({
@@ -147,6 +182,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // A switch of kubeconfig stops every manager's streams (its public stopAll),
+  // so a later test's app-wide events reach no stream this test left open.
+  eventBus.emit('kubeconfig:changing', '');
   resetAllScopedDomainStates('nodes');
   resetAllScopedDomainStates('namespace-workloads');
   resetAllScopedDomainStates('namespace-config');
@@ -168,79 +206,13 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('resourceStreamManager helpers', () => {
-  it('normalizes pod scopes', () => {
-    expect(normalizeResourceScope('pods', 'namespace:default')).toBe('namespace:default');
-    expect(normalizeResourceScope('pods', 'namespace:*')).toBe('namespace:all');
-    expect(normalizeResourceScope('pods', 'node:node-a')).toBe('node:node-a');
-    expect(normalizeResourceScope('pods', 'workload:default:apps:v1:Deployment:web')).toBe(
-      'workload:default:apps:v1:Deployment:web'
-    );
-  });
-
-  it('normalizes namespace workload scopes', () => {
-    expect(normalizeResourceScope('namespace-workloads', 'default')).toBe('namespace:default');
-    expect(normalizeResourceScope('namespace-workloads', 'namespace:all')).toBe('namespace:all');
-  });
-
-  it('normalizes namespace config scopes', () => {
-    expect(normalizeResourceScope('namespace-config', 'default')).toBe('namespace:default');
-    expect(normalizeResourceScope('namespace-config', 'namespace:all')).toBe('namespace:all');
-  });
-
-  it('normalizes namespace network scopes', () => {
-    expect(normalizeResourceScope('namespace-network', 'default')).toBe('namespace:default');
-    expect(normalizeResourceScope('namespace-network', 'namespace:all')).toBe('namespace:all');
-  });
-
-  it('normalizes namespace rbac scopes', () => {
-    expect(normalizeResourceScope('namespace-rbac', 'default')).toBe('namespace:default');
-    expect(normalizeResourceScope('namespace-rbac', 'namespace:all')).toBe('namespace:all');
-  });
-
-  it('normalizes namespace helm scopes', () => {
-    expect(normalizeResourceScope('namespace-helm', 'default')).toBe('namespace:default');
-    expect(normalizeResourceScope('namespace-helm', 'namespace:all')).toBe('namespace:all');
-  });
-
-  it('normalizes namespace autoscaling scopes', () => {
-    expect(normalizeResourceScope('namespace-autoscaling', 'default')).toBe('namespace:default');
-    expect(normalizeResourceScope('namespace-autoscaling', 'namespace:all')).toBe('namespace:all');
-  });
-
-  it('normalizes namespace quotas scopes', () => {
-    expect(normalizeResourceScope('namespace-quotas', 'default')).toBe('namespace:default');
-    expect(normalizeResourceScope('namespace-quotas', 'namespace:all')).toBe('namespace:all');
-  });
-
-  it('normalizes namespace storage scopes', () => {
-    expect(normalizeResourceScope('namespace-storage', 'default')).toBe('namespace:default');
-    expect(normalizeResourceScope('namespace-storage', 'namespace:all')).toBe('namespace:all');
-  });
-
-  it('normalizes node scopes', () => {
-    expect(normalizeResourceScope('nodes', '')).toBe('');
-    expect(normalizeResourceScope('nodes', 'cluster')).toBe('');
-    expect(() => normalizeResourceScope('nodes', 'namespace:default')).toThrow();
-  });
-
-  it('normalizes cluster scopes', () => {
-    expect(normalizeResourceScope('cluster-rbac', '')).toBe('');
-    expect(normalizeResourceScope('cluster-storage', 'cluster')).toBe('');
-    expect(normalizeResourceScope('cluster-config', '')).toBe('');
-    expect(normalizeResourceScope('cluster-crds', 'cluster')).toBe('');
-  });
-});
-
 describe('ResourceStreamManager', () => {
   test('pod delta is signal-only: updates sourceVersion and leaves rows untouched', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('pods', storeScope);
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    subscribe(manager, 'pods', storeScope);
 
     const existing = makePodSnapshotEntry({
       cpuUsageMilli: 50,
@@ -307,7 +279,7 @@ describe('ResourceStreamManager', () => {
     'ignores $label on the shared connection while accepting the owning cluster ACK',
     async ({ label: _label, ...frame }) => {
       const manager = new ResourceStreamManager();
-      const scope = buildClusterScope('cluster-a', '');
+      const scope = testScope('cluster-a', '');
       manager.start('cluster-config', scope);
       await flushPromises();
       const socket = createdSockets[0];
@@ -344,7 +316,7 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
+    const storeScope = testScope('cluster-a', '');
 
     fetchSnapshotMock.mockResolvedValue({
       snapshot: {
@@ -383,7 +355,7 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
+    const storeScope = testScope('cluster-a', '');
     manager.start('namespaces', storeScope);
     await flushPromises();
 
@@ -418,7 +390,7 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
+    const storeScope = testScope('cluster-a', '');
     const permissionDenied = vi.fn();
     const unsubscribe = eventBus.on('refresh:resource-stream-permission-denied', permissionDenied);
 
@@ -443,14 +415,11 @@ describe('ResourceStreamManager', () => {
           source: 'object',
           signal: 'error',
           version: 'object:2',
-          errorDetails: {
-            kind: 'Status',
-            apiVersion: 'v1',
-            message: 'permission denied for domain namespaces (core/namespaces)',
-            reason: 'Forbidden',
-            details: { domain: 'namespaces', resource: 'core/namespaces' },
-            code: 403,
-          },
+          errorDetails: makeErrorStatus(
+            'Forbidden',
+            'permission denied for domain namespaces (core/namespaces)',
+            { details: { domain: 'namespaces', resource: 'core/namespaces' } }
+          ),
         })
       );
 
@@ -515,10 +484,8 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespaces', storeScope);
+    const storeScope = testScope('cluster-a', '');
+    subscribe(manager, 'namespaces', storeScope);
 
     // The server's ACK carries the cluster DISPLAY NAME; the subscription
     // captures it so subscription-labeled logging matches the backend half
@@ -572,14 +539,10 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const podsScope = buildClusterScope('cluster-a', 'namespace:default');
-    const configScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('pods', podsScope);
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-config', configScope);
+    const podsScope = testScope('cluster-a', 'namespace:default');
+    const configScope = testScope('cluster-a', 'namespace:default');
+    subscribe(manager, 'pods', podsScope);
+    subscribe(manager, 'namespace-config', configScope);
 
     const doorbell = (domain: string) =>
       JSON.stringify({
@@ -611,10 +574,8 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-workloads', storeScope);
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    subscribe(manager, 'namespace-workloads', storeScope);
 
     // namespace-workloads is signal-only: the backend ships the change signal
     // (Ref/ResourceVersion) without a row. The frontend advances sourceVersion
@@ -644,25 +605,12 @@ describe('ResourceStreamManager', () => {
     expect(state.data?.rows ?? []).toEqual([]);
   });
 
-  test('catalog doorbell updates each active catalog query report scope', () => {
+  test('a catalog doorbell advances the cluster catalog scope’s catalog clock', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const pageScope = buildClusterScope(
-      'cluster-a',
-      'limit=1000&customOnly=true&sort=name&sortDirection=asc&namespace=team-a'
-    );
-    const metadataScope = buildClusterScope(
-      'cluster-a',
-      'limit=1&customOnly=true&namespace=team-a'
-    );
-
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('catalog', pageScope);
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('catalog', metadataScope);
+    const scope = testScope('cluster-a', '');
+    subscribe(manager, 'catalog', scope);
 
     manager.handleMessage(
       JSON.stringify({
@@ -677,53 +625,18 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
-    expect(getScopedDomainState('catalog', pageScope).sourceVersion).toBe('catalog:42');
-    expect(getScopedDomainState('catalog', pageScope).signalVersions?.catalog).toBe('catalog:42');
-    expect(getScopedDomainState('catalog', metadataScope).sourceVersion).toBe('catalog:42');
-    expect(getScopedDomainState('catalog', metadataScope).signalVersions?.catalog).toBe(
-      'catalog:42'
-    );
-  });
-
-  test('adding the Browse metadata query keeps the shared catalog subscription healthy', async () => {
-    vi.useFakeTimers();
-    installWindowTimers();
-    const manager = new ResourceStreamManager();
-    const pageScope = buildClusterScope(
-      'cluster-a',
-      'limit=500&resourceScope=namespace&namespace=team-a&scopeNamespace=team-a'
-    );
-    const metadataScope = buildClusterScope(
-      'cluster-a',
-      'limit=1&resourceScope=namespace&namespace=team-a&scopeNamespace=team-a'
-    );
-
-    manager.start('catalog', pageScope);
-    await flushPromises();
-    createdSockets[0].onopen?.(new Event('open'));
-    await vi.advanceTimersByTimeAsync(1_100);
-    manager.handleMessage(
-      JSON.stringify({ type: 'ACK', domain: 'catalog', scope: '', clusterId: 'cluster-a' })
-    );
-    expect(manager.getHealthStatus('catalog', pageScope)).toBe('healthy');
-
-    // Browse owns a second report scope for facets. It reuses the same physical
-    // catalog doorbell and may re-arm that subscribe after the resync cooldown.
-    await vi.advanceTimersByTimeAsync(1_100);
-    manager.start('catalog', metadataScope);
-
-    expect(manager.getHealthStatus('catalog', pageScope)).toBe('healthy');
-    expect(manager.getHealthStatus('catalog', metadataScope)).toBe('healthy');
+    expect(getScopedDomainState('catalog', scope)).toMatchObject({
+      sourceVersion: 'catalog:42',
+      signalVersions: { catalog: 'catalog:42' },
+    });
   });
 
   test('A1 changed signal envelope updates sourceVersion without legacy message type', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('pods', storeScope);
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    subscribe(manager, 'pods', storeScope);
 
     setScopedDomainState('pods', storeScope, () => ({
       status: 'ready',
@@ -755,10 +668,8 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-config', storeScope);
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    subscribe(manager, 'namespace-config', storeScope);
 
     manager.handleMessage(
       JSON.stringify({
@@ -782,10 +693,8 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('pods', storeScope);
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    subscribe(manager, 'pods', storeScope);
 
     manager.handleMessage(
       JSON.stringify({
@@ -809,10 +718,8 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-config', storeScope);
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    subscribe(manager, 'namespace-config', storeScope);
 
     setScopedDomainState('namespace-config', storeScope, () => ({
       status: 'ready',
@@ -873,10 +780,8 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-config', storeScope);
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    subscribe(manager, 'namespace-config', storeScope);
 
     setScopedDomainState('namespace-config', storeScope, () => ({
       status: 'ready',
@@ -924,10 +829,8 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-config', storeScope);
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    subscribe(manager, 'namespace-config', storeScope);
 
     setScopedDomainState('namespace-config', storeScope, () => ({
       status: 'ready',
@@ -974,10 +877,8 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-autoscaling', storeScope);
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    subscribe(manager, 'namespace-autoscaling', storeScope);
 
     const sharedRow = {
       ref: {
@@ -1047,10 +948,10 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('cluster-rbac', storeScope);
+    const storeScope = testScope('cluster-a', '');
+    subscribe(manager, 'cluster-rbac', storeScope);
+    // Subscribing (its initial resync and ACK) bumps the revision too.
+    const revisionBefore = getScopedDomainState('cluster-rbac', storeScope).streamRevision ?? 0;
 
     manager.handleMessage(
       JSON.stringify({
@@ -1069,17 +970,17 @@ describe('ResourceStreamManager', () => {
     const state = getScopedDomainState('cluster-rbac', storeScope);
     expect(state.status).toBe('ready');
     expect(state.data).toBeNull();
-    expect(state.streamRevision).toBe(1);
+    expect(state.streamRevision).toBe(revisionBefore + 1);
   });
 
   test('accepts updates even when resource versions regress if sequences advance', async () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('pods', storeScope);
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    subscribe(manager, 'pods', storeScope);
+    // Subscribing (its initial resync and ACK) bumps the revision too.
+    const revisionBefore = getScopedDomainState('pods', storeScope).streamRevision ?? 0;
 
     manager.handleMessage(
       JSON.stringify({
@@ -1119,17 +1020,17 @@ describe('ResourceStreamManager', () => {
     // signal while streamRevision remains diagnostic/backward-compatible state.
     expect(fetchSnapshotMock).not.toHaveBeenCalled();
     const state = getScopedDomainState('pods', storeScope);
-    expect(state.streamRevision).toBe(2);
+    expect(state.streamRevision).toBe(revisionBefore + 2);
   });
 
   test('accepts updates whose resourceVersion exceeds safe integer limits', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('cluster-rbac', storeScope);
+    const storeScope = testScope('cluster-a', '');
+    subscribe(manager, 'cluster-rbac', storeScope);
+    // Subscribing (its initial resync and ACK) bumps the revision too.
+    const revisionBefore = getScopedDomainState('cluster-rbac', storeScope).streamRevision ?? 0;
 
     // A resourceVersion past the safe-integer limit is parsed via BigInt, so the
     // signal-only delta is still accepted and bumps the refetch signal.
@@ -1148,16 +1049,14 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     const state = getScopedDomainState('cluster-rbac', storeScope);
-    expect(state.streamRevision).toBe(1);
+    expect(state.streamRevision).toBe(revisionBefore + 1);
     expect(fetchSnapshotMock).not.toHaveBeenCalled();
   });
 
   test('resyncs on reset messages', async () => {
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-config', storeScope);
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    subscribe(manager, 'namespace-config', storeScope);
 
     fetchSnapshotMock.mockResolvedValueOnce({
       snapshot: {
@@ -1192,10 +1091,8 @@ describe('ResourceStreamManager', () => {
 
   test('resyncs after connection errors', async () => {
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-config', storeScope);
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    subscribe(manager, 'namespace-config', storeScope);
 
     fetchSnapshotMock.mockResolvedValueOnce({
       snapshot: {
@@ -1222,10 +1119,8 @@ describe('ResourceStreamManager', () => {
 
   test('does not resync on connection error when resume sequence exists', async () => {
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
-    (
-      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
-    ).ensureSubscriptions('namespace-config', storeScope);
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    subscribe(manager, 'namespace-config', storeScope);
 
     manager.handleMessage(
       JSON.stringify({
@@ -1257,7 +1152,7 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
+    const storeScope = testScope('cluster-a', 'namespace:default');
 
     fetchSnapshotMock.mockResolvedValueOnce({
       snapshot: {
@@ -1314,7 +1209,7 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
+    const storeScope = testScope('cluster-a', 'namespace:default');
 
     fetchSnapshotMock.mockResolvedValue({
       snapshot: {
@@ -1336,12 +1231,12 @@ describe('ResourceStreamManager', () => {
     const firstSocket = createdSockets[0];
     expect(firstSocket).toBeDefined();
 
-    (manager as unknown as { suspendForVisibility: () => void }).suspendForVisibility();
+    eventBus.emit('app:visibility-hidden');
     expect(firstSocket.close).toHaveBeenCalled();
     expect(manager.getHealthStatus('namespace-config', storeScope)).toBe('unhealthy');
 
     vi.advanceTimersByTime(1100);
-    (manager as unknown as { resumeFromVisibility: () => void }).resumeFromVisibility();
+    eventBus.emit('app:visibility-visible');
     await flushPromises();
 
     // With no retained snapshot, resume only re-opens and re-subscribes the stream.
@@ -1352,7 +1247,7 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
+    const storeScope = testScope('cluster-a', '');
 
     setScopedDomainState('namespaces', storeScope, (previous) => ({
       ...previous,
@@ -1380,9 +1275,9 @@ describe('ResourceStreamManager', () => {
     );
     const versionBeforeGap = getScopedDomainState('namespaces', storeScope).signalVersions?.object;
 
-    (manager as unknown as { suspendForVisibility: () => void }).suspendForVisibility();
+    eventBus.emit('app:visibility-hidden');
     vi.advanceTimersByTime(1100);
-    (manager as unknown as { resumeFromVisibility: () => void }).resumeFromVisibility();
+    eventBus.emit('app:visibility-visible');
     await flushPromises();
 
     const secondSocket = createdSockets[1];
@@ -1402,7 +1297,7 @@ describe('ResourceStreamManager', () => {
 
   test('invalidates the declared non-object clock when a retained doorbell snapshot cannot be replayed', async () => {
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
+    const storeScope = testScope('cluster-a', '');
 
     setScopedDomainState('namespace-metrics', storeScope, (previous) => ({
       ...previous,
@@ -1434,7 +1329,7 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
+    const storeScope = testScope('cluster-a', 'namespace:default');
 
     fetchSnapshotMock.mockResolvedValue({
       snapshot: {
@@ -1493,7 +1388,7 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
+    const storeScope = testScope('cluster-a', 'namespace:default');
 
     fetchSnapshotMock.mockResolvedValue({
       snapshot: {
@@ -1554,9 +1449,68 @@ describe('ResourceStreamManager', () => {
     expect(manager.getHealthStatus('namespace-config', storeScope)).not.toBe('healthy');
   });
 
+  test('changes inside the resync cooldown latch exactly one trailing resync', async () => {
+    // Helm writes a release's Secrets in a burst (pending, superseded,
+    // deployed). Each rings a complete-resync domain; a change that lands in
+    // the cooldown of the previous resync must still reach the view.
+    vi.useFakeTimers();
+    installWindowTimers();
+    const manager = new ResourceStreamManager();
+    const storeScope = testScope('cluster-a', 'namespace:default');
+    fetchSnapshotMock.mockResolvedValue({
+      snapshot: {
+        domain: 'namespace-helm',
+        scope: 'namespace:default',
+        version: 1,
+        checksum: 'etag',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: { rows: [] },
+        stats: { itemCount: 0, buildDurationMs: 0 },
+      },
+      notModified: false,
+    });
+    const helmChanged = () =>
+      manager.handleMessage(
+        JSON.stringify({
+          clusterId: 'cluster-a',
+          type: 'MODIFIED',
+          domain: 'namespace-helm',
+          scope: 'namespace:default',
+        })
+      );
+    const streamRevision = () =>
+      getScopedDomainState('namespace-helm', storeScope).streamRevision ?? 0;
+
+    manager.start('namespace-helm', storeScope);
+    await flushPromises();
+    vi.advanceTimersByTime(1100);
+
+    helmChanged();
+    await flushPromises();
+    const resyncsAfterFirst = manager.getTelemetrySummary().resyncCount;
+    const revisionAfterFirst = streamRevision();
+    expect(resyncsAfterFirst).toBe(1);
+
+    vi.advanceTimersByTime(20);
+    helmChanged();
+    helmChanged();
+    await flushPromises();
+    expect(manager.getTelemetrySummary().resyncCount).toBe(resyncsAfterFirst);
+
+    vi.advanceTimersByTime(1000);
+    await flushPromises();
+    expect(manager.getTelemetrySummary().resyncCount).toBe(resyncsAfterFirst + 1);
+    expect(streamRevision()).toBeGreaterThan(revisionAfterFirst);
+
+    vi.advanceTimersByTime(5000);
+    await flushPromises();
+    expect(manager.getTelemetrySummary().resyncCount).toBe(resyncsAfterFirst + 1);
+  });
+
   test('stops subscriptions and closes the socket on kubeconfig change cleanup', async () => {
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
+    const storeScope = testScope('cluster-a', '');
 
     fetchSnapshotMock.mockResolvedValue({
       snapshot: {
@@ -1578,7 +1532,7 @@ describe('ResourceStreamManager', () => {
     const socket = createdSockets[0];
     expect(socket).toBeDefined();
 
-    (manager as unknown as { stopAll: (reset: boolean) => void }).stopAll(true);
+    eventBus.emit('kubeconfig:changing', '');
 
     expect(socket.close).toHaveBeenCalled();
     expect(manager.getHealthStatus('nodes', storeScope)).toBe('unhealthy');
@@ -1587,7 +1541,7 @@ describe('ResourceStreamManager', () => {
 
   test('counts a stream-down fallback only against a live subscription for that scope', async () => {
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
+    const storeScope = testScope('cluster-a', 'namespace:default');
     manager.start('pods', storeScope);
     await flushPromises();
 
@@ -1595,7 +1549,7 @@ describe('ResourceStreamManager', () => {
     manager.recordStreamFallback('pods', storeScope, 'stream not delivering');
     // No subscription owns this scope, so there is nothing to attribute a
     // fallback to — the counter must not invent a row for it.
-    manager.recordStreamFallback('pods', buildClusterScope('cluster-a', 'namespace:other'), 'nope');
+    manager.recordStreamFallback('pods', testScope('cluster-a', 'namespace:other'), 'nope');
 
     const summary = manager.getTelemetrySummary();
     expect(summary.fallbackCount).toBe(2);
@@ -1606,33 +1560,57 @@ describe('ResourceStreamManager', () => {
   });
 
   test('groups resync/fallback telemetry by cluster AND domain for per-domain rows', () => {
+    vi.useFakeTimers();
+    installWindowTimers();
     const manager = new ResourceStreamManager();
-    const internal = manager as unknown as {
-      streamTelemetry: Map<string, Record<string, unknown>>;
+    const nodesScope = testScope('c1', '');
+    const podsScope = testScope('c1', 'namespace:default');
+    subscribe(manager, 'nodes', nodesScope);
+    subscribe(manager, 'pods', podsScope);
+    // The server resets a scope (resyncs closer together than the cooldown
+    // merge); the client resubscribes, and the server answers it.
+    const reset = (domain: DoorbellDomain, scope: string) => {
+      vi.advanceTimersByTime(1_100);
+      manager.handleMessage(
+        JSON.stringify({ type: 'RESET', domain, scope: scope.slice(3), clusterId: 'c1' })
+      );
+      answerSubscribe(manager, domain, scope);
     };
-    internal.streamTelemetry.set('c1::nodes::path:c1|', {
-      clusterId: 'c1',
-      domain: 'nodes',
-      resyncCount: 2,
-      fallbackCount: 1,
-    });
-    internal.streamTelemetry.set('c1::pods::path:c1|', {
-      clusterId: 'c1',
-      domain: 'pods',
-      resyncCount: 4,
-      fallbackCount: 0,
-    });
+
+    reset('nodes', nodesScope);
+    reset('nodes', nodesScope);
+    for (let count = 0; count < 4; count += 1) {
+      reset('pods', podsScope);
+    }
+    manager.recordStreamFallback('nodes', nodesScope, 'stream not delivering');
 
     const byClusterDomain = manager.getTelemetrySummaryByClusterDomain();
     expect(byClusterDomain['c1::nodes']).toMatchObject({ resyncCount: 2, fallbackCount: 1 });
     expect(byClusterDomain['c1::pods']).toMatchObject({ resyncCount: 4, fallbackCount: 0 });
   });
 
+  test('counts a reconnect as a resync, but not the first connection', () => {
+    vi.useFakeTimers();
+    installWindowTimers();
+    const manager = new ResourceStreamManager();
+    const scope = testScope('c1', '');
+
+    subscribe(manager, 'nodes', scope);
+    expect(manager.getTelemetrySummary().resyncCount).toBe(0);
+
+    vi.advanceTimersByTime(1_100);
+    manager.handleConnectionError('socket closed');
+    vi.advanceTimersByTime(1_100);
+    manager.handleConnectionOpen();
+
+    expect(manager.getTelemetrySummary().resyncCount).toBeGreaterThan(0);
+  });
+
   test('accepts newer updates after stale resource versions when sequences advance', async () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', 'namespace:default');
+    const storeScope = testScope('cluster-a', 'namespace:default');
 
     // pods is signal-only: starting the subscription must NOT fetch a full-row
     // baseline (the query-backed table no longer waits on one — that's the
@@ -1686,7 +1664,7 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
+    const storeScope = testScope('cluster-a', '');
 
     fetchSnapshotMock.mockResolvedValue({
       snapshot: {
@@ -1723,7 +1701,7 @@ describe('ResourceStreamManager', () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = buildClusterScope('cluster-a', '');
+    const storeScope = testScope('cluster-a', '');
 
     fetchSnapshotMock.mockResolvedValue({
       snapshot: {
@@ -1759,31 +1737,59 @@ describe('ResourceStreamManager', () => {
     expect(cancelCount()).toBe(0);
   });
 
-  it('rejects node streaming for multi-cluster scopes', () => {
+  test('a closed cluster’s streams end at once, so reopening it subscribes afresh', async () => {
+    vi.useFakeTimers();
+    installWindowTimers();
     const manager = new ResourceStreamManager();
-    const storeScope = 'clusters=cluster-a,cluster-b|';
+    const closedScope = testScope('cluster-a', '');
+    const siblingScope = testScope('cluster-b', '');
 
-    expect(() => manager.start('nodes', storeScope)).toThrow('single cluster');
+    fetchSnapshotMock.mockResolvedValue({
+      snapshot: {
+        domain: 'nodes',
+        scope: '',
+        version: 1,
+        checksum: 'etag',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: { rows: [] },
+        stats: { itemCount: 0, buildDurationMs: 0 },
+      },
+      notModified: false,
+    });
 
-    expect(fetchSnapshotMock).not.toHaveBeenCalled();
-    expect(createdSockets).toHaveLength(0);
+    manager.start('nodes', closedScope);
+    manager.start('nodes', siblingScope);
+    await flushPromises();
+
+    const socket = createdSockets[0];
+    expect(socket).toBeDefined();
+    const sent = (type: string, clusterId: string) =>
+      socket.send.mock.calls.filter(
+        ([payload]) => payload.type === type && payload.clusterId === clusterId
+      ).length;
+
+    // Both views leave: their streams wait out the unsubscribe debounce.
+    manager.stop('nodes', closedScope, false);
+    manager.stop('nodes', siblingScope, false);
+    expect(sent('CANCEL', 'cluster-a')).toBe(0);
+
+    // cluster-a closes (orchestrator.ts pruneRemovedClusterRuntimes).
+    eventBus.emit('refresh:cluster-pruned', { clusterId: 'cluster-a' });
+
+    expect(sent('CANCEL', 'cluster-a')).toBe(1);
+    expect(sent('CANCEL', 'cluster-b')).toBe(0);
+
+    // Reopened, its view subscribes again instead of reclaiming the old stream.
+    manager.start('nodes', closedScope);
+    await flushPromises();
+    expect(sent('REQUEST', 'cluster-a')).toBe(2);
   });
 
-  test('rejects pod streaming for multi-cluster scopes', () => {
+  it('rejects streaming for a scope without a cluster prefix', () => {
     const manager = new ResourceStreamManager();
-    const storeScope = 'clusters=cluster-a,cluster-b|namespace:default';
 
-    expect(() => manager.start('pods', storeScope)).toThrow('single cluster');
-
-    expect(fetchSnapshotMock).not.toHaveBeenCalled();
-    expect(createdSockets).toHaveLength(0);
-  });
-
-  test('rejects namespace workload streaming for multi-cluster scopes', () => {
-    const manager = new ResourceStreamManager();
-    const storeScope = 'clusters=cluster-a,cluster-b|namespace:default';
-
-    expect(() => manager.start('namespace-workloads', storeScope)).toThrow('single cluster');
+    expect(() => manager.start('pods', 'namespace:default')).toThrow('no cluster prefix');
 
     expect(fetchSnapshotMock).not.toHaveBeenCalled();
     expect(createdSockets).toHaveLength(0);

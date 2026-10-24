@@ -6,8 +6,7 @@ import (
 	"sync"
 	"time"
 
-	corelisters "k8s.io/client-go/listers/core/v1"
-	"k8s.io/client-go/tools/cache"
+	"github.com/luxury-yacht/app/backend/refresh/doorbell"
 )
 
 // namespaceNotifierDebounce coalesces event bursts (a rollout creating dozens of
@@ -26,33 +25,35 @@ const namespaceNotifierNotReadySettleInterval = 2 * time.Second
 // snapshot into a doorbell broadcast, replacing the frontend's 2s poll:
 //
 //   - a Namespace object add/update/delete broadcasts unconditionally (the rows
-//     come solely from the namespace informer);
+//     come solely from the namespace store);
 //   - workload/pod ingest events broadcast ONLY when the workload-presence or health-rollup
 //     signature changes (the exact signature the snapshot stamps as its "workloads" source
 //     clock), so steady pod churn stays silent;
-//   - Events informer mutations broadcast ONLY when the per-namespace Warning
+//   - events-store changes broadcast ONLY when the per-namespace Warning
 //     count or its availability state changes, so Normal-event churn stays silent;
 //   - while the workload tracker is not ready, the notifier re-arms itself so
 //     pending→degraded→ready edges broadcast even with no further ingest event.
 //     Idle ticks inspect only readiness; they do not re-walk workload rows. It
-//     also re-arms while an expected Events informer is warming, so an empty
+//     also re-arms while an expected events store is warming, so an empty
 //     synced cache becomes an authoritative zero. The re-arm stops once every
 //     expected signal source is ready.
 //
-// Inputs may fire from informer/reflector goroutines; the broadcast sink is
-// wired later (the resource-stream manager is built after domain registration),
-// so pending events are retained until SetBroadcast arrives.
+// Inputs may fire from reflector goroutines. The flush is a generation
+// callback of the cluster's doorbell, so stopping the generation cancels a
+// pending flush and waits for a running one.
 type NamespaceChangeNotifier struct {
 	ingest  namespacePodIngestSource
 	tracker *NamespaceWorkloadTracker
 
-	eventLister    corelisters.EventLister
+	events         namespaceEventSource
 	eventsExpected bool
-	eventsSynced   cache.InformerSynced
+
+	bell doorbell.Bell
+	// afterRing runs after each namespaces ring (the cluster-Ready self-build).
+	afterRing func(version, reason string)
 
 	mu                       sync.Mutex
-	broadcast                func(version, reason string)
-	timer                    *time.Timer
+	timer                    doorbell.Timer
 	debounce                 time.Duration
 	namespaceDirty           bool
 	workloadDirty            bool
@@ -74,23 +75,25 @@ type NamespaceChangeNotifier struct {
 	notReadyMinInterval time.Duration
 	lastPresenceAt      time.Time
 	counter             uint64
-	stopped             bool
-	activeFlushes       int
-	flushDone           *sync.Cond
 }
 
 // NewNamespaceChangeNotifier builds a notifier over the same ingest source and
 // tracker the namespaces builder reads, so the presence signature can never
-// drift from what Build serves.
-func NewNamespaceChangeNotifier(ingest namespacePodIngestSource, tracker *NamespaceWorkloadTracker) *NamespaceChangeNotifier {
-	notifier := &NamespaceChangeNotifier{
+// drift from what Build serves. It rings bell, then calls afterRing (may be nil).
+func NewNamespaceChangeNotifier(
+	ingest namespacePodIngestSource,
+	tracker *NamespaceWorkloadTracker,
+	bell doorbell.Bell,
+	afterRing func(version, reason string),
+) *NamespaceChangeNotifier {
+	return &NamespaceChangeNotifier{
 		ingest:              ingest,
 		tracker:             tracker,
+		bell:                bell,
+		afterRing:           afterRing,
 		debounce:            namespaceNotifierDebounce,
 		notReadyMinInterval: namespaceNotifierNotReadySettleInterval,
 	}
-	notifier.flushDone = sync.NewCond(&notifier.mu)
-	return notifier
 }
 
 // WorkloadsReady reports whether this notifier's workload tracker has real data or an explicit
@@ -99,22 +102,6 @@ func NewNamespaceChangeNotifier(ingest namespacePodIngestSource, tracker *Namesp
 // is the generation-local readiness check used before that subsystem may cool.
 func (n *NamespaceChangeNotifier) WorkloadsReady() bool {
 	return n != nil && n.tracker != nil && n.tracker.Synced()
-}
-
-// SetBroadcast wires the doorbell sink. Events recorded before wiring are
-// flushed on the next debounce tick. The reason describes what rang the
-// doorbell, for the debug log at the broadcast site.
-func (n *NamespaceChangeNotifier) SetBroadcast(broadcast func(version, reason string)) {
-	if n == nil {
-		return
-	}
-	n.mu.Lock()
-	n.broadcast = broadcast
-	pending := n.namespaceDirty || n.workloadDirty || n.eventDirty || n.quotaDirty
-	n.mu.Unlock()
-	if pending {
-		n.arm()
-	}
 }
 
 // NamespaceChanged records a Namespace object add/update/delete.
@@ -140,7 +127,7 @@ func (n *NamespaceChangeNotifier) WorkloadChanged() {
 	n.arm()
 }
 
-// EventChanged records an Events informer mutation that might change a
+// EventChanged records an events-store change that might change a
 // namespace's warning-event count. The flush compares the aggregate signature,
 // so Normal-event churn does not refetch the namespace list.
 func (n *NamespaceChangeNotifier) EventChanged() {
@@ -165,39 +152,17 @@ func (n *NamespaceChangeNotifier) QuotaChanged() {
 	n.arm()
 }
 
-// Stop cancels any pending flush; the notifier is discarded with its subsystem.
-func (n *NamespaceChangeNotifier) Stop() {
-	if n == nil {
-		return
-	}
-	n.mu.Lock()
-	n.stopped = true
-	timer := n.timer
-	n.timer = nil
-	for n.activeFlushes > 0 {
-		n.flushDone.Wait()
-	}
-	n.mu.Unlock()
-	if timer != nil {
-		timer.Stop()
-	}
-}
-
 func (n *NamespaceChangeNotifier) arm() {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	if n.stopped || n.timer != nil {
+	if n.timer != nil {
 		return
 	}
-	n.timer = time.AfterFunc(n.debounce, n.flush)
+	n.timer = n.bell.AfterFunc(n.debounce, n.flush)
 }
 
 func (n *NamespaceChangeNotifier) flush() {
-	state, ok := n.beginFlush()
-	if !ok {
-		return
-	}
-	defer n.finishFlush()
+	state := n.beginFlush()
 
 	reasons := namespaceFlushReasons(state.namespaceDirty)
 	workloadReasons, ready := n.workloadFlushReasons(state.workloadDirty, state.namespaceDirty)
@@ -206,7 +171,7 @@ func (n *NamespaceChangeNotifier) flush() {
 	reasons = append(reasons, eventReasons...)
 	quotaReasons, quotaReady := n.quotaFlushReasons(state.quotaDirty)
 	reasons = append(reasons, quotaReasons...)
-	n.broadcastFlushReasons(state.broadcast, reasons)
+	n.ringFlushReasons(reasons)
 
 	if !ready || (n.eventsExpected && !eventReady) || !quotaReady {
 		n.arm()
@@ -214,26 +179,17 @@ func (n *NamespaceChangeNotifier) flush() {
 }
 
 type namespaceFlushState struct {
-	broadcast      func(version, reason string)
 	namespaceDirty bool
 	workloadDirty  bool
 	eventDirty     bool
 	quotaDirty     bool
 }
 
-func (n *NamespaceChangeNotifier) beginFlush() (namespaceFlushState, bool) {
+func (n *NamespaceChangeNotifier) beginFlush() namespaceFlushState {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.timer = nil
-	if n.stopped {
-		return namespaceFlushState{}, false
-	}
-	if n.broadcast == nil {
-		// Not wired yet: keep the dirty flags; SetBroadcast re-arms.
-		return namespaceFlushState{}, false
-	}
 	state := namespaceFlushState{
-		broadcast:      n.broadcast,
 		namespaceDirty: n.namespaceDirty,
 		workloadDirty:  n.workloadDirty,
 		eventDirty:     n.eventDirty,
@@ -243,17 +199,7 @@ func (n *NamespaceChangeNotifier) beginFlush() (namespaceFlushState, bool) {
 	n.workloadDirty = false
 	n.eventDirty = false
 	n.quotaDirty = false
-	n.activeFlushes++
-	return state, true
-}
-
-func (n *NamespaceChangeNotifier) finishFlush() {
-	n.mu.Lock()
-	n.activeFlushes--
-	if n.activeFlushes == 0 {
-		n.flushDone.Broadcast()
-	}
-	n.mu.Unlock()
+	return state
 }
 
 func namespaceFlushReasons(namespaceDirty bool) []string {
@@ -312,15 +258,14 @@ func workloadFlushReason(hadSignature bool, readiness NamespaceWorkloadReadiness
 }
 
 func (n *NamespaceChangeNotifier) eventFlushReasons(eventDirty bool) ([]string, bool) {
-	eventReady := !n.eventsExpected || (n.eventsSynced != nil && n.eventsSynced())
+	eventReady := !n.eventsExpected || eventsStoreSynced(n.events)
 	n.mu.Lock()
 	needEventSignature := eventDirty || !n.eventSignatureKnown || (n.eventsExpected && !n.lastEventReady)
 	n.mu.Unlock()
 	if !needEventSignature {
 		return nil, eventReady
 	}
-	counts, state := namespaceWarningEventRollups(n.eventLister, n.eventsExpected, n.eventsSynced)
-	signature := warningEventRollupSignature(counts, state)
+	signature := namespaceWarningEventRollups(n.events, n.eventsExpected).signature()
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.lastEventReady = eventReady
@@ -362,19 +307,24 @@ func (n *NamespaceChangeNotifier) quotaFlushReasons(quotaDirty bool) ([]string, 
 	return []string{"quota pressure changed"}, quotaReady
 }
 
-func (n *NamespaceChangeNotifier) broadcastFlushReasons(
-	broadcast func(version, reason string),
-	reasons []string,
-) {
-	if len(reasons) > 0 {
-		n.mu.Lock()
-		if n.stopped {
-			n.mu.Unlock()
-			return
-		}
-		n.counter++
-		version := fmt.Sprintf("ns-%d", n.counter)
-		n.mu.Unlock()
-		broadcast(version, strings.Join(reasons, "; "))
+func (n *NamespaceChangeNotifier) ringFlushReasons(reasons []string) {
+	if len(reasons) == 0 {
+		return
+	}
+	n.mu.Lock()
+	n.counter++
+	version := fmt.Sprintf("ns-%d", n.counter)
+	n.mu.Unlock()
+	reason := strings.Join(reasons, "; ")
+	n.bell.Ring(doorbell.Change{
+		Domain:  "namespaces",
+		Source:  doorbell.SourceObject,
+		Target:  doorbell.Subscribed(),
+		Version: version,
+		Reason:  reason,
+	})
+	// After the ring: a self-build triggered here always sees post-change data.
+	if n.afterRing != nil {
+		n.afterRing(version, reason)
 	}
 }

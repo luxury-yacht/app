@@ -19,8 +19,6 @@ type (
 	KubeconfigInfo                      = types.KubeconfigInfo
 	WindowSettings                      = types.WindowSettings
 	AppSettings                         = types.AppSettings
-	AppPreferenceSchema                 = types.AppPreferenceSchema
-	AppSettingsSchema                   = types.AppSettingsSchema
 	AppPreferenceChange                 = types.AppPreferenceChange
 	UpdateAppPreferencesRequest         = types.UpdateAppPreferencesRequest
 	UpdateAppPreferencesResponse        = types.UpdateAppPreferencesResponse
@@ -36,6 +34,7 @@ type (
 	NodeLogFetchRequest                 = types.NodeLogFetchRequest
 	NodeLogFetchResponse                = types.NodeLogFetchResponse
 	ShellSessionRequest                 = types.ShellSessionRequest
+	NodeShellSessionRequest             = types.NodeShellSessionRequest
 	ShellSession                        = types.ShellSession
 	ShellSessionInfo                    = types.ShellSessionInfo
 	DebugContainerRequest               = types.DebugContainerRequest

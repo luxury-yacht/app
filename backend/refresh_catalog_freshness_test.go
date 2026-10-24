@@ -83,27 +83,23 @@ func testCatalogCustomResourceWatchReconcilesTableMembership(t *testing.T, stora
 		versions = append(versions, apiextensionsv1.CustomResourceDefinitionVersion{Name: "v1", Served: true})
 	}
 	definition := &apiextensionsv1.CustomResourceDefinition{ObjectMeta: metav1.ObjectMeta{Name: "externalsecrets.external-secrets.io", UID: "definition-a"}, Spec: apiextensionsv1.CustomResourceDefinitionSpec{Group: gvr.Group, Names: apiextensionsv1.CustomResourceDefinitionNames{Plural: gvr.Resource, Kind: "ExternalSecret"}, Scope: apiextensionsv1.NamespaceScoped, Versions: versions}}
-	_, err := clients.apiextensionsClient.ApiextensionsV1().CustomResourceDefinitions().Create(ctx, definition, metav1.CreateOptions{})
-	require.NoError(t, err)
+	server := crdAPIServer(t, []string{"externalsecrets", "customresourcedefinitions"}, definition)
 	subsystem, err := system.NewSubsystemWithServices(context.Background(), system.Config{
-		KubernetesClient: kube, APIExtensionsClient: clients.apiextensionsClient, DynamicClient: dynamic,
-		ClusterID: target.meta.ID, ClusterName: target.meta.Name, Logger: app.AppLogs.Logger(), ResyncInterval: time.Minute,
+		KubernetesClient: server.Client(t), APIExtensionsClient: server.APIExtensionsClient(t), DynamicClient: dynamic,
+		ClusterID: target.meta.ID, ClusterName: target.meta.Name, Logger: app.AppLogs.Logger(),
 		ObjectDetailsProvider: app.Resources.objectDetailProvider(), NodeMaintenanceStore: app.NodeMaintenanceStore,
 	})
 	require.NoError(t, err)
 	app.Refresh.setRefreshSubsystem(target.meta.ID, subsystem)
 	app.Resources.responseCache = newResponseCache(time.Minute, 10)
-	app.Resources.registerResponseCacheInvalidation(subsystem, target.meta.ID)
+	app.Refresh.registerResponseCacheInvalidation(subsystem, target.meta.ID)
 	t.Cleanup(func() {
 		app.Refresh.stopObjectCatalogForCluster(target.meta.ID)
 		cancel()
-		subsystem.StopDoorbellNotifiers()
 		subsystem.ResourceStream.Stop()
 		subsystem.IngestManager.Stop()
-		_ = subsystem.InformerFactory.Shutdown()
 	})
 	subsystem.IngestManager.Start(ctx)
-	require.NoError(t, subsystem.InformerFactory.Start(ctx))
 	selector, err := resourcestream.ParseStreamSelector(target.meta.ID, "catalog", "")
 	require.NoError(t, err)
 	sub, err := subsystem.ResourceStream.SubscribeSelector(selector)
@@ -176,7 +172,7 @@ func testCatalogCustomResourceWatchReconcilesTableMembership(t *testing.T, stora
 	for _, action := range dynamic.Actions() {
 		require.NotContains(t, []string{"list", "watch"}, action.GetVerb(), "catalog restart must reuse the live ingest source")
 	}
-	require.NoError(t, clients.apiextensionsClient.ApiextensionsV1().CustomResourceDefinitions().Delete(ctx, definition.Name, metav1.DeleteOptions{}))
+	server.Delete(t, definition)
 	requireCatalogSignalState(t, sub, "CRD deletion after catalog restart", func() bool { return replacement.Query(objectcatalog.QueryOptions{}).TotalItems == 0 })
 	require.False(t, subsystem.IngestManager.Tracks(catalogGVR), "confirmed CRD deletion retires its source")
 }

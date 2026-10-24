@@ -3,6 +3,7 @@ package snapshot
 import (
 	"context"
 
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 )
@@ -16,7 +17,7 @@ func RegisterPermissionDeniedDomain(reg *domain.Registry, name string, resource 
 		Name:             name,
 		PermissionDenied: true,
 		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-			return nil, refresh.NewPermissionDeniedError(name, resource)
+			return nil, errorstatus.NewPermissionDenied(name, resource)
 		},
 	})
 }

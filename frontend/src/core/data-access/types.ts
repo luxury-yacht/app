@@ -4,14 +4,13 @@
  * Defines shared request and response contracts for brokered data access.
  */
 
-import type { RefreshContext } from '@/core/refresh/RefreshManager';
+import type { RefreshIntent } from '@/core/refresh/refreshIntent';
 import type { DomainSnapshotState } from '@/core/refresh/store';
 import type { DomainPayloadMap, RefreshDomain } from '@/core/refresh/types';
 
-// 'stream-signal' marks a fetch triggered by a stream doorbell: auto-refresh
-// gating applies (paused means paused), but the orchestrator must not skip it
-// for a healthy stream — the signal is the stream announcing changed data.
-export type DataRequestReason = 'background' | 'startup' | 'foreground' | 'user' | 'stream-signal';
+// Why a broker read happens; the orchestrator carries the same intent through
+// deferral and replay (core/refresh/refreshIntent.ts).
+export type DataRequestReason = RefreshIntent;
 export type DataAccessAdapter =
   | 'refresh-domain'
   | 'context-refresh'
@@ -32,7 +31,6 @@ export interface RefreshDomainRequest {
 export interface RefreshDomainStateRequest<K extends RefreshDomain = RefreshDomain>
   extends RefreshDomainRequest {
   domain: K;
-  cleanup?: boolean;
   preserveState?: boolean;
 }
 
@@ -60,7 +58,7 @@ export type RefreshDomainStateResult<K extends RefreshDomain = RefreshDomain> = 
 
 export interface ContextRefreshRequest {
   reason: 'user';
-  context?: Partial<RefreshContext>;
+  clusterId: string;
   resource?: string;
   label?: string;
   scope?: string;

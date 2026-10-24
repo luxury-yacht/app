@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,14 +10,17 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	podspkg "github.com/luxury-yacht/app/backend/resources/pods"
 
 	"github.com/google/uuid"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/streaming/pkg/httpstream"
@@ -36,15 +40,18 @@ type shellSession struct {
 	id          string
 	clusterID   string
 	clusterName string
-	namespace   string
-	podName     string
+	target      RuntimeOperationTargetRef
 	container   string
 	command     []string
-	stdin       *io.PipeWriter
-	stdinR      *io.PipeReader
-	sizeQueue   *terminalSizeQueue
-	cancel      context.CancelFunc
-	once        sync.Once
+	// debugPod is the pod a node shell created; release deletes it. Both stay
+	// nil for pod shells.
+	debugPod  *RuntimeOperationTargetRef
+	release   func() error
+	stdin     *io.PipeWriter
+	stdinR    *io.PipeReader
+	sizeQueue *terminalSizeQueue
+	cancel    context.CancelFunc
+	once      sync.Once
 
 	activityMu   sync.Mutex
 	lastActivity time.Time
@@ -54,6 +61,31 @@ type shellSession struct {
 	backlog        []string
 	backlogBytes   int
 	operationEpoch uint64
+
+	// cleanupFailure is set while the stream has ended but the debug pod
+	// could not be deleted; the session stays registered until it is.
+	cleanupMu      sync.Mutex
+	cleanupFailure string
+}
+
+// releaseOwned deletes what the session created on the cluster, if anything.
+func (s *shellSession) releaseOwned() error {
+	if s.release == nil {
+		return nil
+	}
+	return s.release()
+}
+
+func (s *shellSession) setCleanupFailure(reason string) {
+	s.cleanupMu.Lock()
+	s.cleanupFailure = reason
+	s.cleanupMu.Unlock()
+}
+
+func (s *shellSession) cleanupFailureReason() string {
+	s.cleanupMu.Lock()
+	defer s.cleanupMu.Unlock()
+	return s.cleanupFailure
 }
 
 // touchActivity updates the last activity timestamp.
@@ -179,10 +211,14 @@ type shellEventWriter struct {
 
 type shellLaunch struct {
 	deps      common.Dependencies
+	target    RuntimeOperationTargetRef
 	pod       *corev1.Pod
 	container string
 	command   []string
 	executor  remotecommand.Executor
+	// debugPod and release carry a node shell's debug pod and its deletion.
+	debugPod *RuntimeOperationTargetRef
+	release  func() error
 }
 
 func (w *shellEventWriter) Write(p []byte) (int, error) {
@@ -199,46 +235,62 @@ func (w *shellEventWriter) Write(p []byte) (int, error) {
 }
 
 // StartShellSession launches a kubectl exec session and begins streaming data back to the frontend.
-func (o *OperationsCoordinator) StartShellSession(clusterID string, req ShellSessionRequest) (*ShellSession, error) {
+func (o *OperationsCoordinator) StartShellSession(req ShellSessionRequest) (*ShellSession, error) {
+	clusterID := req.Target.ClusterID
 	operationEpoch := o.clusterOperationEpoch(clusterID)
-	launch, err := o.prepareShellLaunch(clusterID, req)
+	launch, err := o.prepareShellLaunch(req)
 	if err != nil {
-		return nil, err
+		return nil, shellStartError(req.Target, err)
 	}
-	sess, sessionCtx := newShellSession(o.operationContext(), clusterID, req, launch, operationEpoch)
+	return o.openShellSession(launch, operationEpoch)
+}
+
+// shellStartError reports a failed start as a user action on the target object.
+func shellStartError(target ObjectRef, err error) error {
+	return errorstatus.UserAction(errorstatus.ObjectRef{
+		ClusterID: target.ClusterID, Group: target.Group, Version: target.Version, Kind: target.Kind,
+		Namespace: target.Namespace, Name: target.Name,
+	}, err)
+}
+
+var errShellClusterDisconnected = errors.New("cluster disconnected before shell session started")
+
+// openShellSession registers a prepared launch and starts its stream. A launch
+// whose cluster was stopped since operationEpoch is closed and releases what it
+// created instead of publishing a stale session.
+func (o *OperationsCoordinator) openShellSession(launch shellLaunch, operationEpoch uint64) (*ShellSession, error) {
+	sess, sessionCtx := newShellSession(o.operationContext(), launch, operationEpoch)
 	lifecycle := o.shellSessionLifecycle()
 	if !lifecycle.register(sess) {
 		sess.Close()
-		return nil, fmt.Errorf("cluster disconnected before shell session started")
+		o.logShellReleaseFailure(sess, sess.releaseOwned())
+		return nil, errShellClusterDisconnected
 	}
 	go o.monitorShellTimeout(sessionCtx, sess)
 	o.startShellSessionStream(lifecycle, sessionCtx, sess, launch.executor)
-	lifecycle.emitStatus(sess.id, clusterID, "open", "")
+	lifecycle.emitStatus(sess.id, sess.clusterID, types.ShellSessionStatusOpen, "")
 	return shellSessionResponse(sess, launch.pod), nil
 }
 
-func (o *OperationsCoordinator) prepareShellLaunch(clusterID string, req ShellSessionRequest) (shellLaunch, error) {
-	if err := requirePodObject(req.Namespace, req.PodName); err != nil {
+func (o *OperationsCoordinator) prepareShellLaunch(req ShellSessionRequest) (shellLaunch, error) {
+	if err := requireTargetIdentity(req.Target, podspkg.Identity); err != nil {
 		return shellLaunch{}, err
 	}
-
-	if o == nil || o.clusterAccess == nil {
-		return shellLaunch{}, fmt.Errorf("cluster access not initialized")
+	if err := requirePodObject(req.Target.Namespace, req.Target.Name); err != nil {
+		return shellLaunch{}, err
 	}
-	deps, _, err := o.clusterAccess.ResolveClusterDependencies(clusterID)
+	clusterID := req.Target.ClusterID
+	deps, err := o.resolveShellDependencies(clusterID)
 	if err != nil {
-		return shellLaunch{}, err
-	}
-	if err := validateShellDependencies(deps); err != nil {
 		return shellLaunch{}, err
 	}
 
 	ctx, cancel := context.WithTimeout(o.operationContext(), config.ShellSessionShutdownTimeout)
 	defer cancel()
 
-	podIdentifier := fmt.Sprintf("%s/%s", req.Namespace, req.PodName)
+	podIdentifier := fmt.Sprintf("%s/%s", req.Target.Namespace, req.Target.Name)
 	pod, err := o.clusterAccess.FetchPodWithRetry(ctx, clusterID, podIdentifier, func(fetchCtx context.Context) (*corev1.Pod, error) {
-		return deps.KubernetesClient.CoreV1().Pods(req.Namespace).Get(fetchCtx, req.PodName, metav1.GetOptions{})
+		return deps.KubernetesClient.CoreV1().Pods(req.Target.Namespace).Get(fetchCtx, req.Target.Name, metav1.GetOptions{})
 	})
 	if err != nil {
 		return shellLaunch{}, fmt.Errorf("failed to load pod: %w", err)
@@ -251,11 +303,40 @@ func (o *OperationsCoordinator) prepareShellLaunch(clusterID string, req ShellSe
 		return shellLaunch{}, err
 	}
 	command := shellCommand(req.Command)
-	executor, err := o.buildShellExecutor(deps, req, container, command)
+	executor, err := o.buildShellExecutor(deps, req.Target.Namespace, req.Target.Name, "exec", &corev1.PodExecOptions{
+		Container: container,
+		Command:   command,
+		Stdin:     true,
+		Stdout:    true,
+		Stderr:    true,
+		TTY:       true,
+	})
 	if err != nil {
 		return shellLaunch{}, err
 	}
-	return shellLaunch{deps: deps, pod: pod, container: container, command: command, executor: executor}, nil
+	return shellLaunch{
+		deps:      deps,
+		target:    *runtimeOperationTarget(clusterID, podspkg.Identity.Group, podspkg.Identity.Version, podspkg.Identity.Kind, req.Target.Namespace, req.Target.Name),
+		pod:       pod,
+		container: container,
+		command:   command,
+		executor:  executor,
+	}, nil
+}
+
+// resolveShellDependencies returns the cluster's clients for a shell stream.
+func (o *OperationsCoordinator) resolveShellDependencies(clusterID string) (common.Dependencies, error) {
+	if o == nil || o.clusterAccess == nil {
+		return common.Dependencies{}, fmt.Errorf("cluster access not initialized")
+	}
+	deps, _, err := o.clusterAccess.ResolveClusterDependencies(clusterID)
+	if err != nil {
+		return common.Dependencies{}, err
+	}
+	if err := validateShellDependencies(deps); err != nil {
+		return common.Dependencies{}, err
+	}
+	return deps, nil
 }
 
 func validateShellDependencies(deps common.Dependencies) error {
@@ -290,16 +371,16 @@ func (o *OperationsCoordinator) requireShellExecPermission(ctx context.Context, 
 		OperationsPermissionCheck{
 			Version:     "v1",
 			Kind:        podspkg.Identity.Kind,
-			Namespace:   req.Namespace,
-			Name:        req.PodName,
+			Namespace:   req.Target.Namespace,
+			Name:        req.Target.Name,
 			Verb:        "get",
 			Subresource: "exec",
 		},
 		OperationsPermissionCheck{
 			Version:     "v1",
 			Kind:        podspkg.Identity.Kind,
-			Namespace:   req.Namespace,
-			Name:        req.PodName,
+			Namespace:   req.Target.Namespace,
+			Name:        req.Target.Name,
 			Verb:        "create",
 			Subresource: "exec",
 		},
@@ -314,27 +395,23 @@ func shellCommand(requested []string) []string {
 	return command
 }
 
+// buildShellExecutor streams a terminal through a pod subresource: "exec"
+// starts a command in a container, "attach" joins the container's main process.
 func (o *OperationsCoordinator) buildShellExecutor(
 	deps common.Dependencies,
-	req ShellSessionRequest,
-	container string,
-	command []string,
+	namespace string,
+	podName string,
+	subresource string,
+	options runtime.Object,
 ) (remotecommand.Executor, error) {
 	execReq := deps.KubernetesClient.CoreV1().
 		RESTClient().
 		Post().
 		Resource("pods").
-		Namespace(req.Namespace).
-		Name(req.PodName).
-		SubResource("exec").
-		VersionedParams(&corev1.PodExecOptions{
-			Container: container,
-			Command:   command,
-			Stdin:     true,
-			Stdout:    true,
-			Stderr:    true,
-			TTY:       true,
-		}, scheme.ParameterCodec)
+		Namespace(namespace).
+		Name(podName).
+		SubResource(subresource).
+		VersionedParams(options, scheme.ParameterCodec)
 
 	websocketExec, err := o.websocketExec(deps.RestConfig, http.MethodGet, execReq.URL().String())
 	if err != nil {
@@ -355,7 +432,8 @@ func (o *OperationsCoordinator) buildShellExecutor(
 	return executor, nil
 }
 
-func newShellSession(parent context.Context, clusterID string, req ShellSessionRequest, launch shellLaunch, operationEpoch uint64) (*shellSession, context.Context) {
+func newShellSession(parent context.Context, launch shellLaunch, operationEpoch uint64) (*shellSession, context.Context) {
+	clusterID := launch.target.ClusterID
 	sessionID := uuid.NewString()
 	stdinReader, stdinWriter := io.Pipe()
 	sizeQueue := newTerminalSizeQueue()
@@ -369,8 +447,9 @@ func newShellSession(parent context.Context, clusterID string, req ShellSessionR
 		id:             sessionID,
 		clusterID:      clusterID,
 		clusterName:    launch.deps.ClusterName,
-		namespace:      req.Namespace,
-		podName:        req.PodName,
+		target:         launch.target,
+		debugPod:       launch.debugPod,
+		release:        launch.release,
 		container:      launch.container,
 		command:        append([]string(nil), launch.command...),
 		stdin:          stdinWriter,
@@ -403,9 +482,9 @@ func (o *OperationsCoordinator) startShellSessionStream(
 		})
 
 		if streamErr != nil {
-			lifecycle.finishStream(sess.id, "error", streamErr.Error())
+			lifecycle.finishStream(sess.id, types.ShellSessionStatusError, streamErr.Error())
 		} else {
-			lifecycle.finishStream(sess.id, "closed", "")
+			lifecycle.finishStream(sess.id, types.ShellSessionStatusClosed, "")
 		}
 	}()
 }
@@ -421,8 +500,8 @@ func shellSessionResponse(sess *shellSession, pod *corev1.Pod) *ShellSession {
 
 	return &ShellSession{
 		SessionID:  sess.id,
-		Namespace:  sess.namespace,
-		PodName:    sess.podName,
+		Target:     sess.target,
+		DebugPod:   cloneRuntimeOperationTargetRef(sess.debugPod),
 		Container:  sess.container,
 		Command:    append([]string(nil), sess.command...),
 		Containers: containers,
@@ -434,9 +513,9 @@ func (o *OperationsCoordinator) SendShellInput(sessionID, data string) error {
 	if data == "" {
 		return nil
 	}
-	sess := o.shellSessionLifecycle().get(sessionID)
-	if sess == nil {
-		return fmt.Errorf("shell session %q not found", sessionID)
+	sess, err := o.streamingShellSession(sessionID)
+	if err != nil {
+		return err
 	}
 	sess.touchActivity()
 	if _, err := sess.stdin.Write([]byte(data)); err != nil {
@@ -453,12 +532,25 @@ func (o *OperationsCoordinator) ResizeShellSession(sessionID string, columns, ro
 	if columns > maxTerminalDimension || rows > maxTerminalDimension {
 		return fmt.Errorf("columns and rows must be less than or equal to %d", maxTerminalDimension)
 	}
-	sess := o.shellSessionLifecycle().get(sessionID)
-	if sess == nil {
-		return fmt.Errorf("shell session %q not found", sessionID)
+	sess, err := o.streamingShellSession(sessionID)
+	if err != nil {
+		return err
 	}
 	sess.sizeQueue.Set(uint16(columns), uint16(rows))
 	return nil
+}
+
+// streamingShellSession returns a session whose stream can take terminal
+// input. A session kept only because its debug pod was not deleted has none.
+func (o *OperationsCoordinator) streamingShellSession(sessionID string) (*shellSession, error) {
+	sess := o.shellSessionLifecycle().get(sessionID)
+	if sess == nil {
+		return nil, fmt.Errorf("shell session %q not found", sessionID)
+	}
+	if sess.stdin == nil || sess.sizeQueue == nil || sess.cleanupFailureReason() != "" {
+		return nil, fmt.Errorf("shell session %q has ended", sessionID)
+	}
+	return sess, nil
 }
 
 // CloseShellSession terminates an active shell session.
@@ -480,20 +572,42 @@ func runtimeOperationFromShellSession(sess *shellSession) RuntimeOperation {
 	if sess == nil {
 		return RuntimeOperation{}
 	}
-	return RuntimeOperation{
+	target := sess.target
+	operation := RuntimeOperation{
 		ID:          sess.id,
 		Type:        RuntimeOperationShell,
 		ClusterID:   sess.clusterID,
 		ClusterName: sess.clusterName,
-		Target:      runtimeOperationTarget(sess.clusterID, podspkg.Identity.Group, podspkg.Identity.Version, podspkg.Identity.Kind, sess.namespace, sess.podName),
+		Target:      &target,
 		Status:      "open",
 		StartedAt:   sess.startedAt.Format(time.RFC3339),
-		DisplayName: fmt.Sprintf("Shell %s/%s", sess.namespace, sess.podName),
+		DisplayName: fmt.Sprintf("Shell %s/%s", target.Namespace, target.Name),
 		Summary: map[string]string{
 			"container": sess.container,
 			"command":   strings.Join(sess.command, " "),
 		},
 	}
+	if sess.debugPod != nil {
+		operation.DisplayName = fmt.Sprintf("Node shell %s", target.Name)
+		operation.Summary["debugPod"] = sess.debugPod.Namespace + "/" + sess.debugPod.Name
+	}
+	return operation
+}
+
+// logShellReleaseFailure records a debug pod the app could no longer track:
+// its cluster was removed or the app is quitting.
+func (o *OperationsCoordinator) logShellReleaseFailure(sess *shellSession, err error) {
+	if err != nil && o.logger != nil {
+		o.logger.Warn(fmt.Sprintf("Shell session %s on cluster %s: %v", sess.id, sess.clusterID, err), logsources.ShellSession)
+	}
+}
+
+func cloneRuntimeOperationTargetRef(ref *RuntimeOperationTargetRef) *RuntimeOperationTargetRef {
+	if ref == nil {
+		return nil
+	}
+	clone := *ref
+	return &clone
 }
 
 // GetShellSessionBacklog returns buffered shell output for replaying on reattach.
@@ -534,28 +648,35 @@ func (o *OperationsCoordinator) monitorShellTimeout(ctx context.Context, sess *s
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			// Check max duration first (hard limit)
-			if sess.totalDuration() >= config.ShellSessionMaxDuration {
-				if o.logger != nil {
-					o.logger.Warn(fmt.Sprintf("Shell session %s exceeded max duration (%s), terminating", sess.id, config.ShellSessionMaxDuration), logsources.ShellSession)
-				}
-				o.terminateShellWithReason(sess.id, "timeout", "session exceeded maximum duration")
-				return
-			}
-
-			// Check idle timeout
-			if sess.idleDuration() >= config.ShellSessionIdleTimeout {
-				if o.logger != nil {
-					o.logger.Warn(fmt.Sprintf("Shell session %s idle for %s, terminating", sess.id, config.ShellSessionIdleTimeout), logsources.ShellSession)
-				}
-				o.terminateShellWithReason(sess.id, "timeout", "session idle timeout")
+			if o.endExpiredShellSession(sess) {
 				return
 			}
 		}
 	}
 }
 
+// endExpiredShellSession ends a session past its maximum lifetime (checked
+// first, as the hard limit) or its idle window, and reports whether it did.
+func (o *OperationsCoordinator) endExpiredShellSession(sess *shellSession) bool {
+	var logMessage, reason string
+	switch {
+	case sess.totalDuration() >= config.ShellSessionMaxDuration:
+		logMessage = fmt.Sprintf("Shell session %s exceeded max duration (%s), terminating", sess.id, config.ShellSessionMaxDuration)
+		reason = "session exceeded maximum duration"
+	case sess.idleDuration() >= config.ShellSessionIdleTimeout:
+		logMessage = fmt.Sprintf("Shell session %s idle for %s, terminating", sess.id, config.ShellSessionIdleTimeout)
+		reason = "session idle timeout"
+	default:
+		return false
+	}
+	if o.logger != nil {
+		o.logger.Warn(logMessage, logsources.ShellSession)
+	}
+	o.terminateShellWithReason(sess.id, types.ShellSessionStatusTimeout, reason)
+	return true
+}
+
 // terminateShellWithReason closes a shell session and emits a status with the given reason.
-func (o *OperationsCoordinator) terminateShellWithReason(sessionID, status, reason string) {
+func (o *OperationsCoordinator) terminateShellWithReason(sessionID string, status types.ShellSessionStatus, reason string) {
 	o.shellSessionLifecycle().finishStream(sessionID, status, reason)
 }

@@ -85,7 +85,11 @@ Read the matching route only when that contract changes:
   behavior assertion. Prefer typed state, enabled/disabled controls, callback
   payloads, and resulting UI state over matching an entire message. Keep exact
   strings when they are data or protocol contracts, such as exports and URLs.
+- Never stub the app's state owners; run them with the real-state harness
+  (`installAppStateHarness()`). The
+  [testing standard](../docs/workflows/testing.md#frontend-state-the-real-state-harness)
+  covers its boundary, mount modes, seeding, and isolation rules.
 - For behavior changes, practice red/green/refactor TDD: write the failing
   `*.test.ts[x]` case first, run Vitest to watch it fail for the right reason,
   then write the minimum to make it pass, then refactor under green.
-- Frontend specs mirror their features (for example `DiagnosticsPanel.test.ts`) and run with Vitest; append `--watch` for interactive loops.
+- Frontend specs mirror their features (for example `DiagnosticsPanel.test.tsx`) and run with Vitest; append `--watch` for interactive loops.

@@ -8,9 +8,9 @@ import "github.com/luxury-yacht/app/backend/kind/kindspec"
 
 var Descriptor = kindspec.Descriptor{
 	Identity:        Identity,
-	IngestOwned:     true,
+	ListDomain:      "namespace-workloads",
+	Display:         kindspec.Display{ShortName: "deploy"},
 	DetailListsPods: true,
-	CatalogSource:   kindspec.CatalogShared,
 	DetailCacheable: true,
 	Collector:       &ObjectMapNode,
 	Edges:           ObjectMapEdges,
@@ -18,5 +18,7 @@ var Descriptor = kindspec.Descriptor{
 	Graph:           kindspec.ObjectMapGraph{ScalableWorkload: true},
 	Workload:        &kindspec.WorkloadOperations{Restart: workloadRestart, Scale: workloadScale, CurrentReplicas: workloadCurrentReplicas, RevisionHistory: revisionHistory, ApplyPodTemplate: applyPodTemplate},
 	PortForward:     &kindspec.PortForwardTarget{ResolvePod: ForwardPodName, Reconnect: true},
-	Actions:         kindspec.ObjectActions{Aliases: []string{"deployment"}},
+	Panel:           kindspec.ObjectPanel{Pods: kindspec.PanelPodsByOwner},
+	Logs:            &LogsTarget,
+	Metrics:         kindspec.MetricsWorkloads,
 }

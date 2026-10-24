@@ -2,7 +2,7 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  getAppearanceModePreference,
+  getPreference,
   resetAppPreferencesCacheForTesting,
   setAppPreferencesForTesting,
 } from '@/core/settings/appPreferences';
@@ -93,7 +93,7 @@ describe('AppearanceModeProvider', () => {
       'settings:appearance-mode-changed',
       expect.any(Function)
     );
-    expect(getAppearanceModePreference()).toBe('dark');
+    expect(getPreference('appearanceMode')).toBe('dark');
     expect(modeRef.current).toEqual({ mode: 'dark', resolvedMode: 'dark' });
     expect(document.documentElement.dataset.appearanceMode).toBe('dark');
     expect(document.documentElement.className).toBe('dark');

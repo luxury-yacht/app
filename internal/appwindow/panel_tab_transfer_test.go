@@ -15,6 +15,10 @@ type capturedPanelWindowEvent struct {
 	payload any
 }
 
+// fixtureGroups remembers each fixture window's group: the index stores no
+// tabs, so prepareRegistryTransferSource places them in the registry directory.
+var fixtureGroups = map[*panelIndex]map[string]PanelGroupSnapshot{}
+
 func livePanelWindowForTabTransfer(
 	t *testing.T,
 	panels *panelIndex,
@@ -25,10 +29,34 @@ func livePanelWindowForTabTransfer(
 	require.NoError(t, err)
 	descriptor, err = panels.AcknowledgeOpen(descriptor.WindowName, snapshot.TransferID)
 	require.NoError(t, err)
+	if fixtureGroups[panels] == nil {
+		fixtureGroups[panels] = make(map[string]PanelGroupSnapshot)
+		t.Cleanup(func() { delete(fixtureGroups, panels) })
+	}
+	fixtureGroups[panels][descriptor.WindowName] = snapshot
 	return descriptor
 }
 
-func TestPanelTabTransferPopulatesNativeTargetBeforeCommittingSourceRemoval(t *testing.T) {
+func directoryPanel(t *testing.T, registry *Registry, request panelwindow.TabTransferRequest) panelwindow.WorkspacePanel {
+	t.Helper()
+	for _, panel := range registry.workspace.Snapshot(request.ClusterID).Panels {
+		if panel.Tab.PanelID == request.Tab.PanelID {
+			return panel
+		}
+	}
+	t.Fatalf("panel %q is missing from the directory", request.Tab.PanelID)
+	return panelwindow.WorkspacePanel{}
+}
+
+func eventNames(events []capturedPanelWindowEvent) []string {
+	names := make([]string, 0, len(events))
+	for _, event := range events {
+		names = append(names, event.target+":"+event.name)
+	}
+	return names
+}
+
+func TestNativeTabTargetCommitsOnlyWhenItAcknowledgesTheMountedTab(t *testing.T) {
 	lifecycle := newLifecycle()
 	ownerWindowName := lifecycle.Add()
 	panels := newPanelIndex()
@@ -58,6 +86,9 @@ func TestPanelTabTransferPopulatesNativeTargetBeforeCommittingSourceRemoval(t *t
 			return true
 		},
 	}
+	// The dragged tab shows a view the source has not published yet.
+	moved := sourceSnapshot.Tabs[0]
+	moved.ActiveView = "yaml"
 	request := panelwindow.TabTransferRequest{
 		TransferID:       "tab-transfer-1",
 		SourceWindowName: source.WindowName,
@@ -67,38 +98,37 @@ func TestPanelTabTransferPopulatesNativeTargetBeforeCommittingSourceRemoval(t *t
 		TargetGroupID:    target.GroupID,
 		TargetIndex:      1,
 		TargetKind:       panelwindow.TabTransferTargetPanelWindow,
-		Tab:              sourceSnapshot.Tabs[0],
+		Tab:              moved,
 	}
 
 	prepareRegistryTransferSource(t, registry, request)
 	require.NoError(t, registry.RequestPanelTabTransfer(target.WindowName, request))
-	require.Len(t, events, 1)
-	require.Equal(t, source.WindowName, events[0].target)
-	require.Equal(t, panelwindow.TabTransferRequestedEventName, events[0].name)
-	require.Equal(t, sourceSnapshot, requirePanelDescriptor(t, panels, source.WindowName).Snapshot)
-
+	require.Equal(t, []string{source.WindowName + ":" + panelwindow.TabTransferRequestedEventName}, eventNames(events))
 	require.NoError(t, registry.AcceptPanelTabTransfer(source.WindowName, request.TransferID))
-	require.Len(t, events, 2)
-	require.Equal(t, target.WindowName, events[1].target)
-	require.Equal(t, panelwindow.TabTransferInsertRequestedEventName, events[1].name)
-	require.Equal(t, sourceSnapshot, requirePanelDescriptor(t, panels, source.WindowName).Snapshot)
+	require.Contains(t, eventNames(events), target.WindowName+":"+panelwindow.TabTransferInsertRequestedEventName)
+	pending := directoryPanel(t, registry, request)
+	require.Equal(t, source.WindowName, pending.Location.WindowName)
+	require.Equal(t, panelwindow.PanelLocation{Kind: panelwindow.PanelLocationWindow, WindowName: target.WindowName, GroupID: target.GroupID, Index: 1, Active: true}, pending.Transfer.Target)
 
+	// The target mounts the tab and publishes; publication alone commits nothing.
 	targetWithTransferredTab := targetSnapshot
-	targetWithTransferredTab.SourceWindowName = target.WindowName
-	targetWithTransferredTab.Tabs = append(targetWithTransferredTab.Tabs, sourceSnapshot.Tabs[0])
-	targetWithTransferredTab.ActivePanelID = sourceSnapshot.Tabs[0].PanelID
-	require.NoError(t, registry.UpdatePanelWindowSnapshot(target.WindowName, targetWithTransferredTab))
+	targetWithTransferredTab.Tabs = append(targetWithTransferredTab.Tabs, moved)
+	targetWithTransferredTab.ActivePanelID = moved.PanelID
+	require.NoError(t, registry.PublishPanelWindowGroup(target.WindowName, nativeGroup(targetWithTransferredTab)))
+	require.NotContains(t, eventNames(events), source.WindowName+":"+panelwindow.TabTransferCommittedEventName)
+	require.Equal(t, source.WindowName, directoryPanel(t, registry, request).Location.WindowName)
 
-	require.Equal(t, sourceSnapshot, requirePanelDescriptor(t, panels, source.WindowName).Snapshot)
+	require.Error(t, registry.AcknowledgePanelTransfer(source.WindowName, request.TransferID, true), "only the target settles its copy")
+	require.NoError(t, registry.AcknowledgePanelTransfer(target.WindowName, request.TransferID, true))
 	require.Contains(t, events, capturedPanelWindowEvent{
-		target: source.WindowName,
-		name:   panelwindow.TabTransferCommittedEventName,
-		payload: panelwindow.TabTransferCommittedEvent{
-			Request: request,
-		},
+		target:  source.WindowName,
+		name:    panelwindow.TabTransferCommittedEventName,
+		payload: panelwindow.TabTransferCommittedEvent{Request: request},
 	})
-	_, pending := registry.tabTransfers.pending[request.TransferID]
-	require.False(t, pending)
+	committed := directoryPanel(t, registry, request)
+	require.Equal(t, panelwindow.PanelLocation{Kind: panelwindow.PanelLocationWindow, WindowName: target.WindowName, GroupID: target.GroupID, Index: 1, Active: true}, committed.Location)
+	require.Equal(t, "yaml", committed.Tab.ActiveView)
+	require.Empty(t, registry.tabTransfers.pending)
 }
 
 func TestPanelTabTransferRejectsCrossClusterNativeTargets(t *testing.T) {
@@ -237,49 +267,63 @@ func TestPanelTabTransferReservesOneSourceTab(t *testing.T) {
 	require.Len(t, registry.tabTransfers.pending, 1)
 }
 
-func TestWorkspacePanelTabTransferCommitsAfterTargetPublication(t *testing.T) {
-	lifecycle := newLifecycle()
-	ownerWindowName := lifecycle.Add()
-	panels := newPanelIndex()
-	sourceSnapshot := validPanelGroupSnapshot()
-	sourceSnapshot.SourceWindowName = ownerWindowName
-	sourceSnapshot.GroupID = "source-group"
-	source := livePanelWindowForTabTransfer(t, panels, sourceSnapshot)
-	events := make([]capturedPanelWindowEvent, 0, 3)
-	registry := &Registry{
-		lifecycle: lifecycle,
-		panels:    panels,
-		emitWindowEvent: func(target, name string, payload any) bool {
-			events = append(events, capturedPanelWindowEvent{target: target, name: name, payload: payload})
-			return true
-		},
-	}
-	request := panelwindow.TabTransferRequest{
-		TransferID:       "tab-transfer-workspace",
-		SourceWindowName: source.WindowName,
-		TargetWindowName: ownerWindowName,
-		ClusterID:        source.ClusterID,
-		SourceGroupID:    source.GroupID,
-		TargetGroupID:    "bottom",
-		TargetKind:       panelwindow.TabTransferTargetWorkspace,
-		Tab:              sourceSnapshot.Tabs[0],
-	}
+func TestWorkspaceTabTargetLearnsFromTheDirectoryAndSettlesTheMove(t *testing.T) {
+	for _, mounted := range []bool{true, false} {
+		t.Run(map[bool]string{true: "mounted", false: "rejected"}[mounted], func(t *testing.T) {
+			lifecycle := newLifecycle()
+			ownerWindowName := lifecycle.Add()
+			panels := newPanelIndex()
+			sourceSnapshot := validPanelGroupSnapshot()
+			sourceSnapshot.SourceWindowName = ownerWindowName
+			sourceSnapshot.GroupID = "source-group"
+			source := livePanelWindowForTabTransfer(t, panels, sourceSnapshot)
+			events := make([]capturedPanelWindowEvent, 0, 3)
+			registry := &Registry{
+				lifecycle: lifecycle,
+				panels:    panels,
+				emitWindowEvent: func(target, name string, payload any) bool {
+					events = append(events, capturedPanelWindowEvent{target: target, name: name, payload: payload})
+					return true
+				},
+			}
+			request := panelwindow.TabTransferRequest{
+				TransferID:       "tab-transfer-workspace",
+				SourceWindowName: source.WindowName,
+				TargetWindowName: ownerWindowName,
+				ClusterID:        source.ClusterID,
+				SourceGroupID:    source.GroupID,
+				TargetGroupID:    "bottom",
+				TargetKind:       panelwindow.TabTransferTargetWorkspace,
+				Tab:              sourceSnapshot.Tabs[0],
+			}
 
-	prepareRegistryTransferSource(t, registry, request)
-	require.NoError(t, registry.RequestPanelTabTransfer(ownerWindowName, request))
-	require.NoError(t, registry.AcceptPanelTabTransfer(source.WindowName, request.TransferID))
-	require.Contains(t, registry.tabTransfers.pending, request.TransferID)
-	require.NoError(t, registry.PublishDockedPanels(ownerWindowName, []panelwindow.WorkspaceGroup{{ClusterID: request.ClusterID, GroupID: "bottom", Tabs: []panelwindow.TabSnapshot{request.Tab}, ActivePanelID: request.Tab.PanelID}}))
+			prepareRegistryTransferSource(t, registry, request)
+			require.NoError(t, registry.RequestPanelTabTransfer(ownerWindowName, request))
+			require.NoError(t, registry.AcceptPanelTabTransfer(source.WindowName, request.TransferID))
+			require.Contains(t, eventNames(events), ownerWindowName+":"+panelwindow.WorkspaceChangedEventName)
+			require.NotContains(t, eventNames(events), ownerWindowName+":"+panelwindow.TabTransferInsertRequestedEventName)
+			require.Equal(t, ownerWindowName, directoryPanel(t, registry, request).Transfer.Target.WindowName)
+			require.NoError(t, registry.PublishDockedPanels(ownerWindowName, []panelwindow.WorkspaceGroup{{ClusterID: request.ClusterID, GroupID: "bottom", Tabs: []panelwindow.TabSnapshot{request.Tab}, ActivePanelID: request.Tab.PanelID}}))
+			require.Equal(t, source.WindowName, directoryPanel(t, registry, request).Location.WindowName)
 
-	require.Equal(t, sourceSnapshot, requirePanelDescriptor(t, panels, source.WindowName).Snapshot)
-	require.Contains(t, events, capturedPanelWindowEvent{
-		target: source.WindowName,
-		name:   panelwindow.TabTransferCommittedEventName,
-		payload: panelwindow.TabTransferCommittedEvent{
-			Request: request,
-		},
-	})
-	require.Empty(t, registry.tabTransfers.pending)
+			events = events[:0]
+			require.NoError(t, registry.AcknowledgePanelTransfer(ownerWindowName, request.TransferID, mounted))
+
+			settled := directoryPanel(t, registry, request)
+			require.Zero(t, settled.Transfer)
+			require.Empty(t, registry.tabTransfers.pending)
+			if mounted {
+				require.Equal(t, ownerWindowName, settled.Location.WindowName)
+				require.Empty(t, requireNativeGroup(t, registry, source.WindowName).Tabs, "the source no longer holds the moved tab")
+				require.Contains(t, eventNames(events), source.WindowName+":"+panelwindow.TabTransferCommittedEventName)
+				return
+			}
+			require.Equal(t, source.WindowName, settled.Location.WindowName, "a rejected move keeps the source")
+			require.Equal(t, nativeGroup(sourceSnapshot), requireNativeGroup(t, registry, source.WindowName))
+			require.Contains(t, eventNames(events), source.WindowName+":"+panelwindow.TabTransferFailedEventName)
+			require.Contains(t, eventNames(events), ownerWindowName+":"+panelwindow.WorkspaceChangedEventName, "the target re-reads and drops its copy")
+		})
+	}
 }
 
 func TestFailNewPanelWindowTabTransferClosesItsOpeningTarget(t *testing.T) {
@@ -426,7 +470,7 @@ func TestPanelTabTransferTimeoutFailsAllParticipantsWithoutChangingSource(t *tes
 		}
 	}
 	require.ElementsMatch(t, []string{source.WindowName, target.WindowName}, targets)
-	require.Equal(t, sourceSnapshot, requirePanelDescriptor(t, panels, source.WindowName).Snapshot)
+	require.Equal(t, nativeGroup(sourceSnapshot), requireNativeGroup(t, registry, source.WindowName))
 	require.Empty(t, registry.tabTransfers.pending)
 }
 
@@ -454,7 +498,7 @@ func TestClosingTransferTargetPreservesSourceAndIgnoresUnrelatedWindowClosure(t 
 	request := panelwindow.TabTransferRequest{
 		TransferID: "close-target", SourceWindowName: source.WindowName, TargetWindowName: target.WindowName,
 		ClusterID: source.ClusterID, SourceGroupID: source.GroupID, TargetGroupID: target.GroupID,
-		TargetKind: panelwindow.TabTransferTargetPanelWindow, Tab: source.Snapshot.Tabs[0],
+		TargetKind: panelwindow.TabTransferTargetPanelWindow, Tab: fixtureGroups[registry.panels][source.WindowName].Tabs[0],
 	}
 	prepareRegistryTransferSource(t, registry, request)
 	require.NoError(t, registry.RequestPanelTabTransfer(target.WindowName, request))
@@ -467,7 +511,7 @@ func TestClosingTransferTargetPreservesSourceAndIgnoresUnrelatedWindowClosure(t 
 	for _, failure := range failures {
 		require.Equal(t, request, failure.payload.(panelwindow.TabTransferFailedEvent).Request)
 	}
-	require.Equal(t, source.Snapshot, requirePanelDescriptor(t, registry.panels, source.WindowName).Snapshot)
+	require.Equal(t, nativeGroup(fixtureGroups[registry.panels][source.WindowName]), requireNativeGroup(t, registry, source.WindowName))
 	require.Equal(t, PanelWindowStateMissing, registry.panels.State(target.WindowName))
 	require.Error(t, registry.AcceptPanelTabTransfer(source.WindowName, request.TransferID))
 	panels := registry.workspace.Snapshot(source.ClusterID).Panels
@@ -476,15 +520,12 @@ func TestClosingTransferTargetPreservesSourceAndIgnoresUnrelatedWindowClosure(t 
 	require.Equal(t, source.WindowName, panels[0].Location.WindowName)
 }
 
-func requirePanelDescriptor(
-	t *testing.T,
-	panels *panelIndex,
-	windowName string,
-) PanelWindowDescriptor {
+// requireNativeGroup reads the group the directory places in a native window.
+func requireNativeGroup(t *testing.T, registry *Registry, windowName string) panelwindow.WorkspaceGroup {
 	t.Helper()
-	descriptor, err := panels.Descriptor(windowName)
+	descriptor, err := registry.PanelDescriptor(windowName)
 	require.NoError(t, err)
-	return descriptor
+	return descriptor.Group
 }
 
 func prepareRegistryTransferSource(t *testing.T, registry *Registry, request panelwindow.TabTransferRequest) {
@@ -498,11 +539,8 @@ func prepareRegistryTransferSource(t *testing.T, registry *Registry, request pan
 	if len(registry.workspace.Snapshot(request.ClusterID).Panels) > 0 {
 		return
 	}
-	for _, name := range registry.panels.Names("") {
-		descriptor, err := registry.panels.Descriptor(name)
-		require.NoError(t, err)
-		snapshot := descriptor.Snapshot
-		require.NoError(t, registry.workspace.PublishWindow(name, panelwindow.PanelLocationWindow, []panelwindow.WorkspaceGroup{{ClusterID: snapshot.ClusterID, GroupID: snapshot.GroupID, Tabs: snapshot.Tabs, ActivePanelID: snapshot.ActivePanelID}}))
+	for name, snapshot := range fixtureGroups[registry.panels] {
+		seedNativeGroup(t, registry.workspace, name, snapshot)
 	}
 	if registry.lifecycle.Contains(request.SourceWindowName) {
 		_, _, err := registry.workspace.Open(request.Tab, panelwindow.PanelLocation{Kind: panelwindow.PanelLocationDocked, WindowName: request.SourceWindowName, GroupID: request.SourceGroupID})

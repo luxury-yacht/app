@@ -12,6 +12,7 @@ import {
   AriaGridRowGroup,
 } from '@shared/components/tables/AriaGridPrimitives';
 import type { GridTableFilteredEmptyState } from '@shared/components/tables/GridTable.types';
+import type { RenderRowDetailFn } from '@shared/components/tables/hooks/useGridTableRowDetail';
 import type { RenderRowContentFn } from '@shared/components/tables/hooks/useGridTableRowRenderer';
 import type React from 'react';
 import type { RefObject } from 'react';
@@ -42,6 +43,11 @@ interface GridTableBodyProps<T> {
   totalVirtualHeight: number;
   getRowTop: (index: number) => number;
   renderRowContent: RenderRowContentFn<T>;
+  /** Indexes of the rows whose detail is open, in table order. */
+  rowDetailIndexes?: readonly number[];
+  renderRowDetail?: RenderRowDetailFn<T>;
+  /** False while a table nested in a row detail holds the keyboard. */
+  bodyInTabOrder?: boolean;
   onWrapperFocus: (event: React.FocusEvent<HTMLElement>) => void;
   onWrapperBlur: (event: React.FocusEvent<HTMLElement>) => void;
   onWrapperBackgroundClick: () => void;
@@ -53,6 +59,112 @@ interface GridTableBodyProps<T> {
   hasActiveFilters: boolean;
   /** Callback to clear all active filters. */
   onClearFilters: () => void;
+}
+
+const noRowDetail = () => null;
+const NO_ROW_DETAIL_INDEXES: readonly number[] = [];
+
+function GridTableEmptyRow({
+  emptyMessage,
+  filteredEmptyState,
+  hasActiveFilters,
+  onClearFilters,
+}: Readonly<{
+  emptyMessage: string;
+  filteredEmptyState?: GridTableFilteredEmptyState;
+  hasActiveFilters: boolean;
+  onClearFilters: () => void;
+}>) {
+  const clearFilters = (event: React.MouseEvent) => {
+    event.preventDefault();
+    onClearFilters();
+  };
+  let filterGuidance: React.ReactNode = null;
+  if (hasActiveFilters && filteredEmptyState) {
+    filterGuidance = (
+      <>
+        <div className="gridtable-empty-filter-hint">{filteredEmptyState.description}</div>
+        <div className="gridtable-empty-filter-actions">
+          <button
+            type="button"
+            className="gridtable-empty-filter-hint__link"
+            onClick={clearFilters}
+          >
+            {filteredEmptyState.clearFiltersLabel ?? 'Clear filters'}
+          </button>
+          {!!filteredEmptyState.secondaryAction && (
+            <>
+              <span aria-hidden="true">•</span>
+              <button
+                type="button"
+                className="gridtable-empty-filter-hint__link"
+                onClick={filteredEmptyState.secondaryAction.onClick}
+              >
+                {filteredEmptyState.secondaryAction.label}
+              </button>
+            </>
+          )}
+        </div>
+      </>
+    );
+  } else if (hasActiveFilters) {
+    filterGuidance = (
+      <div className="gridtable-empty-filter-hint">
+        Filters are enabled that may be hiding objects.{' '}
+        <button type="button" className="gridtable-empty-filter-hint__link" onClick={clearFilters}>
+          Clear filters
+        </button>
+      </div>
+    );
+  }
+  return (
+    <AriaGridRow>
+      <AriaGridCell colSpan={1000}>
+        <div className="gridtable-empty">
+          {hasActiveFilters ? 'No matching items' : (emptyMessage ?? '')}
+          {filterGuidance}
+        </div>
+      </AriaGridCell>
+    </AriaGridRow>
+  );
+}
+
+interface VirtualRowsInput<T> {
+  tableData: T[];
+  virtualRows: T[];
+  virtualRangeStart: number;
+  keyExtractor: (item: T, index: number) => string;
+  getRowTop: (index: number) => number;
+  renderRowContent: RenderRowContentFn<T>;
+  rowDetailIndexes: readonly number[];
+  renderRowDetail: RenderRowDetailFn<T>;
+}
+
+function renderVirtualRows<T>({
+  tableData,
+  virtualRows,
+  virtualRangeStart,
+  keyExtractor,
+  getRowTop,
+  renderRowContent,
+  rowDetailIndexes,
+  renderRowDetail,
+}: VirtualRowsInput<T>): React.ReactNode[] {
+  const renderRow = (item: T, index: number, slotId: string) => [
+    renderRowContent(item, index, true, keyExtractor(item, index), slotId, getRowTop(index)),
+    renderRowDetail(item, index, true),
+  ];
+  const rows = virtualRows.flatMap((item, idx) =>
+    renderRow(item, virtualRangeStart + idx, `slot-${idx}`)
+  );
+  // Open rows stay mounted outside the virtual window so their details keep their state.
+  const virtualRangeEnd = virtualRangeStart + virtualRows.length;
+  for (const index of rowDetailIndexes) {
+    if (index < virtualRangeStart || index >= virtualRangeEnd) {
+      rows.push(...renderRow(tableData[index], index, 'open-row'));
+    }
+  }
+  return rows;
 }
 
 function GridTableBody<T>({
@@ -72,6 +184,9 @@ function GridTableBody<T>({
   totalVirtualHeight,
   getRowTop,
   renderRowContent,
+  rowDetailIndexes = NO_ROW_DETAIL_INDEXES,
+  renderRowDetail = noRowDetail,
+  bodyInTabOrder = true,
   onWrapperFocus,
   onWrapperBlur,
   onWrapperBackgroundClick,
@@ -147,84 +262,33 @@ function GridTableBody<T>({
 
   const renderRows = () => {
     if (tableData.length === 0) {
-      let filterGuidance: React.ReactNode = null;
-      if (hasActiveFilters && filteredEmptyState) {
-        filterGuidance = (
-          <>
-            <div className="gridtable-empty-filter-hint">{filteredEmptyState.description}</div>
-            <div className="gridtable-empty-filter-actions">
-              <button
-                type="button"
-                className="gridtable-empty-filter-hint__link"
-                onClick={(e) => {
-                  e.preventDefault();
-                  onClearFilters();
-                }}
-              >
-                {filteredEmptyState.clearFiltersLabel ?? 'Clear filters'}
-              </button>
-              {!!filteredEmptyState.secondaryAction && (
-                <>
-                  <span aria-hidden="true">•</span>
-                  <button
-                    type="button"
-                    className="gridtable-empty-filter-hint__link"
-                    onClick={filteredEmptyState.secondaryAction.onClick}
-                  >
-                    {filteredEmptyState.secondaryAction.label}
-                  </button>
-                </>
-              )}
-            </div>
-          </>
-        );
-      } else if (hasActiveFilters) {
-        filterGuidance = (
-          <div className="gridtable-empty-filter-hint">
-            Filters are enabled that may be hiding objects.{' '}
-            <button
-              type="button"
-              className="gridtable-empty-filter-hint__link"
-              onClick={(e) => {
-                e.preventDefault();
-                onClearFilters();
-              }}
-            >
-              Clear filters
-            </button>
-          </div>
-        );
-      }
       return (
-        <AriaGridRow>
-          <AriaGridCell colSpan={1000}>
-            <div className="gridtable-empty">
-              {hasActiveFilters ? 'No matching items' : (emptyMessage ?? '')}
-              {filterGuidance}
-            </div>
-          </AriaGridCell>
-        </AriaGridRow>
+        <GridTableEmptyRow
+          emptyMessage={emptyMessage}
+          filteredEmptyState={filteredEmptyState}
+          hasActiveFilters={hasActiveFilters}
+          onClearFilters={onClearFilters}
+        />
       );
     }
 
     if (shouldVirtualize) {
-      return virtualRows.map((item, idx) => {
-        const absoluteIndex = virtualRangeStart + idx;
-        const rowKey = keyExtractor(item, absoluteIndex);
-        return renderRowContent(
-          item,
-          absoluteIndex,
-          true,
-          rowKey,
-          `slot-${idx}`,
-          getRowTop(absoluteIndex)
-        );
+      return renderVirtualRows({
+        tableData,
+        virtualRows,
+        virtualRangeStart,
+        keyExtractor,
+        getRowTop,
+        renderRowContent,
+        rowDetailIndexes,
+        renderRowDetail,
       });
     }
 
-    return tableData.map((item, index) =>
-      renderRowContent(item, index, false, keyExtractor(item, index))
-    );
+    return tableData.flatMap((item, index) => [
+      renderRowContent(item, index, false, keyExtractor(item, index)),
+      renderRowDetail(item, index, false),
+    ]);
   };
 
   return (
@@ -234,7 +298,7 @@ function GridTableBody<T>({
         className={`gridtable gridtable--body ${tableClassName} ${useShortNames ? 'short-names' : ''}`}
         onFocus={onWrapperFocus}
         onBlur={onWrapperBlur}
-        tabIndex={0}
+        tabIndex={bodyInTabOrder ? 0 : -1}
         aria-busy={loading || undefined}
         aria-label="Data table"
       >

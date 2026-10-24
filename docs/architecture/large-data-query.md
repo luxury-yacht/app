@@ -63,7 +63,10 @@ Shared rules and table modes live in [large data](large-data.md).
   permission-blocked source is inexact and issue-bearing. When an ingest sync
   deadline releases the liveness gate before the initial list succeeds, the
   envelope stays partial and inexact until raw source readiness is
-  authoritative.
+  authoritative. A kind discovery confirms the cluster does not serve (a
+  Gateway API kind on a cluster without the Gateway API) is not a missing
+  source: it has no rows, no kind option, and no issue. When discovery did not
+  complete for its group, the kind stays an unavailable source.
 - Object-panel related-resource tables stay local while their owner-scoped
   domain keeps them bounded; they become typed query-backed only at namespace or
   cluster scale.
@@ -118,15 +121,23 @@ displayed rows in place.
   data access still owns acquisition, fetch, read, and release. Adapter policies
   stay out of this helper: typed queries own declarative scopes, warm-up retry,
   anchors, and failed-navigation rollback; Browse owns imperative cursor
-  requests, separate metadata scopes, quiet-request coalescing, and its
-  blocked-result/error policies.
+  requests (page one included), quiet-request coalescing with one trailing
+  re-read for a signal that arrives mid-read, and its warm-up/error policies.
+  Every query scope is one-shot for every domain (`hasOneShotQuery`); only base
+  scopes stream.
+- `useLiveScope` (`modules/resource-grid/useLiveQueryRead.ts`) is the reader's
+  live lease: query demand on the domain's base scope, ready once the lease
+  has taken effect and the scope is not starting. `useLiveQueryRead` reads one
+  whole query (Browse facets, resource discovery) once per scope and again per
+  live signal, retrying an empty read; its result stays in the store under its
+  scope.
 - `useQueryStreamSignal` (core refresh hooks) owns query signal identity; typed
   tables invalidate their declarative query with it, and Browse supplies a
-  current-page reconciliation callback. Snapshot readers use
-  `useStreamSignalRefetch`, which requests each doorbell once per scope however
-  many consumers mount (the shared record lives only while one is mounted).
-  Both read declared doorbell clocks from one helper; query consumers add
-  subscription acknowledgements and fallback reconciliation ticks.
+  current-page reconciliation callback. Snapshot leases need no hook: the
+  orchestrator refetches each scope with snapshot demand once per declared
+  clock advance, however many consumers hold it. Both read the domain's
+  declared clocks (`doorbellSourceClocks`); query consumers add subscription
+  acknowledgements and fallback reconciliation ticks.
 
 ### Guarantees
 

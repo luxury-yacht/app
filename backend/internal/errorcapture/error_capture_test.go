@@ -1,9 +1,6 @@
 package errorcapture
 
 import (
-	"bytes"
-	"errors"
-	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -13,75 +10,64 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Wait briefly for async stderr processing.
-func Wait() { time.Sleep(100 * time.Millisecond) }
+// recordingSink installs a log sink that records "level:message" entries and
+// removes it when the test ends.
+func recordingSink(t *testing.T) func() []string {
+	t.Helper()
+	var mu sync.Mutex
+	var logs []string
+	SetLogSink(func(level, message string) {
+		mu.Lock()
+		defer mu.Unlock()
+		logs = append(logs, level+":"+message)
+	})
+	t.Cleanup(func() { SetLogSink(nil) })
+	return func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]string(nil), logs...)
+	}
+}
+
+// Client libraries repeat the same failure on every retry (for example an auth
+// failure each probe); App Logs keeps the first occurrence per session.
+func TestEmitToLogSinkLogsRepeatedWarningsAndErrorsOnce(t *testing.T) {
+	c := &Capture{}
+	logs := recordingSink(t)
+
+	c.emitToLogSink([]byte("E1011 10:00:00.000001   12345 reflector.go:569] Failed to watch: token expired\n"))
+	c.emitToLogSink([]byte("E1011 10:00:05.000002   12345 reflector.go:569] Failed to watch: token expired\n"))
+	c.emitToLogSink([]byte("Error loading SSO Token: Token for dev does not exist\n"))
+	c.emitToLogSink([]byte("Error loading SSO Token: Token for dev does not exist\n"))
+	c.emitToLogSink([]byte("E1011 10:00:06.000003   12345 reflector.go:569] Failed to watch: connection refused\n"))
+	c.emitToLogSink([]byte("I1011 10:00:07.000004   12345 shared_informer.go:1] informer started\n"))
+	c.emitToLogSink([]byte("I1011 10:00:08.000005   12345 shared_informer.go:1] informer started\n"))
+
+	require.Equal(t, []string{
+		"error:E1011 10:00:00.000001   12345 reflector.go:569] Failed to watch: token expired",
+		"error:Error loading SSO Token: Token for dev does not exist",
+		"error:E1011 10:00:06.000003   12345 reflector.go:569] Failed to watch: connection refused",
+		"info:I1011 10:00:07.000004   12345 shared_informer.go:1] informer started",
+		"info:I1011 10:00:08.000005   12345 shared_informer.go:1] informer started",
+	}, logs())
+}
 
 func TestInitIsIdempotent(t *testing.T) {
 	Init()
+	first := global
 	Init() // second call should be harmless
 
-	if got := capturedError(); got != "" {
-		t.Fatalf("expected no captured error after init, got %q", got)
-	}
+	require.Same(t, first, global, "a second Init must not replace the capture")
 }
 
-func TestCaptureIfInterestingStoresLastAndEmits(t *testing.T) {
-	c := &Capture{buffer: &bytes.Buffer{}}
-	global = c
-	defer func() {
-		global = nil
-		eventEmitter = nil
-	}()
-
-	var emitted []string
-	SetEventEmitter(func(msg string) {
-		emitted = append(emitted, msg)
-	})
-
-	c.captureIfInteresting("token expired while authenticating\n")
-
-	if last := c.last(); last != "token expired while authenticating" {
-		t.Fatalf("expected last error to be stored, got %q", last)
-	}
-	if len(emitted) != 1 {
-		t.Fatalf("expected event emitter to be invoked once, got %d", len(emitted))
-	}
-	if emitted[0] != "token expired while authenticating" {
-		t.Fatalf("expected emitted message to be trimmed, got %q", emitted[0])
-	}
-
-	// Non-interesting lines should not overwrite last error.
-	c.captureIfInteresting("INFO: everything healthy")
-	if last := c.last(); last != "token expired while authenticating" {
-		t.Fatalf("expected last error unchanged for non-interesting output, got %q", last)
-	}
-}
-
-func TestPermissionDeniedStderrStaysLocal(t *testing.T) {
+func TestPermissionDeniedStderrIsInformational(t *testing.T) {
 	const line = `E0805 reflector.go:200] "Failed to watch" err="applicationnetworkpolicies.networking.k8s.aws is forbidden: User cannot watch resource"`
-	c := &Capture{buffer: bytes.NewBufferString(line + "\n")}
-	global = c
-	defer func() {
-		global = nil
-		eventEmitter = nil
-		logSink = nil
-	}()
+	c := &Capture{}
+	logs := recordingSink(t)
 
-	var emitted []string
-	var logs []string
-	SetEventEmitter(func(msg string) {
-		emitted = append(emitted, msg)
-	})
-	SetLogSink(func(level, message string) {
-		logs = append(logs, level+":"+message)
-	})
-	c.flushCapturedLines([]byte(line + "\n"))
+	c.emitToLogSink([]byte(line + "\n"))
 
-	require.Empty(t, emitted, "expected RBAC denial to remain a local log")
-	require.Equal(t, []string{"info:" + line}, logs, "expected RBAC denial to be informational")
-	require.Empty(t, c.last(), "expected RBAC denial not to become captured application context")
-	original := errors.New("refresh failed")
-	require.Same(t, original, Enhance(original), "expected RBAC denial not to enhance an application error")
+	require.Equal(t, []string{"info:" + line}, logs(), "expected RBAC denial to be informational")
 }
 
 func TestExpectedConditionDoesNotMatchIncidental403Numbers(t *testing.T) {
@@ -113,279 +99,72 @@ func TestExpectedConditionMatchesStructured403Status(t *testing.T) {
 	}
 }
 
-func TestCaptureIfInterestingIgnoresTokenSubstrings(t *testing.T) {
-	c := &Capture{buffer: &bytes.Buffer{}}
-	global = c
-	defer func() {
-		global = nil
-		eventEmitter = nil
-	}()
-
-	var emitted []string
-	SetEventEmitter(func(msg string) {
-		emitted = append(emitted, msg)
-	})
-
-	c.captureIfInteresting(`I0102 19:05:24.494180   77320 reflector.go:446] "Caches populated" type="generators.external-secrets.io/v1alpha1, Resource=cloudsmithaccesstokens"`)
-	c.captureIfInteresting(`I0113 16:53:29.716676   50650 reflector.go:446] "Caches populated" type="eks.services.k8s.aws/v1alpha1, Resource=podidentityassociations"`)
-
-	if last := c.last(); last != "" {
-		t.Fatalf("expected last error to remain empty, got %q", last)
-	}
-	if len(emitted) != 0 {
-		t.Fatalf("expected no emitted events, got %d", len(emitted))
-	}
-}
-
-func TestCaptureIfInterestingIgnoresInfoSeverity(t *testing.T) {
-	c := &Capture{buffer: &bytes.Buffer{}}
-	global = c
-	defer func() {
-		global = nil
-		eventEmitter = nil
-	}()
-
-	var emitted []string
-	SetEventEmitter(func(msg string) {
-		emitted = append(emitted, msg)
-	})
-
-	c.captureIfInteresting(`I0102 19:05:24.494180   77320 reflector.go:446] "token expired while authenticating"`)
-
-	if last := c.last(); last != "" {
-		t.Fatalf("expected last error to remain empty, got %q", last)
-	}
-	if len(emitted) != 0 {
-		t.Fatalf("expected no emitted events, got %d", len(emitted))
-	}
-}
-
-func TestCapturedErrorPrefersLastAndClears(t *testing.T) {
-	c := &Capture{buffer: &bytes.Buffer{}}
-	c.lastError = "forbidden: token expired"
-	global = c
-	defer func() { global = nil }()
-
-	if got := capturedError(); got != "forbidden: token expired" {
-		t.Fatalf("expected capturedError to return last message, got %q", got)
-	}
-	if got := capturedError(); got != "" {
-		t.Fatalf("expected last error to be cleared after retrieval, got %q", got)
-	}
-}
-
-func TestCapturedErrorScansRecentBuffer(t *testing.T) {
-	c := &Capture{buffer: bytes.NewBufferString("info message\nfailed to refresh token\n")} // newline terminated
-	global = c
-	defer func() { global = nil }()
-
-	if got := capturedError(); got != "failed to refresh token" {
-		t.Fatalf("expected capturedError to scan recent buffer, got %q", got)
-	}
-}
-
-func TestEnhanceAugmentsError(t *testing.T) {
-	c := &Capture{buffer: &bytes.Buffer{}}
-	global = c
-	defer func() { global = nil }()
-
-	c.captureIfInteresting("unauthorized for cluster foo")
-	cause := errors.New("refresh failed")
-	err := Enhance(cause)
-	if err == nil {
-		t.Fatalf("expected error to be returned")
-	}
-	require.ErrorIs(t, err, cause, "stderr context must not destroy the original error identity")
-
-	if !strings.Contains(err.Error(), "unauthorized for cluster foo") {
-		t.Fatalf("expected enhanced error to contain captured message, got %q", err.Error())
-	}
-}
-
-func TestEnhanceNoAugmentWhenNoExtra(t *testing.T) {
-	global = &Capture{buffer: &bytes.Buffer{}}
-	defer func() { global = nil }()
-
-	orig := errors.New("plain error")
-	if got := Enhance(orig); got != orig {
-		t.Fatalf("expected Enhance to return original error when no extra context")
-	}
-}
-
 func TestEmitToLogSinkClassifiesLevels(t *testing.T) {
 	c := &Capture{}
-	global = c
-	defer func() {
-		global = nil
-		logSink = nil
-	}()
-
-	var logs []string
-	SetLogSink(func(level, message string) {
-		logs = append(logs, level+":"+message)
-	})
+	logs := recordingSink(t)
 
 	c.emitToLogSink([]byte("E1010 10:00:00 error occurred\nW1010 warning issued\nI1010 info line\nExternal secrets cache ready\nrequest failed while listing pods\n"))
 
-	expected := []string{
+	require.Equal(t, []string{
 		"error:E1010 10:00:00 error occurred",
 		"warn:W1010 warning issued",
 		"info:I1010 info line",
 		"info:External secrets cache ready",
 		"error:request failed while listing pods",
-	}
-	if len(logs) != len(expected) {
-		t.Fatalf("expected %d log entries, got %d", len(expected), len(logs))
-	}
-	for i, want := range expected {
-		if logs[i] != want {
-			t.Fatalf("log entry %d mismatch: got %q want %q", i, logs[i], want)
-		}
-	}
+	}, logs())
 }
 
-func TestCaptureStartAndEnhance(t *testing.T) {
+func TestStartRoutesStderrWritesToLogSink(t *testing.T) {
 	originalStderr := os.Stderr
 	defer func() { os.Stderr = originalStderr }()
 
-	c := &Capture{buffer: &bytes.Buffer{}}
-	global = c
-
-	var sinkLevelsMu sync.Mutex
-	var sinkLevels []string
-	SetLogSink(func(level string, message string) {
-		sinkLevelsMu.Lock()
-		defer sinkLevelsMu.Unlock()
-		sinkLevels = append(sinkLevels, fmt.Sprintf("%s:%s", level, message))
-	})
-	defer SetLogSink(nil)
+	c := &Capture{}
+	logs := recordingSink(t)
 
 	c.start()
 	require.True(t, c.capturing, "capture should start capturing stderr")
 
-	_, err := c.pipeWriter.Write([]byte("E token expired\n"))
+	_, err := os.Stderr.Write([]byte("E1011 10:00:00.000001 1 client.go:1] token expired\n"))
 	require.NoError(t, err)
 
-	Wait()
+	require.Eventually(t, func() bool {
+		entries := logs()
+		return len(entries) == 1 && strings.Contains(entries[0], "token expired")
+	}, time.Second, 5*time.Millisecond, "a stderr write must reach the log sink")
 
-	enhanced := Enhance(fmt.Errorf("original error"))
-	require.Error(t, enhanced)
-	require.Contains(t, enhanced.Error(), "token expired")
-	sinkLevelsMu.Lock()
-	require.NotEmpty(t, sinkLevels, "log sink should record emitted chunk")
-	sinkLevelsMu.Unlock()
-
-	// cleanup the pipe to stop the goroutine
 	_ = c.pipeWriter.Close()
 	_ = c.pipeReader.Close()
-	global = nil
-
-	time.Sleep(10 * time.Millisecond)
 }
 
-func TestCaptureIfInterestingSetsLastAndEmits(t *testing.T) {
+// TestReadPipeReassemblesLineSplitAcrossReads: readPipe reads stderr in
+// 4096-byte chunks, so a single Read can end mid-line. The line has to be
+// reassembled across reads rather than logged per raw chunk.
+func TestReadPipeReassemblesLineSplitAcrossReads(t *testing.T) {
 	c := &Capture{}
-	emitted := ""
-	SetEventEmitter(func(msg string) { emitted = msg })
-	t.Cleanup(func() {
-		SetEventEmitter(nil)
-	})
-
-	c.captureIfInteresting("token has expired")
-
-	if got := strings.TrimSpace(c.last()); !strings.Contains(got, "token has expired") {
-		t.Fatalf("expected last error to be set, got %q", got)
-	}
-	if emitted == "" {
-		t.Fatalf("expected event emitter to be called")
-	}
-}
-
-func TestCapturedErrorFallsBackToRecent(t *testing.T) {
-	orig := global
-	global = &Capture{buffer: &bytes.Buffer{}}
-	t.Cleanup(func() { global = orig })
-
-	global.buffer.WriteString("INFO starting\nerror pulling config\nanother line\n")
-
-	out := capturedError()
-	if out != "error pulling config" {
-		t.Fatalf("expected last error line, got %q", out)
-	}
-}
-
-func TestCaptureWithClusterPrefixesMessage(t *testing.T) {
-	c := &Capture{buffer: &bytes.Buffer{}}
-	global = c
-	defer func() {
-		global = nil
-		eventEmitter = nil
-	}()
-
-	var emitted string
-	SetEventEmitter(func(msg string) {
-		emitted = msg
-	})
-
-	CaptureWithCluster("prod-cluster", "token expired")
-
-	expectedPrefix := "[prod-cluster] token expired"
-	if last := c.last(); last != expectedPrefix {
-		t.Fatalf("expected last error to be prefixed, got %q", last)
-	}
-	if emitted != expectedPrefix {
-		t.Fatalf("expected emitted message to be prefixed, got %q", emitted)
-	}
-}
-
-func TestCaptureWithClusterNoOpWhenGlobalNil(t *testing.T) {
-	global = nil
-	defer func() { eventEmitter = nil }()
-
-	var emitted bool
-	SetEventEmitter(func(msg string) {
-		emitted = true
-	})
-
-	// Should not panic or emit when global is nil
-	CaptureWithCluster("cluster-1", "some error")
-
-	if emitted {
-		t.Fatalf("expected no event emission when global is nil")
-	}
-}
-
-// TestReadPipeDetectsAuthKeywordSplitAcrossReads guards finding #2: readPipe
-// reads stderr in 4096-byte chunks, so a single Read can end mid-line. An auth
-// keyword that straddles the boundary must still be detected — the line has to be
-// reassembled across reads rather than processed per raw chunk.
-func TestReadPipeDetectsAuthKeywordSplitAcrossReads(t *testing.T) {
-	c := &Capture{buffer: &bytes.Buffer{}}
+	logs := recordingSink(t)
 	r, w, err := os.Pipe()
 	require.NoError(t, err)
 	c.pipeReader = r
 
-	const keyword = "unauthorized"
-	// Pad so the keyword spans byte 4096: the first 4096-byte Read ends mid-keyword
-	// ("...unauth"), the next Read begins with the rest ("orized\n"). The space
-	// before the keyword gives \bunauthorized\b a word boundary to match once the
-	// line is reassembled.
-	prefix := strings.Repeat("x", 4089) + " " // 4090 bytes; keyword then starts at offset 4090
-	line := prefix + keyword + "\n"
-	_, err = w.WriteString(line)
+	// Pad so the keyword spans byte 4096: the first 4096-byte Read ends
+	// mid-keyword, the next Read begins with the rest.
+	line := strings.Repeat("x", 4089) + " unauthorized"
+	_, err = w.WriteString(line + "\n")
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
 
 	c.readPipe() // drains the pipe then returns at EOF
 
-	require.Contains(t, c.last(), keyword,
-		"auth keyword straddling the 4096-byte read boundary must still be detected")
+	entries := logs()
+	require.Len(t, entries, 1, "a line straddling the read boundary must be logged once, whole")
+	require.True(t, strings.HasSuffix(entries[0], line))
 }
 
 // TestReadPipeFlushesUnterminatedFinalLine ensures reassembly never drops a final
 // line that arrives without a trailing newline; it must be flushed at EOF.
 func TestReadPipeFlushesUnterminatedFinalLine(t *testing.T) {
-	c := &Capture{buffer: &bytes.Buffer{}}
+	c := &Capture{}
+	logs := recordingSink(t)
 	r, w, err := os.Pipe()
 	require.NoError(t, err)
 	c.pipeReader = r
@@ -396,20 +175,21 @@ func TestReadPipeFlushesUnterminatedFinalLine(t *testing.T) {
 
 	c.readPipe()
 
-	require.Contains(t, c.last(), "token has expired",
-		"a final line without a trailing newline must still be processed at EOF")
+	require.Equal(t, []string{"info:token has expired"}, logs(),
+		"a final line without a trailing newline must still be logged at EOF")
 }
 
 // TestReadPipeValveFlushesOverlongUnterminatedLine ensures an unterminated line
 // exceeding maxPendingLineBytes is flushed mid-stream — before any newline or
 // EOF — rather than buffered without bound. The pipe stays open during the
-// assertion, so only the size valve (not EOF) can trigger detection.
+// assertion, so only the size valve (not EOF) can trigger the flush.
 func TestReadPipeValveFlushesOverlongUnterminatedLine(t *testing.T) {
 	old := maxPendingLineBytes
 	maxPendingLineBytes = 32
 	t.Cleanup(func() { maxPendingLineBytes = old })
 
-	c := &Capture{buffer: &bytes.Buffer{}}
+	c := &Capture{}
+	logs := recordingSink(t)
 	r, w, err := os.Pipe()
 	require.NoError(t, err)
 	c.pipeReader = r
@@ -422,7 +202,8 @@ func TestReadPipeValveFlushesOverlongUnterminatedLine(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
-		return strings.Contains(c.last(), "unauthorized")
+		entries := logs()
+		return len(entries) == 1 && strings.Contains(entries[0], "unauthorized access")
 	}, time.Second, 5*time.Millisecond,
 		"valve should flush an over-cap unterminated line before EOF")
 

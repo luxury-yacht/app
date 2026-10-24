@@ -8,6 +8,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	gatewayfake "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned/fake"
 )
@@ -64,4 +65,33 @@ func TestDiscoveryCancellationAndMissingClientDoNotAdmitGatewayKinds(t *testing.
 	var absent *Presence
 	require.False(t, absent.AnyPresent())
 	require.False(t, absent.Has("Gateway"))
+}
+
+// A Gateway kind is confirmed absent only when discovery completed for the
+// Gateway API group and did not list it. A failed discovery of that group, or an
+// error that does not say which group failed, proves nothing.
+func TestPresenceConfirmsAbsentKindsOnlyAfterTheGatewayGroupWasDiscovered(t *testing.T) {
+	ctx := context.Background()
+	installed := &metav1.APIResourceList{GroupVersion: Group + "/v1", APIResources: []metav1.APIResource{{Name: "gatewayclasses", Kind: "GatewayClass"}}}
+	failedGroup := func(group string) error {
+		return &discovery.ErrGroupDiscoveryFailed{Groups: map[schema.GroupVersion]error{{Group: group, Version: "v1"}: errors.New("unavailable")}}
+	}
+
+	partial, err := DiscoverViaDiscovery(ctx, partialDiscovery{resources: []*metav1.APIResourceList{installed}})
+	require.NoError(t, err)
+	require.True(t, partial.Absent("HTTPRoute"))
+	require.False(t, partial.Absent("GatewayClass"))
+
+	notInstalled, _ := DiscoverViaDiscovery(ctx, partialDiscovery{err: failedGroup("metrics.k8s.io")})
+	require.True(t, notInstalled.Absent("GatewayClass"))
+
+	for _, discoveryErr := range []error{failedGroup(Group), errors.New("connection refused")} {
+		unknown, _ := DiscoverViaDiscovery(ctx, partialDiscovery{err: discoveryErr})
+		require.False(t, unknown.Absent("GatewayClass"), "after %v", discoveryErr)
+	}
+	noClient, _ := DiscoverViaDiscovery(ctx, nil)
+	require.False(t, noClient.Absent("GatewayClass"))
+	require.False(t, EmptyPresence().Absent("GatewayClass"))
+	var none *Presence
+	require.False(t, none.Absent("GatewayClass"))
 }

@@ -33,6 +33,15 @@ func (s *DesktopService) OpenPanelWorkspaceObject(ctx context.Context, windowNam
 	return s.panelWindows.OpenPanelWorkspaceObject(windowName, tab)
 }
 
+// ClosePanelWorkspaceObject removes a panel this renderer closed; publications
+// only report arrangement, so a close must be explicit.
+func (s *DesktopService) ClosePanelWorkspaceObject(ctx context.Context, windowName, clusterID, panelID string) error {
+	if err := validatePanelCommandCaller(ctx, windowName); err != nil {
+		return err
+	}
+	return s.panelWindows.ClosePanelWorkspaceObject(windowName, clusterID, panelID)
+}
+
 func (s *DesktopService) PublishDockedPanels(ctx context.Context, windowName string, groups []panelwindow.WorkspaceGroup) error {
 	if err := validatePanelCommandCaller(ctx, windowName); err != nil {
 		return err

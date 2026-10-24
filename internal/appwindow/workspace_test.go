@@ -43,9 +43,9 @@ func TestPanelSnapshotContinuesAfterOriginatingAppWindowDisappears(t *testing.T)
 	_, err = index.AcknowledgeOpen(descriptor.WindowName, snapshot.TransferID)
 	require.NoError(t, err)
 	registry := &Registry{lifecycle: newLifecycle(), panels: index, workspace: panelwindow.NewWorkspaceDirectory(), emitWindowEvent: func(string, string, any) bool { return false }}
-	snapshot.SourceWindowName = descriptor.WindowName
+	seedNativeGroup(t, registry.workspace, descriptor.WindowName, snapshot)
 	snapshot.Tabs[0].ActiveView = "yaml"
-	require.NoError(t, registry.UpdatePanelWindowSnapshot(descriptor.WindowName, snapshot))
+	require.NoError(t, registry.PublishPanelWindowGroup(descriptor.WindowName, nativeGroup(snapshot)))
 	shared, err := registry.GetPanelWorkspace(descriptor.WindowName, snapshot.ClusterID)
 	require.NoError(t, err)
 	require.Equal(t, "yaml", shared.Panels[0].Tab.ActiveView)
@@ -123,7 +123,7 @@ func TestQuitPreflightsAppAndPanelRenderersBeforeClosingAny(t *testing.T) {
 	require.Nil(t, registry.pendingQuit)
 }
 
-func TestPanelTabMovesBetweenTwoAppViewsAfterTargetPublication(t *testing.T) {
+func TestPanelTabMovesBetweenTwoAppViewsAfterTargetAcknowledgement(t *testing.T) {
 	lifecycle := newLifecycle()
 	source := lifecycle.Add()
 	target := lifecycle.Add()
@@ -134,16 +134,18 @@ func TestPanelTabMovesBetweenTwoAppViewsAfterTargetPublication(t *testing.T) {
 		return true
 	}}
 	tab := validPanelGroupSnapshot().Tabs[0]
-	require.NoError(t, registry.PublishDockedPanels(source, []panelwindow.WorkspaceGroup{{ClusterID: "cluster-1", GroupID: "right", Tabs: []panelwindow.TabSnapshot{tab}, ActivePanelID: tab.PanelID}}))
+	seedPanels(t, registry.workspace, source, panelwindow.PanelLocationDocked, []panelwindow.WorkspaceGroup{{ClusterID: "cluster-1", GroupID: "right", Tabs: []panelwindow.TabSnapshot{tab}, ActivePanelID: tab.PanelID}})
 	request := panelwindow.TabTransferRequest{TransferID: "cross-app", SourceWindowName: source, TargetWindowName: target, ClusterID: "cluster-1", SourceGroupID: "right", TargetGroupID: "bottom", TargetKind: panelwindow.TabTransferTargetWorkspace, Tab: tab}
 	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(target))
 	require.NoError(t, registry.RequestPanelTabTransfer(target, request))
 	require.Contains(t, events, source+":"+panelwindow.TabTransferRequestedEventName)
 	require.Error(t, registry.AcceptPanelTabTransfer(target, request.TransferID), "only the actual source may approve disposal")
 	require.NoError(t, registry.AcceptPanelTabTransfer(source, request.TransferID))
-	require.Contains(t, events, target+":"+panelwindow.TabTransferInsertRequestedEventName)
+	require.Contains(t, events, target+":"+panelwindow.WorkspaceChangedEventName)
 	require.Equal(t, source, registry.workspace.Snapshot("cluster-1").Panels[0].Location.WindowName)
 	require.NoError(t, registry.PublishDockedPanels(target, []panelwindow.WorkspaceGroup{{ClusterID: "cluster-1", GroupID: "bottom", Tabs: []panelwindow.TabSnapshot{tab}, ActivePanelID: tab.PanelID}}))
+	require.Equal(t, source, registry.workspace.Snapshot("cluster-1").Panels[0].Location.WindowName, "publication alone does not move it")
+	require.NoError(t, registry.AcknowledgePanelTransfer(target, request.TransferID, true))
 	require.Equal(t, target, registry.workspace.Snapshot("cluster-1").Panels[0].Location.WindowName)
 	require.Contains(t, events, source+":"+panelwindow.TabTransferCommittedEventName)
 	require.NoError(t, registry.PublishDockedPanels(source, nil))
@@ -160,41 +162,41 @@ func TestWholePanelDockKeepsSourceUntilAcknowledgementAfterTargetPublication(t *
 	require.NoError(t, err)
 	_, err = registry.panels.AcknowledgeOpen(native.WindowName, snapshot.TransferID)
 	require.NoError(t, err)
-	require.NoError(t, registry.workspace.PublishWindow(native.WindowName, panelwindow.PanelLocationWindow, []panelwindow.WorkspaceGroup{{ClusterID: snapshot.ClusterID, GroupID: snapshot.GroupID, Tabs: snapshot.Tabs, ActivePanelID: snapshot.ActivePanelID}}))
+	seedNativeGroup(t, registry.workspace, native.WindowName, snapshot)
 	snapshot.SourceWindowName = native.WindowName
 	snapshot.TransferID = "dock-after-publish"
 	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(target))
 	require.NoError(t, registry.BeginPanelWindowDock(native.WindowName, "right", snapshot))
 	require.NoError(t, registry.PublishDockedPanels(target, []panelwindow.WorkspaceGroup{{ClusterID: snapshot.ClusterID, GroupID: "right", Tabs: snapshot.Tabs, ActivePanelID: snapshot.ActivePanelID}}))
 	require.Equal(t, native.WindowName, registry.workspace.Snapshot(snapshot.ClusterID).Panels[0].Location.WindowName)
-	require.NoError(t, registry.AcknowledgePanelWindowDock(target, native.WindowName, snapshot.TransferID))
+	require.NoError(t, registry.AcknowledgePanelTransfer(target, snapshot.TransferID, true))
 	require.Equal(t, target, registry.workspace.Snapshot(snapshot.ClusterID).Panels[0].Location.WindowName)
 	require.Equal(t, PanelWindowStateMissing, registry.panels.State(native.WindowName))
 }
 
-func TestRejectedPanelSnapshotPreservesNativeIndexAndDirectory(t *testing.T) {
+func TestNativeSnapshotCannotClaimAnotherWindowsPanel(t *testing.T) {
 	registry := &Registry{lifecycle: newLifecycle(), panels: newPanelIndex(), workspace: panelwindow.NewWorkspaceDirectory(), emitWindowEvent: func(string, string, any) bool { return true }}
 	snapshot := validPanelGroupSnapshot()
 	native, err := registry.panels.BeginOpen(snapshot)
 	require.NoError(t, err)
 	_, err = registry.panels.AcknowledgeOpen(native.WindowName, snapshot.TransferID)
 	require.NoError(t, err)
-	snapshot.SourceWindowName = native.WindowName
-	require.NoError(t, registry.UpdatePanelWindowSnapshot(native.WindowName, snapshot))
+	seedNativeGroup(t, registry.workspace, native.WindowName, snapshot)
+	require.NoError(t, registry.PublishPanelWindowGroup(native.WindowName, nativeGroup(snapshot)))
 	foreign := snapshot.Tabs[0]
 	foreign.PanelID = "foreign"
 	foreign.ObjectRef.Name = "foreign"
 	_, _, err = registry.workspace.Open(foreign, panelwindow.PanelLocation{Kind: panelwindow.PanelLocationDocked, WindowName: "workspace-other", GroupID: "right"})
 	require.NoError(t, err)
-	before, err := registry.PanelDescriptor(native.WindowName)
-	require.NoError(t, err)
-	beforeDirectory := registry.workspace.Snapshot(snapshot.ClusterID)
 	snapshot.Tabs = append(snapshot.Tabs, foreign)
-	require.Error(t, registry.UpdatePanelWindowSnapshot(native.WindowName, snapshot))
-	after, err := registry.PanelDescriptor(native.WindowName)
-	require.NoError(t, err)
-	require.Equal(t, before, after)
-	require.Equal(t, beforeDirectory, registry.workspace.Snapshot(snapshot.ClusterID))
+	require.NoError(t, registry.PublishPanelWindowGroup(native.WindowName, nativeGroup(snapshot)))
+	// The report arranges only the window's own panels; the foreign one stays put.
+	for _, panel := range registry.workspace.Snapshot(snapshot.ClusterID).Panels {
+		if panel.Tab.PanelID == foreign.PanelID {
+			require.Equal(t, "workspace-other", panel.Location.WindowName)
+		}
+	}
+	require.Len(t, registry.workspace.Snapshot(snapshot.ClusterID).Panels, 2)
 }
 
 func TestDockFailureNotifiesTheIndependentPanelRenderer(t *testing.T) {
@@ -248,4 +250,27 @@ func TestFailedNativePanelOpenReleasesItsClusterReference(t *testing.T) {
 			require.Equal(t, source, registry.workspace.Snapshot(snapshot.ClusterID).Panels[0].Location.WindowName)
 		})
 	}
+}
+
+func TestClosingAPanelRemovesItAndReleasesAnUnusedClusterWorkspace(t *testing.T) {
+	lifecycle := newLifecycle()
+	first, second := lifecycle.Add(), lifecycle.Add()
+	backend := &recordingLifecycleBackend{windowClusters: map[string][]string{first: {"cluster-1"}, second: {"cluster-1"}}}
+	var events []string
+	registry := &Registry{lifecycle: lifecycle, panels: newPanelIndex(), backend: backend, workspace: panelwindow.NewWorkspaceDirectory(),
+		emitWindowEvent: func(window, name string, _ any) bool { events = append(events, window+":"+name); return true },
+		focusWindow:     func(string) bool { return true },
+	}
+	tab := validPanelGroupSnapshot().Tabs[0]
+	_, err := registry.OpenPanelWorkspaceObject(first, tab)
+	require.NoError(t, err)
+
+	require.NoError(t, registry.ClosePanelWorkspaceObject(second, tab.ClusterID(), tab.PanelID))
+	require.Len(t, registry.workspace.Snapshot("cluster-1").Panels, 1, "only the window that shows a panel closes it")
+	events, backend.releasedPanelReferences = nil, nil
+
+	require.NoError(t, registry.ClosePanelWorkspaceObject(first, tab.ClusterID(), tab.PanelID))
+	require.Empty(t, registry.workspace.Snapshot("cluster-1").Panels)
+	require.Contains(t, events, second+":"+panelwindow.WorkspaceChangedEventName)
+	require.Contains(t, backend.releasedPanelReferences, "panel-workspace:cluster-1")
 }

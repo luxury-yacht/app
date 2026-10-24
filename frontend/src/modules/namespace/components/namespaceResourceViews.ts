@@ -11,6 +11,7 @@ import NsViewEvents from '@modules/namespace/components/NsViewEvents';
 import NsViewHelm from '@modules/namespace/components/NsViewHelm';
 import NsViewMap from '@modules/namespace/components/NsViewMap';
 import NsViewNetwork from '@modules/namespace/components/NsViewNetwork';
+import NsViewPods from '@modules/namespace/components/NsViewPods';
 import NsViewQuotas from '@modules/namespace/components/NsViewQuotas';
 import NsViewRBAC from '@modules/namespace/components/NsViewRBAC';
 import NsViewStorage from '@modules/namespace/components/NsViewStorage';
@@ -32,6 +33,7 @@ export const NAMESPACE_RESOURCE_VIEWS: Partial<
   browse: { name: 'Browse', Component: BrowseView },
   map: { name: 'Map', Component: NsViewMap },
   workloads: { name: 'Workloads', Component: NsViewWorkloads },
+  pods: { name: 'Pods', Component: NsViewPods },
   config: { name: 'Config', Component: NsViewConfig },
   network: { name: 'Network', Component: NsViewNetwork },
   rbac: { name: 'RBAC', Component: NsViewRBAC },

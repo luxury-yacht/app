@@ -16,7 +16,7 @@ import (
 // refresh_spill.go wires the querypage maintained-store spill into the governor's
 // Cold/re-warm lifecycle: a Cold cluster's stores are flushed to disk before its heap is
 // reclaimed (spillClusterStores, from teardownClusterSubsystem), and a re-warm re-paints
-// the freshly-built stores from disk before the informers feed (restoreClusterStores, from
+// the freshly-built stores from disk before the reflectors feed (restoreClusterStores, from
 // rebuildClusterSubsystem), then reconciles them once the subsystem syncs. The spill is
 // transient cache (re-warm speed only, never user data) and session-scoped — resetSpillRoot
 // clears it at startup so a re-warm only restores what THIS session wrote.
@@ -134,7 +134,7 @@ func (a *RefreshCoordinator) spillClusterStores(clusterID string, reg *domain.Re
 }
 
 // restoreClusterStores re-paints a cluster's freshly-built maintained stores from its spill
-// directory on re-warm, BEFORE the informers feed, so the view is instant. Restored rows
+// directory on re-warm, BEFORE the reflectors feed, so the view is instant. Restored rows
 // may be stale; they are reconciled after the subsystem syncs (ReconcileMaintainedStores)
 // and by the fresh reflectors' initial Replace. Best-effort: a restore failure just means a
 // cold (blank-until-synced) re-warm.

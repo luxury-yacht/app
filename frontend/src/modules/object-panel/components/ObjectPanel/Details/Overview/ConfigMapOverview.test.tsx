@@ -1,18 +1,25 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/ConfigMapOverview.test.tsx
+ *
+ * Renders the ConfigMap overview inside the real app shell, so its consumer
+ * links open panels through the real panel owners (test-utils/appState).
  */
 
 import type React from 'react';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { configMapDescriptor } from './descriptors/configmap';
 import { OverviewRenderer } from './OverviewRenderer';
 
-const openWithObjectMock = vi.fn();
-const defaultClusterId = 'alpha:ctx';
-const podRef = (name: string, namespace: string) => ({
-  clusterId: defaultClusterId,
+const app = installAppStateHarness();
+
+const podRef = (cluster: TestCluster, name: string, namespace: string) => ({
+  clusterId: cluster.clusterId,
   group: '',
   version: 'v1',
   kind: 'Pod',
@@ -20,13 +27,6 @@ const podRef = (name: string, namespace: string) => ({
   namespace,
   name,
 });
-
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({
-    openWithObject: openWithObjectMock,
-    objectData: { clusterId: defaultClusterId, clusterName: 'alpha' },
-  }),
-}));
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,
@@ -45,26 +45,20 @@ vi.mock('@shared/components/kubernetes/ResourceMetadata', () => ({
   ResourceMetadata: () => <div data-testid="resource-metadata" />,
 }));
 
-vi.mock('@shared/hooks/useNavigateToView', () => ({
-  useNavigateToView: () => ({ navigateToView: vi.fn() }),
-}));
-
 const getLinkByText = (container: HTMLElement, text: string) =>
   Array.from(container.querySelectorAll<HTMLElement>('.object-panel-link')).find(
     (el) => el.textContent?.trim() === text
   );
 
 describe('ConfigMapOverview', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  let view: MountedApp;
+  let dev: TestCluster;
+  let container: HTMLElement;
 
   const renderComponent = async (props: { configMapDetails: unknown }) => {
-    await act(async () => {
-      root.render(
-        <OverviewRenderer descriptor={configMapDescriptor} data={props.configMapDetails as never} />
-      );
-      await Promise.resolve();
-    });
+    await view.show(
+      <OverviewRenderer descriptor={configMapDescriptor} data={props.configMapDetails as never} />
+    );
   };
 
   const getValueForLabel = (label: string) => {
@@ -74,18 +68,11 @@ describe('ConfigMapOverview', () => {
     return labelElement?.parentElement?.querySelector<HTMLElement>('.overview-value') ?? null;
   };
 
-  beforeEach(() => {
-    openWithObjectMock.mockReset();
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-  });
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
+  beforeEach(async () => {
+    dev = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, ['default', 'team']);
+    view = await app.render(null);
+    container = view.container;
   });
 
   it('shows pod usage links', async () => {
@@ -95,7 +82,7 @@ describe('ConfigMapOverview', () => {
         namespace: 'default',
         data: { key1: 'value', key2: 'value' },
         binaryData: { bin: 'AAAA' },
-        usedBy: [podRef('pod-a', 'default'), podRef('pod-b', 'default')],
+        usedBy: [podRef(dev, 'pod-a', 'default'), podRef(dev, 'pod-b', 'default')],
         labels: {},
         annotations: {},
       } as unknown,
@@ -108,19 +95,21 @@ describe('ConfigMapOverview', () => {
 
     const podLink = getLinkByText(container, 'pod-a');
     expect(podLink).not.toBeUndefined();
-    act(() => {
+    await act(async () => {
       podLink?.click();
     });
-    expect(openWithObjectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'Pod',
-        name: 'pod-a',
-        namespace: 'default',
-        clusterId: defaultClusterId,
+    await app.settle();
+    expect(view.openPanels()).toEqual([
+      {
+        clusterId: dev.clusterId,
+        clusterName: dev.clusterName,
         group: '',
         version: 'v1',
-      })
-    );
+        kind: 'Pod',
+        namespace: 'default',
+        name: 'pod-a',
+      },
+    ]);
   });
 
   it('renders not-in-use message when no consumers', async () => {
@@ -138,6 +127,6 @@ describe('ConfigMapOverview', () => {
 
     const usedByValue = getValueForLabel('Used By');
     expect(usedByValue?.textContent).toContain('Not in use');
-    expect(openWithObjectMock).not.toHaveBeenCalled();
+    expect(view.openPanels()).toEqual([]);
   });
 });

@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -92,6 +92,15 @@ func clusterStorageCollectIndexer(pvIdx cache.Indexer) func(streamspec.Descripto
 	}
 }
 
+func clusterCRDCollectIndexer(crdIdx cache.Indexer) func(streamspec.Descriptor) cache.Indexer {
+	return func(d streamspec.Descriptor) cache.Indexer {
+		if d.Resource == "customresourcedefinitions" {
+			return crdIdx
+		}
+		return nil
+	}
+}
+
 // networkIndexers holds the per-kind test indexers for the descriptor-driven
 // network kinds (nil = kind unavailable).
 type networkIndexers struct {
@@ -110,7 +119,7 @@ type networkIndexers struct {
 // supplied test indexers. Service, EndpointSlice, Ingress, and NetworkPolicy are cut to
 // the ingest path: their availability resolves to the shared sentinel indexer (a non-nil
 // empty indexer) when the test supplies one, so the descriptor source gate marks them
-// Available without a typed informer — exactly as factoryIndexers does in production. Their
+// Available without a typed indexer. Their
 // ROWS come from the builder's ingest source, not here.
 func networkCollectIndexer(idx networkIndexers) func(streamspec.Descriptor) cache.Indexer {
 	return func(d streamspec.Descriptor) cache.Indexer {
@@ -140,7 +149,7 @@ func networkCollectIndexer(idx networkIndexers) func(streamspec.Descriptor) cach
 
 // rbacCollectIndexer returns a collectIndexer that resolves the RBAC stream
 // descriptors to the supplied test indexers (nil = kind unavailable), so the
-// descriptor-driven NamespaceRBACBuilder can be tested without an informer factory.
+// descriptor-driven NamespaceRBACBuilder can be tested without an ingest manager.
 func rbacCollectIndexer(roleIdx, bindingIdx, saIdx cache.Indexer) func(streamspec.Descriptor) cache.Indexer {
 	return func(d streamspec.Descriptor) cache.Indexer {
 		switch d.Resource {
@@ -178,12 +187,10 @@ func TestNamespaceConfigBuilder(t *testing.T) {
 		Data: map[string][]byte{"user": []byte("alice")},
 	}
 
-	builder := &NamespaceConfigBuilder{
-		collectIndexer: configCollectIndexer(
-			testsupport.NewNamespacedIndexer(t, configMap),
-			testsupport.NewNamespacedIndexer(t, secret),
-		),
-	}
+	builder := namespaceConfigBuilderFor(ClusterMeta{}, configCollectIndexer(
+		testsupport.NewNamespacedIndexer(t, configMap),
+		testsupport.NewNamespacedIndexer(t, secret),
+	))
 
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
@@ -219,12 +226,10 @@ func TestNamespaceConfigBuilderHonorsRuntimeAllowedResources(t *testing.T) {
 		Type: corev1.SecretTypeOpaque,
 		Data: map[string][]byte{"user": []byte("alice")},
 	}
-	builder := &NamespaceConfigBuilder{
-		collectIndexer: configCollectIndexer(
-			testsupport.NewNamespacedIndexer(t, configMap),
-			testsupport.NewNamespacedIndexer(t, secret),
-		),
-	}
+	builder := namespaceConfigBuilderFor(ClusterMeta{}, configCollectIndexer(
+		testsupport.NewNamespacedIndexer(t, configMap),
+		testsupport.NewNamespacedIndexer(t, secret),
+	))
 	ctx := domainpermissions.WithAllowedResources(context.Background(), namespaceConfigDomainName, domainpermissions.AllowedResources{
 		"core/configmaps": false,
 		"core/secrets":    true,
@@ -261,12 +266,10 @@ func TestNamespaceConfigBuilderQueryReportsPartialAllowedResources(t *testing.T)
 		Type: corev1.SecretTypeOpaque,
 		Data: map[string][]byte{"user": []byte("alice")},
 	}
-	builder := &NamespaceConfigBuilder{
-		collectIndexer: configCollectIndexer(
-			testsupport.NewNamespacedIndexer(t, configMap),
-			testsupport.NewNamespacedIndexer(t, secret),
-		),
-	}
+	builder := namespaceConfigBuilderFor(ClusterMeta{}, configCollectIndexer(
+		testsupport.NewNamespacedIndexer(t, configMap),
+		testsupport.NewNamespacedIndexer(t, secret),
+	))
 	ctx := domainpermissions.WithAllowedResources(context.Background(), namespaceConfigDomainName, domainpermissions.AllowedResources{
 		"core/configmaps": false,
 		"core/secrets":    true,
@@ -333,12 +336,10 @@ func TestNamespaceConfigBuilderAllNamespaces(t *testing.T) {
 		Data: map[string][]byte{"cert": []byte("123")},
 	}
 
-	builder := &NamespaceConfigBuilder{
-		collectIndexer: configCollectIndexer(
-			testsupport.NewNamespacedIndexer(t, configMapDefault, configMapSystem),
-			testsupport.NewNamespacedIndexer(t, secretDefault, secretOther),
-		),
-	}
+	builder := namespaceConfigBuilderFor(ClusterMeta{}, configCollectIndexer(
+		testsupport.NewNamespacedIndexer(t, configMapDefault, configMapSystem),
+		testsupport.NewNamespacedIndexer(t, secretDefault, secretOther),
+	))
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")
 	require.NoError(t, err)
@@ -381,12 +382,10 @@ func TestNamespaceConfigBuilderStableOrdering(t *testing.T) {
 		Data: map[string][]byte{"user": []byte("alice")},
 	}
 
-	builder := &NamespaceConfigBuilder{
-		collectIndexer: configCollectIndexer(
-			testsupport.NewNamespacedIndexer(t, configMap),
-			testsupport.NewNamespacedIndexer(t, secret),
-		),
-	}
+	builder := namespaceConfigBuilderFor(ClusterMeta{}, configCollectIndexer(
+		testsupport.NewNamespacedIndexer(t, configMap),
+		testsupport.NewNamespacedIndexer(t, secret),
+	))
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")
 	require.NoError(t, err)
@@ -428,9 +427,7 @@ func TestNamespaceEventsBuilderUsesEventTimestampOrdering(t *testing.T) {
 		LastTimestamp: metav1.NewTime(older),
 	}
 
-	builder := &NamespaceEventsBuilder{
-		eventLister: testsupport.NewEventLister(t, eventA, eventB),
-	}
+	builder := namespaceEventsBuilderFor(t, ClusterMeta{}, eventA, eventB)
 
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
@@ -511,6 +508,10 @@ func TestNamespaceNetworkBuilder(t *testing.T) {
 		Spec: networkingv1.NetworkPolicySpec{},
 	}
 
+	indexers := networkCollectIndexer(networkIndexers{
+		ingress:       emptyIndexer,
+		networkpolicy: emptyIndexer,
+	})
 	builder := &NamespaceNetworkBuilder{
 		networkIngest:          newFakeNetworkIngestSource(ClusterMeta{}, svc, slice, ing, policy),
 		includeServices:        true,
@@ -518,12 +519,9 @@ func TestNamespaceNetworkBuilder(t *testing.T) {
 		includeIngresses:       true,
 		includeNetworkPolicies: true,
 		// Cut kinds resolve availability via the sentinel indexer; rows come from ingest.
-		collectIndexer: networkCollectIndexer(networkIndexers{
-			ingress:       ingestAvailabilityIndexer,
-			networkpolicy: ingestAvailabilityIndexer,
-		}),
+		available: availableFromIndexers(indexers),
 	}
-	seedNetworkMaintained(builder, ClusterMeta{})
+	seedNetworkMaintained(builder, ClusterMeta{}, indexers)
 
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
@@ -620,18 +618,19 @@ func TestNamespaceNetworkBuilderAllNamespaces(t *testing.T) {
 		},
 	}
 
+	indexers := networkCollectIndexer(networkIndexers{
+		ingress:       emptyIndexer,
+		networkpolicy: emptyIndexer,
+	})
 	builder := &NamespaceNetworkBuilder{
 		networkIngest:          newFakeNetworkIngestSource(ClusterMeta{}, svcDefault, svcOther, sliceDefault, sliceOther, ingDefault, policyOther),
 		includeServices:        true,
 		includeEndpointSlices:  true,
 		includeIngresses:       true,
 		includeNetworkPolicies: true,
-		collectIndexer: networkCollectIndexer(networkIndexers{
-			ingress:       ingestAvailabilityIndexer,
-			networkpolicy: ingestAvailabilityIndexer,
-		}),
+		available:              availableFromIndexers(indexers),
 	}
-	seedNetworkMaintained(builder, ClusterMeta{})
+	seedNetworkMaintained(builder, ClusterMeta{}, indexers)
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")
 	require.NoError(t, err)
@@ -677,9 +676,7 @@ func TestNamespaceStorageBuilder(t *testing.T) {
 		},
 	}
 
-	builder := &NamespaceStorageBuilder{
-		collectIndexer: storageCollectIndexer(testsupport.NewNamespacedIndexer(t, pvc)),
-	}
+	builder := namespaceStorageBuilderFor(ClusterMeta{}, storageCollectIndexer(testsupport.NewNamespacedIndexer(t, pvc)))
 
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
@@ -720,9 +717,7 @@ func TestNamespaceStorageBuilderAllNamespaces(t *testing.T) {
 		Status: corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimPending},
 	}
 
-	builder := &NamespaceStorageBuilder{
-		collectIndexer: storageCollectIndexer(testsupport.NewNamespacedIndexer(t, pvcDefault, pvcOther)),
-	}
+	builder := namespaceStorageBuilderFor(ClusterMeta{}, storageCollectIndexer(testsupport.NewNamespacedIndexer(t, pvcDefault, pvcOther)))
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")
 	require.NoError(t, err)
@@ -783,13 +778,11 @@ func TestNamespaceQuotasBuilder(t *testing.T) {
 		},
 	}
 
-	builder := &NamespaceQuotasBuilder{
-		collectIndexer: quotasCollectIndexer(
-			testsupport.NewNamespacedIndexer(t, quota),
-			testsupport.NewNamespacedIndexer(t, limit),
-			testsupport.NewNamespacedIndexer(t, pdb),
-		),
-	}
+	builder := namespaceQuotasBuilderFor(ClusterMeta{}, quotasCollectIndexer(
+		testsupport.NewNamespacedIndexer(t, quota),
+		testsupport.NewNamespacedIndexer(t, limit),
+		testsupport.NewNamespacedIndexer(t, pdb),
+	))
 
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
@@ -857,13 +850,11 @@ func TestNamespaceQuotasBuilderAllNamespaces(t *testing.T) {
 		Status: policyv1.PodDisruptionBudgetStatus{DisruptionsAllowed: 2},
 	}
 
-	builder := &NamespaceQuotasBuilder{
-		collectIndexer: quotasCollectIndexer(
-			testsupport.NewNamespacedIndexer(t, quotaDefault, quotaOther),
-			testsupport.NewNamespacedIndexer(t, limitDefault),
-			testsupport.NewNamespacedIndexer(t, pdbDefault),
-		),
-	}
+	builder := namespaceQuotasBuilderFor(ClusterMeta{}, quotasCollectIndexer(
+		testsupport.NewNamespacedIndexer(t, quotaDefault, quotaOther),
+		testsupport.NewNamespacedIndexer(t, limitDefault),
+		testsupport.NewNamespacedIndexer(t, pdbDefault),
+	))
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")
 	require.NoError(t, err)
@@ -886,26 +877,24 @@ func TestNamespaceQuotasBuilderAllNamespaces(t *testing.T) {
 func TestNamespaceAutoscalingBuilder(t *testing.T) {
 	now := time.Now()
 	min := int32(1)
-	hpa := &autoscalingv1.HorizontalPodAutoscaler{
+	hpa := &autoscalingv2.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "api",
 			Namespace:         "default",
 			ResourceVersion:   "42",
 			CreationTimestamp: metav1.NewTime(now.Add(-20 * time.Minute)),
 		},
-		Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
-			ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{Kind: "Deployment", Name: "api"},
+		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{Kind: "Deployment", Name: "api"},
 			MinReplicas:    &min,
 			MaxReplicas:    4,
 		},
-		Status: autoscalingv1.HorizontalPodAutoscalerStatus{
+		Status: autoscalingv2.HorizontalPodAutoscalerStatus{
 			CurrentReplicas: 2,
 		},
 	}
 
-	builder := &NamespaceAutoscalingBuilder{
-		collectIndexer: autoscalingCollectIndexer(testsupport.NewNamespacedIndexer(t, hpa)),
-	}
+	builder := namespaceAutoscalingBuilderFor(ClusterMeta{}, autoscalingCollectIndexer(testsupport.NewNamespacedIndexer(t, hpa)))
 
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
@@ -926,43 +915,41 @@ func TestNamespaceAutoscalingBuilder(t *testing.T) {
 func TestNamespaceAutoscalingBuilderAllNamespaces(t *testing.T) {
 	now := time.Now()
 	min := int32(1)
-	hpaDefault := &autoscalingv1.HorizontalPodAutoscaler{
+	hpaDefault := &autoscalingv2.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "api",
 			Namespace:         "default",
 			ResourceVersion:   "42",
 			CreationTimestamp: metav1.NewTime(now.Add(-20 * time.Minute)),
 		},
-		Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
-			ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{Kind: "Deployment", Name: "api"},
+		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{Kind: "Deployment", Name: "api"},
 			MinReplicas:    &min,
 			MaxReplicas:    4,
 		},
-		Status: autoscalingv1.HorizontalPodAutoscalerStatus{
+		Status: autoscalingv2.HorizontalPodAutoscalerStatus{
 			CurrentReplicas: 2,
 		},
 	}
 
-	hpaSystem := &autoscalingv1.HorizontalPodAutoscaler{
+	hpaSystem := &autoscalingv2.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "metrics",
 			Namespace:         "kube-system",
 			ResourceVersion:   "43",
 			CreationTimestamp: metav1.NewTime(now.Add(-15 * time.Minute)),
 		},
-		Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
-			ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{Kind: "Deployment", Name: "metrics"},
+		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{Kind: "Deployment", Name: "metrics"},
 			MinReplicas:    &min,
 			MaxReplicas:    6,
 		},
-		Status: autoscalingv1.HorizontalPodAutoscalerStatus{
+		Status: autoscalingv2.HorizontalPodAutoscalerStatus{
 			CurrentReplicas: 3,
 		},
 	}
 
-	builder := &NamespaceAutoscalingBuilder{
-		collectIndexer: autoscalingCollectIndexer(testsupport.NewNamespacedIndexer(t, hpaDefault, hpaSystem)),
-	}
+	builder := namespaceAutoscalingBuilderFor(ClusterMeta{}, autoscalingCollectIndexer(testsupport.NewNamespacedIndexer(t, hpaDefault, hpaSystem)))
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")
 	require.NoError(t, err)
@@ -1026,13 +1013,11 @@ func TestNamespaceEventsBuilder(t *testing.T) {
 		Message: "",
 	}
 
-	builder := &NamespaceEventsBuilder{
-		eventLister: testsupport.NewEventLister(t, eventNew, eventOld),
-	}
+	builder := namespaceEventsBuilderFor(t, ClusterMeta{}, eventNew, eventOld)
 
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
-	require.Equal(t, uint64(5), snapshot.Version)
+	require.NotZero(t, snapshot.Version, "the snapshot carries the store's refetch identity")
 
 	payload, ok := snapshot.Payload.(NamespaceEventsSnapshot)
 	require.True(t, ok)
@@ -1094,9 +1079,7 @@ func TestNamespaceEventsBuilderAllNamespaces(t *testing.T) {
 		Message: "Successfully assigned staging/api-staging to node-b",
 	}
 
-	builder := &NamespaceEventsBuilder{
-		eventLister: testsupport.NewEventLister(t, eventDefault, eventStaging),
-	}
+	builder := namespaceEventsBuilderFor(t, ClusterMeta{}, eventDefault, eventStaging)
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")
 	require.NoError(t, err)
@@ -1151,13 +1134,11 @@ func TestNamespaceRBACBuilder(t *testing.T) {
 		Secrets: []corev1.ObjectReference{{Name: "builder-token"}},
 	}
 
-	builder := &NamespaceRBACBuilder{
-		collectIndexer: rbacCollectIndexer(
-			testsupport.NewNamespacedIndexer(t, role),
-			testsupport.NewNamespacedIndexer(t, binding),
-			testsupport.NewNamespacedIndexer(t, sa),
-		),
-	}
+	builder := namespaceRBACBuilderFor(ClusterMeta{}, rbacCollectIndexer(
+		testsupport.NewNamespacedIndexer(t, role),
+		testsupport.NewNamespacedIndexer(t, binding),
+		testsupport.NewNamespacedIndexer(t, sa),
+	))
 
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
 	require.NoError(t, err)
@@ -1216,13 +1197,11 @@ func TestNamespaceRBACBuilderAllNamespaces(t *testing.T) {
 		},
 	}
 
-	builder := &NamespaceRBACBuilder{
-		collectIndexer: rbacCollectIndexer(
-			testsupport.NewNamespacedIndexer(t, roleDefault, roleOther),
-			testsupport.NewNamespacedIndexer(t, binding),
-			testsupport.NewNamespacedIndexer(t, sa),
-		),
-	}
+	builder := namespaceRBACBuilderFor(ClusterMeta{}, rbacCollectIndexer(
+		testsupport.NewNamespacedIndexer(t, roleDefault, roleOther),
+		testsupport.NewNamespacedIndexer(t, binding),
+		testsupport.NewNamespacedIndexer(t, sa),
+	))
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")
 	require.NoError(t, err)
@@ -1254,9 +1233,7 @@ func TestNamespaceRBACBuilderAllNamespacesCapsLargeSnapshots(t *testing.T) {
 		})
 	}
 
-	builder := &NamespaceRBACBuilder{
-		collectIndexer: rbacCollectIndexer(testsupport.NewNamespacedIndexer(t, roles...), nil, nil),
-	}
+	builder := namespaceRBACBuilderFor(ClusterMeta{}, rbacCollectIndexer(testsupport.NewNamespacedIndexer(t, roles...), nil, nil))
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")
 	require.NoError(t, err)
@@ -1279,9 +1256,7 @@ func TestNamespaceRBACBuilderSingleNamespaceCapsLargeSnapshots(t *testing.T) {
 		})
 	}
 
-	builder := &NamespaceRBACBuilder{
-		collectIndexer: rbacCollectIndexer(testsupport.NewNamespacedIndexer(t, roles...), nil, nil),
-	}
+	builder := namespaceRBACBuilderFor(ClusterMeta{}, rbacCollectIndexer(testsupport.NewNamespacedIndexer(t, roles...), nil, nil))
 
 	snapshot, err := builder.Build(context.Background(), "namespace:team-a")
 	require.NoError(t, err)
@@ -1327,13 +1302,11 @@ func TestNamespaceRBACBuilderStableOrdering(t *testing.T) {
 		},
 	}
 
-	builder := &NamespaceRBACBuilder{
-		collectIndexer: rbacCollectIndexer(
-			testsupport.NewNamespacedIndexer(t, roleStaging, roleDefault),
-			testsupport.NewNamespacedIndexer(t, bindingDefault),
-			testsupport.NewNamespacedIndexer(t, serviceAccount),
-		),
-	}
+	builder := namespaceRBACBuilderFor(ClusterMeta{}, rbacCollectIndexer(
+		testsupport.NewNamespacedIndexer(t, roleStaging, roleDefault),
+		testsupport.NewNamespacedIndexer(t, bindingDefault),
+		testsupport.NewNamespacedIndexer(t, serviceAccount),
+	))
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")
 	require.NoError(t, err)
@@ -1662,76 +1635,6 @@ func TestNamespaceWorkloadsBuilderSingleNamespaceCapsLargeSnapshots(t *testing.T
 	require.True(t, snapshot.Stats.Truncated)
 	require.Equal(t, config.SnapshotNamespaceWorkloadsEntryLimit+1, snapshot.Stats.TotalItems)
 	require.Contains(t, snapshot.Stats.Warnings[0], "workloads")
-}
-
-func TestNamespaceWorkloadsBuilderMarksHPAManagedByFullGVK(t *testing.T) {
-	now := time.Now()
-	replicas := int32(1)
-	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "web",
-			Namespace:         "default",
-			ResourceVersion:   "10",
-			CreationTimestamp: metav1.NewTime(now.Add(-1 * time.Hour)),
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}},
-		},
-	}
-	customTargetHPA := &autoscalingv1.HorizontalPodAutoscaler{
-		ObjectMeta: metav1.ObjectMeta{Name: "custom-web", Namespace: "default"},
-		Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
-			ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{
-				APIVersion: "example.com/v1",
-				Kind:       "Deployment",
-				Name:       "web",
-			},
-		},
-	}
-	appsTargetHPA := &autoscalingv1.HorizontalPodAutoscaler{
-		ObjectMeta: metav1.ObjectMeta{Name: "apps-web", Namespace: "default"},
-		Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
-			ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{
-				APIVersion: "apps/v1",
-				Kind:       "Deployment",
-				Name:       "web",
-			},
-		},
-	}
-
-	builder := &NamespaceWorkloadsBuilder{
-		workloadIngest:      newFakeWorkloadIngestSource(ClusterMeta{}, deployment),
-		includeDeployments:  true,
-		includeStatefulSets: true,
-		includeDaemonSets:   true,
-		includeJobs:         true,
-		includeCronJobs:     true,
-		hpaLister:           testsupport.NewHorizontalPodAutoscalerLister(t, customTargetHPA),
-	}
-	seedWorkloadsFromBuilderSource(builder, ClusterMeta{})
-
-	snapshot, err := builder.Build(context.Background(), "namespace:default")
-	require.NoError(t, err)
-	payload := snapshot.Payload.(NamespaceWorkloadsSnapshot)
-	require.Len(t, payload.Rows, 1)
-	require.NotNil(t, payload.Rows[0].HPAManaged)
-	require.False(t, *payload.Rows[0].HPAManaged)
-
-	builder.hpaLister = nil
-	snapshot, err = builder.Build(context.Background(), "namespace:default")
-	require.NoError(t, err)
-	payload = snapshot.Payload.(NamespaceWorkloadsSnapshot)
-	require.Len(t, payload.Rows, 1)
-	require.Nil(t, payload.Rows[0].HPAManaged)
-
-	builder.hpaLister = testsupport.NewHorizontalPodAutoscalerLister(t, customTargetHPA, appsTargetHPA)
-	snapshot, err = builder.Build(context.Background(), "namespace:default")
-	require.NoError(t, err)
-	payload = snapshot.Payload.(NamespaceWorkloadsSnapshot)
-	require.Len(t, payload.Rows, 1)
-	require.NotNil(t, payload.Rows[0].HPAManaged)
-	require.True(t, *payload.Rows[0].HPAManaged)
 }
 
 func TestNamespaceWorkloadsBuilderAllNamespaces(t *testing.T) {

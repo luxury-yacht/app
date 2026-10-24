@@ -8,9 +8,8 @@ import "github.com/luxury-yacht/app/backend/kind/kindspec"
 
 var Descriptor = kindspec.Descriptor{
 	Identity:        Identity,
-	CatalogSource:   kindspec.CatalogShared,
+	Display:         kindspec.Display{ShortName: "quota"},
 	DetailCacheable: true,
-	IngestOwned:     true,
 	Stream:          &StreamDescriptor,
 	Binding:         &DetailBinding,
 }

@@ -9,16 +9,18 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ActionsMenu } from '@shared/components/kubernetes/ActionsMenu';
 import { useNodeMaintenanceActions } from '@shared/hooks/useNodeMaintenanceActions';
 import type { ObjectActionData } from '@shared/hooks/useObjectActions';
-import { normalizeKind, SCALABLE_KINDS } from '@shared/hooks/useObjectActions';
+import { lookupKindFacets } from '@shared/kinds/kindFacets';
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { readWorkloadHPAManagedForRef, requestData } from '@/core/data-access';
-import { getOverviewDescriptor } from './descriptorRegistry';
+import type { ObjectDetail, ObjectDetailType } from '@/core/refresh/types';
+import { resolveOverviewDescriptor } from './descriptorRegistry';
 import {
   type GenericOverviewProps as FallbackOverviewProps,
   GenericOverview,
 } from './GenericOverview';
 import { OverviewRenderer } from './OverviewRenderer';
+import type { OverviewContext } from './schema';
 import '../../shared.css';
 
 // Generic props for resources - simplified without external type dependencies
@@ -33,29 +35,28 @@ interface GenericOverviewProps {
   /** Called after a successful restart/scale/trigger/suspend so the panel can refetch. */
   onAfterAction?: () => void;
   portForwardAvailable?: boolean;
+  /** Replicas the scale action starts from: the detail's desired count, 0 for unscalable kinds. */
+  desiredReplicas: number;
+  /** The active detail tagged with its type; a registered type renders through its descriptor. */
+  activeDetail?: ObjectDetail | null;
   [key: string]: unknown; // Allow any additional fields for generic resources
+}
+
+// Renders a detail through its descriptor, typed against that detail's DTO; null → generic overview.
+function renderDescriptorOverview<K extends ObjectDetailType>(
+  detail: ObjectDetail<K>,
+  context: OverviewContext
+): React.ReactElement | null {
+  const descriptor = resolveOverviewDescriptor(detail);
+  return descriptor ? (
+    <OverviewRenderer descriptor={descriptor} data={detail.details} context={context} />
+  ) : null;
 }
 
 // Union type using generic props for all resources
 type OverviewProps = GenericOverviewProps;
 
 const clampReplicas = (value: number): number => Math.max(0, Math.min(9999, value));
-
-const parseDesiredReplicaCount = (value: unknown): number | null => {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return clampReplicas(value);
-  }
-  if (typeof value !== 'string') {
-    return null;
-  }
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-  const segments = trimmed.split('/');
-  const candidate = Number.parseInt(segments[segments.length - 1]?.trim() ?? '', 10);
-  return Number.isFinite(candidate) ? clampReplicas(candidate) : null;
-};
 
 const Overview: React.FC<OverviewProps> = (props) => {
   const { objectData, panelId } = useObjectPanel();
@@ -66,9 +67,12 @@ const Overview: React.FC<OverviewProps> = (props) => {
   const objectGroup = objectData?.group ?? '';
   const objectVersion = objectData?.version ?? '';
 
+  // The kind's facets, by the panel object's complete identity.
+  const facets = lookupKindFacets({ group: objectGroup, version: objectVersion, kind: props.kind });
+
   // Check whether a HPA manages this workload (only for scalable kinds).
   const [hpaManaged, setHpaManaged] = useState<boolean | null>(null);
-  const isScalable = SCALABLE_KINDS.includes(normalizeKind(props.kind));
+  const isScalable = facets?.actions.scale ?? false;
   useEffect(() => {
     const namespace = props.namespace;
     if (!isScalable) {
@@ -108,7 +112,8 @@ const Overview: React.FC<OverviewProps> = (props) => {
     };
   }, [clusterId, props.namespace, props.kind, props.name, objectGroup, objectVersion, isScalable]);
 
-  const isNode = normalizeKind(props.kind) === 'Node';
+  // Kinds with node maintenance actions get the drain status and openers.
+  const isNode = Boolean(facets?.actions.cordon || facets?.actions.drain);
   const watchClusterIds = useMemo(
     () => (isNode && clusterId ? [clusterId] : undefined),
     [isNode, clusterId]
@@ -131,22 +136,18 @@ const Overview: React.FC<OverviewProps> = (props) => {
   // scaling is autonomous (e.g. in the Pods caption). Node overviews also
   // get the drain-in-progress signal so they can render the inline icon.
   const renderOverviewContent = () => {
-    // Registered kinds render from their raw DTO; other kinds use generic metadata.
-    const descriptor = getOverviewDescriptor(props.kind, props.activeDetail);
-    if (descriptor) {
-      return (
-        <OverviewRenderer<never>
-          descriptor={descriptor}
-          data={props.activeDetail as never}
-          context={{
-            hpaManaged: hpaManaged === true,
-            drainInProgress: Boolean(activeDrainJob),
-            onOpenDrain,
-            clusterId,
-            clusterName,
-          }}
-        />
-      );
+    // Registered detail types render from their typed DTO; other kinds use generic metadata.
+    const descriptorOverview = props.activeDetail
+      ? renderDescriptorOverview(props.activeDetail, {
+          hpaManaged: hpaManaged === true,
+          drainInProgress: Boolean(activeDrainJob),
+          onOpenDrain,
+          clusterId,
+          clusterName,
+        })
+      : null;
+    if (descriptorOverview) {
+      return descriptorOverview;
     }
     // Custom/unregistered kinds use the generic overview, fed the object's generic metadata from
     // the panel's objectData (the source of truth) since there is no per-kind detail to read.
@@ -175,11 +176,7 @@ const Overview: React.FC<OverviewProps> = (props) => {
         })
     : undefined;
 
-  const currentScaleReplicas =
-    parseDesiredReplicaCount(props.desiredReplicas) ??
-    parseDesiredReplicaCount(props.replicas) ??
-    parseDesiredReplicaCount(props.ready) ??
-    0;
+  const currentScaleReplicas = clampReplicas(props.desiredReplicas);
 
   // Build object data for ActionsMenu. Group/version come from the panel's
   // objectData (the source of truth) so CRD permission lookups in

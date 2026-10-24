@@ -139,6 +139,41 @@ describe('useGridTableHoverSync', () => {
     document.body.removeChild(wrapper);
   });
 
+  // The app zooms the page: bounding rects come back in zoomed pixels while the
+  // overlay is positioned in CSS pixels inside the scrolled wrapper.
+  it('places the hover overlay on its row at a page zoom', () => {
+    document.documentElement.style.setProperty('--app-zoom-factor', '2');
+    const { wrapperRef, headerRef } = setupWrapper();
+    wrapper.scrollTop = 40;
+    const { result, unmount } = renderHook(() =>
+      useGridTableHoverSync({ wrapperRef, headerInnerRef: headerRef, hideHeader: false })
+    );
+    const row = document.createElement('div');
+    row.tabIndex = 0;
+    wrapper.appendChild(row);
+    // The row sits 30 CSS px below the wrapper's top and is 25 CSS px tall.
+    Object.defineProperty(row, 'getBoundingClientRect', {
+      value: () => ({ top: 10 + 30 * 2, height: 25 * 2 }) as DOMRect,
+    });
+    Object.defineProperty(wrapper, 'getBoundingClientRect', {
+      value: () => ({ top: 10 }) as DOMRect,
+    });
+    row.focus();
+
+    try {
+      act(() => {
+        requireValue(result.current, 'hover sync').handleRowMouseEnter(row);
+      });
+      const { hoverState } = requireValue(result.current, 'hover sync');
+      expect(hoverState.top).toBe(30 + 40);
+      expect(hoverState.height).toBe(25);
+    } finally {
+      unmount();
+      document.body.removeChild(wrapper);
+      document.documentElement.style.removeProperty('--app-zoom-factor');
+    }
+  });
+
   it('keeps hover visible when leaving a selected or focused row', () => {
     const { wrapperRef, headerRef } = setupWrapper();
     const { result, unmount } = renderHook(() =>

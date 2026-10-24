@@ -8,6 +8,7 @@
 import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import {
   makeClusterConfigSnapshotPayload,
   makeNamespaceConfigSnapshotPayload,
@@ -265,6 +266,7 @@ describe('resetPermissionDeniedScopedDomainStates', () => {
     setScopedDomainState('namespaces', 'cluster-a|', (prev) => ({
       ...prev,
       status: 'error',
+      error: { kind: 'backend', status: makeErrorStatus('Forbidden') },
       permissionDenied: true,
     }));
     setScopedDomainState('namespace-config', 'cluster-a|namespace:prod', (prev) => ({
@@ -275,6 +277,7 @@ describe('resetPermissionDeniedScopedDomainStates', () => {
     setScopedDomainState('namespaces', 'cluster-b|', (prev) => ({
       ...prev,
       status: 'error',
+      error: { kind: 'backend', status: makeErrorStatus('Forbidden') },
       permissionDenied: true,
     }));
     resetPermissionDeniedScopedDomainStates('cluster-a');

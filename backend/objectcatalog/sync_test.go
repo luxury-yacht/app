@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -31,7 +32,6 @@ import (
 	"k8s.io/client-go/discovery"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
-	"k8s.io/client-go/informers"
 	kubernetesfake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 )
@@ -852,93 +852,66 @@ func (r *recordingTelemetry) count() int {
 	return len(r.entries)
 }
 
+// orderedIngestSource records the catalog's reads of a tracked Namespace
+// store: each readiness check as "wait" and the row read as "collect".
+type orderedIngestSource struct {
+	*controlledIngestSource
+	record func(string)
+	synced func() bool
+}
+
+func (s orderedIngestSource) Tracks(schema.GroupVersionResource) bool { return true }
+func (s orderedIngestSource) HasSyncedFor(schema.GroupVersionResource) bool {
+	s.record("wait")
+	return s.synced()
+}
+func (s orderedIngestSource) CatalogRows(schema.GroupVersionResource) []interface{} {
+	s.record("collect")
+	return nil
+}
+
 // TestSyncWaitsForCachesBetweenPreflightAndCollect pins the catalog startup overlap:
 // discovery and the RBAC preflight are pure API calls and must run BEFORE the
-// informer settle wait (so they overlap the factory's ~10s initial sync); only the
-// collect — which reads listers — runs after the wait. Cancellation during the
+// source settle wait (so they overlap the sources' initial sync); only the
+// collect, which reads the stores, runs after the wait. Cancellation during the
 // wait aborts the sync before any collect.
 func TestSyncWaitsForCachesBetweenPreflightAndCollect(t *testing.T) {
-	newFixture := func(readiness InformerReadiness, order *[]string, mu *sync.Mutex) *Service {
+	newFixture := func(synced func() bool, order *[]string, mu *sync.Mutex) *Service {
 		record := func(step string) {
 			mu.Lock()
 			*order = append(*order, step)
 			mu.Unlock()
 		}
-
-		scheme := runtime.NewScheme()
-		replicaSetGVK := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "ReplicaSet"}
-		scheme.AddKnownTypeWithName(replicaSetGVK, &unstructured.Unstructured{})
-		scheme.AddKnownTypeWithName(replicaSetGVK.GroupVersion().WithKind("ReplicaSetList"), &unstructured.UnstructuredList{})
-		dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
-			{Group: "apps", Version: "v1", Resource: "replicasets"}: "ReplicaSetList",
-		})
-		dyn.PrependReactor("list", "replicasets", func(k8stesting.Action) (bool, runtime.Object, error) {
-			record("collect")
-			return false, nil, nil
-		})
-
 		client := kubernetesfake.NewClientset()
 		baseDiscovery := client.Discovery().(*fakediscovery.FakeDiscovery)
 		hooked := &hookedPreferredDiscovery{
 			preferredDiscovery: &preferredDiscovery{FakeDiscovery: baseDiscovery, resources: []*metav1.APIResourceList{{
-				GroupVersion: "apps/v1",
-				APIResources: []metav1.APIResource{{Name: "replicasets", Namespaced: true, Kind: "ReplicaSet", Verbs: []string{"list"}}},
+				GroupVersion: "v1",
+				APIResources: []metav1.APIResource{{Name: "namespaces", Namespaced: false, Kind: "Namespace", Verbs: []string{"list"}}},
 			}}},
 			onDiscover: func() { record("discover") },
 		}
-
 		return NewService(Dependencies{
 			Common: common.Dependencies{
 				KubernetesClient: &discoveryOverrideClient{Clientset: client, discovery: hooked},
-				DynamicClient:    dyn,
+				DynamicClient:    dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
 			},
-			InformerReadiness: readiness,
+			IngestSource: orderedIngestSource{controlledIngestSource: &controlledIngestSource{checked: make(chan struct{})}, record: record, synced: synced},
 		}, nil)
 	}
 
 	t.Run("wait sits between discovery and collect", func(t *testing.T) {
 		var mu sync.Mutex
 		var order []string
-		var requested [][]string
-		svc := newFixture(informerReadinessStub{settled: func(keys []string) bool {
-			mu.Lock()
-			order = append(order, "wait")
-			requested = append(requested, keys)
-			mu.Unlock()
-			return true
-		}}, &order, &mu)
+		svc := newFixture(func() bool { return true }, &order, &mu)
 
-		if err := svc.sync(context.Background()); err != nil {
-			t.Fatalf("sync failed: %v", err)
-		}
+		require.NoError(t, svc.sync(context.Background()))
 
 		mu.Lock()
 		defer mu.Unlock()
-		index := func(step string) int {
-			for i, s := range order {
-				if s == step {
-					return i
-				}
-			}
-			return -1
-		}
-		waits := 0
-		for _, s := range order {
-			if s == "wait" {
-				waits++
-			}
-		}
-		if waits != 1 {
-			t.Fatalf("expected exactly one cache wait per sync, got %d (order %v)", waits, order)
-		}
-		if !(index("discover") >= 0 && index("discover") < index("wait")) {
-			t.Fatalf("discovery must run BEFORE the cache wait (overlap), order %v", order)
-		}
-		if !(index("collect") >= 0 && index("wait") < index("collect")) {
-			t.Fatalf("the collect must run AFTER the cache wait, order %v", order)
-		}
-		require.Equal(t, [][]string{{"apps/replicasets"}}, requested,
-			"the wait must ask the factory only about the informers collection reads")
+		first := func(step string) int { return slices.Index(order, step) }
+		require.True(t, first("discover") >= 0 && first("discover") < first("wait"), "discovery must run BEFORE the source wait (overlap), order %v", order)
+		require.True(t, first("collect") >= 0 && first("wait") < first("collect"), "the collect must run AFTER the source wait, order %v", order)
 	})
 
 	t.Run("canceled wait aborts the sync before any collect", func(t *testing.T) {
@@ -946,42 +919,17 @@ func TestSyncWaitsForCachesBetweenPreflightAndCollect(t *testing.T) {
 		var order []string
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		svc := newFixture(informerReadinessStub{settled: func([]string) bool {
+		svc := newFixture(func() bool {
 			cancel()
 			return false
-		}}, &order, &mu)
+		}, &order, &mu)
 
 		err := svc.sync(ctx)
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("expected sync to stop with the wait's cancellation, got %v", err)
-		}
+		require.ErrorIs(t, err, context.Canceled)
 		mu.Lock()
 		defer mu.Unlock()
-		for _, s := range order {
-			if s == "collect" {
-				t.Fatalf("no collect may run when the cache wait was canceled, order %v", order)
-			}
-		}
+		require.NotContains(t, order, "collect", "no collect may run when the source wait was canceled")
 	})
-}
-
-// informerReadinessStub reports every requested informer with one readiness
-// state and, when settled is set, delegates the settle check to it.
-type informerReadinessStub struct {
-	settled   func(keys []string) bool
-	readiness refresh.ResourceReadiness
-}
-
-func (s informerReadinessStub) ResourcesSettled(keys []string) bool {
-	return s.settled == nil || s.settled(keys)
-}
-
-func (s informerReadinessStub) ResourceReadiness(keys []string) map[string]refresh.ResourceReadiness {
-	states := make(map[string]refresh.ResourceReadiness, len(keys))
-	for _, key := range keys {
-		states[key] = s.readiness
-	}
-	return states
 }
 
 func TestCatalogContinuesWithPartialSyncWhenTrackedIngestNeverStarts(t *testing.T) {
@@ -1084,9 +1032,8 @@ func TestFailedInitialSyncRetriesWhileReactiveRegistrationBlocks(t *testing.T) {
 			KubernetesClient: &discoveryOverrideClient{Clientset: client, discovery: failing},
 			DynamicClient:    dyn,
 		},
-		Telemetry:       rec,
-		InformerFactory: informers.NewSharedInformerFactory(client, 0),
-		IngestSource:    &blockingIngestSource{release: release},
+		Telemetry:    rec,
+		IngestSource: &blockingIngestSource{release: release},
 	}, &Options{
 		EnableReactiveUpdates:   true,
 		ResyncInterval:          time.Hour,
@@ -1298,8 +1245,16 @@ func (source *blockingIngestSource) SubscribeCatalogSink(gvr schema.GroupVersion
 	return func() {}
 }
 
+func (*blockingIngestSource) SubscribeBundleSink(schema.GroupVersionResource, ingest.BundleSink) func() {
+	return func() {}
+}
+
 func (source *controlledIngestSource) SubscribeCatalogSink(gvr schema.GroupVersionResource, sink ingest.Sink) func() {
 	source.AddCatalogSink(gvr, sink)
+	return func() {}
+}
+
+func (*controlledIngestSource) SubscribeBundleSink(schema.GroupVersionResource, ingest.BundleSink) func() {
 	return func() {}
 }
 
@@ -1307,6 +1262,19 @@ func (*blockingIngestSource) PartitionReadinessFor(schema.GroupVersionResource) 
 	return nil
 }
 
-func (*controlledIngestSource) PartitionReadinessFor(schema.GroupVersionResource) []ingest.PartitionReadiness {
-	return nil
+func (s *controlledIngestSource) PartitionReadinessFor(schema.GroupVersionResource) []ingest.PartitionReadiness {
+	return clusterWidePartition(s.synced.Load())
+}
+
+func (s orderedIngestSource) PartitionReadinessFor(schema.GroupVersionResource) []ingest.PartitionReadiness {
+	return clusterWidePartition(s.synced())
+}
+
+// clusterWidePartition is the readiness the ingest manager reports for an
+// unscoped store: one cluster-wide partition, Ready once it has synced.
+func clusterWidePartition(synced bool) []ingest.PartitionReadiness {
+	if !synced {
+		return []ingest.PartitionReadiness{{State: refresh.ResourceReadinessPending}}
+	}
+	return []ingest.PartitionReadiness{{State: refresh.ResourceReadinessReady}}
 }

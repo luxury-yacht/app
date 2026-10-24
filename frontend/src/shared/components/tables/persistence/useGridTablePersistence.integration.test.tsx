@@ -14,7 +14,10 @@ import type React from 'react';
 import { act, useEffect } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
+import {
+  resetAppPreferencesCacheForTesting,
+  setGridTablePersistenceMode,
+} from '@/core/settings/appPreferences';
 import { requireValue } from '@/test-utils/requireValue';
 import {
   buildGridTableStorageKey,
@@ -23,7 +26,6 @@ import {
   resetGridTablePersistenceCacheForTesting,
 } from './gridTablePersistence';
 import { clearAllGridTableState } from './gridTablePersistenceReset';
-import { setGridTablePersistenceMode } from './gridTablePersistenceSettings';
 import { useGridTablePersistence } from './useGridTablePersistence';
 
 type Row = { id: string };

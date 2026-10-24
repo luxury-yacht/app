@@ -16,8 +16,9 @@ import {
   multiSelectFilterTriggerLabel,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
-import { PlusIcon, ResetFiltersIcon } from '@shared/components/icons/SharedIcons';
+import { ColumnsIcon, PlusIcon, ResetFiltersIcon } from '@shared/components/icons/SharedIcons';
 import SearchInput from '@shared/components/inputs/SearchInput';
+import { StatusChip } from '@shared/components/StatusChip';
 import Tooltip from '@shared/components/Tooltip';
 import type {
   GridTableFilterState,
@@ -47,7 +48,8 @@ interface GridTableFiltersBarProps {
   onSearchChange: (value: string) => void;
   onReset: () => void;
   renderOption: (option: DropdownOption, isSelected: boolean) => React.ReactNode;
-  renderColumnsValue?: (value: string | string[], options: DropdownOption[]) => React.ReactNode;
+  /** Columns the user has hidden; the Columns button is highlighted and names the count. */
+  columnsHiddenCount?: number;
   columnOptions?: DropdownOption[];
   columnValue?: string[];
   onColumnsChange?: (value: string | string[]) => void;
@@ -70,6 +72,8 @@ interface GridTableFiltersBarProps {
   preActions?: IconBarItem[];
   /** IconBar items rendered after a separator following the preceding actions (e.g. Load More). */
   postActions?: IconBarItem[];
+  /** IconBar items at the end of the bar, after Columns (e.g. an attached table's Close). */
+  trailingActions?: IconBarItem[];
   /** Filter feedback shown after the active filter chips: N matching of M in scope. */
   resultCount?: {
     /** N — items matching the active filters (a total, not the current page). */
@@ -103,10 +107,6 @@ interface ResolvedMultiselectFilterControl {
   onChange: (value: string | string[]) => void;
   onClear: () => void;
 }
-
-type PrimaryFilterItem =
-  | { type: 'control'; control: ResolvedMultiselectFilterControl }
-  | { type: 'before-namespace-actions'; items: IconBarItem[] };
 
 function formatResultCountLabel(
   resultCount: NonNullable<GridTableFiltersBarProps['resultCount']>
@@ -205,11 +205,6 @@ function renderResultCountChip(
                   configured exact-count budget.
                 </p>
               )}
-              {!!resultCount.partialDataLabel && (
-                <p className="gridtable-filter-result-tooltip-paragraph">
-                  {resultCount.partialDataLabel}
-                </p>
-              )}
               <p className="gridtable-filter-result-tooltip-paragraph">
                 {searchBehavior === 'query'
                   ? 'This table is showing the current backend query page.'
@@ -232,6 +227,24 @@ function renderResultCountChip(
   );
 }
 
+// Partial data is marked whether or not a filter is active; the chip explains it.
+function renderPartialDataChip(label: string | undefined): React.ReactNode {
+  if (!label) {
+    return undefined;
+  }
+  return (
+    <output className="active-filter-chips__summary" data-gridtable-filter-role="partial-data">
+      <StatusChip
+        variant="warning"
+        tooltip={<p className="gridtable-filter-result-tooltip-paragraph">{label}</p>}
+      >
+        Partial
+      </StatusChip>
+      <span className="sr-only">{label}</span>
+    </output>
+  );
+}
+
 interface ColumnsDropdownOptions {
   show: boolean;
   id: string;
@@ -244,8 +257,12 @@ interface ColumnsDropdownOptions {
   onResetColumns: GridTableFiltersBarProps['onResetColumns'];
   canResetColumns: boolean;
   onAddCustomMetadataColumn: GridTableFiltersBarProps['onAddCustomMetadataColumn'];
-  renderColumnsValue: NonNullable<GridTableFiltersBarProps['renderColumnsValue']>;
+  hiddenCount: number;
 }
+
+// Hidden columns persist per cluster and view, so the closed button discloses them.
+const columnsButtonLabel = (hiddenCount: number): string =>
+  hiddenCount > 0 ? `Columns (${hiddenCount} hidden)` : 'Columns';
 
 function renderColumnsDropdown({
   show,
@@ -259,7 +276,7 @@ function renderColumnsDropdown({
   onResetColumns,
   canResetColumns,
   onAddCustomMetadataColumn,
-  renderColumnsValue,
+  hiddenCount,
 }: ColumnsDropdownOptions): React.ReactNode {
   if (!show || !columnOptions || !columnValue || !onColumnsChange) {
     return null;
@@ -272,6 +289,11 @@ function renderColumnsDropdown({
         multiple
         showBulkActions
         placeholder="Columns"
+        iconTrigger={{
+          icon: <ColumnsIcon width={18} height={18} />,
+          label: columnsButtonLabel(hiddenCount),
+          active: hiddenCount > 0,
+        }}
         value={columnValue}
         options={columnOptions}
         disabled={!columnOptions.length}
@@ -322,7 +344,6 @@ function renderColumnsDropdown({
             )}
           </>
         )}
-        renderValue={renderColumnsValue}
       />
     </div>
   );
@@ -345,7 +366,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   onSearchChange,
   onReset,
   renderOption,
-  renderColumnsValue = () => 'Columns',
+  columnsHiddenCount = 0,
   columnOptions,
   columnValue,
   onColumnsChange,
@@ -366,6 +387,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   containerRef,
   preActions,
   postActions,
+  trailingActions,
   resultCount,
 }) => {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -470,22 +492,12 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   const controlsAt = (placement: FilterControlPlacement): ResolvedMultiselectFilterControl[] =>
     filterControls.filter((control) => control.visible && control.placement === placement);
 
-  const asItems = (controls: ResolvedMultiselectFilterControl[]): PrimaryFilterItem[] =>
-    controls.map((control) => ({ type: 'control', control }));
-  const primaryFilterItems: PrimaryFilterItem[] = [
-    ...asItems(controlsAt('before-kinds')),
-    ...asItems(controlsAt('kind')),
-    ...(resolvedFilterOptions.beforeNamespaceActions?.length
-      ? [
-          {
-            type: 'before-namespace-actions' as const,
-            items: resolvedFilterOptions.beforeNamespaceActions,
-          },
-        ]
-      : []),
-    ...asItems(controlsAt('namespace')),
-    ...asItems(controlsAt('cluster')),
-    ...asItems(controlsAt('after-clusters')),
+  const primaryFilterControls = [
+    ...controlsAt('before-kinds'),
+    ...controlsAt('kind'),
+    ...controlsAt('namespace'),
+    ...controlsAt('cluster'),
+    ...controlsAt('after-clusters'),
   ];
 
   const activeFilterChips = buildActiveFilterChips(activeFilters, filterControls, onFiltersChange);
@@ -562,26 +574,22 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
     hasNarrowingFilters,
     resolvedFilterOptions.searchBehavior
   );
+  const partialDataChip = renderPartialDataChip(resultCount?.partialDataLabel);
+  const summary =
+    resultCountChip || partialDataChip ? (
+      <>
+        {resultCountChip}
+        {partialDataChip}
+      </>
+    ) : undefined;
 
   return (
     <div className="gridtable-filter-container">
       <div className="gridtable-filter-bar" ref={containerRef}>
         <div className="gridtable-filter-cluster" data-gridtable-filter-cluster="primary">
-          {!!primaryFilterItems.length && (
+          {!!primaryFilterControls.length && (
             <div className="gridtable-filter-subcluster">
-              {primaryFilterItems.map((item) =>
-                item.type === 'control' ? (
-                  renderFilterControl(item.control)
-                ) : (
-                  <div
-                    key="before-namespace-actions"
-                    className="gridtable-filter-group"
-                    data-gridtable-filter-role="before-namespace-actions"
-                  >
-                    <IconBar items={item.items} />
-                  </div>
-                )
-              )}
+              {primaryFilterControls.map(renderFilterControl)}
             </div>
           )}
           <div className="gridtable-filter-subcluster">
@@ -614,15 +622,16 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
             onResetColumns,
             canResetColumns,
             onAddCustomMetadataColumn,
-            renderColumnsValue,
+            hiddenCount: columnsHiddenCount,
           })}
+          {!!trailingActions?.length && <IconBar items={trailingActions} />}
         </div>
       </div>
       <ActiveFilterChips
         ariaLabel="Active GridTable filters"
         chips={activeFilterChips}
         onClearAll={onReset}
-        summary={resultCountChip}
+        summary={summary}
       />
     </div>
   );

@@ -26,7 +26,7 @@ const drainJob = (overrides: Partial<NodeMaintenanceDrainJob>): NodeMaintenanceD
 
 describe('node maintenance aggregate helpers', () => {
   it('builds the same aggregate scope that the refresh domain stores', () => {
-    expect(buildNodeMaintenanceAggregateScope('cluster-a')).toBe('cluster-a|aggregate');
+    expect(buildNodeMaintenanceAggregateScope('cluster-a')).toBe('cluster-a|');
   });
 
   it('collects drains from watched aggregate scopes only', () => {

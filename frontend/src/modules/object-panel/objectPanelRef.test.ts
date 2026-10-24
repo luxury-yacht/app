@@ -8,11 +8,13 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { parseRefreshScope } from '@/core/refresh/scopeSelector';
+
 import {
   getObjectPanelScopeEvictions,
   getObjectPanelScopes,
   hasCompleteObjectMapReference,
-  isObjectMapSupportedKind,
+  isObjectMapSupportedRef,
 } from './objectPanelRef';
 
 // The PodsTab leases a `pods` window per panel object (metrics arrive joined on
@@ -64,7 +66,7 @@ describe('getObjectPanelScopeEvictions pods window', () => {
 });
 
 describe('getObjectPanelScopes', () => {
-  it('normalises kind casing and builds scopes for standard resources', () => {
+  it('builds canonical object scopes from the object identity', () => {
     const result = getObjectPanelScopes({
       clusterId: 'cluster-1',
       group: '',
@@ -74,11 +76,9 @@ describe('getObjectPanelScopes', () => {
       version: 'v1',
     });
 
-    expect(result.objectKind).toBe('pod');
-    expect(result.detailScope).toBe('cluster-1|team-a:/v1:pod:api');
+    expect(result.detailScope).toBe('cluster-1|team-a:/v1:Pod:api');
     expect(result.helmScope).toBeNull();
     expect(result.isHelmRelease).toBe(false);
-    expect(result.isEvent).toBe(false);
   });
 
   it('returns null refresh scopes when cluster identity is missing', () => {
@@ -90,7 +90,6 @@ describe('getObjectPanelScopes', () => {
       version: 'v1',
     });
 
-    expect(result.objectKind).toBe('pod');
     expect(result.detailScope).toBeNull();
     expect(result.eventsScope).toBeNull();
     expect(result.containerLogsScope).toBeNull();
@@ -106,7 +105,6 @@ describe('getObjectPanelScopes', () => {
       namespace: 'team-a',
     });
 
-    expect(result.objectKind).toBe('deployment');
     expect(result.detailScope).toBeNull();
     expect(result.eventsScope).toBeNull();
     expect(result.containerLogsScope).toBeNull();
@@ -124,7 +122,6 @@ describe('getObjectPanelScopes', () => {
       version: 'v1',
     });
 
-    expect(result.objectKind).toBe('deployment');
     expect(result.detailScope).toBeNull();
     expect(result.eventsScope).toBeNull();
     expect(result.containerLogsScope).toBeNull();
@@ -133,18 +130,14 @@ describe('getObjectPanelScopes', () => {
   });
 
   it('falls back to cluster scope when namespace is empty', () => {
-    const result = getObjectPanelScopes(
-      {
-        clusterId: 'cluster-1',
-        kind: 'HelmRelease',
-        name: 'shopping-cart',
-        namespace: '',
-      },
-      { clusterScope: '__cluster__' }
-    );
+    const result = getObjectPanelScopes({
+      clusterId: 'cluster-1',
+      kind: 'HelmRelease',
+      name: 'shopping-cart',
+      namespace: '',
+    });
 
-    expect(result.objectKind).toBe('helmrelease');
-    expect(result.detailScope).toBe('cluster-1|__cluster__:helm.sh/v3:helmrelease:shopping-cart');
+    expect(result.detailScope).toBe('cluster-1|__cluster__:helm.sh/v3:HelmRelease:shopping-cart');
     expect(result.helmScope).toBe('cluster-1|__cluster__:shopping-cart');
     expect(result.isHelmRelease).toBe(true);
   });
@@ -159,9 +152,8 @@ describe('getObjectPanelScopes', () => {
       clusterId: 'cluster-1',
     });
 
-    expect(result.objectKind).toBe('helmrelease');
     expect(result.detailScope).toBe(
-      'cluster-1|apps:helm.toolkit.fluxcd.io/v2:helmrelease:flux-app'
+      'cluster-1|apps:helm.toolkit.fluxcd.io/v2:HelmRelease:flux-app'
     );
     expect(result.eventsScope).toBe(
       'cluster-1|apps:helm.toolkit.fluxcd.io/v2:HelmRelease:flux-app'
@@ -170,25 +162,10 @@ describe('getObjectPanelScopes', () => {
     expect(result.isHelmRelease).toBe(false);
   });
 
-  it('marks event resources with event-specific flag', () => {
-    const result = getObjectPanelScopes({
-      clusterId: 'cluster-1',
-      group: '',
-      kind: 'Event',
-      name: 'warning-123',
-      namespace: 'default',
-      version: 'v1',
-    });
-
-    expect(result.isEvent).toBe(true);
-    expect(result.detailScope).toBe('cluster-1|default:/v1:event:warning-123');
-  });
-
   it('emits the GVK scope form when PanelObjectData carries group and version', () => {
-    // Two different DBInstance CRDs share the lowercased kind "dbinstance"
-    // but come from different API groups. With the GVK form threaded
-    // through, the detailScope carries the full group/version so the
-    // backend can disambiguate.
+    // Two different DBInstance CRDs share the kind but come from different
+    // API groups; the scope carries the full group/version so the backend can
+    // disambiguate.
     const result = getObjectPanelScopes({
       kind: 'DBInstance',
       name: 'my-db',
@@ -198,9 +175,8 @@ describe('getObjectPanelScopes', () => {
       version: 'v1alpha1',
     });
 
-    expect(result.objectKind).toBe('dbinstance');
     expect(result.detailScope).toBe(
-      'cluster-1|default:rds.services.k8s.aws/v1alpha1:dbinstance:my-db'
+      'cluster-1|default:rds.services.k8s.aws/v1alpha1:DBInstance:my-db'
     );
   });
 
@@ -217,15 +193,13 @@ describe('getObjectPanelScopes', () => {
       version: 'v1',
     });
 
-    expect(result.detailScope).toBe('cluster-1|team-a:/v1:pod:api');
+    expect(result.detailScope).toBe('cluster-1|team-a:/v1:Pod:api');
   });
 
-  it('builds eventsScope from the original-case kind so a single source of truth feeds both consumers', () => {
-    // The events refresh-domain producer expects the kind in its
-    // original case (matches how the backend events fetcher keys its
-    // dispatch). detailScope uses the lowercased form. ObjectPanelContent
-    // and EventsTab both consume eventsScope and MUST agree on the same
-    // string — keep the computation in one place.
+  it('encodes one object scope for details, events, logs, and the map', () => {
+    // Every object-scoped domain decodes the same object selector, so the
+    // panel's consumers (ObjectPanelContent, EventsTab, LogViewer, map) share
+    // one canonical string and its cache entries.
     const result = getObjectPanelScopes({
       kind: 'Deployment',
       name: 'api',
@@ -235,9 +209,42 @@ describe('getObjectPanelScopes', () => {
       version: 'v1',
     });
 
-    // detailScope is lowercase; eventsScope keeps the original case.
-    expect(result.detailScope).toBe('cluster-1|team-a:apps/v1:deployment:api');
-    expect(result.eventsScope).toBe('cluster-1|team-a:apps/v1:Deployment:api');
+    expect(result.detailScope).toBe('cluster-1|team-a:apps/v1:Deployment:api');
+    expect(result.eventsScope).toBe(result.detailScope);
+    expect(result.containerLogsScope).toBe(result.detailScope);
+    expect(result.mapScope).toBe(result.detailScope);
+  });
+
+  // RBAC names may contain "?"; the panel must still build its scopes, and the
+  // map must address the real object rather than a truncated name and a query.
+  it('builds panel scopes for an object whose name contains "?"', () => {
+    const result = getObjectPanelScopes({
+      kind: 'Role',
+      name: 'reader?team',
+      namespace: 'team-a',
+      clusterId: 'cluster-1',
+      group: 'rbac.authorization.k8s.io',
+      version: 'v1',
+    });
+
+    expect(result.detailScope).toBe(
+      'cluster-1|team-a:rbac.authorization.k8s.io/v1:Role:reader%3Fteam'
+    );
+    expect(result.mapScope).toBe(result.detailScope);
+    expect(parseRefreshScope('object-map', result.mapScope ?? '')).toEqual({
+      clusterId: 'cluster-1',
+      selector: {
+        kind: 'object',
+        object: {
+          namespace: 'team-a',
+          group: 'rbac.authorization.k8s.io',
+          version: 'v1',
+          kind: 'Role',
+          name: 'reader?team',
+        },
+      },
+      query: '',
+    });
   });
 
   it('threads group/version into eventsScope when PanelObjectData carries them', () => {
@@ -261,25 +268,6 @@ describe('getObjectPanelScopes', () => {
     expect(getObjectPanelScopes({ name: 'api' }).eventsScope).toBeNull();
   });
 
-  it('builds containerLogsScope using the lowercased kind so ObjectPanelContent and LogViewer agree', () => {
-    // containerLogsScope is consumed by ObjectPanelContent (full-cleanup lifecycle
-    // when the panel closes) AND by LogViewer (the actual streaming
-    // start/stop). The two consumers used to compute their own scope
-    // strings independently — same drift bug as eventsScope. The log
-    // domain producer expects the lowercased kind (matches LogViewer's
-    // historical convention), distinct from eventsScope's original case.
-    const result = getObjectPanelScopes({
-      kind: 'Deployment',
-      name: 'api',
-      namespace: 'team-a',
-      clusterId: 'cluster-1',
-      group: 'apps',
-      version: 'v1',
-    });
-
-    expect(result.containerLogsScope).toBe('cluster-1|team-a:apps/v1:deployment:api');
-  });
-
   it('threads group/version into containerLogsScope when PanelObjectData carries them', () => {
     const result = getObjectPanelScopes({
       kind: 'Deployment',
@@ -290,7 +278,7 @@ describe('getObjectPanelScopes', () => {
       clusterId: 'cluster-1',
     });
 
-    expect(result.containerLogsScope).toBe('cluster-1|team-a:apps/v1:deployment:api');
+    expect(result.containerLogsScope).toBe('cluster-1|team-a:apps/v1:Deployment:api');
   });
 
   it('keeps colliding kinds distinct in containerLogsScope by threading group/version', () => {
@@ -312,10 +300,10 @@ describe('getObjectPanelScopes', () => {
     });
 
     expect(first.containerLogsScope).toBe(
-      'cluster-1|team-a:rds.services.k8s.aws/v1alpha1:dbinstance:orders'
+      'cluster-1|team-a:rds.services.k8s.aws/v1alpha1:DBInstance:orders'
     );
     expect(second.containerLogsScope).toBe(
-      'cluster-1|team-a:documentdb.services.k8s.aws/v1alpha1:dbinstance:orders'
+      'cluster-1|team-a:documentdb.services.k8s.aws/v1alpha1:DBInstance:orders'
     );
     expect(first.containerLogsScope).not.toBe(second.containerLogsScope);
   });
@@ -344,6 +332,35 @@ describe('getObjectPanelScopes', () => {
       clusterId: 'cluster-1',
     });
     expect(result.mapScope).toBe('cluster-1|team-a:apps/v1:Deployment:api');
+  });
+
+  it('builds a Helm release mapScope from the release identity and evicts it with the panel', () => {
+    const release = {
+      kind: 'HelmRelease',
+      name: 'shopping-cart',
+      namespace: 'apps',
+      clusterId: 'cluster-1',
+    };
+    const mapScope = 'cluster-1|apps:helm.sh/v3:HelmRelease:shopping-cart';
+
+    expect(getObjectPanelScopes(release).mapScope).toBe(mapScope);
+    expect(getObjectPanelScopeEvictions(release)).toContainEqual({
+      domain: 'object-map',
+      scope: mapScope,
+    });
+  });
+
+  it('offers maps for Helm releases but not for Flux HelmRelease custom resources', () => {
+    expect(isObjectMapSupportedRef({ group: 'helm.sh', version: 'v3', kind: 'HelmRelease' })).toBe(
+      true
+    );
+    expect(
+      isObjectMapSupportedRef({
+        group: 'helm.toolkit.fluxcd.io',
+        version: 'v2',
+        kind: 'HelmRelease',
+      })
+    ).toBe(false);
   });
 
   it('returns null mapScope when objectData is incomplete', () => {
@@ -396,8 +413,38 @@ describe('getObjectPanelScopes', () => {
     expect(hasCompleteObjectMapReference({ ...ref, version: undefined })).toBe(false);
   });
 
+  it('does not treat custom resources that share a built-in kind name as map seeds', () => {
+    for (const ref of [
+      { group: 'networking.istio.io', version: 'v1beta1', kind: 'Gateway' },
+      { group: 'crd.projectcalico.org', version: 'v3', kind: 'NetworkPolicy' },
+      { group: 'serving.knative.dev', version: 'v1', kind: 'Service' },
+    ]) {
+      const object = { clusterId: 'cluster-a', namespace: 'default', name: 'web', ...ref };
+      expect(hasCompleteObjectMapReference(object), ref.group).toBe(false);
+      expect(getObjectPanelScopes(object).mapScope, ref.group).toBeNull();
+    }
+  });
+
+  it('supports both served HorizontalPodAutoscaler versions as map seeds', () => {
+    for (const version of ['v1', 'v2']) {
+      expect(
+        hasCompleteObjectMapReference({
+          clusterId: 'cluster-a',
+          group: 'autoscaling',
+          version,
+          kind: 'HorizontalPodAutoscaler',
+          namespace: 'default',
+          name: 'web',
+        }),
+        version
+      ).toBe(true);
+    }
+  });
+
   it('supports policy resources as object-map seeds', () => {
-    expect(isObjectMapSupportedKind('PodDisruptionBudget')).toBe(true);
+    expect(
+      isObjectMapSupportedRef({ group: 'policy', version: 'v1', kind: 'PodDisruptionBudget' })
+    ).toBe(true);
     expect(
       hasCompleteObjectMapReference({
         clusterId: 'cluster-a',
@@ -411,7 +458,9 @@ describe('getObjectPanelScopes', () => {
   });
 
   it('supports network policies as object-map seeds', () => {
-    expect(isObjectMapSupportedKind('NetworkPolicy')).toBe(true);
+    expect(
+      isObjectMapSupportedRef({ group: 'networking.k8s.io', version: 'v1', kind: 'NetworkPolicy' })
+    ).toBe(true);
     expect(
       hasCompleteObjectMapReference({
         clusterId: 'cluster-a',
@@ -435,7 +484,9 @@ describe('getObjectPanelScopes', () => {
       'ReferenceGrant',
       'BackendTLSPolicy',
     ]) {
-      expect(isObjectMapSupportedKind(kind)).toBe(true);
+      expect(
+        isObjectMapSupportedRef({ group: 'gateway.networking.k8s.io', version: 'v1', kind })
+      ).toBe(true);
     }
 
     expect(

@@ -32,8 +32,10 @@ freshness presentation, and object-panel leases. It is not a second cache.
 - Pod panels lease a `pods` namespace scope, workload panels a
   `namespace-workloads` namespace scope, and node panels a `nodes` cluster
   scope.
-- ReplicaSets have no panel metrics until pod rows expose both direct and
-  resolved owner identity.
+- Which kinds have panel metrics, and from which domain, is the kind's
+  `Metrics` facet in the backend kind registry, generated into
+  `shared/kinds/kindFacets.generated.ts` (`metricsDomain`). ReplicaSets have
+  none: `namespace-workloads` has no ReplicaSet rows.
 - Namespace list/table consumers use the namespace context's object/metric
   composition (`NamespaceContext.tsx`), not `useResourceMetrics`.
 - Object detail values may be an initial fallback while refresh data is
@@ -61,10 +63,12 @@ and a chart of samples collected since the panel opened. The Details tab has
 no utilization section and holds no metrics lease.
 
 - **Availability:** `useObjectPanelTabs` offers the tab when
-  `resolveResourceMetricsScope` serves the object from a refresh domain (Pods,
-  Nodes, Deployments, StatefulSets, DaemonSets with built-in group/version).
-  ReplicaSets, other kinds, custom resources sharing a built-in kind name, and
-  Helm releases get no tab. Do not gate it with a separate kind list.
+  `resolveResourceMetricsScope` serves the object from a refresh domain: its
+  kind facets, matched by complete identity, name a `metricsDomain` (today
+  Pods, Nodes, Deployments, StatefulSets, and DaemonSets). Other kinds, custom
+  resources sharing a built-in kind name, unserved versions, and Helm releases
+  get no tab. Do not gate it with a separate kind list; change the kind's
+  descriptor facet.
 - **Utilization bars** show current usage against requests, limits, and a
   Node's allocatable, using detail values until the first live sample. The
   legend lists use, peak (highest charted usage, once samples exist), request,

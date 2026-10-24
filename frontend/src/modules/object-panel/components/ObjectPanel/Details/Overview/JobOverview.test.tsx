@@ -6,22 +6,17 @@
 
 import type { cronjob, job } from '@core/backend-api/models';
 import type React from 'react';
-import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  installAppStateHarness,
+  type MountedApp,
+  type TestCluster,
+} from '@/test-utils/appState/harness';
 import { partialModelFixture } from '@/test-utils/partialModelFixture';
 import { cronJobDescriptor, jobDescriptor } from './descriptors/job';
 import { OverviewRenderer } from './OverviewRenderer';
 
-const defaultClusterId = 'alpha:ctx';
-const defaultClusterName = 'alpha';
-
-vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({
-    openWithObject: vi.fn(),
-    objectData: { clusterId: defaultClusterId, clusterName: defaultClusterName },
-  }),
-}));
+const app = installAppStateHarness();
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ResourceHeader: (props: { kind: string; name: string }) => (
@@ -48,46 +43,35 @@ const getValueForLabel = (container: HTMLElement, label: string) => {
 };
 
 describe('JobOverview', () => {
-  let container: HTMLDivElement;
-  let root: ReactDOM.Root;
+  let view: MountedApp;
+  let dev: TestCluster;
+  let container: HTMLElement;
 
   const renderJob = async (overrides: Record<string, unknown>) => {
-    await act(async () => {
-      root.render(
-        <OverviewRenderer
-          descriptor={jobDescriptor}
-          data={partialModelFixture<job.JobDetails>(overrides)}
-          context={{ clusterId: defaultClusterId, clusterName: defaultClusterName }}
-        />
-      );
-      await Promise.resolve();
-    });
+    await view.show(
+      <OverviewRenderer
+        descriptor={jobDescriptor}
+        data={partialModelFixture<job.JobDetails>(overrides)}
+        context={{ clusterId: dev.clusterId, clusterName: dev.clusterName }}
+      />
+    );
   };
 
   const renderCronJob = async (overrides: Record<string, unknown>) => {
-    await act(async () => {
-      root.render(
-        <OverviewRenderer
-          descriptor={cronJobDescriptor}
-          data={partialModelFixture<cronjob.CronJobDetails>(overrides)}
-          context={{ clusterId: defaultClusterId, clusterName: defaultClusterName }}
-        />
-      );
-      await Promise.resolve();
-    });
+    await view.show(
+      <OverviewRenderer
+        descriptor={cronJobDescriptor}
+        data={partialModelFixture<cronjob.CronJobDetails>(overrides)}
+        context={{ clusterId: dev.clusterId, clusterName: dev.clusterName }}
+      />
+    );
   };
 
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = ReactDOM.createRoot(container);
-  });
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
+  beforeEach(async () => {
+    dev = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, ['default', 'team']);
+    view = await app.render(null);
+    container = view.container;
   });
 
   it('renders job status details including active/failed counts', async () => {

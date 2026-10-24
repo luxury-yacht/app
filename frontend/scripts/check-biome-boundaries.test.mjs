@@ -85,6 +85,12 @@ describe('Biome architectural boundary plugins', () => {
     ['no-direct-clipboard-write', 'navigator.clipboard?.writeText(text);', 'writeClipboardText'],
     ['no-direct-clipboard-write', 'navigator?.clipboard?.writeText(text);', 'writeClipboardText'],
     ['no-direct-clipboard-write', 'navigator.clipboard?.write([item]);', 'writeClipboardText'],
+    ['no-direct-clipboard-read', 'void navigator.clipboard.readText();', 'readClipboardText'],
+    ['no-direct-clipboard-read', 'void clipboard.readText();', 'readClipboardText'],
+    ['no-direct-clipboard-read', 'void navigator.clipboard.read();', 'readClipboardText'],
+    ['no-direct-clipboard-read', 'void navigator.clipboard?.readText();', 'readClipboardText'],
+    ['no-direct-clipboard-read', 'void navigator?.clipboard?.readText();', 'readClipboardText'],
+    ['no-direct-clipboard-read', 'void navigator.clipboard?.read();', 'readClipboardText'],
     [
       'no-inline-error-text',
       'const loadError = "failed"; const View = () => <div>{loadError}</div>;',
@@ -137,6 +143,7 @@ describe('Biome architectural boundary plugins', () => {
     ['no-direct-permission-read', 'dataAccess.readPermissions();'],
     ['no-direct-refresh-orchestrator', 'dataAccess.refreshContext();'],
     ['no-direct-clipboard-write', 'void writeClipboardText(text);'],
+    ['no-direct-clipboard-read', 'void readClipboardText();'],
   ])('accepts boundary calls outside %s', (pluginName, source) => {
     const result = lintWithPlugin(pluginName, source);
 
@@ -163,6 +170,7 @@ describe('Biome architectural boundary plugins', () => {
     ['orchestrator.triggerManualRefreshForContext({});', 'triggerManualRefreshForContext'],
     ['console.error("load failed", error);', 'errorHandler'],
     ['void navigator.clipboard.writeText("copied");', 'writeClipboardText'],
+    ['void navigator.clipboard.readText();', 'readClipboardText'],
   ])('rejects forbidden calls through the real project config', (source, diagnostic) => {
     const result = lintWithProjectConfig(source);
 
@@ -210,5 +218,63 @@ describe('Biome architectural boundary plugins', () => {
     );
 
     expect(result.status).toBe(0);
+  });
+});
+
+describe('owned-state mock guard', () => {
+  const HARNESS_MESSAGE = 'installAppStateHarness';
+  const lintTest = (source) => {
+    const result = lintWithProjectConfig(
+      source,
+      path.join(process.cwd(), 'src'),
+      'adversarial.test.tsx'
+    );
+    return { status: result.status, output: `${result.stdout}\n${result.stderr}` };
+  };
+
+  // Through the real project config, so an unanchored or mis-scoped include
+  // (which Biome silently ignores) fails here instead of disabling the guard.
+  it.each([
+    ['an aliased owner', "vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({}));"],
+    [
+      'a relative owner on several lines',
+      "vi.mock(\n  '../config/KubeconfigContext',\n  () => ({})\n);",
+    ],
+    ['an automocked owner', "vi.mock('@/core/capabilities');"],
+    ['an owner replaced later', "vi.doMock('@/core/data-access', () => ({}));"],
+  ])('rejects mocking %s in a test file', (_case, source) => {
+    const result = lintTest(source);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain(HARNESS_MESSAGE);
+  });
+
+  it.each([
+    ['the backend API boundary', "vi.mock('@/core/backend-api', () => ({}));"],
+    [
+      'a module whose name only starts like an owner',
+      "vi.mock('@modules/kubernetes/config/KubeconfigContextLabel', () => ({}));",
+    ],
+  ])('allows mocking %s', (_case, source) => {
+    expect(lintTest(source).output).not.toContain(HARNESS_MESSAGE);
+  });
+
+  // A benchmark times one component's own work; real owners and StrictMode
+  // would add their cost to the measurement (John, 2026-10-22).
+  it('allows owner mocks in a benchmark file', () => {
+    const result = lintWithProjectConfig(
+      "vi.mock('@/core/refresh/orchestrator', () => ({}));",
+      path.join(process.cwd(), 'src'),
+      'adversarial.benchmark.test.tsx'
+    );
+
+    expect(`${result.stdout}\n${result.stderr}`).not.toContain(HARNESS_MESSAGE);
+  });
+
+  it('rejects an owned-state mock with the plugin alone', () => {
+    const result = lintWithPlugin('no-owned-state-mocks', "vi.mock('@/core/refresh', () => ({}));");
+
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toContain(HARNESS_MESSAGE);
   });
 });

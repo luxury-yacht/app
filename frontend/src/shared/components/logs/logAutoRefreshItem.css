@@ -1,0 +1,8 @@
+/* The auto-refresh icon: red stop while logs refresh, green play while they are stopped. */
+.log-auto-refresh-stop-icon {
+  color: var(--color-error);
+}
+
+.log-auto-refresh-play-icon {
+  color: var(--color-success);
+}

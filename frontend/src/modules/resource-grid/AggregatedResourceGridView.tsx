@@ -34,14 +34,15 @@ import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
+import { kindDisplayName } from '@shared/kinds/kindDisplay';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { useCallback, useMemo } from 'react';
+import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 import type { CanonicalResourceRef, RefreshDomain } from '@/core/refresh/types';
-import { useShortNames } from '@/hooks/useShortNames';
+import { usePreference } from '@/core/settings/usePreference';
 import type { NamespaceViewType } from '@/types/navigation/views';
 import type { KubernetesObjectReference } from '@/types/view-state';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
-import { getDisplayKind } from '@/utils/kindAliasMap';
 
 /** The row fields the shared skeleton itself reads. */
 export interface AggregatedRowBase {
@@ -80,7 +81,7 @@ export const createAggregatedIdentityColumns = <
     key: 'kind',
     getKind: (row) => row.ref.kind,
     getAlias: (row) => row.kindAlias,
-    getDisplayText: (row) => getDisplayKind(row.ref.kind, useShortResourceNames),
+    getDisplayText: (row) => kindDisplayName(row.ref, useShortResourceNames),
     onClick: identity.open,
     onAltClick: identity.navigate,
   }),
@@ -136,7 +137,7 @@ function useAggregatedGridCore<D extends AggregatedRowBase>(
   const { openWithObject } = useObjectPanel();
   const { navigateToView } = useNavigateToView();
   const { selectedClusterId, selectedClusterName } = useKubeconfig();
-  const useShortResourceNames = useShortNames();
+  const useShortResourceNames = usePreference('useShortResourceNames');
   const getObject = useCallback(
     (row: D) => ({ ...getAggregatedRowRef(row), clusterName: selectedClusterName }),
     [selectedClusterName]
@@ -219,7 +220,10 @@ function useAggregatedGridCore<D extends AggregatedRowBase>(
 export function ClusterAggregatedResourceGridView<
   P extends TypedQueryPayload,
   D extends AggregatedRowBase,
->({ spec, error }: Readonly<{ spec: AggregatedResourceGridViewSpec<D>; error?: string | null }>) {
+>({
+  spec,
+  error,
+}: Readonly<{ spec: AggregatedResourceGridViewSpec<D>; error?: RefreshFailure | null }>) {
   const core = useAggregatedGridCore(spec);
   const diagnosticsLabel = spec.labels.cluster ?? '';
 
@@ -299,7 +303,6 @@ export function NamespaceAggregatedResourceGridView<
     return cf.withNamespaceColumn(core.columns, {
       afterColumnKey: 'name',
       accessor: (row: D) => row.ref.namespace ?? '',
-      sortValue: (row: D) => (row.ref.namespace || '').toLowerCase(),
       ...namespaceColumnLink,
     });
   }, [core.columns, namespaceColumnLink, showNamespaceColumn]);

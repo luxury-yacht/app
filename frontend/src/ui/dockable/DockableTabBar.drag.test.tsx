@@ -7,45 +7,53 @@
  * drop zone, and assert against `ctx.tabGroups`.
  */
 
+import { TAB_DRAG_DATA_TYPE } from '@shared/components/tabs/dragCoordinator';
 import type React from 'react';
 import { act } from 'react';
-import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { installAppStateHarness } from '@/test-utils/appState/harness';
 import { requireValue } from '@/test-utils/requireValue';
-
-vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: vi.fn(() => ({
-    selectedClusterId: 'cluster-a',
-    selectedClusterIds: ['cluster-a'],
-  })),
-}));
-
-import { TAB_DRAG_DATA_TYPE } from '@shared/components/tabs/dragCoordinator';
 import { DockablePanelProvider, useDockablePanelContext } from './DockablePanelProvider';
 import { DockableTabBar } from './DockableTabBar';
 
-const renderWithProvider = async (
-  ui: React.ReactElement,
-  options: Omit<React.ComponentProps<typeof DockablePanelProvider>, 'children'> = {}
+// Each dock provider renders inside the production shell, under the real
+// cluster selection (test-utils/appState).
+const app = installAppStateHarness();
+
+type ProviderOptions = Omit<React.ComponentProps<typeof DockablePanelProvider>, 'children'>;
+
+/**
+ * Shows each entry under its own dock provider, as the docks of separate app
+ * windows would be, and returns each provider's host element.
+ */
+const showProviders = async (
+  ...entries: Array<{ ui: React.ReactElement; options?: ProviderOptions }>
 ) => {
-  const host = document.createElement('div');
-  document.body.appendChild(host);
-  const root = ReactDOM.createRoot(host);
-
-  await act(async () => {
-    root.render(<DockablePanelProvider {...options}>{ui}</DockablePanelProvider>);
-    await Promise.resolve();
-  });
-
+  const dev = app.cluster({ name: 'dev', context: 'alpha' });
+  app.namespaces(dev, ['default']);
+  const view = await app.render(null);
+  await view.show(
+    entries.map(({ ui, options }, index) => (
+      // biome-ignore lint/suspicious/noArrayIndexKey: entries are fixed for the mount
+      <div key={index} data-dock-host={index}>
+        <DockablePanelProvider {...options}>{ui}</DockablePanelProvider>
+      </div>
+    ))
+  );
   return {
-    host,
-    unmount: async () => {
-      await act(async () => {
-        root.unmount();
-      });
-      host.remove();
-    },
+    hosts: entries.map((_, index) =>
+      requireValue(
+        view.container.querySelector<HTMLElement>(`[data-dock-host="${index}"]`),
+        'dock host'
+      )
+    ),
+    unmount: () => view.clear(),
   };
+};
+
+const renderWithProvider = async (ui: React.ReactElement, options: ProviderOptions = {}) => {
+  const { hosts, unmount } = await showProviders({ ui, options });
+  return { host: hosts[0], unmount };
 };
 
 const setRect = (element: Element, left: number, right: number, top = 0, bottom = 28) => {
@@ -132,7 +140,9 @@ describe('DockableTabBar drag-and-drop (provider mode)', () => {
   });
 
   afterEach(() => {
-    document.body.replaceChildren();
+    document.querySelectorAll('.content').forEach((node) => {
+      node.remove();
+    });
   });
 
   it.each([
@@ -161,32 +171,46 @@ describe('DockableTabBar drag-and-drop (provider mode)', () => {
         clusterId: 'cluster-A',
         getTabSnapshot: () => tab,
       };
-      const source = await renderWithProvider(
-        <DockableTabBar
-          tabs={[{ panelId: 'panel-a', title: 'Pod A' }]}
-          activeTab="panel-a"
-          onTabClick={() => undefined}
-          groupKey="right"
-        />,
-        { tabDragIdentity: identity }
-      );
       const onExternalTabDrop = vi.fn();
-      const target = await renderWithProvider(
-        <DockableTabBar tabs={[]} activeTab={null} onTabClick={() => undefined} groupKey="right" />,
+      const {
+        hosts: [sourceHost, targetHost],
+        unmount,
+      } = await showProviders(
         {
-          tabDragIdentity: {
-            ...identity,
-            windowName: 'panel-target',
-            clusterId: String(cluster),
+          ui: (
+            <DockableTabBar
+              tabs={[{ panelId: 'panel-a', title: 'Pod A' }]}
+              activeTab="panel-a"
+              onTabClick={() => undefined}
+              groupKey="right"
+            />
+          ),
+          options: { tabDragIdentity: identity },
+        },
+        {
+          ui: (
+            <DockableTabBar
+              tabs={[]}
+              activeTab={null}
+              onTabClick={() => undefined}
+              groupKey="right"
+            />
+          ),
+          options: {
+            tabDragIdentity: {
+              ...identity,
+              windowName: 'panel-target',
+              clusterId: String(cluster),
+            },
+            onExternalTabDrop,
           },
-          onExternalTabDrop,
         }
       );
       try {
         const transfer = createDataTransfer();
-        const sourceTab = requireValue(source.host.querySelector('[role="tab"]'), 'source tab');
+        const sourceTab = requireValue(sourceHost.querySelector('[role="tab"]'), 'source tab');
         const targetBar = requireValue(
-          target.host.querySelector('.dockable-tab-bar-shell'),
+          targetHost.querySelector('.dockable-tab-bar-shell'),
           'target bar'
         );
         await act(async () => {
@@ -223,8 +247,7 @@ describe('DockableTabBar drag-and-drop (provider mode)', () => {
         });
         expect(onExternalTabDrop).toHaveBeenCalledTimes(accepted ? 1 : 0);
       } finally {
-        await source.unmount();
-        await target.unmount();
+        unmount();
       }
     }
   );
@@ -279,7 +302,7 @@ describe('DockableTabBar drag-and-drop (provider mode)', () => {
     expect(dataTransfer.getData(TAB_DRAG_DATA_TYPE)).toContain('p1');
     expect(dataTransfer.getData(TAB_DRAG_DATA_TYPE)).toContain('right');
 
-    await unmount();
+    unmount();
   });
 
   it('reorders tabs within the same group on drop', async () => {
@@ -349,7 +372,7 @@ describe('DockableTabBar drag-and-drop (provider mode)', () => {
         .bottom.tabs
     ).toEqual(['p2', 'p3', 'p1']);
 
-    await unmount();
+    unmount();
   });
 
   it('moves a dragged tab to a different group on cross-group drop', async () => {
@@ -435,6 +458,6 @@ describe('DockableTabBar drag-and-drop (provider mode)', () => {
         .right.tabs
     ).toEqual(['r1', 'p1']);
 
-    await unmount();
+    unmount();
   });
 });

@@ -61,7 +61,7 @@ export const useClusterOverviewNavigation = ({
         return;
       }
       setSelectedNamespace(ALL_NAMESPACES_SCOPE);
-      navigation.setActiveNamespaceTab('workloads');
+      navigation.setActiveNamespaceTab('pods');
       navigation.setSidebarSelection({ type: 'namespace', value: ALL_NAMESPACES_SCOPE });
       navigation.navigateToNamespace();
     },

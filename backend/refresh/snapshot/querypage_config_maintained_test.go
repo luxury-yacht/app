@@ -57,7 +57,7 @@ func newNamespaceIndexer() cache.Indexer {
 	})
 }
 
-// TestConfigMaintainedStoreIngestion proves the informer-fed store reflects
+// TestConfigMaintainedStoreIngestion proves the reflector-fed store reflects
 // Add/Update/Delete (incl. tombstone), tracks the max resourceVersion, and projects
 // rows identically to a direct BuildStreamSummary.
 func TestConfigMaintainedStoreIngestion(t *testing.T) {
@@ -152,10 +152,9 @@ func TestConfigMaintainedStoreBulkReplaceScopesSourceKind(t *testing.T) {
 	sec := secObj("default", "sec-a", "5", map[string][]byte{"t": []byte("x")})
 	secRow, ok := secDesc.StreamRow(meta, sec).(ConfigSummary)
 	require.True(t, ok)
-	store.Sink().Upsert(secRow)
+	unpublishedSink(store, "").Upsert(secRow)
 
-	cmSink, ok := store.bundleSinkFor(cmDesc).(ingest.BundleReplacer)
-	require.True(t, ok, "source-scoped maintained sink must support bulk bundle replace")
+	var cmSink ingest.BundleReplacer = unpublishedSink(store, cmDesc.Kind)
 	projectCatalog := objectcatalog.SummaryProjector(meta.ClusterID, configmap.Identity)
 	cmSink.ReplaceBundles([]ingest.Bundle{{
 		Table:   cmDesc.StreamRow(meta, cmObj("default", "cm-a", "10", map[string]string{"k": "v"})),
@@ -204,8 +203,8 @@ func TestNamespaceConfigBuilderMaintainedMatchesListPath(t *testing.T) {
 	}
 
 	collect := configCollectIndexer(cmIdx, secIdx)
-	listBuilder := &NamespaceConfigBuilder{collectIndexer: collect}
-	maintainedBuilder := &NamespaceConfigBuilder{collectIndexer: collect, maintained: maintained}
+	listBuilder := newTypedTableListOracle(namespaceConfigDomainSpec(), collect)
+	maintainedBuilder := &NamespaceConfigBuilder{available: availableFromIndexers(collect), maintained: maintained}
 
 	scopes := []string{
 		"namespace:default",
@@ -262,8 +261,8 @@ func TestNamespaceConfigDirectServeEdgeScopesMatchListPath(t *testing.T) {
 	}
 
 	collect := configCollectIndexer(cmIdx, secIdx)
-	listBuilder := &NamespaceConfigBuilder{collectIndexer: collect}
-	maintainedBuilder := &NamespaceConfigBuilder{collectIndexer: collect, maintained: maintained}
+	listBuilder := newTypedTableListOracle(namespaceConfigDomainSpec(), collect)
+	maintainedBuilder := &NamespaceConfigBuilder{available: availableFromIndexers(collect), maintained: maintained}
 
 	// Single-shot scopes: whitespace-padded search, descending sort, mixed-case kind
 	// filter, and a kind+search combination.

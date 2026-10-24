@@ -179,15 +179,7 @@ func runtimePolicyAllows(ctx context.Context, checker *permissions.Checker, poli
 	anyAllowed := false
 	allAllowed := true
 	for _, req := range policy.Runtime {
-		var decision permissions.Decision
-		var err error
-		if req.ClusterWide {
-			// The requirement gates a cluster-wide data source; its check
-			// must match that source and bypass any namespace scope.
-			decision, err = checker.CanClusterWide(ctx, req.Group, req.Resource, req.Verb)
-		} else {
-			decision, err = checker.Can(ctx, req.Group, req.Resource, req.Verb)
-		}
+		decision, err := checker.Can(ctx, req.Group, req.Resource, req.Verb)
 		if err != nil {
 			return nil, false, err
 		}
@@ -197,6 +189,7 @@ func runtimePolicyAllows(ctx context.Context, checker *permissions.Checker, poli
 			allAllowed = false
 		}
 	}
+	recordOptionalResources(ctx, checker, policy.Optional, allowedResources)
 	if policy.Mode == ModeOptional {
 		return allowedResources, true, nil
 	}
@@ -204,6 +197,16 @@ func runtimePolicyAllows(ctx context.Context, checker *permissions.Checker, poli
 		return allowedResources, anyAllowed, nil
 	}
 	return allowedResources, allAllowed, nil
+}
+
+// recordOptionalResources adds each optional resource's decision without
+// letting it deny the domain: a check the cluster could not evaluate counts as
+// not allowed, so the domain still loads and reports that source as missing.
+func recordOptionalResources(ctx context.Context, checker *permissions.Checker, optional []permissions.ResourceRequirement, allowedResources AllowedResources) {
+	for _, req := range optional {
+		decision, err := checker.Can(ctx, req.Group, req.Resource, req.Verb)
+		allowedResources[permissions.ResourceKey(req.Group, req.Resource)] = err == nil && decision.Allowed
+	}
 }
 
 func deniedReason(policy Policy) string {

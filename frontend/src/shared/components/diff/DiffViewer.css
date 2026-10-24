@@ -40,7 +40,7 @@
   padding: 4px 8px;
   border: 1px solid var(--color-accent);
   clip-path: none;
-  background: var(--color-bg-primary);
+  background: var(--color-bg);
   color: var(--color-text);
 }
 

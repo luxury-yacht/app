@@ -11,6 +11,7 @@ import { useRefreshDomainHandle } from '@/core/data-access';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import '../Yaml/YamlTab.css';
+import { failureMessage } from '@/core/refresh/refreshFailure';
 
 interface ManifestTabProps {
   scope: string | null;
@@ -40,7 +41,7 @@ const ManifestTab: React.FC<ManifestTabProps> = ({ scope, isActive = false }) =>
   });
   const manifestLoading = manifestLoadingState.loading;
   const showPausedManifestState = manifestLoadingState.showPausedEmptyState;
-  const manifestError = snapshot.error ?? null;
+  const manifestError = failureMessage(snapshot.error);
 
   if (manifestLoading) {
     return (

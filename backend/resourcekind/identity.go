@@ -28,7 +28,7 @@ type Identity struct {
 }
 
 // GVR is the identity's GroupVersionResource, the key subsystems use to address the
-// kind's informer, lister, or ingest store.
+// kind's reflector or ingest store.
 func (i Identity) GVR() schema.GroupVersionResource {
 	return schema.GroupVersionResource{Group: i.Group, Version: i.Version, Resource: i.Resource}
 }

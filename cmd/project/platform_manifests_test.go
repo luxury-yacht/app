@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -63,6 +64,36 @@ func TestRenderNFPMManifestUsesConfiguredMaintainer(t *testing.T) {
 	require.Contains(t, manifest, `maintainer: "Luxury Yacht <info@luxury-yacht.app>"`)
 	require.NotContains(t, manifest, appMaintainerPlaceholder)
 	require.NotContains(t, manifest, "GIT_COMMITTER")
+}
+
+// SignPath reads an empty product name from an executable whose string table
+// lacks FileVersion, and Windows shows a 0.0.0.0 file version unless the fixed
+// version is numeric.
+func TestRenderedWindowsVersionInfoIsCompleteForSigning(t *testing.T) {
+	configPath := repositoryPath("build", "config.yml")
+	metadata, err := readProjectMetadata(configPath)
+	require.NoError(t, err)
+	outputPath := filepath.Join(t.TempDir(), "info.json")
+	require.NoError(t, renderProjectPlatformManifests(configPath, []platformManifestSpec{{
+		sourcePath: repositoryPath("build", "windows", "info.json"),
+		outputPath: outputPath,
+	}}))
+
+	var info struct {
+		Fixed map[string]string            `json:"fixed"`
+		Info  map[string]map[string]string `json:"info"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(readTestFile(t, outputPath)), &info))
+	windowsVersion, err := windowsNumericVersion(metadata.Info.Version)
+	require.NoError(t, err)
+	require.Equal(t, windowsVersion, info.Fixed["file_version"])
+	require.Equal(t, windowsVersion, info.Fixed["product_version"])
+	require.NotEmpty(t, info.Info)
+	for language, table := range info.Info {
+		require.Equal(t, metadata.Info.ProductName, table["ProductName"], language)
+		require.Equal(t, metadata.Info.Version, table["ProductVersion"], language)
+		require.Equal(t, metadata.Info.Version, table["FileVersion"], language)
+	}
 }
 
 func TestRenderedLinuxMarkersMatchRuntimeInstallationIdentity(t *testing.T) {
