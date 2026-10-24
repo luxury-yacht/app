@@ -198,7 +198,7 @@ describe('EndpointSliceOverview', () => {
         clusterName: dev.clusterName,
         group: '',
         version: 'v1',
-        kind: 'service',
+        kind: 'Service',
         namespace: 'shop',
         name: 'web',
       },

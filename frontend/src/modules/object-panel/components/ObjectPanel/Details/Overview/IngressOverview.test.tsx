@@ -167,10 +167,10 @@ describe('IngressOverview', () => {
     await click(backendLink(defaultRule));
     await click(tlsValue?.querySelector<HTMLElement>('.object-panel-link'));
     expect(view.openPanels()).toEqual([
-      panel('ingressclass', 'networking.k8s.io', '', 'nginx'),
-      panel('service', '', 'prod', 'web'),
-      panel('service', '', 'prod', 'fallback'),
-      panel('secret', '', 'prod', 'tls-secret'),
+      panel('IngressClass', 'networking.k8s.io', '', 'nginx'),
+      panel('Service', '', 'prod', 'web'),
+      panel('Service', '', 'prod', 'fallback'),
+      panel('Secret', '', 'prod', 'tls-secret'),
     ]);
   });
 

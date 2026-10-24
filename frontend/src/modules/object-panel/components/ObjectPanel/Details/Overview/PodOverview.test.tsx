@@ -183,16 +183,15 @@ describe('PodOverview', () => {
     expect(serviceAccountLink).not.toBeUndefined();
     await click(serviceAccountLink);
 
-    // Built-in kinds resolve their group/version; the kind keeps the link's
-    // casing (panel ids and backend lookups compare kinds case-insensitively).
+    // The links spell the kinds in lowercase; panels take the registry's spelling.
     const cluster = { clusterId: dev.clusterId, clusterName: dev.clusterName };
     expect(view.openPanels()).toEqual([
-      { ...cluster, group: '', version: 'v1', kind: 'node', namespace: '', name: 'node-b' },
+      { ...cluster, group: '', version: 'v1', kind: 'Node', namespace: '', name: 'node-b' },
       {
         ...cluster,
         group: '',
         version: 'v1',
-        kind: 'serviceaccount',
+        kind: 'ServiceAccount',
         namespace: 'infra',
         name: 'cache-sa',
       },

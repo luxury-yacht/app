@@ -448,6 +448,26 @@ const permissionResult = (query: PermissionQuery, decision: PermissionDecision) 
 
 type WorkspacePanel = NonNullable<BackendResult<'GetPanelWorkspace'>['panels']>[number];
 
+const OBJECT_REFERENCE_FIELDS = [
+  'clusterId',
+  'group',
+  'version',
+  'kind',
+  'namespace',
+  'name',
+] as const;
+const IDENTITY_REFERENCE_FIELDS = ['clusterId', 'kind', 'name'] as const;
+
+/** internal/panelwindow/types.go identity(): the tab kind and every reference field, exactly. */
+const samePanelIdentity = (left: WorkspacePanel['tab'], right: WorkspacePanel['tab']): boolean =>
+  left.kind === right.kind &&
+  OBJECT_REFERENCE_FIELDS.every(
+    (field) => (left.objectRef?.[field] ?? '') === (right.objectRef?.[field] ?? '')
+  ) &&
+  IDENTITY_REFERENCE_FIELDS.every(
+    (field) => (left.identityRef?.[field] ?? '') === (right.identityRef?.[field] ?? '')
+  );
+
 /**
  * The backend's panel directory for this window. Mirrors
  * internal/appwindow/workspace.go OpenPanelWorkspaceObject,
@@ -483,6 +503,10 @@ const answerPanelDirectory = (session: Session): void => {
     }
     const entry = clusterEntry(clusterId);
     const listed = entry.panels.find((existing) => existing.tab.panelId === tab.panelId);
+    if (listed && !samePanelIdentity(listed.tab, tab)) {
+      // workspace.go Open: a listed panel id must keep its object identity.
+      throw new Error('panel identity does not match its object');
+    }
     if (listed) {
       // The directory focuses the panel where it already is (workspace.go
       // focusWorkspacePanel) instead of rendering it again.

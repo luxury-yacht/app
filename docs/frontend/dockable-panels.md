@@ -31,6 +31,11 @@ Tab rendering and drag payloads: [tabs.md](tabs.md). Keyboard:
   targets keep exact User/Group names and no object reference. Both target
   types use the `obj:` panel ID prefix for layout preferences; identity IDs
   encode cluster, subject kind, and name.
+- Every object target is built by `buildObjectPanelRef`, which gives a
+  registered kind its registry spelling. Object panel IDs ignore the kind's
+  case, and the directory refuses a known panel ID whose object reference
+  differs (`internal/panelwindow/workspace.go`), so a ref built any other way
+  breaks reopening from a lowercase link.
 - One native window holds one same-cluster group; clusters never share a group.
 - Renderers project the shared directory and acknowledge changes through its
   owner.

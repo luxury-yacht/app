@@ -136,6 +136,24 @@ describe('opening an object panel', () => {
     expect(focusedPanelId()).toBe(objectPanelId(pod()));
   });
 
+  // Links spell some kinds in lowercase (a Deployment's ReplicaSet link). The
+  // directory refuses a listed panel id whose object identity differs, so a
+  // reopen through such a link must send the identity it was opened with.
+  it('focuses the open panel when a link spells its kind in another case', async () => {
+    await start();
+    await openObject(pod());
+    (document.activeElement as HTMLElement | null)?.blur();
+
+    await openObject({ ...pod(), kind: 'pod' });
+
+    expect(app.backend.calls('OpenPanelWorkspaceObject').map(([, tab]) => tab.objectRef)).toEqual([
+      expect.objectContaining({ kind: 'Pod' }),
+      expect.objectContaining({ kind: 'Pod' }),
+    ]);
+    expect(panel().openPanels.size).toBe(1);
+    expect(focusedPanelId()).toBe(objectPanelId(pod()));
+  });
+
   it('restores the retained panel sub-tab when reopening its object', async () => {
     await start();
     const panelId = objectPanelId(pod());

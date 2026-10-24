@@ -175,13 +175,13 @@ describe('StorageOverview', () => {
     expect(mountedByLink).not.toBeUndefined();
     await click(mountedByLink);
 
-    // Built-in kinds resolve their group/version; the kind keeps the link's casing.
+    // Built-in kinds resolve their group/version and take the registry's kind spelling.
     expect(view.openPanels()).toEqual([
-      panel({ group: '', version: 'v1', kind: 'persistentvolume', namespace: '', name: 'pv-123' }),
+      panel({ group: '', version: 'v1', kind: 'PersistentVolume', namespace: '', name: 'pv-123' }),
       panel({
         group: 'storage.k8s.io',
         version: 'v1',
-        kind: 'storageclass',
+        kind: 'StorageClass',
         namespace: '',
         name: 'standard',
       }),
@@ -290,14 +290,14 @@ describe('StorageOverview', () => {
       panel({
         group: 'storage.k8s.io',
         version: 'v1',
-        kind: 'storageclass',
+        kind: 'StorageClass',
         namespace: '',
         name: 'nfs',
       }),
       panel({
         group: '',
         version: 'v1',
-        kind: 'persistentvolumeclaim',
+        kind: 'PersistentVolumeClaim',
         namespace: 'default',
         name: 'cache',
       }),

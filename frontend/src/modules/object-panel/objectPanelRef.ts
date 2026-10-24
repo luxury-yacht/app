@@ -8,7 +8,7 @@
 
 import { buildObjectPanelPodsSelector } from '@modules/object-panel/components/ObjectPanel/Pods/objectPanelPodsScope';
 import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
-import { HELM_RELEASE_GVK, lookupKindFacets } from '@shared/kinds/kindFacets';
+import { HELM_RELEASE_GVK, lookupKindFacets, lookupKindMetadata } from '@shared/kinds/kindFacets';
 import {
   buildObjectReference,
   buildRequiredObjectReference,
@@ -89,6 +89,14 @@ const hasExplicitScopeGVK = (input: KubernetesObjectReference): boolean => {
   return true;
 };
 
+// Links spell some kinds in lowercase. Panel ids ignore the kind's case, the
+// backend refuses a panel id whose object identity differs, and every panel scope
+// names the kind, so a registered kind always carries the registry's spelling.
+const withRegistryKind = <T extends ResolvedObjectReference>(ref: T): T => {
+  const kind = lookupKindMetadata(ref)?.kind ?? ref.kind;
+  return kind === ref.kind ? ref : { ...ref, kind };
+};
+
 export const buildObjectPanelRef = (
   input: KubernetesObjectReference,
   options: ObjectPanelRefOptions = {}
@@ -98,9 +106,11 @@ export const buildObjectPanelRef = (
   if (!clusterId) {
     throw new Error('Object panel reference is missing clusterId');
   }
-  return buildRequiredObjectReference(normalizePanelInput(input), {
-    fallbackClusterId: clusterId,
-  });
+  return withRegistryKind(
+    buildRequiredObjectReference(normalizePanelInput(input), {
+      fallbackClusterId: clusterId,
+    })
+  );
 };
 
 export const objectPanelId = (ref: KubernetesObjectReference): string => {
@@ -181,7 +191,7 @@ export const getObjectPanelScopes = (
 
   let ref: ResolvedObjectReference;
   try {
-    ref = buildObjectReference(normalizedObjectData);
+    ref = withRegistryKind(buildObjectReference(normalizedObjectData));
   } catch {
     return emptyObjectPanelScopes();
   }

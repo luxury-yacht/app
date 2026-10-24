@@ -246,7 +246,7 @@ export function useObjectPanel() {
     (obj: KubernetesObjectReference, options?: OpenWithObjectOptions) => {
       const enriched = hydrateClusterMeta(obj);
       assertObjectRefHasRequiredIdentity(enriched);
-      openTarget(enriched, options);
+      openTarget(buildPanelTarget(enriched), options);
     },
     [hydrateClusterMeta, openTarget]
   );
