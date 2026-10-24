@@ -54,6 +54,8 @@ const excludedFiles = new Set([
   'src/core/refresh/types.generated.ts',
   'src/shared/actions/objectActions.generated.ts',
   'src/shared/kinds/kindFacets.generated.ts',
+  'src/core/settings/appPreferences.generated.ts',
+  'src/core/settings/appPreferences.parity.generated.json',
   'scripts/check-biome-suppressions.mjs',
   'scripts/check-biome-suppressions.test.mjs',
 ]);

@@ -7,13 +7,24 @@ effects. App-state reads use `appStateAccess`
 ## Backend schema and mutation
 
 - `backend.PreferencesService` owns persisted preferences and coalesced
-  lazy-load state. Defaults, normalization, schema metadata, validation, Wails
-  DTOs, and the six-route effect dispatcher stay aligned in
-  `backend/preferences_settings.go`.
-- `GetAppSettingsSchema` owns defaults, current values, bounds, enum options,
-  validation hints, and runtime-effect flags. It covers every preference
-  `UpdateAppPreferences` accepts but no separate state such as selected
-  kubeconfigs or saved themes.
+  lazy-load state.
+- `backend/internal/preferenceschema` declares each preference once: its key,
+  type, default, bounds, allowed values, and validation, plus the zoom bounds
+  and the color pattern. It covers every preference `UpdateAppPreferences`
+  accepts and no separate state (selected kubeconfigs, saved themes, window
+  geometry); zoom keeps its own commands.
+- Writes (update and import) use the schema's `Validate`; reads of
+  `settings.json` use its `Repair`, so the backend stores and serves the values
+  the UI shows. Type errors, unknown enums, and malformed colors reject a write;
+  integers never reject. An option-list integer (page size) keeps only an exact
+  option, else the default. A range integer applies its non-positive rule to the
+  raw number, then truncates toward zero and clamps. Import validates before
+  repair, so an unknown enum or malformed color still rejects it.
+- Package `backend` binds each key to its `AppSettings` field, effect route,
+  and change-log text (`preferences_settings_data.go`). The `settings.json`
+  mapping lives in `preferences_settings.go`. Adding a preference is one schema
+  row, one binding row, and that mapping; tests fail on a missing binding,
+  field, or mapping.
 - `UpdateAppPreferences` validates the whole batch before mutating, persists
   normalized settings before runtime effects, and rejects the whole batch on
   validation or persistence failure. It returns normalized settings and changed
@@ -23,12 +34,13 @@ effects. App-state reads use `appStateAccess`
   effect machinery.
 - Persisted object-panel position and layout defaults belong to the backend
   settings contract, not frontend hydration fallbacks.
-- Regenerate Wails bindings when settings DTOs, schema fields, or response
-  shapes change.
+- Regenerate Wails bindings when settings DTOs or response shapes change, and
+  the frontend contract (`go generate ./backend`) when the schema changes;
+  freshness tests fail otherwise.
 
 ## Frontend metadata and rollback
 
-- Hydrate with `readAppSettingsSchema` via `appStateAccess`; mutate through the
+- Hydrate with `readAppSettings` via `appStateAccess`; mutate through the
   common `UpdateAppPreferences` optimistic path. The typed store and setters live
   in `frontend/src/core/settings`; UI never imports preference-specific generated
   setters.
@@ -40,11 +52,16 @@ effects. App-state reads use `appStateAccess`
   Mode- or scope-keyed selectors (`getPaletteTint`, `getAccentColor`,
   `getLinkColor`, `getSidebarGroupExpanded`, `getObjectPanelLayoutDefaults`)
   read the same store. No per-preference event-bus events or one-off hooks.
-- `frontend/src/core/settings/appPreferences.ts` owns metadata caching, fallback
-  metadata, and typed helpers. Settings sections read defaults, bounds, options,
-  hints, and runtime flags only through them, never fetching schema or copying
-  backend constants. Fallback metadata serves first paint, Wails-less tests, and
-  schema-load failure; it is not a second contract.
+- `appPreferences.generated.ts` (from `backend/internal/genpreferences`) is the
+  frontend's only copy of the schema: the `AppPreferences` type, the key order,
+  and each key's spec. `appPreferences.ts` derives defaults and metadata from it
+  and repairs values by the backend's rules; `appPreferences.parity.test.ts`
+  runs the generated parity vectors. Settings sections read defaults, bounds,
+  and options only through `getPreferenceMetadata` and
+  `getIntegerPreferenceMetadata`, never copying backend constants.
+- The Day.js timestamp format is the one deliberate difference: the frontend
+  trims it and repairs an unsupported format to the default, while the backend
+  keeps any non-empty format. Its tests are separate from the parity vectors.
 - One confirmed base plus ordered pending edits owns optimistic state. Writes
   and success notifications run in edit order. Failure removes only the failed
   edit; later edits stay visible, even for the same key. Cache values,
@@ -63,10 +80,10 @@ effects. App-state reads use `appStateAccess`
   on a light/dark change or when a theme is applied, so a rollback or another
   window's change shows after either event or on restart.
 - Transient component state and state needed before Wails is available stay
-  frontend-owned (last Settings tab, first-paint appearance caches); Settings
-  displaying a value is no reason to move it to the backend.
-- Runtime-effect flags are metadata for diagnostics and future UI; add
-  user-facing runtime-effect copy only when a workflow calls for it.
+  frontend-owned (last Settings tab, first-paint appearance caches, and the
+  `'system'` default in `frontend/index.html`'s inline script, which runs before
+  any module loads); Settings displaying a value is no reason to move it to the
+  backend.
 
 ## Loading and runtime effects
 
@@ -113,6 +130,7 @@ back into Preferences.
 
 ## Validation
 
-Exercise schema coverage, whole-batch rejection, persistence before effects,
-and frontend rollback for the changed preference; add load/retry and
-independent effect failure when those paths change.
+Exercise the schema and binding coverage tests, the per-key save/reload round
+trip, the Go/TypeScript parity vectors, whole-batch rejection, persistence
+before effects, and frontend rollback for the changed preference; add
+load/retry and independent effect failure when those paths change.

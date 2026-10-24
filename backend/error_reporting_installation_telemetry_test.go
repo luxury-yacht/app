@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/preferenceschema"
 	"github.com/luxury-yacht/app/internal/sentry"
 	"github.com/stretchr/testify/require"
 )
@@ -115,10 +116,6 @@ func TestAppCreatesAndPersistsAnonymizedID(t *testing.T) {
 	freshSettings, err := freshApp.Preferences.GetAppSettings()
 	require.NoError(t, err)
 	require.Equal(t, settings.AnonymizedID, freshSettings.AnonymizedID)
-
-	schema, err := freshApp.Preferences.GetAppSettingsSchema()
-	require.NoError(t, err)
-	require.Equal(t, settings.AnonymizedID, schema.AnonymizedID)
 }
 
 func TestCreatingReplacementAnonymizedIDResetsInstallationMetricAcknowledgement(t *testing.T) {
@@ -274,7 +271,7 @@ func TestEnablingErrorReportingEmitsPendingInstallationMetric(t *testing.T) {
 	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 
 	_, err := app.Preferences.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{
-		Key:   appPreferenceErrorReportingEnabled,
+		Key:   preferenceschema.KeyErrorReportingEnabled,
 		Value: true,
 	}}})
 	require.NoError(t, err)

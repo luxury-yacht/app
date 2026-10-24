@@ -1,16 +1,23 @@
 /**
  * frontend/src/shared/components/tables/pageSizeOptions.ts
  *
- * The single source of truth for table page-size choices. Every pagination
- * footer dropdown AND the Settings ▸ Display ▸ Tables "Default Page Size"
- * dropdown render from this list — edit it here and both update together.
+ * Table page-size choices. Every pagination footer dropdown AND the
+ * Settings ▸ Display ▸ Tables "Default Page Size" dropdown render from this
+ * list. The list is the default-page-size preference's allowed values, owned by
+ * the backend preference schema (backend/internal/preferenceschema).
  */
 
-export const TABLE_PAGE_SIZE_OPTIONS = [25, 50, 100, 250, 500, 1000] as const;
+import {
+  APP_PREFERENCE_SPECS,
+  type AppPreferences,
+} from '@/core/settings/appPreferences.generated';
 
-export type TablePageSize = (typeof TABLE_PAGE_SIZE_OPTIONS)[number];
+export const TABLE_PAGE_SIZE_OPTIONS = APP_PREFERENCE_SPECS.defaultTablePageSize.intOptions;
 
-export const DEFAULT_TABLE_PAGE_SIZE: TablePageSize = 50;
+export type TablePageSize = AppPreferences['defaultTablePageSize'];
+
+export const DEFAULT_TABLE_PAGE_SIZE: TablePageSize =
+  APP_PREFERENCE_SPECS.defaultTablePageSize.defaultValue;
 
 export const isTablePageSize = (value: unknown): value is TablePageSize =>
   TABLE_PAGE_SIZE_OPTIONS.includes(value as TablePageSize);

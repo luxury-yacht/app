@@ -1,6 +1,10 @@
 package backend
 
-import "sync/atomic"
+import (
+	"sync/atomic"
+
+	"github.com/luxury-yacht/app/backend/internal/preferenceschema"
+)
 
 type ContainerLogsSelectionPolicy struct {
 	limit atomic.Int64
@@ -16,12 +20,12 @@ func (p *ContainerLogsSelectionPolicy) SetContainerLogsPerScopeLimit(limit int) 
 	if p == nil {
 		return
 	}
-	p.limit.Store(int64(clampObjPanelLogsTargetPerScopeLimit(limit)))
+	p.limit.Store(int64(repairIntPreference(preferenceschema.KeyObjPanelLogsTargetPerScopeLimit, limit)))
 }
 
 func (p *ContainerLogsSelectionPolicy) Limit() int {
 	if p == nil || p.limit.Load() <= 0 {
-		return defaultObjPanelLogsTargetPerScopeLimit
+		return preferenceschema.DefaultObjPanelLogsTargetPerScopeLimit
 	}
 	return int(p.limit.Load())
 }
@@ -40,12 +44,12 @@ func (p *PermissionFetchPolicy) SetPermissionFetchConcurrency(concurrency int) {
 	if p == nil {
 		return
 	}
-	p.concurrency.Store(int64(clampPermissionSSRRFetchConcurrency(concurrency)))
+	p.concurrency.Store(int64(repairIntPreference(preferenceschema.KeyPermissionSSRRFetchConcurrency, concurrency)))
 }
 
 func (p *PermissionFetchPolicy) Concurrency() int {
 	if p == nil || p.concurrency.Load() <= 0 {
-		return defaultPermissionSSRRFetchConcurrency
+		return preferenceschema.DefaultPermissionSSRRFetchConcurrency
 	}
 	return int(p.concurrency.Load())
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/lifecycle"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
+	"github.com/luxury-yacht/app/backend/internal/preferenceschema"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
@@ -20,7 +21,7 @@ import (
 
 func (r *RefreshCoordinator) resolveMetricsInterval() time.Duration {
 	if r == nil {
-		return time.Duration(defaultMetricsIntervalMs()) * time.Millisecond
+		return time.Duration(preferenceschema.DefaultMetricsRefreshIntervalMs) * time.Millisecond
 	}
 	r.metricsIntervalMu.RLock()
 	defer r.metricsIntervalMu.RUnlock()
@@ -346,7 +347,7 @@ func (r *RefreshCoordinator) sharedContainerLogsTargetLimiter() *containerlogsst
 	r.containerLogsTargetLimiterMu.Lock()
 	defer r.containerLogsTargetLimiterMu.Unlock()
 	if r.containerLogsTargetLimiter == nil {
-		r.containerLogsTargetLimiter = containerlogsstream.NewGlobalTargetLimiter(defaultObjPanelLogsTargetGlobalLimit)
+		r.containerLogsTargetLimiter = containerlogsstream.NewGlobalTargetLimiter(preferenceschema.DefaultObjPanelLogsTargetGlobalLimit)
 	}
 	return r.containerLogsTargetLimiter
 }

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
+	"github.com/luxury-yacht/app/backend/internal/preferenceschema"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
@@ -105,11 +106,11 @@ func TestRefreshCoordinatorPublishesCatalogAndTelemetryToResourceProjection(t *t
 
 func TestResourceGatewayUsesDefaultAndLiveRuntimePolicies(t *testing.T) {
 	defaultGateway := newResourceGateway(resourceGatewayDependencies{})
-	if got := defaultGateway.permissionFetchPolicy.Concurrency(); got != defaultPermissionSSRRFetchConcurrency {
-		t.Fatalf("default permission concurrency = %d, want %d", got, defaultPermissionSSRRFetchConcurrency)
+	if got := defaultGateway.permissionFetchPolicy.Concurrency(); got != preferenceschema.DefaultPermissionSSRRFetchConcurrency {
+		t.Fatalf("default permission concurrency = %d, want %d", got, preferenceschema.DefaultPermissionSSRRFetchConcurrency)
 	}
-	if got := defaultGateway.withResourcePolicies(common.Dependencies{}, "cluster-a").ContainerLogsPerScopeTargetLimit; got != defaultObjPanelLogsTargetPerScopeLimit {
-		t.Fatalf("default container-log limit = %d, want %d", got, defaultObjPanelLogsTargetPerScopeLimit)
+	if got := defaultGateway.withResourcePolicies(common.Dependencies{}, "cluster-a").ContainerLogsPerScopeTargetLimit; got != preferenceschema.DefaultObjPanelLogsTargetPerScopeLimit {
+		t.Fatalf("default container-log limit = %d, want %d", got, preferenceschema.DefaultObjPanelLogsTargetPerScopeLimit)
 	}
 
 	permissionPolicy := NewPermissionFetchPolicy(3)

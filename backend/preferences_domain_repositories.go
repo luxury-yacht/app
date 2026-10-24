@@ -1,6 +1,10 @@
 package backend
 
-import "slices"
+import (
+	"slices"
+
+	"github.com/luxury-yacht/app/backend/internal/preferenceschema"
+)
 
 func (p *PreferencesService) SetDiscoveredKubeconfigSearchPaths(paths []string) {
 	p.settingsMu.Lock()
@@ -18,7 +22,7 @@ func (p *PreferencesService) MetricsRefreshIntervalMs() int {
 	p.settingsMu.Lock()
 	defer p.settingsMu.Unlock()
 	if p.appSettings == nil || p.appSettings.MetricsRefreshIntervalMs <= 0 {
-		return defaultMetricsIntervalMs()
+		return preferenceschema.DefaultMetricsRefreshIntervalMs
 	}
 	return p.appSettings.MetricsRefreshIntervalMs
 }

@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/luxury-yacht/app/backend/internal/preferenceschema"
 )
 
 func TestNewApplicationRuntimeHasNoProcessGlobalSideEffects(t *testing.T) {
@@ -52,7 +54,7 @@ func TestOwnerConstructorsRejectIncompleteDependencyGraphs(t *testing.T) {
 			Context: fixture.Lifecycle.CtxOrBackground, RuntimeAvailable: fixture.Lifecycle.runtimeAvailable,
 			EmitEvent: fixture.Lifecycle.emitEvent, ResourceProjection: newRefreshResourceProjection(),
 			NodeMaintenanceStore: fixture.NodeMaintenanceStore,
-			SettingsBridge:       newRefreshSettingBridge(defaultObjPanelLogsTargetGlobalLimit, defaultMetricsIntervalMs()),
+			SettingsBridge:       newRefreshSettingBridge(preferenceschema.DefaultObjPanelLogsTargetGlobalLimit, preferenceschema.DefaultMetricsRefreshIntervalMs),
 		}
 	}
 	refreshCases := []struct {

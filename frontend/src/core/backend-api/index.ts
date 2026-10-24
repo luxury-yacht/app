@@ -50,7 +50,6 @@ export {
   GetAppLogs,
   GetAppLogsSince,
   GetAppSettings,
-  GetAppSettingsSchema,
   GetClusterAllowedNamespaces,
   GetClusterTabOrder,
   GetClusterWorkspaceStateForWindow,

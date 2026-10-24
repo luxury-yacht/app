@@ -7,9 +7,7 @@ export {
 
 export type {
     AppPreferenceChange,
-    AppPreferenceSchema,
     AppSettings,
-    AppSettingsSchema,
     ConditionState,
     ConditionsSummary,
     ContainerLogsEntry,

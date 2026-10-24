@@ -26,7 +26,8 @@ changed path crosses that boundary.
 - Frontend: `frontend/src/ui/{settings,command-palette,shortcuts,navigation,layout,dockable,modals,favorites}`,
   `frontend/src/core/{settings,app-state-access}`,
   `frontend/src/shared/components/{modals,tabs}`
-- Backend: `backend/{preferences_service,preferences_settings,runtime_setting_policies,data_management_coordinator,desktop_shell,favorites_service,ui_state_store}.go`
+- Backend: `backend/{preferences_service,preferences_settings,preferences_settings_data,runtime_setting_policies,data_management_coordinator,desktop_shell,favorites_service,ui_state_store}.go`,
+  `backend/internal/{preferenceschema,genpreferences}` (the preference schema and its frontend generator)
 
 ## Checks
 

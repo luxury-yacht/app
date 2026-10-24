@@ -1,0 +1,1460 @@
+{
+  "generatedBy": "genpreferences; DO NOT EDIT. Regenerate with: go generate ./backend",
+  "vectors": [
+    {
+      "key": "sidebarClusterResourcesExpanded",
+      "input": null,
+      "repaired": true
+    },
+    {
+      "key": "sidebarClusterResourcesExpanded",
+      "input": true,
+      "repaired": true
+    },
+    {
+      "key": "sidebarClusterResourcesExpanded",
+      "input": false,
+      "repaired": false
+    },
+    {
+      "key": "sidebarClusterResourcesExpanded",
+      "input": "x",
+      "repaired": true
+    },
+    {
+      "key": "sidebarClusterExtensionsExpanded",
+      "input": null,
+      "repaired": false
+    },
+    {
+      "key": "sidebarClusterExtensionsExpanded",
+      "input": true,
+      "repaired": true
+    },
+    {
+      "key": "sidebarClusterExtensionsExpanded",
+      "input": false,
+      "repaired": false
+    },
+    {
+      "key": "sidebarClusterExtensionsExpanded",
+      "input": "x",
+      "repaired": false
+    },
+    {
+      "key": "sidebarNamespaceResourcesExpanded",
+      "input": null,
+      "repaired": true
+    },
+    {
+      "key": "sidebarNamespaceResourcesExpanded",
+      "input": true,
+      "repaired": true
+    },
+    {
+      "key": "sidebarNamespaceResourcesExpanded",
+      "input": false,
+      "repaired": false
+    },
+    {
+      "key": "sidebarNamespaceResourcesExpanded",
+      "input": "x",
+      "repaired": true
+    },
+    {
+      "key": "sidebarNamespaceExtensionsExpanded",
+      "input": null,
+      "repaired": false
+    },
+    {
+      "key": "sidebarNamespaceExtensionsExpanded",
+      "input": true,
+      "repaired": true
+    },
+    {
+      "key": "sidebarNamespaceExtensionsExpanded",
+      "input": false,
+      "repaired": false
+    },
+    {
+      "key": "sidebarNamespaceExtensionsExpanded",
+      "input": "x",
+      "repaired": false
+    },
+    {
+      "key": "appearanceMode",
+      "input": null,
+      "repaired": "system"
+    },
+    {
+      "key": "appearanceMode",
+      "input": "light",
+      "repaired": "light"
+    },
+    {
+      "key": "appearanceMode",
+      "input": "dark",
+      "repaired": "dark"
+    },
+    {
+      "key": "appearanceMode",
+      "input": "system",
+      "repaired": "system"
+    },
+    {
+      "key": "appearanceMode",
+      "input": "unknown-option",
+      "repaired": "system"
+    },
+    {
+      "key": "appearanceMode",
+      "input": "",
+      "repaired": "system"
+    },
+    {
+      "key": "appearanceMode",
+      "input": 7,
+      "repaired": "system"
+    },
+    {
+      "key": "useShortResourceNames",
+      "input": null,
+      "repaired": false
+    },
+    {
+      "key": "useShortResourceNames",
+      "input": true,
+      "repaired": true
+    },
+    {
+      "key": "useShortResourceNames",
+      "input": false,
+      "repaired": false
+    },
+    {
+      "key": "useShortResourceNames",
+      "input": "x",
+      "repaired": false
+    },
+    {
+      "key": "dimInactiveNamespaces",
+      "input": null,
+      "repaired": true
+    },
+    {
+      "key": "dimInactiveNamespaces",
+      "input": true,
+      "repaired": true
+    },
+    {
+      "key": "dimInactiveNamespaces",
+      "input": false,
+      "repaired": false
+    },
+    {
+      "key": "dimInactiveNamespaces",
+      "input": "x",
+      "repaired": true
+    },
+    {
+      "key": "exclusiveNamespaces",
+      "input": null,
+      "repaired": true
+    },
+    {
+      "key": "exclusiveNamespaces",
+      "input": true,
+      "repaired": true
+    },
+    {
+      "key": "exclusiveNamespaces",
+      "input": false,
+      "repaired": false
+    },
+    {
+      "key": "exclusiveNamespaces",
+      "input": "x",
+      "repaired": true
+    },
+    {
+      "key": "errorReportingEnabled",
+      "input": null,
+      "repaired": true
+    },
+    {
+      "key": "errorReportingEnabled",
+      "input": true,
+      "repaired": true
+    },
+    {
+      "key": "errorReportingEnabled",
+      "input": false,
+      "repaired": false
+    },
+    {
+      "key": "errorReportingEnabled",
+      "input": "x",
+      "repaired": true
+    },
+    {
+      "key": "autoRefreshEnabled",
+      "input": null,
+      "repaired": true
+    },
+    {
+      "key": "autoRefreshEnabled",
+      "input": true,
+      "repaired": true
+    },
+    {
+      "key": "autoRefreshEnabled",
+      "input": false,
+      "repaired": false
+    },
+    {
+      "key": "autoRefreshEnabled",
+      "input": "x",
+      "repaired": true
+    },
+    {
+      "key": "metricsRefreshIntervalMs",
+      "input": null,
+      "repaired": 5000
+    },
+    {
+      "key": "metricsRefreshIntervalMs",
+      "input": 0,
+      "repaired": 5000
+    },
+    {
+      "key": "metricsRefreshIntervalMs",
+      "input": -1,
+      "repaired": 5000
+    },
+    {
+      "key": "metricsRefreshIntervalMs",
+      "input": "x",
+      "repaired": 5000
+    },
+    {
+      "key": "metricsRefreshIntervalMs",
+      "input": 1,
+      "repaired": 1
+    },
+    {
+      "key": "metricsRefreshIntervalMs",
+      "input": 1.5,
+      "repaired": 1
+    },
+    {
+      "key": "metricsRefreshIntervalMs",
+      "input": 0.9,
+      "repaired": 1
+    },
+    {
+      "key": "metricsRefreshIntervalMs",
+      "input": -0.5,
+      "repaired": 5000
+    },
+    {
+      "key": "metricsRefreshIntervalMs",
+      "input": -10.7,
+      "repaired": 5000
+    },
+    {
+      "key": "metricsRefreshIntervalMs",
+      "input": 10000000,
+      "repaired": 10000000
+    },
+    {
+      "key": "kubernetesClientQPS",
+      "input": null,
+      "repaired": 200
+    },
+    {
+      "key": "kubernetesClientQPS",
+      "input": 0,
+      "repaired": 200
+    },
+    {
+      "key": "kubernetesClientQPS",
+      "input": -1,
+      "repaired": 200
+    },
+    {
+      "key": "kubernetesClientQPS",
+      "input": "x",
+      "repaired": 200
+    },
+    {
+      "key": "kubernetesClientQPS",
+      "input": 1,
+      "repaired": 1
+    },
+    {
+      "key": "kubernetesClientQPS",
+      "input": 1.5,
+      "repaired": 1
+    },
+    {
+      "key": "kubernetesClientQPS",
+      "input": 0.9,
+      "repaired": 1
+    },
+    {
+      "key": "kubernetesClientQPS",
+      "input": -0.5,
+      "repaired": 200
+    },
+    {
+      "key": "kubernetesClientQPS",
+      "input": -10.7,
+      "repaired": 200
+    },
+    {
+      "key": "kubernetesClientQPS",
+      "input": 5000,
+      "repaired": 5000
+    },
+    {
+      "key": "kubernetesClientQPS",
+      "input": 5001,
+      "repaired": 5000
+    },
+    {
+      "key": "kubernetesClientBurst",
+      "input": null,
+      "repaired": 500
+    },
+    {
+      "key": "kubernetesClientBurst",
+      "input": 0,
+      "repaired": 500
+    },
+    {
+      "key": "kubernetesClientBurst",
+      "input": -1,
+      "repaired": 500
+    },
+    {
+      "key": "kubernetesClientBurst",
+      "input": "x",
+      "repaired": 500
+    },
+    {
+      "key": "kubernetesClientBurst",
+      "input": 1,
+      "repaired": 1
+    },
+    {
+      "key": "kubernetesClientBurst",
+      "input": 1.5,
+      "repaired": 1
+    },
+    {
+      "key": "kubernetesClientBurst",
+      "input": 0.9,
+      "repaired": 1
+    },
+    {
+      "key": "kubernetesClientBurst",
+      "input": -0.5,
+      "repaired": 500
+    },
+    {
+      "key": "kubernetesClientBurst",
+      "input": -10.7,
+      "repaired": 500
+    },
+    {
+      "key": "kubernetesClientBurst",
+      "input": 10000,
+      "repaired": 10000
+    },
+    {
+      "key": "kubernetesClientBurst",
+      "input": 10001,
+      "repaired": 10000
+    },
+    {
+      "key": "permissionSSRRFetchConcurrency",
+      "input": null,
+      "repaired": 32
+    },
+    {
+      "key": "permissionSSRRFetchConcurrency",
+      "input": 0,
+      "repaired": 32
+    },
+    {
+      "key": "permissionSSRRFetchConcurrency",
+      "input": -1,
+      "repaired": 32
+    },
+    {
+      "key": "permissionSSRRFetchConcurrency",
+      "input": "x",
+      "repaired": 32
+    },
+    {
+      "key": "permissionSSRRFetchConcurrency",
+      "input": 1,
+      "repaired": 1
+    },
+    {
+      "key": "permissionSSRRFetchConcurrency",
+      "input": 1.5,
+      "repaired": 1
+    },
+    {
+      "key": "permissionSSRRFetchConcurrency",
+      "input": 0.9,
+      "repaired": 1
+    },
+    {
+      "key": "permissionSSRRFetchConcurrency",
+      "input": -0.5,
+      "repaired": 32
+    },
+    {
+      "key": "permissionSSRRFetchConcurrency",
+      "input": -10.7,
+      "repaired": 32
+    },
+    {
+      "key": "permissionSSRRFetchConcurrency",
+      "input": 256,
+      "repaired": 256
+    },
+    {
+      "key": "permissionSSRRFetchConcurrency",
+      "input": 257,
+      "repaired": 256
+    },
+    {
+      "key": "objPanelLogsBufferMaxSize",
+      "input": null,
+      "repaired": 5000
+    },
+    {
+      "key": "objPanelLogsBufferMaxSize",
+      "input": 0,
+      "repaired": 5000
+    },
+    {
+      "key": "objPanelLogsBufferMaxSize",
+      "input": -1,
+      "repaired": 5000
+    },
+    {
+      "key": "objPanelLogsBufferMaxSize",
+      "input": "x",
+      "repaired": 5000
+    },
+    {
+      "key": "objPanelLogsBufferMaxSize",
+      "input": 99,
+      "repaired": 100
+    },
+    {
+      "key": "objPanelLogsBufferMaxSize",
+      "input": 100,
+      "repaired": 100
+    },
+    {
+      "key": "objPanelLogsBufferMaxSize",
+      "input": 100.5,
+      "repaired": 100
+    },
+    {
+      "key": "objPanelLogsBufferMaxSize",
+      "input": 0.9,
+      "repaired": 100
+    },
+    {
+      "key": "objPanelLogsBufferMaxSize",
+      "input": -0.5,
+      "repaired": 5000
+    },
+    {
+      "key": "objPanelLogsBufferMaxSize",
+      "input": -10.7,
+      "repaired": 5000
+    },
+    {
+      "key": "objPanelLogsBufferMaxSize",
+      "input": 10000,
+      "repaired": 10000
+    },
+    {
+      "key": "objPanelLogsBufferMaxSize",
+      "input": 10001,
+      "repaired": 10000
+    },
+    {
+      "key": "objPanelLogsApiTimestampFormat",
+      "input": null,
+      "repaired": "YYYY-MM-DDTHH:mm:ss.SSS[Z]"
+    },
+    {
+      "key": "objPanelLogsApiTimestampFormat",
+      "input": "",
+      "repaired": "YYYY-MM-DDTHH:mm:ss.SSS[Z]"
+    },
+    {
+      "key": "objPanelLogsApiTimestampFormat",
+      "input": 7,
+      "repaired": "YYYY-MM-DDTHH:mm:ss.SSS[Z]"
+    },
+    {
+      "key": "objPanelLogsApiTimestampFormat",
+      "input": "YYYY-MM-DDTHH:mm:ss.SSS[Z]",
+      "repaired": "YYYY-MM-DDTHH:mm:ss.SSS[Z]"
+    },
+    {
+      "key": "objPanelLogsApiTimestampUseLocalTimeZone",
+      "input": null,
+      "repaired": false
+    },
+    {
+      "key": "objPanelLogsApiTimestampUseLocalTimeZone",
+      "input": true,
+      "repaired": true
+    },
+    {
+      "key": "objPanelLogsApiTimestampUseLocalTimeZone",
+      "input": false,
+      "repaired": false
+    },
+    {
+      "key": "objPanelLogsApiTimestampUseLocalTimeZone",
+      "input": "x",
+      "repaired": false
+    },
+    {
+      "key": "objPanelLogsTargetPerScopeLimit",
+      "input": null,
+      "repaired": 100
+    },
+    {
+      "key": "objPanelLogsTargetPerScopeLimit",
+      "input": 0,
+      "repaired": 100
+    },
+    {
+      "key": "objPanelLogsTargetPerScopeLimit",
+      "input": -1,
+      "repaired": 100
+    },
+    {
+      "key": "objPanelLogsTargetPerScopeLimit",
+      "input": "x",
+      "repaired": 100
+    },
+    {
+      "key": "objPanelLogsTargetPerScopeLimit",
+      "input": 1,
+      "repaired": 1
+    },
+    {
+      "key": "objPanelLogsTargetPerScopeLimit",
+      "input": 1.5,
+      "repaired": 1
+    },
+    {
+      "key": "objPanelLogsTargetPerScopeLimit",
+      "input": 0.9,
+      "repaired": 1
+    },
+    {
+      "key": "objPanelLogsTargetPerScopeLimit",
+      "input": -0.5,
+      "repaired": 100
+    },
+    {
+      "key": "objPanelLogsTargetPerScopeLimit",
+      "input": -10.7,
+      "repaired": 100
+    },
+    {
+      "key": "objPanelLogsTargetPerScopeLimit",
+      "input": 1000,
+      "repaired": 1000
+    },
+    {
+      "key": "objPanelLogsTargetPerScopeLimit",
+      "input": 1001,
+      "repaired": 1000
+    },
+    {
+      "key": "objPanelLogsTargetGlobalLimit",
+      "input": null,
+      "repaired": 200
+    },
+    {
+      "key": "objPanelLogsTargetGlobalLimit",
+      "input": 0,
+      "repaired": 200
+    },
+    {
+      "key": "objPanelLogsTargetGlobalLimit",
+      "input": -1,
+      "repaired": 200
+    },
+    {
+      "key": "objPanelLogsTargetGlobalLimit",
+      "input": "x",
+      "repaired": 200
+    },
+    {
+      "key": "objPanelLogsTargetGlobalLimit",
+      "input": 1,
+      "repaired": 1
+    },
+    {
+      "key": "objPanelLogsTargetGlobalLimit",
+      "input": 1.5,
+      "repaired": 1
+    },
+    {
+      "key": "objPanelLogsTargetGlobalLimit",
+      "input": 0.9,
+      "repaired": 1
+    },
+    {
+      "key": "objPanelLogsTargetGlobalLimit",
+      "input": -0.5,
+      "repaired": 200
+    },
+    {
+      "key": "objPanelLogsTargetGlobalLimit",
+      "input": -10.7,
+      "repaired": 200
+    },
+    {
+      "key": "objPanelLogsTargetGlobalLimit",
+      "input": 1000,
+      "repaired": 1000
+    },
+    {
+      "key": "objPanelLogsTargetGlobalLimit",
+      "input": 1001,
+      "repaired": 1000
+    },
+    {
+      "key": "gridTablePersistenceMode",
+      "input": null,
+      "repaired": "shared"
+    },
+    {
+      "key": "gridTablePersistenceMode",
+      "input": "shared",
+      "repaired": "shared"
+    },
+    {
+      "key": "gridTablePersistenceMode",
+      "input": "namespaced",
+      "repaired": "namespaced"
+    },
+    {
+      "key": "gridTablePersistenceMode",
+      "input": "unknown-option",
+      "repaired": "shared"
+    },
+    {
+      "key": "gridTablePersistenceMode",
+      "input": "",
+      "repaired": "shared"
+    },
+    {
+      "key": "gridTablePersistenceMode",
+      "input": 7,
+      "repaired": "shared"
+    },
+    {
+      "key": "defaultTablePageSize",
+      "input": null,
+      "repaired": 50
+    },
+    {
+      "key": "defaultTablePageSize",
+      "input": 0,
+      "repaired": 50
+    },
+    {
+      "key": "defaultTablePageSize",
+      "input": -1,
+      "repaired": 50
+    },
+    {
+      "key": "defaultTablePageSize",
+      "input": "x",
+      "repaired": 50
+    },
+    {
+      "key": "defaultTablePageSize",
+      "input": 25,
+      "repaired": 25
+    },
+    {
+      "key": "defaultTablePageSize",
+      "input": 50,
+      "repaired": 50
+    },
+    {
+      "key": "defaultTablePageSize",
+      "input": 100,
+      "repaired": 100
+    },
+    {
+      "key": "defaultTablePageSize",
+      "input": 250,
+      "repaired": 250
+    },
+    {
+      "key": "defaultTablePageSize",
+      "input": 500,
+      "repaired": 500
+    },
+    {
+      "key": "defaultTablePageSize",
+      "input": 1000,
+      "repaired": 1000
+    },
+    {
+      "key": "defaultTablePageSize",
+      "input": 25.5,
+      "repaired": 50
+    },
+    {
+      "key": "defaultTablePageSize",
+      "input": 100.5,
+      "repaired": 50
+    },
+    {
+      "key": "defaultTablePageSize",
+      "input": 37,
+      "repaired": 50
+    },
+    {
+      "key": "defaultTablePageSize",
+      "input": 1001,
+      "repaired": 50
+    },
+    {
+      "key": "defaultObjectPanelPosition",
+      "input": null,
+      "repaired": "right"
+    },
+    {
+      "key": "defaultObjectPanelPosition",
+      "input": "right",
+      "repaired": "right"
+    },
+    {
+      "key": "defaultObjectPanelPosition",
+      "input": "bottom",
+      "repaired": "bottom"
+    },
+    {
+      "key": "defaultObjectPanelPosition",
+      "input": "floating",
+      "repaired": "floating"
+    },
+    {
+      "key": "defaultObjectPanelPosition",
+      "input": "unknown-option",
+      "repaired": "right"
+    },
+    {
+      "key": "defaultObjectPanelPosition",
+      "input": "",
+      "repaired": "right"
+    },
+    {
+      "key": "defaultObjectPanelPosition",
+      "input": 7,
+      "repaired": "right"
+    },
+    {
+      "key": "objectPanelDockedRightWidth",
+      "input": null,
+      "repaired": 600
+    },
+    {
+      "key": "objectPanelDockedRightWidth",
+      "input": 0,
+      "repaired": 600
+    },
+    {
+      "key": "objectPanelDockedRightWidth",
+      "input": -1,
+      "repaired": 600
+    },
+    {
+      "key": "objectPanelDockedRightWidth",
+      "input": "x",
+      "repaired": 600
+    },
+    {
+      "key": "objectPanelDockedRightWidth",
+      "input": 499,
+      "repaired": 500
+    },
+    {
+      "key": "objectPanelDockedRightWidth",
+      "input": 500,
+      "repaired": 500
+    },
+    {
+      "key": "objectPanelDockedRightWidth",
+      "input": 500.5,
+      "repaired": 500
+    },
+    {
+      "key": "objectPanelDockedRightWidth",
+      "input": 0.9,
+      "repaired": 500
+    },
+    {
+      "key": "objectPanelDockedRightWidth",
+      "input": -0.5,
+      "repaired": 600
+    },
+    {
+      "key": "objectPanelDockedRightWidth",
+      "input": -10.7,
+      "repaired": 600
+    },
+    {
+      "key": "objectPanelDockedRightWidth",
+      "input": 9999,
+      "repaired": 9999
+    },
+    {
+      "key": "objectPanelDockedRightWidth",
+      "input": 10000,
+      "repaired": 9999
+    },
+    {
+      "key": "objectPanelDockedBottomHeight",
+      "input": null,
+      "repaired": 600
+    },
+    {
+      "key": "objectPanelDockedBottomHeight",
+      "input": 0,
+      "repaired": 600
+    },
+    {
+      "key": "objectPanelDockedBottomHeight",
+      "input": -1,
+      "repaired": 600
+    },
+    {
+      "key": "objectPanelDockedBottomHeight",
+      "input": "x",
+      "repaired": 600
+    },
+    {
+      "key": "objectPanelDockedBottomHeight",
+      "input": 199,
+      "repaired": 200
+    },
+    {
+      "key": "objectPanelDockedBottomHeight",
+      "input": 200,
+      "repaired": 200
+    },
+    {
+      "key": "objectPanelDockedBottomHeight",
+      "input": 200.5,
+      "repaired": 200
+    },
+    {
+      "key": "objectPanelDockedBottomHeight",
+      "input": 0.9,
+      "repaired": 200
+    },
+    {
+      "key": "objectPanelDockedBottomHeight",
+      "input": -0.5,
+      "repaired": 600
+    },
+    {
+      "key": "objectPanelDockedBottomHeight",
+      "input": -10.7,
+      "repaired": 600
+    },
+    {
+      "key": "objectPanelDockedBottomHeight",
+      "input": 9999,
+      "repaired": 9999
+    },
+    {
+      "key": "objectPanelDockedBottomHeight",
+      "input": 10000,
+      "repaired": 9999
+    },
+    {
+      "key": "objectPanelFloatingWidth",
+      "input": null,
+      "repaired": 600
+    },
+    {
+      "key": "objectPanelFloatingWidth",
+      "input": 0,
+      "repaired": 600
+    },
+    {
+      "key": "objectPanelFloatingWidth",
+      "input": -1,
+      "repaired": 600
+    },
+    {
+      "key": "objectPanelFloatingWidth",
+      "input": "x",
+      "repaired": 600
+    },
+    {
+      "key": "objectPanelFloatingWidth",
+      "input": 449,
+      "repaired": 450
+    },
+    {
+      "key": "objectPanelFloatingWidth",
+      "input": 450,
+      "repaired": 450
+    },
+    {
+      "key": "objectPanelFloatingWidth",
+      "input": 450.5,
+      "repaired": 450
+    },
+    {
+      "key": "objectPanelFloatingWidth",
+      "input": 0.9,
+      "repaired": 450
+    },
+    {
+      "key": "objectPanelFloatingWidth",
+      "input": -0.5,
+      "repaired": 600
+    },
+    {
+      "key": "objectPanelFloatingWidth",
+      "input": -10.7,
+      "repaired": 600
+    },
+    {
+      "key": "objectPanelFloatingWidth",
+      "input": 9999,
+      "repaired": 9999
+    },
+    {
+      "key": "objectPanelFloatingWidth",
+      "input": 10000,
+      "repaired": 9999
+    },
+    {
+      "key": "objectPanelFloatingHeight",
+      "input": null,
+      "repaired": 800
+    },
+    {
+      "key": "objectPanelFloatingHeight",
+      "input": 0,
+      "repaired": 800
+    },
+    {
+      "key": "objectPanelFloatingHeight",
+      "input": -1,
+      "repaired": 800
+    },
+    {
+      "key": "objectPanelFloatingHeight",
+      "input": "x",
+      "repaired": 800
+    },
+    {
+      "key": "objectPanelFloatingHeight",
+      "input": 199,
+      "repaired": 200
+    },
+    {
+      "key": "objectPanelFloatingHeight",
+      "input": 200,
+      "repaired": 200
+    },
+    {
+      "key": "objectPanelFloatingHeight",
+      "input": 200.5,
+      "repaired": 200
+    },
+    {
+      "key": "objectPanelFloatingHeight",
+      "input": 0.9,
+      "repaired": 200
+    },
+    {
+      "key": "objectPanelFloatingHeight",
+      "input": -0.5,
+      "repaired": 800
+    },
+    {
+      "key": "objectPanelFloatingHeight",
+      "input": -10.7,
+      "repaired": 800
+    },
+    {
+      "key": "objectPanelFloatingHeight",
+      "input": 9999,
+      "repaired": 9999
+    },
+    {
+      "key": "objectPanelFloatingHeight",
+      "input": 10000,
+      "repaired": 9999
+    },
+    {
+      "key": "paletteHueLight",
+      "input": null,
+      "repaired": 0
+    },
+    {
+      "key": "paletteHueLight",
+      "input": 0,
+      "repaired": 0
+    },
+    {
+      "key": "paletteHueLight",
+      "input": -1,
+      "repaired": 0
+    },
+    {
+      "key": "paletteHueLight",
+      "input": "x",
+      "repaired": 0
+    },
+    {
+      "key": "paletteHueLight",
+      "input": 0.5,
+      "repaired": 0
+    },
+    {
+      "key": "paletteHueLight",
+      "input": 0.9,
+      "repaired": 0
+    },
+    {
+      "key": "paletteHueLight",
+      "input": -0.5,
+      "repaired": 0
+    },
+    {
+      "key": "paletteHueLight",
+      "input": -10.7,
+      "repaired": 0
+    },
+    {
+      "key": "paletteHueLight",
+      "input": 360,
+      "repaired": 360
+    },
+    {
+      "key": "paletteHueLight",
+      "input": 361,
+      "repaired": 360
+    },
+    {
+      "key": "paletteSaturationLight",
+      "input": null,
+      "repaired": 0
+    },
+    {
+      "key": "paletteSaturationLight",
+      "input": 0,
+      "repaired": 0
+    },
+    {
+      "key": "paletteSaturationLight",
+      "input": -1,
+      "repaired": 0
+    },
+    {
+      "key": "paletteSaturationLight",
+      "input": "x",
+      "repaired": 0
+    },
+    {
+      "key": "paletteSaturationLight",
+      "input": 0.5,
+      "repaired": 0
+    },
+    {
+      "key": "paletteSaturationLight",
+      "input": 0.9,
+      "repaired": 0
+    },
+    {
+      "key": "paletteSaturationLight",
+      "input": -0.5,
+      "repaired": 0
+    },
+    {
+      "key": "paletteSaturationLight",
+      "input": -10.7,
+      "repaired": 0
+    },
+    {
+      "key": "paletteSaturationLight",
+      "input": 100,
+      "repaired": 100
+    },
+    {
+      "key": "paletteSaturationLight",
+      "input": 101,
+      "repaired": 100
+    },
+    {
+      "key": "paletteBrightnessLight",
+      "input": null,
+      "repaired": 0
+    },
+    {
+      "key": "paletteBrightnessLight",
+      "input": 0,
+      "repaired": 0
+    },
+    {
+      "key": "paletteBrightnessLight",
+      "input": -1,
+      "repaired": -1
+    },
+    {
+      "key": "paletteBrightnessLight",
+      "input": "x",
+      "repaired": 0
+    },
+    {
+      "key": "paletteBrightnessLight",
+      "input": -51,
+      "repaired": -50
+    },
+    {
+      "key": "paletteBrightnessLight",
+      "input": -50,
+      "repaired": -50
+    },
+    {
+      "key": "paletteBrightnessLight",
+      "input": -49.5,
+      "repaired": -49
+    },
+    {
+      "key": "paletteBrightnessLight",
+      "input": 0.9,
+      "repaired": 0
+    },
+    {
+      "key": "paletteBrightnessLight",
+      "input": -0.5,
+      "repaired": 0
+    },
+    {
+      "key": "paletteBrightnessLight",
+      "input": -10.7,
+      "repaired": -10
+    },
+    {
+      "key": "paletteBrightnessLight",
+      "input": 50,
+      "repaired": 50
+    },
+    {
+      "key": "paletteBrightnessLight",
+      "input": 51,
+      "repaired": 50
+    },
+    {
+      "key": "paletteHueDark",
+      "input": null,
+      "repaired": 0
+    },
+    {
+      "key": "paletteHueDark",
+      "input": 0,
+      "repaired": 0
+    },
+    {
+      "key": "paletteHueDark",
+      "input": -1,
+      "repaired": 0
+    },
+    {
+      "key": "paletteHueDark",
+      "input": "x",
+      "repaired": 0
+    },
+    {
+      "key": "paletteHueDark",
+      "input": 0.5,
+      "repaired": 0
+    },
+    {
+      "key": "paletteHueDark",
+      "input": 0.9,
+      "repaired": 0
+    },
+    {
+      "key": "paletteHueDark",
+      "input": -0.5,
+      "repaired": 0
+    },
+    {
+      "key": "paletteHueDark",
+      "input": -10.7,
+      "repaired": 0
+    },
+    {
+      "key": "paletteHueDark",
+      "input": 360,
+      "repaired": 360
+    },
+    {
+      "key": "paletteHueDark",
+      "input": 361,
+      "repaired": 360
+    },
+    {
+      "key": "paletteSaturationDark",
+      "input": null,
+      "repaired": 0
+    },
+    {
+      "key": "paletteSaturationDark",
+      "input": 0,
+      "repaired": 0
+    },
+    {
+      "key": "paletteSaturationDark",
+      "input": -1,
+      "repaired": 0
+    },
+    {
+      "key": "paletteSaturationDark",
+      "input": "x",
+      "repaired": 0
+    },
+    {
+      "key": "paletteSaturationDark",
+      "input": 0.5,
+      "repaired": 0
+    },
+    {
+      "key": "paletteSaturationDark",
+      "input": 0.9,
+      "repaired": 0
+    },
+    {
+      "key": "paletteSaturationDark",
+      "input": -0.5,
+      "repaired": 0
+    },
+    {
+      "key": "paletteSaturationDark",
+      "input": -10.7,
+      "repaired": 0
+    },
+    {
+      "key": "paletteSaturationDark",
+      "input": 100,
+      "repaired": 100
+    },
+    {
+      "key": "paletteSaturationDark",
+      "input": 101,
+      "repaired": 100
+    },
+    {
+      "key": "paletteBrightnessDark",
+      "input": null,
+      "repaired": 0
+    },
+    {
+      "key": "paletteBrightnessDark",
+      "input": 0,
+      "repaired": 0
+    },
+    {
+      "key": "paletteBrightnessDark",
+      "input": -1,
+      "repaired": -1
+    },
+    {
+      "key": "paletteBrightnessDark",
+      "input": "x",
+      "repaired": 0
+    },
+    {
+      "key": "paletteBrightnessDark",
+      "input": -51,
+      "repaired": -50
+    },
+    {
+      "key": "paletteBrightnessDark",
+      "input": -50,
+      "repaired": -50
+    },
+    {
+      "key": "paletteBrightnessDark",
+      "input": -49.5,
+      "repaired": -49
+    },
+    {
+      "key": "paletteBrightnessDark",
+      "input": 0.9,
+      "repaired": 0
+    },
+    {
+      "key": "paletteBrightnessDark",
+      "input": -0.5,
+      "repaired": 0
+    },
+    {
+      "key": "paletteBrightnessDark",
+      "input": -10.7,
+      "repaired": -10
+    },
+    {
+      "key": "paletteBrightnessDark",
+      "input": 50,
+      "repaired": 50
+    },
+    {
+      "key": "paletteBrightnessDark",
+      "input": 51,
+      "repaired": 50
+    },
+    {
+      "key": "accentColorLight",
+      "input": null,
+      "repaired": ""
+    },
+    {
+      "key": "accentColorLight",
+      "input": "",
+      "repaired": ""
+    },
+    {
+      "key": "accentColorLight",
+      "input": "#a1B2c3",
+      "repaired": "#a1B2c3"
+    },
+    {
+      "key": "accentColorLight",
+      "input": "#zzz",
+      "repaired": ""
+    },
+    {
+      "key": "accentColorLight",
+      "input": "blue",
+      "repaired": ""
+    },
+    {
+      "key": "accentColorLight",
+      "input": 7,
+      "repaired": ""
+    },
+    {
+      "key": "accentColorDark",
+      "input": null,
+      "repaired": ""
+    },
+    {
+      "key": "accentColorDark",
+      "input": "",
+      "repaired": ""
+    },
+    {
+      "key": "accentColorDark",
+      "input": "#a1B2c3",
+      "repaired": "#a1B2c3"
+    },
+    {
+      "key": "accentColorDark",
+      "input": "#zzz",
+      "repaired": ""
+    },
+    {
+      "key": "accentColorDark",
+      "input": "blue",
+      "repaired": ""
+    },
+    {
+      "key": "accentColorDark",
+      "input": 7,
+      "repaired": ""
+    },
+    {
+      "key": "linkColorLight",
+      "input": null,
+      "repaired": ""
+    },
+    {
+      "key": "linkColorLight",
+      "input": "",
+      "repaired": ""
+    },
+    {
+      "key": "linkColorLight",
+      "input": "#a1B2c3",
+      "repaired": "#a1B2c3"
+    },
+    {
+      "key": "linkColorLight",
+      "input": "#zzz",
+      "repaired": ""
+    },
+    {
+      "key": "linkColorLight",
+      "input": "blue",
+      "repaired": ""
+    },
+    {
+      "key": "linkColorLight",
+      "input": 7,
+      "repaired": ""
+    },
+    {
+      "key": "linkColorDark",
+      "input": null,
+      "repaired": ""
+    },
+    {
+      "key": "linkColorDark",
+      "input": "",
+      "repaired": ""
+    },
+    {
+      "key": "linkColorDark",
+      "input": "#a1B2c3",
+      "repaired": "#a1B2c3"
+    },
+    {
+      "key": "linkColorDark",
+      "input": "#zzz",
+      "repaired": ""
+    },
+    {
+      "key": "linkColorDark",
+      "input": "blue",
+      "repaired": ""
+    },
+    {
+      "key": "linkColorDark",
+      "input": 7,
+      "repaired": ""
+    }
+  ]
+}

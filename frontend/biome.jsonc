@@ -29,7 +29,9 @@
       "**",
       "!src/core/refresh/types.generated.ts",
       "!src/shared/actions/objectActions.generated.ts",
-      "!src/shared/kinds/kindFacets.generated.ts"
+      "!src/shared/kinds/kindFacets.generated.ts",
+      "!src/core/settings/appPreferences.generated.ts",
+      "!src/core/settings/appPreferences.parity.generated.json"
     ],
     "indentStyle": "space",
     "indentWidth": 2,
@@ -44,7 +46,9 @@
       "**",
       "!src/core/refresh/types.generated.ts",
       "!src/shared/actions/objectActions.generated.ts",
-      "!src/shared/kinds/kindFacets.generated.ts"
+      "!src/shared/kinds/kindFacets.generated.ts",
+      "!src/core/settings/appPreferences.generated.ts",
+      "!src/core/settings/appPreferences.parity.generated.json"
     ],
     "actions": {
       "preset": "recommended"
@@ -58,7 +62,9 @@
       "**",
       "!src/core/refresh/types.generated.ts",
       "!src/shared/actions/objectActions.generated.ts",
-      "!src/shared/kinds/kindFacets.generated.ts"
+      "!src/shared/kinds/kindFacets.generated.ts",
+      "!src/core/settings/appPreferences.generated.ts",
+      "!src/core/settings/appPreferences.parity.generated.json"
     ],
     "rules": {
       "preset": "recommended",

@@ -19,7 +19,6 @@ export type {
     AppInfo,
     AppLogsAddedEvent,
     AppSettings,
-    AppSettingsSchema,
     AppearanceModeChangedEvent,
     CatalogQueryCSVExport,
     ClusterAuthEvent,

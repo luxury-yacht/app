@@ -219,24 +219,38 @@ func decodeSettingsDataFile(data []byte) (*settingsDataFile, settingsSideEffects
 		return nil, settingsSideEffects{}, fmt.Errorf("settings import must contain at least one kubeconfig search path")
 	}
 
-	normalized := normalizeSettingsFile(&settingsFile{
+	imported := &settingsFile{
 		SchemaVersion: settingsSchemaVersion,
 		Preferences:   document.Preferences,
 		Kubeconfig:    settingsKubeconfig{SearchPaths: document.KubeconfigSearchPaths},
-	})
-	document.Preferences = normalized.Preferences
-	importedSettings := appSettingsFromFile(normalized)
-	validated := getDefaultAppSettings()
-	effects := settingsSideEffects{}
-	for _, descriptor := range appPreferenceDescriptors() {
-		if err := descriptor.apply(validated, descriptor.key, descriptor.current(importedSettings), &effects); err != nil {
-			return nil, settingsSideEffects{}, fmt.Errorf("validate settings import: %w", err)
-		}
 	}
+	effects, err := validateImportedPreferences(imported)
+	if err != nil {
+		return nil, settingsSideEffects{}, err
+	}
+	document.Preferences = normalizeSettingsFile(imported).Preferences
 	if err := validateImportedThemes(document.Preferences.Themes); err != nil {
 		return nil, settingsSideEffects{}, err
 	}
 	return &document, effects, nil
+}
+
+// validateImportedPreferences checks the imported values as written, after only
+// filling what is absent, so an unknown enum or malformed color rejects the
+// import instead of being repaired away. It returns every effect the import
+// must apply.
+func validateImportedPreferences(imported *settingsFile) (settingsSideEffects, error) {
+	completeSettingsFile(imported)
+	values := &AppSettings{}
+	readAppPreferences(&imported.Preferences, values)
+	validated := getDefaultAppSettings()
+	effects := settingsSideEffects{}
+	for _, descriptor := range appPreferenceDescriptors() {
+		if err := descriptor.apply(validated, descriptor.current(values), &effects); err != nil {
+			return settingsSideEffects{}, fmt.Errorf("validate settings import: %w", err)
+		}
+	}
+	return effects, nil
 }
 
 func validateImportedThemes(themes []Theme) error {

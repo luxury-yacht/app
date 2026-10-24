@@ -156,9 +156,7 @@ export function PreferenceNumberRow({
           value={draft ?? String(value)}
           onChange={setDraft}
           onCommit={(raw) => {
-            commitIntegerPreferenceInput(setting.prefKey, raw, setting.persist, {
-              defaultOnNonPositive: true,
-            });
+            commitIntegerPreferenceInput(setting.prefKey, raw, setting.persist);
             setDraft(null);
           }}
         />{' '}

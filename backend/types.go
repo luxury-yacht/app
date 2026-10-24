@@ -19,8 +19,6 @@ type (
 	KubeconfigInfo                      = types.KubeconfigInfo
 	WindowSettings                      = types.WindowSettings
 	AppSettings                         = types.AppSettings
-	AppPreferenceSchema                 = types.AppPreferenceSchema
-	AppSettingsSchema                   = types.AppSettingsSchema
 	AppPreferenceChange                 = types.AppPreferenceChange
 	UpdateAppPreferencesRequest         = types.UpdateAppPreferencesRequest
 	UpdateAppPreferencesResponse        = types.UpdateAppPreferencesResponse

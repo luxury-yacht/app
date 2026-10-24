@@ -233,10 +233,6 @@ export function GetAppSettings(): $CancellablePromise<$models.AppSettings | null
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetAppSettings");
 }
 
-export function GetAppSettingsSchema(): $CancellablePromise<$models.AppSettingsSchema | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetAppSettingsSchema");
-}
-
 export function GetClusterAllowedNamespaces(clusterID: string): $CancellablePromise<string[] | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetClusterAllowedNamespaces", clusterID);
 }

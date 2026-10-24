@@ -19,3 +19,8 @@ package backend
 // The frontend's per-kind facets (tabs, logs/shell/metrics sources, object-map
 // support, action eligibility) are generated from the kind registry.
 //go:generate go run ./internal/genkindfacets/cmd -out ../frontend/src/shared/kinds/kindFacets.generated.ts
+
+// The frontend's app-preference contract (keys, types, defaults, bounds,
+// allowed values) and its parity vectors are generated from the preference
+// schema in internal/preferenceschema.
+//go:generate go run ./internal/genpreferences/cmd -out ../frontend/src/core/settings/appPreferences.generated.ts -vectors-out ../frontend/src/core/settings/appPreferences.parity.generated.json

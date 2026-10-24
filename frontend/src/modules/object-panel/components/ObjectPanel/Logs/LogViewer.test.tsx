@@ -24,11 +24,8 @@ import type {
   ContainerLogsWarning,
   ContainerLogsWireEntry,
 } from '@/core/refresh/types';
-import {
-  OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE,
-  OBJ_PANEL_LOGS_BUFFER_MIN_SIZE,
-  setObjPanelLogsBufferMaxSize,
-} from '@/core/settings/appPreferences';
+import { setObjPanelLogsBufferMaxSize } from '@/core/settings/appPreferences';
+import { APP_PREFERENCE_SPECS as SPECS } from '@/core/settings/appPreferences.generated';
 import { objectPanelId } from '@/modules/object-panel/objectPanelRef';
 import {
   installAppStateHarness,
@@ -966,7 +963,7 @@ describe('LogViewer active pod synchronisation', () => {
 
   it('freezes visible log rows while paused and resumes from a bottom overlay', async () => {
     // A small buffer, so the next line evicts the oldest.
-    const bufferSize = OBJ_PANEL_LOGS_BUFFER_MIN_SIZE;
+    const bufferSize = SPECS.objPanelLogsBufferMaxSize.min;
     app.preferences({ objPanelLogsBufferMaxSize: bufferSize });
     const anchored = (index: number) => logLine('web-1', `anchored line ${index}`, at(index));
     const firstLine = '[2024-05-01T10:00:01Z] [web-1] anchored line 1';
@@ -1011,7 +1008,7 @@ describe('LogViewer active pod synchronisation', () => {
           expect(content.scrollTop).toBe(400);
         } finally {
           // The stream manager keeps the buffer size across tests.
-          setObjPanelLogsBufferMaxSize(OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE);
+          setObjPanelLogsBufferMaxSize(SPECS.objPanelLogsBufferMaxSize.defaultValue);
           await app.settle();
         }
       }

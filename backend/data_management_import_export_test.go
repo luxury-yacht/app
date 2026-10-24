@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/internal/appupdates"
+	"github.com/luxury-yacht/app/backend/internal/preferenceschema"
 	"github.com/stretchr/testify/require"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -383,8 +384,8 @@ func TestFactoryResetClearsEveryAppOwnedArtifactAndRestoresRuntimePolicyDefaults
 	require.FileExists(t, externalKubeconfigPath, "Factory Reset must preserve user-owned kubeconfig files")
 	require.FileExists(t, siblingStatePath, "Factory Reset must preserve other applications' state")
 	require.Nil(t, app.Preferences.appSettings)
-	require.Equal(t, defaultPermissionSSRRFetchConcurrency, app.PermissionFetchPolicy.Concurrency())
-	require.Equal(t, defaultObjPanelLogsTargetPerScopeLimit, app.ContainerLogsPolicy.Limit())
+	require.Equal(t, preferenceschema.DefaultPermissionSSRRFetchConcurrency, app.PermissionFetchPolicy.Concurrency())
+	require.Equal(t, preferenceschema.DefaultObjPanelLogsTargetPerScopeLimit, app.ContainerLogsPolicy.Limit())
 	require.Equal(t, 2, updateState.resetCalls)
 	require.Equal(t, 2, searchPathResets)
 }
@@ -445,6 +446,41 @@ func TestReadDataImportFileRejectsOversizedFiles(t *testing.T) {
 	require.ErrorContains(t, err, "import file exceeds")
 }
 
+// Integer settings are Go ints on disk, so a fractional value in an import
+// fails to parse before validation and the import changes nothing.
+func TestImportSettingsRejectsFractionalIntegerWithoutChangingSettings(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newSettingsEffectsTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	require.NoError(t, app.Preferences.saveSettingsFile(defaultSettingsFile()))
+	settingsPath, err := app.Preferences.getSettingsFilePath()
+	require.NoError(t, err)
+	before, err := os.ReadFile(settingsPath)
+	require.NoError(t, err)
+
+	encoded, err := json.Marshal(settingsDataFile{
+		Format:                settingsDataFormat,
+		SchemaVersion:         settingsDataSchemaVersion,
+		Preferences:           defaultSettingsFile().Preferences,
+		KubeconfigSearchPaths: []string{"/portable/kubeconfigs"},
+	})
+	require.NoError(t, err)
+	var document map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &document))
+	document["preferences"].(map[string]any)["defaultTablePageSize"] = 25.5
+	encoded, err = json.Marshal(document)
+	require.NoError(t, err)
+	importPath := filepath.Join(t.TempDir(), "settings.json")
+	require.NoError(t, os.WriteFile(importPath, encoded, 0o600))
+	installDataManagementDialogs(t, app, "", importPath)
+
+	_, err = app.DataManagement.ImportSettings()
+	require.ErrorContains(t, err, "parse settings import")
+	after, err := os.ReadFile(settingsPath)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+}
+
 func TestDecodeSettingsDataFileRejectsInvalidPortableSettings(t *testing.T) {
 	makeDocument := func() settingsDataFile {
 		return settingsDataFile{
@@ -480,6 +516,16 @@ func TestDecodeSettingsDataFileRejectsInvalidPortableSettings(t *testing.T) {
 		require.NoError(t, err)
 		_, _, err = decodeSettingsDataFile(data)
 		require.ErrorContains(t, err, "invalid appearance mode")
+	})
+
+	// Reading settings repairs a malformed color; an import still rejects it.
+	t.Run("color", func(t *testing.T) {
+		document := makeDocument()
+		document.Preferences.AccentColorLight = "#zzz"
+		data, err := json.Marshal(document)
+		require.NoError(t, err)
+		_, _, err = decodeSettingsDataFile(data)
+		require.ErrorContains(t, err, "invalid color format")
 	})
 
 	t.Run("theme", func(t *testing.T) {

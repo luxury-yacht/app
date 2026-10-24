@@ -1,12 +1,15 @@
 package backend
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/luxury-yacht/app/backend/internal/preferenceschema"
 )
 
 // TestGetThemes_Default verifies that GetThemes always returns the protected
@@ -287,11 +290,122 @@ func TestReorderThemes_InvalidIDs(t *testing.T) {
 	assert.Contains(t, err.Error(), "default theme must remain last")
 }
 
+// activeAppearance is the palette, accent, and link part of the active settings.
+type activeAppearance struct {
+	HueLight, SaturationLight, BrightnessLight   int
+	HueDark, SaturationDark, BrightnessDark      int
+	AccentLight, AccentDark, LinkLight, LinkDark string
+}
+
+func cachedAppearance(t *testing.T, preferences *PreferencesService) activeAppearance {
+	t.Helper()
+	settings, err := preferences.GetAppSettings()
+	require.NoError(t, err)
+	return activeAppearance{
+		settings.PaletteHueLight, settings.PaletteSaturationLight, settings.PaletteBrightnessLight,
+		settings.PaletteHueDark, settings.PaletteSaturationDark, settings.PaletteBrightnessDark,
+		settings.AccentColorLight, settings.AccentColorDark, settings.LinkColorLight, settings.LinkColorDark,
+	}
+}
+
+func savedAppearance(t *testing.T, preferences *PreferencesService) activeAppearance {
+	t.Helper()
+	path, err := preferences.getSettingsFilePath()
+	require.NoError(t, err)
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var file settingsFile
+	require.NoError(t, json.Unmarshal(data, &file))
+	saved := file.Preferences
+	return activeAppearance{
+		saved.PaletteHueLight, saved.PaletteSaturationLight, saved.PaletteBrightnessLight,
+		saved.PaletteHueDark, saved.PaletteSaturationDark, saved.PaletteBrightnessDark,
+		saved.AccentColorLight, saved.AccentColorDark, saved.LinkColorLight, saved.LinkColorDark,
+	}
+}
+
+// A theme can hold values outside the preference bounds (SaveTheme checks only
+// its identity and pattern). Applying it stores the repaired values, and the
+// cache that later saves write from holds the same values.
+func TestApplyThemeStoresRepairedValuesInCacheAndFile(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newSettingsEffectsTestFixture(t)
+	ensurePreferencesLoaded(t, app.Preferences)
+	require.NoError(t, app.Preferences.SaveTheme(Theme{
+		ID: "loud", Name: "Loud",
+		PaletteHueLight: 999, PaletteSaturationLight: 150, PaletteBrightnessLight: -80,
+		AccentColorLight: "#zzz",
+	}))
+
+	require.NoError(t, app.Preferences.ApplyTheme("loud"))
+
+	want := activeAppearance{HueLight: 360, SaturationLight: 100, BrightnessLight: -50}
+	require.Equal(t, want, savedAppearance(t, app.Preferences))
+	require.Equal(t, want, cachedAppearance(t, app.Preferences))
+
+	// An unrelated save writes the whole cache back to the file.
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyUseShortResourceNames, true))
+	require.Equal(t, want, savedAppearance(t, app.Preferences))
+	require.Equal(t, want, cachedAppearance(t, app.Preferences))
+}
+
+// A failed save leaves the active values where they were, in the cache and on
+// disk; the same apply succeeds once the file can be written.
+func TestApplyThemeFailedSaveLeavesActiveValues(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newSettingsEffectsTestFixture(t)
+	preferences := app.Preferences
+	require.NoError(t, updatePreferences(preferences,
+		AppPreferenceChange{Key: preferenceschema.KeyPaletteHueLight, Value: 10},
+		AppPreferenceChange{Key: preferenceschema.KeyPaletteSaturationLight, Value: 20},
+		AppPreferenceChange{Key: preferenceschema.KeyPaletteBrightnessLight, Value: 5},
+		AppPreferenceChange{Key: preferenceschema.KeyAccentColorLight, Value: "#112233"},
+		AppPreferenceChange{Key: preferenceschema.KeyLinkColorLight, Value: "#445566"},
+	))
+	require.NoError(t, preferences.SaveTheme(Theme{
+		ID: "ocean", Name: "Ocean",
+		PaletteHueLight: 210, PaletteSaturationLight: 80, PaletteBrightnessLight: -15,
+		AccentColorLight: "#0077cc", LinkColorLight: "#3399ff",
+	}))
+	ensurePreferencesLoaded(t, preferences)
+	seeded := activeAppearance{
+		HueLight: 10, SaturationLight: 20, BrightnessLight: 5,
+		AccentLight: "#112233", LinkLight: "#445566",
+	}
+	require.Equal(t, seeded, cachedAppearance(t, preferences))
+	path, err := preferences.getSettingsFilePath()
+	require.NoError(t, err)
+	diskBefore, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	originalWrite := writeSettingsFileAtomic
+	t.Cleanup(func() { writeSettingsFileAtomic = originalWrite })
+	failure := errors.New("forced theme write failure")
+	writeSettingsFileAtomic = func(string, []byte, os.FileMode) error { return failure }
+	require.ErrorIs(t, preferences.ApplyTheme("ocean"), failure)
+	require.Equal(t, seeded, cachedAppearance(t, preferences))
+	diskAfter, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, diskBefore, diskAfter)
+
+	writeSettingsFileAtomic = originalWrite
+	require.NoError(t, preferences.ApplyTheme("ocean"))
+	applied := activeAppearance{
+		HueLight: 210, SaturationLight: 80, BrightnessLight: -15,
+		AccentLight: "#0077cc", LinkLight: "#3399ff",
+	}
+	require.Equal(t, applied, savedAppearance(t, preferences))
+	require.Equal(t, applied, cachedAppearance(t, preferences))
+}
+
 // TestApplyTheme verifies that ApplyTheme copies a saved theme's palette values
-// into the active settings fields.
+// into the active settings fields, on disk and in the loaded cache.
 func TestApplyTheme(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newSettingsEffectsTestFixture(t)
+	// Load first: ApplyTheme updates only a cache that exists, and a read after
+	// an unloaded apply would load the file and hide a stale cache.
+	ensurePreferencesLoaded(t, app.Preferences)
 
 	// Save a theme with specific palette values.
 	theme := Theme{
@@ -323,6 +437,7 @@ func TestApplyTheme(t *testing.T) {
 	assert.Equal(t, -15, settings.Preferences.PaletteBrightnessDark)
 	assert.Equal(t, "#0077cc", settings.Preferences.AccentColorLight)
 	assert.Equal(t, "#3399ff", settings.Preferences.AccentColorDark)
+	assert.Equal(t, savedAppearance(t, app.Preferences), cachedAppearance(t, app.Preferences))
 }
 
 // TestApplyTheme_NotFound verifies that ApplyTheme returns an error when the
@@ -509,7 +624,7 @@ func TestThemeLibraryMutationsPublishOnlyAfterPersistence(t *testing.T) {
 			cached, err := preferences.GetAppSettings()
 			require.NoError(t, err)
 			assert.Equal(t, saved, cached.Themes)
-			require.NoError(t, updatePreference(preferences, appPreferenceAppearanceMode, "dark"))
+			require.NoError(t, updatePreference(preferences, preferenceschema.KeyAppearanceMode, "dark"))
 			afterPreferenceWrite, err := preferences.GetThemes()
 			require.NoError(t, err)
 			assert.Equal(t, saved, afterPreferenceWrite)

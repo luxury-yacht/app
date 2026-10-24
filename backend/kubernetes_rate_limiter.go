@@ -5,6 +5,8 @@ import (
 	"sync"
 
 	"k8s.io/client-go/util/flowcontrol"
+
+	"github.com/luxury-yacht/app/backend/internal/preferenceschema"
 )
 
 type mutableKubernetesRateLimiter struct {
@@ -21,11 +23,11 @@ func newMutableKubernetesRateLimiter(qps, burst int) *mutableKubernetesRateLimit
 }
 
 func (l *mutableKubernetesRateLimiter) Set(qps, burst int) {
-	if qps < minKubernetesClientQPS {
-		qps = minKubernetesClientQPS
+	if qps < preferenceschema.MinKubernetesClientQPS {
+		qps = preferenceschema.MinKubernetesClientQPS
 	}
-	if burst < minKubernetesClientBurst {
-		burst = minKubernetesClientBurst
+	if burst < preferenceschema.MinKubernetesClientBurst {
+		burst = preferenceschema.MinKubernetesClientBurst
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()

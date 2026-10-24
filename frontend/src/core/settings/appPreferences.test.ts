@@ -13,31 +13,12 @@ import {
   commitIntegerPreferenceInput,
   createPaletteTintPreferenceWorkflow,
   getAccentColor,
-  getIntegerPreferenceMetadata,
   getLinkColor,
   getObjectPanelLayoutDefaults,
   getPaletteTint,
   getPreference,
-  getPreferenceMetadata,
   getSidebarGroupExpanded,
   hydrateAppPreferences,
-  KUBERNETES_CLIENT_BURST_DEFAULT,
-  KUBERNETES_CLIENT_BURST_MAX,
-  KUBERNETES_CLIENT_BURST_MIN,
-  KUBERNETES_CLIENT_QPS_DEFAULT,
-  KUBERNETES_CLIENT_QPS_MAX,
-  KUBERNETES_CLIENT_QPS_MIN,
-  normalizeIntegerPreferenceValue,
-  OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE,
-  OBJ_PANEL_LOGS_BUFFER_MAX_SIZE,
-  OBJ_PANEL_LOGS_BUFFER_MIN_SIZE,
-  OBJ_PANEL_LOGS_TARGET_GLOBAL_DEFAULT,
-  OBJ_PANEL_LOGS_TARGET_GLOBAL_MAX,
-  OBJ_PANEL_LOGS_TARGET_PER_SCOPE_DEFAULT,
-  OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MAX,
-  PERMISSION_SSRR_FETCH_CONCURRENCY_DEFAULT,
-  PERMISSION_SSRR_FETCH_CONCURRENCY_MAX,
-  PERMISSION_SSRR_FETCH_CONCURRENCY_MIN,
   resetAppPreferencesCacheForTesting,
   setAccentColor,
   setAppearanceModePreference,
@@ -63,10 +44,10 @@ import {
   subscribePreference,
   validateThemeClusterPattern,
 } from './appPreferences';
+import { APP_PREFERENCE_SPECS as SPECS } from './appPreferences.generated';
 
 const appMocks = vi.hoisted(() => ({
   GetAppSettings: vi.fn(),
-  GetAppSettingsSchema: vi.fn(),
   UpdateAppPreferences: vi.fn(),
   ValidateThemeClusterPattern: vi.fn(),
 }));
@@ -96,289 +77,8 @@ const deferred = <T>() => {
   return { promise, resolve, reject };
 };
 
-const preferenceSchema = (overrides: Record<string, Partial<Record<string, unknown>>> = {}) => {
-  const definitions: Array<{
-    key: string;
-    type: string;
-    defaultValue: unknown;
-    currentValue: unknown;
-    min?: number;
-    max?: number;
-    enumOptions?: string[];
-    validation?: string;
-    runtimeSideEffect: boolean;
-  }> = [
-    {
-      key: 'appearanceMode',
-      type: 'enum',
-      defaultValue: 'system',
-      currentValue: 'system',
-      enumOptions: ['light', 'dark', 'system'],
-      runtimeSideEffect: true,
-    },
-    {
-      key: 'useShortResourceNames',
-      type: 'boolean',
-      defaultValue: false,
-      currentValue: false,
-      runtimeSideEffect: false,
-    },
-    {
-      key: 'dimInactiveNamespaces',
-      type: 'boolean',
-      defaultValue: true,
-      currentValue: true,
-      runtimeSideEffect: false,
-    },
-    {
-      key: 'exclusiveNamespaces',
-      type: 'boolean',
-      defaultValue: true,
-      currentValue: true,
-      runtimeSideEffect: false,
-    },
-    {
-      key: 'errorReportingEnabled',
-      type: 'boolean',
-      defaultValue: true,
-      currentValue: true,
-      runtimeSideEffect: true,
-    },
-    {
-      key: 'autoRefreshEnabled',
-      type: 'boolean',
-      defaultValue: true,
-      currentValue: true,
-      runtimeSideEffect: true,
-    },
-    {
-      key: 'metricsRefreshIntervalMs',
-      type: 'integer',
-      defaultValue: 5000,
-      currentValue: 5000,
-      min: 1,
-      runtimeSideEffect: true,
-    },
-    {
-      key: 'kubernetesClientQPS',
-      type: 'integer',
-      defaultValue: 200,
-      currentValue: 200,
-      min: 1,
-      max: 5000,
-      runtimeSideEffect: true,
-    },
-    {
-      key: 'kubernetesClientBurst',
-      type: 'integer',
-      defaultValue: 500,
-      currentValue: 500,
-      min: 1,
-      max: 10000,
-      runtimeSideEffect: true,
-    },
-    {
-      key: 'permissionSSRRFetchConcurrency',
-      type: 'integer',
-      defaultValue: 32,
-      currentValue: 32,
-      min: 1,
-      max: 256,
-      runtimeSideEffect: false,
-    },
-    {
-      key: 'objPanelLogsBufferMaxSize',
-      type: 'integer',
-      defaultValue: 1000,
-      currentValue: 1000,
-      min: 100,
-      max: 10000,
-      runtimeSideEffect: false,
-    },
-    {
-      key: 'objPanelLogsApiTimestampFormat',
-      type: 'string',
-      defaultValue: 'YYYY-MM-DDTHH:mm:ss.SSS[Z]',
-      currentValue: 'YYYY-MM-DDTHH:mm:ss.SSS[Z]',
-      validation: 'dayjs-format',
-      runtimeSideEffect: false,
-    },
-    {
-      key: 'objPanelLogsApiTimestampUseLocalTimeZone',
-      type: 'boolean',
-      defaultValue: false,
-      currentValue: false,
-      runtimeSideEffect: false,
-    },
-    {
-      key: 'objPanelLogsTargetPerScopeLimit',
-      type: 'integer',
-      defaultValue: 100,
-      currentValue: 100,
-      min: 1,
-      max: 1000,
-      runtimeSideEffect: true,
-    },
-    {
-      key: 'objPanelLogsTargetGlobalLimit',
-      type: 'integer',
-      defaultValue: 200,
-      currentValue: 200,
-      min: 1,
-      max: 1000,
-      runtimeSideEffect: true,
-    },
-    {
-      key: 'gridTablePersistenceMode',
-      type: 'enum',
-      defaultValue: 'shared',
-      currentValue: 'shared',
-      enumOptions: ['shared', 'namespaced'],
-      runtimeSideEffect: false,
-    },
-    {
-      key: 'defaultObjectPanelPosition',
-      type: 'enum',
-      defaultValue: 'right',
-      currentValue: 'right',
-      enumOptions: ['right', 'bottom', 'floating'],
-      runtimeSideEffect: false,
-    },
-    {
-      key: 'objectPanelDockedRightWidth',
-      type: 'integer',
-      defaultValue: 600,
-      currentValue: 600,
-      min: 500,
-      max: 9999,
-      runtimeSideEffect: false,
-    },
-    {
-      key: 'objectPanelDockedBottomHeight',
-      type: 'integer',
-      defaultValue: 600,
-      currentValue: 600,
-      min: 200,
-      max: 9999,
-      runtimeSideEffect: false,
-    },
-    {
-      key: 'objectPanelFloatingWidth',
-      type: 'integer',
-      defaultValue: 600,
-      currentValue: 600,
-      min: 450,
-      max: 9999,
-      runtimeSideEffect: false,
-    },
-    {
-      key: 'objectPanelFloatingHeight',
-      type: 'integer',
-      defaultValue: 800,
-      currentValue: 800,
-      min: 200,
-      max: 9999,
-      runtimeSideEffect: false,
-    },
-    {
-      key: 'paletteHueLight',
-      type: 'integer',
-      defaultValue: 0,
-      currentValue: 0,
-      min: 0,
-      max: 360,
-      runtimeSideEffect: false,
-    },
-    {
-      key: 'paletteSaturationLight',
-      type: 'integer',
-      defaultValue: 0,
-      currentValue: 0,
-      min: 0,
-      max: 100,
-      runtimeSideEffect: false,
-    },
-    {
-      key: 'paletteBrightnessLight',
-      type: 'integer',
-      defaultValue: 0,
-      currentValue: 0,
-      min: -50,
-      max: 50,
-      runtimeSideEffect: false,
-    },
-    {
-      key: 'paletteHueDark',
-      type: 'integer',
-      defaultValue: 0,
-      currentValue: 0,
-      min: 0,
-      max: 360,
-      runtimeSideEffect: false,
-    },
-    {
-      key: 'paletteSaturationDark',
-      type: 'integer',
-      defaultValue: 0,
-      currentValue: 0,
-      min: 0,
-      max: 100,
-      runtimeSideEffect: false,
-    },
-    {
-      key: 'paletteBrightnessDark',
-      type: 'integer',
-      defaultValue: 0,
-      currentValue: 0,
-      min: -50,
-      max: 50,
-      runtimeSideEffect: false,
-    },
-    {
-      key: 'accentColorLight',
-      type: 'color',
-      defaultValue: '',
-      currentValue: '',
-      validation: '#rrggbb-or-empty',
-      runtimeSideEffect: false,
-    },
-    {
-      key: 'accentColorDark',
-      type: 'color',
-      defaultValue: '',
-      currentValue: '',
-      validation: '#rrggbb-or-empty',
-      runtimeSideEffect: false,
-    },
-    {
-      key: 'linkColorLight',
-      type: 'color',
-      defaultValue: '',
-      currentValue: '',
-      validation: '#rrggbb-or-empty',
-      runtimeSideEffect: false,
-    },
-    {
-      key: 'linkColorDark',
-      type: 'color',
-      defaultValue: '',
-      currentValue: '',
-      validation: '#rrggbb-or-empty',
-      runtimeSideEffect: false,
-    },
-  ];
-
-  return {
-    preferences: definitions.map((definition) => ({
-      ...definition,
-      ...overrides[definition.key],
-    })),
-  };
-};
-
 vi.mock('@core/backend-api', () => ({
   GetAppSettings: (...args: unknown[]) => appMocks.GetAppSettings(...args),
-  GetAppSettingsSchema: (...args: unknown[]) => appMocks.GetAppSettingsSchema(...args),
   UpdateAppPreferences: (...args: unknown[]) => appMocks.UpdateAppPreferences(...args),
   ValidateThemeClusterPattern: (...args: unknown[]) =>
     appMocks.ValidateThemeClusterPattern(...args),
@@ -393,7 +93,6 @@ describe('appPreferences', () => {
   beforeEach(() => {
     resetAppPreferencesCacheForTesting();
     appMocks.GetAppSettings.mockReset();
-    appMocks.GetAppSettingsSchema.mockReset();
     appMocks.UpdateAppPreferences.mockReset();
     appMocks.ValidateThemeClusterPattern.mockReset();
     telemetryMocks.captureBootstrapError.mockReset();
@@ -402,7 +101,6 @@ describe('appPreferences', () => {
     telemetryMocks.recordBrokerRequestStarted.mockReset();
     desktopRuntimeMocks.emitBroadcastEvent.mockReset();
     desktopRuntimeMocks.emitBroadcastEvent.mockResolvedValue(false);
-    appMocks.GetAppSettingsSchema.mockResolvedValue(null);
     appMocks.UpdateAppPreferences.mockResolvedValue({ settings: {}, changedKeys: [] });
   });
 
@@ -495,39 +193,9 @@ describe('appPreferences', () => {
     });
   });
 
-  it('hydrates preferences from backend schema when available', async () => {
-    appMocks.GetAppSettingsSchema.mockResolvedValue({
+  it('defaults error reporting on when the backend settings omit the preference', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({
       anonymizedId: '123e4567-e89b-42d3-a456-426614174000',
-      preferences: [
-        { key: 'appearanceMode', type: 'enum', defaultValue: 'system', currentValue: 'dark' },
-        { key: 'retiredPreference', type: 'integer', defaultValue: 1000, currentValue: 5000 },
-        {
-          key: 'defaultObjectPanelPosition',
-          type: 'enum',
-          defaultValue: 'right',
-          currentValue: 'bottom',
-        },
-        {
-          key: 'objectPanelDockedRightWidth',
-          type: 'integer',
-          defaultValue: 600,
-          currentValue: 720,
-        },
-      ],
-    });
-
-    const preferences = await hydrateAppPreferences({ force: true });
-
-    expect(appMocks.GetAppSettings).not.toHaveBeenCalled();
-    expect(preferences.anonymizedId).toBe('123e4567-e89b-42d3-a456-426614174000');
-    expect(getPreference('appearanceMode')).toBe('dark');
-    expect(getPreference('defaultObjectPanelPosition')).toBe('bottom');
-  });
-
-  it('defaults error reporting on when the backend schema omits the preference', async () => {
-    appMocks.GetAppSettingsSchema.mockResolvedValue({
-      anonymizedId: '123e4567-e89b-42d3-a456-426614174000',
-      preferences: [],
     });
 
     await hydrateAppPreferences({ force: true });
@@ -535,7 +203,7 @@ describe('appPreferences', () => {
     expect(getPreference('errorReportingEnabled')).toBe(true);
   });
 
-  it('hydrates anonymizedId from legacy settings fallback', async () => {
+  it('hydrates anonymizedId from backend settings', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
       anonymizedId: '123e4567-e89b-42d3-a456-426614174000',
       errorReportingEnabled: true,
@@ -546,80 +214,17 @@ describe('appPreferences', () => {
     expect(preferences.anonymizedId).toBe('123e4567-e89b-42d3-a456-426614174000');
   });
 
-  it('reports a schema hydration failure and uses the fallback preference', async () => {
-    const failure = new Error('schema unavailable');
-    appMocks.GetAppSettingsSchema.mockRejectedValue(failure);
-    appMocks.GetAppSettings.mockResolvedValue({ errorReportingEnabled: false });
-
-    await hydrateAppPreferences({ force: true });
-
-    expect(telemetryMocks.captureBootstrapError).toHaveBeenCalledWith(failure, {
-      action: 'loadAppSettingsSchema',
-    });
-    expect(getPreference('errorReportingEnabled')).toBe(false);
-  });
-
   it('fails error reporting closed when persisted settings cannot be read', async () => {
-    const schemaFailure = new Error('schema unavailable');
     const settingsFailure = new Error('settings unavailable');
-    appMocks.GetAppSettingsSchema.mockRejectedValue(schemaFailure);
     appMocks.GetAppSettings.mockRejectedValue(settingsFailure);
 
     await hydrateAppPreferences({ force: true });
 
-    expect(telemetryMocks.captureBootstrapError).toHaveBeenNthCalledWith(1, schemaFailure, {
-      action: 'loadAppSettingsSchema',
-    });
-    expect(telemetryMocks.captureBootstrapError).toHaveBeenNthCalledWith(2, settingsFailure, {
+    expect(telemetryMocks.captureBootstrapError).toHaveBeenCalledOnce();
+    expect(telemetryMocks.captureBootstrapError).toHaveBeenCalledWith(settingsFailure, {
       action: 'loadAppSettings',
     });
     expect(getPreference('errorReportingEnabled')).toBe(false);
-  });
-
-  it('exposes typed preference metadata from the backend schema', async () => {
-    appMocks.GetAppSettingsSchema.mockResolvedValue(
-      preferenceSchema({
-        kubernetesClientQPS: { defaultValue: 150, currentValue: 5000, min: 50, max: 9000 },
-        appearanceMode: { defaultValue: 'system', currentValue: 'dark' },
-      })
-    );
-
-    await hydrateAppPreferences({ force: true });
-
-    expect(getPreferenceMetadata('appearanceMode')).toMatchObject({
-      key: 'appearanceMode',
-      type: 'enum',
-      defaultValue: 'system',
-      currentValue: 'dark',
-      enumOptions: ['light', 'dark', 'system'],
-      runtimeSideEffect: true,
-    });
-    expect(getIntegerPreferenceMetadata('kubernetesClientQPS')).toMatchObject({
-      key: 'kubernetesClientQPS',
-      type: 'integer',
-      defaultValue: 150,
-      currentValue: 5000,
-      min: 50,
-      max: 9000,
-    });
-    expect(normalizeIntegerPreferenceValue('kubernetesClientQPS', 10)).toBe(50);
-    expect(normalizeIntegerPreferenceValue('kubernetesClientQPS', 99999)).toBe(9000);
-  });
-
-  it('tracks schema metadata for every appPreferences key', async () => {
-    const schema = preferenceSchema();
-    appMocks.GetAppSettingsSchema.mockResolvedValue(schema);
-
-    await hydrateAppPreferences({ force: true });
-
-    const keys = schema.preferences.map((entry) => entry.key);
-    for (const key of keys) {
-      expect(getPreferenceMetadata(key as AppPreferenceKey)).toMatchObject({
-        key,
-      });
-    }
-    expect(keys).not.toContain('selectedKubeconfigs');
-    expect(keys).not.toContain('themes');
   });
 
   it('defaults palette hue, saturation, and brightness to 0 when not present', async () => {
@@ -646,6 +251,19 @@ describe('appPreferences', () => {
     await hydrateAppPreferences({ force: true });
 
     expect(getPreference('objPanelLogsApiTimestampFormat')).toBe('YYYY-MM-DDTHH:mm:ss.SSS[Z]');
+  });
+
+  // The backend keeps any non-empty format; the frontend's Day.js check is the
+  // deliberate stricter rule, so it is tested here rather than by parity.
+  it('hydrates a padded Object Panel Logs Tab API timestamp format trimmed', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({
+      appearanceMode: 'system',
+      objPanelLogsApiTimestampFormat: '  HH:mm:ss  ',
+    });
+
+    await hydrateAppPreferences({ force: true });
+
+    expect(getPreference('objPanelLogsApiTimestampFormat')).toBe('HH:mm:ss');
   });
 
   it('hydrates the default table page size and snaps off-list values to the default', async () => {
@@ -814,8 +432,7 @@ describe('appPreferences', () => {
     unsubscribe();
   });
 
-  it('normalizes Object Panel layout updates from schema metadata', async () => {
-    appMocks.GetAppSettingsSchema.mockResolvedValue(preferenceSchema());
+  it('normalizes Object Panel layout updates to the preference bounds', async () => {
     await hydrateAppPreferences({ force: true });
 
     setObjectPanelLayoutDefaults({
@@ -882,21 +499,9 @@ describe('appPreferences', () => {
   });
 
   it('hydrates sidebar groups, persists toggles and rolls back a failed toggle for subscribers', async () => {
-    appMocks.GetAppSettingsSchema.mockResolvedValue({
-      preferences: [
-        {
-          key: 'sidebarClusterResourcesExpanded',
-          type: 'boolean',
-          defaultValue: true,
-          currentValue: false,
-        },
-        {
-          key: 'sidebarNamespaceExtensionsExpanded',
-          type: 'boolean',
-          defaultValue: false,
-          currentValue: true,
-        },
-      ],
+    appMocks.GetAppSettings.mockResolvedValue({
+      sidebarClusterResourcesExpanded: false,
+      sidebarNamespaceExtensionsExpanded: true,
     });
     await hydrateAppPreferences({ force: true });
     expect(getSidebarGroupExpanded('cluster', 'resources')).toBe(false);
@@ -1005,13 +610,13 @@ describe('appPreferences', () => {
   it('waits for pending preference writes before reading a forced refresh', async () => {
     appMocks.GetAppSettings.mockResolvedValue({ useShortResourceNames: false });
     await hydrateAppPreferences({ force: true });
-    appMocks.GetAppSettingsSchema.mockClear();
+    appMocks.GetAppSettings.mockClear();
     const write = deferred<unknown>();
     appMocks.UpdateAppPreferences.mockReturnValueOnce(write.promise);
     const saved = setUseShortResourceNames(true);
     const refreshed = hydrateAppPreferences({ force: true });
     await flushPromises();
-    const readsBeforeSave = appMocks.GetAppSettingsSchema.mock.calls.length;
+    const readsBeforeSave = appMocks.GetAppSettings.mock.calls.length;
     const visibleBeforeSave = getPreference('useShortResourceNames');
     appMocks.GetAppSettings.mockResolvedValue({ useShortResourceNames: true });
     write.resolve({});
@@ -1273,26 +878,22 @@ describe('appPreferences', () => {
     vi.useRealTimers();
   });
 
-  it('commits integer preference inputs through schema-backed normalization', async () => {
-    appMocks.GetAppSettingsSchema.mockResolvedValue(
-      preferenceSchema({
-        kubernetesClientQPS: { defaultValue: 750, currentValue: 1000, min: 50, max: 9000 },
-      })
-    );
+  it('commits integer preference inputs through the preference rules', async () => {
     await hydrateAppPreferences({ force: true });
     const persisted: number[] = [];
 
-    const normalized = commitIntegerPreferenceInput(
-      'kubernetesClientQPS',
-      '99999',
-      (value) => persisted.push(value),
-      { defaultOnNonPositive: true }
-    );
+    const commit = (raw: string) =>
+      commitIntegerPreferenceInput('kubernetesClientQPS', raw, (value) => persisted.push(value));
 
-    expect(normalized).toBe(9000);
-    expect(persisted).toEqual([9000]);
+    expect(commit('99999')).toBe(SPECS.kubernetesClientQPS.max);
+    expect(commit('0')).toBe(SPECS.kubernetesClientQPS.defaultValue);
+    expect(commit('not a number')).toBe(SPECS.kubernetesClientQPS.defaultValue);
+    expect(persisted).toEqual([
+      SPECS.kubernetesClientQPS.max,
+      SPECS.kubernetesClientQPS.defaultValue,
+      SPECS.kubernetesClientQPS.defaultValue,
+    ]);
   });
-
   it('setAccentColor updates cache and calls backend for the specified mode', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
       appearanceMode: 'system',
@@ -1354,10 +955,10 @@ describe('appPreferences', () => {
   it('defaults Kubernetes API settings when backend payload is missing the fields', async () => {
     appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system' });
     await hydrateAppPreferences({ force: true });
-    expect(getPreference('kubernetesClientQPS')).toBe(KUBERNETES_CLIENT_QPS_DEFAULT);
-    expect(getPreference('kubernetesClientBurst')).toBe(KUBERNETES_CLIENT_BURST_DEFAULT);
+    expect(getPreference('kubernetesClientQPS')).toBe(SPECS.kubernetesClientQPS.defaultValue);
+    expect(getPreference('kubernetesClientBurst')).toBe(SPECS.kubernetesClientBurst.defaultValue);
     expect(getPreference('permissionSSRRFetchConcurrency')).toBe(
-      PERMISSION_SSRR_FETCH_CONCURRENCY_DEFAULT
+      SPECS.permissionSSRRFetchConcurrency.defaultValue
     );
   });
 
@@ -1378,16 +979,16 @@ describe('appPreferences', () => {
     await hydrateAppPreferences({ force: true });
 
     setKubernetesClientQPS(0);
-    expect(getPreference('kubernetesClientQPS')).toBe(KUBERNETES_CLIENT_QPS_DEFAULT);
+    expect(getPreference('kubernetesClientQPS')).toBe(SPECS.kubernetesClientQPS.defaultValue);
 
     setKubernetesClientQPS(-1);
-    expect(getPreference('kubernetesClientQPS')).toBe(KUBERNETES_CLIENT_QPS_DEFAULT);
+    expect(getPreference('kubernetesClientQPS')).toBe(SPECS.kubernetesClientQPS.defaultValue);
 
     setKubernetesClientQPS(999_999);
-    expect(getPreference('kubernetesClientQPS')).toBe(KUBERNETES_CLIENT_QPS_MAX);
+    expect(getPreference('kubernetesClientQPS')).toBe(SPECS.kubernetesClientQPS.max);
 
-    setKubernetesClientQPS(KUBERNETES_CLIENT_QPS_MIN - 0.1);
-    expect(getPreference('kubernetesClientQPS')).toBe(KUBERNETES_CLIENT_QPS_MIN);
+    setKubernetesClientQPS(SPECS.kubernetesClientQPS.min - 0.1);
+    expect(getPreference('kubernetesClientQPS')).toBe(SPECS.kubernetesClientQPS.min);
   });
 
   it('setKubernetesClientBurst round-trips and clamps values', async () => {
@@ -1402,13 +1003,13 @@ describe('appPreferences', () => {
     });
 
     setKubernetesClientBurst(0);
-    expect(getPreference('kubernetesClientBurst')).toBe(KUBERNETES_CLIENT_BURST_DEFAULT);
+    expect(getPreference('kubernetesClientBurst')).toBe(SPECS.kubernetesClientBurst.defaultValue);
 
     setKubernetesClientBurst(999_999);
-    expect(getPreference('kubernetesClientBurst')).toBe(KUBERNETES_CLIENT_BURST_MAX);
+    expect(getPreference('kubernetesClientBurst')).toBe(SPECS.kubernetesClientBurst.max);
 
-    setKubernetesClientBurst(KUBERNETES_CLIENT_BURST_MIN - 0.1);
-    expect(getPreference('kubernetesClientBurst')).toBe(KUBERNETES_CLIENT_BURST_MIN);
+    setKubernetesClientBurst(SPECS.kubernetesClientBurst.min - 0.1);
+    expect(getPreference('kubernetesClientBurst')).toBe(SPECS.kubernetesClientBurst.min);
   });
 
   it('setPermissionSSRRFetchConcurrency round-trips and clamps values', async () => {
@@ -1424,26 +1025,26 @@ describe('appPreferences', () => {
 
     setPermissionSSRRFetchConcurrency(0);
     expect(getPreference('permissionSSRRFetchConcurrency')).toBe(
-      PERMISSION_SSRR_FETCH_CONCURRENCY_DEFAULT
+      SPECS.permissionSSRRFetchConcurrency.defaultValue
     );
 
     setPermissionSSRRFetchConcurrency(999_999);
     expect(getPreference('permissionSSRRFetchConcurrency')).toBe(
-      PERMISSION_SSRR_FETCH_CONCURRENCY_MAX
+      SPECS.permissionSSRRFetchConcurrency.max
     );
 
-    setPermissionSSRRFetchConcurrency(PERMISSION_SSRR_FETCH_CONCURRENCY_MIN - 0.1);
+    setPermissionSSRRFetchConcurrency(SPECS.permissionSSRRFetchConcurrency.min - 0.1);
     expect(getPreference('permissionSSRRFetchConcurrency')).toBe(
-      PERMISSION_SSRR_FETCH_CONCURRENCY_MIN
+      SPECS.permissionSSRRFetchConcurrency.min
     );
   });
 
   it('defaults Object Panel Logs Tab buffer size when the backend payload is missing the field', async () => {
     appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system' });
     await hydrateAppPreferences({ force: true });
-    // A new install keeps 5,000 lines per Logs tab.
-    expect(OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE).toBe(5000);
-    expect(getPreference('objPanelLogsBufferMaxSize')).toBe(OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE);
+    expect(getPreference('objPanelLogsBufferMaxSize')).toBe(
+      SPECS.objPanelLogsBufferMaxSize.defaultValue
+    );
   });
 
   it('defaults Object Panel Logs Tab buffer size when the backend payload reports zero (unset)', async () => {
@@ -1452,13 +1053,15 @@ describe('appPreferences', () => {
       objPanelLogsBufferMaxSize: 0,
     });
     await hydrateAppPreferences({ force: true });
-    expect(getPreference('objPanelLogsBufferMaxSize')).toBe(OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE);
+    expect(getPreference('objPanelLogsBufferMaxSize')).toBe(
+      SPECS.objPanelLogsBufferMaxSize.defaultValue
+    );
   });
 
   it('setObjPanelLogsBufferMaxSize round-trips an in-range value through the cache and backend', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
       appearanceMode: 'system',
-      objPanelLogsBufferMaxSize: OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE,
+      objPanelLogsBufferMaxSize: SPECS.objPanelLogsBufferMaxSize.defaultValue,
     });
     await hydrateAppPreferences({ force: true });
 
@@ -1474,14 +1077,14 @@ describe('appPreferences', () => {
     appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system' });
     await hydrateAppPreferences({ force: true });
     setObjPanelLogsBufferMaxSize(1);
-    expect(getPreference('objPanelLogsBufferMaxSize')).toBe(OBJ_PANEL_LOGS_BUFFER_MIN_SIZE);
+    expect(getPreference('objPanelLogsBufferMaxSize')).toBe(SPECS.objPanelLogsBufferMaxSize.min);
   });
 
   it('setObjPanelLogsBufferMaxSize clamps values above the maximum', async () => {
     appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system' });
     await hydrateAppPreferences({ force: true });
     setObjPanelLogsBufferMaxSize(999_999);
-    expect(getPreference('objPanelLogsBufferMaxSize')).toBe(OBJ_PANEL_LOGS_BUFFER_MAX_SIZE);
+    expect(getPreference('objPanelLogsBufferMaxSize')).toBe(SPECS.objPanelLogsBufferMaxSize.max);
   });
 
   it('hydrates Object Panel Logs Tab target limits from backend settings', async () => {
@@ -1499,10 +1102,10 @@ describe('appPreferences', () => {
     appMocks.GetAppSettings.mockResolvedValue({ appearanceMode: 'system' });
     await hydrateAppPreferences({ force: true });
     expect(getPreference('objPanelLogsTargetPerScopeLimit')).toBe(
-      OBJ_PANEL_LOGS_TARGET_PER_SCOPE_DEFAULT
+      SPECS.objPanelLogsTargetPerScopeLimit.defaultValue
     );
     expect(getPreference('objPanelLogsTargetGlobalLimit')).toBe(
-      OBJ_PANEL_LOGS_TARGET_GLOBAL_DEFAULT
+      SPECS.objPanelLogsTargetGlobalLimit.defaultValue
     );
   });
 
@@ -1524,12 +1127,12 @@ describe('appPreferences', () => {
 
     setObjPanelLogsTargetPerScopeLimit(0);
     expect(getPreference('objPanelLogsTargetPerScopeLimit')).toBe(
-      OBJ_PANEL_LOGS_TARGET_PER_SCOPE_DEFAULT
+      SPECS.objPanelLogsTargetPerScopeLimit.defaultValue
     );
 
     setObjPanelLogsTargetPerScopeLimit(999_999);
     expect(getPreference('objPanelLogsTargetPerScopeLimit')).toBe(
-      OBJ_PANEL_LOGS_TARGET_PER_SCOPE_MAX
+      SPECS.objPanelLogsTargetPerScopeLimit.max
     );
   });
 
@@ -1551,11 +1154,13 @@ describe('appPreferences', () => {
 
     setObjPanelLogsTargetGlobalLimit(0);
     expect(getPreference('objPanelLogsTargetGlobalLimit')).toBe(
-      OBJ_PANEL_LOGS_TARGET_GLOBAL_DEFAULT
+      SPECS.objPanelLogsTargetGlobalLimit.defaultValue
     );
 
     setObjPanelLogsTargetGlobalLimit(999_999);
-    expect(getPreference('objPanelLogsTargetGlobalLimit')).toBe(OBJ_PANEL_LOGS_TARGET_GLOBAL_MAX);
+    expect(getPreference('objPanelLogsTargetGlobalLimit')).toBe(
+      SPECS.objPanelLogsTargetGlobalLimit.max
+    );
   });
 
   describe('preference subscriptions', () => {

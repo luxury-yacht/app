@@ -1,4 +1,5 @@
 import { useId, useRef, useState } from 'react';
+import { isHexColor } from '@/core/settings/appPreferences';
 import { SettingRow } from './SettingsControls';
 
 export default function AppearanceColorControl({
@@ -35,7 +36,7 @@ export default function AppearanceColorControl({
     if (/^#[0-9a-f]{3}$/.test(hex)) {
       hex = `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`;
     }
-    if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+    if (isHexColor(hex)) {
       onChange(hex);
     }
     setIsEditing(false);

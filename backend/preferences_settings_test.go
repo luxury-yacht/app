@@ -7,10 +7,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/preferenceschema"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/stretchr/testify/require"
@@ -218,24 +221,13 @@ func TestAppGetAppSettingsReturnsDefaultWhenMissing(t *testing.T) {
 	require.Equal(t, 800, settings.ObjectPanelFloatingHeight)
 }
 
-func TestErrorReportingPreferenceDefaultsEnabledInSettingsAndSchema(t *testing.T) {
+func TestErrorReportingPreferenceDefaultsEnabled(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newSettingsEffectsTestFixture(t)
 
 	settings, err := app.Preferences.GetAppSettings()
 	require.NoError(t, err)
 	require.True(t, settings.ErrorReportingEnabled)
-
-	schema, err := app.Preferences.GetAppSettingsSchema()
-	require.NoError(t, err)
-	byKey := make(map[string]AppPreferenceSchema, len(schema.Preferences))
-	for _, preference := range schema.Preferences {
-		byKey[preference.Key] = preference
-	}
-	require.Equal(t, "boolean", byKey[appPreferenceErrorReportingEnabled].Type)
-	require.Equal(t, true, byKey[appPreferenceErrorReportingEnabled].DefaultValue)
-	require.Equal(t, true, byKey[appPreferenceErrorReportingEnabled].CurrentValue)
-	require.True(t, byKey[appPreferenceErrorReportingEnabled].RuntimeSideEffect)
 }
 
 func TestErrorReportingPreferencePersistsBeforeApplyingRuntimeState(t *testing.T) {
@@ -253,7 +245,7 @@ func TestErrorReportingPreferencePersistsBeforeApplyingRuntimeState(t *testing.T
 	}
 
 	response, err := app.Preferences.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{
-		Key:   appPreferenceErrorReportingEnabled,
+		Key:   preferenceschema.KeyErrorReportingEnabled,
 		Value: false,
 	}}})
 	require.NoError(t, err)
@@ -320,10 +312,6 @@ func TestSettingsRPCsSurfaceCorruptSettingsInsteadOfReturningDefaultOnValues(t *
 	settings, settingsErr := app.Preferences.GetAppSettings()
 	require.Error(t, settingsErr)
 	require.Nil(t, settings)
-
-	schema, schemaErr := app.Preferences.GetAppSettingsSchema()
-	require.Error(t, schemaErr)
-	require.Nil(t, schema)
 }
 
 func TestInitializeErrorReportingAllowsMissingAppOrReporter(t *testing.T) {
@@ -360,7 +348,7 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 		PaletteHueDark:                           120,
 		PaletteSaturationDark:                    40,
 		PaletteBrightnessDark:                    10,
-		AccentColorLight:                         "#326ce5.",
+		AccentColorLight:                         "#326ce5",
 		AccentColorDark:                          "#f59e0b",
 	}
 
@@ -398,7 +386,7 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 	require.Equal(t, 120, app.Preferences.appSettings.PaletteHueDark)
 	require.Equal(t, 40, app.Preferences.appSettings.PaletteSaturationDark)
 	require.Equal(t, 10, app.Preferences.appSettings.PaletteBrightnessDark)
-	require.Equal(t, "#326ce5.", app.Preferences.appSettings.AccentColorLight)
+	require.Equal(t, "#326ce5", app.Preferences.appSettings.AccentColorLight)
 	require.Equal(t, "#f59e0b", app.Preferences.appSettings.AccentColorDark)
 }
 
@@ -406,7 +394,7 @@ func TestAppSetAppearanceModePersistsAndLogs(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newSettingsEffectsTestFixture(t)
 
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceAppearanceMode, "dark"))
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyAppearanceMode, "dark"))
 	require.Equal(t, "dark", app.Preferences.appSettings.AppearanceMode)
 
 	app.Preferences.appSettings = nil
@@ -424,7 +412,7 @@ func TestAppSetAppearanceModeRejectsInvalidValues(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newSettingsEffectsTestFixture(t)
 
-	err := updatePreference(app.Preferences, appPreferenceAppearanceMode, "blue")
+	err := updatePreference(app.Preferences, preferenceschema.KeyAppearanceMode, "blue")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid appearance mode")
 }
@@ -433,7 +421,7 @@ func TestAppSetUseShortResourceNamesPersists(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newSettingsEffectsTestFixture(t)
 
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceUseShortResourceNames, true))
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyUseShortResourceNames, true))
 	require.True(t, app.Preferences.appSettings.UseShortResourceNames)
 
 	app.Preferences.appSettings = nil
@@ -455,7 +443,7 @@ func TestAppSetDimInactiveNamespacesPersists(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, settings.DimInactiveNamespaces)
 
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceDimInactiveNamespaces, false))
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyDimInactiveNamespaces, false))
 	require.False(t, app.Preferences.appSettings.DimInactiveNamespaces)
 
 	app.Preferences.appSettings = nil
@@ -474,7 +462,7 @@ func TestSidebarGroupExpansionPersistsIndependentlyWithoutLogging(t *testing.T) 
 	logger := NewLogger(20)
 	preferences := NewPreferencesService(nil, nil, logger)
 	keys := []string{"sidebarClusterResourcesExpanded", "sidebarClusterExtensionsExpanded", "sidebarNamespaceResourcesExpanded", "sidebarNamespaceExtensionsExpanded"}
-	defaults := readSchemaValues(t, preferences)
+	defaults := readPreferenceValues(t, preferences)
 	require.Equal(t, true, defaults[keys[0]], "Resources holds the default namespace view, so it starts open")
 	require.Equal(t, false, defaults[keys[1]])
 	require.Equal(t, true, defaults[keys[2]], "Resources holds the default namespace view, so it starts open")
@@ -484,7 +472,7 @@ func TestSidebarGroupExpansionPersistsIndependentlyWithoutLogging(t *testing.T) 
 	}
 	require.NoError(t, updatePreference(preferences, keys[0], false))
 	require.NoError(t, updatePreference(preferences, keys[3], false))
-	values := readSchemaValues(t, NewPreferencesService(nil, nil, nil))
+	values := readPreferenceValues(t, NewPreferencesService(nil, nil, nil))
 	require.Equal(t, false, values[keys[0]])
 	require.Equal(t, true, values[keys[1]])
 	require.Equal(t, true, values[keys[2]])
@@ -507,27 +495,23 @@ func TestSidebarResourcesSavedStateSurvivesTheOpenDefault(t *testing.T) {
 		}
 	}`), 0o644)
 
-	values := readSchemaValues(t, preferences)
-	require.Equal(t, false, values[appPreferenceSidebarClusterResourcesExpanded])
-	require.Equal(t, true, values[appPreferenceSidebarNamespaceResourcesExpanded])
+	values := readPreferenceValues(t, preferences)
+	require.Equal(t, false, values[preferenceschema.KeySidebarClusterResourcesExpanded])
+	require.Equal(t, true, values[preferenceschema.KeySidebarNamespaceResourcesExpanded])
 
-	require.NoError(t, updatePreference(preferences, appPreferenceSidebarNamespaceExtensionsExpanded, true))
-	values = readSchemaValues(t, NewPreferencesService(nil, nil, nil))
-	require.Equal(t, false, values[appPreferenceSidebarClusterResourcesExpanded])
-	require.Equal(t, true, values[appPreferenceSidebarNamespaceResourcesExpanded])
-	require.Equal(t, true, values[appPreferenceSidebarNamespaceExtensionsExpanded])
-	require.Equal(t, "dark", values[appPreferenceAppearanceMode])
+	require.NoError(t, updatePreference(preferences, preferenceschema.KeySidebarNamespaceExtensionsExpanded, true))
+	values = readPreferenceValues(t, NewPreferencesService(nil, nil, nil))
+	require.Equal(t, false, values[preferenceschema.KeySidebarClusterResourcesExpanded])
+	require.Equal(t, true, values[preferenceschema.KeySidebarNamespaceResourcesExpanded])
+	require.Equal(t, true, values[preferenceschema.KeySidebarNamespaceExtensionsExpanded])
+	require.Equal(t, "dark", values[preferenceschema.KeyAppearanceMode])
 }
 
-func readSchemaValues(t *testing.T, owner *PreferencesService) map[string]any {
+func readPreferenceValues(t *testing.T, owner *PreferencesService) map[string]any {
 	t.Helper()
-	schema, err := owner.GetAppSettingsSchema()
+	settings, err := owner.GetAppSettings()
 	require.NoError(t, err)
-	values := make(map[string]any)
-	for _, preference := range schema.Preferences {
-		values[preference.Key] = preference.CurrentValue
-	}
-	return values
+	return appSettingsJSON(t, settings)
 }
 
 func TestAppPreferenceBatchKeepsOtherLogsWithSidebarChanges(t *testing.T) {
@@ -535,10 +519,10 @@ func TestAppPreferenceBatchKeepsOtherLogsWithSidebarChanges(t *testing.T) {
 	logger := NewLogger(20)
 	preferences := NewPreferencesService(nil, nil, logger)
 	require.NoError(t, updatePreferences(preferences,
-		AppPreferenceChange{Key: appPreferenceSidebarClusterResourcesExpanded, Value: true},
-		AppPreferenceChange{Key: appPreferenceUseShortResourceNames, Value: true},
-		AppPreferenceChange{Key: appPreferenceSidebarNamespaceExtensionsExpanded, Value: true},
-		AppPreferenceChange{Key: appPreferenceObjectPanelFloatingWidth, Value: 800},
+		AppPreferenceChange{Key: preferenceschema.KeySidebarClusterResourcesExpanded, Value: true},
+		AppPreferenceChange{Key: preferenceschema.KeyUseShortResourceNames, Value: true},
+		AppPreferenceChange{Key: preferenceschema.KeySidebarNamespaceExtensionsExpanded, Value: true},
+		AppPreferenceChange{Key: preferenceschema.KeyObjectPanelFloatingWidth, Value: 800},
 	))
 	require.Len(t, logger.GetEntries(), 2, "both named and generic logs must survive a batch containing sidebar changes")
 }
@@ -551,7 +535,7 @@ func TestAppSetExclusiveNamespacesPersists(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, settings.ExclusiveNamespaces)
 
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceExclusiveNamespaces, false))
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyExclusiveNamespaces, false))
 	require.False(t, app.Preferences.appSettings.ExclusiveNamespaces)
 
 	app.Preferences.appSettings = nil
@@ -569,7 +553,7 @@ func TestAppSetAutoRefreshEnabledPersists(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newSettingsEffectsTestFixture(t)
 
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceAutoRefreshEnabled, false))
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyAutoRefreshEnabled, false))
 	require.False(t, app.Preferences.appSettings.AutoRefreshEnabled)
 
 	app.Preferences.appSettings = nil
@@ -588,7 +572,7 @@ func TestAppSetObjPanelLogsBufferMaxSizePersistsAndClamps(t *testing.T) {
 
 	// In-range value round-trips unchanged.
 	app := newSettingsEffectsTestFixture(t)
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceObjPanelLogsBufferMaxSize, 2500))
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyObjPanelLogsBufferMaxSize, 2500))
 	require.Equal(t, 2500, app.Preferences.appSettings.ObjPanelLogsBufferMaxSize)
 
 	app.Preferences.appSettings = nil
@@ -600,11 +584,11 @@ func TestAppSetObjPanelLogsBufferMaxSizePersistsAndClamps(t *testing.T) {
 	require.Contains(t, entries[len(entries)-1].Message, "ObjPanelLogs buffer max size changed to: 2500")
 
 	// Out-of-range values clamp to the allowed range.
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceObjPanelLogsBufferMaxSize, 50))
-	require.Equal(t, minObjPanelLogsBufferMaxSize, app.Preferences.appSettings.ObjPanelLogsBufferMaxSize)
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyObjPanelLogsBufferMaxSize, 50))
+	require.Equal(t, preferenceschema.MinObjPanelLogsBufferMaxSize, app.Preferences.appSettings.ObjPanelLogsBufferMaxSize)
 
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceObjPanelLogsBufferMaxSize, 50000))
-	require.Equal(t, maxObjPanelLogsBufferMaxSize, app.Preferences.appSettings.ObjPanelLogsBufferMaxSize)
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyObjPanelLogsBufferMaxSize, 50000))
+	require.Equal(t, preferenceschema.MaxObjPanelLogsBufferMaxSize, app.Preferences.appSettings.ObjPanelLogsBufferMaxSize)
 
 	// Default is returned when the settings file has no entry yet.
 	setTestConfigEnv(t)
@@ -612,9 +596,9 @@ func TestAppSetObjPanelLogsBufferMaxSizePersistsAndClamps(t *testing.T) {
 	settings, err := freshApp.Preferences.GetAppSettings()
 	require.NoError(t, err)
 	require.Equal(t, 5000, settings.ObjPanelLogsBufferMaxSize, "a new install keeps 5,000 lines per Logs tab")
-	require.Equal(t, defaultObjPanelLogsTargetPerScopeLimit, settings.ObjPanelLogsTargetPerScopeLimit)
-	require.Equal(t, defaultObjPanelLogsTargetGlobalLimit, settings.ObjPanelLogsTargetGlobalLimit)
-	require.Equal(t, defaultObjPanelLogsAPITimestampFormat, settings.ObjPanelLogsAPITimestampFormat)
+	require.Equal(t, preferenceschema.DefaultObjPanelLogsTargetPerScopeLimit, settings.ObjPanelLogsTargetPerScopeLimit)
+	require.Equal(t, preferenceschema.DefaultObjPanelLogsTargetGlobalLimit, settings.ObjPanelLogsTargetGlobalLimit)
+	require.Equal(t, preferenceschema.DefaultObjPanelLogsAPITimestampFormat, settings.ObjPanelLogsAPITimestampFormat)
 	require.False(t, settings.ObjPanelLogsAPITimestampUseLocalTimeZone)
 }
 
@@ -637,9 +621,9 @@ func TestAppSetKubernetesAPISettingsPersistAndClamp(t *testing.T) {
 
 	app := newSettingsEffectsTestFixture(t)
 	require.NoError(t, updatePreferences(app.Preferences,
-		AppPreferenceChange{Key: appPreferenceKubernetesClientQPS, Value: 250},
-		AppPreferenceChange{Key: appPreferenceKubernetesClientBurst, Value: 500},
-		AppPreferenceChange{Key: appPreferencePermissionSSRRFetchConcurrency, Value: 16},
+		AppPreferenceChange{Key: preferenceschema.KeyKubernetesClientQPS, Value: 250},
+		AppPreferenceChange{Key: preferenceschema.KeyKubernetesClientBurst, Value: 500},
+		AppPreferenceChange{Key: preferenceschema.KeyPermissionSSRRFetchConcurrency, Value: 16},
 	))
 	require.Equal(t, 250, app.Preferences.appSettings.KubernetesClientQPS)
 	require.Equal(t, 500, app.Preferences.appSettings.KubernetesClientBurst)
@@ -651,28 +635,80 @@ func TestAppSetKubernetesAPISettingsPersistAndClamp(t *testing.T) {
 	require.Equal(t, 500, app.Preferences.appSettings.KubernetesClientBurst)
 	require.Equal(t, 16, app.Preferences.appSettings.PermissionSSRRFetchConcurrency)
 
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceKubernetesClientQPS, 0))
-	require.Equal(t, minKubernetesClientQPS, app.Preferences.appSettings.KubernetesClientQPS)
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceKubernetesClientQPS, 999_999))
-	require.Equal(t, maxKubernetesClientQPS, app.Preferences.appSettings.KubernetesClientQPS)
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyKubernetesClientQPS, 999_999))
+	require.Equal(t, preferenceschema.MaxKubernetesClientQPS, app.Preferences.appSettings.KubernetesClientQPS)
 
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceKubernetesClientBurst, 0))
-	require.Equal(t, minKubernetesClientBurst, app.Preferences.appSettings.KubernetesClientBurst)
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceKubernetesClientBurst, 999_999))
-	require.Equal(t, maxKubernetesClientBurst, app.Preferences.appSettings.KubernetesClientBurst)
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyKubernetesClientBurst, 999_999))
+	require.Equal(t, preferenceschema.MaxKubernetesClientBurst, app.Preferences.appSettings.KubernetesClientBurst)
 
-	require.NoError(t, updatePreference(app.Preferences, appPreferencePermissionSSRRFetchConcurrency, 0))
-	require.Equal(t, minPermissionSSRRFetchConcurrency, app.Preferences.appSettings.PermissionSSRRFetchConcurrency)
-	require.NoError(t, updatePreference(app.Preferences, appPreferencePermissionSSRRFetchConcurrency, 999_999))
-	require.Equal(t, maxPermissionSSRRFetchConcurrency, app.Preferences.appSettings.PermissionSSRRFetchConcurrency)
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyPermissionSSRRFetchConcurrency, 999_999))
+	require.Equal(t, preferenceschema.MaxPermissionSSRRFetchConcurrency, app.Preferences.appSettings.PermissionSSRRFetchConcurrency)
 
 	setTestConfigEnv(t)
 	freshApp := newSettingsEffectsTestFixture(t)
 	settings, err := freshApp.Preferences.GetAppSettings()
 	require.NoError(t, err)
-	require.Equal(t, defaultKubernetesClientQPS, settings.KubernetesClientQPS)
-	require.Equal(t, defaultKubernetesClientBurst, settings.KubernetesClientBurst)
-	require.Equal(t, defaultPermissionSSRRFetchConcurrency, settings.PermissionSSRRFetchConcurrency)
+	require.Equal(t, preferenceschema.DefaultKubernetesClientQPS, settings.KubernetesClientQPS)
+	require.Equal(t, preferenceschema.DefaultKubernetesClientBurst, settings.KubernetesClientBurst)
+	require.Equal(t, preferenceschema.DefaultPermissionSSRRFetchConcurrency, settings.PermissionSSRRFetchConcurrency)
+}
+
+// Zero or a negative value means "use the default" for every integer setting
+// whose minimum is at least 1: the same rule settings.json loads with and the
+// Settings UI applies before saving.
+func TestAppPreferenceNonPositiveIntegersUseDefaults(t *testing.T) {
+	cases := []struct {
+		key   string
+		want  int
+		field func(*AppSettings) int
+	}{
+		{preferenceschema.KeyKubernetesClientQPS, preferenceschema.DefaultKubernetesClientQPS, func(s *AppSettings) int { return s.KubernetesClientQPS }},
+		{preferenceschema.KeyKubernetesClientBurst, preferenceschema.DefaultKubernetesClientBurst, func(s *AppSettings) int { return s.KubernetesClientBurst }},
+		{preferenceschema.KeyPermissionSSRRFetchConcurrency, preferenceschema.DefaultPermissionSSRRFetchConcurrency, func(s *AppSettings) int { return s.PermissionSSRRFetchConcurrency }},
+		{preferenceschema.KeyObjPanelLogsBufferMaxSize, preferenceschema.DefaultObjPanelLogsBufferMaxSize, func(s *AppSettings) int { return s.ObjPanelLogsBufferMaxSize }},
+		{preferenceschema.KeyObjPanelLogsTargetPerScopeLimit, preferenceschema.DefaultObjPanelLogsTargetPerScopeLimit, func(s *AppSettings) int { return s.ObjPanelLogsTargetPerScopeLimit }},
+		{preferenceschema.KeyObjPanelLogsTargetGlobalLimit, preferenceschema.DefaultObjPanelLogsTargetGlobalLimit, func(s *AppSettings) int { return s.ObjPanelLogsTargetGlobalLimit }},
+		{preferenceschema.KeyObjectPanelDockedRightWidth, preferenceschema.DefaultObjectPanelDockedRightWidth, func(s *AppSettings) int { return s.ObjectPanelDockedRightWidth }},
+		{preferenceschema.KeyObjectPanelDockedBottomHeight, preferenceschema.DefaultObjectPanelDockedBottomHeight, func(s *AppSettings) int { return s.ObjectPanelDockedBottomHeight }},
+		{preferenceschema.KeyObjectPanelFloatingWidth, preferenceschema.DefaultObjectPanelFloatingWidth, func(s *AppSettings) int { return s.ObjectPanelFloatingWidth }},
+		{preferenceschema.KeyObjectPanelFloatingHeight, preferenceschema.DefaultObjectPanelFloatingHeight, func(s *AppSettings) int { return s.ObjectPanelFloatingHeight }},
+		{preferenceschema.KeyMetricsRefreshIntervalMs, preferenceschema.DefaultMetricsRefreshIntervalMs, func(s *AppSettings) int { return s.MetricsRefreshIntervalMs }},
+	}
+	setTestConfigEnv(t)
+	app := newSettingsEffectsTestFixture(t)
+	for _, tc := range cases {
+		for _, value := range []any{0, -0.1} {
+			t.Run(fmt.Sprintf("%s=%v", tc.key, value), func(t *testing.T) {
+				// Move off the default first so the assertion sees the rule apply.
+				require.NoError(t, updatePreference(app.Preferences, tc.key, tc.want+1))
+				response, err := app.Preferences.UpdateAppPreferences(UpdateAppPreferencesRequest{
+					Changes: []AppPreferenceChange{{Key: tc.key, Value: value}},
+				})
+				require.NoError(t, err)
+				require.Equal(t, tc.want, tc.field(response.Settings))
+			})
+		}
+	}
+}
+
+// A positive fraction is an ordinary value: it truncates toward zero and then
+// clamps, so it never becomes the default.
+func TestAppPreferenceFractionalIntegersTruncateTowardZero(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newSettingsEffectsTestFixture(t)
+
+	require.NoError(t, updatePreferences(app.Preferences,
+		AppPreferenceChange{Key: preferenceschema.KeyKubernetesClientQPS, Value: 0.9},
+		AppPreferenceChange{Key: preferenceschema.KeyObjectPanelDockedRightWidth, Value: 0.5},
+		AppPreferenceChange{Key: preferenceschema.KeyPaletteBrightnessLight, Value: -0.5},
+		AppPreferenceChange{Key: preferenceschema.KeyPaletteBrightnessDark, Value: -10.7},
+	))
+
+	settings := app.Preferences.appSettings
+	require.Equal(t, 1, settings.KubernetesClientQPS)
+	require.Equal(t, 500, settings.ObjectPanelDockedRightWidth)
+	require.Equal(t, 0, settings.PaletteBrightnessLight)
+	require.Equal(t, -10, settings.PaletteBrightnessDark)
 }
 
 func TestAppSetKubernetesClientRateLimitsUpdatesExistingClients(t *testing.T) {
@@ -680,24 +716,24 @@ func TestAppSetKubernetesClientRateLimitsUpdatesExistingClients(t *testing.T) {
 
 	app := newSettingsEffectsTestFixture(t)
 	app.ClusterRuntime.kubeAPIMetrics = newKubernetesAPIMetricsRegistry()
-	limiter := newMutableKubernetesRateLimiter(defaultKubernetesClientQPS, defaultKubernetesClientBurst)
+	limiter := newMutableKubernetesRateLimiter(preferenceschema.DefaultKubernetesClientQPS, preferenceschema.DefaultKubernetesClientBurst)
 	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		"cluster-a": {
 			meta:        ClusterMeta{ID: "cluster-a", Name: "Cluster A"},
 			rateLimiter: limiter,
-			restConfig:  &rest.Config{QPS: float32(defaultKubernetesClientQPS), Burst: defaultKubernetesClientBurst},
+			restConfig:  &rest.Config{QPS: float32(preferenceschema.DefaultKubernetesClientQPS), Burst: preferenceschema.DefaultKubernetesClientBurst},
 		},
 	}
-	app.ClusterRuntime.kubeAPIMetrics.getOrCreate(ClusterMeta{ID: "cluster-a", Name: "Cluster A"}, defaultKubernetesClientQPS, defaultKubernetesClientBurst)
+	app.ClusterRuntime.kubeAPIMetrics.getOrCreate(ClusterMeta{ID: "cluster-a", Name: "Cluster A"}, preferenceschema.DefaultKubernetesClientQPS, preferenceschema.DefaultKubernetesClientBurst)
 
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceKubernetesClientQPS, 150))
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyKubernetesClientQPS, 150))
 	qps, burst := limiter.Limits()
 	require.Equal(t, 150, qps)
-	require.Equal(t, defaultKubernetesClientBurst, burst)
+	require.Equal(t, preferenceschema.DefaultKubernetesClientBurst, burst)
 	require.Equal(t, float32(150), app.ClusterRuntime.clusterClients["cluster-a"].restConfig.QPS)
-	require.Equal(t, defaultKubernetesClientBurst, app.ClusterRuntime.clusterClients["cluster-a"].restConfig.Burst)
+	require.Equal(t, preferenceschema.DefaultKubernetesClientBurst, app.ClusterRuntime.clusterClients["cluster-a"].restConfig.Burst)
 
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceKubernetesClientBurst, 450))
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyKubernetesClientBurst, 450))
 	qps, burst = limiter.Limits()
 	require.Equal(t, 150, qps)
 	require.Equal(t, 450, burst)
@@ -714,7 +750,7 @@ func TestAppSetObjPanelLogsTargetPerScopeLimitPersistsAndClamps(t *testing.T) {
 	setTestConfigEnv(t)
 
 	app := newSettingsEffectsTestFixture(t)
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceObjPanelLogsTargetPerScopeLimit, 144))
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyObjPanelLogsTargetPerScopeLimit, 144))
 	require.Equal(t, 144, app.Preferences.appSettings.ObjPanelLogsTargetPerScopeLimit)
 
 	app.Preferences.appSettings = nil
@@ -725,11 +761,8 @@ func TestAppSetObjPanelLogsTargetPerScopeLimitPersistsAndClamps(t *testing.T) {
 	require.NotEmpty(t, entries)
 	require.Contains(t, entries[len(entries)-1].Message, "Object Panel Logs Tab target per-scope limit changed to: 144")
 
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceObjPanelLogsTargetPerScopeLimit, 0))
-	require.Equal(t, minObjPanelLogsTargetPerScopeLimit, app.Preferences.appSettings.ObjPanelLogsTargetPerScopeLimit)
-
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceObjPanelLogsTargetPerScopeLimit, 999_999))
-	require.Equal(t, maxObjPanelLogsTargetPerScopeLimit, app.Preferences.appSettings.ObjPanelLogsTargetPerScopeLimit)
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyObjPanelLogsTargetPerScopeLimit, 999_999))
+	require.Equal(t, preferenceschema.MaxObjPanelLogsTargetPerScopeLimit, app.Preferences.appSettings.ObjPanelLogsTargetPerScopeLimit)
 }
 
 // Troubleshooting the app can need more history than a Logs tab keeps, so the
@@ -738,7 +771,7 @@ func TestAppSetObjPanelLogsBufferMaxSizeLeavesApplicationLogsAlone(t *testing.T)
 	setTestConfigEnv(t)
 
 	app := newSettingsEffectsTestFixture(t)
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceObjPanelLogsBufferMaxSize, 150))
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyObjPanelLogsBufferMaxSize, 150))
 	for i := range 200 {
 		app.AppLogs.logger.Info(fmt.Sprintf("line %d", i))
 	}
@@ -752,7 +785,7 @@ func TestAppSetObjPanelLogsTargetGlobalLimitPersistsAndClamps(t *testing.T) {
 	setTestConfigEnv(t)
 
 	app := newSettingsEffectsTestFixture(t)
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceObjPanelLogsTargetGlobalLimit, 180))
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyObjPanelLogsTargetGlobalLimit, 180))
 	require.Equal(t, 180, app.Preferences.appSettings.ObjPanelLogsTargetGlobalLimit)
 
 	app.Preferences.appSettings = nil
@@ -763,18 +796,15 @@ func TestAppSetObjPanelLogsTargetGlobalLimitPersistsAndClamps(t *testing.T) {
 	require.NotEmpty(t, entries)
 	require.Contains(t, entries[len(entries)-1].Message, "Object Panel Logs Tab target global limit changed to: 180")
 
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceObjPanelLogsTargetGlobalLimit, 0))
-	require.Equal(t, minObjPanelLogsTargetGlobalLimit, app.Preferences.appSettings.ObjPanelLogsTargetGlobalLimit)
-
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceObjPanelLogsTargetGlobalLimit, 999_999))
-	require.Equal(t, maxObjPanelLogsTargetGlobalLimit, app.Preferences.appSettings.ObjPanelLogsTargetGlobalLimit)
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyObjPanelLogsTargetGlobalLimit, 999_999))
+	require.Equal(t, preferenceschema.MaxObjPanelLogsTargetGlobalLimit, app.Preferences.appSettings.ObjPanelLogsTargetGlobalLimit)
 }
 
 func TestAppSetObjPanelLogsAPITimestampFormatPersists(t *testing.T) {
 	setTestConfigEnv(t)
 
 	app := newSettingsEffectsTestFixture(t)
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceObjPanelLogsAPITimestampFormat, "HH:mm:ss.SSS"))
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyObjPanelLogsAPITimestampFormat, "HH:mm:ss.SSS"))
 	require.Equal(t, "HH:mm:ss.SSS", app.Preferences.appSettings.ObjPanelLogsAPITimestampFormat)
 
 	app.Preferences.appSettings = nil
@@ -785,15 +815,15 @@ func TestAppSetObjPanelLogsAPITimestampFormatPersists(t *testing.T) {
 	require.NotEmpty(t, entries)
 	require.Contains(t, entries[len(entries)-1].Message, "Object Panel Logs Tab API timestamp format changed to: HH:mm:ss.SSS")
 
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceObjPanelLogsAPITimestampFormat, ""))
-	require.Equal(t, defaultObjPanelLogsAPITimestampFormat, app.Preferences.appSettings.ObjPanelLogsAPITimestampFormat)
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyObjPanelLogsAPITimestampFormat, ""))
+	require.Equal(t, preferenceschema.DefaultObjPanelLogsAPITimestampFormat, app.Preferences.appSettings.ObjPanelLogsAPITimestampFormat)
 }
 
 func TestAppSetObjPanelLogsAPITimestampUseLocalTimeZonePersists(t *testing.T) {
 	setTestConfigEnv(t)
 
 	app := newSettingsEffectsTestFixture(t)
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceObjPanelLogsAPITimestampUseLocalTimeZone, true))
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyObjPanelLogsAPITimestampUseLocalTimeZone, true))
 	require.True(t, app.Preferences.appSettings.ObjPanelLogsAPITimestampUseLocalTimeZone)
 
 	app.Preferences.appSettings = nil
@@ -813,7 +843,7 @@ func TestAppSetGridTablePersistenceModePersists(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newSettingsEffectsTestFixture(t)
 
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceGridTablePersistenceMode, "namespaced"))
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyGridTablePersistenceMode, "namespaced"))
 	require.Equal(t, "namespaced", app.Preferences.appSettings.GridTablePersistenceMode)
 
 	app.Preferences.appSettings = nil
@@ -831,7 +861,7 @@ func TestAppSetGridTablePersistenceModeRejectsInvalidValues(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newSettingsEffectsTestFixture(t)
 
-	err := updatePreference(app.Preferences, appPreferenceGridTablePersistenceMode, "invalid")
+	err := updatePreference(app.Preferences, preferenceschema.KeyGridTablePersistenceMode, "invalid")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid grid table persistence mode")
 }
@@ -840,7 +870,7 @@ func TestAppSetDefaultObjectPanelPositionPersists(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newSettingsEffectsTestFixture(t)
 
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceDefaultObjectPanelPosition, "bottom"))
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyDefaultObjectPanelPosition, "bottom"))
 	require.Equal(t, "bottom", app.Preferences.appSettings.DefaultObjectPanelPosition)
 
 	app.Preferences.appSettings = nil
@@ -857,7 +887,7 @@ func TestAppSetDefaultObjectPanelPositionRejectsInvalidValues(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newSettingsEffectsTestFixture(t)
 
-	err := updatePreference(app.Preferences, appPreferenceDefaultObjectPanelPosition, "invalid")
+	err := updatePreference(app.Preferences, preferenceschema.KeyDefaultObjectPanelPosition, "invalid")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid default object panel position")
 }
@@ -866,7 +896,7 @@ func TestAppGetAppearanceModeInfoReflectsCurrentSettings(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newSettingsEffectsTestFixture(t)
 
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceAppearanceMode, "light"))
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyAppearanceMode, "light"))
 	info, err := app.Preferences.GetAppSettings()
 	require.NoError(t, err)
 	require.Equal(t, "light", info.AppearanceMode)
@@ -915,11 +945,11 @@ func TestLoadSettingsFileNormalizesDefaults(t *testing.T) {
 	require.NotNil(t, settings.Preferences.Refresh)
 	require.True(t, settings.Preferences.Refresh.Auto)
 	require.Equal(t, "shared", settings.Preferences.GridTablePersistenceMode)
-	require.Equal(t, defaultObjectPanelPosition, settings.Preferences.DefaultObjectPanelPosition)
-	require.Equal(t, defaultObjectPanelDockedRightWidth, settings.Preferences.ObjectPanelDockedRightWidth)
-	require.Equal(t, defaultObjectPanelDockedBottomHeight, settings.Preferences.ObjectPanelDockedBottomHeight)
-	require.Equal(t, defaultObjectPanelFloatingWidth, settings.Preferences.ObjectPanelFloatingWidth)
-	require.Equal(t, defaultObjectPanelFloatingHeight, settings.Preferences.ObjectPanelFloatingHeight)
+	require.Equal(t, preferenceschema.DefaultObjectPanelPosition, settings.Preferences.DefaultObjectPanelPosition)
+	require.Equal(t, preferenceschema.DefaultObjectPanelDockedRightWidth, settings.Preferences.ObjectPanelDockedRightWidth)
+	require.Equal(t, preferenceschema.DefaultObjectPanelDockedBottomHeight, settings.Preferences.ObjectPanelDockedBottomHeight)
+	require.Equal(t, preferenceschema.DefaultObjectPanelFloatingWidth, settings.Preferences.ObjectPanelFloatingWidth)
+	require.Equal(t, preferenceschema.DefaultObjectPanelFloatingHeight, settings.Preferences.ObjectPanelFloatingHeight)
 	require.Equal(t, defaultKubeconfigSearchPaths(), settings.Kubeconfig.SearchPaths)
 }
 
@@ -935,23 +965,23 @@ func TestNormalizeSettingsFileIsIdempotentAndPreservesExplicitValues(t *testing.
 				MetricsIntervalMs: 1234,
 			},
 			KubernetesAPI: &settingsKubernetesAPI{
-				ClientQPS:                      maxKubernetesClientQPS + 1,
-				ClientBurst:                    maxKubernetesClientBurst + 1,
-				PermissionSSRRFetchConcurrency: maxPermissionSSRRFetchConcurrency + 1,
+				ClientQPS:                      preferenceschema.MaxKubernetesClientQPS + 1,
+				ClientBurst:                    preferenceschema.MaxKubernetesClientBurst + 1,
+				PermissionSSRRFetchConcurrency: preferenceschema.MaxPermissionSSRRFetchConcurrency + 1,
 			},
 			ObjPanelLogs: &settingsObjPanelLogs{
-				BufferMaxSize:       maxObjPanelLogsBufferMaxSize + 1,
-				TargetPerScopeLimit: maxObjPanelLogsTargetPerScopeLimit + 1,
-				TargetGlobalLimit:   maxObjPanelLogsTargetGlobalLimit + 1,
+				BufferMaxSize:       preferenceschema.MaxObjPanelLogsBufferMaxSize + 1,
+				TargetPerScopeLimit: preferenceschema.MaxObjPanelLogsTargetPerScopeLimit + 1,
+				TargetGlobalLimit:   preferenceschema.MaxObjPanelLogsTargetGlobalLimit + 1,
 				APITimestampFormat:  "HH:mm:ss",
 			},
 			GridTablePersistenceMode:      "per-cluster",
-			DefaultTablePageSize:          maxTablePageSize + 1,
+			DefaultTablePageSize:          37,
 			DefaultObjectPanelPosition:    "bottom",
-			ObjectPanelDockedRightWidth:   maxObjectPanelLayoutValue + 1,
-			ObjectPanelDockedBottomHeight: maxObjectPanelLayoutValue + 1,
-			ObjectPanelFloatingWidth:      maxObjectPanelLayoutValue + 1,
-			ObjectPanelFloatingHeight:     maxObjectPanelLayoutValue + 1,
+			ObjectPanelDockedRightWidth:   preferenceschema.MaxObjectPanelLayoutValue + 1,
+			ObjectPanelDockedBottomHeight: preferenceschema.MaxObjectPanelLayoutValue + 1,
+			ObjectPanelFloatingWidth:      preferenceschema.MaxObjectPanelLayoutValue + 1,
+			ObjectPanelFloatingHeight:     preferenceschema.MaxObjectPanelLayoutValue + 1,
 			PaletteHue:                    175,
 			PaletteSaturation:             65,
 			PaletteBrightness:             -10,
@@ -968,15 +998,15 @@ func TestNormalizeSettingsFileIsIdempotentAndPreservesExplicitValues(t *testing.
 	require.False(t, *got.Preferences.DimInactiveNamespaces)
 	require.False(t, *got.Preferences.ExclusiveNamespaces)
 	require.False(t, *got.Preferences.ErrorReportingEnabled)
-	require.Equal(t, maxKubernetesClientQPS, got.Preferences.KubernetesAPI.ClientQPS)
-	require.Equal(t, maxKubernetesClientBurst, got.Preferences.KubernetesAPI.ClientBurst)
-	require.Equal(t, maxPermissionSSRRFetchConcurrency, got.Preferences.KubernetesAPI.PermissionSSRRFetchConcurrency)
-	require.Equal(t, maxObjPanelLogsBufferMaxSize, got.Preferences.ObjPanelLogs.BufferMaxSize)
-	require.Equal(t, maxObjPanelLogsTargetPerScopeLimit, got.Preferences.ObjPanelLogs.TargetPerScopeLimit)
-	require.Equal(t, maxObjPanelLogsTargetGlobalLimit, got.Preferences.ObjPanelLogs.TargetGlobalLimit)
-	require.Equal(t, maxTablePageSize, got.Preferences.DefaultTablePageSize)
-	require.Equal(t, maxObjectPanelLayoutValue, got.Preferences.ObjectPanelDockedRightWidth)
-	require.Equal(t, maxObjectPanelLayoutValue, got.Preferences.ObjectPanelFloatingHeight)
+	require.Equal(t, preferenceschema.MaxKubernetesClientQPS, got.Preferences.KubernetesAPI.ClientQPS)
+	require.Equal(t, preferenceschema.MaxKubernetesClientBurst, got.Preferences.KubernetesAPI.ClientBurst)
+	require.Equal(t, preferenceschema.MaxPermissionSSRRFetchConcurrency, got.Preferences.KubernetesAPI.PermissionSSRRFetchConcurrency)
+	require.Equal(t, preferenceschema.MaxObjPanelLogsBufferMaxSize, got.Preferences.ObjPanelLogs.BufferMaxSize)
+	require.Equal(t, preferenceschema.MaxObjPanelLogsTargetPerScopeLimit, got.Preferences.ObjPanelLogs.TargetPerScopeLimit)
+	require.Equal(t, preferenceschema.MaxObjPanelLogsTargetGlobalLimit, got.Preferences.ObjPanelLogs.TargetGlobalLimit)
+	require.Equal(t, preferenceschema.DefaultTablePageSize, got.Preferences.DefaultTablePageSize, "an off-list page size repairs to the default")
+	require.Equal(t, preferenceschema.MaxObjectPanelLayoutValue, got.Preferences.ObjectPanelDockedRightWidth)
+	require.Equal(t, preferenceschema.MaxObjectPanelLayoutValue, got.Preferences.ObjectPanelFloatingHeight)
 	require.Equal(t, 175, got.Preferences.PaletteHueLight)
 	require.Equal(t, 175, got.Preferences.PaletteHueDark)
 	require.Zero(t, got.Preferences.PaletteHue)
@@ -993,6 +1023,63 @@ func TestNormalizeSettingsFileIsIdempotentAndPreservesExplicitValues(t *testing.
 	require.JSONEq(t, string(once), string(twice))
 }
 
+// repairableValues are the stored values a read repairs.
+type repairableValues struct {
+	AppearanceMode, GridTablePersistenceMode, DefaultObjectPanelPosition string
+	AccentColorLight, LinkColorDark                                      string
+	PaletteHueLight, PaletteSaturationDark, PaletteBrightnessLight       int
+	DefaultTablePageSize                                                 int
+}
+
+func repairableFromFile(p settingsPreferences) repairableValues {
+	return repairableValues{
+		p.AppearanceMode, p.GridTablePersistenceMode, p.DefaultObjectPanelPosition,
+		p.AccentColorLight, p.LinkColorDark,
+		p.PaletteHueLight, p.PaletteSaturationDark, p.PaletteBrightnessLight,
+		p.DefaultTablePageSize,
+	}
+}
+
+// A hand-edited or older settings.json can hold values the frontend has always
+// repaired on display. The backend repairs them the same way when it reads the
+// file, so the values it serves, exports, and saves back match what the UI shows.
+func TestSettingsReadsRepairStoredValues(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newSettingsEffectsTestFixture(t)
+	configPath, err := app.Preferences.getSettingsFilePath()
+	require.NoError(t, err)
+	writeTestFileWithParents(t, configPath, []byte(`{"schemaVersion":1,"preferences":{
+		"appearanceMode":"sepia","gridTablePersistenceMode":"per-cluster","defaultObjectPanelPosition":"left",
+		"accentColorLight":"#zzz","linkColorDark":"blue",
+		"paletteHueLight":999,"paletteSaturationDark":-5,"paletteBrightnessLight":80,
+		"defaultTablePageSize":37}}`), 0o644)
+	want := repairableValues{
+		AppearanceMode: "system", GridTablePersistenceMode: "shared", DefaultObjectPanelPosition: "right",
+		PaletteHueLight: 360, PaletteSaturationDark: 0, PaletteBrightnessLight: 50,
+		DefaultTablePageSize: 50,
+	}
+
+	settings, err := app.Preferences.GetAppSettings()
+	require.NoError(t, err)
+	require.Equal(t, want, repairableValues{
+		settings.AppearanceMode, settings.GridTablePersistenceMode, settings.DefaultObjectPanelPosition,
+		settings.AccentColorLight, settings.LinkColorDark,
+		settings.PaletteHueLight, settings.PaletteSaturationDark, settings.PaletteBrightnessLight,
+		settings.DefaultTablePageSize,
+	})
+
+	exported, err := app.Preferences.exportSettingsDocument()
+	require.NoError(t, err)
+	require.Equal(t, want, repairableFromFile(exported.Preferences))
+
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyUseShortResourceNames, true))
+	data, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	var saved settingsFile
+	require.NoError(t, json.Unmarshal(data, &saved))
+	require.Equal(t, want, repairableFromFile(saved.Preferences))
+}
+
 func TestNormalizeSettingsFileCompletesZeroValueDefaults(t *testing.T) {
 	settings := normalizeSettingsFile(&settingsFile{})
 
@@ -1001,19 +1088,19 @@ func TestNormalizeSettingsFileCompletesZeroValueDefaults(t *testing.T) {
 	require.True(t, *settings.Preferences.DimInactiveNamespaces)
 	require.True(t, *settings.Preferences.ExclusiveNamespaces)
 	require.True(t, *settings.Preferences.ErrorReportingEnabled)
-	require.Equal(t, &settingsRefresh{Auto: true, MetricsIntervalMs: defaultMetricsIntervalMs()}, settings.Preferences.Refresh)
+	require.Equal(t, &settingsRefresh{Auto: true, MetricsIntervalMs: preferenceschema.DefaultMetricsRefreshIntervalMs}, settings.Preferences.Refresh)
 	require.Equal(t, &settingsKubernetesAPI{
-		ClientQPS:                      defaultKubernetesClientQPS,
-		ClientBurst:                    defaultKubernetesClientBurst,
-		PermissionSSRRFetchConcurrency: defaultPermissionSSRRFetchConcurrency,
+		ClientQPS:                      preferenceschema.DefaultKubernetesClientQPS,
+		ClientBurst:                    preferenceschema.DefaultKubernetesClientBurst,
+		PermissionSSRRFetchConcurrency: preferenceschema.DefaultPermissionSSRRFetchConcurrency,
 	}, settings.Preferences.KubernetesAPI)
 	require.Equal(t, &settingsObjPanelLogs{
-		BufferMaxSize:       defaultObjPanelLogsBufferMaxSize,
-		TargetPerScopeLimit: defaultObjPanelLogsTargetPerScopeLimit,
-		TargetGlobalLimit:   defaultObjPanelLogsTargetGlobalLimit,
-		APITimestampFormat:  defaultObjPanelLogsAPITimestampFormat,
+		BufferMaxSize:       preferenceschema.DefaultObjPanelLogsBufferMaxSize,
+		TargetPerScopeLimit: preferenceschema.DefaultObjPanelLogsTargetPerScopeLimit,
+		TargetGlobalLimit:   preferenceschema.DefaultObjPanelLogsTargetGlobalLimit,
+		APITimestampFormat:  preferenceschema.DefaultObjPanelLogsAPITimestampFormat,
 	}, settings.Preferences.ObjPanelLogs)
-	require.Equal(t, defaultTablePageSize, settings.Preferences.DefaultTablePageSize)
+	require.Equal(t, preferenceschema.DefaultTablePageSize, settings.Preferences.DefaultTablePageSize)
 	require.Equal(t, []Theme{defaultTheme()}, settings.Preferences.Themes)
 	require.Equal(t, defaultKubeconfigSearchPaths(), settings.Kubeconfig.SearchPaths)
 }
@@ -1024,8 +1111,8 @@ func TestNormalizeSettingsFileCompletesPartiallyPresentNestedDefaults(t *testing
 		ObjPanelLogs: &settingsObjPanelLogs{},
 	}})
 
-	require.Equal(t, defaultMetricsIntervalMs(), settings.Preferences.Refresh.MetricsIntervalMs)
-	require.Equal(t, defaultObjPanelLogsAPITimestampFormat, settings.Preferences.ObjPanelLogs.APITimestampFormat)
+	require.Equal(t, preferenceschema.DefaultMetricsRefreshIntervalMs, settings.Preferences.Refresh.MetricsIntervalMs)
+	require.Equal(t, preferenceschema.DefaultObjPanelLogsAPITimestampFormat, settings.Preferences.ObjPanelLogs.APITimestampFormat)
 }
 
 func TestNormalizeSettingsFileNilUsesCompleteDefaults(t *testing.T) {
@@ -1039,81 +1126,128 @@ func TestNormalizeSettingsFileNilUsesCompleteDefaults(t *testing.T) {
 	require.Equal(t, []Theme{defaultTheme()}, settings.Preferences.Themes)
 }
 
-func TestAppGetAppSettingsSchemaIncludesBackendOwnedDefaults(t *testing.T) {
-	setTestConfigEnv(t)
-	app := newSettingsEffectsTestFixture(t)
-
-	schema, err := app.Preferences.GetAppSettingsSchema()
-	require.NoError(t, err)
-
-	byKey := make(map[string]AppPreferenceSchema, len(schema.Preferences))
-	for _, pref := range schema.Preferences {
-		byKey[pref.Key] = pref
+// nonDefaultValue picks a valid value other than the preference's default.
+func nonDefaultValue(p preferenceschema.Preference) any {
+	switch p.Type {
+	case preferenceschema.Boolean:
+		return !p.Default.(bool)
+	case preferenceschema.Enum:
+		for _, option := range p.Options {
+			if option != p.Default {
+				return option
+			}
+		}
+	case preferenceschema.Color:
+		return "#123456"
+	case preferenceschema.String:
+		return "HH:mm"
+	case preferenceschema.Integer:
+		for _, option := range p.IntOptions {
+			if option != p.Default {
+				return option
+			}
+		}
+		if p.Max != nil {
+			return *p.Max
+		}
+		return p.Default.(int) + 1
 	}
-
-	require.Equal(t, "enum", byKey[appPreferenceAppearanceMode].Type)
-	require.Equal(t, []string{"light", "dark", "system"}, byKey[appPreferenceAppearanceMode].EnumOptions)
-	require.True(t, byKey[appPreferenceAppearanceMode].RuntimeSideEffect)
-	require.Equal(t, defaultObjectPanelPosition, byKey[appPreferenceDefaultObjectPanelPosition].DefaultValue)
-	require.Equal(t, defaultObjectPanelPosition, byKey[appPreferenceDefaultObjectPanelPosition].CurrentValue)
-	require.Equal(t, 600, byKey[appPreferenceObjectPanelDockedRightWidth].DefaultValue)
-	require.Equal(t, 600, byKey[appPreferenceObjectPanelDockedBottomHeight].DefaultValue)
-	require.Equal(t, 600, byKey[appPreferenceObjectPanelFloatingWidth].DefaultValue)
-	require.Equal(t, 800, byKey[appPreferenceObjectPanelFloatingHeight].DefaultValue)
-	require.Equal(t, defaultKubernetesClientQPS, byKey[appPreferenceKubernetesClientQPS].DefaultValue)
-	require.Equal(t, minKubernetesClientQPS, *byKey[appPreferenceKubernetesClientQPS].Min)
-	require.Equal(t, maxKubernetesClientQPS, *byKey[appPreferenceKubernetesClientQPS].Max)
-	require.Equal(t, minObjectPanelDockedRightWidth, *byKey[appPreferenceObjectPanelDockedRightWidth].Min)
-	require.Equal(t, maxObjectPanelLayoutValue, *byKey[appPreferenceObjectPanelDockedRightWidth].Max)
+	panic("no non-default value for " + p.Key)
 }
 
-func TestAppSettingsSchemaCoversUpdateAppPreferenceKeys(t *testing.T) {
+// appSettingsJSON reads AppSettings by the JSON names the frontend uses.
+func appSettingsJSON(t *testing.T, settings *AppSettings) map[string]any {
+	t.Helper()
+	data, err := json.Marshal(settings)
+	require.NoError(t, err)
+	var values map[string]any
+	require.NoError(t, json.Unmarshal(data, &values))
+	return values
+}
+
+// Every schema key is bound, in schema order, to the AppSettings field the
+// frontend reads under the same JSON name, and AppSettings has no preference
+// field the schema leaves out.
+func TestEveryPreferenceIsBoundToItsAppSettingsField(t *testing.T) {
+	specs := preferenceschema.All()
+	specKeys := make([]string, 0, len(specs))
+	for _, spec := range specs {
+		specKeys = append(specKeys, spec.Key)
+	}
+	boundKeys := make([]string, 0, len(appPreferenceDescriptors()))
+	for _, descriptor := range appPreferenceDescriptors() {
+		boundKeys = append(boundKeys, descriptor.spec.Key)
+	}
+	require.Equal(t, specKeys, boundKeys)
+
+	notPreferences := map[string]bool{"anonymizedId": true, "selectedKubeconfigs": true, "themes": true}
+	fields := reflect.TypeFor[AppSettings]()
+	var tagged []string
+	for index := range fields.NumField() {
+		name := strings.Split(fields.Field(index).Tag.Get("json"), ",")[0]
+		if !notPreferences[name] {
+			tagged = append(tagged, name)
+		}
+	}
+	require.ElementsMatch(t, specKeys, tagged)
+
+	for _, descriptor := range appPreferenceDescriptors() {
+		settings := defaultAppPreferences()
+		value := nonDefaultValue(descriptor.spec)
+		require.NoError(t, descriptor.apply(settings, value, &settingsSideEffects{}))
+		require.EqualValues(t, value, appSettingsJSON(t, settings)[descriptor.spec.Key], descriptor.spec.Key)
+	}
+}
+
+// Every preference survives a save and reload, which catches a key missing
+// from the settings.json mappings.
+func TestEveryPreferenceSurvivesSaveAndReload(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newSettingsEffectsTestFixture(t)
-
-	schema, err := app.Preferences.GetAppSettingsSchema()
-	require.NoError(t, err)
-
-	schemaKeys := make([]string, 0, len(schema.Preferences))
-	seen := make(map[string]struct{}, len(schema.Preferences))
-	for _, pref := range schema.Preferences {
-		require.NotEmpty(t, pref.Key)
-		require.NotEmpty(t, pref.Type)
-		require.NotContains(t, seen, pref.Key, "duplicate schema key %q", pref.Key)
-		seen[pref.Key] = struct{}{}
-		schemaKeys = append(schemaKeys, pref.Key)
+	want := map[string]any{}
+	changes := []AppPreferenceChange{}
+	for _, spec := range preferenceschema.All() {
+		value := nonDefaultValue(spec)
+		want[spec.Key] = value
+		changes = append(changes, AppPreferenceChange{Key: spec.Key, Value: value})
 	}
+	require.NoError(t, updatePreferences(app.Preferences, changes...))
 
-	require.ElementsMatch(t, appPreferenceKeys(), schemaKeys)
+	app.Preferences.appSettings = nil
+	reloaded := ensurePreferencesLoaded(t, app.Preferences).Settings
+	got := appSettingsJSON(t, reloaded)
+	for key, value := range want {
+		require.EqualValues(t, value, got[key], key)
+	}
 }
 
 func TestAppUpdateAppPreferencesAppliesAtomicBatch(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newSettingsEffectsTestFixture(t)
 	app.ClusterRuntime.kubeAPIMetrics = newKubernetesAPIMetricsRegistry()
-	limiter := newMutableKubernetesRateLimiter(defaultKubernetesClientQPS, defaultKubernetesClientBurst)
+	limiter := newMutableKubernetesRateLimiter(preferenceschema.DefaultKubernetesClientQPS, preferenceschema.DefaultKubernetesClientBurst)
 	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		"cluster-a": {
 			meta:        ClusterMeta{ID: "cluster-a", Name: "Cluster A"},
 			rateLimiter: limiter,
-			restConfig:  &rest.Config{QPS: float32(defaultKubernetesClientQPS), Burst: defaultKubernetesClientBurst},
+			restConfig:  &rest.Config{QPS: float32(preferenceschema.DefaultKubernetesClientQPS), Burst: preferenceschema.DefaultKubernetesClientBurst},
 		},
 	}
 
 	response, err := app.Preferences.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{
-		{Key: appPreferenceAppearanceMode, Value: "dark"},
-		{Key: appPreferenceKubernetesClientQPS, Value: 150},
-		{Key: appPreferenceKubernetesClientBurst, Value: 450},
-		{Key: appPreferenceObjPanelLogsTargetPerScopeLimit, Value: 144},
-		{Key: appPreferenceDefaultObjectPanelPosition, Value: "bottom"},
+		{Key: preferenceschema.KeyAppearanceMode, Value: "dark"},
+		{Key: preferenceschema.KeyKubernetesClientQPS, Value: 150},
+		{Key: preferenceschema.KeyKubernetesClientBurst, Value: 450},
+		{Key: preferenceschema.KeyObjPanelLogsTargetPerScopeLimit, Value: 144},
+		{Key: preferenceschema.KeyDefaultObjectPanelPosition, Value: "bottom"},
 	}})
 	require.NoError(t, err)
 	require.Equal(t, []string{
-		appPreferenceAppearanceMode,
-		appPreferenceKubernetesClientQPS,
-		appPreferenceKubernetesClientBurst,
-		appPreferenceObjPanelLogsTargetPerScopeLimit,
-		appPreferenceDefaultObjectPanelPosition,
+		preferenceschema.KeyAppearanceMode,
+		preferenceschema.KeyKubernetesClientQPS,
+		preferenceschema.KeyKubernetesClientBurst,
+		preferenceschema.KeyObjPanelLogsTargetPerScopeLimit,
+		preferenceschema.KeyDefaultObjectPanelPosition,
 	}, response.ChangedKeys)
 	require.Equal(t, "dark", response.Settings.AppearanceMode)
 	require.Equal(t, 150, response.Settings.KubernetesClientQPS)
@@ -1136,11 +1270,11 @@ func TestAppUpdateAppPreferencesAppliesAtomicBatch(t *testing.T) {
 func TestAppUpdateAppPreferencesRejectsInvalidBatchWithoutMutation(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newSettingsEffectsTestFixture(t)
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceAppearanceMode, "light"))
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyAppearanceMode, "light"))
 
 	_, err := app.Preferences.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{
-		{Key: appPreferenceAppearanceMode, Value: "dark"},
-		{Key: appPreferenceGridTablePersistenceMode, Value: "invalid"},
+		{Key: preferenceschema.KeyAppearanceMode, Value: "dark"},
+		{Key: preferenceschema.KeyGridTablePersistenceMode, Value: "invalid"},
 	}})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid grid table persistence mode")
@@ -1154,21 +1288,21 @@ func TestAppUpdateAppPreferencesRejectsInvalidBatchWithoutMutation(t *testing.T)
 func TestAppUpdateAppPreferencesDoesNotApplySideEffectsWhenPersistenceFails(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newSettingsEffectsTestFixture(t)
-	app.ContainerLogsPolicy.SetContainerLogsPerScopeLimit(defaultObjPanelLogsTargetPerScopeLimit)
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceObjPanelLogsTargetPerScopeLimit, 144))
+	app.ContainerLogsPolicy.SetContainerLogsPerScopeLimit(preferenceschema.DefaultObjPanelLogsTargetPerScopeLimit)
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyObjPanelLogsTargetPerScopeLimit, 144))
 	require.Equal(t, 144, app.ContainerLogsPolicy.Limit())
 
 	originalWrite := writeSettingsFileAtomic
 	t.Cleanup(func() {
 		writeSettingsFileAtomic = originalWrite
-		app.ContainerLogsPolicy.SetContainerLogsPerScopeLimit(defaultObjPanelLogsTargetPerScopeLimit)
+		app.ContainerLogsPolicy.SetContainerLogsPerScopeLimit(preferenceschema.DefaultObjPanelLogsTargetPerScopeLimit)
 	})
 	writeSettingsFileAtomic = func(string, []byte, os.FileMode) error {
 		return errors.New("forced write failure")
 	}
 
 	_, err := app.Preferences.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{
-		{Key: appPreferenceObjPanelLogsTargetPerScopeLimit, Value: 222},
+		{Key: preferenceschema.KeyObjPanelLogsTargetPerScopeLimit, Value: 222},
 	}})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "forced write failure")
@@ -1242,12 +1376,12 @@ func TestSettingsEffectDispatcherAppliesAllSixRoutes(t *testing.T) {
 	app := newSettingsEffectsTestFixture(t)
 	app.ErrorReporting.reporter = reporter
 	app.ClusterRuntime.kubeAPIMetrics = newKubernetesAPIMetricsRegistry()
-	rateLimiter := newMutableKubernetesRateLimiter(defaultKubernetesClientQPS, defaultKubernetesClientBurst)
+	rateLimiter := newMutableKubernetesRateLimiter(preferenceschema.DefaultKubernetesClientQPS, preferenceschema.DefaultKubernetesClientBurst)
 	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		"cluster-a": {
 			meta:        ClusterMeta{ID: "cluster-a", Name: "Cluster A"},
 			rateLimiter: rateLimiter,
-			restConfig:  &rest.Config{QPS: float32(defaultKubernetesClientQPS), Burst: defaultKubernetesClientBurst},
+			restConfig:  &rest.Config{QPS: float32(preferenceschema.DefaultKubernetesClientQPS), Burst: preferenceschema.DefaultKubernetesClientBurst},
 		},
 	}
 	metricsPoller := &settingsMetricsPoller{}
@@ -1256,12 +1390,12 @@ func TestSettingsEffectDispatcherAppliesAllSixRoutes(t *testing.T) {
 	}
 	require.NotNil(t, app.Refresh.containerLogsTargetLimiter)
 	initialSession := app.Refresh.containerLogsTargetLimiter.StartSession("cluster-a", "initial-default")
-	initialTargets := make([]string, defaultObjPanelLogsTargetGlobalLimit+1)
+	initialTargets := make([]string, preferenceschema.DefaultObjPanelLogsTargetGlobalLimit+1)
 	for index := range initialTargets {
 		initialTargets[index] = fmt.Sprintf("target-%d", index)
 	}
 	allowed, skipped := initialSession.UpdateDesired(initialTargets)
-	require.Len(t, allowed, defaultObjPanelLogsTargetGlobalLimit)
+	require.Len(t, allowed, preferenceschema.DefaultObjPanelLogsTargetGlobalLimit)
 	require.Equal(t, 1, skipped)
 	initialSession.Release()
 
@@ -1364,9 +1498,9 @@ func TestAppSetPaletteTintPersistsAndClamps(t *testing.T) {
 
 	// Normal values persist correctly for light mode.
 	require.NoError(t, updatePreferences(app.Preferences,
-		AppPreferenceChange{Key: appPreferencePaletteHueLight, Value: 220},
-		AppPreferenceChange{Key: appPreferencePaletteSaturationLight, Value: 50},
-		AppPreferenceChange{Key: appPreferencePaletteBrightnessLight, Value: -15},
+		AppPreferenceChange{Key: preferenceschema.KeyPaletteHueLight, Value: 220},
+		AppPreferenceChange{Key: preferenceschema.KeyPaletteSaturationLight, Value: 50},
+		AppPreferenceChange{Key: preferenceschema.KeyPaletteBrightnessLight, Value: -15},
 	))
 	require.Equal(t, 220, app.Preferences.appSettings.PaletteHueLight)
 	require.Equal(t, 50, app.Preferences.appSettings.PaletteSaturationLight)
@@ -1397,9 +1531,9 @@ func TestAppSetPaletteTintClampsOutOfRange(t *testing.T) {
 
 	// Values above max are clamped (light mode).
 	require.NoError(t, updatePreferences(app.Preferences,
-		AppPreferenceChange{Key: appPreferencePaletteHueLight, Value: 400},
-		AppPreferenceChange{Key: appPreferencePaletteSaturationLight, Value: 150},
-		AppPreferenceChange{Key: appPreferencePaletteBrightnessLight, Value: 80},
+		AppPreferenceChange{Key: preferenceschema.KeyPaletteHueLight, Value: 400},
+		AppPreferenceChange{Key: preferenceschema.KeyPaletteSaturationLight, Value: 150},
+		AppPreferenceChange{Key: preferenceschema.KeyPaletteBrightnessLight, Value: 80},
 	))
 	require.Equal(t, 360, app.Preferences.appSettings.PaletteHueLight)
 	require.Equal(t, 100, app.Preferences.appSettings.PaletteSaturationLight)
@@ -1407,9 +1541,9 @@ func TestAppSetPaletteTintClampsOutOfRange(t *testing.T) {
 
 	// Values below min are clamped (dark mode).
 	require.NoError(t, updatePreferences(app.Preferences,
-		AppPreferenceChange{Key: appPreferencePaletteHueDark, Value: -10},
-		AppPreferenceChange{Key: appPreferencePaletteSaturationDark, Value: -5},
-		AppPreferenceChange{Key: appPreferencePaletteBrightnessDark, Value: -100},
+		AppPreferenceChange{Key: preferenceschema.KeyPaletteHueDark, Value: -10},
+		AppPreferenceChange{Key: preferenceschema.KeyPaletteSaturationDark, Value: -5},
+		AppPreferenceChange{Key: preferenceschema.KeyPaletteBrightnessDark, Value: -100},
 	))
 	require.Equal(t, 0, app.Preferences.appSettings.PaletteHueDark)
 	require.Equal(t, 0, app.Preferences.appSettings.PaletteSaturationDark)
@@ -1446,7 +1580,7 @@ func TestAppPaletteTintMigration(t *testing.T) {
 			PaletteHue:               180,
 			PaletteSaturation:        65,
 			PaletteBrightness:        -10,
-			Refresh:                  &settingsRefresh{Auto: true, MetricsIntervalMs: defaultMetricsIntervalMs()},
+			Refresh:                  &settingsRefresh{Auto: true, MetricsIntervalMs: preferenceschema.DefaultMetricsRefreshIntervalMs},
 		},
 	}
 	bytes, err := json.Marshal(oldSettings)
@@ -1468,7 +1602,7 @@ func TestAppSetAccentColorPersists(t *testing.T) {
 	app := newSettingsEffectsTestFixture(t)
 
 	// Set light accent color.
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceAccentColorLight, "#ff5733"))
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyAccentColorLight, "#ff5733"))
 	require.Equal(t, "#ff5733", app.Preferences.appSettings.AccentColorLight)
 	// Dark mode remains untouched.
 	require.Equal(t, "", app.Preferences.appSettings.AccentColorDark)
@@ -1492,22 +1626,22 @@ func TestAppSetAccentColorValidation(t *testing.T) {
 	app := newSettingsEffectsTestFixture(t)
 
 	// Invalid hex format returns error.
-	err := updatePreference(app.Preferences, appPreferenceAccentColorLight, "ff5733")
+	err := updatePreference(app.Preferences, preferenceschema.KeyAccentColorLight, "ff5733")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid color format")
 
 	// Short hex returns error.
-	err = updatePreference(app.Preferences, appPreferenceAccentColorLight, "#fff")
+	err = updatePreference(app.Preferences, preferenceschema.KeyAccentColorLight, "#fff")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid color format")
 
 	// Non-hex characters return error.
-	err = updatePreference(app.Preferences, appPreferenceAccentColorDark, "#zzzzzz")
+	err = updatePreference(app.Preferences, preferenceschema.KeyAccentColorDark, "#zzzzzz")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid color format")
 
 	// Empty string is accepted (reset).
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceAccentColorDark, ""))
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyAccentColorDark, ""))
 	require.Equal(t, "", app.Preferences.appSettings.AccentColorDark)
 }
 
@@ -1521,36 +1655,44 @@ func TestAppSettingsDefaultTablePageSize(t *testing.T) {
 	writeTestFileWithParents(t, configPath, []byte(`{"schemaVersion":0}`), 0o644)
 	settings, err := app.Preferences.loadSettingsFile()
 	require.NoError(t, err)
-	require.Equal(t, defaultTablePageSize, settings.Preferences.DefaultTablePageSize)
+	require.Equal(t, preferenceschema.DefaultTablePageSize, settings.Preferences.DefaultTablePageSize)
 
-	// Schema: integer preference with the default and sanity bounds.
-	schema, err := app.Preferences.GetAppSettingsSchema()
-	require.NoError(t, err)
-	byKey := make(map[string]AppPreferenceSchema, len(schema.Preferences))
-	for _, pref := range schema.Preferences {
-		byKey[pref.Key] = pref
-	}
-	require.Equal(t, "integer", byKey[appPreferenceDefaultTablePageSize].Type)
-	require.Equal(t, defaultTablePageSize, byKey[appPreferenceDefaultTablePageSize].DefaultValue)
-	require.Equal(t, minTablePageSize, *byKey[appPreferenceDefaultTablePageSize].Min)
-	require.Equal(t, maxTablePageSize, *byKey[appPreferenceDefaultTablePageSize].Max)
-
-	// Updates persist, clamp to the sanity bounds, and survive a reload.
+	// A listed size persists and survives a reload.
 	response, err := app.Preferences.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{
-		{Key: appPreferenceDefaultTablePageSize, Value: 250},
+		{Key: preferenceschema.KeyDefaultTablePageSize, Value: 250},
 	}})
 	require.NoError(t, err)
 	require.Equal(t, 250, response.Settings.DefaultTablePageSize)
-
-	response, err = app.Preferences.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{
-		{Key: appPreferenceDefaultTablePageSize, Value: 999999},
-	}})
-	require.NoError(t, err)
-	require.Equal(t, maxTablePageSize, response.Settings.DefaultTablePageSize)
-
 	app.Preferences.appSettings = nil
 	ensurePreferencesLoaded(t, app.Preferences)
-	require.Equal(t, maxTablePageSize, app.Preferences.appSettings.DefaultTablePageSize)
+	require.Equal(t, 250, app.Preferences.appSettings.DefaultTablePageSize)
+
+	// The sizes are a fixed list: anything else, fractions included, becomes the
+	// default, as the pagination footers and the Settings dropdown do.
+	for _, value := range []any{37, 999999, 25.5, 100.5} {
+		require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyDefaultTablePageSize, 250))
+		response, err = app.Preferences.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{
+			{Key: preferenceschema.KeyDefaultTablePageSize, Value: value},
+		}})
+		require.NoError(t, err)
+		require.Equal(t, preferenceschema.DefaultTablePageSize, response.Settings.DefaultTablePageSize, "page size %v", value)
+	}
+
+	// An import with an off-list size imports the default.
+	for _, value := range []int{37, 999999} {
+		preferences := defaultSettingsFile().Preferences
+		preferences.DefaultTablePageSize = value
+		data, err := json.Marshal(settingsDataFile{
+			Format:                settingsDataFormat,
+			SchemaVersion:         settingsDataSchemaVersion,
+			Preferences:           preferences,
+			KubeconfigSearchPaths: []string{"/portable/kubeconfigs"},
+		})
+		require.NoError(t, err)
+		document, _, err := decodeSettingsDataFile(data)
+		require.NoError(t, err)
+		require.Equal(t, preferenceschema.DefaultTablePageSize, document.Preferences.DefaultTablePageSize, "imported page size %d", value)
+	}
 }
 
 // TestGetAppSettingsDoesNotDeadlockWhenSettingsNotLoaded pins the lock-direction
@@ -1593,7 +1735,7 @@ func TestSettingsFileWithRemovedBackgroundRefreshKeyStillLoads(t *testing.T) {
 	require.False(t, app.Preferences.appSettings.AutoRefreshEnabled)
 	require.Equal(t, "dark", app.Preferences.appSettings.AppearanceMode)
 
-	require.NoError(t, updatePreference(app.Preferences, appPreferenceAutoRefreshEnabled, true))
+	require.NoError(t, updatePreference(app.Preferences, preferenceschema.KeyAutoRefreshEnabled, true))
 	saved, err := os.ReadFile(configPath)
 	require.NoError(t, err)
 	require.NotContains(t, string(saved), `"background"`)

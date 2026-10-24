@@ -11,6 +11,7 @@ import (
 	appconfig "github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
+	"github.com/luxury-yacht/app/backend/internal/preferenceschema"
 	"github.com/luxury-yacht/app/backend/resources/gatewayapi"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/client-go/dynamic"
@@ -338,8 +339,8 @@ func (m *ClusterRuntimeManager) applyKubernetesClientRateLimits(qps, burst int) 
 	if m == nil {
 		return
 	}
-	qps = clampKubernetesClientQPS(qps)
-	burst = clampKubernetesClientBurst(burst)
+	qps = repairIntPreference(preferenceschema.KeyKubernetesClientQPS, qps)
+	burst = repairIntPreference(preferenceschema.KeyKubernetesClientBurst, burst)
 	m.rateLimitMu.Lock()
 	m.kubernetesQPS = qps
 	m.kubernetesBurst = burst
@@ -364,7 +365,7 @@ func (m *ClusterRuntimeManager) applyKubernetesClientRateLimits(qps, burst int) 
 
 func (m *ClusterRuntimeManager) kubernetesClientRateLimits() (int, int) {
 	if m == nil {
-		return defaultKubernetesClientQPS, defaultKubernetesClientBurst
+		return preferenceschema.DefaultKubernetesClientQPS, preferenceschema.DefaultKubernetesClientBurst
 	}
 	m.rateLimitMu.RLock()
 	defer m.rateLimitMu.RUnlock()

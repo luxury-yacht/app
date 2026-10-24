@@ -7,6 +7,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/internal/preferenceschema"
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
@@ -62,8 +63,8 @@ func newResourceGatewayFixture() *resourceGatewayFixture {
 			return fixture.resourceResolver(clusterID)
 		},
 		refreshProjection:            refreshProjection,
-		permissionFetchPolicy:        NewPermissionFetchPolicy(defaultPermissionSSRRFetchConcurrency),
-		containerLogsSelectionPolicy: NewContainerLogsSelectionPolicy(defaultObjPanelLogsTargetPerScopeLimit),
+		permissionFetchPolicy:        NewPermissionFetchPolicy(preferenceschema.DefaultPermissionSSRRFetchConcurrency),
+		containerLogsSelectionPolicy: NewContainerLogsSelectionPolicy(preferenceschema.DefaultObjPanelLogsTargetPerScopeLimit),
 		nodeMaintenanceStore:         fixture.nodeMaintenance,
 		operations:                   operations,
 	})

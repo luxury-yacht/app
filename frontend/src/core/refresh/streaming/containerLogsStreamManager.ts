@@ -10,11 +10,8 @@
 import type { types } from '@core/backend-api/models';
 import { type JSONSocket, JSONStream } from '@wailsio/runtime';
 import { eventBus } from '@/core/events';
-import {
-  getPreference,
-  OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE,
-  subscribePreference,
-} from '@/core/settings/appPreferences';
+import { getPreference, subscribePreference } from '@/core/settings/appPreferences';
+import { APP_PREFERENCE_SPECS } from '@/core/settings/appPreferences.generated';
 import type { SnapshotStats } from '../client';
 import { localFailure, type RefreshFailure } from '../refreshFailure';
 import { resetScopedDomainState, setScopedDomainState } from '../store';
@@ -583,7 +580,7 @@ export class ContainerLogsStreamManager {
    * Starts at the default so the module-level singleton has a sane value
    * before preferences hydrate.
    */
-  private maxEntries = OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE;
+  private maxEntries: number = APP_PREFERENCE_SPECS.objPanelLogsBufferMaxSize.defaultValue;
   private readonly maxBytes: number;
   private readonly fixedMaxEntries: number | undefined;
 

@@ -133,8 +133,8 @@ describe('Sentry error reporting', () => {
   });
 
   it('reports preference hydration failures only after the persisted preference is known', async () => {
-    const failure = new Error('settings schema unavailable');
-    captureBootstrapError(failure, { action: 'loadAppSettingsSchema' });
+    const failure = new Error('settings unavailable');
+    captureBootstrapError(failure, { action: 'loadAppSettings' });
 
     expect(sentryMocks.captureException).not.toHaveBeenCalled();
     await configureErrorReportingFromPreferences(
@@ -153,14 +153,14 @@ describe('Sentry error reporting', () => {
     expect(scopeMocks.setTag).toHaveBeenCalledWith('error.surface', 'bootstrap');
     expect(scopeMocks.setContext).toHaveBeenCalledWith('operation', {
       id: 'bootstrap-error-1',
-      action: 'loadAppSettingsSchema',
+      action: 'loadAppSettings',
     });
     expect(sentryMocks.captureException).toHaveBeenCalledWith(failure);
   });
 
   it('discards buffered bootstrap failures when persisted reporting is disabled', async () => {
-    captureBootstrapError(new Error('settings schema unavailable'), {
-      action: 'loadAppSettingsSchema',
+    captureBootstrapError(new Error('settings unavailable'), {
+      action: 'loadAppSettings',
     });
 
     await configureErrorReportingFromPreferences(

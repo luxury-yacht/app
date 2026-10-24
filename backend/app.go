@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 
+	"github.com/luxury-yacht/app/backend/internal/preferenceschema"
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/internal/panelwindow"
@@ -93,8 +94,8 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 		},
 	)
 	clusterWorkspace := newClusterWorkspaceProjection()
-	containerLogsPolicy := NewContainerLogsSelectionPolicy(defaultObjPanelLogsTargetPerScopeLimit)
-	permissionFetchPolicy := NewPermissionFetchPolicy(defaultPermissionSSRRFetchConcurrency)
+	containerLogsPolicy := NewContainerLogsSelectionPolicy(preferenceschema.DefaultObjPanelLogsTargetPerScopeLimit)
+	permissionFetchPolicy := NewPermissionFetchPolicy(preferenceschema.DefaultPermissionSSRRFetchConcurrency)
 	updateCheck := &updateCheckPort{}
 	kubeconfigSearchPaths := &kubeconfigSearchPathPort{}
 	desktopShell := NewDesktopShell(
@@ -129,10 +130,10 @@ func NewApplicationRuntime(wailsApplication *application.App, configured ...Appl
 		options.Reporter, signals.CtxOrBackground, appLogs.Logger(), Version, installationTelemetry,
 	)
 	refreshSettings := newRefreshSettingBridge(
-		defaultObjPanelLogsTargetGlobalLimit,
-		defaultMetricsIntervalMs(),
+		preferenceschema.DefaultObjPanelLogsTargetGlobalLimit,
+		preferenceschema.DefaultMetricsRefreshIntervalMs,
 	)
-	clusterRateLimits := newClusterRateLimitBridge(defaultKubernetesClientQPS, defaultKubernetesClientBurst)
+	clusterRateLimits := newClusterRateLimitBridge(preferenceschema.DefaultKubernetesClientQPS, preferenceschema.DefaultKubernetesClientBurst)
 	preferences := NewPreferencesService(
 		desktopShell,
 		NewSettingsEffectDispatcher(errorReporting, clusterRateLimits, permissionFetchPolicy, containerLogsPolicy, refreshSettings, appLogs.Logger()),

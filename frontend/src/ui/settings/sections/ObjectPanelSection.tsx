@@ -109,9 +109,7 @@ function ObjectPanelSection() {
     setLayoutDrafts((prev) => ({ ...prev, [field]: raw }));
     const parsed = Number.parseInt(raw, 10);
     if (!Number.isNaN(parsed)) {
-      const clamped = normalizeIntegerPreferenceValue(fieldPreferenceKeys[field], parsed, {
-        defaultOnNonPositive: true,
-      });
+      const clamped = normalizeIntegerPreferenceValue(fieldPreferenceKeys[field], parsed);
       setObjectPanelLayoutDefaults({ ...panelLayout, [field]: clamped });
       applyLayoutDefaultsAcrossClusters();
     }

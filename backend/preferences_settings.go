@@ -5,12 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"time"
 
-	"github.com/luxury-yacht/app/backend/internal/config"
-	"github.com/luxury-yacht/app/backend/internal/containerlogs"
+	"github.com/luxury-yacht/app/backend/internal/preferenceschema"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/internal/appstate"
@@ -18,50 +16,9 @@ import (
 
 const settingsSchemaVersion = 1
 
-var validHexColorRe = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
-
 const (
 	defaultThemeID   = "default"
 	defaultThemeName = "default"
-)
-
-const (
-	appPreferenceSidebarClusterResourcesExpanded          = "sidebarClusterResourcesExpanded"
-	appPreferenceSidebarClusterExtensionsExpanded         = "sidebarClusterExtensionsExpanded"
-	appPreferenceSidebarNamespaceResourcesExpanded        = "sidebarNamespaceResourcesExpanded"
-	appPreferenceSidebarNamespaceExtensionsExpanded       = "sidebarNamespaceExtensionsExpanded"
-	appPreferenceAppearanceMode                           = "appearanceMode"
-	appPreferenceUseShortResourceNames                    = "useShortResourceNames"
-	appPreferenceDimInactiveNamespaces                    = "dimInactiveNamespaces"
-	appPreferenceExclusiveNamespaces                      = "exclusiveNamespaces"
-	appPreferenceErrorReportingEnabled                    = "errorReportingEnabled"
-	appPreferenceAutoRefreshEnabled                       = "autoRefreshEnabled"
-	appPreferenceMetricsRefreshIntervalMs                 = "metricsRefreshIntervalMs"
-	appPreferenceKubernetesClientQPS                      = "kubernetesClientQPS"
-	appPreferenceKubernetesClientBurst                    = "kubernetesClientBurst"
-	appPreferencePermissionSSRRFetchConcurrency           = "permissionSSRRFetchConcurrency"
-	appPreferenceObjPanelLogsBufferMaxSize                = "objPanelLogsBufferMaxSize"
-	appPreferenceObjPanelLogsAPITimestampFormat           = "objPanelLogsApiTimestampFormat"
-	appPreferenceObjPanelLogsAPITimestampUseLocalTimeZone = "objPanelLogsApiTimestampUseLocalTimeZone"
-	appPreferenceObjPanelLogsTargetPerScopeLimit          = "objPanelLogsTargetPerScopeLimit"
-	appPreferenceObjPanelLogsTargetGlobalLimit            = "objPanelLogsTargetGlobalLimit"
-	appPreferenceGridTablePersistenceMode                 = "gridTablePersistenceMode"
-	appPreferenceDefaultTablePageSize                     = "defaultTablePageSize"
-	appPreferenceDefaultObjectPanelPosition               = "defaultObjectPanelPosition"
-	appPreferenceObjectPanelDockedRightWidth              = "objectPanelDockedRightWidth"
-	appPreferenceObjectPanelDockedBottomHeight            = "objectPanelDockedBottomHeight"
-	appPreferenceObjectPanelFloatingWidth                 = "objectPanelFloatingWidth"
-	appPreferenceObjectPanelFloatingHeight                = "objectPanelFloatingHeight"
-	appPreferencePaletteHueLight                          = "paletteHueLight"
-	appPreferencePaletteSaturationLight                   = "paletteSaturationLight"
-	appPreferencePaletteBrightnessLight                   = "paletteBrightnessLight"
-	appPreferencePaletteHueDark                           = "paletteHueDark"
-	appPreferencePaletteSaturationDark                    = "paletteSaturationDark"
-	appPreferencePaletteBrightnessDark                    = "paletteBrightnessDark"
-	appPreferenceAccentColorLight                         = "accentColorLight"
-	appPreferenceAccentColorDark                          = "accentColorDark"
-	appPreferenceLinkColorLight                           = "linkColorLight"
-	appPreferenceLinkColorDark                            = "linkColorDark"
 )
 
 // settingsFile captures the persisted application settings stored in settings.json.
@@ -193,77 +150,6 @@ type settingsObjPanelLogs struct {
 	UseLocalTimeZone    bool   `json:"useLocalTimeZone"`    // Render the Kubernetes API timestamp in the user's local timezone instead of UTC
 }
 
-// Object Panel Logs Tab buffer size bounds. The frontend clamps to the same
-// range, so the client can't push values outside these limits; clamping again
-// in the setter is defence in depth.
-const (
-	defaultObjPanelLogsBufferMaxSize       = 5000
-	minObjPanelLogsBufferMaxSize           = 100
-	maxObjPanelLogsBufferMaxSize           = 10000
-	defaultObjPanelLogsAPITimestampFormat  = "YYYY-MM-DDTHH:mm:ss.SSS[Z]"
-	defaultObjPanelLogsTargetPerScopeLimit = containerlogs.DefaultPerScopeTargetLimit
-	minObjPanelLogsTargetPerScopeLimit     = containerlogs.MinPerScopeTargetLimit
-	maxObjPanelLogsTargetPerScopeLimit     = containerlogs.MaxPerScopeTargetLimit
-	defaultObjPanelLogsTargetGlobalLimit   = config.ContainerLogsStreamGlobalTargetLimit
-	minObjPanelLogsTargetGlobalLimit       = 1
-	maxObjPanelLogsTargetGlobalLimit       = 1000
-	defaultKubernetesClientQPS             = config.KubernetesClientQPS
-	minKubernetesClientQPS                 = 1
-	maxKubernetesClientQPS                 = 5000
-	defaultKubernetesClientBurst           = config.KubernetesClientBurst
-	minKubernetesClientBurst               = 1
-	maxKubernetesClientBurst               = 10000
-	defaultPermissionSSRRFetchConcurrency  = config.PermissionSSRRFetchConcurrency
-	minPermissionSSRRFetchConcurrency      = 1
-	maxPermissionSSRRFetchConcurrency      = config.PermissionSSRRFetchConcurrency * 8
-	// Sanity bounds only — the selectable page-size values are owned by the
-	// frontend's shared TABLE_PAGE_SIZE_OPTIONS list (one source for the
-	// pagination footers and the Settings dropdown).
-	defaultTablePageSize                 = 50
-	minTablePageSize                     = 1
-	maxTablePageSize                     = 1000
-	defaultObjectPanelPosition           = "right"
-	defaultObjectPanelDockedRightWidth   = 600
-	defaultObjectPanelDockedBottomHeight = 600
-	defaultObjectPanelFloatingWidth      = 600
-	defaultObjectPanelFloatingHeight     = 800
-	minObjectPanelDockedRightWidth       = 500
-	minObjectPanelDockedBottomHeight     = 200
-	minObjectPanelFloatingWidth          = 450
-	minObjectPanelFloatingHeight         = 200
-	maxObjectPanelLayoutValue            = 9999
-	minPaletteHue                        = 0
-	maxPaletteHue                        = 360
-	minPaletteSaturation                 = 0
-	maxPaletteSaturation                 = 100
-	minPaletteBrightness                 = -50
-	maxPaletteBrightness                 = 50
-)
-
-func clampKubernetesClientQPS(qps int) int {
-	return clampInt(qps, minKubernetesClientQPS, maxKubernetesClientQPS)
-}
-
-func clampKubernetesClientBurst(burst int) int {
-	return clampInt(burst, minKubernetesClientBurst, maxKubernetesClientBurst)
-}
-
-func clampPermissionSSRRFetchConcurrency(limit int) int {
-	return clampInt(limit, minPermissionSSRRFetchConcurrency, maxPermissionSSRRFetchConcurrency)
-}
-
-func clampObjPanelLogsBufferMaxSize(size int) int {
-	return clampInt(size, minObjPanelLogsBufferMaxSize, maxObjPanelLogsBufferMaxSize)
-}
-
-func clampObjPanelLogsTargetPerScopeLimit(limit int) int {
-	return clampInt(limit, minObjPanelLogsTargetPerScopeLimit, maxObjPanelLogsTargetPerScopeLimit)
-}
-
-func clampObjPanelLogsTargetGlobalLimit(limit int) int {
-	return clampInt(limit, minObjPanelLogsTargetGlobalLimit, maxObjPanelLogsTargetGlobalLimit)
-}
-
 // settingsKubeconfig captures user-configurable kubeconfig settings.
 type settingsKubeconfig struct {
 	Selected    []string `json:"selected"`
@@ -280,57 +166,33 @@ type settingsUI struct {
 
 // defaultSettingsFile provides a fully-populated settings file with safe defaults.
 func defaultSettingsFile() *settingsFile {
+	preferences := defaultPreferencesFile()
+	preferences.Themes = []Theme{defaultTheme()}
 	return &settingsFile{
 		SchemaVersion: settingsSchemaVersion,
 		UpdatedAt:     time.Now().UTC(),
-		Preferences: settingsPreferences{
-			SidebarClusterResourcesExpanded:   boolPtr(true),
-			SidebarNamespaceResourcesExpanded: boolPtr(true),
-			AppearanceMode:                    "system",
-			DimInactiveNamespaces:             boolPtr(true),
-			ExclusiveNamespaces:               boolPtr(true),
-			ErrorReportingEnabled:             boolPtr(true),
-			Refresh:                           &settingsRefresh{Auto: true, MetricsIntervalMs: defaultMetricsIntervalMs()},
-			KubernetesAPI: &settingsKubernetesAPI{
-				ClientQPS:                      defaultKubernetesClientQPS,
-				ClientBurst:                    defaultKubernetesClientBurst,
-				PermissionSSRRFetchConcurrency: defaultPermissionSSRRFetchConcurrency,
-			},
-			ObjPanelLogs: &settingsObjPanelLogs{
-				BufferMaxSize:       defaultObjPanelLogsBufferMaxSize,
-				TargetPerScopeLimit: defaultObjPanelLogsTargetPerScopeLimit,
-				TargetGlobalLimit:   defaultObjPanelLogsTargetGlobalLimit,
-				APITimestampFormat:  defaultObjPanelLogsAPITimestampFormat,
-			},
-
-			GridTablePersistenceMode:      "shared",
-			DefaultTablePageSize:          defaultTablePageSize,
-			DefaultObjectPanelPosition:    defaultObjectPanelPosition,
-			ObjectPanelDockedRightWidth:   defaultObjectPanelDockedRightWidth,
-			ObjectPanelDockedBottomHeight: defaultObjectPanelDockedBottomHeight,
-			ObjectPanelFloatingWidth:      defaultObjectPanelFloatingWidth,
-			ObjectPanelFloatingHeight:     defaultObjectPanelFloatingHeight,
-			Themes:                        []Theme{defaultTheme()},
-		},
+		Preferences:   preferences,
 		Kubeconfig: settingsKubeconfig{
 			SearchPaths: defaultKubeconfigSearchPaths(),
 		},
 	}
 }
 
-// normalizeSettingsFile ensures required defaults are present after loading.
+// defaultPreferencesFile holds every preference default, in the settings.json layout.
+func defaultPreferencesFile() settingsPreferences {
+	var preferences settingsPreferences
+	writeAppPreferences(&preferences, defaultAppPreferences())
+	return preferences
+}
+
+// normalizeSettingsFile completes absent values and repairs invalid ones. Load,
+// save, export, and import all pass through it.
 func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 	if settings == nil {
 		return defaultSettingsFile()
 	}
-	normalizeSettingsMetadata(settings)
-	normalizeCorePreferences(&settings.Preferences)
-	normalizeRefreshPreferences(&settings.Preferences)
-	normalizeKubernetesAPIPreferences(&settings.Preferences)
-	normalizeObjPanelLogsPreferences(&settings.Preferences)
-	normalizeLayoutPreferences(&settings.Preferences)
-	migrateLegacyPalettePreferences(&settings.Preferences)
-	normalizeKubeconfigSettings(&settings.Kubeconfig)
+	completeSettingsFile(settings)
+	repairPreferencesFile(&settings.Preferences)
 	settings.Preferences.Themes = normalizeThemes(
 		settings.Preferences.Themes,
 		defaultThemeFromPreferences(settings.Preferences),
@@ -339,101 +201,147 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 	return settings
 }
 
+// completeSettingsFile fills only what is absent, under the rules settings.json
+// has always used, and runs the legacy migrations. It leaves present values as
+// written, so an import can still be validated against them.
+func completeSettingsFile(settings *settingsFile) {
+	normalizeSettingsMetadata(settings)
+	completePreferences(&settings.Preferences)
+	migrateLegacyPalettePreferences(&settings.Preferences)
+	normalizeKubeconfigSettings(&settings.Kubeconfig)
+}
+
 func normalizeSettingsMetadata(settings *settingsFile) {
 	if settings.SchemaVersion == 0 {
 		settings.SchemaVersion = settingsSchemaVersion
 	}
 }
 
-func normalizeCorePreferences(preferences *settingsPreferences) {
-	// Resources holds the default namespace view, so it starts open; a saved
-	// state (always written by earlier versions) is kept.
-	if preferences.SidebarClusterResourcesExpanded == nil {
-		preferences.SidebarClusterResourcesExpanded = boolPtr(true)
-	}
-	if preferences.SidebarNamespaceResourcesExpanded == nil {
-		preferences.SidebarNamespaceResourcesExpanded = boolPtr(true)
-	}
-	if preferences.AppearanceMode == "" {
-		preferences.AppearanceMode = "system"
-	}
-	if preferences.DimInactiveNamespaces == nil {
-		preferences.DimInactiveNamespaces = boolPtr(true)
-	}
-	if preferences.ExclusiveNamespaces == nil {
-		preferences.ExclusiveNamespaces = boolPtr(true)
-	}
-	if preferences.ErrorReportingEnabled == nil {
-		preferences.ErrorReportingEnabled = boolPtr(true)
+// completePreferences gives an absent section, an unset optional flag, or an
+// empty enum its default. (A zero integer and an empty format are settled by
+// the schema's own rules during repair or validation.) The Resources groups
+// start open; a saved state, which earlier versions always wrote, is kept.
+func completePreferences(preferences *settingsPreferences) {
+	defaults := defaultPreferencesFile()
+	fillNil(&preferences.SidebarClusterResourcesExpanded, defaults.SidebarClusterResourcesExpanded)
+	fillNil(&preferences.SidebarNamespaceResourcesExpanded, defaults.SidebarNamespaceResourcesExpanded)
+	fillNil(&preferences.DimInactiveNamespaces, defaults.DimInactiveNamespaces)
+	fillNil(&preferences.ExclusiveNamespaces, defaults.ExclusiveNamespaces)
+	fillNil(&preferences.ErrorReportingEnabled, defaults.ErrorReportingEnabled)
+	fillNil(&preferences.Refresh, defaults.Refresh)
+	fillNil(&preferences.KubernetesAPI, defaults.KubernetesAPI)
+	fillNil(&preferences.ObjPanelLogs, defaults.ObjPanelLogs)
+	fillEmpty(&preferences.AppearanceMode, defaults.AppearanceMode)
+	fillEmpty(&preferences.GridTablePersistenceMode, defaults.GridTablePersistenceMode)
+	fillEmpty(&preferences.DefaultObjectPanelPosition, defaults.DefaultObjectPanelPosition)
+}
+
+func fillNil[T any](target **T, fallback *T) {
+	if *target == nil {
+		*target = fallback
 	}
 }
 
-func normalizeRefreshPreferences(preferences *settingsPreferences) {
-	if preferences.Refresh == nil {
-		preferences.Refresh = &settingsRefresh{Auto: true, MetricsIntervalMs: defaultMetricsIntervalMs()}
-	}
-	if preferences.Refresh.MetricsIntervalMs <= 0 {
-		preferences.Refresh.MetricsIntervalMs = defaultMetricsIntervalMs()
+func fillEmpty(target *string, fallback string) {
+	if *target == "" {
+		*target = fallback
 	}
 }
 
-func normalizeKubernetesAPIPreferences(preferences *settingsPreferences) {
-	if preferences.KubernetesAPI == nil {
-		preferences.KubernetesAPI = &settingsKubernetesAPI{
-			ClientQPS:                      defaultKubernetesClientQPS,
-			ClientBurst:                    defaultKubernetesClientBurst,
-			PermissionSSRRFetchConcurrency: defaultPermissionSSRRFetchConcurrency,
-		}
-	}
-	api := preferences.KubernetesAPI
-	api.ClientQPS = defaultOrClampInt(api.ClientQPS, defaultKubernetesClientQPS, minKubernetesClientQPS, maxKubernetesClientQPS)
-	api.ClientBurst = defaultOrClampInt(api.ClientBurst, defaultKubernetesClientBurst, minKubernetesClientBurst, maxKubernetesClientBurst)
-	api.PermissionSSRRFetchConcurrency = defaultOrClampInt(
-		api.PermissionSSRRFetchConcurrency,
-		defaultPermissionSSRRFetchConcurrency,
-		minPermissionSSRRFetchConcurrency,
-		maxPermissionSSRRFetchConcurrency,
-	)
+// repairPreferencesFile settles every preference in a completed file through
+// the schema's Repair rule.
+func repairPreferencesFile(preferences *settingsPreferences) {
+	settings := &AppSettings{}
+	readAppPreferences(preferences, settings)
+	repairAppPreferences(settings)
+	writeAppPreferences(preferences, settings)
 }
 
-func normalizeObjPanelLogsPreferences(preferences *settingsPreferences) {
-	if preferences.ObjPanelLogs == nil {
-		preferences.ObjPanelLogs = &settingsObjPanelLogs{
-			BufferMaxSize:       defaultObjPanelLogsBufferMaxSize,
-			TargetPerScopeLimit: defaultObjPanelLogsTargetPerScopeLimit,
-			TargetGlobalLimit:   defaultObjPanelLogsTargetGlobalLimit,
-			APITimestampFormat:  defaultObjPanelLogsAPITimestampFormat,
-		}
-	}
-	// A zero value means "use the default", not "truncate every buffer to 0".
-	logs := preferences.ObjPanelLogs
-	logs.BufferMaxSize = defaultOrClampInt(logs.BufferMaxSize, defaultObjPanelLogsBufferMaxSize, minObjPanelLogsBufferMaxSize, maxObjPanelLogsBufferMaxSize)
-	logs.TargetPerScopeLimit = defaultOrClampInt(logs.TargetPerScopeLimit, defaultObjPanelLogsTargetPerScopeLimit, minObjPanelLogsTargetPerScopeLimit, maxObjPanelLogsTargetPerScopeLimit)
-	logs.TargetGlobalLimit = defaultOrClampInt(logs.TargetGlobalLimit, defaultObjPanelLogsTargetGlobalLimit, minObjPanelLogsTargetGlobalLimit, maxObjPanelLogsTargetGlobalLimit)
-	if logs.APITimestampFormat == "" {
-		logs.APITimestampFormat = defaultObjPanelLogsAPITimestampFormat
-	}
+// readAppPreferences maps a completed file's preferences onto AppSettings.
+func readAppPreferences(preferences *settingsPreferences, settings *AppSettings) {
+	settings.SidebarClusterResourcesExpanded = *preferences.SidebarClusterResourcesExpanded
+	settings.SidebarClusterExtensionsExpanded = preferences.SidebarClusterExtensionsExpanded
+	settings.SidebarNamespaceResourcesExpanded = *preferences.SidebarNamespaceResourcesExpanded
+	settings.SidebarNamespaceExtensionsExpanded = preferences.SidebarNamespaceExtensionsExpanded
+	settings.AppearanceMode = preferences.AppearanceMode
+	settings.UseShortResourceNames = preferences.UseShortResourceNames
+	settings.DimInactiveNamespaces = *preferences.DimInactiveNamespaces
+	settings.ExclusiveNamespaces = *preferences.ExclusiveNamespaces
+	settings.ErrorReportingEnabled = *preferences.ErrorReportingEnabled
+	settings.AutoRefreshEnabled = preferences.Refresh.Auto
+	settings.MetricsRefreshIntervalMs = preferences.Refresh.MetricsIntervalMs
+	settings.KubernetesClientQPS = preferences.KubernetesAPI.ClientQPS
+	settings.KubernetesClientBurst = preferences.KubernetesAPI.ClientBurst
+	settings.PermissionSSRRFetchConcurrency = preferences.KubernetesAPI.PermissionSSRRFetchConcurrency
+	settings.ObjPanelLogsBufferMaxSize = preferences.ObjPanelLogs.BufferMaxSize
+	settings.ObjPanelLogsTargetPerScopeLimit = preferences.ObjPanelLogs.TargetPerScopeLimit
+	settings.ObjPanelLogsTargetGlobalLimit = preferences.ObjPanelLogs.TargetGlobalLimit
+	settings.ObjPanelLogsAPITimestampFormat = preferences.ObjPanelLogs.APITimestampFormat
+	settings.ObjPanelLogsAPITimestampUseLocalTimeZone = preferences.ObjPanelLogs.UseLocalTimeZone
+	settings.GridTablePersistenceMode = preferences.GridTablePersistenceMode
+	settings.DefaultTablePageSize = preferences.DefaultTablePageSize
+	settings.DefaultObjectPanelPosition = preferences.DefaultObjectPanelPosition
+	settings.ObjectPanelDockedRightWidth = preferences.ObjectPanelDockedRightWidth
+	settings.ObjectPanelDockedBottomHeight = preferences.ObjectPanelDockedBottomHeight
+	settings.ObjectPanelFloatingWidth = preferences.ObjectPanelFloatingWidth
+	settings.ObjectPanelFloatingHeight = preferences.ObjectPanelFloatingHeight
+	settings.PaletteHueLight = preferences.PaletteHueLight
+	settings.PaletteSaturationLight = preferences.PaletteSaturationLight
+	settings.PaletteBrightnessLight = preferences.PaletteBrightnessLight
+	settings.PaletteHueDark = preferences.PaletteHueDark
+	settings.PaletteSaturationDark = preferences.PaletteSaturationDark
+	settings.PaletteBrightnessDark = preferences.PaletteBrightnessDark
+	settings.AccentColorLight = preferences.AccentColorLight
+	settings.AccentColorDark = preferences.AccentColorDark
+	settings.LinkColorLight = preferences.LinkColorLight
+	settings.LinkColorDark = preferences.LinkColorDark
 }
 
-func normalizeLayoutPreferences(preferences *settingsPreferences) {
-	if preferences.GridTablePersistenceMode == "" {
-		preferences.GridTablePersistenceMode = "shared"
+// writeAppPreferences maps AppSettings preferences into the settings.json
+// layout. The legacy single-value palette fields stay zero, so omitempty drops them.
+func writeAppPreferences(preferences *settingsPreferences, settings *AppSettings) {
+	preferences.SidebarClusterResourcesExpanded = boolPtr(settings.SidebarClusterResourcesExpanded)
+	preferences.SidebarClusterExtensionsExpanded = settings.SidebarClusterExtensionsExpanded
+	preferences.SidebarNamespaceResourcesExpanded = boolPtr(settings.SidebarNamespaceResourcesExpanded)
+	preferences.SidebarNamespaceExtensionsExpanded = settings.SidebarNamespaceExtensionsExpanded
+	preferences.AppearanceMode = settings.AppearanceMode
+	preferences.UseShortResourceNames = settings.UseShortResourceNames
+	preferences.DimInactiveNamespaces = boolPtr(settings.DimInactiveNamespaces)
+	preferences.ExclusiveNamespaces = boolPtr(settings.ExclusiveNamespaces)
+	preferences.ErrorReportingEnabled = boolPtr(settings.ErrorReportingEnabled)
+	preferences.Refresh = &settingsRefresh{
+		Auto:              settings.AutoRefreshEnabled,
+		MetricsIntervalMs: settings.MetricsRefreshIntervalMs,
 	}
-	if preferences.DefaultObjectPanelPosition == "" {
-		preferences.DefaultObjectPanelPosition = defaultObjectPanelPosition
+	preferences.KubernetesAPI = &settingsKubernetesAPI{
+		ClientQPS:                      settings.KubernetesClientQPS,
+		ClientBurst:                    settings.KubernetesClientBurst,
+		PermissionSSRRFetchConcurrency: settings.PermissionSSRRFetchConcurrency,
 	}
-	preferences.DefaultTablePageSize = defaultOrClampInt(preferences.DefaultTablePageSize, defaultTablePageSize, minTablePageSize, maxTablePageSize)
-	preferences.ObjectPanelDockedRightWidth = defaultOrClampInt(preferences.ObjectPanelDockedRightWidth, defaultObjectPanelDockedRightWidth, minObjectPanelDockedRightWidth, maxObjectPanelLayoutValue)
-	preferences.ObjectPanelDockedBottomHeight = defaultOrClampInt(preferences.ObjectPanelDockedBottomHeight, defaultObjectPanelDockedBottomHeight, minObjectPanelDockedBottomHeight, maxObjectPanelLayoutValue)
-	preferences.ObjectPanelFloatingWidth = defaultOrClampInt(preferences.ObjectPanelFloatingWidth, defaultObjectPanelFloatingWidth, minObjectPanelFloatingWidth, maxObjectPanelLayoutValue)
-	preferences.ObjectPanelFloatingHeight = defaultOrClampInt(preferences.ObjectPanelFloatingHeight, defaultObjectPanelFloatingHeight, minObjectPanelFloatingHeight, maxObjectPanelLayoutValue)
-}
-
-func defaultOrClampInt(value, defaultValue, minValue, maxValue int) int {
-	if value <= 0 {
-		return defaultValue
+	preferences.ObjPanelLogs = &settingsObjPanelLogs{
+		BufferMaxSize:       settings.ObjPanelLogsBufferMaxSize,
+		TargetPerScopeLimit: settings.ObjPanelLogsTargetPerScopeLimit,
+		TargetGlobalLimit:   settings.ObjPanelLogsTargetGlobalLimit,
+		APITimestampFormat:  settings.ObjPanelLogsAPITimestampFormat,
+		UseLocalTimeZone:    settings.ObjPanelLogsAPITimestampUseLocalTimeZone,
 	}
-	return clampInt(value, minValue, maxValue)
+	preferences.GridTablePersistenceMode = settings.GridTablePersistenceMode
+	preferences.DefaultTablePageSize = settings.DefaultTablePageSize
+	preferences.DefaultObjectPanelPosition = settings.DefaultObjectPanelPosition
+	preferences.ObjectPanelDockedRightWidth = settings.ObjectPanelDockedRightWidth
+	preferences.ObjectPanelDockedBottomHeight = settings.ObjectPanelDockedBottomHeight
+	preferences.ObjectPanelFloatingWidth = settings.ObjectPanelFloatingWidth
+	preferences.ObjectPanelFloatingHeight = settings.ObjectPanelFloatingHeight
+	preferences.PaletteHueLight = settings.PaletteHueLight
+	preferences.PaletteSaturationLight = settings.PaletteSaturationLight
+	preferences.PaletteBrightnessLight = settings.PaletteBrightnessLight
+	preferences.PaletteHueDark = settings.PaletteHueDark
+	preferences.PaletteSaturationDark = settings.PaletteSaturationDark
+	preferences.PaletteBrightnessDark = settings.PaletteBrightnessDark
+	preferences.AccentColorLight = settings.AccentColorLight
+	preferences.AccentColorDark = settings.AccentColorDark
+	preferences.LinkColorLight = settings.LinkColorLight
+	preferences.LinkColorDark = settings.LinkColorDark
 }
 
 func migrateLegacyPalettePreferences(preferences *settingsPreferences) {
@@ -508,10 +416,6 @@ func normalizeThemes(themes []Theme, fallbackDefault Theme) []Theme {
 
 	normalized = append(normalized, defaultThemeValue)
 	return normalized
-}
-
-func defaultMetricsIntervalMs() int {
-	return int(config.RefreshMetricsInterval / time.Millisecond)
 }
 
 // defaultKubeconfigSearchPaths returns the default list of kubeconfig locations.
@@ -721,50 +625,13 @@ func (p *PreferencesService) loadAppSettingsSnapshot() (*AppSettings, error) {
 
 func appSettingsFromFile(settings *settingsFile) *AppSettings {
 	settings = normalizeSettingsFile(settings)
-	logSettings := settings.Preferences.ObjPanelLogs
-	kubernetesAPISettings := settings.Preferences.KubernetesAPI
-
-	return &AppSettings{
-		AnonymizedID:                             settings.Telemetry.AnonymizedID,
-		AppearanceMode:                           settings.Preferences.AppearanceMode,
-		SelectedKubeconfigs:                      append([]string(nil), settings.Kubeconfig.Selected...),
-		UseShortResourceNames:                    settings.Preferences.UseShortResourceNames,
-		DimInactiveNamespaces:                    *settings.Preferences.DimInactiveNamespaces,
-		SidebarClusterResourcesExpanded:          *settings.Preferences.SidebarClusterResourcesExpanded,
-		SidebarClusterExtensionsExpanded:         settings.Preferences.SidebarClusterExtensionsExpanded,
-		SidebarNamespaceResourcesExpanded:        *settings.Preferences.SidebarNamespaceResourcesExpanded,
-		SidebarNamespaceExtensionsExpanded:       settings.Preferences.SidebarNamespaceExtensionsExpanded,
-		ExclusiveNamespaces:                      *settings.Preferences.ExclusiveNamespaces,
-		ErrorReportingEnabled:                    *settings.Preferences.ErrorReportingEnabled,
-		AutoRefreshEnabled:                       settings.Preferences.Refresh.Auto,
-		MetricsRefreshIntervalMs:                 settings.Preferences.Refresh.MetricsIntervalMs,
-		KubernetesClientQPS:                      kubernetesAPISettings.ClientQPS,
-		KubernetesClientBurst:                    kubernetesAPISettings.ClientBurst,
-		PermissionSSRRFetchConcurrency:           kubernetesAPISettings.PermissionSSRRFetchConcurrency,
-		ObjPanelLogsBufferMaxSize:                logSettings.BufferMaxSize,
-		ObjPanelLogsTargetPerScopeLimit:          logSettings.TargetPerScopeLimit,
-		ObjPanelLogsTargetGlobalLimit:            logSettings.TargetGlobalLimit,
-		ObjPanelLogsAPITimestampFormat:           logSettings.APITimestampFormat,
-		ObjPanelLogsAPITimestampUseLocalTimeZone: logSettings.UseLocalTimeZone,
-		GridTablePersistenceMode:                 settings.Preferences.GridTablePersistenceMode,
-		DefaultTablePageSize:                     settings.Preferences.DefaultTablePageSize,
-		DefaultObjectPanelPosition:               settings.Preferences.DefaultObjectPanelPosition,
-		ObjectPanelDockedRightWidth:              settings.Preferences.ObjectPanelDockedRightWidth,
-		ObjectPanelDockedBottomHeight:            settings.Preferences.ObjectPanelDockedBottomHeight,
-		ObjectPanelFloatingWidth:                 settings.Preferences.ObjectPanelFloatingWidth,
-		ObjectPanelFloatingHeight:                settings.Preferences.ObjectPanelFloatingHeight,
-		PaletteHueLight:                          settings.Preferences.PaletteHueLight,
-		PaletteSaturationLight:                   settings.Preferences.PaletteSaturationLight,
-		PaletteBrightnessLight:                   settings.Preferences.PaletteBrightnessLight,
-		PaletteHueDark:                           settings.Preferences.PaletteHueDark,
-		PaletteSaturationDark:                    settings.Preferences.PaletteSaturationDark,
-		PaletteBrightnessDark:                    settings.Preferences.PaletteBrightnessDark,
-		AccentColorLight:                         settings.Preferences.AccentColorLight,
-		AccentColorDark:                          settings.Preferences.AccentColorDark,
-		LinkColorLight:                           settings.Preferences.LinkColorLight,
-		LinkColorDark:                            settings.Preferences.LinkColorDark,
-		Themes:                                   settings.Preferences.Themes,
+	app := &AppSettings{
+		AnonymizedID:        settings.Telemetry.AnonymizedID,
+		SelectedKubeconfigs: append([]string(nil), settings.Kubeconfig.Selected...),
+		Themes:              settings.Preferences.Themes,
 	}
+	readAppPreferences(&settings.Preferences, app)
+	return app
 }
 
 func (p *PreferencesService) saveAppSettings() error {
@@ -777,58 +644,8 @@ func (p *PreferencesService) saveAppSettings() error {
 		return err
 	}
 
-	settings.Preferences.AppearanceMode = p.appSettings.AppearanceMode
-	settings.Preferences.UseShortResourceNames = p.appSettings.UseShortResourceNames
-	settings.Preferences.DimInactiveNamespaces = boolPtr(p.appSettings.DimInactiveNamespaces)
-	settings.Preferences.ExclusiveNamespaces = boolPtr(p.appSettings.ExclusiveNamespaces)
-	settings.Preferences.SidebarClusterResourcesExpanded = boolPtr(p.appSettings.SidebarClusterResourcesExpanded)
-	settings.Preferences.SidebarClusterExtensionsExpanded = p.appSettings.SidebarClusterExtensionsExpanded
-	settings.Preferences.SidebarNamespaceResourcesExpanded = boolPtr(p.appSettings.SidebarNamespaceResourcesExpanded)
-	settings.Preferences.SidebarNamespaceExtensionsExpanded = p.appSettings.SidebarNamespaceExtensionsExpanded
-	settings.Preferences.ErrorReportingEnabled = boolPtr(p.appSettings.ErrorReportingEnabled)
-	if settings.Preferences.Refresh == nil {
-		settings.Preferences.Refresh = &settingsRefresh{}
-	}
-	settings.Preferences.Refresh.Auto = p.appSettings.AutoRefreshEnabled
-	settings.Preferences.Refresh.MetricsIntervalMs = p.appSettings.MetricsRefreshIntervalMs
-	if settings.Preferences.KubernetesAPI == nil {
-		settings.Preferences.KubernetesAPI = &settingsKubernetesAPI{}
-	}
-	settings.Preferences.KubernetesAPI.ClientQPS = clampKubernetesClientQPS(p.appSettings.KubernetesClientQPS)
-	settings.Preferences.KubernetesAPI.ClientBurst = clampKubernetesClientBurst(p.appSettings.KubernetesClientBurst)
-	settings.Preferences.KubernetesAPI.PermissionSSRRFetchConcurrency = clampPermissionSSRRFetchConcurrency(p.appSettings.PermissionSSRRFetchConcurrency)
-	if settings.Preferences.ObjPanelLogs == nil {
-		settings.Preferences.ObjPanelLogs = &settingsObjPanelLogs{}
-	}
-	settings.Preferences.ObjPanelLogs.BufferMaxSize = clampObjPanelLogsBufferMaxSize(p.appSettings.ObjPanelLogsBufferMaxSize)
-	settings.Preferences.ObjPanelLogs.TargetPerScopeLimit = clampObjPanelLogsTargetPerScopeLimit(p.appSettings.ObjPanelLogsTargetPerScopeLimit)
-	settings.Preferences.ObjPanelLogs.TargetGlobalLimit = clampObjPanelLogsTargetGlobalLimit(p.appSettings.ObjPanelLogsTargetGlobalLimit)
-	if p.appSettings.ObjPanelLogsAPITimestampFormat == "" {
-		settings.Preferences.ObjPanelLogs.APITimestampFormat = defaultObjPanelLogsAPITimestampFormat
-	} else {
-		settings.Preferences.ObjPanelLogs.APITimestampFormat = p.appSettings.ObjPanelLogsAPITimestampFormat
-	}
-	settings.Preferences.ObjPanelLogs.UseLocalTimeZone = p.appSettings.ObjPanelLogsAPITimestampUseLocalTimeZone
-	settings.Preferences.GridTablePersistenceMode = p.appSettings.GridTablePersistenceMode
-	settings.Preferences.DefaultTablePageSize = p.appSettings.DefaultTablePageSize
-	settings.Preferences.DefaultObjectPanelPosition = p.appSettings.DefaultObjectPanelPosition
-	settings.Preferences.ObjectPanelDockedRightWidth = p.appSettings.ObjectPanelDockedRightWidth
-	settings.Preferences.ObjectPanelDockedBottomHeight = p.appSettings.ObjectPanelDockedBottomHeight
-	settings.Preferences.ObjectPanelFloatingWidth = p.appSettings.ObjectPanelFloatingWidth
-	settings.Preferences.ObjectPanelFloatingHeight = p.appSettings.ObjectPanelFloatingHeight
-	// Write per-mode palette fields; leave old fields zeroed so omitempty drops them.
-	settings.Preferences.PaletteHueLight = p.appSettings.PaletteHueLight
-	settings.Preferences.PaletteSaturationLight = p.appSettings.PaletteSaturationLight
-	settings.Preferences.PaletteBrightnessLight = p.appSettings.PaletteBrightnessLight
-	settings.Preferences.PaletteHueDark = p.appSettings.PaletteHueDark
-	settings.Preferences.PaletteSaturationDark = p.appSettings.PaletteSaturationDark
-	settings.Preferences.PaletteBrightnessDark = p.appSettings.PaletteBrightnessDark
-	settings.Preferences.AccentColorLight = p.appSettings.AccentColorLight
-	settings.Preferences.AccentColorDark = p.appSettings.AccentColorDark
-	settings.Preferences.LinkColorLight = p.appSettings.LinkColorLight
-	settings.Preferences.LinkColorDark = p.appSettings.LinkColorDark
+	writeAppPreferences(&settings.Preferences, p.appSettings)
 	settings.Preferences.Themes = p.appSettings.Themes
-
 	settings.Kubeconfig.Selected = append([]string(nil), p.appSettings.SelectedKubeconfigs...)
 
 	return p.saveSettingsFile(settings)
@@ -874,20 +691,6 @@ func InitializeErrorReporting(preferences *PreferencesService, reporting *ErrorR
 	return reporting.SetErrorReportingEnabled(snapshot.Settings.ErrorReportingEnabled)
 }
 
-func intPtr(v int) *int {
-	return &v
-}
-
-func (p *PreferencesService) GetAppSettingsSchema() (*AppSettingsSchema, error) {
-	settings, err := p.GetAppSettings()
-	if err != nil {
-		return nil, err
-	}
-	schema := buildAppSettingsSchema(settings)
-	schema.AnonymizedID = settings.AnonymizedID
-	return schema, nil
-}
-
 func copyAppSettings(settings *AppSettings) *AppSettings {
 	if settings == nil {
 		return nil
@@ -896,46 +699,6 @@ func copyAppSettings(settings *AppSettings) *AppSettings {
 	cp.SelectedKubeconfigs = append([]string(nil), settings.SelectedKubeconfigs...)
 	cp.Themes = append([]Theme(nil), settings.Themes...)
 	return &cp
-}
-
-func boolPreferenceValue(value any) (bool, error) {
-	v, ok := value.(bool)
-	if !ok {
-		return false, fmt.Errorf("expected boolean value")
-	}
-	return v, nil
-}
-
-func stringPreferenceValue(value any) (string, error) {
-	v, ok := value.(string)
-	if !ok {
-		return "", fmt.Errorf("expected string value")
-	}
-	return v, nil
-}
-
-func intPreferenceValue(value any) (int, error) {
-	switch v := value.(type) {
-	case int:
-		return v, nil
-	case int8:
-		return int(v), nil
-	case int16:
-		return int(v), nil
-	case int32:
-		return int(v), nil
-	case int64:
-		return int(v), nil
-	case float64:
-		return int(v), nil
-	case float32:
-		return int(v), nil
-	case json.Number:
-		i, err := v.Int64()
-		return int(i), err
-	default:
-		return 0, fmt.Errorf("expected integer value")
-	}
 }
 
 type settingsSideEffects struct {
@@ -951,16 +714,6 @@ type preparedPreferenceUpdate struct {
 	settings    *AppSettings
 	changedKeys []string
 	effects     settingsSideEffects
-}
-
-func clampInt(value, minValue, maxValue int) int {
-	if value < minValue {
-		return minValue
-	}
-	if value > maxValue {
-		return maxValue
-	}
-	return value
 }
 
 func (p *PreferencesService) UpdateAppPreferences(request UpdateAppPreferencesRequest) (*UpdateAppPreferencesResponse, error) {
@@ -1017,29 +770,24 @@ func setSubsystemMetricsInterval(subsystem *system.Subsystem, interval time.Dura
 	subsystem.Manager.SetMetricsInterval(interval)
 }
 
-// GetZoomLevel returns the persisted zoom level (50-200), defaulting to 100.
+// GetZoomLevel returns the persisted zoom level, or the default when it is
+// missing or outside the zoom bounds.
 func (p *PreferencesService) GetZoomLevel() int {
 	settings, err := p.loadSettingsFile()
 	if err != nil {
-		return 100
+		return preferenceschema.DefaultZoomLevel
 	}
 
 	level := settings.UI.ZoomLevel
-	if level < 50 || level > 200 {
-		return 100
+	if level < preferenceschema.MinZoomLevel || level > preferenceschema.MaxZoomLevel {
+		return preferenceschema.DefaultZoomLevel
 	}
 	return level
 }
 
-// SetZoomLevel persists the zoom level (clamped to 50-200).
+// SetZoomLevel persists the zoom level, clamped to the zoom bounds.
 func (p *PreferencesService) SetZoomLevel(level int) error {
-	// Clamp to valid range
-	if level < 50 {
-		level = 50
-	}
-	if level > 200 {
-		level = 200
-	}
+	level = min(max(level, preferenceschema.MinZoomLevel), preferenceschema.MaxZoomLevel)
 
 	settings, err := p.loadSettingsFile()
 	if err != nil {
@@ -1209,24 +957,29 @@ func (p *PreferencesService) ApplyTheme(id string) error {
 	settings.Preferences.AccentColorDark = theme.AccentColorDark
 	settings.Preferences.LinkColorLight = theme.LinkColorLight
 	settings.Preferences.LinkColorDark = theme.LinkColorDark
+	// A saved theme can hold values outside the preference bounds; repair them
+	// before they are stored and cached.
+	normalizeSettingsFile(settings)
 
 	if err := p.saveSettingsFile(settings); err != nil {
 		return err
 	}
 
-	// Sync the in-memory cache so saveAppSettings doesn't overwrite with stale data.
+	// Sync the in-memory cache with the stored values so saveAppSettings, which
+	// writes from the cache, keeps them.
 	if p.appSettings != nil {
-		p.appSettings.PaletteHueLight = theme.PaletteHueLight
-		p.appSettings.PaletteSaturationLight = theme.PaletteSaturationLight
-		p.appSettings.PaletteBrightnessLight = theme.PaletteBrightnessLight
-		p.appSettings.PaletteHueDark = theme.PaletteHueDark
-		p.appSettings.PaletteSaturationDark = theme.PaletteSaturationDark
-		p.appSettings.PaletteBrightnessDark = theme.PaletteBrightnessDark
-		p.appSettings.AccentColorLight = theme.AccentColorLight
-		p.appSettings.AccentColorDark = theme.AccentColorDark
-		p.appSettings.LinkColorLight = theme.LinkColorLight
-		p.appSettings.LinkColorDark = theme.LinkColorDark
-		p.appSettings.Themes = append([]Theme(nil), settings.Preferences.Themes...)
+		stored := settings.Preferences
+		p.appSettings.PaletteHueLight = stored.PaletteHueLight
+		p.appSettings.PaletteSaturationLight = stored.PaletteSaturationLight
+		p.appSettings.PaletteBrightnessLight = stored.PaletteBrightnessLight
+		p.appSettings.PaletteHueDark = stored.PaletteHueDark
+		p.appSettings.PaletteSaturationDark = stored.PaletteSaturationDark
+		p.appSettings.PaletteBrightnessDark = stored.PaletteBrightnessDark
+		p.appSettings.AccentColorLight = stored.AccentColorLight
+		p.appSettings.AccentColorDark = stored.AccentColorDark
+		p.appSettings.LinkColorLight = stored.LinkColorLight
+		p.appSettings.LinkColorDark = stored.LinkColorDark
+		p.appSettings.Themes = append([]Theme(nil), stored.Themes...)
 	}
 	return nil
 }

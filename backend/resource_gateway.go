@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/luxury-yacht/app/backend/capabilities"
+	"github.com/luxury-yacht/app/backend/internal/preferenceschema"
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
@@ -165,11 +166,11 @@ func newResourceGateway(dependencies resourceGatewayDependencies) *ResourceGatew
 	}
 	permissionPolicy := dependencies.permissionFetchPolicy
 	if permissionPolicy == nil {
-		permissionPolicy = NewPermissionFetchPolicy(defaultPermissionSSRRFetchConcurrency)
+		permissionPolicy = NewPermissionFetchPolicy(preferenceschema.DefaultPermissionSSRRFetchConcurrency)
 	}
 	containerLogsPolicy := dependencies.containerLogsSelectionPolicy
 	if containerLogsPolicy == nil {
-		containerLogsPolicy = NewContainerLogsSelectionPolicy(defaultObjPanelLogsTargetPerScopeLimit)
+		containerLogsPolicy = NewContainerLogsSelectionPolicy(preferenceschema.DefaultObjPanelLogsTargetPerScopeLimit)
 	}
 	refreshProjection := dependencies.refreshProjection
 	if refreshProjection == nil {

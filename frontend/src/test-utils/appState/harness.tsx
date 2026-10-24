@@ -42,6 +42,7 @@ import {
 } from '@/core/refresh/scopeSelector';
 import type { DomainPayloadMap, NamespaceSummary, RefreshDomain } from '@/core/refresh/types';
 import { setAppPreferencesForTesting } from '@/core/settings/appPreferences';
+import { ZOOM_LEVEL } from '@/core/settings/appPreferences.generated';
 import { useKubeconfig } from '@/modules/kubernetes/config/KubeconfigContext';
 import { PanelWindowShell } from '@/PanelWindowApp';
 import type { KubernetesObjectReference } from '@/types/view-state';
@@ -657,7 +658,6 @@ const answerBootRpcs = (session: Session): void => {
     clusters: Object.fromEntries(session.clusters),
   });
 
-  rpc.answer('GetAppSettingsSchema', () => null);
   rpc.answer('GetAppSettings', () => ({ ...session.settings }) as AppSettings);
   rpc.answer('GetNativeWindowDescriptor', (name) => {
     const panel = session.panelWindows.get(name);
@@ -702,7 +702,7 @@ const answerBootRpcs = (session: Session): void => {
     gitCommit: '',
     isBeta: false,
   }));
-  rpc.answer('GetZoomLevel', () => 100);
+  rpc.answer('GetZoomLevel', () => ZOOM_LEVEL.defaultValue);
   rpc.answer('ListRuntimeOperations', () => []);
   rpc.answer('ListShellSessions', () => []);
   rpc.answer('ListPortForwards', () => []);

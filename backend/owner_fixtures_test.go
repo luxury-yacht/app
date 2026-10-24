@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/internal/preferenceschema"
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	sentryreporting "github.com/luxury-yacht/app/internal/sentry"
@@ -54,10 +55,10 @@ type clusterRuntimeTestFixture struct {
 func newClusterRuntimeTestFixture(t testing.TB, reporters ...sentryreporting.Reporter) *clusterRuntimeTestFixture {
 	t.Helper()
 	base := newLifecycleOwnerFixture(t, reporters...)
-	containerLogsPolicy := NewContainerLogsSelectionPolicy(defaultObjPanelLogsTargetPerScopeLimit)
-	permissionPolicy := NewPermissionFetchPolicy(defaultPermissionSSRRFetchConcurrency)
-	rateLimits := newClusterRateLimitBridge(defaultKubernetesClientQPS, defaultKubernetesClientBurst)
-	refreshSettings := newRefreshSettingBridge(defaultObjPanelLogsTargetGlobalLimit, defaultMetricsIntervalMs())
+	containerLogsPolicy := NewContainerLogsSelectionPolicy(preferenceschema.DefaultObjPanelLogsTargetPerScopeLimit)
+	permissionPolicy := NewPermissionFetchPolicy(preferenceschema.DefaultPermissionSSRRFetchConcurrency)
+	rateLimits := newClusterRateLimitBridge(preferenceschema.DefaultKubernetesClientQPS, preferenceschema.DefaultKubernetesClientBurst)
+	refreshSettings := newRefreshSettingBridge(preferenceschema.DefaultObjPanelLogsTargetGlobalLimit, preferenceschema.DefaultMetricsRefreshIntervalMs)
 	installationTelemetry := &installationTelemetryPort{}
 	errorReporting := NewErrorReportingService(
 		firstReporter(reporters), base.signals.CtxOrBackground, base.AppLogs.Logger(), Version, installationTelemetry,

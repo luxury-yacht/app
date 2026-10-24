@@ -15,10 +15,10 @@ import { Clipboard } from '@wailsio/runtime';
 import { act, type ReactNode, useRef } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE,
   setAutoRefreshEnabled,
   setObjPanelLogsBufferMaxSize,
 } from '@/core/settings/appPreferences';
+import { APP_PREFERENCE_SPECS as SPECS } from '@/core/settings/appPreferences.generated';
 import { objectPanelId } from '@/modules/object-panel/objectPanelRef';
 import {
   installAppStateHarness,
@@ -919,7 +919,7 @@ describe('NodeLogsTab', () => {
         ?.textContent;
 
     it('keeps only as many lines as the buffer setting allows', async () => {
-      const bufferSize = OBJ_PANEL_LOGS_BUFFER_DEFAULT_SIZE;
+      const bufferSize = SPECS.objPanelLogsBufferMaxSize.defaultValue;
       answerNodeLogs(numberedLines(1, bufferSize + 200));
 
       await renderTab();

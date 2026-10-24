@@ -41,7 +41,6 @@ type PreferencesCommands interface {
 	ApplyTheme(string) error
 	DeleteTheme(string) error
 	GetAppSettings() (*AppSettings, error)
-	GetAppSettingsSchema() (*AppSettingsSchema, error)
 	GetKubeconfigSearchPaths() ([]string, error)
 	GetThemes() ([]Theme, error)
 	GetZoomLevel() int
@@ -323,10 +322,6 @@ func (s *DesktopService) DeleteTheme(id string) error {
 
 func (s *DesktopService) GetAppSettings() (*AppSettings, error) {
 	return s.preferences.GetAppSettings()
-}
-
-func (s *DesktopService) GetAppSettingsSchema() (*AppSettingsSchema, error) {
-	return s.preferences.GetAppSettingsSchema()
 }
 
 func (s *DesktopService) GetKubeconfigSearchPaths() ([]string, error) {

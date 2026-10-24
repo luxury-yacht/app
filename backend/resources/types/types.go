@@ -33,7 +33,8 @@ type WindowSettings struct {
 	Maximized bool `json:"maximized"`
 }
 
-// AppSettings represents the application settings
+// AppSettings represents the application settings. Each preference's default,
+// bounds, and allowed values are declared in backend/internal/preferenceschema.
 type AppSettings struct {
 	SidebarClusterResourcesExpanded          bool     `json:"sidebarClusterResourcesExpanded"`
 	SidebarClusterExtensionsExpanded         bool     `json:"sidebarClusterExtensionsExpanded"`
@@ -51,9 +52,9 @@ type AppSettings struct {
 	KubernetesClientQPS                      int      `json:"kubernetesClientQPS"`                      // Per-cluster Kubernetes REST client QPS
 	KubernetesClientBurst                    int      `json:"kubernetesClientBurst"`                    // Per-cluster Kubernetes REST client burst allowance
 	PermissionSSRRFetchConcurrency           int      `json:"permissionSSRRFetchConcurrency"`           // Concurrent namespace SelfSubjectRulesReview fetches
-	ObjPanelLogsBufferMaxSize                int      `json:"objPanelLogsBufferMaxSize"`                // Max container log entries kept in memory per Object Panel Logs Tab (100-10000)
-	ObjPanelLogsTargetPerScopeLimit          int      `json:"objPanelLogsTargetPerScopeLimit"`          // Max pod/container Object Panel Logs Tab targets per Logs tab (1-1000)
-	ObjPanelLogsTargetGlobalLimit            int      `json:"objPanelLogsTargetGlobalLimit"`            // Max pod/container Object Panel Logs Tab targets across all log tabs (1-1000)
+	ObjPanelLogsBufferMaxSize                int      `json:"objPanelLogsBufferMaxSize"`                // Max container log entries kept in memory per Object Panel Logs Tab
+	ObjPanelLogsTargetPerScopeLimit          int      `json:"objPanelLogsTargetPerScopeLimit"`          // Max pod/container Object Panel Logs Tab targets per Logs tab
+	ObjPanelLogsTargetGlobalLimit            int      `json:"objPanelLogsTargetGlobalLimit"`            // Max pod/container Object Panel Logs Tab targets across all log tabs
 	ObjPanelLogsAPITimestampFormat           string   `json:"objPanelLogsApiTimestampFormat"`           // Day.js format for the Kubernetes API timestamp shown in container logs
 	ObjPanelLogsAPITimestampUseLocalTimeZone bool     `json:"objPanelLogsApiTimestampUseLocalTimeZone"` // Render the Kubernetes API timestamp in the user's local timezone instead of UTC
 	GridTablePersistenceMode                 string   `json:"gridTablePersistenceMode"`                 // "shared" or "namespaced"
@@ -63,37 +64,17 @@ type AppSettings struct {
 	ObjectPanelDockedBottomHeight            int      `json:"objectPanelDockedBottomHeight"`            // Default height when docked bottom (px)
 	ObjectPanelFloatingWidth                 int      `json:"objectPanelFloatingWidth"`                 // Default floating width (px)
 	ObjectPanelFloatingHeight                int      `json:"objectPanelFloatingHeight"`                // Default floating height (px)
-	PaletteHueLight                          int      `json:"paletteHueLight"`                          // Hue for gray palette tint in light mode (0-360)
-	PaletteSaturationLight                   int      `json:"paletteSaturationLight"`                   // Saturation intensity for gray palette tint in light mode (0-100)
-	PaletteBrightnessLight                   int      `json:"paletteBrightnessLight"`                   // Brightness offset for gray palette in light mode (-50 to +50)
-	PaletteHueDark                           int      `json:"paletteHueDark"`                           // Hue for gray palette tint in dark mode (0-360)
-	PaletteSaturationDark                    int      `json:"paletteSaturationDark"`                    // Saturation intensity for gray palette tint in dark mode (0-100)
-	PaletteBrightnessDark                    int      `json:"paletteBrightnessDark"`                    // Brightness offset for gray palette in dark mode (-50 to +50)
+	PaletteHueLight                          int      `json:"paletteHueLight"`                          // Hue for gray palette tint in light mode
+	PaletteSaturationLight                   int      `json:"paletteSaturationLight"`                   // Saturation intensity for gray palette tint in light mode
+	PaletteBrightnessLight                   int      `json:"paletteBrightnessLight"`                   // Brightness offset for gray palette in light mode
+	PaletteHueDark                           int      `json:"paletteHueDark"`                           // Hue for gray palette tint in dark mode
+	PaletteSaturationDark                    int      `json:"paletteSaturationDark"`                    // Saturation intensity for gray palette tint in dark mode
+	PaletteBrightnessDark                    int      `json:"paletteBrightnessDark"`                    // Brightness offset for gray palette in dark mode
 	AccentColorLight                         string   `json:"accentColorLight"`                         // Custom accent hex for light mode (empty = default)
 	AccentColorDark                          string   `json:"accentColorDark"`                          // Custom accent hex for dark mode (empty = default)
 	LinkColorLight                           string   `json:"linkColorLight"`                           // Custom link hex for light mode (empty = default)
 	LinkColorDark                            string   `json:"linkColorDark"`                            // Custom link hex for dark mode (empty = default)
 	Themes                                   []Theme  `json:"themes"`                                   // Saved theme library
-}
-
-// AppPreferenceSchema describes one persisted/runtime app preference the
-// frontend can edit through the settings contract.
-type AppPreferenceSchema struct {
-	Key               string   `json:"key"`
-	Type              string   `json:"type"`
-	DefaultValue      any      `json:"defaultValue"`
-	CurrentValue      any      `json:"currentValue"`
-	Min               *int     `json:"min,omitempty"`
-	Max               *int     `json:"max,omitempty"`
-	EnumOptions       []string `json:"enumOptions,omitempty"`
-	Validation        string   `json:"validation,omitempty"`
-	RuntimeSideEffect bool     `json:"runtimeSideEffect"`
-}
-
-// AppSettingsSchema describes the persisted/runtime settings contract.
-type AppSettingsSchema struct {
-	AnonymizedID string                `json:"anonymizedId"`
-	Preferences  []AppPreferenceSchema `json:"preferences"`
 }
 
 // AppPreferenceChange updates one persisted/runtime app preference.

@@ -20,23 +20,8 @@ export interface AppPreferenceChange {
 }
 
 /**
- * AppPreferenceSchema describes one persisted/runtime app preference the
- * frontend can edit through the settings contract.
- */
-export interface AppPreferenceSchema {
-    "key": string;
-    "type": string;
-    "defaultValue": any;
-    "currentValue": any;
-    "min"?: number | null;
-    "max"?: number | null;
-    "enumOptions"?: string[] | null;
-    "validation"?: string;
-    "runtimeSideEffect": boolean;
-}
-
-/**
- * AppSettings represents the application settings
+ * AppSettings represents the application settings. Each preference's default,
+ * bounds, and allowed values are declared in backend/internal/preferenceschema.
  */
 export interface AppSettings {
     "sidebarClusterResourcesExpanded": boolean;
@@ -105,17 +90,17 @@ export interface AppSettings {
     "permissionSSRRFetchConcurrency": number;
 
     /**
-     * Max container log entries kept in memory per Object Panel Logs Tab (100-10000)
+     * Max container log entries kept in memory per Object Panel Logs Tab
      */
     "objPanelLogsBufferMaxSize": number;
 
     /**
-     * Max pod/container Object Panel Logs Tab targets per Logs tab (1-1000)
+     * Max pod/container Object Panel Logs Tab targets per Logs tab
      */
     "objPanelLogsTargetPerScopeLimit": number;
 
     /**
-     * Max pod/container Object Panel Logs Tab targets across all log tabs (1-1000)
+     * Max pod/container Object Panel Logs Tab targets across all log tabs
      */
     "objPanelLogsTargetGlobalLimit": number;
 
@@ -165,32 +150,32 @@ export interface AppSettings {
     "objectPanelFloatingHeight": number;
 
     /**
-     * Hue for gray palette tint in light mode (0-360)
+     * Hue for gray palette tint in light mode
      */
     "paletteHueLight": number;
 
     /**
-     * Saturation intensity for gray palette tint in light mode (0-100)
+     * Saturation intensity for gray palette tint in light mode
      */
     "paletteSaturationLight": number;
 
     /**
-     * Brightness offset for gray palette in light mode (-50 to +50)
+     * Brightness offset for gray palette in light mode
      */
     "paletteBrightnessLight": number;
 
     /**
-     * Hue for gray palette tint in dark mode (0-360)
+     * Hue for gray palette tint in dark mode
      */
     "paletteHueDark": number;
 
     /**
-     * Saturation intensity for gray palette tint in dark mode (0-100)
+     * Saturation intensity for gray palette tint in dark mode
      */
     "paletteSaturationDark": number;
 
     /**
-     * Brightness offset for gray palette in dark mode (-50 to +50)
+     * Brightness offset for gray palette in dark mode
      */
     "paletteBrightnessDark": number;
 
@@ -218,14 +203,6 @@ export interface AppSettings {
      * Saved theme library
      */
     "themes": Theme[] | null;
-}
-
-/**
- * AppSettingsSchema describes the persisted/runtime settings contract.
- */
-export interface AppSettingsSchema {
-    "anonymizedId": string;
-    "preferences": AppPreferenceSchema[] | null;
 }
 
 export interface ConditionState {

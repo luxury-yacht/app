@@ -4,23 +4,18 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/internal/preferenceschema"
 )
 
-// preferenceDescriptor declares one app preference in one place: its key,
-// schema metadata, how a change is validated/clamped and applied to
-// *AppSettings (including runtime side-effect flags), and how its value is
-// read back for the schema and the change log. applyAppPreferenceChange,
-// buildAppSettingsSchema, appPreferenceKeys, and logPreferenceChange all
-// iterate this table, so adding a preference is one row here (plus its
-// persistence mapping in normalize/load/saveAppSettings).
+// preferenceDescriptor binds one preference declared in preferenceschema to the
+// AppSettings field that holds it, the runtime effect a change flags, and its
+// change-log text. The schema owns the key, type, default, bounds, allowed
+// values, and validation. applyAppPreferenceChange, settings-file repair,
+// import validation, and the change log iterate this table, so adding a
+// preference is one schema row, one row here, and its settings.json mapping in
+// readAppPreferences/writeAppPreferences.
 type preferenceDescriptor struct {
-	key               string
-	valueType         string
-	defaultValue      any
-	min, max          *int
-	enumOptions       []string
-	validation        string
-	runtimeSideEffect bool
+	spec preferenceschema.Preference
 	// logText, when set, prefixes the change log line ("<logText>: <value>").
 	// Keys without it log the generic "Preference <key> changed to" line.
 	logText string
@@ -29,27 +24,41 @@ type preferenceDescriptor struct {
 	logsValue bool
 	// skipChangeLog suppresses both named and generic preference log entries.
 	skipChangeLog bool
-	// current reads the schema CurrentValue (and the logged value).
+	// current reads the field (for repair, import validation, and the change log).
 	current func(*AppSettings) any
-	// apply validates/clamps the incoming value and writes it, flagging any
-	// runtime side effects. key is passed through for error wrapping.
-	apply func(settings *AppSettings, key string, value any, effects *settingsSideEffects) error
+	// set writes a value the spec has already validated.
+	set func(*AppSettings, any)
+	// effect flags the runtime owner a change must reach, if any.
+	effect func(*settingsSideEffects)
 }
 
-// boolPreference declares a boolean preference over a field pointer.
-func boolPreference(key string, defaultValue, sideEffect bool, logText string, field func(*AppSettings) *bool) preferenceDescriptor {
+// apply validates an incoming value against the spec, writes it, and flags the
+// change's runtime effect.
+func (d preferenceDescriptor) apply(settings *AppSettings, raw any, effects *settingsSideEffects) error {
+	value, err := d.spec.Validate(raw)
+	if err != nil {
+		return err
+	}
+	d.set(settings, value)
+	if d.effect != nil {
+		d.effect(effects)
+	}
+	return nil
+}
+
+func (d preferenceDescriptor) repair(settings *AppSettings) {
+	d.set(settings, d.spec.Repair(d.current(settings)))
+}
+
+// bindPreference binds key to a field of type T; T must match the spec's type.
+func bindPreference[T any](key, logText string, effect func(*settingsSideEffects), field func(*AppSettings) *T) preferenceDescriptor {
 	return preferenceDescriptor{
-		key: key, valueType: "boolean", defaultValue: defaultValue, runtimeSideEffect: sideEffect,
-		logText: logText, logsValue: logText != "",
-		current: func(s *AppSettings) any { return *field(s) },
-		apply: func(settings *AppSettings, key string, raw any, _ *settingsSideEffects) error {
-			value, err := boolPreferenceValue(raw)
-			if err != nil {
-				return fmt.Errorf("%s: %w", key, err)
-			}
-			*field(settings) = value
-			return nil
-		},
+		spec:      preferenceschema.MustLookup(key),
+		logText:   logText,
+		logsValue: logText != "",
+		current:   func(s *AppSettings) any { return *field(s) },
+		set:       func(s *AppSettings, value any) { *field(s) = value.(T) },
+		effect:    effect,
 	}
 }
 
@@ -58,255 +67,98 @@ func unloggedPreference(descriptor preferenceDescriptor) preferenceDescriptor {
 	return descriptor
 }
 
-// intPreference declares an integer preference over a field pointer. transform
-// clamps/defaults the incoming value; effect (optional) flags a runtime side
-// effect to apply after save.
-type intPreferenceLimits struct {
-	defaultValue       int
-	minValue, maxValue *int
-}
-
-func intPreference(key string, limits intPreferenceLimits, sideEffect bool, logText string, transform func(int) int, effect func(*settingsSideEffects), field func(*AppSettings) *int) preferenceDescriptor {
-	return preferenceDescriptor{
-		key: key, valueType: "integer", defaultValue: limits.defaultValue, min: limits.minValue, max: limits.maxValue,
-		runtimeSideEffect: sideEffect, logText: logText, logsValue: logText != "",
-		current: func(s *AppSettings) any { return *field(s) },
-		apply: func(settings *AppSettings, key string, raw any, effects *settingsSideEffects) error {
-			value, err := intPreferenceValue(raw)
-			if err != nil {
-				return fmt.Errorf("%s: %w", key, err)
-			}
-			*field(settings) = transform(value)
-			if effect != nil {
-				effect(effects)
-			}
-			return nil
-		},
-	}
-}
-
-// enumPreference declares a string preference restricted to options, reporting
-// "invalid <label>: <value>" otherwise.
-func enumPreference(key, defaultValue, label string, options []string, sideEffect bool, logText string, field func(*AppSettings) *string) preferenceDescriptor {
-	return preferenceDescriptor{
-		key: key, valueType: "enum", defaultValue: defaultValue, enumOptions: options,
-		runtimeSideEffect: sideEffect, logText: logText, logsValue: logText != "",
-		current: func(s *AppSettings) any { return *field(s) },
-		apply: func(settings *AppSettings, key string, raw any, _ *settingsSideEffects) error {
-			value, err := stringPreferenceValue(raw)
-			if err != nil {
-				return fmt.Errorf("%s: %w", key, err)
-			}
-			valid := false
-			for _, option := range options {
-				if value == option {
-					valid = true
-					break
-				}
-			}
-			if !valid {
-				return fmt.Errorf("invalid %s: %s", label, value)
-			}
-			*field(settings) = value
-			return nil
-		},
-	}
-}
-
-// colorPreference declares an optional #rrggbb color preference.
-func colorPreference(key string, field func(*AppSettings) *string) preferenceDescriptor {
-	logText := map[string]string{
-		appPreferenceAccentColorLight: "Accent color light changed to",
-		appPreferenceAccentColorDark:  "Accent color dark changed to",
-		appPreferenceLinkColorLight:   "Link color light changed to",
-		appPreferenceLinkColorDark:    "Link color dark changed to",
-	}[key]
-	return preferenceDescriptor{
-		key: key, valueType: "color", defaultValue: "", validation: "#rrggbb-or-empty",
-		logText: logText, logsValue: true,
-		current: func(s *AppSettings) any { return *field(s) },
-		apply: func(settings *AppSettings, key string, raw any, _ *settingsSideEffects) error {
-			color, err := stringPreferenceValue(raw)
-			if err != nil {
-				return fmt.Errorf("%s: %w", key, err)
-			}
-			if color != "" && !validHexColorRe.MatchString(color) {
-				return fmt.Errorf("invalid color format for %s: %s (expected #rrggbb)", key, color)
-			}
-			*field(settings) = color
-			return nil
-		},
-	}
-}
-
-// clampRange returns a clampInt transform over [minValue, maxValue].
-func clampRange(minValue, maxValue int) func(int) int {
-	return func(value int) int { return clampInt(value, minValue, maxValue) }
-}
-
-// zeroDefaulted substitutes defaultValue for non-positive values before next.
-func zeroDefaulted(defaultValue int, next func(int) int) func(int) int {
-	return func(value int) int {
-		if value <= 0 {
-			value = defaultValue
-		}
-		if next != nil {
-			value = next(value)
-		}
-		return value
-	}
-}
-
 func rateLimitEffect(e *settingsSideEffects) { e.kubernetesClientRateLimits = true }
 
-// appPreferenceDescriptors builds the preference table. It is rebuilt per call
-// because the metrics-interval default is derived at read time.
-func appPreferenceDescriptors() []preferenceDescriptor {
-	metricsInterval := intPreference(appPreferenceMetricsRefreshIntervalMs, intPreferenceLimits{defaultValue: defaultMetricsIntervalMs(), minValue: intPtr(1), maxValue: nil}, true, "",
-		zeroDefaulted(defaultMetricsIntervalMs(), nil),
+// appPreferenceTable is in schema declaration order (a binding-coverage test
+// holds it there).
+var appPreferenceTable = []preferenceDescriptor{
+	unloggedPreference(bindPreference(preferenceschema.KeySidebarClusterResourcesExpanded, "", nil,
+		func(s *AppSettings) *bool { return &s.SidebarClusterResourcesExpanded })),
+	unloggedPreference(bindPreference(preferenceschema.KeySidebarClusterExtensionsExpanded, "", nil,
+		func(s *AppSettings) *bool { return &s.SidebarClusterExtensionsExpanded })),
+	unloggedPreference(bindPreference(preferenceschema.KeySidebarNamespaceResourcesExpanded, "", nil,
+		func(s *AppSettings) *bool { return &s.SidebarNamespaceResourcesExpanded })),
+	unloggedPreference(bindPreference(preferenceschema.KeySidebarNamespaceExtensionsExpanded, "", nil,
+		func(s *AppSettings) *bool { return &s.SidebarNamespaceExtensionsExpanded })),
+	bindPreference(preferenceschema.KeyAppearanceMode, "Appearance mode changed to", nil,
+		func(s *AppSettings) *string { return &s.AppearanceMode }),
+	bindPreference(preferenceschema.KeyUseShortResourceNames, "Use short resource names changed to", nil,
+		func(s *AppSettings) *bool { return &s.UseShortResourceNames }),
+	bindPreference(preferenceschema.KeyDimInactiveNamespaces, "Dim inactive namespaces changed to", nil,
+		func(s *AppSettings) *bool { return &s.DimInactiveNamespaces }),
+	bindPreference(preferenceschema.KeyExclusiveNamespaces, "Exclusive namespaces changed to", nil,
+		func(s *AppSettings) *bool { return &s.ExclusiveNamespaces }),
+	bindPreference(preferenceschema.KeyErrorReportingEnabled, "Error reporting enabled changed to",
+		func(e *settingsSideEffects) { e.errorReporting = true },
+		func(s *AppSettings) *bool { return &s.ErrorReportingEnabled }),
+	bindPreference(preferenceschema.KeyAutoRefreshEnabled, "Auto refresh enabled changed to", nil,
+		func(s *AppSettings) *bool { return &s.AutoRefreshEnabled }),
+	loggedValue(bindPreference(preferenceschema.KeyMetricsRefreshIntervalMs, "",
 		func(e *settingsSideEffects) { e.metricsInterval = true },
-		func(s *AppSettings) *int { return &s.MetricsRefreshIntervalMs })
+		func(s *AppSettings) *int { return &s.MetricsRefreshIntervalMs })),
+	bindPreference(preferenceschema.KeyKubernetesClientQPS, "Kubernetes client QPS changed to", rateLimitEffect,
+		func(s *AppSettings) *int { return &s.KubernetesClientQPS }),
+	bindPreference(preferenceschema.KeyKubernetesClientBurst, "Kubernetes client burst changed to", rateLimitEffect,
+		func(s *AppSettings) *int { return &s.KubernetesClientBurst }),
+	bindPreference(preferenceschema.KeyPermissionSSRRFetchConcurrency, "Permission SSRR fetch concurrency changed to",
+		func(e *settingsSideEffects) { e.permissionFetchConcurrency = true },
+		func(s *AppSettings) *int { return &s.PermissionSSRRFetchConcurrency }),
+	bindPreference(preferenceschema.KeyObjPanelLogsBufferMaxSize, "ObjPanelLogs buffer max size changed to", nil,
+		func(s *AppSettings) *int { return &s.ObjPanelLogsBufferMaxSize }),
+	bindPreference(preferenceschema.KeyObjPanelLogsAPITimestampFormat, "Object Panel Logs Tab API timestamp format changed to", nil,
+		func(s *AppSettings) *string { return &s.ObjPanelLogsAPITimestampFormat }),
+	bindPreference(preferenceschema.KeyObjPanelLogsAPITimestampUseLocalTimeZone, "Object Panel Logs Tab API timestamp local timezone changed to", nil,
+		func(s *AppSettings) *bool { return &s.ObjPanelLogsAPITimestampUseLocalTimeZone }),
+	bindPreference(preferenceschema.KeyObjPanelLogsTargetPerScopeLimit, "Object Panel Logs Tab target per-scope limit changed to",
+		func(e *settingsSideEffects) { e.containerLogsPerScopeLimit = true },
+		func(s *AppSettings) *int { return &s.ObjPanelLogsTargetPerScopeLimit }),
+	bindPreference(preferenceschema.KeyObjPanelLogsTargetGlobalLimit, "Object Panel Logs Tab target global limit changed to",
+		func(e *settingsSideEffects) { e.containerLogsGlobalLimit = true },
+		func(s *AppSettings) *int { return &s.ObjPanelLogsTargetGlobalLimit }),
+	bindPreference(preferenceschema.KeyGridTablePersistenceMode, "Grid table persistence mode changed to", nil,
+		func(s *AppSettings) *string { return &s.GridTablePersistenceMode }),
+	bindPreference(preferenceschema.KeyDefaultTablePageSize, "Default table page size changed to", nil,
+		func(s *AppSettings) *int { return &s.DefaultTablePageSize }),
+	bindPreference(preferenceschema.KeyDefaultObjectPanelPosition, "Default object panel position changed to", nil,
+		func(s *AppSettings) *string { return &s.DefaultObjectPanelPosition }),
+	bindPreference(preferenceschema.KeyObjectPanelDockedRightWidth, "", nil,
+		func(s *AppSettings) *int { return &s.ObjectPanelDockedRightWidth }),
+	bindPreference(preferenceschema.KeyObjectPanelDockedBottomHeight, "", nil,
+		func(s *AppSettings) *int { return &s.ObjectPanelDockedBottomHeight }),
+	bindPreference(preferenceschema.KeyObjectPanelFloatingWidth, "", nil,
+		func(s *AppSettings) *int { return &s.ObjectPanelFloatingWidth }),
+	bindPreference(preferenceschema.KeyObjectPanelFloatingHeight, "", nil,
+		func(s *AppSettings) *int { return &s.ObjectPanelFloatingHeight }),
+	bindPreference(preferenceschema.KeyPaletteHueLight, "Palette hue light changed to", nil,
+		func(s *AppSettings) *int { return &s.PaletteHueLight }),
+	bindPreference(preferenceschema.KeyPaletteSaturationLight, "Palette saturation light changed to", nil,
+		func(s *AppSettings) *int { return &s.PaletteSaturationLight }),
+	bindPreference(preferenceschema.KeyPaletteBrightnessLight, "Palette brightness light changed to", nil,
+		func(s *AppSettings) *int { return &s.PaletteBrightnessLight }),
+	bindPreference(preferenceschema.KeyPaletteHueDark, "Palette hue dark changed to", nil,
+		func(s *AppSettings) *int { return &s.PaletteHueDark }),
+	bindPreference(preferenceschema.KeyPaletteSaturationDark, "Palette saturation dark changed to", nil,
+		func(s *AppSettings) *int { return &s.PaletteSaturationDark }),
+	bindPreference(preferenceschema.KeyPaletteBrightnessDark, "Palette brightness dark changed to", nil,
+		func(s *AppSettings) *int { return &s.PaletteBrightnessDark }),
+	bindPreference(preferenceschema.KeyAccentColorLight, "Accent color light changed to", nil,
+		func(s *AppSettings) *string { return &s.AccentColorLight }),
+	bindPreference(preferenceschema.KeyAccentColorDark, "Accent color dark changed to", nil,
+		func(s *AppSettings) *string { return &s.AccentColorDark }),
+	bindPreference(preferenceschema.KeyLinkColorLight, "Link color light changed to", nil,
+		func(s *AppSettings) *string { return &s.LinkColorLight }),
+	bindPreference(preferenceschema.KeyLinkColorDark, "Link color dark changed to", nil,
+		func(s *AppSettings) *string { return &s.LinkColorDark }),
+}
 
-	// The metrics interval logs its applied value under the generic line.
-	metricsInterval.logsValue = true
+// loggedValue logs the applied value under the generic change line.
+func loggedValue(descriptor preferenceDescriptor) preferenceDescriptor {
+	descriptor.logsValue = true
+	return descriptor
+}
 
-	timestampFormat := preferenceDescriptor{
-		key: appPreferenceObjPanelLogsAPITimestampFormat, valueType: "string",
-		defaultValue: defaultObjPanelLogsAPITimestampFormat, validation: "dayjs-format",
-		logText: "Object Panel Logs Tab API timestamp format changed to", logsValue: true,
-		current: func(s *AppSettings) any { return s.ObjPanelLogsAPITimestampFormat },
-		apply: func(settings *AppSettings, key string, raw any, _ *settingsSideEffects) error {
-			value, err := stringPreferenceValue(raw)
-			if err != nil {
-				return fmt.Errorf("%s: %w", key, err)
-			}
-			if value == "" {
-				value = defaultObjPanelLogsAPITimestampFormat
-			}
-			settings.ObjPanelLogsAPITimestampFormat = value
-			return nil
-		},
-	}
-
-	errorReporting := preferenceDescriptor{
-		key: appPreferenceErrorReportingEnabled, valueType: "boolean", defaultValue: true,
-		runtimeSideEffect: true, logText: "Error reporting enabled changed to", logsValue: true,
-		current: func(s *AppSettings) any { return s.ErrorReportingEnabled },
-		apply: func(settings *AppSettings, key string, raw any, effects *settingsSideEffects) error {
-			value, err := boolPreferenceValue(raw)
-			if err != nil {
-				return fmt.Errorf("%s: %w", key, err)
-			}
-			settings.ErrorReportingEnabled = value
-			effects.errorReporting = true
-			return nil
-		},
-	}
-
-	return []preferenceDescriptor{
-		unloggedPreference(boolPreference(appPreferenceSidebarClusterResourcesExpanded, true, false,
-			"", func(s *AppSettings) *bool { return &s.SidebarClusterResourcesExpanded })),
-		unloggedPreference(boolPreference(appPreferenceSidebarClusterExtensionsExpanded, false, false,
-			"", func(s *AppSettings) *bool { return &s.SidebarClusterExtensionsExpanded })),
-		unloggedPreference(boolPreference(appPreferenceSidebarNamespaceResourcesExpanded, true, false,
-			"", func(s *AppSettings) *bool { return &s.SidebarNamespaceResourcesExpanded })),
-		unloggedPreference(boolPreference(appPreferenceSidebarNamespaceExtensionsExpanded, false, false,
-			"", func(s *AppSettings) *bool { return &s.SidebarNamespaceExtensionsExpanded })),
-		enumPreference(appPreferenceAppearanceMode, "system", "appearance mode", []string{"light", "dark", "system"}, true,
-			"Appearance mode changed to", func(s *AppSettings) *string { return &s.AppearanceMode }),
-		boolPreference(appPreferenceUseShortResourceNames, false, false,
-			"Use short resource names changed to", func(s *AppSettings) *bool { return &s.UseShortResourceNames }),
-		boolPreference(appPreferenceDimInactiveNamespaces, true, false,
-			"Dim inactive namespaces changed to", func(s *AppSettings) *bool { return &s.DimInactiveNamespaces }),
-		boolPreference(appPreferenceExclusiveNamespaces, true, false,
-			"Exclusive namespaces changed to", func(s *AppSettings) *bool { return &s.ExclusiveNamespaces }),
-		errorReporting,
-		boolPreference(appPreferenceAutoRefreshEnabled, true, true,
-			"Auto refresh enabled changed to", func(s *AppSettings) *bool { return &s.AutoRefreshEnabled }),
-		metricsInterval,
-		intPreference(appPreferenceKubernetesClientQPS, intPreferenceLimits{defaultValue: defaultKubernetesClientQPS, minValue: intPtr(minKubernetesClientQPS), maxValue: intPtr(maxKubernetesClientQPS)}, true,
-			"Kubernetes client QPS changed to", clampKubernetesClientQPS, rateLimitEffect,
-			func(s *AppSettings) *int { return &s.KubernetesClientQPS }),
-
-		intPreference(appPreferenceKubernetesClientBurst, intPreferenceLimits{defaultValue: defaultKubernetesClientBurst, minValue: intPtr(minKubernetesClientBurst), maxValue: intPtr(maxKubernetesClientBurst)}, true,
-			"Kubernetes client burst changed to", clampKubernetesClientBurst, rateLimitEffect,
-			func(s *AppSettings) *int { return &s.KubernetesClientBurst }),
-
-		intPreference(appPreferencePermissionSSRRFetchConcurrency, intPreferenceLimits{defaultValue: defaultPermissionSSRRFetchConcurrency, minValue: intPtr(minPermissionSSRRFetchConcurrency), maxValue: intPtr(maxPermissionSSRRFetchConcurrency)}, true,
-			"Permission SSRR fetch concurrency changed to", clampPermissionSSRRFetchConcurrency,
-			func(e *settingsSideEffects) { e.permissionFetchConcurrency = true },
-			func(s *AppSettings) *int { return &s.PermissionSSRRFetchConcurrency }),
-
-		intPreference(appPreferenceObjPanelLogsBufferMaxSize, intPreferenceLimits{defaultValue: defaultObjPanelLogsBufferMaxSize, minValue: intPtr(minObjPanelLogsBufferMaxSize), maxValue: intPtr(maxObjPanelLogsBufferMaxSize)}, false,
-			"ObjPanelLogs buffer max size changed to", clampObjPanelLogsBufferMaxSize, nil,
-			func(s *AppSettings) *int { return &s.ObjPanelLogsBufferMaxSize }),
-
-		timestampFormat,
-		boolPreference(appPreferenceObjPanelLogsAPITimestampUseLocalTimeZone, false, false,
-			"Object Panel Logs Tab API timestamp local timezone changed to", func(s *AppSettings) *bool { return &s.ObjPanelLogsAPITimestampUseLocalTimeZone }),
-		intPreference(appPreferenceObjPanelLogsTargetPerScopeLimit, intPreferenceLimits{defaultValue: defaultObjPanelLogsTargetPerScopeLimit, minValue: intPtr(minObjPanelLogsTargetPerScopeLimit), maxValue: intPtr(maxObjPanelLogsTargetPerScopeLimit)}, true,
-			"Object Panel Logs Tab target per-scope limit changed to", clampObjPanelLogsTargetPerScopeLimit,
-			func(e *settingsSideEffects) { e.containerLogsPerScopeLimit = true },
-			func(s *AppSettings) *int { return &s.ObjPanelLogsTargetPerScopeLimit }),
-
-		intPreference(appPreferenceObjPanelLogsTargetGlobalLimit, intPreferenceLimits{defaultValue: defaultObjPanelLogsTargetGlobalLimit, minValue: intPtr(minObjPanelLogsTargetGlobalLimit), maxValue: intPtr(maxObjPanelLogsTargetGlobalLimit)}, true,
-			"Object Panel Logs Tab target global limit changed to", clampObjPanelLogsTargetGlobalLimit,
-			func(e *settingsSideEffects) { e.containerLogsGlobalLimit = true },
-			func(s *AppSettings) *int { return &s.ObjPanelLogsTargetGlobalLimit }),
-
-		enumPreference(appPreferenceGridTablePersistenceMode, "shared", "grid table persistence mode", []string{"shared", "namespaced"}, false,
-			"Grid table persistence mode changed to", func(s *AppSettings) *string { return &s.GridTablePersistenceMode }),
-		intPreference(appPreferenceDefaultTablePageSize, intPreferenceLimits{defaultValue: defaultTablePageSize, minValue: intPtr(minTablePageSize), maxValue: intPtr(maxTablePageSize)}, false,
-			"Default table page size changed to", clampRange(minTablePageSize, maxTablePageSize), nil,
-			func(s *AppSettings) *int { return &s.DefaultTablePageSize }),
-
-		enumPreference(appPreferenceDefaultObjectPanelPosition, defaultObjectPanelPosition, "default object panel position", []string{"right", "bottom", "floating"}, false,
-			"Default object panel position changed to", func(s *AppSettings) *string { return &s.DefaultObjectPanelPosition }),
-		intPreference(appPreferenceObjectPanelDockedRightWidth, intPreferenceLimits{defaultValue: defaultObjectPanelDockedRightWidth, minValue: intPtr(minObjectPanelDockedRightWidth), maxValue: intPtr(maxObjectPanelLayoutValue)}, false,
-			"", clampRange(minObjectPanelDockedRightWidth, maxObjectPanelLayoutValue), nil,
-			func(s *AppSettings) *int { return &s.ObjectPanelDockedRightWidth }),
-
-		intPreference(appPreferenceObjectPanelDockedBottomHeight, intPreferenceLimits{defaultValue: defaultObjectPanelDockedBottomHeight, minValue: intPtr(minObjectPanelDockedBottomHeight), maxValue: intPtr(maxObjectPanelLayoutValue)}, false,
-			"", clampRange(minObjectPanelDockedBottomHeight, maxObjectPanelLayoutValue), nil,
-			func(s *AppSettings) *int { return &s.ObjectPanelDockedBottomHeight }),
-
-		intPreference(appPreferenceObjectPanelFloatingWidth, intPreferenceLimits{defaultValue: defaultObjectPanelFloatingWidth, minValue: intPtr(minObjectPanelFloatingWidth), maxValue: intPtr(maxObjectPanelLayoutValue)}, false,
-			"", clampRange(minObjectPanelFloatingWidth, maxObjectPanelLayoutValue), nil,
-			func(s *AppSettings) *int { return &s.ObjectPanelFloatingWidth }),
-
-		intPreference(appPreferenceObjectPanelFloatingHeight, intPreferenceLimits{defaultValue: defaultObjectPanelFloatingHeight, minValue: intPtr(minObjectPanelFloatingHeight), maxValue: intPtr(maxObjectPanelLayoutValue)}, false,
-			"", clampRange(minObjectPanelFloatingHeight, maxObjectPanelLayoutValue), nil,
-			func(s *AppSettings) *int { return &s.ObjectPanelFloatingHeight }),
-
-		intPreference(appPreferencePaletteHueLight, intPreferenceLimits{defaultValue: 0, minValue: intPtr(minPaletteHue), maxValue: intPtr(maxPaletteHue)}, false,
-			"Palette hue light changed to", clampRange(minPaletteHue, maxPaletteHue), nil,
-			func(s *AppSettings) *int { return &s.PaletteHueLight }),
-
-		intPreference(appPreferencePaletteSaturationLight, intPreferenceLimits{defaultValue: 0, minValue: intPtr(minPaletteSaturation), maxValue: intPtr(maxPaletteSaturation)}, false,
-			"Palette saturation light changed to", clampRange(minPaletteSaturation, maxPaletteSaturation), nil,
-			func(s *AppSettings) *int { return &s.PaletteSaturationLight }),
-
-		intPreference(appPreferencePaletteBrightnessLight, intPreferenceLimits{defaultValue: 0, minValue: intPtr(minPaletteBrightness), maxValue: intPtr(maxPaletteBrightness)}, false,
-			"Palette brightness light changed to", clampRange(minPaletteBrightness, maxPaletteBrightness), nil,
-			func(s *AppSettings) *int { return &s.PaletteBrightnessLight }),
-
-		intPreference(appPreferencePaletteHueDark, intPreferenceLimits{defaultValue: 0, minValue: intPtr(minPaletteHue), maxValue: intPtr(maxPaletteHue)}, false,
-			"Palette hue dark changed to", clampRange(minPaletteHue, maxPaletteHue), nil,
-			func(s *AppSettings) *int { return &s.PaletteHueDark }),
-
-		intPreference(appPreferencePaletteSaturationDark, intPreferenceLimits{defaultValue: 0, minValue: intPtr(minPaletteSaturation), maxValue: intPtr(maxPaletteSaturation)}, false,
-			"Palette saturation dark changed to", clampRange(minPaletteSaturation, maxPaletteSaturation), nil,
-			func(s *AppSettings) *int { return &s.PaletteSaturationDark }),
-
-		intPreference(appPreferencePaletteBrightnessDark, intPreferenceLimits{defaultValue: 0, minValue: intPtr(minPaletteBrightness), maxValue: intPtr(maxPaletteBrightness)}, false,
-			"Palette brightness dark changed to", clampRange(minPaletteBrightness, maxPaletteBrightness), nil,
-			func(s *AppSettings) *int { return &s.PaletteBrightnessDark }),
-
-		colorPreference(appPreferenceAccentColorLight, func(s *AppSettings) *string { return &s.AccentColorLight }),
-		colorPreference(appPreferenceAccentColorDark, func(s *AppSettings) *string { return &s.AccentColorDark }),
-		colorPreference(appPreferenceLinkColorLight, func(s *AppSettings) *string { return &s.LinkColorLight }),
-		colorPreference(appPreferenceLinkColorDark, func(s *AppSettings) *string { return &s.LinkColorDark }),
-	}
+func appPreferenceDescriptors() []preferenceDescriptor {
+	return appPreferenceTable
 }
 
 func applyAppPreferenceChange(settings *AppSettings, change AppPreferenceChange, effects *settingsSideEffects) error {
@@ -314,42 +166,34 @@ func applyAppPreferenceChange(settings *AppSettings, change AppPreferenceChange,
 		return fmt.Errorf("settings are not loaded")
 	}
 	for _, descriptor := range appPreferenceDescriptors() {
-		if descriptor.key == change.Key {
-			return descriptor.apply(settings, change.Key, change.Value, effects)
+		if descriptor.spec.Key == change.Key {
+			return descriptor.apply(settings, change.Value, effects)
 		}
 	}
 	return fmt.Errorf("unknown preference key: %s", change.Key)
 }
 
-func buildAppSettingsSchema(settings *AppSettings) *AppSettingsSchema {
-	if settings == nil {
-		settings = getDefaultAppSettings()
+// defaultAppPreferences returns AppSettings holding every preference default.
+func defaultAppPreferences() *AppSettings {
+	settings := &AppSettings{}
+	for _, descriptor := range appPreferenceDescriptors() {
+		descriptor.set(settings, descriptor.spec.Default)
 	}
-	descriptors := appPreferenceDescriptors()
-	preferences := make([]AppPreferenceSchema, 0, len(descriptors))
-	for _, descriptor := range descriptors {
-		preferences = append(preferences, AppPreferenceSchema{
-			Key:               descriptor.key,
-			Type:              descriptor.valueType,
-			DefaultValue:      descriptor.defaultValue,
-			CurrentValue:      descriptor.current(settings),
-			Min:               descriptor.min,
-			Max:               descriptor.max,
-			EnumOptions:       descriptor.enumOptions,
-			Validation:        descriptor.validation,
-			RuntimeSideEffect: descriptor.runtimeSideEffect,
-		})
-	}
-	return &AppSettingsSchema{Preferences: preferences}
+	return settings
 }
 
-func appPreferenceKeys() []string {
-	descriptors := appPreferenceDescriptors()
-	keys := make([]string, 0, len(descriptors))
-	for _, descriptor := range descriptors {
-		keys = append(keys, descriptor.key)
+// repairAppPreferences settles every preference read back from a settings
+// file, the way the schema repairs a stored value.
+func repairAppPreferences(settings *AppSettings) {
+	for _, descriptor := range appPreferenceDescriptors() {
+		descriptor.repair(settings)
 	}
-	return keys
+}
+
+// repairIntPreference is a runtime owner's guard on an integer preference value
+// it receives.
+func repairIntPreference(key string, value int) int {
+	return preferenceschema.MustLookup(key).Repair(value).(int)
 }
 
 func logPreferenceChange(logger *Logger, key string, value any) {
@@ -357,7 +201,7 @@ func logPreferenceChange(logger *Logger, key string, value any) {
 		return
 	}
 	for _, descriptor := range appPreferenceDescriptors() {
-		if descriptor.key != key {
+		if descriptor.spec.Key != key {
 			continue
 		}
 		if descriptor.skipChangeLog {
@@ -379,7 +223,7 @@ func preferenceValueForLog(settings *AppSettings, key string) any {
 		return nil
 	}
 	for _, descriptor := range appPreferenceDescriptors() {
-		if descriptor.key == key {
+		if descriptor.spec.Key == key {
 			if !descriptor.logsValue {
 				return nil
 			}
