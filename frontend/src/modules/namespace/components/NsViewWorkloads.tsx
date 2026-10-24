@@ -65,6 +65,7 @@ interface WorkloadsTableProps extends WorkloadsViewProps {
 }
 
 const NO_ROW_KEYS: readonly string[] = [];
+const WORKLOADS_VIEW_ID = 'namespace-workloads';
 
 /**
  * GridTable of namespace workloads; a workload's pods open under its row.
@@ -186,7 +187,7 @@ const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
       excludedQueryFacetKeys: RESOURCE_STATUS_QUERY_FACET_KEYS,
       label: diagnosticsLabel,
       selectRows: selectPayloadRows,
-      viewId: 'namespace-workloads',
+      viewId: WORKLOADS_VIEW_ID,
       namespace,
       columns: tableColumns as unknown as GridColumnDefinition<WorkloadData>[],
       keyExtractor,
@@ -296,8 +297,8 @@ interface ScopedWorkloadsViewProps extends WorkloadsViewProps {
   selectedClusterId?: string | null;
 }
 
-// Highlight and open pods live only in this mounted view and only for the
-// current cluster and namespace scope.
+// The highlight lives only in this mounted view and only for the current
+// cluster and namespace scope.
 const refInScope = (
   ref: ClusterObjectReference | null,
   clusterId: string | null | undefined,
@@ -337,17 +338,18 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
       buildRequiredCanonicalObjectRowKey(ref, { fallbackClusterId: selectedClusterId }),
     [selectedClusterId]
   );
-  const openInScope = useCallback(
-    (ref: ClusterObjectReference) => refInScope(ref, selectedClusterId, namespace),
-    [namespace, selectedClusterId]
-  );
   const {
     openRefs: openWorkloads,
     openKeys: openWorkloadKeys,
     toggle: toggleWorkloadPods,
     close: closeWorkloadPods,
     closeKeys: closeWorkloadPodsByKey,
-  } = useOpenRowDetails({ keyOf: rowKeyOf, inScope: openInScope });
+  } = useOpenRowDetails({
+    clusterId: selectedClusterId ?? '',
+    viewId: WORKLOADS_VIEW_ID,
+    namespace,
+    keyOf: rowKeyOf,
+  });
 
   const handleWorkloadSelect = useCallback(
     (workload: WorkloadData) => setSelectedWorkload(toReference(workload)),

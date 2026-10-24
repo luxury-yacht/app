@@ -37,9 +37,12 @@ virtualization, and native table accessibility. Apply the
 - Workloads and Nodes open a row's Pods under it ([row detail](#row-detail))
   from the row's Pods count or `Space`, which also highlight the row; a pointer
   click only highlights; `Enter` and the Kind/Name links still open the object.
-  Any number of rows can be open; `useOpenRowDetails` owns them. Highlight and
-  open rows live only while the view is mounted, and each clears when its row
-  leaves the settled rows (`useClearHiddenRowSelection`) or the scope changes.
+  Any number of rows can be open; `useOpenRowDetails` owns them. The highlight
+  lives only while the view is mounted and clears when the scope changes. Open
+  rows are kept per cluster, view, and namespace until the cluster closes, so
+  returning to the view, namespace, or cluster tab shows them open again. Each
+  clears when its row leaves the settled rows (`useClearHiddenRowSelection`),
+  including a row on another page, since a view starts on page 1.
   Pod jumps land in the Pods view, never an attached table.
 - Shared filter and Columns dropdown menus measure both viewport axes on open:
   right-edge menus end-align when start alignment would overflow, and width stays

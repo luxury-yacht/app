@@ -168,7 +168,9 @@ health.
   work, then acquires the new one, even when rapid. The pause blocks passive
   work only.
 - `setConnectedClusters` only prunes runtimes of closed clusters; it creates
-  no demand.
+  no demand. A pruned cluster's stream subscriptions end at once, including
+  any a released lease left inside the unsubscribe debounce, so reopening the
+  cluster subscribes afresh instead of reclaiming its old runtime's stream.
 - `preserveState` disable keeps stream-owned data for a remount. Resetting a
   streaming scope no consumer has enabled also resets its owner
   (`stop(scope, { reset: true })`) so closed-panel data is released; an

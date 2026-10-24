@@ -17,6 +17,7 @@ This release is focused on bugfixes, UI/UX, and code refactoring for stability a
 - The app uses less memory on clusters with many pods or events.
 - Scrollbars are wider and higher-contrast. They appear only while you scroll or hover over the scroll area, and fade out shortly after.
 - A new `partial` chip in the filter bar for data views shows when a table has incomplete data, such as namespaces you cannot read, a kind you cannot list, or an approximate count. Hover over it for details.
+- Pods lists you expand under Nodes or Workloads rows stay expanded when you switch to another view, namespace, or cluster tab and come back. They reset when you close the cluster.
 
 ### Fixed
 
@@ -47,6 +48,7 @@ This release is focused on bugfixes, UI/UX, and code refactoring for stability a
   - Identities limited to some namespaces can see HPAs, Events, and Helm releases there, instead of "Insufficient permissions".
   - A namespace's warning-event count shows as unavailable when you cannot read its Events, instead of zero.
   - Reopening a cluster whose data still fails to load shows the error again.
+  - Closing a cluster and reopening it right away no longer leaves its tables stuck loading.
   - A namespace list that fails to load shows one error instead of two.
 - The Helm view no longer gets stuck showing `pending-install` or `pending-upgrade`.
 - Clicking a recent warning on the cluster Overview opens its object on the Events tab again.

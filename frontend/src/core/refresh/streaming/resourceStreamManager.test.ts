@@ -1737,6 +1737,55 @@ describe('ResourceStreamManager', () => {
     expect(cancelCount()).toBe(0);
   });
 
+  test('a closed cluster’s streams end at once, so reopening it subscribes afresh', async () => {
+    vi.useFakeTimers();
+    installWindowTimers();
+    const manager = new ResourceStreamManager();
+    const closedScope = testScope('cluster-a', '');
+    const siblingScope = testScope('cluster-b', '');
+
+    fetchSnapshotMock.mockResolvedValue({
+      snapshot: {
+        domain: 'nodes',
+        scope: '',
+        version: 1,
+        checksum: 'etag',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: { rows: [] },
+        stats: { itemCount: 0, buildDurationMs: 0 },
+      },
+      notModified: false,
+    });
+
+    manager.start('nodes', closedScope);
+    manager.start('nodes', siblingScope);
+    await flushPromises();
+
+    const socket = createdSockets[0];
+    expect(socket).toBeDefined();
+    const sent = (type: string, clusterId: string) =>
+      socket.send.mock.calls.filter(
+        ([payload]) => payload.type === type && payload.clusterId === clusterId
+      ).length;
+
+    // Both views leave: their streams wait out the unsubscribe debounce.
+    manager.stop('nodes', closedScope, false);
+    manager.stop('nodes', siblingScope, false);
+    expect(sent('CANCEL', 'cluster-a')).toBe(0);
+
+    // cluster-a closes (orchestrator.ts pruneRemovedClusterRuntimes).
+    eventBus.emit('refresh:cluster-pruned', { clusterId: 'cluster-a' });
+
+    expect(sent('CANCEL', 'cluster-a')).toBe(1);
+    expect(sent('CANCEL', 'cluster-b')).toBe(0);
+
+    // Reopened, its view subscribes again instead of reclaiming the old stream.
+    manager.start('nodes', closedScope);
+    await flushPromises();
+    expect(sent('REQUEST', 'cluster-a')).toBe(2);
+  });
+
   it('rejects streaming for a scope without a cluster prefix', () => {
     const manager = new ResourceStreamManager();
 

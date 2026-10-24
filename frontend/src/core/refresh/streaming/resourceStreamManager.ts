@@ -153,6 +153,7 @@ export class ResourceStreamManager {
 
   constructor() {
     eventBus.on('kubeconfig:changing', () => this.stopAll(true));
+    eventBus.on('refresh:cluster-pruned', ({ clusterId }) => this.stopCluster(clusterId));
     eventBus.on('view:reset', () => this.stopAll(false));
     eventBus.on('app:visibility-hidden', () => this.suspendForVisibility());
     eventBus.on('app:visibility-visible', () => this.resumeFromVisibility());
@@ -699,6 +700,19 @@ export class ResourceStreamManager {
 
   private clearAllStreamErrors(): void {
     this.errorNotifier.clearAll();
+  }
+
+  // A closed cluster's streams end now, including those still waiting out the
+  // unsubscribe debounce after their view left. Otherwise reopening the cluster
+  // reclaims a stream its old runtime owned, and no new subscribe or ACK ever
+  // reaches the reset refresh state.
+  private stopCluster(clusterId: string): void {
+    const id = clusterId.trim();
+    Array.from(this.subscriptions.values())
+      .filter((subscription) => subscription.clusterId === id)
+      .forEach((subscription) => {
+        this.unsubscribe(subscription, true);
+      });
   }
 
   private stopAll(reset: boolean): void {

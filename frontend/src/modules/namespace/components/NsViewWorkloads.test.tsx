@@ -9,8 +9,9 @@
  * it owns in a table attached under its row: that table queries the pods by
  * the workload's complete identity, keeps its state in memory without the
  * shared Namespaces selection or a Favorite, never shows another workload's
- * pods while it loads, and closes from its own Close, when the workload leaves
- * the table, or when the namespace changes. Row menus offer Scale only for
+ * pods while it loads, and closes from its own Close or when the workload
+ * leaves the table. Each namespace keeps its open pods, which open again when
+ * the user returns to the namespace or the view. Row menus offer Scale only for
  * workloads that scale and carry each workload's action facts (CronJob Trigger
  * and Resume). All Namespaces lists every namespace's workloads, and leaving
  * the view stops its streams. Column rendering, action availability, and
@@ -429,7 +430,7 @@ describe('NsViewWorkloads', () => {
     expect(attachedPodNames('web')).toEqual(['web-0']);
   });
 
-  it('closes a workload’s pods when the user changes namespace', async () => {
+  it('keeps each namespace’s open pods, and opens them again when the user returns to the namespace', async () => {
     const api = workload('Deployment', 'api');
     serve([api], [podOf(api, 'api-0')]);
     await start();
@@ -437,9 +438,27 @@ describe('NsViewWorkloads', () => {
     expect(attachedPodNames('api')).toEqual(['api-0']);
 
     await view.goTo({ namespace: 'team-b', view: 'workloads' });
+    expect(view.container.querySelector('[data-gridtable-row-detail]')).toBeNull();
+
+    await view.goTo({ namespace: 'team-a', view: 'workloads' });
+    expect(podsToggle('api').getAttribute('aria-expanded')).toBe('true');
+    expect(attachedPodNames('api')).toEqual(['api-0']);
+  });
+
+  it('opens a workload’s pods again when the user returns to the view', async () => {
+    const api = workload('Deployment', 'api');
+    const web = workload('Deployment', 'web');
+    serve([api, web], [podOf(api, 'api-0'), podOf(web, 'web-0')]);
+    await start();
+    await activate(() => podsToggle('web').click());
+    expect(attachedPodNames('web')).toEqual(['web-0']);
+
+    await view.goTo({ clusterView: 'overview' });
     await view.goTo({ namespace: 'team-a', view: 'workloads' });
 
     expect(attachedPods('api')).toBeNull();
+    expect(podsToggle('web').getAttribute('aria-expanded')).toBe('true');
+    expect(attachedPodNames('web')).toEqual(['web-0']);
   });
 
   it('closes a workload’s pods and highlight when it leaves the table', async () => {

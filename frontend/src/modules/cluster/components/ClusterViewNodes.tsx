@@ -70,6 +70,7 @@ interface NodesTableProps extends NodesViewProps {
 }
 
 const NO_ROW_KEYS: readonly string[] = [];
+const NODES_VIEW_ID = 'cluster-nodes';
 
 /*
  * GridTable component for cluster nodes
@@ -318,7 +319,7 @@ const NodesTable: React.FC<NodesTableProps> = React.memo(
         excludedQueryFacetKeys: RESOURCE_STATUS_QUERY_FACET_KEYS,
         label: 'Cluster Nodes',
         selectRows: selectPayloadRows,
-        viewId: 'cluster-nodes',
+        viewId: NODES_VIEW_ID,
         persistenceData: [],
         columns: tableColumns,
         keyExtractor,
@@ -438,7 +439,8 @@ NodesTable.displayName = 'NodesTable';
 /**
  * The cluster's nodes. A node's Pods count (or Space) opens that node's pods
  * under its row; a row click only highlights; Enter and the Kind/Name links
- * open the node. Highlight and open pods live only while the view is mounted.
+ * open the node. The highlight lives only while the view is mounted; open
+ * pods stay open until the cluster closes.
  */
 const ClusterViewNodes: React.FC<NodesViewProps> = ({ error }) => {
   const { selectedClusterId, selectedClusterName } = useKubeconfig();
@@ -463,7 +465,7 @@ const ClusterViewNodes: React.FC<NodesViewProps> = ({ error }) => {
     toggle: toggleNodePods,
     close: closeNodePods,
     closeKeys: closeNodePodsByKey,
-  } = useOpenRowDetails({ keyOf: rowKeyOf });
+  } = useOpenRowDetails({ clusterId: selectedClusterId, viewId: NODES_VIEW_ID, keyOf: rowKeyOf });
 
   const handleNodeSelect = useCallback(
     (node: ClusterNodeRow) => setSelectedNode(toReference(node)),
