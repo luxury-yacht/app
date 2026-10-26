@@ -18,7 +18,6 @@ import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { kindDisplayName } from '@shared/kinds/kindDisplay';
 import { HELM_RELEASE_GVK } from '@shared/kinds/kindFacets';
-import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -108,17 +107,10 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
       ];
 
       baseColumns.push(
-        cf.createTextColumn<HelmData>(
-          'status',
-          'Status',
-          (resource) => {
-            const status = resource.status || resource.info?.status || 'unknown';
-            return status;
-          },
-          {
-            getClassName: (resource) => backendStatusTextClass(resource.statusPresentation),
-          }
-        ),
+        cf.createStatusChipColumn<HelmData>('status', 'Status', (resource) => ({
+          value: resource.status || resource.info?.status || 'unknown',
+          presentation: resource.statusPresentation,
+        })),
         cf.createTextColumn<HelmData>('chart', 'Chart', (resource) => {
           if (!resource.chart) {
             return '-';
