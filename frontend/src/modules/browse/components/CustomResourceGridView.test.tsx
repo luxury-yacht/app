@@ -27,9 +27,9 @@ describe('custom resource status column', () => {
     expect(cell({ ...row, status: '' }).textContent).toBe('-');
   });
 
-  it('keeps the projected status and its presentation class for objects that report one', () => {
+  it('shows the projected status as a chip colored by its presentation for objects that report one', () => {
     const dom = cell({ ...row, status: 'Ready', statusPresentation: 'ready' });
     expect(dom.textContent).toBe('Ready');
-    expect(dom.querySelector('.status-text.ready')).not.toBeNull();
+    expect(dom.querySelector('.status-chip--healthy')).not.toBeNull();
   });
 });

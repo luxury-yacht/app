@@ -541,11 +541,11 @@ describe('PodsTab', () => {
     startCluster();
     await openPods([createPod({ statusPresentation: 'warning' })]);
 
-    const cell = requireReactElement<{ className?: string }>(
+    const cell = requireReactElement<{ variant?: string }>(
       column('status').render(firstRow()),
       'expected a status cell'
     );
-    expect(cell.props.className).toBe('status-text warning');
+    expect(cell.props.variant).toBe('warning');
   });
 
   // The backend sorts restarts by count; the table shows zero as no value.

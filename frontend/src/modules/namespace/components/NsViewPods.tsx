@@ -31,7 +31,6 @@ import type { GridTableFilterOptions } from '@shared/components/tables/GridTable
 import { formatRestartCount } from '@shared/components/tables/restartCount';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
-import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import {
   buildRequiredObjectReference,
   type ClusterObjectReference,
@@ -185,9 +184,10 @@ export const PodsTable: React.FC<PodsTableProps> = React.memo(
           getTitle: (pod) => pod.ref.name,
           getClassName: () => 'object-panel-link',
         }),
-        cf.createTextColumn<PodSnapshotEntry>('status', 'Status', (pod) => pod.status || '—', {
-          getClassName: (pod) => backendStatusTextClass(pod.statusPresentation),
-        }),
+        cf.createStatusChipColumn<PodSnapshotEntry>('status', 'Status', (pod) => ({
+          value: pod.status,
+          presentation: pod.statusPresentation,
+        })),
         cf.createTextColumn<PodSnapshotEntry>('ready', 'Ready', (pod) => pod.ready || '—', {
           alignHeader: 'center',
           alignData: 'center',

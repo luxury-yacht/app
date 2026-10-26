@@ -31,7 +31,6 @@ import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useNodeMaintenanceActions } from '@shared/hooks/useNodeMaintenanceActions';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { kindDisplayName } from '@shared/kinds/kindDisplay';
-import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import {
   buildRequiredCanonicalObjectRowKey,
@@ -139,13 +138,11 @@ const NodesTable: React.FC<NodesTableProps> = React.memo(
     );
 
     const tableColumns = useMemo<GridColumnDefinition<ClusterNodeRow>[]>(() => {
-      const resolveNodeStatus = (node: ClusterNodeRow) => {
-        const text = node.status ?? 'Unknown';
-        return {
-          text,
-          className: backendStatusTextClass(node.statusPresentation),
-        };
-      };
+      const statusChipColumn = cf.createStatusChipColumn<ClusterNodeRow>(
+        'status',
+        'Status',
+        (node) => ({ value: node.status ?? 'Unknown', presentation: node.statusPresentation })
+      );
 
       const resolveNodeRestarts = (node: ClusterNodeRow) => {
         const restartCount = node.restarts ?? 0;
@@ -183,15 +180,13 @@ const NodesTable: React.FC<NodesTableProps> = React.memo(
           isInteractive: () => true,
         }),
         {
-          key: 'status',
-          header: 'Status',
-          sortable: true,
+          ...statusChipColumn,
+          // A node being drained shows a button beside its status that opens the drain.
           render: (row: ClusterNodeRow) => {
-            const status = resolveNodeStatus(row);
             const activeDrain = nodeMaintenance.activeDrainFor(row.ref.clusterId, row.ref.name);
             return (
               <span className="cluster-nodes-status-cell">
-                <span className={status.className}>{status.text}</span>
+                {statusChipColumn.render(row)}
                 {activeDrain && (
                   <button
                     type="button"

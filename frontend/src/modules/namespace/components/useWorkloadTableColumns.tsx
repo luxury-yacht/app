@@ -15,7 +15,6 @@ import {
   withRowDetailToggle,
 } from '@shared/components/tables/rowDetailToggle';
 import { kindDisplayName } from '@shared/kinds/kindDisplay';
-import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
 import { useMemo } from 'react';
 import { workloadRowCpuValue, workloadRowMemoryValue } from '@/core/resource-metrics';
@@ -102,9 +101,10 @@ const useWorkloadTableColumns = ({
         getClassName: () => 'object-panel-link',
         isInteractive: () => true,
       }),
-      cf.createTextColumn<WorkloadData>('status', 'Status', (row) => row.status, {
-        getClassName: (row) => backendStatusTextClass(row.statusPresentation),
-      }),
+      cf.createStatusChipColumn<WorkloadData>('status', 'Status', (row) => ({
+        value: row.status,
+        presentation: row.statusPresentation,
+      })),
       readyColumn,
       cf.createTextColumn<WorkloadData>(
         'restarts',

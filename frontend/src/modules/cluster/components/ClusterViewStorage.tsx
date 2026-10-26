@@ -11,7 +11,6 @@ import {
 } from '@modules/resource-grid/AggregatedResourceGridView';
 import * as cf from '@shared/components/tables/columnFactories';
 import { kindDisplayName } from '@shared/kinds/kindDisplay';
-import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import React from 'react';
 import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 import type { ClusterStorageEntry, ClusterStorageSnapshotPayload } from '@/core/refresh/types';
@@ -89,9 +88,10 @@ const storageSpec: AggregatedResourceGridViewSpec<StorageData> = {
         onAltClick: identity.navigate,
         getClassName: () => 'object-panel-link',
       }),
-      cf.createTextColumn<StorageData>('status', 'Status', (pv) => pv.status || 'Unknown', {
-        getClassName: (pv) => backendStatusTextClass(pv.statusPresentation),
-      }),
+      cf.createStatusChipColumn<StorageData>('status', 'Status', (pv) => ({
+        value: pv.status || 'Unknown',
+        presentation: pv.statusPresentation,
+      })),
       cf.createTextColumn('capacity', 'Capacity', (pv) => pv.capacity || '-'),
       cf.createTextColumn('accessModes', 'Access Modes', (pv) => pv.accessModes || '-'),
       cf.createTextColumn<StorageData>(

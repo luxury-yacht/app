@@ -16,6 +16,7 @@ import {
   createKindColumn,
   createResourceBarColumn,
   createResourceNameColumn,
+  createStatusChipColumn,
   createTextColumn,
   withColumnSizing,
   withNamespaceColumn,
@@ -41,7 +42,6 @@ import {
 import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import { useResourceGridObjectIdentity } from '@modules/resource-grid/useResourceGridObjectIdentity';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
-import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { podNamespacePermissionTargets, podOwnerReference } from '@shared/utils/podTableModel';
 import { buildObjectPanelPodsSelector } from './objectPanelPodsScope';
@@ -145,9 +145,10 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
         getClassName: () => 'object-panel-link',
         getTitle: (pod) => pod.ref.name,
       }),
-      createTextColumn<PodSnapshotEntry>('status', 'Status', (pod) => pod.status || '—', {
-        getClassName: (pod) => backendStatusTextClass(pod.statusPresentation),
-      }),
+      createStatusChipColumn<PodSnapshotEntry>('status', 'Status', (pod) => ({
+        value: pod.status,
+        presentation: pod.statusPresentation,
+      })),
       createTextColumn<PodSnapshotEntry>('ready', 'Ready', (pod) => pod.ready || '—', {
         alignData: 'right',
       }),

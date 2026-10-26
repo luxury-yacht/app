@@ -29,7 +29,6 @@ import type { GridColumnDefinition, GridTableProps } from '@shared/components/ta
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { kindDisplayName } from '@shared/kinds/kindDisplay';
-import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import type React from 'react';
 import { useCallback, useMemo } from 'react';
 import type { RefreshFailure } from '@/core/refresh/refreshFailure';
@@ -49,14 +48,14 @@ type CatalogRowsResult = ReturnType<typeof useCatalogBackedCustomResourceRows>;
  */
 // Status is whatever the backend projected for the object. Kinds whose API defines no status
 // arrive without one and fall through to the factory's placeholder rather than a made-up label.
-export const customResourceStatusColumn = cf.createTextColumn<CustomResourceGridRow>(
+export const customResourceStatusColumn = cf.createStatusChipColumn<CustomResourceGridRow>(
   'status',
   'Status',
-  (resource) => resource.status || undefined,
-  {
-    sortable: false,
-    getClassName: (resource) => backendStatusTextClass(resource.statusPresentation),
-  }
+  (resource) => ({
+    value: resource.status || undefined,
+    presentation: resource.statusPresentation,
+  }),
+  { sortable: false }
 );
 
 export function useCustomResourceGridParts({ kindFallback }: { kindFallback?: string } = {}) {

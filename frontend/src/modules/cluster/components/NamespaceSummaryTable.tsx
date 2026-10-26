@@ -10,7 +10,6 @@ import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { TABLE_PAGE_SIZE_OPTIONS } from '@shared/components/tables/pageSizeOptions';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
-import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
@@ -199,17 +198,10 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
       );
     }
     result.push(
-      {
-        key: 'status',
-        header: 'Status',
-        sortable: true,
-        sortValue: (row) => row.status ?? row.phase,
-        render: (row) => (
-          <span className={backendStatusTextClass(row.statusPresentation)}>
-            {row.status ?? row.phase ?? 'Unknown'}
-          </span>
-        ),
-      },
+      cf.createStatusChipColumn('status', 'Status', (row) => ({
+        value: row.status ?? row.phase ?? 'Unknown',
+        presentation: row.statusPresentation,
+      })),
       cf.createTextColumn('workloads', 'Workloads', workloadText, {
         alignHeader: 'center',
         alignData: 'center',
