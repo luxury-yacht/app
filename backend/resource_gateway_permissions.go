@@ -21,6 +21,8 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/helm"
 )
 
 // resolveGVRForPermissionQuery resolves a permission query to the concrete
@@ -198,6 +200,7 @@ func (g *ResourceGateway) preparePermissionQuery(
 	if query.ID == "" || query.Verb == "" || query.ResourceKind == "" || query.ClusterId == "" {
 		return preparedPermissionQuery{}, 0, fmt.Errorf("missing required field (id, verb, resourceKind, or clusterId)")
 	}
+	query = storagePermissionQuery(query)
 	startedAt := time.Now()
 	gvr, isNamespaced, err := g.resolveGVRForPermissionQueryCached(ctx, query, resolutionCache)
 	duration := time.Since(startedAt)
@@ -211,6 +214,19 @@ func (g *ResourceGateway) preparePermissionQuery(
 			Subresource: query.Subresource, Name: query.Name,
 		},
 	}, duration, nil
+}
+
+// storagePermissionQuery returns the query RBAC evaluates for q. A Helm release
+// is not an API object, so its permissions are those of its storage objects in
+// the release namespace, none of which the release name names. The batch
+// result still reports q as asked.
+func storagePermissionQuery(q capabilities.PermissionQuery) capabilities.PermissionQuery {
+	if !resourcemodel.IsHelmReleaseGVK(schema.GroupVersionKind{Group: q.Group, Version: q.Version, Kind: q.ResourceKind}) {
+		return q
+	}
+	q.Group, q.Version, q.ResourceKind = helm.StorageGVK.Group, helm.StorageGVK.Version, helm.StorageGVK.Kind
+	q.Name = ""
+	return q
 }
 
 func (b *permissionQueryBatch) registerPreparedQuery(prepared preparedPermissionQuery) {

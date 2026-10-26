@@ -177,6 +177,13 @@ func (g *ResourceGateway) deleteObjectAction(target ObjectActionTargetRef, force
 	}
 }
 
+func (g *ResourceGateway) rollbackObjectAction(target ObjectActionTargetRef, revision int64) error {
+	if resourcemodel.IsHelmReleaseGVK(objectActionTargetGVK(target)) {
+		return g.rollbackHelmReleaseAction(target, revision)
+	}
+	return g.rollbackWorkloadAction(target, revision)
+}
+
 // RunObjectAction is the single Wails mutation contract for Kubernetes object
 // actions. The target always carries clusterId + full GVK + name, and namespace
 // when the target is namespaced.
@@ -327,5 +334,5 @@ func runRollbackObjectAction(invocation objectActionInvocation) (ObjectActionRes
 	if err := requireActionNamespacedTarget(invocation.target, invocation.action); err != nil {
 		return ObjectActionResponse{}, err
 	}
-	return ObjectActionResponse{}, invocation.gateway.rollbackWorkloadAction(invocation.target, revision)
+	return ObjectActionResponse{}, invocation.gateway.rollbackObjectAction(invocation.target, revision)
 }

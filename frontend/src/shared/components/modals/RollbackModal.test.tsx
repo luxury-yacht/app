@@ -33,13 +33,13 @@ vi.mock('@utils/errorHandler', () => ({
 const makeRevision = (
   revision: number,
   current: boolean,
-  opts?: { changeCause?: string; podTemplate?: string; createdAt?: string }
+  opts?: { changeCause?: string; content?: string; createdAt?: string }
 ) => ({
   revision,
   createdAt: opts?.createdAt ?? new Date(Date.now() - revision * 3600_000).toISOString(),
   changeCause: opts?.changeCause ?? '',
   current,
-  podTemplate: opts?.podTemplate ?? `template-v${revision}`,
+  content: opts?.content ?? `template-v${revision}`,
 });
 
 const buildLargeRollbackTemplate = (lineCount: number) =>
@@ -249,8 +249,8 @@ describe('RollbackModal', () => {
 
   it('renders the shared diff viewer for selectable revisions', async () => {
     backendMocks.GetRevisionHistory.mockResolvedValue([
-      makeRevision(2, true, { podTemplate: 'image: demo:v2' }),
-      makeRevision(1, false, { podTemplate: 'image: demo:v1' }),
+      makeRevision(2, true, { content: 'image: demo:v2' }),
+      makeRevision(1, false, { content: 'image: demo:v1' }),
     ]);
 
     await renderModal();
@@ -263,8 +263,8 @@ describe('RollbackModal', () => {
 
   it('shows the shared too-large warning when a rollback diff exceeds budget', async () => {
     backendMocks.GetRevisionHistory.mockResolvedValue([
-      makeRevision(2, true, { podTemplate: buildLargeRollbackTemplate(15_001) }),
-      makeRevision(1, false, { podTemplate: buildLargeRollbackTemplate(15_001) }),
+      makeRevision(2, true, { content: buildLargeRollbackTemplate(15_001) }),
+      makeRevision(1, false, { content: buildLargeRollbackTemplate(15_001) }),
     ]);
 
     await renderModal();

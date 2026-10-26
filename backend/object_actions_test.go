@@ -13,9 +13,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	authorizationv1 "k8s.io/api/authorization/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	cgofake "k8s.io/client-go/kubernetes/fake"
+	cgotesting "k8s.io/client-go/testing"
 
 	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/internal/genobjectactions"
@@ -227,5 +229,39 @@ func TestGeneratedObjectActionContractIsCurrent(t *testing.T) {
 	}
 	if string(got) != string(want) {
 		t.Fatal("generated frontend object action contract is stale; run `go generate ./backend`")
+	}
+}
+
+// A HelmRelease rollback runs Helm's rollback, which writes a new release
+// revision and supersedes the current one in Helm's Secret storage. It must
+// not reach the workload rollback path, and it must stop before Helm runs when
+// the user cannot create or update those Secrets.
+func TestRunObjectActionRollsBackHelmReleaseOnlyWithStorageAccess(t *testing.T) {
+	for _, deniedVerb := range []string{"create", "update"} {
+		t.Run(deniedVerb, func(t *testing.T) {
+			client := cgofake.NewClientset()
+			gateway := buildRevisionHistoryGateway(client)
+			client.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {
+				review := action.(cgotesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
+				attrs := review.Spec.ResourceAttributes
+				denied := attrs != nil && attrs.Verb == deniedVerb && attrs.Group == "" && attrs.Resource == "secrets" &&
+					attrs.Namespace == "shop-ns"
+				review.Status = authorizationv1.SubjectAccessReviewStatus{Allowed: !denied}
+				if denied {
+					review.Status.Reason = "secret " + deniedVerb + " denied"
+				}
+				return true, review, nil
+			})
+			revision := int64(1)
+
+			_, err := gateway.RunObjectAction(ObjectActionRequest{
+				Action:   ObjectActionRollback,
+				Target:   objectActionTarget("config:ctx", "helm.sh", "v3", "HelmRelease", "shop-ns", "shop"),
+				Revision: &revision,
+			})
+
+			require.Equal(t, errorstatus.ReasonForbidden, errorstatus.Classify(err).Reason)
+			require.ErrorContains(t, err, "secret "+deniedVerb+" denied")
+		})
 	}
 }

@@ -186,7 +186,7 @@ func TestGetRevisionHistoryDeployment(t *testing.T) {
 
 	// All pod templates must be non-empty YAML strings.
 	for i, e := range entries {
-		require.NotEmpty(t, e.PodTemplate, "pod template for entry %d (revision %d) should not be empty", i, e.Revision)
+		require.NotEmpty(t, e.Content, "pod template for entry %d (revision %d) should not be empty", i, e.Revision)
 	}
 }
 
@@ -338,7 +338,7 @@ func TestGetRevisionHistoryStatefulSet(t *testing.T) {
 
 	// All pod templates must be non-empty YAML strings.
 	for i, e := range entries {
-		require.NotEmpty(t, e.PodTemplate, "pod template for entry %d (revision %d) should not be empty", i, e.Revision)
+		require.NotEmpty(t, e.Content, "pod template for entry %d (revision %d) should not be empty", i, e.Revision)
 	}
 }
 
@@ -431,7 +431,7 @@ func TestGetRevisionHistoryDaemonSet(t *testing.T) {
 
 	// All pod templates must be non-empty YAML strings.
 	for i, e := range entries {
-		require.NotEmpty(t, e.PodTemplate, "pod template for entry %d (revision %d) should not be empty", i, e.Revision)
+		require.NotEmpty(t, e.Content, "pod template for entry %d (revision %d) should not be empty", i, e.Revision)
 	}
 }
 

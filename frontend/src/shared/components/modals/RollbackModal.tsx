@@ -1,10 +1,11 @@
 /**
  * frontend/src/shared/components/modals/RollbackModal.tsx
  *
- * Modal for viewing revision history and rolling back a workload.
+ * Modal for viewing revision history and rolling back a workload or Helm release.
  * Left panel shows a scrollable revision list; right panel shows a
- * side-by-side diff between the current and selected revision pod templates,
- * with history loaded from a full object ref.
+ * side-by-side diff between what the current and selected revisions apply (a
+ * workload's pod template, a release's manifest), with history loaded from a
+ * full object ref.
  */
 
 import type { backend } from '@core/backend-api/models';
@@ -37,7 +38,7 @@ interface RollbackModalProps {
   group: string;
   version: string;
   name: string;
-  kind: string; // "Deployment" | "StatefulSet" | "DaemonSet"
+  kind: string; // "Deployment" | "StatefulSet" | "DaemonSet" | "HelmRelease"
   onMutationChange?: (inFlight: boolean) => void;
 }
 
@@ -173,21 +174,21 @@ const RollbackModal = ({
   // Whether there are any non-current revisions to roll back to.
   const hasNonCurrentRevisions = useMemo(() => revisions.some((r) => !r.current), [revisions]);
 
-  // Compute diff lines between the current and selected pod templates.
+  // Compute diff lines between what the current and selected revisions apply.
   const diffResult = useMemo(() => {
     if (!currentEntry || !selectedEntry) {
       return null;
     }
     const raw = computeBudgetedLineDiff(
-      currentEntry.podTemplate,
-      selectedEntry.podTemplate,
+      currentEntry.content,
+      selectedEntry.content,
       ROLLBACK_DIFF_BUDGETS
     );
 
     return {
       lines: raw.tooLarge ? [] : mergeDiffLines(raw.lines),
-      leftText: currentEntry.podTemplate,
-      rightText: selectedEntry.podTemplate,
+      leftText: currentEntry.content,
+      rightText: selectedEntry.content,
       tooLarge: raw.tooLarge,
       tooLargeReason: raw.tooLargeReason,
       leftLineCount: raw.leftLineCount,

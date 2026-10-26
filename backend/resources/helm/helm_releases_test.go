@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -31,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/luxury-yacht/app/backend/internal/errorcapture"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	sentryreporting "github.com/luxury-yacht/app/internal/sentry"
 )
@@ -546,4 +548,175 @@ func TestReleaseManifestReturnsContent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "kind: ConfigMap", out)
 	require.Equal(t, 6, revision)
+}
+
+// hookWaitRecorder records how long Helm may wait for a hook to finish.
+type hookWaitRecorder struct {
+	fakeKubeClient
+	hookTimeouts []time.Duration
+}
+
+func (r *hookWaitRecorder) WatchUntilReady(_ kube.ResourceList, timeout time.Duration) error {
+	r.hookTimeouts = append(r.hookTimeouts, timeout)
+	return nil
+}
+
+func helmServiceOver(store *storage.Storage, kubeClient kube.Interface) *Service {
+	return NewService(Dependencies{
+		Common: common.Dependencies{
+			EnsureClient: func(string) error { return nil },
+		},
+		ActionConfigFactory: func(*cli.EnvSettings, string) (*action.Configuration, error) {
+			return &action.Configuration{
+				Releases:   store,
+				KubeClient: kubeClient,
+				Log:        func(string, ...interface{}) {},
+			}, nil
+		},
+	})
+}
+
+// buildRevisionChain stores revisions 1..n of release demo in default, each
+// with its own manifest and values; the last one is deployed.
+func buildRevisionChain(t *testing.T, store *storage.Storage, n int) []*release.Release {
+	t.Helper()
+	start := time.Now().Add(-time.Duration(n+1) * time.Hour)
+	revisions := make([]*release.Release, 0, n)
+	for version := 1; version <= n; version++ {
+		deployed := start.Add(time.Duration(version) * time.Hour)
+		rel := buildTestRelease("demo", "default", version, start, deployed)
+		rel.Manifest = fmt.Sprintf("kind: ConfigMap\nmetadata:\n  name: demo\ndata:\n  revision: %q\n", fmt.Sprint(version))
+		rel.Config = map[string]interface{}{"revision": version}
+		rel.Info.Status = release.StatusSuperseded
+		if version == n {
+			rel.Info.Status = release.StatusDeployed
+		}
+		require.NoError(t, store.Create(rel))
+		revisions = append(revisions, rel)
+	}
+	return revisions
+}
+
+// The rollback dialog diffs each revision's rendered manifest against the
+// current one. Helm's rollback replaces the latest revision whatever its
+// status, so the latest is current even when its upgrade failed.
+func TestReleaseHistoryReturnsEachRevisionManifestNewestFirst(t *testing.T) {
+	store := storage.Init(driver.NewMemory())
+	revisions := buildRevisionChain(t, store, 3)
+	revisions[1].Info.Status = release.StatusDeployed
+	revisions[1].Info.Description = "Upgrade complete"
+	revisions[2].Info.Status = release.StatusFailed
+	revisions[2].Info.Description = "Upgrade failed"
+	require.NoError(t, store.Update(revisions[1]))
+	require.NoError(t, store.Update(revisions[2]))
+
+	history, err := helmServiceOver(store, &fakeKubeClient{}).ReleaseHistory("default", "demo")
+	require.NoError(t, err)
+
+	require.Len(t, history, 3)
+	for index, entry := range history {
+		source := revisions[len(revisions)-1-index]
+		require.Equal(t, source.Version, entry.Revision)
+		require.Equal(t, source.Manifest, entry.Manifest)
+		require.True(t, source.Info.LastDeployed.Time.Equal(entry.Deployed), "revision %d deploy time", entry.Revision)
+		require.Equal(t, source.Info.Description, entry.Description)
+		require.Equal(t, index == 0, entry.Current, "revision %d current", entry.Revision)
+	}
+}
+
+func TestReleaseHistoryReportsMissingReleaseAsNotFound(t *testing.T) {
+	_, err := helmServiceOver(storage.Init(driver.NewMemory()), &fakeKubeClient{}).ReleaseHistory("default", "gone")
+
+	require.Equal(t, errorstatus.ReasonNotFound, errorstatus.Classify(err).Reason)
+}
+
+// Rolling back must reinstate the chosen revision's chart values and manifest
+// as a new deployed revision and supersede the one it replaces, as `helm
+// rollback` does. Hook waits keep the CLI's bound: Helm treats a zero timeout
+// as no deadline, so a stuck hook would hang the rollback forever.
+func TestRollbackReleaseReinstatesTheChosenRevision(t *testing.T) {
+	store := storage.Init(driver.NewMemory())
+	revisions := buildRevisionChain(t, store, 2)
+	revisions[0].Hooks = []*release.Hook{{
+		Name: "migrate", Kind: "Job", Path: "templates/migrate.yaml",
+		Manifest: "kind: Job\nmetadata:\n  name: migrate\n",
+		Events:   []release.HookEvent{release.HookPreRollback},
+	}}
+	require.NoError(t, store.Update(revisions[0]))
+	kubeClient := &hookWaitRecorder{}
+
+	require.NoError(t, helmServiceOver(store, kubeClient).RollbackRelease("default", "demo", 1))
+
+	latest, err := store.Last("demo")
+	require.NoError(t, err)
+	require.Equal(t, 3, latest.Version)
+	require.Equal(t, release.StatusDeployed, latest.Info.Status)
+	require.Equal(t, revisions[0].Manifest, latest.Manifest)
+	require.Equal(t, revisions[0].Config, latest.Config)
+	replaced, err := store.Get("demo", 2)
+	require.NoError(t, err)
+	require.Equal(t, release.StatusSuperseded, replaced.Info.Status)
+	require.Equal(t, []time.Duration{5 * time.Minute}, kubeClient.hookTimeouts)
+}
+
+// Helm reads revision 0 as "the previous revision"; the dialog always names
+// the revision it showed, so 0 and absent revisions must fail without
+// writing a new revision.
+func TestRollbackReleaseRejectsRevisionsNotInHistory(t *testing.T) {
+	for _, revision := range []int{0, 7} {
+		t.Run(fmt.Sprint(revision), func(t *testing.T) {
+			store := storage.Init(driver.NewMemory())
+			buildRevisionChain(t, store, 2)
+
+			err := helmServiceOver(store, &fakeKubeClient{}).RollbackRelease("default", "demo", revision)
+
+			require.Error(t, err)
+			latest, lastErr := store.Last("demo")
+			require.NoError(t, lastErr)
+			require.Equal(t, 2, latest.Version)
+		})
+	}
+}
+
+// Helm builds manifest objects that name no namespace into its settings'
+// namespace, as `helm -n` does. Left unset it is the kubeconfig context's
+// namespace, so a rollback or uninstall would change same-named objects in
+// another namespace instead of the release's.
+func TestReleaseChangesTargetTheReleaseNamespace(t *testing.T) {
+	kubeconfig := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, os.WriteFile(kubeconfig, []byte(`apiVersion: v1
+kind: Config
+clusters: [{name: c, cluster: {server: "https://127.0.0.1:1"}}]
+users: [{name: u, user: {}}]
+contexts: [{name: ctx, context: {cluster: c, user: u, namespace: elsewhere}}]
+current-context: ctx
+`), 0o600))
+	changes := map[string]func(*Service) error{
+		"rollback": func(s *Service) error { return s.RollbackRelease("shop-ns", "demo", 1) },
+		"delete":   func(s *Service) error { return s.DeleteRelease("shop-ns", "demo") },
+	}
+	for name, change := range changes {
+		t.Run(name, func(t *testing.T) {
+			store := storage.Init(driver.NewMemory())
+			for version := 1; version <= 2; version++ {
+				rel := buildTestRelease("demo", "shop-ns", version, time.Now().Add(-time.Hour), time.Now())
+				require.NoError(t, store.Create(rel))
+			}
+			var objectNamespace string
+			service := NewService(Dependencies{
+				Common: common.Dependencies{
+					EnsureClient:       func(string) error { return nil },
+					SelectedKubeconfig: kubeconfig,
+					SelectedContext:    "ctx",
+				},
+				ActionConfigFactory: func(settings *cli.EnvSettings, _ string) (*action.Configuration, error) {
+					objectNamespace = settings.Namespace()
+					return &action.Configuration{Releases: store, KubeClient: &fakeKubeClient{}, Log: func(string, ...interface{}) {}}, nil
+				},
+			})
+
+			require.NoError(t, change(service))
+			require.Equal(t, "shop-ns", objectNamespace)
+		})
+	}
 }

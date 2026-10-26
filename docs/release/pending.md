@@ -1,5 +1,10 @@
 This release is focused on bugfixes, UI/UX, and code refactoring for stability and performance. There are no headline new features, but there are many minor quality-of-life improvements.
 
+### Added
+
+- Rollback for Helm releases, from the release's Actions menu
+  - Shows the difference between the current and chosen revision's manifests before you roll back.
+
 ### Changed
 
 - Better live feedback when editing YAML, and new conflict resolution options.
@@ -37,6 +42,7 @@ This release is focused on bugfixes, UI/UX, and code refactoring for stability a
   - A panel you open or move into a window takes keyboard focus.
   - A Logs tab on a workload with many pods picks up new or changed pods much sooner.
   - The "HPA managed" flag no longer says "not managed" while HPA data is still loading or not readable.
+  - A Helm release's Actions menu offers Delete when you are allowed to delete the release's stored revisions.
 - Object links:
   - Alt+click goes to the view that lists the object, such as Config for storage classes and Quotas for pod disruption budgets. Built-in kinds without their own list, such as ReplicaSets and Leases, go to Browse, and custom resources go to the Custom view.
   - Opening an object whose cluster is not open in the window says so.

@@ -88,6 +88,11 @@ failure behavior, and diagnostics.
   catalog in the request's cluster-scoped dependencies (injected
   `ResourceResolver`); never guess `resource` from kind. Refresh permission
   state is not a shortcut for request-time mutation checks.
+- The synthetic Helm release identity (`helm.sh/v3 HelmRelease`) names no API
+  resource. `QueryPermissions` evaluates it as the release's storage
+  (`helm.StorageGVK`, core/v1 Secrets) in the release namespace, without the
+  release name, and reports the result under the release identity. Helm
+  mutations check the storage verbs they write (rollback: create and update).
 - Capability query types and rule matching: `backend/capabilities`. Frontend
   permission store, specs, hooks, and feature labels:
   `frontend/src/core/capabilities`. Specs and diagnostics filters use stable

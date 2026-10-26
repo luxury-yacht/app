@@ -11,6 +11,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/errorstatus"
@@ -149,7 +151,7 @@ func (s *Service) getRelease(namespace, name string) (*action.Configuration, *re
 	if err := s.ensureClient(); err != nil {
 		return nil, nil, err
 	}
-	actionConfig, err := s.initActionConfig(s.helmSettings(), namespace)
+	actionConfig, err := s.initActionConfig(s.helmSettings(namespace), namespace)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -177,7 +179,7 @@ func (s *Service) DeleteRelease(namespace, name string) error {
 		return s.logDeleteError(err, failure, name)
 	}
 
-	settings := s.helmSettings()
+	settings := s.helmSettings(namespace)
 	actionConfig, err := s.initActionConfig(settings, namespace)
 	if err != nil {
 		return s.logDeleteError(err, failure, name)
@@ -193,6 +195,76 @@ func (s *Service) DeleteRelease(namespace, name string) error {
 	return nil
 }
 
+// ReleaseRevision is one stored revision of a release: what rolling back to it
+// reinstates.
+type ReleaseRevision struct {
+	Revision    int
+	Deployed    time.Time
+	Description string
+	// Current marks the release's latest revision, the one a rollback replaces,
+	// whatever its status.
+	Current  bool
+	Manifest string
+}
+
+// ReleaseHistory returns every stored revision of a release, newest first.
+func (s *Service) ReleaseHistory(namespace, name string) ([]ReleaseRevision, error) {
+	actionConfig, latest, err := s.getRelease(namespace, name)
+	if err != nil {
+		return nil, err
+	}
+	history, err := action.NewHistory(actionConfig).Run(name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get history for release %s: %w", name, err)
+	}
+	revisions := make([]ReleaseRevision, 0, len(history))
+	for _, rel := range history {
+		revision := ReleaseRevision{Revision: rel.Version, Current: rel.Version == latest.Version, Manifest: rel.Manifest}
+		if rel.Info != nil {
+			revision.Deployed = rel.Info.LastDeployed.Time
+			revision.Description = rel.Info.Description
+		}
+		revisions = append(revisions, revision)
+	}
+	slices.SortFunc(revisions, func(a, b ReleaseRevision) int { return b.Revision - a.Revision })
+	return revisions, nil
+}
+
+// rollbackHookTimeout bounds each hook wait as `helm rollback` does by default;
+// Helm treats a zero timeout as no deadline.
+const rollbackHookTimeout = 5 * time.Minute
+
+// RollbackRelease rolls a release back to a stored revision with `helm
+// rollback`'s defaults. Helm reads revision 0 as "the previous revision", so a
+// revision below 1 is rejected.
+func (s *Service) RollbackRelease(namespace, name string, revision int) error {
+	if revision < 1 {
+		return errorstatus.BadRequest(fmt.Errorf("rollback of release %s requires a revision, got %d", name, revision))
+	}
+	if err := s.ensureClient(); err != nil {
+		return err
+	}
+	settings := s.helmSettings(namespace)
+	actionConfig, err := s.initActionConfig(settings, namespace)
+	if err != nil {
+		return err
+	}
+	client := action.NewRollback(actionConfig)
+	client.Version = revision
+	client.Timeout = rollbackHookTimeout
+	client.MaxHistory = settings.MaxHistory
+	if err := client.Run(name); err != nil {
+		err = fmt.Errorf("failed to roll back release %s to revision %d: %w", name, revision, err)
+		if IsReleaseNotFound(err) {
+			err = errorstatus.NotFound(err)
+		}
+		return err
+	}
+
+	s.logInfo(fmt.Sprintf("Rolled back Helm release %s/%s to revision %d", namespace, name, revision))
+	return nil
+}
+
 func (s *Service) ensureClient() error {
 	if s.deps.Common.EnsureClient != nil {
 		if err := s.deps.Common.EnsureClient("HelmRelease"); err != nil {
@@ -202,7 +274,10 @@ func (s *Service) ensureClient() error {
 	return nil
 }
 
-func (s *Service) helmSettings() *cli.EnvSettings {
+// helmSettings targets the release namespace as `helm -n` does: Helm builds
+// manifest objects that name no namespace into it, so without it a rollback
+// or uninstall changes the kubeconfig context namespace's objects.
+func (s *Service) helmSettings(namespace string) *cli.EnvSettings {
 	settings := cli.New()
 	if cfg := s.deps.Common.SelectedKubeconfig; cfg != "" {
 		settings.KubeConfig = cfg
@@ -210,6 +285,7 @@ func (s *Service) helmSettings() *cli.EnvSettings {
 	if ctx := s.deps.Common.SelectedContext; ctx != "" {
 		settings.KubeContext = ctx
 	}
+	settings.SetNamespace(namespace)
 	return settings
 }
 

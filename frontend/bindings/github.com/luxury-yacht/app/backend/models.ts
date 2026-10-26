@@ -797,7 +797,8 @@ export interface PortForwardStatusEvent {
 }
 
 /**
- * RevisionEntry describes a single historical revision of a workload rollout.
+ * RevisionEntry describes a single historical revision of a workload rollout
+ * or a Helm release.
  */
 export interface RevisionEntry {
     /**
@@ -806,24 +807,28 @@ export interface RevisionEntry {
     "revision": number;
 
     /**
-     * CreatedAt is the ISO-8601 creation timestamp of the underlying ReplicaSet or ControllerRevision.
+     * CreatedAt is the ISO-8601 time the revision was made: the ReplicaSet or
+     * ControllerRevision creation, or the Helm revision's deployment.
      */
     "createdAt": string;
 
     /**
-     * ChangeCause is the value of the kubernetes.io/change-cause annotation, if present.
+     * ChangeCause is the value of the kubernetes.io/change-cause annotation, if
+     * present, or the Helm revision's description.
      */
     "changeCause": string;
 
     /**
-     * Current indicates that this revision matches the workload's active revision.
+     * Current indicates the revision a rollback replaces: the workload's active
+     * revision, or the release's latest revision.
      */
     "current": boolean;
 
     /**
-     * PodTemplate is the YAML-serialised pod template spec for this revision.
+     * Content is the YAML a rollback to this revision reinstates: the workload's
+     * pod template spec, or the release's rendered manifest.
      */
-    "podTemplate": string;
+    "content": string;
 }
 
 export interface RuntimeOperation {
