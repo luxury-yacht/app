@@ -108,6 +108,56 @@ describe('NsViewHelm', () => {
     ]);
   });
 
+  // A release's row menu offers Rollback, as a workload's does, and opens the
+  // rollback dialog on that row's release.
+  it('rolls back a release from its row’s right-click menu', async () => {
+    app.backend.answer('GetRevisionHistory', () => [
+      {
+        revision: 3,
+        createdAt: '2026-10-01T10:00:00Z',
+        changeCause: 'Upgrade complete',
+        current: true,
+        content: 'v3',
+      },
+      {
+        revision: 2,
+        createdAt: '2026-09-30T10:00:00Z',
+        changeCause: 'Upgrade complete',
+        current: false,
+        content: 'v2',
+      },
+    ]);
+    await start([release('web'), release('db')]);
+
+    const cell = requireValue(
+      rowOf('web').querySelector<HTMLElement>('[data-column="status"]'),
+      'expected a cell in the web row'
+    );
+    await act(async () => {
+      cell.dispatchEvent(
+        new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 })
+      );
+    });
+    await app.settle();
+    await act(async () => {
+      requireValue(
+        document.body.querySelector<HTMLElement>(
+          '[role="menu"] .context-menu-item[data-context-action-id="rollback"]'
+        ),
+        'expected the Rollback menu item'
+      ).click();
+    });
+    await app.settle();
+
+    expect(document.body.querySelector('.rollback-modal')).not.toBeNull();
+    expect(app.backend.calls('GetRevisionHistory')).not.toHaveLength(0);
+    for (const [target] of app.backend.calls('GetRevisionHistory')) {
+      expect(target).toEqual(
+        expect.objectContaining({ clusterId: dev.clusterId, ...releaseIdentity('web') })
+      );
+    }
+  });
+
   it('lists every namespace’s releases under All Namespaces and opens a release’s namespace in Helm', async () => {
     await start([release('web'), release('db', 'team-b')]);
     await view.goTo({ namespace: 'namespace:all', view: 'helm' });

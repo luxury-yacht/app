@@ -75,7 +75,6 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
     );
     const objectActions = useObjectActionController({
       context: 'gridtable',
-      useDefaultHandlers: false,
       onOpen: (object) => openWithObject(object),
     });
     const handleResourceClick = useCallback(
