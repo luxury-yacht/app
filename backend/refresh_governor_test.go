@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -14,6 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/stretchr/testify/require"
@@ -821,6 +823,67 @@ func TestSetVisibleClusterMovesToFrontOfMRU(t *testing.T) {
 	require.Equal(t, []string{y, x}, app.Refresh.governorMRU)
 }
 
+// In a fresh session the window reports its first cluster before that cluster's
+// setup seeds the governor. The seed must not pin the cluster as a second
+// Foreground: it would never go Cold, so one more tab than the warm budget
+// allows stayed live (issue #408).
+func TestSeedAfterWindowReportLeavesForegroundToTheWindow(t *testing.T) {
+	selections := []kubeconfigSelection{
+		{Path: "/p/a", Context: "a"},
+		{Path: "/p/b", Context: "b"},
+		{Path: "/p/c", Context: "c"},
+		{Path: "/p/d", Context: "d"},
+	}
+	app, ids := governorTestApp(t, selections, 2)
+	a, b, c, d := ids[0], ids[1], ids[2], ids[3]
+
+	app.Refresh.SetWindowVisibleCluster("workspace-1", a)
+	app.Refresh.seedGovernorFromOpenClusters()
+	for _, id := range []string{b, c, d} {
+		app.Refresh.SetWindowVisibleCluster("workspace-1", id)
+	}
+
+	app.Refresh.governorMu.Lock()
+	planned := maps.Clone(app.Refresh.governorPlanned)
+	app.Refresh.governorMu.Unlock()
+	require.Equal(t, map[string]system.ResourceTier{
+		a: system.TierCold,
+		b: system.TierBackground,
+		c: system.TierBackground,
+		d: system.TierForeground,
+	}, planned)
+}
+
+// On relaunch the restored clusters seed the governor before any window
+// reports. One of them stays Foreground until the window's report replaces it.
+func TestSeedBeforeWindowReportHandsForegroundToTheWindow(t *testing.T) {
+	selections := []kubeconfigSelection{
+		{Path: "/p/a", Context: "a"},
+		{Path: "/p/b", Context: "b"},
+	}
+	app, ids := governorTestApp(t, selections, 0)
+	a, b := ids[0], ids[1]
+	plannedForeground := func() []string {
+		app.Refresh.governorMu.Lock()
+		defer app.Refresh.governorMu.Unlock()
+		var foreground []string
+		for id, tier := range app.Refresh.governorPlanned {
+			if tier == system.TierForeground {
+				foreground = append(foreground, id)
+			}
+		}
+		return foreground
+	}
+
+	app.Refresh.seedGovernorFromOpenClusters()
+	require.Len(t, plannedForeground(), 1, "a fresh start lands one Foreground before any window reports")
+
+	app.Refresh.SetWindowVisibleCluster("workspace-1", b)
+	require.Equal(t, []string{b}, plannedForeground())
+	app.Refresh.SetWindowVisibleCluster("workspace-1", a)
+	require.Equal(t, []string{a}, plannedForeground())
+}
+
 func TestSetVisibleClusterReplaysCurrentLifecycleState(t *testing.T) {
 	selections := []kubeconfigSelection{{Path: "/p/x", Context: "x"}}
 	app, ids := governorTestApp(t, selections, 0)
@@ -880,6 +943,62 @@ func TestCooledMappingsOutliveSnapshotRouting(t *testing.T) {
 			require.False(t, closedWhileRouted, "mmap closer ran while the old store was routed")
 		})
 	}
+}
+
+// Cooling keeps a cluster routed to serve its frozen snapshots, and every open
+// cluster tab keeps a namespaces subscription. A stopped stream hub rejected
+// each re-subscribe and the client retried without end (issue #408). The
+// cooled hub stays quiet and confirmed until its generation retires.
+func TestCooledClusterStreamAcceptsSubscriptionsUntilTeardown(t *testing.T) {
+	const clusterID = "cluster-a"
+	app := newRefreshCoordinatorTestFixture(t)
+	app.Refresh.spillRoot = t.TempDir()
+	meta := snapshot.ClusterMeta{ClusterID: clusterID, ClusterName: "a"}
+	stream := resourcestream.NewManager(nil, nil, meta, nil)
+	subsystem := &system.Subsystem{
+		Registry:        domain.New(),
+		SnapshotService: &coldPreparationSnapshotService{},
+		ResourceStream:  stream,
+		ClusterMeta:     meta,
+	}
+	app.Refresh.setRefreshSubsystem(clusterID, subsystem)
+	resources, err := newAggregateResourceStreamHandler(map[string]*system.Subsystem{clusterID: subsystem}, nil, nil)
+	require.NoError(t, err)
+	app.Refresh.refreshAggregates.Store(&refreshAggregateHandlers{resources: resources})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	conn := newResourceStreamTestConn(ctx)
+	go resources.Handle(ctx, conn)
+	subscribe := func(domainName string) {
+		t.Helper()
+		conn.incoming <- resourcestream.ClientMessage{
+			Type: resourcestream.MessageTypeRequest, ClusterID: clusterID, Domain: domainName,
+		}
+		ack := conn.read(t)
+		require.Equal(t, resourcestream.MessageTypeAck, ack.Type, "subscribe %s answered %q", domainName, ack.Error)
+		require.Equal(t, resourcestream.MessageTypeReset, conn.read(t).Type)
+	}
+	subscribe("namespaces")
+
+	app.Refresh.coolClusterToMmapServing(clusterID)
+	require.True(t, subsystem.Cooled)
+
+	// The open subscription is not completed, and a later one is confirmed.
+	subscribe("cluster-overview")
+
+	app.Refresh.teardownClusterSubsystem(clusterID)
+	completed := map[string]bool{}
+	for range 2 {
+		frame := conn.read(t)
+		require.Equal(t, resourcestream.MessageTypeComplete, frame.Type)
+		completed[frame.Domain] = true
+	}
+	require.Equal(t, map[string]bool{"namespaces": true, "cluster-overview": true}, completed)
+	selector, err := resourcestream.ParseStreamSelector(clusterID, "namespaces", "")
+	require.NoError(t, err)
+	_, err = stream.SubscribeSelector(selector)
+	require.Error(t, err, "a retired generation's hub must not confirm new subscriptions")
 }
 
 // A visible cluster is still connecting until its clients exist. Rebuilding it

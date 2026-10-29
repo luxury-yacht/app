@@ -212,6 +212,9 @@ acknowledgement, synchronized, resyncing, permission-blocked, stopping.
 - Initial and manual resubscriptions keep confirmed health while awaiting their
   next ACK. Gap, error, overflow, visibility, and reconnect recovery do not, so
   snapshot polling provides fallback.
+- A non-permission ERROR leaves the scope unsubscribed and unhealthy until an
+  ACK. Its retry honors the resync cooldown, so a scope the server keeps
+  rejecting re-subscribes at most once per cooldown, never per round trip.
 
 ## Behavior classes
 
@@ -320,9 +323,11 @@ manager with zero subscribers means this contract regressed.
 
 - A closed update channel always produces COMPLETE, even if its reason channel
   closes at the same time. Delivery is tied to the exact subscription owner so
-  an old frame or COMPLETE cannot affect its replacement. Manager shutdown
-  closes subscribers, rejects new subscriptions, and serializes channel closure
-  with delivery.
+  an old frame or COMPLETE cannot affect its replacement. `StopProducers`
+  (cooling) only ends rings and producer callbacks. `Stop` (generation
+  retirement) also closes subscribers, rejects new subscriptions, and
+  serializes channel closure with delivery. A rejected subscribe is logged once
+  per generation and reason; telemetry counts every rejection.
 - A replay that cannot fit the remaining outgoing queue sends ACK then RESET for
   that scope instead of a partial replay; other scopes' queued updates stay.
 - Live-delivery overflow of the shared session queue closes the session, so

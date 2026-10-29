@@ -386,6 +386,54 @@ describe('ResourceStreamManager', () => {
     expect(manager.getHealthStatus('namespaces', storeScope)).toBe('healthy');
   });
 
+  // Re-subscribing as soon as each rejection arrived spun the app and the
+  // backend at the speed of the round trip (issue #408). A rejected scope
+  // retries once the resync cooldown ends and stays unhealthy until an ACK.
+  test('a scope the server keeps rejecting retries once per resync cooldown', async () => {
+    vi.useFakeTimers();
+    installWindowTimers();
+    const manager = new ResourceStreamManager();
+    const storeScope = testScope('cluster-a', '');
+    manager.start('namespaces', storeScope);
+    await flushPromises();
+    createdSockets[0].onopen?.(new Event('open'));
+    await flushPromises();
+
+    const requestCount = () =>
+      createdSockets[0].send.mock.calls.filter(([payload]) => payload.type === 'REQUEST').length;
+    const reject = () =>
+      manager.handleMessage(
+        JSON.stringify({
+          type: 'ERROR',
+          clusterId: 'cluster-a',
+          domain: 'namespaces',
+          scope: '',
+          error: 'resource stream stopped',
+        })
+      );
+    const subscribed = requestCount();
+
+    reject();
+    await flushPromises();
+    expect(requestCount()).toBe(subscribed);
+    expect(manager.getHealthStatus('namespaces', storeScope)).toBe('unhealthy');
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(requestCount()).toBe(subscribed + 1);
+
+    reject();
+    await vi.advanceTimersByTimeAsync(999);
+    expect(requestCount()).toBe(subscribed + 1);
+    expect(manager.getHealthStatus('namespaces', storeScope)).toBe('unhealthy');
+    await vi.advanceTimersByTimeAsync(1);
+    expect(requestCount()).toBe(subscribed + 2);
+
+    manager.handleMessage(
+      JSON.stringify({ type: 'ACK', domain: 'namespaces', scope: '', clusterId: 'cluster-a' })
+    );
+    expect(manager.getHealthStatus('namespaces', storeScope)).toBe('healthy');
+  });
+
   test('permission denial is terminal until subscription ownership is replaced', async () => {
     vi.useFakeTimers();
     installWindowTimers();

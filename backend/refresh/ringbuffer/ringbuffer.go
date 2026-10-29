@@ -1,7 +1,8 @@
 // Package ringbuffer provides a fixed-capacity ring buffer of sequence-numbered
 // items with replay-after-sequence. It is the shared implementation behind the
-// event/update stream resume buffers, which previously each hand-rolled the same
-// ring + replay logic for their own element type.
+// event/update stream resume buffers and the Application Logs history, which
+// previously each hand-rolled the same ring + replay logic for their own
+// element type.
 package ringbuffer
 
 // Buffer is a fixed-capacity ring buffer. seqOf extracts an item's monotonically
@@ -38,6 +39,22 @@ func (b *Buffer[T]) Add(item T) {
 	}
 	b.items[b.start] = item
 	b.start = (b.start + 1) % b.max
+}
+
+// Items returns every retained item, oldest first. It is never nil.
+func (b *Buffer[T]) Items() []T {
+	out := make([]T, b.count)
+	for i := range out {
+		out[i] = b.items[(b.start+i)%b.max]
+	}
+	return out
+}
+
+// Clear drops every retained item, releasing what they reference.
+func (b *Buffer[T]) Clear() {
+	clear(b.items)
+	b.start = 0
+	b.count = 0
 }
 
 // Since returns the items newer than sequence. ok is false when the buffer cannot

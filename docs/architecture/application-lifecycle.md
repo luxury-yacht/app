@@ -87,6 +87,8 @@ close sequences: [dockable-panels.md](../frontend/dockable-panels.md).
   cluster workspace commands carry it. Foreground demand maps window name to
   cluster ID; cluster-tab ownership maps window name to that peer's selected
   kubeconfig set, so clusters shown in different peers are all Foreground.
+  The governor's startup seed picks a default Foreground only while no window
+  has reported; after a report it would be a second Foreground nothing clears.
 - Process events are broadcasts; window-targeted menu events carry Wails sender
   identity and other peers filter them at the desktop-runtime boundary.
 - Persist only logical `x`, `y`, `width`, `height`, `maximized`; never screen
