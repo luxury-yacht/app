@@ -65,6 +65,8 @@ type fakeUpdateEventRegistrar struct {
 
 type fakeUpdaterClient struct {
 	state updater.State
+	// onCheck runs inside Check, where Wails emits its check events.
+	onCheck func()
 }
 
 func (client *fakeUpdaterClient) Init(updater.Config) error {
@@ -72,12 +74,23 @@ func (client *fakeUpdaterClient) Init(updater.Config) error {
 	return nil
 }
 
-func (*fakeUpdaterClient) Check(context.Context) (*updater.Release, error) { return nil, nil }
-func (*fakeUpdaterClient) DownloadAndInstall(context.Context) error        { return nil }
-func (*fakeUpdaterClient) Restart(context.Context) error                   { return nil }
-func (client *fakeUpdaterClient) State() updater.State                     { return client.state }
-func (*fakeUpdaterClient) DownloadedPath() string                          { return "" }
-func (*fakeUpdaterClient) SkipVersion(string)                              {}
+func (client *fakeUpdaterClient) Check(context.Context) (*updater.Release, error) {
+	if client.onCheck != nil {
+		client.onCheck()
+	}
+	return nil, nil
+}
+
+func (*fakeUpdaterClient) DownloadAndInstall(context.Context) error { return nil }
+func (*fakeUpdaterClient) Restart(context.Context) error            { return nil }
+func (client *fakeUpdaterClient) State() updater.State              { return client.state }
+func (*fakeUpdaterClient) DownloadedPath() string                   { return "" }
+func (*fakeUpdaterClient) SkipVersion(string)                       {}
+
+type idleUpdateScheduler struct{}
+
+func (idleUpdateScheduler) Start(time.Duration, func(context.Context)) {}
+func (idleUpdateScheduler) Stop()                                      {}
 
 type fakeUpdaterProvider struct{}
 
@@ -289,30 +302,37 @@ func TestWailsUpdateEventsProjectToOneApplicationBroadcast(t *testing.T) {
 	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, name string, data ...interface{}) {
 		emitted = append(emitted, emittedEvent{name: name, data: data})
 	}
+	client := &fakeUpdaterClient{}
 	coordinator := appupdates.New(appupdates.Dependencies{
-		Client: &fakeUpdaterClient{}, Provider: fakeUpdaterProvider{},
+		Client: client, Provider: fakeUpdaterProvider{},
 		Eligibility: enabledApplicationUpdateBuild(), PublicKey: make([]byte, 32),
 		Platform: "darwin", Architecture: "arm64", TempRoot: "/owned/temp/root",
-		OnChange: app.Updates.storeApplicationUpdateSnapshot,
+		Scheduler: idleUpdateScheduler{}, OnChange: app.Updates.storeApplicationUpdateSnapshot,
 	})
 	app.Updates.coordinator = coordinator
+	coordinator.RuntimeReady()
 	registrar := &fakeUpdateEventRegistrar{}
 
 	unsubscribers := subscribeApplicationUpdateEvents(registrar, coordinator)
 	require.Len(t, unsubscribers, len(applicationUpdateEventNames))
-	require.Contains(t, registrar.callbacks, updater.EventDownloadProgress)
-	registrar.callbacks[updater.EventDownloadProgress](&application.CustomEvent{
-		Name: updater.EventDownloadProgress,
-		Data: updater.Progress{Written: 25, Total: 100},
-	})
+	require.Contains(t, registrar.callbacks, updater.EventError)
+	var projected *UpdateInfo
+	client.onCheck = func() {
+		emitted = nil
+		registrar.callbacks[updater.EventError](&application.CustomEvent{
+			Name: updater.EventError,
+			Data: updater.ErrorInfo{Stage: updater.StageCheck, Message: "provider unavailable"},
+		})
+		projected = app.Updates.getUpdateInfo()
+	}
+	_, err := coordinator.Check(context.Background())
+	require.NoError(t, err)
 
-	info := app.Updates.getUpdateInfo()
-	require.Equal(t, appupdates.StatusDownloading, info.Status)
-	require.NotNil(t, info.ProgressPercent)
-	require.Equal(t, float64(25), *info.ProgressPercent)
-	require.Len(t, emitted, 1)
+	require.Equal(t, appupdates.StatusCheckError, projected.Status)
+	require.Equal(t, "provider unavailable", projected.Error)
+	require.NotEmpty(t, emitted)
 	require.Equal(t, "app-update", emitted[0].name)
-	require.Equal(t, info, emitted[0].data[0])
+	require.Equal(t, projected, emitted[0].data[0], "the Wails event yields one application broadcast")
 
 	for _, unsubscribe := range unsubscribers {
 		unsubscribe()
@@ -338,6 +358,7 @@ func TestResolveApplicationUpdateEligibilityUsesReleaseAndInstallIdentity(t *tes
 	require.True(t, eligibility.CanInitialize)
 	require.True(t, eligibility.CanInstall)
 	require.Equal(t, updateidentity.DistributionMacBundle, eligibility.Installation.Distribution)
+	require.Equal(t, bundle, eligibility.TargetPath, "Wails stages updates beside this target")
 
 	windowsRoot := t.TempDir()
 	windowsExecutable := filepath.Join(windowsRoot, "luxury-yacht.exe")
@@ -386,7 +407,7 @@ func TestNewUpdateCoordinatorWithoutStateStopsCleanly(t *testing.T) {
 func TestNewApplicationUpdateStateStoreUsesDefaultStatePath(t *testing.T) {
 	setTestConfigEnv(t)
 
-	store, err := newApplicationUpdateStateStore(ApplicationUpdateOptions{TempRoot: t.TempDir()})
+	store, err := newApplicationUpdateStateStore(ApplicationUpdateOptions{TempRoot: t.TempDir()}, enabledApplicationUpdateBuild())
 
 	require.NoError(t, err)
 	require.NotNil(t, store)
@@ -441,6 +462,53 @@ func TestPrepareApplicationUpdateStateReconcilesBeforeSweepingOrphans(t *testing
 	document, err := setup.Store.Load()
 	require.NoError(t, err)
 	require.Empty(t, document.ProtectedPaths())
+}
+
+func TestPrepareApplicationUpdateStateOwnsStagingBesideAnInstallableTarget(t *testing.T) {
+	for _, test := range []struct {
+		name         string
+		canInstall   bool
+		wantLeftover bool
+	}{
+		{name: "installable", canInstall: true, wantLeftover: false},
+		{name: "not installable", canInstall: false, wantLeftover: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			base := t.TempDir()
+			root := filepath.Join(base, "owned-temp")
+			require.NoError(t, os.Mkdir(root, 0o700))
+			applications := filepath.Join(base, "Applications")
+			target := filepath.Join(applications, "Luxury Yacht.app")
+			require.NoError(t, os.MkdirAll(target, 0o755))
+			leftover := filepath.Join(applications, "wails-update-2835506545")
+			require.NoError(t, os.MkdirAll(filepath.Join(leftover, "Luxury Yacht.app"), 0o700))
+			eligibility := enabledApplicationUpdateBuild()
+			eligibility.Installation.CanInstall = test.canInstall
+			eligibility.TargetPath = target
+
+			setup, err := prepareApplicationUpdateState(ApplicationUpdateOptions{
+				TempRoot: root, StatePath: filepath.Join(base, "config", "application-update.json"),
+			}, eligibility)
+
+			require.NoError(t, err)
+			require.Equal(t, test.wantLeftover, dirExists(leftover))
+			staging := filepath.Join(applications, "wails-update-next")
+			payload := filepath.Join(staging, "Luxury Yacht.app")
+			require.NoError(t, os.MkdirAll(payload, 0o700))
+			resolved, err := setup.Store.ResolveStagingDirectory(payload)
+			if test.canInstall {
+				require.NoError(t, err)
+				require.Equal(t, staging, resolved)
+			} else {
+				require.Error(t, err)
+			}
+		})
+	}
+}
+
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
 }
 
 func TestPrepareApplicationUpdateStateReconcilesWindowsDisplayVersionAfterSuccessfulSwap(t *testing.T) {

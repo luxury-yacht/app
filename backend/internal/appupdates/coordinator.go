@@ -104,7 +104,6 @@ type Coordinator struct {
 	activeOperation             *updateOperation
 	checkIncludesSkippedVersion bool
 	restartRequested            bool
-	preparedOwned               bool
 	skippedVersion              string
 	pending                     *updater.Release
 	snapshot                    Snapshot
@@ -263,17 +262,50 @@ func (coordinator *Coordinator) Stop() {
 }
 
 // HandleWailsEvent projects Wails updater lifecycle events into the semantic
-// state exposed to application consumers.
+// state exposed to application consumers. Wails delivers them asynchronously,
+// so an event only advances the check or download that is still running; one
+// that arrives after its operation returned is stale and ignored.
 func (coordinator *Coordinator) HandleWailsEvent(name string, payload any) Snapshot {
 	coordinator.mu.Lock()
 	previous := cloneSnapshot(coordinator.snapshot)
+	if coordinator.operationRunningLocked(wailsEventOperation(name, payload)) {
+		coordinator.projectWailsEventLocked(name, payload)
+	}
+	snapshot := cloneSnapshot(coordinator.snapshot)
+	coordinator.mu.Unlock()
+	coordinator.publishIfChanged(previous, snapshot)
+	return snapshot
+}
 
+// wailsEventOperation names the coordinator operation whose Wails call emits
+// the event.
+func wailsEventOperation(name string, payload any) string {
+	switch name {
+	case updater.EventCheckStarted, updater.EventUpdateAvailable, updater.EventNoUpdate:
+		return "check"
+	case updater.EventDownloadStarted, updater.EventDownloadProgress, updater.EventVerifying,
+		updater.EventInstalling, updater.EventUpdateReady:
+		return "download"
+	case updater.EventError:
+		if info, ok := errorPayload(payload); ok && info.Stage == updater.StageCheck {
+			return "check"
+		}
+		return "download"
+	}
+	return ""
+}
+
+func (coordinator *Coordinator) operationRunningLocked(kind string) bool {
+	return kind != "" && coordinator.inFlight &&
+		coordinator.activeOperation != nil && coordinator.activeOperation.kind == kind
+}
+
+func (coordinator *Coordinator) projectWailsEventLocked(name string, payload any) {
 	switch name {
 	case updater.EventCheckStarted:
 		coordinator.snapshot = coordinator.baseSnapshot(StatusChecking)
 	case updater.EventNoUpdate:
 		coordinator.pending = nil
-		coordinator.preparedOwned = false
 		if coordinator.skippedVersion != "" && !coordinator.checkIncludesSkippedVersion {
 			coordinator.snapshot = coordinator.baseSnapshot(StatusSkipped)
 		} else {
@@ -299,11 +331,6 @@ func (coordinator *Coordinator) HandleWailsEvent(name string, payload any) Snaps
 	case updater.EventError:
 		coordinator.projectUpdateError(payload)
 	}
-
-	snapshot := cloneSnapshot(coordinator.snapshot)
-	coordinator.mu.Unlock()
-	coordinator.publishIfChanged(previous, snapshot)
-	return snapshot
 }
 
 func (coordinator *Coordinator) projectAvailableRelease(payload any) {
@@ -319,12 +346,10 @@ func (coordinator *Coordinator) projectAvailableRelease(payload any) {
 	coordinator.snapshot = coordinator.snapshotForRelease(StatusAvailable, &release)
 }
 
+// projectUpdateReady keeps the download preparing: Wails has staged the
+// payload, but the update is ready only once the download records it.
 func (coordinator *Coordinator) projectUpdateReady() {
-	if coordinator.preparedOwned {
-		coordinator.snapshot.Status = StatusReady
-	} else {
-		coordinator.snapshot.Status = StatusPreparing
-	}
+	coordinator.snapshot.Status = StatusPreparing
 	coordinator.snapshot.ProgressPercent = nil
 	coordinator.snapshot.Error = ""
 }
@@ -611,7 +636,6 @@ func (coordinator *Coordinator) beginDownload(ctx context.Context, version strin
 
 	coordinator.inFlight = true
 	operationContext, operation := coordinator.beginOperationLocked(ctx, "download")
-	coordinator.preparedOwned = false
 	pending := *coordinator.pending
 	previous := cloneSnapshot(coordinator.snapshot)
 	coordinator.snapshot.Status = StatusDownloading
@@ -657,7 +681,6 @@ func (coordinator *Coordinator) finishDownload(err error) (Snapshot, error) {
 		coordinator.snapshot.Status = StatusPrepareError
 		coordinator.snapshot.Error = err.Error()
 	} else {
-		coordinator.preparedOwned = true
 		coordinator.snapshot.Status = StatusReady
 		coordinator.snapshot.Error = ""
 	}
@@ -730,7 +753,6 @@ func (coordinator *Coordinator) Skip(_ context.Context, version string) (Snapsho
 	previous := cloneSnapshot(coordinator.snapshot)
 	coordinator.inFlight = false
 	coordinator.skippedVersion = version
-	coordinator.preparedOwned = false
 	coordinator.snapshot = coordinator.snapshotForRelease(StatusSkipped, coordinator.pending)
 	result := cloneSnapshot(coordinator.snapshot)
 	coordinator.mu.Unlock()
@@ -978,7 +1000,6 @@ func (coordinator *Coordinator) clearReleaseLocked() {
 		coordinator.client.SkipVersion("")
 	}
 	coordinator.pending = nil
-	coordinator.preparedOwned = false
 	coordinator.skippedVersion = ""
 	coordinator.checkIncludesSkippedVersion = false
 	status := StatusIdle

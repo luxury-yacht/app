@@ -13,7 +13,6 @@ import (
 	"github.com/luxury-yacht/app/internal/appstate"
 	"github.com/luxury-yacht/app/internal/updateidentity"
 	"github.com/luxury-yacht/app/internal/updatestate"
-	"github.com/luxury-yacht/app/internal/updatetemp"
 	"github.com/wailsapp/wails/v3/pkg/updater"
 )
 
@@ -44,8 +43,9 @@ func (u *UpdateCoordinator) initializeApplicationUpdates(options ApplicationUpda
 	if u == nil {
 		return
 	}
-	u.resetState, u.resetStateErr = newApplicationUpdateStateStore(options)
-	configuration := u.prepareApplicationUpdateConfiguration(options)
+	eligibility := u.resolveApplicationUpdateEligibility(options)
+	u.resetState, u.resetStateErr = newApplicationUpdateStateStore(options, eligibility)
+	configuration := u.prepareApplicationUpdateConfiguration(options, eligibility)
 	var updateState appupdates.UpdateState
 	if configuration.updateState != nil {
 		updateState = configuration.updateState
@@ -78,8 +78,8 @@ type applicationUpdateConfiguration struct {
 
 func (u *UpdateCoordinator) prepareApplicationUpdateConfiguration(
 	options ApplicationUpdateOptions,
+	eligibility updateidentity.BuildEligibility,
 ) applicationUpdateConfiguration {
-	eligibility := u.resolveApplicationUpdateEligibility(options)
 	setup, eligibility := u.resolveApplicationUpdateState(options, eligibility)
 	client := u.applicationUpdateClient()
 	provider, eligibility := u.resolveApplicationUpdateProvider(options, client, eligibility)
@@ -176,7 +176,7 @@ func prepareApplicationUpdateState(
 	options ApplicationUpdateOptions,
 	eligibility updateidentity.BuildEligibility,
 ) (applicationUpdateStateSetup, error) {
-	store, err := newApplicationUpdateStateStore(options)
+	store, err := newApplicationUpdateStateStore(options, eligibility)
 	if err != nil {
 		return applicationUpdateStateSetup{}, err
 	}
@@ -197,7 +197,7 @@ func prepareApplicationUpdateState(
 	if err != nil {
 		return applicationUpdateStateSetup{}, fmt.Errorf("load reconciled application update state: %w", err)
 	}
-	if _, err := updatetemp.SweepOrphans(options.TempRoot, document.ProtectedPaths()); err != nil {
+	if err := store.SweepOrphans(); err != nil {
 		return applicationUpdateStateSetup{}, fmt.Errorf("sweep orphaned application update staging: %w", err)
 	}
 	return applicationUpdateStateSetup{
@@ -206,7 +206,10 @@ func prepareApplicationUpdateState(
 	}, nil
 }
 
-func newApplicationUpdateStateStore(options ApplicationUpdateOptions) (*updatestate.Store, error) {
+func newApplicationUpdateStateStore(
+	options ApplicationUpdateOptions,
+	eligibility updateidentity.BuildEligibility,
+) (*updatestate.Store, error) {
 	if options.TempSetupError != nil {
 		// No temp root was accepted as app-owned, so reset must leave that path
 		// untouched instead of replaying the startup diagnostic as a reset failure.
@@ -223,9 +226,16 @@ func newApplicationUpdateStateStore(options ApplicationUpdateOptions) (*updatest
 		}
 		statePath = manifest.UpdateStatePath()
 	}
+	// Only an installation that can replace itself stages beside its target;
+	// other targets (such as package-managed binaries) are never swept.
+	targetPath := ""
+	if eligibility.Installation.CanInstall {
+		targetPath = eligibility.TargetPath
+	}
 	return updatestate.New(updatestate.Config{
-		StatePath: statePath,
-		TempRoot:  options.TempRoot,
+		StatePath:  statePath,
+		TempRoot:   options.TempRoot,
+		TargetPath: targetPath,
 	})
 }
 
@@ -302,7 +312,7 @@ func resolveApplicationUpdateEligibility(runtimeInfo applicationUpdateRuntime) (
 	installation := updateidentity.ResolveInstallation(probe)
 	return updateidentity.ResolveBuild(updateidentity.BuildProbe{
 		Version: runtimeInfo.Version, Server: runtimeInfo.Server, BetaExpiry: betaExpiry,
-		Now: runtimeInfo.Now, Installation: installation,
+		Now: runtimeInfo.Now, Installation: installation, TargetPath: probe.TargetPath,
 		PayloadAvailable: updateidentity.HasUpdaterTarget(
 			runtimeInfo.UpdaterTargets, probe.Platform, probe.Architecture,
 		),

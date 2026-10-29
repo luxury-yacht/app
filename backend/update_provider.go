@@ -157,7 +157,7 @@ func matchUpdaterReleaseAsset(
 		"-" + strings.ToLower(strings.TrimSpace(request.Arch)) + extension
 	for index, asset := range assets {
 		name := strings.ToLower(strings.TrimSpace(asset.Name))
-		if strings.HasPrefix(name, "luxury-yacht-v") && strings.HasSuffix(name, suffix) {
+		if strings.HasPrefix(name, updateidentity.UpdaterPayloadPrefix) && strings.HasSuffix(name, suffix) {
 			return index
 		}
 	}

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -92,8 +93,13 @@ type ReconcileResult struct {
 }
 
 type Config struct {
-	StatePath   string
-	TempRoot    string
+	StatePath string
+	TempRoot  string
+	// TargetPath is the installed bundle or executable an update replaces. Wails
+	// stages each download in a wails-update-* directory beside it; builds
+	// through 2.7.x staged in TempRoot instead. Empty when the installation
+	// cannot update itself.
+	TargetPath  string
 	Now         func() time.Time
 	PID         func() int
 	ReplaceFile func(string, string) error
@@ -104,6 +110,7 @@ type Store struct {
 	mu          sync.Mutex
 	statePath   string
 	tempRoot    string
+	targetPath  string
 	now         func() time.Time
 	pid         func() int
 	replaceFile func(string, string) error
@@ -137,6 +144,10 @@ func New(config Config) (*Store, error) {
 	if rootInfo.Mode()&os.ModeSymlink != 0 || !rootInfo.IsDir() {
 		return nil, fmt.Errorf("application update temp root must be a non-symlink directory: %s", tempRoot)
 	}
+	targetPath, err := cleanTargetPath(config.TargetPath)
+	if err != nil {
+		return nil, err
+	}
 	if config.Now == nil {
 		config.Now = time.Now
 	}
@@ -150,9 +161,21 @@ func New(config Config) (*Store, error) {
 		config.RemoveAll = os.RemoveAll
 	}
 	return &Store{
-		statePath: statePath, tempRoot: tempRoot, now: config.Now, pid: config.PID,
+		statePath: statePath, tempRoot: tempRoot, targetPath: targetPath, now: config.Now, pid: config.PID,
 		replaceFile: config.ReplaceFile, removeAll: config.RemoveAll,
 	}, nil
+}
+
+// cleanTargetPath normalizes the optional install target; empty stays empty.
+func cleanTargetPath(path string) (string, error) {
+	if strings.TrimSpace(path) == "" {
+		return "", nil
+	}
+	cleaned := filepath.Clean(strings.TrimSpace(path))
+	if !filepath.IsAbs(cleaned) {
+		return "", fmt.Errorf("application update target path must be absolute: %q", path)
+	}
+	return cleaned, nil
 }
 
 func (store *Store) Load() (Document, error) {
@@ -332,15 +355,10 @@ func (store *Store) ResolveStagingDirectory(downloadedPath string) (string, erro
 	if !filepath.IsAbs(path) {
 		return "", fmt.Errorf("downloaded update path must be absolute: %q", downloadedPath)
 	}
-	relative, err := filepath.Rel(store.tempRoot, path)
-	if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("downloaded update path is outside the owned temp root: %s", path)
+	staging, err := store.stagingDirectoryFor(path)
+	if err != nil {
+		return "", err
 	}
-	parts := strings.Split(relative, string(filepath.Separator))
-	if len(parts) < 2 {
-		return "", fmt.Errorf("downloaded update path must be inside an updater staging directory: %s", path)
-	}
-	staging := filepath.Join(store.tempRoot, parts[0])
 	if err := store.validateRecordedStaging(staging); err != nil {
 		return "", err
 	}
@@ -357,13 +375,39 @@ func (store *Store) ResolveStagingDirectory(downloadedPath string) (string, erro
 	return staging, nil
 }
 
+// stagingParents lists the directories updater staging may live directly in.
+func (store *Store) stagingParents() []string {
+	if store.targetPath == "" {
+		return []string{store.tempRoot}
+	}
+	return []string{store.tempRoot, filepath.Dir(store.targetPath)}
+}
+
+// stagingDirectoryFor returns the staging directory, a direct child of a
+// staging parent, that holds the downloaded payload path.
+func (store *Store) stagingDirectoryFor(path string) (string, error) {
+	for _, parent := range store.stagingParents() {
+		relative, err := filepath.Rel(parent, path)
+		if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+			continue
+		}
+		parts := strings.Split(relative, string(filepath.Separator))
+		if len(parts) < 2 {
+			return "", fmt.Errorf("downloaded update path must be inside an updater staging directory: %s", path)
+		}
+		return filepath.Join(parent, parts[0]), nil
+	}
+	return "", fmt.Errorf("downloaded update path is outside the updater staging locations: %s", path)
+}
+
 func (store *Store) validateRecordedStaging(path string) error {
 	path = filepath.Clean(strings.TrimSpace(path))
-	if !filepath.IsAbs(path) || filepath.Dir(path) != store.tempRoot ||
-		!strings.HasPrefix(filepath.Base(path), "wails-update-") || filepath.Base(path) == "wails-update-" {
-		return fmt.Errorf("updater staging path must be a direct child of the owned root: %s", path)
+	name := filepath.Base(path)
+	if filepath.IsAbs(path) && slices.Contains(store.stagingParents(), filepath.Dir(path)) &&
+		strings.HasPrefix(name, "wails-update-") && name != "wails-update-" {
+		return nil
 	}
-	return nil
+	return fmt.Errorf("updater staging path must be a direct child of an updater staging location: %s", path)
 }
 
 func (store *Store) RecordPrepared(prepared PreparedUpdate) error {
@@ -491,6 +535,79 @@ func appendCleanup(paths []string, path string) []string {
 	return append(paths, path)
 }
 
+// SweepOrphans removes updater staging that no record protects: any staging or
+// helper log in the app-owned temp root, and leftovers beside the install
+// target that hold only this app's payload.
+func (store *Store) SweepOrphans() error {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	document, err := store.loadLocked()
+	if err != nil {
+		return err
+	}
+	return store.sweepOrphansLocked(document.ProtectedPaths())
+}
+
+func (store *Store) sweepOrphansLocked(protected []string) error {
+	var tempProtected, targetProtected []string
+	for _, path := range protected {
+		if filepath.Dir(filepath.Clean(path)) == store.tempRoot {
+			tempProtected = append(tempProtected, path)
+		} else {
+			targetProtected = append(targetProtected, filepath.Clean(path))
+		}
+	}
+	_, err := updatetemp.SweepOrphans(store.tempRoot, tempProtected)
+	return errors.Join(err, store.sweepTargetLeftovers(targetProtected))
+}
+
+// sweepTargetLeftovers removes staging beside the install target that a failed
+// or interrupted update left behind. That directory can be shared with other
+// applications (macOS /Applications), so anything that is not plainly this
+// app's payload is kept.
+func (store *Store) sweepTargetLeftovers(protected []string) error {
+	if store.targetPath == "" {
+		return nil
+	}
+	parent := filepath.Dir(store.targetPath)
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		return fmt.Errorf("read install target directory before sweep: %w", err)
+	}
+	var failures []error
+	for _, entry := range entries {
+		path := filepath.Join(parent, entry.Name())
+		if slices.Contains(protected, path) || !store.holdsOnlyPayload(path) {
+			continue
+		}
+		if err := store.removeAll(path); err != nil {
+			failures = append(failures, fmt.Errorf("remove leftover updater staging %s: %w", path, err))
+		}
+	}
+	return errors.Join(failures...)
+}
+
+// holdsOnlyPayload reports whether path is a staging directory whose single
+// entry is this app's payload: the extracted bundle or binary, named like the
+// install target, or an unextracted release payload. Partial downloads and
+// other applications' staging never match.
+func (store *Store) holdsOnlyPayload(path string) bool {
+	if store.validateRecordedStaging(path) != nil {
+		return false
+	}
+	info, err := os.Lstat(path)
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return false
+	}
+	entries, err := os.ReadDir(path)
+	if err != nil || len(entries) != 1 {
+		return false
+	}
+	payload := entries[0].Name()
+	return payload == filepath.Base(store.targetPath) ||
+		strings.HasPrefix(payload, updateidentity.UpdaterPayloadPrefix)
+}
+
 func (store *Store) RetryCleanup() error {
 	store.mu.Lock()
 	defer store.mu.Unlock()
@@ -521,7 +638,7 @@ func (store *Store) Reset() error {
 		owned = appendCleanup(owned, document.Prepared.StagingDir)
 	}
 	remaining, failures := store.removeStagingPaths(owned)
-	if _, sweepErr := updatetemp.SweepOrphans(store.tempRoot, remaining); sweepErr != nil {
+	if sweepErr := store.sweepOrphansLocked(remaining); sweepErr != nil {
 		failures = append(failures, sweepErr)
 	}
 	if len(failures) > 0 {

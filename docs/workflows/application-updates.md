@@ -11,6 +11,9 @@ hosts only manual recovery guidance, never discovery or payload delivery.
   runtime-ready workspace: reconcile a prior helper attempt, check silently,
   then every six hours. All windows read and act on the same snapshot and
   `app-update` event. Checks and downloads are cancellable.
+- Wails delivers updater events asynchronously, so `appupdates` projects them
+  only while the check or download that emits them is running; that
+  operation's own result is the final state, and a late event is ignored.
 - Checks only discover. The header status control is a label and entry point to
   About, the single surface for release notes, progress, failures, and recovery.
   `frontend/src/ui/status/updatePresentation.ts` supplies status copy, badge,
@@ -164,16 +167,25 @@ repository must exist and the `gh` account must create and delete its releases.
 
 - `internal/updatetemp` creates and validates a private per-user root before any
   Wails or child-process dispatch and points the platform temp environment at
-  it, so staging and helper logs stay under a bounded parent. Unix requires the
-  current UID and owner-only permissions. Windows creates root and marker with
-  an explicit `TOKEN_USER` owner and a protected DACL giving only that user
-  inheritable full control; reused paths owned by any other account or group are
-  rejected.
+  it, so helper logs and child processes stay under a bounded parent. Unix
+  requires the current UID and owner-only permissions. Windows creates root and
+  marker with an explicit `TOKEN_USER` owner and a protected DACL giving only
+  that user inheritable full control; reused paths owned by any other account or
+  group are rejected.
+- Wails stages each download in a `wails-update-*` directory beside the install
+  target, so its swap is a same-filesystem rename. Eligibility probes that
+  target (`BuildEligibility.TargetPath`) and passes it to `internal/updatestate`
+  only when the installation can self-update. Recorded staging must sit directly
+  below that directory or the temp root, where builds through 2.7.x staged, so
+  their handoff records still reconcile.
 - Installable portable Linux targets base the root on the target's XDG data
-  home so Wails' Unix helper swaps with a same-filesystem rename;
-  package-managed and unverified Linux targets use the system temp base.
+  home; package-managed and unverified Linux targets use the system temp base.
 - Startup cleanup may inspect only validated `wails-update-*` children and must
-  keep paths recorded by `internal/updatestate`.
+  keep paths recorded by `internal/updatestate`. In the temp root it removes any
+  other staging and helper logs. The target's directory can be shared (macOS
+  `/Applications`), so there it removes only a directory whose single entry is
+  this app's payload: named like the target, or a `luxury-yacht-v…` release
+  file. Partial downloads, symlinks, and other apps' staging stay.
 - Persist `PreparedUpdate` after a verified download, before exposing ready
   state. Restart atomically converts it to `UpdateAttempt`, then invokes Wails
   restart so the detached helper owns replacement and relaunch.
