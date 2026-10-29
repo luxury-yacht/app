@@ -14,6 +14,7 @@ import (
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/stretchr/testify/require"
@@ -880,6 +881,62 @@ func TestCooledMappingsOutliveSnapshotRouting(t *testing.T) {
 			require.False(t, closedWhileRouted, "mmap closer ran while the old store was routed")
 		})
 	}
+}
+
+// Cooling keeps a cluster routed to serve its frozen snapshots, and every open
+// cluster tab keeps a namespaces subscription. A stopped stream hub rejected
+// each re-subscribe and the client retried without end (issue #408). The
+// cooled hub stays quiet and confirmed until its generation retires.
+func TestCooledClusterStreamAcceptsSubscriptionsUntilTeardown(t *testing.T) {
+	const clusterID = "cluster-a"
+	app := newRefreshCoordinatorTestFixture(t)
+	app.Refresh.spillRoot = t.TempDir()
+	meta := snapshot.ClusterMeta{ClusterID: clusterID, ClusterName: "a"}
+	stream := resourcestream.NewManager(nil, nil, meta, nil)
+	subsystem := &system.Subsystem{
+		Registry:        domain.New(),
+		SnapshotService: &coldPreparationSnapshotService{},
+		ResourceStream:  stream,
+		ClusterMeta:     meta,
+	}
+	app.Refresh.setRefreshSubsystem(clusterID, subsystem)
+	resources, err := newAggregateResourceStreamHandler(map[string]*system.Subsystem{clusterID: subsystem}, nil, nil)
+	require.NoError(t, err)
+	app.Refresh.refreshAggregates.Store(&refreshAggregateHandlers{resources: resources})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	conn := newResourceStreamTestConn(ctx)
+	go resources.Handle(ctx, conn)
+	subscribe := func(domainName string) {
+		t.Helper()
+		conn.incoming <- resourcestream.ClientMessage{
+			Type: resourcestream.MessageTypeRequest, ClusterID: clusterID, Domain: domainName,
+		}
+		ack := conn.read(t)
+		require.Equal(t, resourcestream.MessageTypeAck, ack.Type, "subscribe %s answered %q", domainName, ack.Error)
+		require.Equal(t, resourcestream.MessageTypeReset, conn.read(t).Type)
+	}
+	subscribe("namespaces")
+
+	app.Refresh.coolClusterToMmapServing(clusterID)
+	require.True(t, subsystem.Cooled)
+
+	// The open subscription is not completed, and a later one is confirmed.
+	subscribe("cluster-overview")
+
+	app.Refresh.teardownClusterSubsystem(clusterID)
+	completed := map[string]bool{}
+	for range 2 {
+		frame := conn.read(t)
+		require.Equal(t, resourcestream.MessageTypeComplete, frame.Type)
+		completed[frame.Domain] = true
+	}
+	require.Equal(t, map[string]bool{"namespaces": true, "cluster-overview": true}, completed)
+	selector, err := resourcestream.ParseStreamSelector(clusterID, "namespaces", "")
+	require.NoError(t, err)
+	_, err = stream.SubscribeSelector(selector)
+	require.Error(t, err, "a retired generation's hub must not confirm new subscriptions")
 }
 
 // A visible cluster is still connecting until its clients exist. Rebuilding it

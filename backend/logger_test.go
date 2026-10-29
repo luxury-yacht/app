@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -590,4 +591,27 @@ func TestApplicationLogsKeepTheNewestTenThousandEntries(t *testing.T) {
 	require.Len(t, entries, 10_000)
 	require.Equal(t, "line 5", entries[0].Message)
 	require.Equal(t, "line 10004", entries[len(entries)-1].Message)
+}
+
+// A full Application Logs buffer evicts its oldest entry in place. Copying the
+// 10,000-entry history on every write made a warning burst (issue #408) spend
+// the process's CPU allocating and garbage-collecting megabytes per line.
+func TestApplicationLogsWriteIntoAFullBufferWithoutCopyingHistory(t *testing.T) {
+	logger := NewApplicationLogs().Logger()
+	for i := range appLogsMaxEntries {
+		logger.Info(fmt.Sprintf("line %d", i))
+	}
+
+	const writes = 200
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	for range writes {
+		logger.Warn("resource stream stopped")
+	}
+	runtime.ReadMemStats(&after)
+
+	// A write keeps one 120-byte entry; one copy of the history is 1.2 MB.
+	perWrite := (after.TotalAlloc - before.TotalAlloc) / writes
+	require.Less(t, perWrite, uint64(64<<10), "a write into a full buffer allocated %d bytes", perWrite)
 }

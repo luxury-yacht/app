@@ -31,7 +31,7 @@ func (a *RefreshCoordinator) teardownClusterSubsystem(clusterID string) {
 
 	// Stop all feeds through the shared reverse-order generation contract.
 	a.stopRefreshGenerationProducers(clusterID, subsystem)
-	subsystem.RetireSnapshotServing()
+	retireRefreshGenerationReads(subsystem)
 
 	// Spill this cluster's stores to disk now that the subsystem is quiescent, so a re-warm
 	// re-paints them fast before its reflectors re-sync (the heap they hold is reclaimed by the

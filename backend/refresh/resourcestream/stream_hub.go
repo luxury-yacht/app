@@ -29,7 +29,9 @@ func (m *Manager) SubscribeSelector(selector StreamSelector) (*Subscription, err
 	// Avoid pre-checking permissions so partial streams can still deliver updates.
 	id, sub, err := m.addSubscriber(domain, normalized)
 	if err != nil {
-		m.logWarn(err.Error())
+		if _, logged := m.loggedRejections.LoadOrStore(err.Error(), struct{}{}); !logged {
+			m.logWarn(err.Error())
+		}
 		if m.telemetry != nil {
 			// The failure belongs to the requesting domain, not the shared socket.
 			m.telemetry.RecordStreamErrorForLeaf(telemetry.StreamResources, telemetry.DomainLeaf(domain), err)
