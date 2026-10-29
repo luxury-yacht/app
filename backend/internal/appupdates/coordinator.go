@@ -74,6 +74,10 @@ type Dependencies struct {
 }
 
 type Snapshot struct {
+	// Revision increases with every committed change. Snapshots reach consumers
+	// over events, reads, and command results, which can arrive out of order, so
+	// a consumer keeps the highest revision it has seen.
+	Revision          uint64                           `json:"revision"`
 	Status            Status                           `json:"status"`
 	CurrentVersion    string                           `json:"currentVersion,omitempty"`
 	AvailableVersion  string                           `json:"availableVersion,omitempty"`
@@ -271,7 +275,7 @@ func (coordinator *Coordinator) HandleWailsEvent(name string, payload any) Snaps
 	if coordinator.operationRunningLocked(wailsEventOperation(name, payload)) {
 		coordinator.projectWailsEventLocked(name, payload)
 	}
-	snapshot := cloneSnapshot(coordinator.snapshot)
+	snapshot := coordinator.commitLocked(previous)
 	coordinator.mu.Unlock()
 	coordinator.publishIfChanged(previous, snapshot)
 	return snapshot
@@ -432,6 +436,17 @@ func snapshotsEqual(left, right Snapshot) bool {
 	return left == right
 }
 
+// commitLocked returns the snapshot a transition from previous publishes. A
+// change takes the next revision, so consumers can discard a snapshot whose
+// publication was overtaken; no change keeps the revision and publishes nothing.
+func (coordinator *Coordinator) commitLocked(previous Snapshot) Snapshot {
+	coordinator.snapshot.Revision = previous.Revision
+	if !snapshotsEqual(previous, coordinator.snapshot) {
+		coordinator.snapshot.Revision++
+	}
+	return cloneSnapshot(coordinator.snapshot)
+}
+
 func (coordinator *Coordinator) publishIfChanged(previous, current Snapshot) {
 	if coordinator.onChange != nil && !snapshotsEqual(previous, current) {
 		coordinator.onChange(cloneSnapshot(current))
@@ -516,7 +531,7 @@ func (coordinator *Coordinator) check(ctx context.Context, includeSkippedVersion
 	skippedVersion := coordinator.skippedVersion
 	previous := cloneSnapshot(coordinator.snapshot)
 	coordinator.snapshot = coordinator.baseSnapshot(StatusChecking)
-	checking := cloneSnapshot(coordinator.snapshot)
+	checking := coordinator.commitLocked(previous)
 	coordinator.mu.Unlock()
 	defer coordinator.endOperation(operation)
 	coordinator.publishIfChanged(previous, checking)
@@ -527,7 +542,8 @@ func (coordinator *Coordinator) check(ctx context.Context, includeSkippedVersion
 	previous = cloneSnapshot(coordinator.snapshot)
 	coordinator.inFlight = false
 	coordinator.checkIncludesSkippedVersion = false
-	result, err := coordinator.finishCheckLocked(release, err, includeSkippedVersion)
+	err = coordinator.finishCheckLocked(release, err, includeSkippedVersion)
+	result := coordinator.commitLocked(previous)
 	coordinator.mu.Unlock()
 	coordinator.publishIfChanged(previous, result)
 	return result, err
@@ -538,11 +554,11 @@ func (coordinator *Coordinator) finishCheckLocked(
 	release *updater.Release,
 	checkErr error,
 	includeSkippedVersion bool,
-) (Snapshot, error) {
+) error {
 	if checkErr != nil {
 		coordinator.snapshot = coordinator.baseSnapshot(StatusCheckError)
 		coordinator.snapshot.Error = checkErr.Error()
-		return cloneSnapshot(coordinator.snapshot), checkErr
+		return checkErr
 	}
 	if release == nil {
 		coordinator.pending = nil
@@ -551,18 +567,18 @@ func (coordinator *Coordinator) finishCheckLocked(
 		} else {
 			coordinator.snapshot = coordinator.baseSnapshot(StatusCurrent)
 		}
-		return cloneSnapshot(coordinator.snapshot), nil
+		return nil
 	}
 	if validationErr := coordinator.validateRelease(release); validationErr != nil {
 		coordinator.pending = nil
 		coordinator.snapshot = coordinator.baseSnapshot(StatusCheckError)
 		coordinator.snapshot.Error = validationErr.Error()
-		return cloneSnapshot(coordinator.snapshot), validationErr
+		return validationErr
 	}
 	releaseCopy := *release
 	coordinator.pending = &releaseCopy
 	coordinator.snapshot = coordinator.snapshotForRelease(StatusAvailable, release)
-	return cloneSnapshot(coordinator.snapshot), nil
+	return nil
 }
 
 func (coordinator *Coordinator) checkClient(
@@ -641,7 +657,7 @@ func (coordinator *Coordinator) beginDownload(ctx context.Context, version strin
 	coordinator.snapshot.Status = StatusDownloading
 	coordinator.snapshot.ProgressPercent = nil
 	coordinator.snapshot.Error = ""
-	downloading := cloneSnapshot(coordinator.snapshot)
+	downloading := coordinator.commitLocked(previous)
 	return downloadStart{
 		pending: pending, previous: previous, snapshot: downloading, started: true,
 		operation: operation,
@@ -684,7 +700,7 @@ func (coordinator *Coordinator) finishDownload(err error) (Snapshot, error) {
 		coordinator.snapshot.Status = StatusReady
 		coordinator.snapshot.Error = ""
 	}
-	result := cloneSnapshot(coordinator.snapshot)
+	result := coordinator.commitLocked(previous)
 	coordinator.mu.Unlock()
 	coordinator.publishIfChanged(previous, result)
 	return result, err
@@ -754,7 +770,7 @@ func (coordinator *Coordinator) Skip(_ context.Context, version string) (Snapsho
 	coordinator.inFlight = false
 	coordinator.skippedVersion = version
 	coordinator.snapshot = coordinator.snapshotForRelease(StatusSkipped, coordinator.pending)
-	result := cloneSnapshot(coordinator.snapshot)
+	result := coordinator.commitLocked(previous)
 	coordinator.mu.Unlock()
 	coordinator.publishIfChanged(previous, result)
 	return result, nil
@@ -792,7 +808,7 @@ func (coordinator *Coordinator) RemoveSkip(ctx context.Context) (Snapshot, error
 	} else {
 		coordinator.snapshot = coordinator.baseSnapshot(StatusIdle)
 	}
-	result := cloneSnapshot(coordinator.snapshot)
+	result := coordinator.commitLocked(previous)
 	coordinator.mu.Unlock()
 	coordinator.publishIfChanged(previous, result)
 	if hasPendingRelease {
@@ -806,7 +822,7 @@ func (coordinator *Coordinator) finishSkipError(err error) (Snapshot, error) {
 	previous := cloneSnapshot(coordinator.snapshot)
 	coordinator.inFlight = false
 	coordinator.snapshot.Error = err.Error()
-	result := cloneSnapshot(coordinator.snapshot)
+	result := coordinator.commitLocked(previous)
 	coordinator.mu.Unlock()
 	coordinator.publishIfChanged(previous, result)
 	return result, err
@@ -876,7 +892,7 @@ func (coordinator *Coordinator) Restart(ctx context.Context) (Snapshot, error) {
 		coordinator.snapshot.Status = StatusReady
 		coordinator.snapshot.Error = ""
 	}
-	result := cloneSnapshot(coordinator.snapshot)
+	result := coordinator.commitLocked(previous)
 	coordinator.mu.Unlock()
 	coordinator.publishIfChanged(previous, result)
 	return result, err
@@ -889,7 +905,7 @@ func (coordinator *Coordinator) finishRestartError(err error) (Snapshot, error) 
 	coordinator.restartRequested = false
 	coordinator.snapshot.Status = StatusRestartError
 	coordinator.snapshot.Error = err.Error()
-	result := cloneSnapshot(coordinator.snapshot)
+	result := coordinator.commitLocked(previous)
 	coordinator.mu.Unlock()
 	coordinator.publishIfChanged(previous, result)
 	return result, err
@@ -988,7 +1004,7 @@ func (coordinator *Coordinator) Reset(ctx context.Context) error {
 		coordinator.clearReleaseLocked()
 	}
 	coordinator.resetting = false
-	current := cloneSnapshot(coordinator.snapshot)
+	current := coordinator.commitLocked(previous)
 	coordinator.mu.Unlock()
 	coordinator.publishIfChanged(previous, current)
 	return err

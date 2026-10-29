@@ -145,6 +145,7 @@ describe('AboutModal', () => {
     appInfoMock.GetAppInfo.mockResolvedValue({
       version: '1.9.0',
       update: {
+        revision: 1,
         status: 'available',
         currentVersion: '1.9.0',
         availableVersion: '2.0.0',
@@ -153,8 +154,11 @@ describe('AboutModal', () => {
         canInstall: true,
       },
     });
-    appInfoMock.DownloadApplicationUpdate.mockResolvedValue({ status: 'downloading' });
-    appInfoMock.RestartAndApplyApplicationUpdate.mockResolvedValue({ status: 'ready' });
+    appInfoMock.DownloadApplicationUpdate.mockResolvedValue({ revision: 2, status: 'downloading' });
+    appInfoMock.RestartAndApplyApplicationUpdate.mockResolvedValue({
+      revision: 4,
+      status: 'ready',
+    });
     const modal = await renderModal({ isOpen: true, onClose: vi.fn() });
     await act(async () => Promise.resolve());
 
@@ -170,6 +174,7 @@ describe('AboutModal', () => {
 
     await act(async () => {
       updateHandler?.({
+        revision: 3,
         status: 'ready',
         currentVersion: '1.9.0',
         availableVersion: '2.0.0',
@@ -191,6 +196,7 @@ describe('AboutModal', () => {
     appInfoMock.GetAppInfo.mockResolvedValue({
       version: '1.9.0',
       update: {
+        revision: 1,
         status: 'available',
         currentVersion: '1.9.0',
         availableVersion: '2.0.0',
@@ -199,6 +205,7 @@ describe('AboutModal', () => {
       },
     });
     appInfoMock.SkipApplicationUpdate.mockResolvedValue({
+      revision: 2,
       status: 'skipped',
       currentVersion: '1.9.0',
       availableVersion: '2.0.0',
@@ -206,6 +213,7 @@ describe('AboutModal', () => {
       canInstall: true,
     });
     appInfoMock.RemoveApplicationUpdateSkip.mockResolvedValue({
+      revision: 3,
       status: 'available',
       currentVersion: '1.9.0',
       availableVersion: '2.0.0',
@@ -635,9 +643,14 @@ describe('AboutModal', () => {
         .reverse()
         .find(([name]) => name === 'app-update')?.[1];
       expect(listener).toBeDefined();
-      await act(async () => listener?.({ status: 'ready', availableVersion: '2.0.0' }));
       await act(async () =>
-        finish({ version: '1.0.0', update: { status: 'available', availableVersion: '2.0.0' } })
+        listener?.({ revision: 2, status: 'ready', availableVersion: '2.0.0' })
+      );
+      await act(async () =>
+        finish({
+          version: '1.0.0',
+          update: { revision: 1, status: 'available', availableVersion: '2.0.0' },
+        })
       );
       expect(document.body.textContent).toContain('Version 1.0.0');
       expect(

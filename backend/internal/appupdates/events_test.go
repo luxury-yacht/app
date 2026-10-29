@@ -3,6 +3,7 @@ package appupdates_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -83,6 +84,7 @@ func TestWailsEventsPublishCompleteApplicationSnapshot(t *testing.T) {
 	})
 
 	require.Equal(t, appupdates.Snapshot{
+		Revision:          2,
 		Status:            appupdates.StatusAvailable,
 		CurrentVersion:    "2.0.0-beta.3",
 		AvailableVersion:  "2.0.0",
@@ -192,6 +194,48 @@ func TestLateWailsDownloadEventsDoNotOverwriteAFinishedDownload(t *testing.T) {
 	coordinator.HandleWailsEvent(updater.EventDownloadProgress, updater.Progress{Written: 1, Total: 2})
 	coordinator.HandleWailsEvent(updater.EventVerifying, release)
 	require.Equal(t, appupdates.StatusReady, coordinator.Snapshot().Status)
+}
+
+// An event admitted during the download can publish after the download's own
+// result; the result's higher revision lets consumers discard the stale one.
+func TestAnEventPublishedAfterTheDownloadResultIsSupersededByRevision(t *testing.T) {
+	t.Parallel()
+	client := &fakeUpdater{release: signedRelease("2.0.0", "stable", "darwin", "arm64")}
+	var mu sync.Mutex
+	var published []appupdates.Snapshot
+	projected, resume := make(chan struct{}), make(chan struct{})
+	var holdOnce sync.Once
+	coordinator := newCheckedCoordinator(t, client, func(snapshot appupdates.Snapshot) {
+		if snapshot.Status == appupdates.StatusPreparing {
+			holdOnce.Do(func() { close(projected) })
+			<-resume
+		}
+		mu.Lock()
+		published = append(published, snapshot)
+		mu.Unlock()
+	})
+
+	eventDone := make(chan struct{})
+	duringDownload(t, coordinator, client, func() {
+		go func() {
+			defer close(eventDone)
+			coordinator.HandleWailsEvent(updater.EventUpdateReady, nil)
+		}()
+		<-projected
+	})
+	close(resume)
+	<-eventDone
+
+	require.Equal(t, appupdates.StatusPreparing, published[len(published)-1].Status,
+		"the stale event must publish last for this test to exercise reordering")
+	var current *appupdates.Snapshot
+	for index := range published {
+		if current == nil || published[index].Revision >= current.Revision {
+			current = &published[index]
+		}
+	}
+	require.Equal(t, appupdates.StatusReady, current.Status)
+	require.Equal(t, coordinator.Snapshot(), *current)
 }
 
 func publishedStatuses(snapshots []appupdates.Snapshot) []appupdates.Status {

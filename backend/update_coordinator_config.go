@@ -122,7 +122,11 @@ func (u *UpdateCoordinator) resolveApplicationUpdateState(
 		u.logger.Warn(fmt.Sprintf("Automatic update recovery state unavailable: %v", err), logsources.UpdateCheck)
 		eligibility.CanInstall = false
 		eligibility.Installation.CanInstall = false
-		return nil, eligibility
+		// The failed setup offers no store for new updates, but an attempt it
+		// reconciled is still reported.
+		if setup.Reconciled.Outcome == updatestate.OutcomeNone {
+			return nil, eligibility
+		}
 	}
 	u.logApplicationUpdateReconciliation(setup.Reconciled)
 	if setup.MetadataReconcileError != nil {
@@ -180,30 +184,44 @@ func prepareApplicationUpdateState(
 	if err != nil {
 		return applicationUpdateStateSetup{}, err
 	}
-	reconciled, err := store.Reconcile(eligibility.Release.Version)
-	if err != nil {
-		return applicationUpdateStateSetup{}, fmt.Errorf("reconcile application update state: %w", err)
+	// Reconcile consumes the attempt record, so its outcome is acted on and
+	// returned even when cleanup or a later step fails. Only a fully prepared
+	// setup carries the store.
+	reconciled, reconcileErr := store.Reconcile(eligibility.Release.Version)
+	setup := applicationUpdateStateSetup{
+		Reconciled:             reconciled,
+		MetadataReconcileError: reconcileApplicationUpdateMetadata(options, reconciled),
 	}
-	var metadataReconcileError error
-	if reconciled.Outcome == updatestate.OutcomeSucceeded &&
-		reconciled.Distribution == updateidentity.DistributionWindowsNSIS {
-		reconcileDisplayVersion := options.ReconcileWindowsDisplayVersion
-		if reconcileDisplayVersion == nil {
-			reconcileDisplayVersion = reconcileWindowsDisplayVersion
-		}
-		metadataReconcileError = reconcileDisplayVersion(reconciled.TargetVersion)
+	if reconcileErr != nil {
+		return setup, fmt.Errorf("reconcile application update state: %w", reconcileErr)
 	}
 	document, err := store.Load()
 	if err != nil {
-		return applicationUpdateStateSetup{}, fmt.Errorf("load reconciled application update state: %w", err)
+		return setup, fmt.Errorf("load reconciled application update state: %w", err)
 	}
 	if err := store.SweepOrphans(); err != nil {
-		return applicationUpdateStateSetup{}, fmt.Errorf("sweep orphaned application update staging: %w", err)
+		return setup, fmt.Errorf("sweep orphaned application update staging: %w", err)
 	}
-	return applicationUpdateStateSetup{
-		Store: store, Reconciled: reconciled, SkippedVersion: document.SkippedVersion,
-		MetadataReconcileError: metadataReconcileError,
-	}, nil
+	setup.Store = store
+	setup.SkippedVersion = document.SkippedVersion
+	return setup, nil
+}
+
+// reconcileApplicationUpdateMetadata brings Windows Installed Apps metadata up
+// to the version a successful swap installed.
+func reconcileApplicationUpdateMetadata(
+	options ApplicationUpdateOptions,
+	reconciled updatestate.ReconcileResult,
+) error {
+	if reconciled.Outcome != updatestate.OutcomeSucceeded ||
+		reconciled.Distribution != updateidentity.DistributionWindowsNSIS {
+		return nil
+	}
+	reconcileDisplayVersion := options.ReconcileWindowsDisplayVersion
+	if reconcileDisplayVersion == nil {
+		reconcileDisplayVersion = reconcileWindowsDisplayVersion
+	}
+	return reconcileDisplayVersion(reconciled.TargetVersion)
 }
 
 func newApplicationUpdateStateStore(
@@ -226,16 +244,14 @@ func newApplicationUpdateStateStore(
 		}
 		statePath = manifest.UpdateStatePath()
 	}
-	// Only an installation that can replace itself stages beside its target;
-	// other targets (such as package-managed binaries) are never swept.
-	targetPath := ""
-	if eligibility.Installation.CanInstall {
-		targetPath = eligibility.TargetPath
-	}
+	// Records staged beside the target stay recoverable whatever the install
+	// permission; only an installation that can replace itself stages or sweeps
+	// there, so other targets (such as package-managed binaries) are never swept.
 	return updatestate.New(updatestate.Config{
-		StatePath:  statePath,
-		TempRoot:   options.TempRoot,
-		TargetPath: targetPath,
+		StatePath:         statePath,
+		TempRoot:          options.TempRoot,
+		TargetPath:        eligibility.TargetPath,
+		TargetInstallable: eligibility.Installation.CanInstall,
 	})
 }
 

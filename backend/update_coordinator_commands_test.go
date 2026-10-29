@@ -511,45 +511,141 @@ func dirExists(path string) bool {
 	return err == nil && info.IsDir()
 }
 
-func TestPrepareApplicationUpdateStateReconcilesWindowsDisplayVersionAfterSuccessfulSwap(t *testing.T) {
+// recordAttemptBesideTarget leaves what an installable launch leaves after it
+// staged beside target and its helper failed to apply the update.
+func recordAttemptBesideTarget(t *testing.T) (ApplicationUpdateOptions, string, string) {
+	t.Helper()
 	base := t.TempDir()
 	root := filepath.Join(base, "owned-temp")
-	statePath := filepath.Join(base, "config", "application-update.json")
 	require.NoError(t, os.Mkdir(root, 0o700))
+	statePath := filepath.Join(base, "config", "application-update.json")
+	target := filepath.Join(base, "Applications", "Luxury Yacht.app")
+	require.NoError(t, os.MkdirAll(target, 0o755))
 	store, err := updatestate.New(updatestate.Config{
-		StatePath: statePath, TempRoot: root, PID: func() int { return 4242 },
+		StatePath: statePath, TempRoot: root, TargetPath: target, TargetInstallable: true,
+		PID: func() int { return 4242 },
 	})
 	require.NoError(t, err)
-	staging := filepath.Join(root, "wails-update-success")
-	require.NoError(t, os.Mkdir(staging, 0o700))
+	staging := filepath.Join(filepath.Dir(target), "wails-update-attempt")
+	require.NoError(t, os.MkdirAll(filepath.Join(staging, "Luxury Yacht.app"), 0o700))
 	require.NoError(t, store.RecordPrepared(updatestate.PreparedUpdate{
-		TargetVersion: "2.0.0-beta.3", StagingDir: staging,
-		RecoveryTarget: updateidentity.RecoveryWindowsDownload,
+		TargetVersion: "2.0.0", StagingDir: staging, RecoveryTarget: updateidentity.RecoveryMacDownload,
 	}))
 	_, err = store.BeginAttempt(updatestate.AttemptMetadata{
-		SourceVersion: "2.0.0-beta.2", Platform: "windows", Architecture: "amd64",
-		Distribution: updateidentity.DistributionWindowsNSIS,
+		SourceVersion: "2.0.0-beta.3", Platform: "darwin", Architecture: "arm64",
+		Distribution: updateidentity.DistributionMacBundle,
 	})
 	require.NoError(t, err)
-	wantWarning := errors.New("registry unavailable")
-	var reconciledVersions []string
+	require.NoError(t, os.WriteFile(
+		filepath.Join(root, "wails-update-4242.log"), []byte("bundle replacement failed"), 0o600,
+	))
+	return ApplicationUpdateOptions{TempRoot: root, StatePath: statePath}, target, staging
+}
 
-	setup, err := prepareApplicationUpdateState(ApplicationUpdateOptions{
-		TempRoot: root, StatePath: statePath,
-		ReconcileWindowsDisplayVersion: func(version string) error {
-			reconciledVersions = append(reconciledVersions, version)
-			return wantWarning
-		},
-	}, enabledApplicationUpdateBuild())
+// The installation can lose permission to update itself (its directory stops
+// being writable, say) before the next launch; the failed attempt staged beside
+// it must still be reported.
+func TestPrepareApplicationUpdateStateReconcilesAnAttemptBesideATargetThatCanNoLongerInstall(t *testing.T) {
+	options, target, staging := recordAttemptBesideTarget(t)
+	eligibility := enabledApplicationUpdateBuild()
+	eligibility.TargetPath = target
+	eligibility.Installation.CanInstall = false
+
+	setup, err := prepareApplicationUpdateState(options, eligibility)
 
 	require.NoError(t, err)
-	require.Equal(t, updatestate.OutcomeSucceeded, setup.Reconciled.Outcome)
-	require.Equal(t, []string{"2.0.0-beta.3"}, reconciledVersions)
-	require.ErrorIs(t, setup.MetadataReconcileError, wantWarning)
-	document, err := setup.Store.Load()
-	require.NoError(t, err)
-	require.Nil(t, document.Attempt)
+	require.Equal(t, updatestate.OutcomeFailed, setup.Reconciled.Outcome)
+	require.Equal(t, "bundle replacement failed", setup.Reconciled.HelperDiagnostic)
 	require.NoDirExists(t, staging)
+}
+
+// Removing the reconciled attempt's staging can fail (its directory is no
+// longer writable, say); the failed apply it reports must still be projected.
+func TestApplicationUpdateConfigurationKeepsAFailedApplyWhoseStagingCannotBeRemoved(t *testing.T) {
+	options, target, staging := recordAttemptBesideTarget(t)
+	require.NoError(t, os.RemoveAll(staging))
+	require.NoError(t, os.WriteFile(staging, []byte("not a directory"), 0o600))
+	eligibility := enabledApplicationUpdateBuild()
+	eligibility.TargetPath = target
+	logger := NewLogger(50)
+	updates := &UpdateCoordinator{logger: logger}
+
+	configuration := updates.prepareApplicationUpdateConfiguration(options, eligibility)
+
+	require.NotNil(t, configuration.reconciled)
+	require.Equal(t, updatestate.OutcomeFailed, configuration.reconciled.Outcome)
+	require.Equal(t, updateidentity.RecoveryMacDownload, configuration.reconciled.RecoveryTarget)
+	require.Nil(t, configuration.updateState, "state that cannot be cleaned up is not offered for new updates")
+	require.False(t, configuration.eligibility.CanInstall)
+	require.Condition(t, func() bool {
+		for _, entry := range logger.GetEntries() {
+			if strings.Contains(entry.Message, "bundle replacement failed") {
+				return true
+			}
+		}
+		return false
+	})
+}
+
+// The attempt record is gone once reconciled, so Installed Apps metadata is
+// updated on that launch even when the swapped staging cannot be removed.
+func TestPrepareApplicationUpdateStateReconcilesWindowsDisplayVersionAfterSuccessfulSwap(t *testing.T) {
+	for _, test := range []struct {
+		name             string
+		stagingRemovable bool
+	}{
+		{name: "staging removed", stagingRemovable: true},
+		{name: "staging cannot be removed", stagingRemovable: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			base := t.TempDir()
+			root := filepath.Join(base, "owned-temp")
+			statePath := filepath.Join(base, "config", "application-update.json")
+			require.NoError(t, os.Mkdir(root, 0o700))
+			store, err := updatestate.New(updatestate.Config{
+				StatePath: statePath, TempRoot: root, PID: func() int { return 4242 },
+			})
+			require.NoError(t, err)
+			staging := filepath.Join(root, "wails-update-success")
+			require.NoError(t, os.Mkdir(staging, 0o700))
+			require.NoError(t, store.RecordPrepared(updatestate.PreparedUpdate{
+				TargetVersion: "2.0.0-beta.3", StagingDir: staging,
+				RecoveryTarget: updateidentity.RecoveryWindowsDownload,
+			}))
+			_, err = store.BeginAttempt(updatestate.AttemptMetadata{
+				SourceVersion: "2.0.0-beta.2", Platform: "windows", Architecture: "amd64",
+				Distribution: updateidentity.DistributionWindowsNSIS,
+			})
+			require.NoError(t, err)
+			if !test.stagingRemovable {
+				require.NoError(t, os.Remove(staging))
+				require.NoError(t, os.WriteFile(staging, []byte("not a directory"), 0o600))
+			}
+			wantWarning := errors.New("registry unavailable")
+			var reconciledVersions []string
+
+			setup, err := prepareApplicationUpdateState(ApplicationUpdateOptions{
+				TempRoot: root, StatePath: statePath,
+				ReconcileWindowsDisplayVersion: func(version string) error {
+					reconciledVersions = append(reconciledVersions, version)
+					return wantWarning
+				},
+			}, enabledApplicationUpdateBuild())
+
+			require.Equal(t, updatestate.OutcomeSucceeded, setup.Reconciled.Outcome)
+			require.Equal(t, []string{"2.0.0-beta.3"}, reconciledVersions)
+			require.ErrorIs(t, setup.MetadataReconcileError, wantWarning)
+			if !test.stagingRemovable {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			document, err := setup.Store.Load()
+			require.NoError(t, err)
+			require.Nil(t, document.Attempt)
+			require.NoDirExists(t, staging)
+		})
+	}
 }
 
 func TestNewUpdateCoordinatorProjectsAndLogsFailedApply(t *testing.T) {

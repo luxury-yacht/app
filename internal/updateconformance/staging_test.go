@@ -27,9 +27,10 @@ func TestUpdateStateOwnsTheDirectoryWailsStagesIn(t *testing.T) {
 	root := filepath.Join(base, "owned-temp")
 	require.NoError(t, os.Mkdir(root, 0o700))
 	store, err := updatestate.New(updatestate.Config{
-		StatePath:  filepath.Join(base, "config", "application-update.json"),
-		TempRoot:   root,
-		TargetPath: probe.TargetPath,
+		StatePath:         filepath.Join(base, "config", "application-update.json"),
+		TempRoot:          root,
+		TargetPath:        probe.TargetPath,
+		TargetInstallable: true,
 	})
 	require.NoError(t, err)
 	artifact := filepath.Join(t.TempDir(), "luxury-yacht-v2.0.0-darwin-arm64.zip")

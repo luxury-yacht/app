@@ -97,24 +97,30 @@ type Config struct {
 	TempRoot  string
 	// TargetPath is the installed bundle or executable an update replaces. Wails
 	// stages each download in a wails-update-* directory beside it; builds
-	// through 2.7.x staged in TempRoot instead. Empty when the installation
-	// cannot update itself.
-	TargetPath  string
-	Now         func() time.Time
-	PID         func() int
-	ReplaceFile func(string, string) error
-	RemoveAll   func(string) error
+	// through 2.7.x staged in TempRoot instead. Empty when no installation was
+	// probed.
+	TargetPath string
+	// TargetInstallable reports that the installation may replace TargetPath
+	// now. Only then may a new download stage beside it or leftovers there be
+	// swept. Records already staged there stay valid either way, so losing that
+	// permission never orphans an update in progress.
+	TargetInstallable bool
+	Now               func() time.Time
+	PID               func() int
+	ReplaceFile       func(string, string) error
+	RemoveAll         func(string) error
 }
 
 type Store struct {
-	mu          sync.Mutex
-	statePath   string
-	tempRoot    string
-	targetPath  string
-	now         func() time.Time
-	pid         func() int
-	replaceFile func(string, string) error
-	removeAll   func(string) error
+	mu                sync.Mutex
+	statePath         string
+	tempRoot          string
+	targetPath        string
+	targetInstallable bool
+	now               func() time.Time
+	pid               func() int
+	replaceFile       func(string, string) error
+	removeAll         func(string) error
 }
 
 type invalidDocumentError struct {
@@ -161,7 +167,8 @@ func New(config Config) (*Store, error) {
 		config.RemoveAll = os.RemoveAll
 	}
 	return &Store{
-		statePath: statePath, tempRoot: tempRoot, targetPath: targetPath, now: config.Now, pid: config.PID,
+		statePath: statePath, tempRoot: tempRoot, targetPath: targetPath,
+		targetInstallable: config.TargetInstallable, now: config.Now, pid: config.PID,
 		replaceFile: config.ReplaceFile, removeAll: config.RemoveAll,
 	}, nil
 }
@@ -375,18 +382,28 @@ func (store *Store) ResolveStagingDirectory(downloadedPath string) (string, erro
 	return staging, nil
 }
 
-// stagingParents lists the directories updater staging may live directly in.
-func (store *Store) stagingParents() []string {
+// recordedStagingParents lists the directories recorded staging may live
+// directly in, whether or not the installation may still update itself.
+func (store *Store) recordedStagingParents() []string {
 	if store.targetPath == "" {
 		return []string{store.tempRoot}
 	}
 	return []string{store.tempRoot, filepath.Dir(store.targetPath)}
 }
 
+// downloadStagingParents lists where a new download may stage: beside the
+// target only while the installation may replace it.
+func (store *Store) downloadStagingParents() []string {
+	if !store.targetInstallable {
+		return []string{store.tempRoot}
+	}
+	return store.recordedStagingParents()
+}
+
 // stagingDirectoryFor returns the staging directory, a direct child of a
-// staging parent, that holds the downloaded payload path.
+// download staging parent, that holds the downloaded payload path.
 func (store *Store) stagingDirectoryFor(path string) (string, error) {
-	for _, parent := range store.stagingParents() {
+	for _, parent := range store.downloadStagingParents() {
 		relative, err := filepath.Rel(parent, path)
 		if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 			continue
@@ -403,7 +420,7 @@ func (store *Store) stagingDirectoryFor(path string) (string, error) {
 func (store *Store) validateRecordedStaging(path string) error {
 	path = filepath.Clean(strings.TrimSpace(path))
 	name := filepath.Base(path)
-	if filepath.IsAbs(path) && slices.Contains(store.stagingParents(), filepath.Dir(path)) &&
+	if filepath.IsAbs(path) && slices.Contains(store.recordedStagingParents(), filepath.Dir(path)) &&
 		strings.HasPrefix(name, "wails-update-") && name != "wails-update-" {
 		return nil
 	}
@@ -564,9 +581,10 @@ func (store *Store) sweepOrphansLocked(protected []string) error {
 // sweepTargetLeftovers removes staging beside the install target that a failed
 // or interrupted update left behind. That directory can be shared with other
 // applications (macOS /Applications), so anything that is not plainly this
-// app's payload is kept.
+// app's payload is kept, and nothing is swept unless the installation may
+// replace the target.
 func (store *Store) sweepTargetLeftovers(protected []string) error {
-	if store.targetPath == "" {
+	if store.targetPath == "" || !store.targetInstallable {
 		return nil
 	}
 	parent := filepath.Dir(store.targetPath)

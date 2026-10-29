@@ -15,6 +15,7 @@ const defaultAppInfo: backend.AppInfo = {
   isBeta: false,
   expiryDate: undefined,
   update: {
+    revision: 1,
     status: Status.StatusCurrent,
     currentVersion: '1.3.13',
     canCheck: true,
