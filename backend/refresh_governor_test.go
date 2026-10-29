@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -820,6 +821,67 @@ func TestSetVisibleClusterMovesToFrontOfMRU(t *testing.T) {
 
 	require.Equal(t, y, app.Refresh.governorVisible)
 	require.Equal(t, []string{y, x}, app.Refresh.governorMRU)
+}
+
+// In a fresh session the window reports its first cluster before that cluster's
+// setup seeds the governor. The seed must not pin the cluster as a second
+// Foreground: it would never go Cold, so one more tab than the warm budget
+// allows stayed live (issue #408).
+func TestSeedAfterWindowReportLeavesForegroundToTheWindow(t *testing.T) {
+	selections := []kubeconfigSelection{
+		{Path: "/p/a", Context: "a"},
+		{Path: "/p/b", Context: "b"},
+		{Path: "/p/c", Context: "c"},
+		{Path: "/p/d", Context: "d"},
+	}
+	app, ids := governorTestApp(t, selections, 2)
+	a, b, c, d := ids[0], ids[1], ids[2], ids[3]
+
+	app.Refresh.SetWindowVisibleCluster("workspace-1", a)
+	app.Refresh.seedGovernorFromOpenClusters()
+	for _, id := range []string{b, c, d} {
+		app.Refresh.SetWindowVisibleCluster("workspace-1", id)
+	}
+
+	app.Refresh.governorMu.Lock()
+	planned := maps.Clone(app.Refresh.governorPlanned)
+	app.Refresh.governorMu.Unlock()
+	require.Equal(t, map[string]system.ResourceTier{
+		a: system.TierCold,
+		b: system.TierBackground,
+		c: system.TierBackground,
+		d: system.TierForeground,
+	}, planned)
+}
+
+// On relaunch the restored clusters seed the governor before any window
+// reports. One of them stays Foreground until the window's report replaces it.
+func TestSeedBeforeWindowReportHandsForegroundToTheWindow(t *testing.T) {
+	selections := []kubeconfigSelection{
+		{Path: "/p/a", Context: "a"},
+		{Path: "/p/b", Context: "b"},
+	}
+	app, ids := governorTestApp(t, selections, 0)
+	a, b := ids[0], ids[1]
+	plannedForeground := func() []string {
+		app.Refresh.governorMu.Lock()
+		defer app.Refresh.governorMu.Unlock()
+		var foreground []string
+		for id, tier := range app.Refresh.governorPlanned {
+			if tier == system.TierForeground {
+				foreground = append(foreground, id)
+			}
+		}
+		return foreground
+	}
+
+	app.Refresh.seedGovernorFromOpenClusters()
+	require.Len(t, plannedForeground(), 1, "a fresh start lands one Foreground before any window reports")
+
+	app.Refresh.SetWindowVisibleCluster("workspace-1", b)
+	require.Equal(t, []string{b}, plannedForeground())
+	app.Refresh.SetWindowVisibleCluster("workspace-1", a)
+	require.Equal(t, []string{a}, plannedForeground())
 }
 
 func TestSetVisibleClusterReplaysCurrentLifecycleState(t *testing.T) {

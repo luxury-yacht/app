@@ -597,7 +597,9 @@ func (a *RefreshCoordinator) installCooledStores(clusterID string, subsystem *sy
 // currently open clusters and starts settling them to the policy's tiers. Called
 // once the initial subsystems have been built and their manager starts launched.
 // A Cold assignment remains live while its retained baseline settles. The first open cluster is treated
-// as visible if none has been set yet, so a fresh start lands one Foreground.
+// as visible if none has been set yet, so a fresh start lands one Foreground. A window that has
+// already reported its cluster owns foreground demand: the default would add a second Foreground
+// that no window report clears, so that cluster could never go Cold.
 func (a *RefreshCoordinator) seedGovernorFromOpenClusters() {
 	if a == nil {
 		return
@@ -607,7 +609,7 @@ func (a *RefreshCoordinator) seedGovernorFromOpenClusters() {
 	a.governorMu.Lock()
 	a.ensureGovernorStateLocked()
 	a.governorMRU = intersectOrdered(a.governorMRU, open)
-	if a.governorVisible == "" || !open[a.governorVisible] {
+	if len(a.governorWindows) == 0 && (a.governorVisible == "" || !open[a.governorVisible]) {
 		if len(a.governorMRU) > 0 {
 			a.setGovernorVisibleLocked(a.governorMRU[0])
 		}
