@@ -81,18 +81,24 @@ const digestBytes = (data: BufferSource): Uint8Array =>
     ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
     : new Uint8Array(data);
 
+const nodeDigest = (algorithm: AlgorithmIdentifier, data: BufferSource): ArrayBuffer => {
+  const name = typeof algorithm === 'string' ? algorithm : algorithm.name;
+  const nodeAlgorithm = NODE_DIGEST_ALGORITHMS[name.toUpperCase()];
+  if (!nodeAlgorithm) {
+    throw new DOMException(`Unrecognized digest algorithm: ${name}`, 'NotSupportedError');
+  }
+  const digest = createHash(nodeAlgorithm).update(digestBytes(data)).digest();
+  return digest.buffer.slice(digest.byteOffset, digest.byteOffset + digest.byteLength);
+};
+
 Object.defineProperty(globalThis.crypto.subtle, 'digest', {
   configurable: true,
   writable: true,
-  value: async (algorithm: AlgorithmIdentifier, data: BufferSource): Promise<ArrayBuffer> => {
-    const name = typeof algorithm === 'string' ? algorithm : algorithm.name;
-    const nodeAlgorithm = NODE_DIGEST_ALGORITHMS[name.toUpperCase()];
-    if (!nodeAlgorithm) {
-      throw new DOMException(`Unrecognized digest algorithm: ${name}`, 'NotSupportedError');
-    }
-    const digest = createHash(nodeAlgorithm).update(digestBytes(data)).digest();
-    return digest.buffer.slice(digest.byteOffset, digest.byteOffset + digest.byteLength);
-  },
+  // The executor turns a throw into a rejection, as WebCrypto rejects.
+  value: (algorithm: AlgorithmIdentifier, data: BufferSource): Promise<ArrayBuffer> =>
+    new Promise((resolve) => {
+      resolve(nodeDigest(algorithm, data));
+    }),
 });
 
 vi.mock('@wailsio/runtime', () => {
