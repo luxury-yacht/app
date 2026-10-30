@@ -702,6 +702,11 @@ export interface QueryBackedClusterGridParams<
     QueryBackedGridParamsCommon<TPayload, TRow> {
   /** Optional: the wrapper resolves a canonical default when omitted. */
   keyExtractor?: (item: TRow, index: number) => string;
+  /**
+   * Open with the filters another view requests for this one
+   * (requestGridTableFilters); the first query already carries them.
+   */
+  acceptsFilterRequests?: boolean;
 }
 
 export function useQueryBackedClusterResourceGridTable<
@@ -723,6 +728,7 @@ export function useQueryBackedClusterResourceGridTable<
   defaultSortKey = 'name',
   defaultSortDirection = 'asc',
   supportsCustomMetadataColumns,
+  acceptsFilterRequests = false,
   ...tableParams
 }: QueryBackedClusterGridParams<TPayload, TRow>): QueryBackedNamespaceGridResult<TRow, TPayload> {
   const defaultSort = useMemo(
@@ -744,6 +750,7 @@ export function useQueryBackedClusterResourceGridTable<
     filterOptions: { ...tableParams.filterOptions, isNamespaceScoped: false },
     pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
     transient: transientTableState,
+    filterRequestClusterId: acceptsFilterRequests ? (clusterId ?? undefined) : undefined,
   });
   const liveScope = useMemo(
     () => (clusterId ? buildRefreshScope(domain, { clusterId, selector: baseSelector }) : ''),

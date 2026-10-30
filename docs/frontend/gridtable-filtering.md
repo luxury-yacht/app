@@ -53,9 +53,11 @@ zoom follow [interaction boundaries](gridtable-interaction.md#interaction-bounda
   boundaries when clearing user filters.
 - Cross-view filter navigation uses the shared one-shot GridTable filter
   request, naming the exact destination `viewId` and `clusterId`. Stage it
-  before activating the destination route; the destination applies it only after
-  its persisted state hydrates, then consumes it, so no other table or cluster
-  receives it and hydration cannot overwrite it.
+  before activating the destination route. A destination table opts in
+  (`acceptsFilterRequests`); its persistence takes the request as part of
+  hydration, so the table's first query already carries the requested filters,
+  and a request arriving after hydration replaces them. Taking consumes it, so
+  no other table or cluster receives it.
 
 ## Filtering And Search
 

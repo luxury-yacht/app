@@ -5,7 +5,8 @@
  * namespace's entry hydrates when the table moves to it (namespaced mode), a
  * column choice saves while a live table republishes inline filter options,
  * transient tables never read or write saved state, saved custom columns
- * hydrate, and reset keeps their definitions. Runs inside the production shell
+ * hydrate, reset keeps their definitions, and filters another view requests
+ * for the table are its filters from the first hydrated render. Runs inside the production shell
  * with the real preferences and persistence store over a faked backend
  * (test-utils/appState); saved state is what GetGridTablePersistence answers
  * at startup and what SetGridTablePersistence/DeleteGridTablePersistence write.
@@ -15,8 +16,16 @@ import {
   type CustomMetadataColumnDefinition,
   createCustomMetadataColumnDefinition,
 } from '@shared/components/tables/customMetadataColumns';
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
-import { act } from 'react';
+import type {
+  GridColumnDefinition,
+  GridTableFilterState,
+} from '@shared/components/tables/GridTable.types';
+import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
+import {
+  requestGridTableFilters,
+  setPendingGridTableFilterRequest,
+} from '@shared/components/tables/hooks/gridTableFilterRequest';
+import { act, useLayoutEffect } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   installAppStateHarness,
@@ -46,21 +55,38 @@ const app = installAppStateHarness();
 let dev: TestCluster;
 let view: MountedApp;
 let latest: ReturnType<typeof useGridTablePersistence<Row>> | undefined;
+// The filters of every render after hydration, in order.
+let hydratedFilters: GridTableFilterState[] = [];
 const table = () => requireValue(latest, 'expected the table’s persisted state');
 
 function Table(
   props: Readonly<
-    Partial<UseGridTablePersistenceParams<Row>> & { rows?: Row[]; namespace?: string }
+    Partial<UseGridTablePersistenceParams<Row>> & {
+      rows?: Row[];
+      namespace?: string;
+      // Runs in the hydrated commit, before that commit's passive effects.
+      onHydrated?: () => void;
+    }
   >
 ) {
-  const { rows, ...params } = props;
-  latest = useGridTablePersistence<Row>({
+  const { rows, onHydrated, ...params } = props;
+  const persistence = useGridTablePersistence<Row>({
     viewId: 'namespace-pods',
     clusterIdentity: dev.clusterId,
     isNamespaceScoped: true,
     columns,
     ...params,
   });
+  latest = persistence;
+  const { hydrated } = persistence;
+  if (hydrated) {
+    hydratedFilters.push(persistence.filters);
+  }
+  useLayoutEffect(() => {
+    if (hydrated) {
+      onHydrated?.();
+    }
+  }, [hydrated, onHydrated]);
   return <span>{rows?.[0]?.id}</span>;
 }
 
@@ -105,6 +131,8 @@ const start = async () => {
 
 beforeEach(() => {
   latest = undefined;
+  hydratedFilters = [];
+  setPendingGridTableFilterRequest(null);
   savedTables = new Map();
   dev = app.cluster({ name: 'dev', context: 'alpha' });
   app.namespaces(dev, ['team-a', 'team-b']);
@@ -226,6 +254,79 @@ describe('useGridTablePersistence', () => {
     expect(savedTables.get(await storageKey('namespace-pods', '__shared__'))).toEqual({
       version: 3,
       customColumns: [ownerColumn],
+    });
+  });
+
+  describe('filters requested by another view', () => {
+    const requested: GridTableFilterState = {
+      ...DEFAULT_GRID_TABLE_FILTER_STATE,
+      kinds: { mode: 'some', values: ['Pod'] },
+      namespaces: { mode: 'some', values: ['payments'] },
+      queryFacets: { findings: { mode: 'some', values: ['restarts'] } },
+    };
+    const AttentionTable = ({ onHydrated }: Readonly<{ onHydrated?: () => void }>) => (
+      <Table
+        viewId="cluster-attention"
+        isNamespaceScoped={false}
+        filterRequestClusterId={dev.clusterId}
+        onHydrated={onHydrated}
+      />
+    );
+    const request = (
+      clusterId: string,
+      destinationViewId = 'cluster-attention',
+      filters = requested
+    ) => requestGridTableFilters({ clusterId, destinationViewId, filters });
+
+    it('are the filters of its first hydrated render, and are taken once', async () => {
+      await start();
+      request(dev.clusterId, 'cluster-workloads');
+      await view.show(<AttentionTable />);
+      expect(table().filters).toEqual(DEFAULT_GRID_TABLE_FILTER_STATE);
+
+      await view.show(null);
+      hydratedFilters = [];
+      request('another-cluster');
+      request(dev.clusterId);
+      await view.show(<AttentionTable />);
+      expect(hydratedFilters.length).toBeGreaterThan(0);
+      expect(hydratedFilters).toEqual(hydratedFilters.map(() => requested));
+
+      await view.show(null);
+      await view.show(<AttentionTable />);
+      expect(table().filters).toEqual(DEFAULT_GRID_TABLE_FILTER_STATE);
+    });
+
+    it('take a request that arrives while the table finishes hydrating', async () => {
+      const later: GridTableFilterState = {
+        ...requested,
+        namespaces: { mode: 'some', values: ['orders'] },
+      };
+      let sent = false;
+      const requestLater = () => {
+        if (!sent) {
+          sent = true;
+          request(dev.clusterId, 'cluster-attention', later);
+        }
+      };
+      await start();
+      request(dev.clusterId);
+
+      await view.show(<AttentionTable onHydrated={requestLater} />);
+
+      expect(sent).toBe(true);
+      expect(table().filters).toEqual(later);
+    });
+
+    it('replace the filters of a table that has already hydrated', async () => {
+      await start();
+      await view.show(<AttentionTable />);
+      expect(table().hydrated).toBe(true);
+
+      await act(async () => request('another-cluster'));
+      expect(table().filters).toEqual(DEFAULT_GRID_TABLE_FILTER_STATE);
+      await act(async () => request(dev.clusterId));
+      expect(table().filters).toEqual(requested);
     });
   });
 });
