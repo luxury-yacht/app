@@ -94,11 +94,9 @@ const nodeDigest = (algorithm: AlgorithmIdentifier, data: BufferSource): ArrayBu
 Object.defineProperty(globalThis.crypto.subtle, 'digest', {
   configurable: true,
   writable: true,
-  // The executor turns a throw into a rejection, as WebCrypto rejects.
+  // Hashing inside then() turns a throw into a rejection, as WebCrypto rejects.
   value: (algorithm: AlgorithmIdentifier, data: BufferSource): Promise<ArrayBuffer> =>
-    new Promise((resolve) => {
-      resolve(nodeDigest(algorithm, data));
-    }),
+    Promise.resolve().then(() => nodeDigest(algorithm, data)),
 });
 
 vi.mock('@wailsio/runtime', () => {
