@@ -153,6 +153,14 @@ const clickMenuItem = async (label: string) => {
   );
 };
 
+// The Attention table's findings queries in a cluster. The sidebar's attention
+// badges read the same domain unfiltered, without a query.
+const attentionQueries = (cluster: TestCluster) =>
+  app.snapshots
+    .reads('cluster-attention')
+    .filter((read) => read.scope.startsWith(`${cluster.clusterId}|?`))
+    .map((read) => new URLSearchParams(read.scope.slice(read.scope.indexOf('?') + 1)));
+
 const namespaceTarget = (cluster: TestCluster, name: string) => ({
   clusterId: cluster.clusterId,
   clusterName: cluster.clusterName,
@@ -380,16 +388,14 @@ describe('GlobalViewNamespaces', () => {
     const owners = view.owners();
     expect(owners.kubeconfig.selectedClusterId).toBe(beta.clusterId);
     expect(owners.viewState?.activeClusterTab).toBe('attention');
-    const read = requireValue(
-      app.snapshots
-        .reads('cluster-attention')
-        .filter((r) => r.scope.startsWith(beta.clusterId))
-        .slice(-1)[0],
-      'expected an attention read in beta'
-    );
-    const query = new URLSearchParams(read.scope.split('|')[1]);
-    expect(query.get('namespaces')).toBe('payments');
-    expect(query.get('kinds')?.split(',').sort()).toEqual([...kinds].sort());
+    // Every findings query carries the requested filters: Attention never
+    // fetches the findings it is about to filter out.
+    const queries = attentionQueries(beta);
+    expect(queries.length).toBeGreaterThan(0);
+    for (const query of queries) {
+      expect(query.get('namespaces')).toBe('payments');
+      expect(query.get('kinds')?.split(',').sort()).toEqual([...kinds].sort());
+    }
   });
 
   // Cluster-scoped permissions are batch-queried only for the visible

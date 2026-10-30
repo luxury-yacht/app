@@ -170,6 +170,12 @@ window placement, focus across windows) still needs the native app; see the
 
 ## Test environment
 
+The harness's `settle()` drains microtasks, lazy imports, and fake timers only.
+[vitest.setup.ts](../../frontend/vitest.setup.ts) settles WebCrypto digests,
+which Node runs on its threadpool, within microtasks and with the same bytes.
+Shim any new boundary that settles outside those queues the same way; tests
+that depend on it otherwise fail only under load.
+
 Isolate the backend test process's config and cache directories before fixtures
 run, as in [TestMain](../../backend/main_test.go). Per-test overrides must restore
 to those disposable roots so late background work cannot write real app settings.

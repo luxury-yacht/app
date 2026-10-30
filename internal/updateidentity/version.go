@@ -37,6 +37,10 @@ func (version ReleaseVersion) Compare(other ReleaseVersion) int {
 	return semver.Compare("v"+version.Version, "v"+other.Version)
 }
 
+// UpdaterPayloadPrefix begins the file name of every published updater
+// payload, for example luxury-yacht-v2.8.1-windows-amd64.exe.
+const UpdaterPayloadPrefix = "luxury-yacht-v"
+
 func HasUpdaterTarget(targets []string, platform Platform, architecture string) bool {
 	want := strings.ToLower(strings.TrimSpace(string(platform))) + "/" +
 		strings.ToLower(strings.TrimSpace(architecture))

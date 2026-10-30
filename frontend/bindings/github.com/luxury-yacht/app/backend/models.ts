@@ -1008,6 +1008,7 @@ export type UpdateAppPreferencesRequest = types$0.UpdateAppPreferencesRequest;
 export type UpdateAppPreferencesResponse = types$0.UpdateAppPreferencesResponse;
 
 export interface UpdateInfo {
+    "revision": number;
     "status": appupdates$0.Status;
     "currentVersion"?: string;
     "availableVersion"?: string;

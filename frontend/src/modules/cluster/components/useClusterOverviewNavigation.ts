@@ -1,7 +1,7 @@
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import type { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
-import { requestGridTableFilters } from '@shared/components/tables/hooks/useGridTableExternalFilters';
+import { requestGridTableFilters } from '@shared/components/tables/hooks/gridTableFilterRequest';
 import { useCallback } from 'react';
 import type { useViewState } from '@/core/contexts/ViewStateContext';
 import type { ClusterViewType } from '@/types/navigation/views';

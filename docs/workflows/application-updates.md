@@ -11,6 +11,13 @@ hosts only manual recovery guidance, never discovery or payload delivery.
   runtime-ready workspace: reconcile a prior helper attempt, check silently,
   then every six hours. All windows read and act on the same snapshot and
   `app-update` event. Checks and downloads are cancellable.
+- Wails delivers updater events asynchronously, so `appupdates` projects them
+  only while the check or download that emits them is running; that
+  operation's own result is the final state, and a late event is ignored.
+- Every committed snapshot change takes the next `revision`. Snapshots reach
+  the frontend over `app-update`, the app-info read, and command results, and
+  publication runs outside the coordinator lock, so they can arrive out of
+  order; `useAppInfo` keeps the highest revision it has seen.
 - Checks only discover. The header status control is a label and entry point to
   About, the single surface for release notes, progress, failures, and recovery.
   `frontend/src/ui/status/updatePresentation.ts` supplies status copy, badge,
@@ -164,16 +171,27 @@ repository must exist and the `gh` account must create and delete its releases.
 
 - `internal/updatetemp` creates and validates a private per-user root before any
   Wails or child-process dispatch and points the platform temp environment at
-  it, so staging and helper logs stay under a bounded parent. Unix requires the
-  current UID and owner-only permissions. Windows creates root and marker with
-  an explicit `TOKEN_USER` owner and a protected DACL giving only that user
-  inheritable full control; reused paths owned by any other account or group are
-  rejected.
+  it, so helper logs and child processes stay under a bounded parent. Unix
+  requires the current UID and owner-only permissions. Windows creates root and
+  marker with an explicit `TOKEN_USER` owner and a protected DACL giving only
+  that user inheritable full control; reused paths owned by any other account or
+  group are rejected.
+- Wails stages each download in a `wails-update-*` directory beside the install
+  target, so its swap is a same-filesystem rename. Eligibility probes that
+  target (`BuildEligibility.TargetPath`), and `internal/updatestate` receives it
+  with whether the installation can self-update now. Recorded staging must sit
+  directly below that directory or the temp root, where builds through 2.7.x
+  staged, so their handoff records still reconcile. Records beside the target
+  stay valid after the installation loses permission to update itself; only a
+  self-updating installation stages a new download or sweeps there.
 - Installable portable Linux targets base the root on the target's XDG data
-  home so Wails' Unix helper swaps with a same-filesystem rename;
-  package-managed and unverified Linux targets use the system temp base.
+  home; package-managed and unverified Linux targets use the system temp base.
 - Startup cleanup may inspect only validated `wails-update-*` children and must
-  keep paths recorded by `internal/updatestate`.
+  keep paths recorded by `internal/updatestate`. In the temp root it removes any
+  other staging and helper logs. The target's directory can be shared (macOS
+  `/Applications`), so there it removes only a directory whose single entry is
+  this app's payload: named like the target, or a `luxury-yacht-v…` release
+  file. Partial downloads, symlinks, and other apps' staging stay.
 - Persist `PreparedUpdate` after a verified download, before exposing ready
   state. Restart atomically converts it to `UpdateAttempt`, then invokes Wails
   restart so the detached helper owns replacement and relaunch.
@@ -184,6 +202,10 @@ repository must exist and the `gh` account must create and delete its releases.
   the helper restored the old app (ingest its bounded, sanitized diagnostic and
   show recovery); any other version means a manual or newer install superseded
   it (clear without a stale failure).
+- Reconciliation consumes the attempt record, so its outcome (log, recovery,
+  Windows Installed Apps metadata) is acted on even when removing its staging
+  or a later setup step fails. That launch then disables installation and
+  offers no state store; the cleanup entry stays for the next launch to retry.
 - A failed helper relaunch can restore the previous app. Post-launch defects
   are fixed by a higher signed version or manual installer, never an
   updater-driven downgrade.

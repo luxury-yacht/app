@@ -1,14 +1,7 @@
-### Added
-
-- Support for rolling back Helm releases.
-
-### Changed
-
-- Status columns in all tables use formatted status chips for faster visual scanning of anomalous data.
-
 ### Fixed
 
-- High CPU use with many cluster tabs open:
-  - Inactive clusters no longer reject and re-request live updates in a tight loop.
-  - Application Logs no longer copy their whole history for every new line.
-  - The first cluster opened in a session is no longer kept fully loaded after you switch away from it.
+- In-app updates:
+  - Updating no longer gets stuck on "Preparing update..."
+  - Versions 2.8.0 and 2.8.1 can't install this release themselves, so download and install it manually from the [downloads page](https://luxury-yacht.app/#downloads).
+  - A failed update shows what went wrong and offers a retry, instead of getting stuck on "Preparing update...".
+  - Copies of the new version that failed updates left next to the app (about 80 MB each) are removed.

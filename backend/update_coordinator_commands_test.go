@@ -65,6 +65,8 @@ type fakeUpdateEventRegistrar struct {
 
 type fakeUpdaterClient struct {
 	state updater.State
+	// onCheck runs inside Check, where Wails emits its check events.
+	onCheck func()
 }
 
 func (client *fakeUpdaterClient) Init(updater.Config) error {
@@ -72,12 +74,23 @@ func (client *fakeUpdaterClient) Init(updater.Config) error {
 	return nil
 }
 
-func (*fakeUpdaterClient) Check(context.Context) (*updater.Release, error) { return nil, nil }
-func (*fakeUpdaterClient) DownloadAndInstall(context.Context) error        { return nil }
-func (*fakeUpdaterClient) Restart(context.Context) error                   { return nil }
-func (client *fakeUpdaterClient) State() updater.State                     { return client.state }
-func (*fakeUpdaterClient) DownloadedPath() string                          { return "" }
-func (*fakeUpdaterClient) SkipVersion(string)                              {}
+func (client *fakeUpdaterClient) Check(context.Context) (*updater.Release, error) {
+	if client.onCheck != nil {
+		client.onCheck()
+	}
+	return nil, nil
+}
+
+func (*fakeUpdaterClient) DownloadAndInstall(context.Context) error { return nil }
+func (*fakeUpdaterClient) Restart(context.Context) error            { return nil }
+func (client *fakeUpdaterClient) State() updater.State              { return client.state }
+func (*fakeUpdaterClient) DownloadedPath() string                   { return "" }
+func (*fakeUpdaterClient) SkipVersion(string)                       {}
+
+type idleUpdateScheduler struct{}
+
+func (idleUpdateScheduler) Start(time.Duration, func(context.Context)) {}
+func (idleUpdateScheduler) Stop()                                      {}
 
 type fakeUpdaterProvider struct{}
 
@@ -289,30 +302,37 @@ func TestWailsUpdateEventsProjectToOneApplicationBroadcast(t *testing.T) {
 	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, name string, data ...interface{}) {
 		emitted = append(emitted, emittedEvent{name: name, data: data})
 	}
+	client := &fakeUpdaterClient{}
 	coordinator := appupdates.New(appupdates.Dependencies{
-		Client: &fakeUpdaterClient{}, Provider: fakeUpdaterProvider{},
+		Client: client, Provider: fakeUpdaterProvider{},
 		Eligibility: enabledApplicationUpdateBuild(), PublicKey: make([]byte, 32),
 		Platform: "darwin", Architecture: "arm64", TempRoot: "/owned/temp/root",
-		OnChange: app.Updates.storeApplicationUpdateSnapshot,
+		Scheduler: idleUpdateScheduler{}, OnChange: app.Updates.storeApplicationUpdateSnapshot,
 	})
 	app.Updates.coordinator = coordinator
+	coordinator.RuntimeReady()
 	registrar := &fakeUpdateEventRegistrar{}
 
 	unsubscribers := subscribeApplicationUpdateEvents(registrar, coordinator)
 	require.Len(t, unsubscribers, len(applicationUpdateEventNames))
-	require.Contains(t, registrar.callbacks, updater.EventDownloadProgress)
-	registrar.callbacks[updater.EventDownloadProgress](&application.CustomEvent{
-		Name: updater.EventDownloadProgress,
-		Data: updater.Progress{Written: 25, Total: 100},
-	})
+	require.Contains(t, registrar.callbacks, updater.EventError)
+	var projected *UpdateInfo
+	client.onCheck = func() {
+		emitted = nil
+		registrar.callbacks[updater.EventError](&application.CustomEvent{
+			Name: updater.EventError,
+			Data: updater.ErrorInfo{Stage: updater.StageCheck, Message: "provider unavailable"},
+		})
+		projected = app.Updates.getUpdateInfo()
+	}
+	_, err := coordinator.Check(context.Background())
+	require.NoError(t, err)
 
-	info := app.Updates.getUpdateInfo()
-	require.Equal(t, appupdates.StatusDownloading, info.Status)
-	require.NotNil(t, info.ProgressPercent)
-	require.Equal(t, float64(25), *info.ProgressPercent)
-	require.Len(t, emitted, 1)
+	require.Equal(t, appupdates.StatusCheckError, projected.Status)
+	require.Equal(t, "provider unavailable", projected.Error)
+	require.NotEmpty(t, emitted)
 	require.Equal(t, "app-update", emitted[0].name)
-	require.Equal(t, info, emitted[0].data[0])
+	require.Equal(t, projected, emitted[0].data[0], "the Wails event yields one application broadcast")
 
 	for _, unsubscribe := range unsubscribers {
 		unsubscribe()
@@ -338,6 +358,7 @@ func TestResolveApplicationUpdateEligibilityUsesReleaseAndInstallIdentity(t *tes
 	require.True(t, eligibility.CanInitialize)
 	require.True(t, eligibility.CanInstall)
 	require.Equal(t, updateidentity.DistributionMacBundle, eligibility.Installation.Distribution)
+	require.Equal(t, bundle, eligibility.TargetPath, "Wails stages updates beside this target")
 
 	windowsRoot := t.TempDir()
 	windowsExecutable := filepath.Join(windowsRoot, "luxury-yacht.exe")
@@ -386,7 +407,7 @@ func TestNewUpdateCoordinatorWithoutStateStopsCleanly(t *testing.T) {
 func TestNewApplicationUpdateStateStoreUsesDefaultStatePath(t *testing.T) {
 	setTestConfigEnv(t)
 
-	store, err := newApplicationUpdateStateStore(ApplicationUpdateOptions{TempRoot: t.TempDir()})
+	store, err := newApplicationUpdateStateStore(ApplicationUpdateOptions{TempRoot: t.TempDir()}, enabledApplicationUpdateBuild())
 
 	require.NoError(t, err)
 	require.NotNil(t, store)
@@ -443,45 +464,188 @@ func TestPrepareApplicationUpdateStateReconcilesBeforeSweepingOrphans(t *testing
 	require.Empty(t, document.ProtectedPaths())
 }
 
-func TestPrepareApplicationUpdateStateReconcilesWindowsDisplayVersionAfterSuccessfulSwap(t *testing.T) {
+func TestPrepareApplicationUpdateStateOwnsStagingBesideAnInstallableTarget(t *testing.T) {
+	for _, test := range []struct {
+		name         string
+		canInstall   bool
+		wantLeftover bool
+	}{
+		{name: "installable", canInstall: true, wantLeftover: false},
+		{name: "not installable", canInstall: false, wantLeftover: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			base := t.TempDir()
+			root := filepath.Join(base, "owned-temp")
+			require.NoError(t, os.Mkdir(root, 0o700))
+			applications := filepath.Join(base, "Applications")
+			target := filepath.Join(applications, "Luxury Yacht.app")
+			require.NoError(t, os.MkdirAll(target, 0o755))
+			leftover := filepath.Join(applications, "wails-update-2835506545")
+			require.NoError(t, os.MkdirAll(filepath.Join(leftover, "Luxury Yacht.app"), 0o700))
+			eligibility := enabledApplicationUpdateBuild()
+			eligibility.Installation.CanInstall = test.canInstall
+			eligibility.TargetPath = target
+
+			setup, err := prepareApplicationUpdateState(ApplicationUpdateOptions{
+				TempRoot: root, StatePath: filepath.Join(base, "config", "application-update.json"),
+			}, eligibility)
+
+			require.NoError(t, err)
+			require.Equal(t, test.wantLeftover, dirExists(leftover))
+			staging := filepath.Join(applications, "wails-update-next")
+			payload := filepath.Join(staging, "Luxury Yacht.app")
+			require.NoError(t, os.MkdirAll(payload, 0o700))
+			resolved, err := setup.Store.ResolveStagingDirectory(payload)
+			if test.canInstall {
+				require.NoError(t, err)
+				require.Equal(t, staging, resolved)
+			} else {
+				require.Error(t, err)
+			}
+		})
+	}
+}
+
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+// recordAttemptBesideTarget leaves what an installable launch leaves after it
+// staged beside target and its helper failed to apply the update.
+func recordAttemptBesideTarget(t *testing.T) (ApplicationUpdateOptions, string, string) {
+	t.Helper()
 	base := t.TempDir()
 	root := filepath.Join(base, "owned-temp")
-	statePath := filepath.Join(base, "config", "application-update.json")
 	require.NoError(t, os.Mkdir(root, 0o700))
+	statePath := filepath.Join(base, "config", "application-update.json")
+	target := filepath.Join(base, "Applications", "Luxury Yacht.app")
+	require.NoError(t, os.MkdirAll(target, 0o755))
 	store, err := updatestate.New(updatestate.Config{
-		StatePath: statePath, TempRoot: root, PID: func() int { return 4242 },
+		StatePath: statePath, TempRoot: root, TargetPath: target, TargetInstallable: true,
+		PID: func() int { return 4242 },
 	})
 	require.NoError(t, err)
-	staging := filepath.Join(root, "wails-update-success")
-	require.NoError(t, os.Mkdir(staging, 0o700))
+	staging := filepath.Join(filepath.Dir(target), "wails-update-attempt")
+	require.NoError(t, os.MkdirAll(filepath.Join(staging, "Luxury Yacht.app"), 0o700))
 	require.NoError(t, store.RecordPrepared(updatestate.PreparedUpdate{
-		TargetVersion: "2.0.0-beta.3", StagingDir: staging,
-		RecoveryTarget: updateidentity.RecoveryWindowsDownload,
+		TargetVersion: "2.0.0", StagingDir: staging, RecoveryTarget: updateidentity.RecoveryMacDownload,
 	}))
 	_, err = store.BeginAttempt(updatestate.AttemptMetadata{
-		SourceVersion: "2.0.0-beta.2", Platform: "windows", Architecture: "amd64",
-		Distribution: updateidentity.DistributionWindowsNSIS,
+		SourceVersion: "2.0.0-beta.3", Platform: "darwin", Architecture: "arm64",
+		Distribution: updateidentity.DistributionMacBundle,
 	})
 	require.NoError(t, err)
-	wantWarning := errors.New("registry unavailable")
-	var reconciledVersions []string
+	require.NoError(t, os.WriteFile(
+		filepath.Join(root, "wails-update-4242.log"), []byte("bundle replacement failed"), 0o600,
+	))
+	return ApplicationUpdateOptions{TempRoot: root, StatePath: statePath}, target, staging
+}
 
-	setup, err := prepareApplicationUpdateState(ApplicationUpdateOptions{
-		TempRoot: root, StatePath: statePath,
-		ReconcileWindowsDisplayVersion: func(version string) error {
-			reconciledVersions = append(reconciledVersions, version)
-			return wantWarning
-		},
-	}, enabledApplicationUpdateBuild())
+// The installation can lose permission to update itself (its directory stops
+// being writable, say) before the next launch; the failed attempt staged beside
+// it must still be reported.
+func TestPrepareApplicationUpdateStateReconcilesAnAttemptBesideATargetThatCanNoLongerInstall(t *testing.T) {
+	options, target, staging := recordAttemptBesideTarget(t)
+	eligibility := enabledApplicationUpdateBuild()
+	eligibility.TargetPath = target
+	eligibility.Installation.CanInstall = false
+
+	setup, err := prepareApplicationUpdateState(options, eligibility)
 
 	require.NoError(t, err)
-	require.Equal(t, updatestate.OutcomeSucceeded, setup.Reconciled.Outcome)
-	require.Equal(t, []string{"2.0.0-beta.3"}, reconciledVersions)
-	require.ErrorIs(t, setup.MetadataReconcileError, wantWarning)
-	document, err := setup.Store.Load()
-	require.NoError(t, err)
-	require.Nil(t, document.Attempt)
+	require.Equal(t, updatestate.OutcomeFailed, setup.Reconciled.Outcome)
+	require.Equal(t, "bundle replacement failed", setup.Reconciled.HelperDiagnostic)
 	require.NoDirExists(t, staging)
+}
+
+// Removing the reconciled attempt's staging can fail (its directory is no
+// longer writable, say); the failed apply it reports must still be projected.
+func TestApplicationUpdateConfigurationKeepsAFailedApplyWhoseStagingCannotBeRemoved(t *testing.T) {
+	options, target, staging := recordAttemptBesideTarget(t)
+	require.NoError(t, os.RemoveAll(staging))
+	require.NoError(t, os.WriteFile(staging, []byte("not a directory"), 0o600))
+	eligibility := enabledApplicationUpdateBuild()
+	eligibility.TargetPath = target
+	logger := NewLogger(50)
+	updates := &UpdateCoordinator{logger: logger}
+
+	configuration := updates.prepareApplicationUpdateConfiguration(options, eligibility)
+
+	require.NotNil(t, configuration.reconciled)
+	require.Equal(t, updatestate.OutcomeFailed, configuration.reconciled.Outcome)
+	require.Equal(t, updateidentity.RecoveryMacDownload, configuration.reconciled.RecoveryTarget)
+	require.Nil(t, configuration.updateState, "state that cannot be cleaned up is not offered for new updates")
+	require.False(t, configuration.eligibility.CanInstall)
+	require.Condition(t, func() bool {
+		for _, entry := range logger.GetEntries() {
+			if strings.Contains(entry.Message, "bundle replacement failed") {
+				return true
+			}
+		}
+		return false
+	})
+}
+
+// The attempt record is gone once reconciled, so Installed Apps metadata is
+// updated on that launch even when the swapped staging cannot be removed.
+func TestPrepareApplicationUpdateStateReconcilesWindowsDisplayVersionAfterSuccessfulSwap(t *testing.T) {
+	for _, test := range []struct {
+		name             string
+		stagingRemovable bool
+	}{
+		{name: "staging removed", stagingRemovable: true},
+		{name: "staging cannot be removed", stagingRemovable: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			base := t.TempDir()
+			root := filepath.Join(base, "owned-temp")
+			statePath := filepath.Join(base, "config", "application-update.json")
+			require.NoError(t, os.Mkdir(root, 0o700))
+			store, err := updatestate.New(updatestate.Config{
+				StatePath: statePath, TempRoot: root, PID: func() int { return 4242 },
+			})
+			require.NoError(t, err)
+			staging := filepath.Join(root, "wails-update-success")
+			require.NoError(t, os.Mkdir(staging, 0o700))
+			require.NoError(t, store.RecordPrepared(updatestate.PreparedUpdate{
+				TargetVersion: "2.0.0-beta.3", StagingDir: staging,
+				RecoveryTarget: updateidentity.RecoveryWindowsDownload,
+			}))
+			_, err = store.BeginAttempt(updatestate.AttemptMetadata{
+				SourceVersion: "2.0.0-beta.2", Platform: "windows", Architecture: "amd64",
+				Distribution: updateidentity.DistributionWindowsNSIS,
+			})
+			require.NoError(t, err)
+			if !test.stagingRemovable {
+				require.NoError(t, os.Remove(staging))
+				require.NoError(t, os.WriteFile(staging, []byte("not a directory"), 0o600))
+			}
+			wantWarning := errors.New("registry unavailable")
+			var reconciledVersions []string
+
+			setup, err := prepareApplicationUpdateState(ApplicationUpdateOptions{
+				TempRoot: root, StatePath: statePath,
+				ReconcileWindowsDisplayVersion: func(version string) error {
+					reconciledVersions = append(reconciledVersions, version)
+					return wantWarning
+				},
+			}, enabledApplicationUpdateBuild())
+
+			require.Equal(t, updatestate.OutcomeSucceeded, setup.Reconciled.Outcome)
+			require.Equal(t, []string{"2.0.0-beta.3"}, reconciledVersions)
+			require.ErrorIs(t, setup.MetadataReconcileError, wantWarning)
+			if !test.stagingRemovable {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			document, err := setup.Store.Load()
+			require.NoError(t, err)
+			require.Nil(t, document.Attempt)
+			require.NoDirExists(t, staging)
+		})
+	}
 }
 
 func TestNewUpdateCoordinatorProjectsAndLogsFailedApply(t *testing.T) {

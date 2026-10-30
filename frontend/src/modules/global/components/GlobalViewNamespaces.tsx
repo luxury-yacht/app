@@ -14,7 +14,7 @@ import {
 } from '@modules/namespace/contexts/NamespaceContext';
 import { joinNamespaceMetrics } from '@modules/namespace/contexts/namespaceMetrics';
 import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
-import { requestGridTableFilters } from '@shared/components/tables/hooks/useGridTableExternalFilters';
+import { requestGridTableFilters } from '@shared/components/tables/hooks/gridTableFilterRequest';
 import type { ClusterObjectReference } from '@shared/utils/objectIdentity';
 import React, { useCallback, useMemo } from 'react';
 import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
