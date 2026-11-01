@@ -19,10 +19,11 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/authstate"
 )
 
-// The expected verdicts are the reporting oracle carried over unchanged from
-// errorcapture.IsExpectedClusterFailure: expected cluster conditions stay in
-// the local log and never create Sentry issues.
-func TestExpectedPreservesReportingVerdicts(t *testing.T) {
+// The expected verdict is the reporting oracle: only application failures
+// create Sentry issues. Kubernetes behavior and cluster conditions stay in the
+// local log even when the user sees them as errors.
+func TestExpectedReportsOnlyApplicationFailures(t *testing.T) {
+	pods := schema.GroupResource{Resource: "pods"}
 	tests := []struct {
 		name string
 		err  error
@@ -31,8 +32,22 @@ func TestExpectedPreservesReportingVerdicts(t *testing.T) {
 		{name: "nil", want: false},
 		{name: "wrapped authentication failure", err: fmt.Errorf("request failed: %w", &authstate.AuthInvalidError{Reason: "credentials rejected"}), want: true},
 		{name: "raw structured authentication failure", err: apierrors.NewUnauthorized("credentials rejected"), want: true},
-		{name: "structured permission failure", err: apierrors.NewForbidden(schema.GroupResource{Resource: "pods"}, "pod-a", errors.New("permission denied")), want: true},
-		{name: "wrapped structured not found failure", err: fmt.Errorf("resource fetch failed: %w", apierrors.NewNotFound(schema.GroupResource{Resource: "pods"}, "pod-a")), want: true},
+		{name: "structured permission failure", err: apierrors.NewForbidden(pods, "pod-a", errors.New("permission denied")), want: true},
+		{name: "wrapped structured not found failure", err: fmt.Errorf("resource fetch failed: %w", apierrors.NewNotFound(pods, "pod-a")), want: true},
+		{name: "conflict", err: apierrors.NewConflict(pods, "pod-a", errors.New("the object has been modified")), want: true},
+		{name: "already exists", err: apierrors.NewAlreadyExists(pods, "pod-a"), want: true},
+		{name: "validation rejection", err: apierrors.NewInvalid(schema.GroupKind{Kind: "Pod"}, "pod-a", nil), want: true},
+		{name: "API bad request", err: apierrors.NewBadRequest("container web is not valid for pod pod-a"), want: true},
+		{name: "rate limited", err: apierrors.NewTooManyRequests("busy", 1), want: true},
+		{name: "wrapped API server error", err: fmt.Errorf("delete: %w", apierrors.NewInternalError(errors.New("webhook failed"))), want: true},
+		// client-go's status for a non-Status reply, such as a proxy's HTML 500.
+		{name: "unexpected server response", err: apierrors.NewGenericServerResponse(500, "create", schema.GroupResource{Group: "authorization.k8s.io", Resource: "selfsubjectaccessreviews"}, "", "", 0, true), want: true},
+		// Only the application shapes a request's verb and media types.
+		{name: "method not allowed", err: apierrors.NewMethodNotSupported(pods, "patch"), want: false},
+		{name: "not acceptable", err: apierrors.NewGenericServerResponse(406, "get", pods, "", "", 0, false), want: false},
+		{name: "unsupported media type", err: apierrors.NewGenericServerResponse(415, "patch", pods, "", "", 0, false), want: false},
+		{name: "connection closed mid-reply", err: &url.Error{Op: "Post", URL: "https://cluster.example.test", Err: io.ErrUnexpectedEOF}, want: true},
+		{name: "HTTP/2 stream reset by peer", err: &url.Error{Op: "Post", URL: "https://cluster.example.test", Err: errors.New("stream error: stream ID 31135; INTERNAL_ERROR; received from peer")}, want: true},
 		{name: "unstructured not found application failure", err: errors.New("cache invariant failed after 404 not found"), want: false},
 		{name: "raw credential helper failure", err: errors.New("getting credentials: exec: executable aws failed with exit code 255"), want: true},
 		{name: "URL connectivity failure", err: &url.Error{Op: "Get", URL: "https://cluster.example.test", Err: errors.New("connection refused")}, want: true},
@@ -129,6 +144,7 @@ func TestClassifyAssignsReasonCategoryAndCode(t *testing.T) {
 		{"credentials rejected", fmt.Errorf("list: %w", &authstate.AuthInvalidError{Reason: "expired"}), ReasonCredentialsRejected, CategoryAuthentication, 401},
 		{"exec helper failure", errors.New("getting credentials: exec: executable aws failed with exit code 255"), ReasonCredentialsRejected, CategoryAuthentication, 401},
 		{"connectivity", &url.Error{Op: "Get", URL: "https://x", Err: &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}}, ReasonClusterUnreachable, CategoryNetwork, 503},
+		{"connection closed mid-reply", &url.Error{Op: "Post", URL: "https://x", Err: io.ErrUnexpectedEOF}, ReasonClusterUnreachable, CategoryNetwork, 503},
 		{"bare client deadline", fmt.Errorf("fetch: %w", context.DeadlineExceeded), ReasonDeadlineExceeded, CategoryTimeout, 504},
 		{"canceled", context.Canceled, ReasonCanceled, CategoryUnknown, 499},
 		{"json decode", &json.SyntaxError{}, ReasonBadRequest, CategoryValidation, 400},
@@ -219,6 +235,8 @@ func TestExplicitStatusesCarryTheirVerdicts(t *testing.T) {
 		{"cluster not ready", ClusterNotReady(base), ReasonClusterNotReady, 503, true, true},
 		{"refresh unavailable", RefreshUnavailable(base), ReasonRefreshUnavailable, 503, true, true},
 		{"not found", NotFound(base), ReasonNotFound, 404, false, true},
+		// Keeps its classification, so the user still sees its own message.
+		{"cluster outcome", ClusterOutcome(base), ReasonUnknown, 500, false, true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			status := Classify(tt.err)
@@ -233,27 +251,47 @@ func TestExplicitStatusesCarryTheirVerdicts(t *testing.T) {
 	}
 }
 
-// The UI offers an action only after its permission gate allowed it, so the
-// action boundary reports a denial and names its target; other failures and a
-// denial that already names its object are left as they are.
-func TestUserActionReportsADenialOfAnOfferedAction(t *testing.T) {
+// Marking work the cluster did not complete never hides a request only the app
+// could have built wrong, including under an action boundary.
+func TestClusterOutcomeKeepsRequestShapeRejectionsReportable(t *testing.T) {
+	pods := schema.GroupResource{Resource: "pods"}
+	target := ObjectRef{ClusterID: "c1", Version: "v1", Kind: "Pod", Namespace: "default", Name: "web"}
+	unsupported := fmt.Errorf("warning: Hook pre-delete failed: %w",
+		apierrors.NewGenericServerResponse(415, "create", pods, "", "", 0, false))
+
+	require.False(t, Classify(ClusterOutcome(unsupported)).Expected)
+	require.False(t, Classify(UserAction(target, ClusterOutcome(unsupported))).Expected)
+}
+
+// An action's outcome is marked as one, so the UI shows a denial of it that no
+// view presents; a denial is the cluster's answer, never reported. A denial
+// that does not name its object names the action's target.
+func TestUserActionMarksTheActionOutcome(t *testing.T) {
 	target := ObjectRef{ClusterID: "c1", Group: "apps", Version: "v1", Kind: "Deployment", Namespace: "default", Name: "web"}
 	other := ObjectRef{ClusterID: "c1", Version: "v1", Kind: "Pod", Namespace: "default", Name: "web-0"}
 	pods := schema.GroupResource{Resource: "pods"}
 
 	denied := Classify(UserAction(target, apierrors.NewForbidden(pods, "web-0", errors.New("rbac"))))
 	require.Equal(t, ReasonForbidden, denied.Reason)
-	require.False(t, denied.Expected)
+	require.True(t, denied.Expected)
+	require.True(t, denied.UserAction)
 	require.Equal(t, &target, denied.Ref)
 
 	alreadyNamed := Classify(UserAction(target, Denied(&other, Details{Resource: "pods"}, errors.New("permission denied"))))
 	require.Equal(t, &other, alreadyNamed.Ref)
-	require.False(t, alreadyNamed.Expected)
+	require.True(t, alreadyNamed.Expected)
+	require.True(t, alreadyNamed.UserAction)
 
 	missing := Classify(UserAction(target, apierrors.NewNotFound(pods, "web-0")))
 	require.Equal(t, ReasonNotFound, missing.Reason)
-	require.True(t, missing.Expected)
+	require.True(t, missing.UserAction)
 	require.Nil(t, missing.Ref)
+
+	appFailure := Classify(UserAction(target, errors.New("invariant violated")))
+	require.False(t, appFailure.Expected)
+	require.True(t, appFailure.UserAction)
+
+	require.False(t, Classify(apierrors.NewForbidden(pods, "web-0", errors.New("rbac"))).UserAction)
 
 	require.NoError(t, UserAction(target, nil))
 }

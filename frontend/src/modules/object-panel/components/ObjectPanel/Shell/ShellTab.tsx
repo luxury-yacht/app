@@ -42,6 +42,7 @@ import { resolveTerminalTheme, toXtermThemeDefinition } from '@shared/terminal/t
 import { buildCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
 import { useKeyboardSurface } from '@ui/shortcuts';
 import { errorHandler } from '@utils/errorHandler';
+import { statusError } from '@utils/errorStatus';
 import {
   CloseShellSession,
   ResizeShellSession,
@@ -853,7 +854,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
       switch (evt.status) {
         case types.ShellSessionStatus.ShellSessionStatusError: {
           const details = errorHandler.handleInline(
-            new Error(evt.reason || 'Shell session failed.'),
+            statusError(evt.errorDetails, evt.reason || 'Shell session failed.'),
             {
               action: 'runShellSession',
               source: 'ShellTab',

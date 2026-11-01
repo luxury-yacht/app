@@ -7,14 +7,16 @@ import (
 	"net/url"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
 	"github.com/luxury-yacht/app/backend/internal/credentialerrors"
 )
 
-// Expected reports whether an error describes an expected cluster state rather
-// than an application defect. These failures remain in the local application
-// log and user-visible lifecycle state, but must not create Sentry issues.
+// Expected reports whether an error describes Kubernetes behavior or a cluster
+// condition rather than an application defect. These failures remain in the
+// local application log and user-visible state, even when the user sees them
+// as errors, but must not create Sentry issues.
 func Expected(err error) bool {
 	if err == nil {
 		return false
@@ -25,7 +27,7 @@ func Expected(err error) bool {
 	if errors.Is(err, context.Canceled) {
 		return true
 	}
-	if apierrors.IsNotFound(err) || apierrors.IsForbidden(err) || IsPermissionDenied(err) {
+	if isKubernetesAnswer(err) || IsPermissionDenied(err) {
 		return true
 	}
 
@@ -36,6 +38,29 @@ func Expected(err error) bool {
 	diagnostic := credentialerrors.ClassifyKnown(err, credentialerrors.Context{})
 	return diagnostic.Class == credentialerrors.ClassAuth ||
 		diagnostic.Class == credentialerrors.ClassConnectivity
+}
+
+// requestShapeReasons are the API answers that reject how a request was built
+// (its verb or media types), which only application code decides.
+var requestShapeReasons = map[metav1.StatusReason]bool{
+	metav1.StatusReasonMethodNotAllowed:     true,
+	metav1.StatusReasonNotAcceptable:        true,
+	metav1.StatusReasonUnsupportedMediaType: true,
+}
+
+// isKubernetesAnswer reports an API server's status reply: a denial, conflict,
+// validation, quota or admission rejection, or the server's own failure. Each
+// is Kubernetes behavior, except a rejection of the request's shape.
+func isKubernetesAnswer(err error) bool {
+	var api apierrors.APIStatus
+	return errors.As(err, &api) && !isRequestShapeRejection(err)
+}
+
+// isRequestShapeRejection reports an API status that rejects how the request
+// was built. It stays reportable even inside work marked a cluster outcome.
+func isRequestShapeRejection(err error) bool {
+	var api apierrors.APIStatus
+	return errors.As(err, &api) && requestShapeReasons[api.Status().Reason]
 }
 
 // isBareDeadline reports a client-side deadline that is not a transport

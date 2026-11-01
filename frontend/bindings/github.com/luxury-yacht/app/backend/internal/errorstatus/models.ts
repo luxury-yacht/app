@@ -94,6 +94,12 @@ export interface Status {
     "message": string;
     "retryable": boolean;
     "expected": boolean;
+
+    /**
+     * UserAction marks the outcome of an action the user asked for, which no
+     * view presents, so the UI shows even an expected denial of it.
+     */
+    "userAction"?: boolean;
     "ref"?: ObjectRef | null;
     "details"?: Details | null;
 }

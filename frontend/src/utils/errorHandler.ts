@@ -231,12 +231,14 @@ class ErrorHandler {
     const errorDetails = this.describe(error, context, customMessage);
     const { category } = errorDetails;
 
-    // An expected denial or credential failure is already shown where it
-    // belongs (the view's permission state; the auth overlay), so it gets no
-    // toast. A denial of an offered action is not expected and is shown.
+    // An expected credential failure or read denial is already shown where it
+    // belongs (the auth overlay; the view's permission state), so it gets no
+    // toast. No view presents a denied user action, so it is shown.
+    const status = errorStatusOf(error);
     const suppressNotification =
-      errorStatusOf(error)?.expected === true &&
-      (category === ErrorCategory.PERMISSION || category === ErrorCategory.AUTHENTICATION);
+      status?.expected === true &&
+      (category === ErrorCategory.AUTHENTICATION ||
+        (category === ErrorCategory.PERMISSION && status.userAction !== true));
 
     if (suppressNotification) {
       this.logExpectedCondition(errorDetails);

@@ -186,13 +186,32 @@ func (s *Service) DeleteRelease(namespace, name string) error {
 	}
 
 	client := action.NewUninstall(actionConfig)
-	if _, err := client.Run(name); err != nil {
+	if response, err := client.Run(name); err != nil {
+		if response != nil && chartHookFailed(response.Release, release.HookPreDelete, release.HookPostDelete) {
+			err = errorstatus.ClusterOutcome(err)
+		}
 		err = s.logDeleteError(err, failure, name)
 		return fmt.Errorf("failed to delete Helm release: %w", err)
 	}
 
 	s.logInfo(fmt.Sprintf("Deleted Helm release %s/%s", namespace, name))
 	return nil
+}
+
+// chartHookFailed reports whether one of rel's hooks for events failed while
+// Helm ran it: the chart's own work failing in the cluster. Helm returns that
+// failure untyped but records the phase on the release it ran, resetting it
+// before each run, so the phase of a hook for these events is this run's.
+func chartHookFailed(rel *release.Release, events ...release.HookEvent) bool {
+	if rel == nil {
+		return false
+	}
+	return slices.ContainsFunc(rel.Hooks, func(hook *release.Hook) bool {
+		return hook != nil && hook.LastRun.Phase == release.HookPhaseFailed &&
+			slices.ContainsFunc(hook.Events, func(event release.HookEvent) bool {
+				return slices.Contains(events, event)
+			})
+	})
 }
 
 // ReleaseRevision is one stored revision of a release: what rolling back to it

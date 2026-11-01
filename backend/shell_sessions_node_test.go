@@ -20,6 +20,7 @@ import (
 	"k8s.io/client-go/rest"
 	cgotesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/remotecommand"
+	utilexec "k8s.io/client-go/util/exec"
 )
 
 const nodeShellNodeName = "worker-1"
@@ -326,6 +327,55 @@ func (exitedShellExecutor) Stream(remotecommand.StreamOptions) error { return ni
 
 func (exitedShellExecutor) StreamWithContext(context.Context, remotecommand.StreamOptions) error {
 	return nil
+}
+
+// failedShellExecutor ends its stream with err, as a shell whose last command
+// failed or whose container was killed does.
+type failedShellExecutor struct{ err error }
+
+func (e failedShellExecutor) Stream(remotecommand.StreamOptions) error { return e.err }
+
+func (e failedShellExecutor) StreamWithContext(context.Context, remotecommand.StreamOptions) error {
+	return e.err
+}
+
+// A shell that ends with a failure shows it in the shell tab with its status:
+// the remote shell's own outcome, which is never reported as an app error.
+func TestFailedShellStreamPublishesItsOutcomeStatus(t *testing.T) {
+	fixture := newNodeShellFixture(t, runningDebugger())
+	killed := utilexec.CodeExitError{Err: errors.New("command terminated with exit code 137"), Code: 137}
+	fixture.operations.websocketExec = func(*rest.Config, string, string) (remotecommand.Executor, error) {
+		return failedShellExecutor{err: killed}, nil
+	}
+	var mu sync.Mutex
+	var failures []ShellStatusEvent
+	emit := fixture.operations.emitEvent
+	fixture.operations.emitEvent = func(name string, args ...interface{}) {
+		if event, ok := args[0].(ShellStatusEvent); ok && name == shellStatusEventName && event.Status == types.ShellSessionStatusError {
+			mu.Lock()
+			failures = append(failures, event)
+			mu.Unlock()
+		}
+		if emit != nil {
+			emit(name, args...)
+		}
+	}
+
+	session := fixture.start(t)
+
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(failures) == 1
+	}, 5*time.Second, 5*time.Millisecond)
+	mu.Lock()
+	failed := failures[0]
+	mu.Unlock()
+	require.Equal(t, session.SessionID, failed.SessionID)
+	require.Equal(t, killed.Error(), failed.Reason)
+	require.NotNil(t, failed.ErrorDetails)
+	require.Equal(t, killed.Error(), failed.ErrorDetails.Message)
+	require.True(t, failed.ErrorDetails.Expected)
 }
 
 // A shell that exits on its own also keeps its pod's ownership when the

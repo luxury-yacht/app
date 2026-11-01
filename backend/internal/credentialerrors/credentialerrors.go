@@ -194,14 +194,17 @@ func isConnectivity(err error, msg string) bool {
 		// net/http's HTTP/2 transport reports dropped connections only as text.
 		strings.Contains(msg, "http2: client connection lost") ||
 		strings.Contains(msg, "http2: client connection force closed") ||
-		strings.Contains(msg, "http2: server sent goaway")
+		strings.Contains(msg, "http2: server sent goaway") ||
+		// The server or a proxy reset the request's HTTP/2 stream.
+		strings.Contains(msg, "stream error: stream id")
 }
 
-// isTransportEOF reports a request whose connection closed before the server
-// replied. An EOF outside a transport request is an application failure.
+// isTransportEOF reports a request whose connection closed before or while the
+// server replied. An EOF outside a transport request is an application failure.
 func isTransportEOF(err error) bool {
 	var requestErr *url.Error
-	return errors.As(err, &requestErr) && errors.Is(requestErr.Err, io.EOF)
+	return errors.As(err, &requestErr) &&
+		(errors.Is(requestErr.Err, io.EOF) || errors.Is(requestErr.Err, io.ErrUnexpectedEOF))
 }
 
 // isMissingHelper reports an exec credential helper that could not be located.

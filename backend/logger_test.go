@@ -308,6 +308,28 @@ func TestLoggerKeepsExpectedClusterFailuresLocal(t *testing.T) {
 				Err: errors.New(`http2: server sent GOAWAY and closed the connection; LastStreamID=109, ErrCode=NO_ERROR, debug=""`),
 			},
 		},
+		{
+			name: "HTTP/2 stream reset by the server",
+			err: &url.Error{
+				Op:  "Post",
+				URL: "https://cluster.example.test",
+				Err: errors.New("stream error: stream ID 31135; INTERNAL_ERROR; received from peer"),
+			},
+		},
+		{
+			name: "connection closed mid-response",
+			err:  &url.Error{Op: "Post", URL: "https://cluster.example.test", Err: io.ErrUnexpectedEOF},
+		},
+		{
+			// A cluster (or its proxy) failing a permission review the app sent.
+			name: "API server error",
+			err: apierrors.NewGenericServerResponse(500, "create",
+				schema.GroupResource{Group: "authorization.k8s.io", Resource: "selfsubjectaccessreviews"}, "", "", 0, true),
+		},
+		{
+			name: "write conflict",
+			err:  apierrors.NewConflict(schema.GroupResource{Resource: "pods"}, "pod-a", errors.New("the object has been modified")),
+		},
 	}
 
 	for _, tt := range tests {
@@ -348,6 +370,11 @@ func TestLoggerReportsDeadlineAndUnexpectedURLFailures(t *testing.T) {
 				URL: "https://cluster.example.test",
 				Err: errors.New("redirect policy rejected"),
 			},
+		},
+		{
+			// Only the application chooses the media types a request accepts.
+			name: "response format the request cannot accept",
+			err:  apierrors.NewGenericServerResponse(406, "get", schema.GroupResource{Resource: "nodes"}, "", "", 0, false),
 		},
 	}
 

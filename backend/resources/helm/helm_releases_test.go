@@ -27,6 +27,7 @@ import (
 	"helm.sh/helm/v3/pkg/storage/driver"
 	helmTime "helm.sh/helm/v3/pkg/time"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -559,6 +560,109 @@ type hookWaitRecorder struct {
 func (r *hookWaitRecorder) WatchUntilReady(_ kube.ResourceList, timeout time.Duration) error {
 	r.hookTimeouts = append(r.hookTimeouts, timeout)
 	return nil
+}
+
+// failingHookKubeClient stands in for a cluster where creating a chart hook's
+// objects fails with createErr, every hook job fails with hookErr, and
+// deleting the release's own objects fails with deleteErr.
+type failingHookKubeClient struct {
+	fakeKubeClient
+	createErr error
+	hookErr   error
+	deleteErr error
+}
+
+func (c failingHookKubeClient) Create(resources kube.ResourceList) (*kube.Result, error) {
+	if c.createErr != nil {
+		return nil, c.createErr
+	}
+	return c.fakeKubeClient.Create(resources)
+}
+
+func (c failingHookKubeClient) WatchUntilReady(kube.ResourceList, time.Duration) error {
+	return c.hookErr
+}
+
+func (c failingHookKubeClient) Delete(kube.ResourceList) (*kube.Result, []error) {
+	if c.deleteErr != nil {
+		return &kube.Result{}, []error{c.deleteErr}
+	}
+	return &kube.Result{}, nil
+}
+
+func hookedRelease(rel *release.Release, events ...release.HookEvent) {
+	rel.Hooks = []*release.Hook{{
+		Name: "demo-hook", Kind: "Job", Path: "demo/templates/hook.yaml",
+		Manifest: "kind: Job\nmetadata:\n  name: demo-hook\n", Events: events,
+	}}
+}
+
+// A chart hook that fails in the cluster, before or after the release's objects
+// are deleted, fails the delete and the user sees why; it is the chart's
+// outcome, never reported as an app error.
+func TestReleaseDeleteFailedByChartHookIsNotAnAppError(t *testing.T) {
+	jobFailed := errors.New("job demo-hook failed: BackoffLimitExceeded")
+	for _, event := range []release.HookEvent{release.HookPreDelete, release.HookPostDelete} {
+		t.Run(string(event), func(t *testing.T) {
+			store := storage.Init(driver.NewMemory())
+			rel := buildTestRelease("demo", "default", 1, time.Now().Add(-2*time.Hour), time.Now().Add(-time.Hour))
+			hookedRelease(rel, event)
+			require.NoError(t, store.Create(rel))
+			logger := &recordingHelmLogger{}
+			service := helmServiceOver(store, failingHookKubeClient{hookErr: jobFailed})
+			service.deps.Common.Logger = logger
+
+			err := service.DeleteRelease("default", "demo")
+
+			require.ErrorContains(t, err, jobFailed.Error())
+			require.True(t, errorstatus.Classify(err).Expected, "chart hook failure reported as an app error")
+			require.True(t, errorstatus.Classify(logger.cause).Expected, "chart hook failure logged as an app error")
+		})
+	}
+}
+
+// Helm records a hook as failed when creating its objects fails, too. The
+// cluster refusing them is its own answer, but a request only the app could
+// have built wrong stays reportable behind the hook rule.
+func TestReleaseDeleteHookCreateFailureKeepsItsVerdict(t *testing.T) {
+	jobs := schema.GroupResource{Group: "batch", Resource: "jobs"}
+	for name, tt := range map[string]struct {
+		createErr error
+		expected  bool
+	}{
+		"denied by the cluster":            {apierrors.NewForbidden(jobs, "demo-hook", errors.New("quota exceeded")), true},
+		"request the server cannot accept": {apierrors.NewGenericServerResponse(415, "create", jobs, "demo-hook", "", 0, false), false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := storage.Init(driver.NewMemory())
+			rel := buildTestRelease("demo", "default", 1, time.Now().Add(-2*time.Hour), time.Now().Add(-time.Hour))
+			hookedRelease(rel, release.HookPreDelete)
+			require.NoError(t, store.Create(rel))
+			logger := &recordingHelmLogger{}
+			service := helmServiceOver(store, failingHookKubeClient{createErr: tt.createErr})
+			service.deps.Common.Logger = logger
+
+			err := service.DeleteRelease("default", "demo")
+
+			require.ErrorIs(t, err, tt.createErr)
+			require.Equal(t, tt.expected, errorstatus.Classify(err).Expected)
+			require.Equal(t, tt.expected, errorstatus.Classify(logger.cause).Expected)
+		})
+	}
+}
+
+// A delete whose hooks ran fine but which then failed is not hidden behind the
+// hook rule: it stays reportable.
+func TestReleaseDeleteFailureAfterHooksSucceedStaysReportable(t *testing.T) {
+	store := storage.Init(driver.NewMemory())
+	rel := buildTestRelease("demo", "default", 1, time.Now().Add(-2*time.Hour), time.Now().Add(-time.Hour))
+	hookedRelease(rel, release.HookPreDelete)
+	require.NoError(t, store.Create(rel))
+
+	err := helmServiceOver(store, failingHookKubeClient{deleteErr: errors.New("invariant violated")}).DeleteRelease("default", "demo")
+
+	require.Error(t, err)
+	require.False(t, errorstatus.Classify(err).Expected)
 }
 
 func helmServiceOver(store *storage.Storage, kubeClient kube.Interface) *Service {
