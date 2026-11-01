@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hashicorp/go-multierror"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
@@ -642,6 +643,10 @@ func TestReleaseDeleteHookCreateFailureKeepsItsVerdict(t *testing.T) {
 		}{
 			"denied by the cluster":            {apierrors.NewForbidden(jobs, "demo-hook", errors.New("quota exceeded")), true},
 			"request the server cannot accept": {apierrors.NewGenericServerResponse(415, "create", jobs, "demo-hook", "", 0, false), false},
+			// Helm's kube client aggregates one failure per resource with go-multierror.
+			"one of two resources the server cannot accept": {multierror.Append(nil,
+				apierrors.NewForbidden(jobs, "demo-hook", errors.New("quota exceeded")),
+				apierrors.NewGenericServerResponse(415, "create", jobs, "demo-hook-config", "", 0, false)), false},
 		} {
 			t.Run(string(event)+"/"+name, func(t *testing.T) {
 				store := storage.Init(driver.NewMemory())
@@ -659,6 +664,52 @@ func TestReleaseDeleteHookCreateFailureKeepsItsVerdict(t *testing.T) {
 				require.Equal(t, tt.expected, errorstatus.Classify(logger.cause).Expected)
 			})
 		}
+	}
+}
+
+// failingDeleteDriver is release storage whose deletes fail with err.
+type failingDeleteDriver struct {
+	driver.Driver
+	err error
+}
+
+func (d failingDeleteDriver) Delete(string) (*release.Release, error) { return nil, d.err }
+
+// After a post-delete hook fails, Helm still purges the release's records and
+// reports both failures as one. The hook's failure is the chart's, but a purge
+// that failed for the app's own reason stays reportable.
+func TestReleaseDeleteHookFailureKeepsPurgeFailureVerdict(t *testing.T) {
+	secrets := schema.GroupResource{Resource: "secrets"}
+	jobFailed := failingHookKubeClient{hookErr: errors.New("job demo-hook failed: BackoffLimitExceeded")}
+	// A hook the cluster refused is a Kubernetes answer, which alone would make
+	// the whole failure look expected.
+	hookDenied := failingHookKubeClient{createErr: apierrors.NewForbidden(schema.GroupResource{Group: "batch", Resource: "jobs"}, "demo-hook", errors.New("quota exceeded"))}
+	for name, tt := range map[string]struct {
+		hooks    failingHookKubeClient
+		purgeErr error
+		expected bool
+	}{
+		"purge denied by the cluster":                    {jobFailed, apierrors.NewForbidden(secrets, "sh.helm.release.v1.demo.v1", errors.New("denied")), true},
+		"purge request the server cannot accept":         {jobFailed, apierrors.NewGenericServerResponse(415, "delete", secrets, "sh.helm.release.v1.demo.v1", "", 0, false), false},
+		"purge application failure":                      {jobFailed, errors.New("invariant violated"), false},
+		"purge application failure beside a denied hook": {hookDenied, errors.New("invariant violated"), false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			memory := driver.NewMemory()
+			rel := buildTestRelease("demo", "default", 1, time.Now().Add(-2*time.Hour), time.Now().Add(-time.Hour))
+			hookedRelease(rel, release.HookPostDelete)
+			require.NoError(t, storage.Init(memory).Create(rel))
+			store := storage.Init(failingDeleteDriver{Driver: memory, err: tt.purgeErr})
+			logger := &recordingHelmLogger{}
+			service := helmServiceOver(store, tt.hooks)
+			service.deps.Common.Logger = logger
+
+			err := service.DeleteRelease("default", "demo")
+
+			require.Error(t, err)
+			require.Equal(t, tt.expected, errorstatus.Classify(err).Expected)
+			require.Equal(t, tt.expected, errorstatus.Classify(logger.cause).Expected)
+		})
 	}
 }
 

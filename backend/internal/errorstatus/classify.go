@@ -243,6 +243,19 @@ func ClusterOutcome(err error) error {
 	}}
 }
 
+// ApplicationFailure marks err as holding an application failure, for a
+// producer that knows an aggregate includes one beside cluster outcomes or
+// Kubernetes answers that would otherwise make it expected. It is reported;
+// its reason stays as classified.
+func ApplicationFailure(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &statusError{err: err, override: func(status *Status) {
+		status.Expected = false
+	}}
+}
+
 // CredentialsRejected marks err as a request blocked because the cluster's
 // credentials are invalid; the auth overlay owns that state.
 func CredentialsRejected(err error) error {

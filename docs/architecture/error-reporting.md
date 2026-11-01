@@ -325,16 +325,22 @@ expected and never reported.
 - A producer marks work the cluster did not complete with
   `errorstatus.ClusterOutcome`, which keeps the classified reason and message.
   A request-shape rejection anywhere in an error's chain, including any branch
-  of a joined error, is reportable whatever accompanies it, even inside a
-  cluster outcome. Producers: a node debug pod that never starts or whose
-  debugger exits; a shell stream that fails (its writers never fail, so the
-  failure is the remote shell's, the container runtime's, or the
+  of a joined error or a `go-multierror` aggregate (Helm's kube client reports
+  one failure per resource that way), is reportable whatever accompanies it,
+  even inside a cluster outcome. Producers: a node debug pod that never starts
+  or whose debugger exits; a shell stream that fails (its writers never fail,
+  so the failure is the remote shell's, the container runtime's, or the
   connection's); a Helm delete during which a chart hook failed. During an
   uninstall only hooks create objects or wait for them, so the uninstall's
   kube client records those calls' errors: evidence from this run (a hook's
   stored phase can be an earlier run's), kept typed in the chain because Helm
-  flattens post-delete failures into text. A rollback's failed hook is not
-  recognized, so it stays reportable.
+  flattens post-delete failures into text. Helm reports a hook failure
+  together with the failures that followed it, such as purging the release's
+  records, so the uninstall records those too (kube calls and the storage
+  driver). If any of them is reportable on its own, the producer marks the
+  whole failure `errorstatus.ApplicationFailure`, which is reported: a
+  Kubernetes answer inside it would otherwise make it expected. A rollback's
+  failed hook is not recognized, so it stays reportable.
 - Resource services call `LogResourceRequestFailure` /
   `LogDynamicResourceRequestFailure` (via
   `common.Dependencies.LogRequestFailure`): cancellation logs at `DEBUG`, other

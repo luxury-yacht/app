@@ -186,9 +186,9 @@ func (s *Service) DeleteRelease(namespace, name string) error {
 	}
 
 	client := action.NewUninstall(actionConfig)
-	hooks := recordHookFailures(actionConfig)
+	failures := recordUninstallFailures(actionConfig)
 	if _, err := client.Run(name); err != nil {
-		err = s.logDeleteError(chartHookOutcome(err, hooks), failure, name)
+		err = s.logDeleteError(chartHookOutcome(err, failures), failure, name)
 		return fmt.Errorf("failed to delete Helm release: %w", err)
 	}
 

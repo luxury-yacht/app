@@ -73,6 +73,10 @@ func isRequestShapeRejection(err error) bool {
 	switch wrapped := err.(type) {
 	case interface{ Unwrap() []error }:
 		return slices.ContainsFunc(wrapped.Unwrap(), isRequestShapeRejection)
+	// go-multierror (Helm's kube client aggregates per-resource failures with
+	// it) unwraps to a chain that exposes each failure only through As and Is.
+	case interface{ WrappedErrors() []error }:
+		return slices.ContainsFunc(wrapped.WrappedErrors(), isRequestShapeRejection)
 	case interface{ Unwrap() error }:
 		return isRequestShapeRejection(wrapped.Unwrap())
 	}
