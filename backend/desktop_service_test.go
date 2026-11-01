@@ -38,10 +38,14 @@ func (f *recordingFavoritesCommands) AddFavorite(favorite Favorite) (Favorite, e
 	return favorite, nil
 }
 
-func (*recordingFavoritesCommands) DeleteFavorite(string) error       { return nil }
-func (*recordingFavoritesCommands) GetFavorites() ([]Favorite, error) { return nil, nil }
-func (*recordingFavoritesCommands) SetFavoriteOrder([]string) error   { return nil }
-func (*recordingFavoritesCommands) UpdateFavorite(Favorite) error     { return nil }
+func (*recordingFavoritesCommands) DeleteFavorite(string) error            { return nil }
+func (*recordingFavoritesCommands) GetFavorites() ([]Favorite, error)      { return nil, nil }
+func (*recordingFavoritesCommands) GetFavoriteClusters() ([]string, error) { return nil, nil }
+func (*recordingFavoritesCommands) SetClusterFavorite(string, bool) ([]string, error) {
+	return nil, nil
+}
+func (*recordingFavoritesCommands) SetFavoriteOrder([]string) error { return nil }
+func (*recordingFavoritesCommands) UpdateFavorite(Favorite) error   { return nil }
 
 func TestDesktopServiceDelegatesLifecycleHTTPAndCommands(t *testing.T) {
 	lifecycle := &recordingDesktopLifecycle{}

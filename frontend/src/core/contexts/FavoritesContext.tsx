@@ -29,11 +29,14 @@ import {
 } from '@/core/navigation/favoriteRoute';
 import type { Favorite } from '@/core/persistence/favorites';
 import {
+  getFavoriteClusters,
   hydrateFavorites,
   addFavorite as persistAddFavorite,
   deleteFavorite as persistDeleteFavorite,
+  setClusterFavorite as persistSetClusterFavorite,
   updateFavorite as persistUpdateFavorite,
   setFavoriteOrder,
+  subscribeFavoriteClusters,
   subscribeFavorites,
 } from '@/core/persistence/favorites';
 import {
@@ -50,6 +53,9 @@ interface FavoritesContextType {
   updateFavorite: (fav: Favorite) => Promise<void>;
   deleteFavorite: (id: string) => Promise<void>;
   reorderFavorites: (ids: string[]) => Promise<void>;
+  /** Favorite clusters as kubeconfig selections (`<kubeconfig path>:<context>`). */
+  favoriteClusters: readonly string[];
+  setClusterFavorite: (selection: string, favorite: boolean) => Promise<void>;
   /** Set by navigateToFavorite — the favorite being navigated to. Views read this
    *  on mount to restore saved filter/table state, then clear it. */
   pendingFavorite: Favorite | null;
@@ -157,6 +163,7 @@ const applyFavoriteNavigation = (
 
 export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }) => {
   const [favorites, setFavorites] = useState<Favorite[]>([]);
+  const [favoriteClusters, setFavoriteClusters] = useState<readonly string[]>([]);
   const [pendingNavigation, setPendingNavigation] = useState<{
     favorite: Favorite;
     phase: 'waiting' | 'restoring';
@@ -197,6 +204,7 @@ export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }
     void hydrateFavorites().then((favs) => {
       if (active) {
         setFavorites(favs);
+        setFavoriteClusters(getFavoriteClusters());
       }
     });
     return () => {
@@ -211,6 +219,7 @@ export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }
       setFavorites(favs);
     });
   }, []);
+  useEffect(() => subscribeFavoriteClusters(setFavoriteClusters), []);
 
   const readyFavorite =
     pendingFavorite &&
@@ -251,11 +260,13 @@ export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }
       updateFavorite: persistUpdateFavorite,
       deleteFavorite: persistDeleteFavorite,
       reorderFavorites: setFavoriteOrder,
+      favoriteClusters,
+      setClusterFavorite: persistSetClusterFavorite,
       pendingFavorite,
       favoriteToRestore,
       setPendingFavorite,
     }),
-    [favorites, pendingFavorite, favoriteToRestore, setPendingFavorite]
+    [favorites, favoriteClusters, pendingFavorite, favoriteToRestore, setPendingFavorite]
   );
 
   return <FavoritesContext.Provider value={value}>{children}</FavoritesContext.Provider>;

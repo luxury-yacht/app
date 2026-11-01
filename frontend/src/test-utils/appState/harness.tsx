@@ -311,6 +311,7 @@ interface Session {
   kubeconfigs: KubeconfigInfo[];
   clusters: Map<string, WorkspaceClusterState>;
   workspace: { selectedKubeconfigs: string[]; visibleClusterId: string };
+  favoriteClusters: string[];
   settings: Partial<AppSettings>;
   denials: PermissionDenial[];
   decide: ((query: PermissionQuery) => PermissionDecision) | null;
@@ -707,6 +708,18 @@ const answerBootRpcs = (session: Session): void => {
   rpc.answer('ListShellSessions', () => []);
   rpc.answer('ListPortForwards', () => []);
   rpc.answer('GetFavorites', () => []);
+  rpc.answer('GetFavoriteClusters', () => [...session.favoriteClusters]);
+  // Mirrors backend/favorites_service_persistence.go SetClusterFavorite: a new
+  // favorite is appended, an unfavorited one removed, and the list returned.
+  rpc.answer('SetClusterFavorite', (selection, favorite) => {
+    const others = session.favoriteClusters.filter((value) => value !== selection);
+    if (!favorite) {
+      session.favoriteClusters = others;
+    } else if (others.length === session.favoriteClusters.length) {
+      session.favoriteClusters = [...others, selection];
+    }
+    return [...session.favoriteClusters];
+  });
   rpc.answer('GetClusterTabOrder', () => []);
   rpc.answer('GetGridTablePersistence', () => ({}));
   // Tables save their layout 250 ms after a change (useGridTablePersistence.ts).
@@ -922,6 +935,7 @@ export const installAppStateHarness = (
       kubeconfigs: [],
       clusters: new Map(),
       workspace: { selectedKubeconfigs: [], visibleClusterId: '' },
+      favoriteClusters: [],
       settings: {},
       denials: [],
       decide: null,

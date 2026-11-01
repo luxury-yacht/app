@@ -13,12 +13,14 @@ export function ClusterPanelsMenu({
   position,
   onClose,
   onCloseCluster,
+  favoriteAction,
   orderActions = [],
 }: Readonly<{
   clusterId: string;
   position: { x: number; y: number };
   onClose: () => void;
   onCloseCluster: () => void;
+  favoriteAction?: ContextMenuItem;
   orderActions?: ContextMenuItem[];
 }>) {
   const windowName = getWindowIdentity();
@@ -59,6 +61,7 @@ export function ClusterPanelsMenu({
       },
     },
     { divider: true },
+    ...(favoriteAction ? [favoriteAction] : []),
     { label: 'Close', icon: <CloseIcon width={16} height={16} />, onClick: onCloseCluster },
     ...(orderActions.length ? [{ divider: true }, ...orderActions] : []),
   ];

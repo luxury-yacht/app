@@ -286,6 +286,19 @@ describe('the kubeconfig picker', () => {
     expect(contextLabels()).toEqual(['alpha', 'bravo', 'charlie']);
   });
 
+  it('lists favorite clusters first, each group by context name', async () => {
+    dev = openCluster('zfile', 'charlie');
+    const alpha = openCluster('afile', 'alpha', {}, { open: false });
+    openCluster('mfile', 'bravo', {}, { open: false });
+    const delta = openCluster('dfile', 'delta', {}, { open: false });
+    app.backend.answer('GetFavoriteClusters', () => [delta.selection, alpha.selection]);
+    await showPalette();
+
+    await menu('open-cluster');
+
+    expect(contextLabels()).toEqual(['alpha', 'delta', 'bravo', 'charlie']);
+  });
+
   it('opens a closed context as a new cluster tab, and switches to an open one without closing any', async () => {
     dev = openCluster('dev', 'alpha');
     const prod = openCluster('prod', 'beta', {}, { open: false });

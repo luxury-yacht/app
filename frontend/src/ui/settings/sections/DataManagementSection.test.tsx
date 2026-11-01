@@ -22,9 +22,12 @@ import DataManagementSection from './DataManagementSection';
 const app = installAppStateHarness();
 let view: MountedApp;
 let favoriteNames: string[] = [];
+let favoriteClusters: readonly string[] = [];
 
 function FavoritesProbe() {
-  favoriteNames = useFavorites().favorites.map((favorite) => favorite.name);
+  const favorites = useFavorites();
+  favoriteNames = favorites.favorites.map((favorite) => favorite.name);
+  favoriteClusters = favorites.favoriteClusters;
   return null;
 }
 
@@ -59,6 +62,7 @@ const click = async (target: HTMLElement) => {
 
 beforeEach(async () => {
   favoriteNames = [];
+  favoriteClusters = [];
   app.preferences({ errorReportingEnabled: false });
   // Mirrors backend/preferences_settings.go UpdateAppPreferences.
   app.backend.answer('UpdateAppPreferences', (request) => ({
@@ -129,11 +133,14 @@ describe('DataManagementSection', () => {
     expect(errorReporting().getAttribute('aria-checked')).toBe('true');
   });
 
-  it('imports favorites and the app’s favorites list shows them', async () => {
+  it('imports favorites and the app’s favorites list and favorite clusters show them', async () => {
     let saved: backend.Favorite[] = [];
+    let savedClusters: string[] = [];
     app.backend.answer('GetFavorites', () => saved);
+    app.backend.answer('GetFavoriteClusters', () => savedClusters);
     app.backend.answer('ImportFavorites', () => {
       saved = [partialModelFixture<backend.Favorite>({ id: 'fav-1', name: 'Prod pods', order: 0 })];
+      savedClusters = ['/kube/config:prod'];
       return chosen;
     });
 
@@ -141,6 +148,7 @@ describe('DataManagementSection', () => {
 
     expect(status()).toBe('Favorites imported.');
     expect(favoriteNames).toEqual(['Prod pods']);
+    expect(favoriteClusters).toEqual(['/kube/config:prod']);
   });
 
   it.each([

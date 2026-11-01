@@ -17,8 +17,8 @@ type dataManagementPreferences interface {
 
 type dataManagementFavorites interface {
 	Reset() error
-	exportSnapshot() ([]Favorite, error)
-	importSnapshot([]Favorite) error
+	exportSnapshot() ([]Favorite, []string, error)
+	importSnapshot([]Favorite, []string) error
 }
 
 type dataManagementResetter interface {
