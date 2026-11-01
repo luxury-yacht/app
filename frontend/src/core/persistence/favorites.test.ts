@@ -22,6 +22,7 @@ import {
 
 const mockApp = vi.hoisted(() => ({
   GetFavorites: vi.fn(),
+  GetFavoriteClusters: vi.fn(),
   AddFavorite: vi.fn(),
   UpdateFavorite: vi.fn(),
   DeleteFavorite: vi.fn(),
@@ -30,6 +31,7 @@ const mockApp = vi.hoisted(() => ({
 
 vi.mock('@core/backend-api', () => ({
   GetFavorites: (...args: unknown[]) => mockApp.GetFavorites(...args),
+  GetFavoriteClusters: (...args: unknown[]) => mockApp.GetFavoriteClusters(...args),
   AddFavorite: (...args: unknown[]) => mockApp.AddFavorite(...args),
   UpdateFavorite: (...args: unknown[]) => mockApp.UpdateFavorite(...args),
   DeleteFavorite: (...args: unknown[]) => mockApp.DeleteFavorite(...args),
@@ -38,6 +40,7 @@ vi.mock('@core/backend-api', () => ({
 
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => true,
+  emitBroadcastEvent: () => Promise.resolve(true),
 }));
 
 const makeFavorite = (overrides: Partial<Favorite> = {}): Favorite => ({

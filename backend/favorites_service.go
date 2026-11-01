@@ -2,6 +2,7 @@ package backend
 
 import (
 	"fmt"
+	"slices"
 	"sync"
 )
 
@@ -12,26 +13,31 @@ type FavoritesService struct {
 
 func NewFavoritesService() *FavoritesService { return &FavoritesService{} }
 
-func (s *FavoritesService) exportSnapshot() ([]Favorite, error) {
+// exportSnapshot returns the view favorites and favorite clusters.
+func (s *FavoritesService) exportSnapshot() ([]Favorite, []string, error) {
 	if s == nil {
-		return nil, fmt.Errorf("favorites service is not available")
+		return nil, nil, fmt.Errorf("favorites service is not available")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state, err := s.loadFavoritesFile()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return cloneFavorites(state.Favorites), nil
+	return cloneFavorites(state.Favorites), slices.Clone(state.Clusters), nil
 }
 
-func (s *FavoritesService) importSnapshot(favorites []Favorite) error {
+// importSnapshot replaces the view favorites and favorite clusters.
+func (s *FavoritesService) importSnapshot(favorites []Favorite, clusters []string) error {
 	if s == nil {
 		return fmt.Errorf("favorites service is not available")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.saveFavoritesFile(&favoritesFile{Favorites: cloneFavorites(favorites)})
+	return s.saveFavoritesFile(&favoritesFile{
+		Favorites: cloneFavorites(favorites),
+		Clusters:  normalizeKubeconfigSelections(clusters),
+	})
 }
 
 func (s *FavoritesService) Reset() error {

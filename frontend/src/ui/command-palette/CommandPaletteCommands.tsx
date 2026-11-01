@@ -146,18 +146,39 @@ const getKubeconfigDescription = (config: KubeconfigEntry) => {
   return config.name !== config.context ? `From ${config.name}` : 'Switch to this context';
 };
 
+const kubeconfigSelection = (config: KubeconfigEntry) => `${config.path}:${config.context}`;
+
+// Favorite clusters first, then by context (the primary identity users read),
+// then filename to keep duplicate context names deterministic.
+const sortKubeconfigs = (
+  kubeconfigs: KubeconfigEntry[],
+  favoriteClusters: readonly string[]
+): KubeconfigEntry[] => {
+  const isFavorite = (config: KubeconfigEntry) =>
+    favoriteClusters.includes(kubeconfigSelection(config));
+  return [...kubeconfigs].sort(
+    (a, b) =>
+      Number(isFavorite(b)) - Number(isFavorite(a)) ||
+      a.context.localeCompare(b.context) ||
+      a.name.localeCompare(b.name)
+  );
+};
+
 const buildKubeconfigCommand = (
   config: KubeconfigEntry,
   selectedKubeconfigs: string[],
+  favoriteClusters: readonly string[],
   setActiveKubeconfig: KubeconfigContextValue['setActiveKubeconfig'],
   openKubeconfig: KubeconfigContextValue['openKubeconfig']
 ): Command => {
-  const configValue = `${config.path}:${config.context}`;
+  const configValue = kubeconfigSelection(config);
   const isActive = selectedKubeconfigs.includes(configValue);
   return {
     id: `kubeconfig-${configValue}`,
     label: `${config.name}:${config.context}`,
-    renderLabel: <KubeconfigContextLabel config={config} />,
+    renderLabel: (
+      <KubeconfigContextLabel config={config} favorite={favoriteClusters.includes(configValue)} />
+    ),
     description: getKubeconfigDescription(config),
     category: 'Kubeconfigs',
     icon: !config.invalid && isActive ? '✓' : undefined,
@@ -189,7 +210,7 @@ export function useCommandPaletteCommands() {
     setActiveKubeconfig,
     getClusterMeta,
   } = useKubeconfig();
-  const { favorites, setPendingFavorite } = useFavorites();
+  const { favorites, favoriteClusters, setPendingFavorite } = useFavorites();
   const { mode } = useAppearanceMode();
   const { zoomIn, zoomOut, resetZoom, zoomLevel } = useZoom();
   const autoRefreshEnabled = usePreference('autoRefreshEnabled');
@@ -606,17 +627,16 @@ export function useCommandPaletteCommands() {
       return [];
     }
 
-    // Order by context (the primary identity users read), then filename to keep
-    // duplicate context names deterministic.
-    const sorted = [...kubeconfigs].sort((a, b) => {
-      const byContext = a.context.localeCompare(b.context);
-      return byContext !== 0 ? byContext : a.name.localeCompare(b.name);
-    });
-
-    return sorted.map((config) =>
-      buildKubeconfigCommand(config, selectedKubeconfigs, setActiveKubeconfig, openKubeconfig)
+    return sortKubeconfigs(kubeconfigs, favoriteClusters).map((config) =>
+      buildKubeconfigCommand(
+        config,
+        selectedKubeconfigs,
+        favoriteClusters,
+        setActiveKubeconfig,
+        openKubeconfig
+      )
     );
-  }, [kubeconfigs, openKubeconfig, selectedKubeconfigs, setActiveKubeconfig]);
+  }, [favoriteClusters, kubeconfigs, openKubeconfig, selectedKubeconfigs, setActiveKubeconfig]);
 
   // Build commands from saved favorites so they appear as a searchable group.
   const favoriteCommands: Command[] = useMemo(

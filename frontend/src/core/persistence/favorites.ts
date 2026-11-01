@@ -18,11 +18,13 @@ import { requestAppState } from '@/core/app-state-access';
 import {
   AddFavorite,
   DeleteFavorite,
+  GetFavoriteClusters,
   GetFavorites,
+  SetClusterFavorite,
   SetFavoriteOrder,
   UpdateFavorite,
 } from '@/core/backend-api';
-import { desktopRuntimeAvailable } from '@/core/desktop-runtime';
+import { desktopRuntimeAvailable, emitBroadcastEvent } from '@/core/desktop-runtime';
 import { eventBus } from '@/core/events';
 import { reportOperationalError } from '@/utils/errorHandler';
 
@@ -160,57 +162,100 @@ const toBackendFavorite = (favorite: Favorite): backend.Favorite => ({
 // ---------- Internal state ----------
 
 let cachedFavorites: Favorite[] = [];
+// Favorite clusters as kubeconfig selections (`<kubeconfig path>:<context>`).
+let cachedFavoriteClusters: string[] = [];
 let hydrated = false;
 let hydrationPromise: Promise<void> | null = null;
+// Moves with every saved change and forced reload, so a read of favorites.json
+// that overlaps one is read again instead of replacing newer state.
+let favoritesRevision = 0;
 
 const emitChanged = () => {
   eventBus.emit('favorites:changed', [...cachedFavorites]);
 };
 
+const emitFavoriteClustersChanged = () => {
+  eventBus.emit('favorites:clusters-changed', [...cachedFavoriteClusters]);
+};
+
+const toFavoriteClusters = (clusters: string[] | null): string[] =>
+  Array.isArray(clusters) ? clusters : [];
+
+const readLatestFavorites = async (): Promise<void> => {
+  const revision = favoritesRevision;
+  const [result, clusters] = await requestAppState({
+    resource: 'favorites',
+    adapter: 'persistence-read',
+    read: () => Promise.all([GetFavorites(), GetFavoriteClusters()]),
+  });
+  if (revision !== favoritesRevision) {
+    // Favorites changed while favorites.json was read; read it again.
+    return readLatestFavorites();
+  }
+  cachedFavorites = Array.isArray(result) ? result.map(fromBackendFavorite) : [];
+  cachedFavoriteClusters = toFavoriteClusters(clusters);
+  emitChanged();
+  emitFavoriteClustersChanged();
+};
+
+const hydrateLatestFavorites = async (): Promise<void> => {
+  if (!desktopRuntimeAvailable()) {
+    hydrated = true;
+    return;
+  }
+  try {
+    await readLatestFavorites();
+  } catch (error) {
+    reportOperationalError(error, { source: 'Favorites', action: 'hydrateFavorites' });
+  } finally {
+    hydrated = true;
+  }
+};
+
+/**
+ * Records a saved change: overlapping reads start over, and every app window
+ * reloads favorites.json. A failed broadcast is reported, not thrown, because
+ * the change itself was saved.
+ */
+const publishSavedChange = async (): Promise<void> => {
+  favoritesRevision++;
+  try {
+    await emitBroadcastEvent('favorites:library-changed', undefined);
+  } catch (error) {
+    reportOperationalError(error, { source: 'Favorites', action: 'broadcast-favorites-change' });
+  }
+};
+
 // ---------- Public API ----------
 
 /**
- * Hydrates the favorites cache from the Go backend.
- * Deduplicates concurrent calls and skips if already hydrated unless `force` is set.
+ * Hydrates the favorites and favorite-clusters caches from the Go backend; both
+ * live in favorites.json, so a forced reload (after an import, or another
+ * window's change) refreshes both. Concurrent calls share one read; a forced
+ * call makes a read already in flight start over.
  */
 export const hydrateFavorites = async (options?: { force?: boolean }): Promise<Favorite[]> => {
   if (hydrated && !options?.force) {
     return cachedFavorites;
   }
-  if (hydrationPromise && !options?.force) {
-    await hydrationPromise;
-    return cachedFavorites;
+  if (options?.force) {
+    favoritesRevision++;
   }
-
-  hydrationPromise = (async () => {
-    if (!desktopRuntimeAvailable()) {
-      hydrated = true;
-      return;
-    }
-    try {
-      const result = await requestAppState({
-        resource: 'favorites',
-        adapter: 'persistence-read',
-        read: () => GetFavorites(),
-      });
-      cachedFavorites = Array.isArray(result) ? result.map(fromBackendFavorite) : [];
-      if (options?.force) {
-        emitChanged();
-      }
-    } catch (error) {
-      reportOperationalError(error, { source: 'Favorites', action: 'hydrateFavorites' });
-    } finally {
-      hydrated = true;
-    }
-  })();
-
-  try {
-    await hydrationPromise;
-  } finally {
+  hydrationPromise ??= hydrateLatestFavorites().finally(() => {
     hydrationPromise = null;
-  }
-
+  });
+  await hydrationPromise;
   return cachedFavorites;
+};
+
+/**
+ * Reloads favorites.json after an import replaced it, and tells every app
+ * window to reload it too.
+ */
+export const reloadImportedFavorites = async (): Promise<Favorite[]> => {
+  const favorites = await hydrateFavorites({ force: true });
+  await publishSavedChange();
+  return favorites;
 };
 
 /** Returns the cached favorites list synchronously. */
@@ -225,6 +270,7 @@ export const addFavorite = async (fav: Favorite): Promise<Favorite> => {
   cachedFavorites = [...cachedFavorites, created];
   hydrated = true;
   emitChanged();
+  await publishSavedChange();
   return created;
 };
 
@@ -236,6 +282,7 @@ export const updateFavorite = async (fav: Favorite): Promise<void> => {
   await UpdateFavorite(toBackendFavorite(fav));
   cachedFavorites = cachedFavorites.map((existing) => (existing.id === fav.id ? fav : existing));
   emitChanged();
+  await publishSavedChange();
 };
 
 /** Deletes a favorite via the backend, removes it from the cache, and emits a change event. */
@@ -246,6 +293,7 @@ export const deleteFavorite = async (id: string): Promise<void> => {
   await DeleteFavorite(id);
   cachedFavorites = cachedFavorites.filter((fav) => fav.id !== id);
   emitChanged();
+  await publishSavedChange();
 };
 
 /** Reorders favorites via the backend, reorders the cache, and emits a change event. */
@@ -269,7 +317,25 @@ export const setFavoriteOrder = async (ids: string[]): Promise<void> => {
 
   cachedFavorites = reordered;
   emitChanged();
+  await publishSavedChange();
 };
+
+/** Returns the cached favorite clusters' kubeconfig selections synchronously. */
+export const getFavoriteClusters = (): string[] => cachedFavoriteClusters;
+
+/** Adds or removes a favorite cluster via the backend and adopts the saved list. */
+export const setClusterFavorite = async (selection: string, favorite: boolean): Promise<void> => {
+  if (!desktopRuntimeAvailable()) {
+    throw new Error('Backend not available');
+  }
+  cachedFavoriteClusters = toFavoriteClusters(await SetClusterFavorite(selection, favorite));
+  emitFavoriteClustersChanged();
+  await publishSavedChange();
+};
+
+/** Subscribes to favorite-cluster changes. Returns an unsubscribe function. */
+export const subscribeFavoriteClusters = (handler: (clusters: string[]) => void): (() => void) =>
+  eventBus.on('favorites:clusters-changed', handler);
 
 /** Subscribes to favorites changes. Returns an unsubscribe function. */
 export const subscribeFavorites = (handler: (favs: Favorite[]) => void): (() => void) => {
@@ -279,6 +345,8 @@ export const subscribeFavorites = (handler: (favs: Favorite[]) => void): (() => 
 /** Test helper to clear cached state between runs. */
 export const resetFavoritesCacheForTesting = (): void => {
   cachedFavorites = [];
+  cachedFavoriteClusters = [];
   hydrated = false;
   hydrationPromise = null;
+  favoritesRevision = 0;
 };

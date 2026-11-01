@@ -20,6 +20,7 @@ const (
 	kubeconfigAvailableChangedEventName = "kubeconfig:available-changed"
 	appearanceModeChangedEventName      = "settings:appearance-mode-changed"
 	preferencesChangedEventName         = "settings:preferences-changed"
+	favoritesLibraryChangedEventName    = "favorites:library-changed"
 )
 
 type AppearanceModeChangedEvent struct {
@@ -83,6 +84,7 @@ func init() {
 	application.RegisterEvent[application.Void](kubeconfigAvailableChangedEventName)
 	application.RegisterEvent[AppearanceModeChangedEvent](appearanceModeChangedEventName)
 	application.RegisterEvent[application.Void](preferencesChangedEventName)
+	application.RegisterEvent[application.Void](favoritesLibraryChangedEventName)
 
 	application.RegisterEvent[application.Void]("debug:open-inspector")
 	application.RegisterEvent[application.Void]("debug:toggle-error-overlay")

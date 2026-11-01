@@ -249,6 +249,10 @@ export function GetContainerLogsScopeContainers(clusterID: string, scope: string
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetContainerLogsScopeContainers", clusterID, scope);
 }
 
+export function GetFavoriteClusters(): $CancellablePromise<string[] | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetFavoriteClusters");
+}
+
 export function GetFavorites(): $CancellablePromise<$models.Favorite[] | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.GetFavorites");
 }
@@ -466,6 +470,10 @@ export function SetAppLogsPanelVisible(visible: boolean): $CancellablePromise<vo
 
 export function SetClusterAllowedNamespaces(clusterID: string, namespaces: string[] | null): $CancellablePromise<string[] | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.SetClusterAllowedNamespaces", clusterID, namespaces);
+}
+
+export function SetClusterFavorite(selection: string, favorite: boolean): $CancellablePromise<string[] | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.SetClusterFavorite", selection, favorite);
 }
 
 export function SetClusterTabOrder(order: string[] | null): $CancellablePromise<void> {

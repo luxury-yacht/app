@@ -117,8 +117,8 @@ func (s *UIStateStore) savePersistenceFile(state *persistenceFile) error {
 	return nil
 }
 
-// normalizeClusterTabOrder removes empty entries and duplicates while preserving order.
-func normalizeClusterTabOrder(order []string) []string {
+// normalizeKubeconfigSelections removes empty entries and duplicates while preserving order.
+func normalizeKubeconfigSelections(order []string) []string {
 	normalized := make([]string, 0, len(order))
 	seen := make(map[string]struct{}, len(order))
 	for _, entry := range order {
@@ -173,7 +173,7 @@ func (s *UIStateStore) GetClusterTabOrder() ([]string, error) {
 
 // SetClusterTabOrder stores the persisted cluster tab order.
 func (s *UIStateStore) SetClusterTabOrder(order []string) error {
-	normalized := normalizeClusterTabOrder(order)
+	normalized := normalizeKubeconfigSelections(order)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()

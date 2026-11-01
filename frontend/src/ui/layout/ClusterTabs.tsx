@@ -8,6 +8,7 @@ import { reportOperationalError } from '@/utils/errorHandler';
  * Cluster tab strip for multi-cluster navigation.
  */
 
+import { useFavorites } from '@core/contexts/FavoritesContext';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import {
   getClusterTabOrder,
@@ -17,6 +18,8 @@ import {
   subscribeClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import { FavoriteFilledIcon, FavoriteOutlineIcon } from '@shared/components/icons/FavoriteIcons';
 import { CloseIcon, PlusIcon } from '@shared/components/icons/SharedIcons';
 import { type TabDescriptor, Tabs } from '@shared/components/tabs';
 import { useTabDragSourceFactory, useTabDropTarget } from '@shared/components/tabs/dragCoordinator';
@@ -44,6 +47,30 @@ type ClusterTab = {
   selection: string;
 };
 
+/** The tab menu's Favorite/Unfavorite item for one cluster. */
+const clusterFavoriteMenuItem = (
+  selection: string,
+  clusterId: string,
+  favoriteClusters: readonly string[],
+  setClusterFavorite: (selection: string, favorite: boolean) => Promise<void>
+): ContextMenuItem => {
+  const favorite = favoriteClusters.includes(selection);
+  const Icon = favorite ? FavoriteFilledIcon : FavoriteOutlineIcon;
+  return {
+    label: favorite ? 'Unfavorite' : 'Favorite',
+    icon: <Icon width={16} height={16} />,
+    onClick: () => {
+      void setClusterFavorite(selection, !favorite).catch((error) =>
+        reportOperationalError(error, {
+          source: 'ClusterTabs',
+          action: 'set-cluster-favorite',
+          clusterId,
+        })
+      );
+    },
+  };
+};
+
 interface ClusterTabsProps {
   /** Opens the Open Cluster modal. Wired from AppLayout. */
   onOpenCluster?: () => void;
@@ -61,6 +88,7 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
     getClusterMeta,
     closeKubeconfig,
   } = useKubeconfig();
+  const { favoriteClusters, setClusterFavorite } = useFavorites();
   const [panelMenu, setPanelMenu] = useState<{
     clusterId: string;
     selection: string;
@@ -313,6 +341,12 @@ const ClusterTabs: React.FC<ClusterTabsProps> = ({ onOpenCluster }) => {
           position={panelMenu.position}
           onClose={() => setPanelMenu(null)}
           onCloseCluster={() => closeClusterSelection(panelMenu.selection)}
+          favoriteAction={clusterFavoriteMenuItem(
+            panelMenu.selection,
+            panelMenu.clusterId,
+            favoriteClusters,
+            setClusterFavorite
+          )}
           orderActions={tabReorderMenuItems(mergedOrder, panelMenu.selection, (index) => {
             const next = mergedOrder.filter((id) => id !== panelMenu.selection);
             next.splice(index, 0, panelMenu.selection);

@@ -208,6 +208,7 @@ describe('ClusterTabs', () => {
       expect(await openMenu(target)).toEqual([
         'Open in new window',
         'Move to new window',
+        'Favorite',
         'Close',
         ...moves,
       ]);
@@ -245,6 +246,67 @@ describe('ClusterTabs', () => {
     expect(app.backend.calls('CloseClusterView')).toEqual([[app.windowName, staging.clusterId]]);
     expect(owners().kubeconfig.selectedClusterId).toBe(production.clusterId);
     expect(menu()).toBeNull();
+  });
+
+  it('favorites a cluster from its tab menu, listing it first in the kubeconfig picker until unfavorited', async () => {
+    const [, bravo] = openClusters('alpha', 'bravo');
+    view = await app.mountApp();
+    const pickerContexts = () =>
+      Array.from(
+        document.querySelectorAll('.command-palette [role="option"] .kubeconfig-label__context')
+      ).map((context) => context.textContent);
+    const closePicker = async () => {
+      await press('Escape');
+      await app.settle();
+    };
+
+    await openMenu('bravo');
+    await choose('Favorite');
+    expect(app.backend.calls('SetClusterFavorite')).toEqual([[bravo.selection, true]]);
+    await click(buttonNamed('Open Cluster'));
+    expect(pickerContexts()).toEqual(['bravo', 'alpha']);
+    await closePicker();
+
+    expect(await openMenu('bravo')).toContain('Unfavorite');
+    await choose('Unfavorite');
+    expect(app.backend.calls('SetClusterFavorite')).toEqual([
+      [bravo.selection, true],
+      [bravo.selection, false],
+    ]);
+    await click(buttonNamed('Open Cluster'));
+    expect(pickerContexts()).toEqual(['alpha', 'bravo']);
+  });
+
+  it('tells the other windows when it favorites a cluster, and reloads when another window does', async () => {
+    const [alpha, bravo] = openClusters('alpha', 'bravo');
+    view = await app.mountApp();
+
+    await openMenu('bravo');
+    await choose('Favorite');
+    expect(app.events.emitted('favorites:library-changed')).toHaveLength(1);
+
+    // Another window favorites alpha.
+    app.backend.answer('GetFavoriteClusters', () => [bravo.selection, alpha.selection]);
+    await act(async () => {
+      app.events.emit('favorites:library-changed');
+    });
+    await app.settle();
+
+    expect(await openMenu('alpha')).toContain('Unfavorite');
+  });
+
+  it('keeps a favorite chosen while the saved favorites are still loading', async () => {
+    const [, bravo] = openClusters('alpha', 'bravo');
+    const release = app.backend.hold('GetFavorites');
+    view = await app.mountApp();
+
+    await openMenu('bravo');
+    await choose('Favorite');
+    await act(async () => release());
+    await app.settle();
+
+    expect(app.backend.calls('SetClusterFavorite')).toEqual([[bravo.selection, true]]);
+    expect(await openMenu('bravo')).toContain('Unfavorite');
   });
 
   it('dismisses a tab’s menu when its cluster closes and does not revive it on reopen', async () => {

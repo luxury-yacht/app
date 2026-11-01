@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 )
 
 func TestAppFavoritesRoundTrip(t *testing.T) {
@@ -62,6 +64,46 @@ func TestAppFavoritesRoundTrip(t *testing.T) {
 	favs, err = app.Favorites.GetFavorites()
 	require.NoError(t, err)
 	require.Empty(t, favs)
+}
+
+// Favorite clusters live in favorites.json beside the view favorites: toggling
+// one returns the saved list, view favorite edits keep it, and a new service
+// reads it back.
+func TestAppFavoriteClustersPersistBesideViewFavorites(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newPersistenceTestFixture()
+
+	clusters, err := app.Favorites.GetFavoriteClusters()
+	require.NoError(t, err)
+	require.Empty(t, clusters)
+
+	clusters, err = app.Favorites.SetClusterFavorite(" /kube/config:prod ", true)
+	require.NoError(t, err)
+	require.Equal(t, []string{"/kube/config:prod"}, clusters)
+	clusters, err = app.Favorites.SetClusterFavorite("/kube/config:prod", true)
+	require.NoError(t, err)
+	require.Equal(t, []string{"/kube/config:prod"}, clusters)
+	clusters, err = app.Favorites.SetClusterFavorite("/kube/other:dev", true)
+	require.NoError(t, err)
+	require.Equal(t, []string{"/kube/config:prod", "/kube/other:dev"}, clusters)
+
+	_, err = app.Favorites.SetClusterFavorite("  ", true)
+	status := errorstatus.Classify(err)
+	require.Equal(t, errorstatus.ReasonBadRequest, status.Reason)
+
+	_, err = app.Favorites.AddFavorite(Favorite{Name: "Nodes", ViewType: "cluster", View: "nodes"})
+	require.NoError(t, err)
+
+	reloaded, err := newPersistenceTestFixture().Favorites.GetFavoriteClusters()
+	require.NoError(t, err)
+	require.Equal(t, []string{"/kube/config:prod", "/kube/other:dev"}, reloaded)
+
+	clusters, err = app.Favorites.SetClusterFavorite("/kube/config:prod", false)
+	require.NoError(t, err)
+	require.Equal(t, []string{"/kube/other:dev"}, clusters)
+	favorites, err := app.Favorites.GetFavorites()
+	require.NoError(t, err)
+	require.Len(t, favorites, 1)
 }
 
 func TestAppAddFavoriteRejectsDuplicateName(t *testing.T) {

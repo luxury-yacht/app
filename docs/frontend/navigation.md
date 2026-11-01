@@ -53,6 +53,18 @@ same slot.
 - Reorder ignores repeated and unknown IDs, appends omitted favorites in their
   current relative order, and assigns contiguous positions; backend and
   frontend cache follow the same rule.
+- Favorite clusters are kubeconfig selections (`<kubeconfig path>:<context>`)
+  stored in `favorites.json` beside view favorites, so favorites export,
+  import, and reset include them. The cluster tab menu toggles one through
+  `FavoritesContext`; the command palette lists favorite kubeconfigs first,
+  then by context and file. A favorite whose kubeconfig disappears stays saved
+  and returns to the top when the context is discovered again.
+- Every saved favorites change, view or cluster, broadcasts
+  `favorites:library-changed`; each window then force-reloads both lists, as
+  preferences do with `settings:preferences-changed`. A reload that overlaps a
+  saved change or another forced reload reads `favorites.json` again rather
+  than adopting the older copy. A favorites or settings import reloads the
+  importing window, then broadcasts so every other window reloads too.
 
 ## Sidebar Organization
 

@@ -42,6 +42,9 @@ type favoritesDataFile struct {
 	SchemaVersion int        `json:"schemaVersion"`
 	ExportedAt    time.Time  `json:"exportedAt"`
 	Favorites     []Favorite `json:"favorites"`
+	// Clusters are favorite kubeconfig selections; exports made before
+	// favorite clusters existed omit them.
+	Clusters []string `json:"clusters,omitempty"`
 }
 
 func (c *DataManagementCoordinator) ExportSettings() (DataManagementResult, error) {
@@ -101,7 +104,7 @@ func (c *DataManagementCoordinator) ExportFavorites() (DataManagementResult, err
 	if err := c.requireDataManagementContext(); err != nil {
 		return DataManagementResult{}, err
 	}
-	favorites, err := c.favorites.exportSnapshot()
+	favorites, clusters, err := c.favorites.exportSnapshot()
 	if err != nil {
 		return DataManagementResult{}, fmt.Errorf("load favorites for export: %w", err)
 	}
@@ -110,6 +113,7 @@ func (c *DataManagementCoordinator) ExportFavorites() (DataManagementResult, err
 		SchemaVersion: favoritesDataSchemaVersion,
 		ExportedAt:    time.Now().UTC(),
 		Favorites:     favorites,
+		Clusters:      clusters,
 	}
 	return c.exportDataFile("Export Favorites", favoritesDataDefaultFilename, document)
 }
@@ -131,7 +135,7 @@ func (c *DataManagementCoordinator) ImportFavorites() (DataManagementResult, err
 		return DataManagementResult{}, err
 	}
 
-	err = c.favorites.importSnapshot(document.Favorites)
+	err = c.favorites.importSnapshot(document.Favorites, document.Clusters)
 	if err != nil {
 		return DataManagementResult{}, fmt.Errorf("save imported favorites: %w", err)
 	}

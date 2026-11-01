@@ -222,6 +222,7 @@ func TestFavoritesExportImportRoundTripReplacesLibrary(t *testing.T) {
 			dataManagementFavorite("favorite-a", "Favorite A"),
 			dataManagementFavorite("favorite-b", "Favorite B"),
 		},
+		Clusters: []string{"/kube/config:prod"},
 	}
 	require.NoError(t, app.Favorites.saveFavoritesFile(original))
 
@@ -237,9 +238,11 @@ func TestFavoritesExportImportRoundTripReplacesLibrary(t *testing.T) {
 	require.NoError(t, json.Unmarshal(exportData, &exported))
 	require.Equal(t, favoritesDataFormat, exported.Format)
 	require.Equal(t, []string{"favorite-a", "favorite-b"}, []string{exported.Favorites[0].ID, exported.Favorites[1].ID})
+	require.Equal(t, []string{"/kube/config:prod"}, exported.Clusters)
 
 	require.NoError(t, app.Favorites.saveFavoritesFile(&favoritesFile{
 		Favorites: []Favorite{dataManagementFavorite("replace-me", "Replace Me")},
+		Clusters:  []string{"/kube/config:replace-me"},
 	}))
 
 	importResult, err := app.DataManagement.ImportFavorites()
@@ -251,6 +254,9 @@ func TestFavoritesExportImportRoundTripReplacesLibrary(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"favorite-a", "favorite-b"}, []string{got[0].ID, got[1].ID})
 	require.Equal(t, []int{0, 1}, []int{got[0].Order, got[1].Order})
+	clusters, err := app.Favorites.GetFavoriteClusters()
+	require.NoError(t, err)
+	require.Equal(t, []string{"/kube/config:prod"}, clusters)
 }
 
 // Version 1 exports hold schema v3 favorites with one table state per pane of
