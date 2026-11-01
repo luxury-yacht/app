@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/url"
+	"slices"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,7 +22,7 @@ func Expected(err error) bool {
 	if err == nil {
 		return false
 	}
-	if isBareDeadline(err) {
+	if isBareDeadline(err) || isRequestShapeRejection(err) {
 		return false
 	}
 	if errors.Is(err, context.Canceled) {
@@ -50,17 +51,32 @@ var requestShapeReasons = map[metav1.StatusReason]bool{
 
 // isKubernetesAnswer reports an API server's status reply: a denial, conflict,
 // validation, quota or admission rejection, or the server's own failure. Each
-// is Kubernetes behavior, except a rejection of the request's shape.
+// is Kubernetes behavior; Expected rules out a rejection of the request's
+// shape first.
 func isKubernetesAnswer(err error) bool {
 	var api apierrors.APIStatus
-	return errors.As(err, &api) && !isRequestShapeRejection(err)
+	return errors.As(err, &api)
 }
 
-// isRequestShapeRejection reports an API status that rejects how the request
-// was built. It stays reportable even inside work marked a cluster outcome.
+// isRequestShapeRejection reports an API status anywhere in err's chain that
+// rejects how the request was built. It follows every branch of a joined
+// error, where errors.As would stop at the first status, because such a
+// rejection is an app failure whatever accompanies it, even inside work
+// marked a cluster outcome.
 func isRequestShapeRejection(err error) bool {
-	var api apierrors.APIStatus
-	return errors.As(err, &api) && requestShapeReasons[api.Status().Reason]
+	if err == nil {
+		return false
+	}
+	if api, ok := err.(apierrors.APIStatus); ok && requestShapeReasons[api.Status().Reason] {
+		return true
+	}
+	switch wrapped := err.(type) {
+	case interface{ Unwrap() []error }:
+		return slices.ContainsFunc(wrapped.Unwrap(), isRequestShapeRejection)
+	case interface{ Unwrap() error }:
+		return isRequestShapeRejection(wrapped.Unwrap())
+	}
+	return false
 }
 
 // isBareDeadline reports a client-side deadline that is not a transport

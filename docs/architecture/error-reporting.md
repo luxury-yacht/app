@@ -323,14 +323,18 @@ expected and never reported.
   (405 `MethodNotAllowed`, 406 `NotAcceptable`, 415 `UnsupportedMediaType`),
   which application code alone builds, is reportable.
 - A producer marks work the cluster did not complete with
-  `errorstatus.ClusterOutcome`, which keeps the classified reason and message
-  and never hides a request-shape rejection in its chain (Helm records a hook
-  failed when creating its objects fails, too):
-  a node debug pod that never starts or whose debugger exits; a shell stream
-  that fails (its writers never fail, so the failure is the remote shell's,
-  the container runtime's, or the connection's); a Helm delete whose chart
-  hook Helm recorded as failed (Helm returns that failure untyped; a rollback's
-  failed hook is never recorded, so it stays reportable).
+  `errorstatus.ClusterOutcome`, which keeps the classified reason and message.
+  A request-shape rejection anywhere in an error's chain, including any branch
+  of a joined error, is reportable whatever accompanies it, even inside a
+  cluster outcome. Producers: a node debug pod that never starts or whose
+  debugger exits; a shell stream that fails (its writers never fail, so the
+  failure is the remote shell's, the container runtime's, or the
+  connection's); a Helm delete during which a chart hook failed. During an
+  uninstall only hooks create objects or wait for them, so the uninstall's
+  kube client records those calls' errors: evidence from this run (a hook's
+  stored phase can be an earlier run's), kept typed in the chain because Helm
+  flattens post-delete failures into text. A rollback's failed hook is not
+  recognized, so it stays reportable.
 - Resource services call `LogResourceRequestFailure` /
   `LogDynamicResourceRequestFailure` (via
   `common.Dependencies.LogRequestFailure`): cancellation logs at `DEBUG`, other

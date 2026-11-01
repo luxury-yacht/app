@@ -261,6 +261,10 @@ func TestClusterOutcomeKeepsRequestShapeRejectionsReportable(t *testing.T) {
 
 	require.False(t, Classify(ClusterOutcome(unsupported)).Expected)
 	require.False(t, Classify(UserAction(target, ClusterOutcome(unsupported))).Expected)
+	// Behind another failure, as when several hooks fail in one run.
+	denied := apierrors.NewForbidden(pods, "web", errors.New("quota exceeded"))
+	require.False(t, Classify(ClusterOutcome(errors.Join(denied, unsupported))).Expected)
+	require.True(t, Classify(ClusterOutcome(errors.Join(denied, errors.New("job failed")))).Expected)
 }
 
 // An action's outcome is marked as one, so the UI shows a denial of it that no
