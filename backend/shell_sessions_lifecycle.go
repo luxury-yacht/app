@@ -5,12 +5,20 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type shellSessionLifecycle struct {
 	coordinator *OperationsCoordinator
+}
+
+// shellSessionEnd is how a session ended, as its final status reports it.
+type shellSessionEnd struct {
+	status  types.ShellSessionStatus
+	reason  string
+	failure *errorstatus.Status
 }
 
 func (o *OperationsCoordinator) shellSessionLifecycle() shellSessionLifecycle {
@@ -70,7 +78,7 @@ func (l shellSessionLifecycle) closeForRuntime(sessionID, reason string) error {
 	}
 	sess.Close()
 	err := sess.releaseOwned()
-	l.close(sessionID, types.ShellSessionStatusClosed, reason)
+	l.close(sessionID, shellSessionEnd{status: types.ShellSessionStatusClosed, reason: reason})
 	return err
 }
 
@@ -78,6 +86,19 @@ func (l shellSessionLifecycle) closeForRuntime(sessionID, reason string) error {
 // When the release fails the session stays registered in the cleanup-failed
 // state and the error is returned. It reports whether the session existed.
 func (l shellSessionLifecycle) finishStream(sessionID string, status types.ShellSessionStatus, reason string) (bool, error) {
+	return l.endStream(sessionID, shellSessionEnd{status: status, reason: reason})
+}
+
+// failStream ends a session whose stream failed. The session's writers never
+// fail, so the failure is the remote shell's or its connection's outcome (an
+// exit status, a container runtime refusal, a dropped connection): the shell
+// tab shows it, and its status says it is not an application failure.
+func (l shellSessionLifecycle) failStream(sessionID string, streamErr error) {
+	failure := errorstatus.Classify(errorstatus.ClusterOutcome(streamErr))
+	l.endStream(sessionID, shellSessionEnd{status: types.ShellSessionStatusError, reason: streamErr.Error(), failure: &failure})
+}
+
+func (l shellSessionLifecycle) endStream(sessionID string, end shellSessionEnd) (bool, error) {
 	sess := l.get(sessionID)
 	if sess == nil {
 		return false, nil
@@ -87,7 +108,7 @@ func (l shellSessionLifecycle) finishStream(sessionID string, status types.Shell
 		l.retainForCleanup(sess, err)
 		return true, err
 	}
-	if l.close(sessionID, status, reason) {
+	if l.close(sessionID, end) {
 		l.emitList()
 		l.coordinator.unregisterRuntimeOperation(sessionID)
 	}
@@ -104,13 +125,15 @@ func (l shellSessionLifecycle) retainForCleanup(sess *shellSession, err error) {
 	l.emitList()
 }
 
-func (l shellSessionLifecycle) close(sessionID string, status types.ShellSessionStatus, reason string) bool {
+func (l shellSessionLifecycle) close(sessionID string, end shellSessionEnd) bool {
 	sess, removed := l.remove(sessionID)
 	if !removed {
 		return false
 	}
 	sess.Close()
-	l.emitStatus(sess.id, sess.clusterID, status, reason)
+	l.publishStatus(ShellStatusEvent{
+		SessionID: sess.id, ClusterID: sess.clusterID, Status: end.status, Reason: end.reason, ErrorDetails: end.failure,
+	})
 	return true
 }
 
@@ -197,15 +220,14 @@ func (l shellSessionLifecycle) emitOutput(sessionID, clusterID, stream, data str
 }
 
 func (l shellSessionLifecycle) emitStatus(sessionID, clusterID string, status types.ShellSessionStatus, reason string) {
-	if l.coordinator == nil || sessionID == "" || status == "" {
+	l.publishStatus(ShellStatusEvent{SessionID: sessionID, ClusterID: clusterID, Status: status, Reason: reason})
+}
+
+func (l shellSessionLifecycle) publishStatus(event ShellStatusEvent) {
+	if l.coordinator == nil || event.SessionID == "" || event.Status == "" {
 		return
 	}
-	l.coordinator.publishEvent(shellStatusEventName, ShellStatusEvent{
-		SessionID: sessionID,
-		ClusterID: clusterID,
-		Status:    status,
-		Reason:    reason,
-	})
+	l.coordinator.publishEvent(shellStatusEventName, event)
 }
 
 func (l shellSessionLifecycle) emitList() {

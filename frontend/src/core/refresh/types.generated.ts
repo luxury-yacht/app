@@ -1038,6 +1038,7 @@ export interface ErrorStatus {
   message: string;
   retryable: boolean;
   expected: boolean;
+  userAction?: boolean;
   ref?: ErrorStatusObjectRef;
   details?: ErrorStatusDetails;
 }

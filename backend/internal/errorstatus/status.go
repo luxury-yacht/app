@@ -72,14 +72,17 @@ type Details struct {
 
 // Status is the Kubernetes Status-shaped error the frontend reads.
 type Status struct {
-	Kind       string     `json:"kind"`
-	APIVersion string     `json:"apiVersion"`
-	Code       int        `json:"code"`
-	Reason     Reason     `json:"reason"`
-	Category   Category   `json:"category"`
-	Message    string     `json:"message"`
-	Retryable  bool       `json:"retryable"`
-	Expected   bool       `json:"expected"`
+	Kind       string   `json:"kind"`
+	APIVersion string   `json:"apiVersion"`
+	Code       int      `json:"code"`
+	Reason     Reason   `json:"reason"`
+	Category   Category `json:"category"`
+	Message    string   `json:"message"`
+	Retryable  bool     `json:"retryable"`
+	Expected   bool     `json:"expected"`
+	// UserAction marks the outcome of an action the user asked for, which no
+	// view presents, so the UI shows even an expected denial of it.
+	UserAction bool       `json:"userAction,omitempty"`
 	Ref        *ObjectRef `json:"ref,omitempty"`
 	Details    *Details   `json:"details,omitempty"`
 }

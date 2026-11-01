@@ -6,6 +6,10 @@ matching DSN is configured; **Settings → Data Management → Telemetry** turns
 both reporters off. Development builds disable both SDKs even when Sentry
 environment variables are present.
 
+Sentry receives application failures only. Kubernetes behavior and cluster
+conditions are never reported, even when the user sees them as errors: see
+[Cancellation and Expected Outcomes](#cancellation-and-expected-outcomes).
+
 Only `frontend/src/core/telemetry/sentry.ts` and `internal/sentry` may import
 Sentry SDKs (Biome and Go architecture tests enforce this). Feature code never
 calls Sentry; `errorHandler`, `ErrorSurface`, `runUserAction`, and the
@@ -42,7 +46,7 @@ no layer decides behavior from message text.
 
 - `backend/internal/errorstatus` owns `Status` (Kubernetes `Status`-shaped:
   `code`, `reason`, `category`, `message`, `retryable`, `expected`, optional
-  `ref` and `details`) and its `Reason`/`Category` enums, generated to
+  `userAction`, `ref` and `details`) and its `Reason`/`Category` enums, generated to
   TypeScript (`ErrorStatus*` in `types.generated.ts`). `Classify` decides, in
   order: an explicit status attached at a boundary, an app permission denial,
   a Kubernetes `APIStatus`, `authstate.AuthInvalidError`, then known transport
@@ -54,7 +58,8 @@ no layer decides behavior from message text.
 - Wire forms: a bound method's returned error carries the status as the Wails
   `cause` (`ServiceOptions.MarshalError`); a refresh HTTP failure answers with
   the status as its body and its `code` as the response status; resource and
-  container-log stream error frames carry it as `errorDetails`. A result that
+  container-log stream error frames, and a failed shell session's status
+  event, carry it as `errorDetails`. A result that
   returns state alongside a failure (`ClusterWorkspaceResult`, a failed
   manual-refresh job) carries the status as its `error`; the frontend turns it
   into an error with `statusError`, which validates it at the boundary. Wails
@@ -64,8 +69,9 @@ no layer decides behavior from message text.
   `BadRequest`; a refresh request for a cluster without an active subsystem
   returns `ClusterNotReady`, and one before the refresh service is published
   `RefreshUnavailable`; a gated user action (`RunObjectAction`, YAML apply and
-  ownership check, shell) marks a `Forbidden` `expected: false`, because the
-  UI only offers actions its permission gate allowed.
+  ownership check, shell start) marks its outcome `userAction` and names its
+  target on a `Forbidden`, so the UI shows a denial no view presents. The
+  denial stays expected: the cluster answered, no app code failed.
 - `ref` names the object whose lookup failed, with full identity. Only the
   producer that looked that exact object up sets it. Object details confirm a
   Kubernetes NotFound with an uncached read first. A Helm release missing
@@ -81,11 +87,12 @@ no layer decides behavior from message text.
   (`errorStatusOf`); an error without one is `NETWORK` only for the browser's
   own fetch failure, otherwise `UNKNOWN`. `handle` reports before publishing a
   global notification, and suppresses the toast only for an `expected`
-  `PERMISSION` or `AUTHENTICATION` status (refresh denials; credential
-  failures the auth overlay owns). `VALIDATION` shows the status's own
+  `AUTHENTICATION` status (the auth overlay owns credential failures) or an
+  `expected` `PERMISSION` status that is not a `userAction` (the view's
+  permission state shows read denials). `VALIDATION` shows the status's own
   message. A 409 (`Conflict`, `AlreadyExists`) is `CONFLICT`, not
   `VALIDATION`: another writer won a race, so "check your input" would
-  mislead. It is still reported.
+  mislead. It is shown, not reported.
 - One reporting decision: `core/telemetry/expectedErrors.ts` returns the
   status's `expected` verdict when there is a status, otherwise only browser
   conditions (clipboard denial, browser/Wails cancellation) are expected.
@@ -302,9 +309,38 @@ are separate signals, never interchangeable counts.
 ## Cancellation and Expected Outcomes
 
 Only structured failures and string-only `ERROR` entries become issues; lower
-levels are breadcrumbs. Context cancellation (panel closed, navigation, cluster
-disconnect, poller shutdown) is expected and never reported.
+levels are breadcrumbs. Only an application failure is reportable: the
+`expected` verdict (`errorstatus.Expected`, and the explicit statuses that
+override it) marks Kubernetes behavior and cluster conditions, which stay in
+the local log and the UI even when the user sees them as errors. Context
+cancellation (panel closed, navigation, cluster disconnect, poller shutdown) is
+expected and never reported.
 
+- Every Kubernetes API status reply is expected: denials (RBAC, admission such
+  as PodSecurity, quota), NotFound, conflicts, validation, rate limits, and the
+  API server's or its proxy's own failures (including client-go's
+  `UnexpectedServerResponse` status). Only a rejection of the request's shape
+  (405 `MethodNotAllowed`, 406 `NotAcceptable`, 415 `UnsupportedMediaType`),
+  which application code alone builds, is reportable.
+- A producer marks work the cluster did not complete with
+  `errorstatus.ClusterOutcome`, which keeps the classified reason and message.
+  A request-shape rejection anywhere in an error's chain, including any branch
+  of a joined error or a `go-multierror` aggregate (Helm's kube client reports
+  one failure per resource that way), is reportable whatever accompanies it,
+  even inside a cluster outcome. Producers: a node debug pod that never starts
+  or whose debugger exits; a shell stream that fails (its writers never fail,
+  so the failure is the remote shell's, the container runtime's, or the
+  connection's); a Helm delete during which a chart hook failed. During an
+  uninstall only hooks create objects or wait for them, so the uninstall's
+  kube client records those calls' errors: evidence from this run (a hook's
+  stored phase can be an earlier run's), kept typed in the chain because Helm
+  flattens post-delete failures into text. Helm reports a hook failure
+  together with the failures that followed it, such as purging the release's
+  records, so the uninstall records those too (kube calls and the storage
+  driver). If any of them is reportable on its own, the producer marks the
+  whole failure `errorstatus.ApplicationFailure`, which is reported: a
+  Kubernetes answer inside it would otherwise make it expected. A rollback's
+  failed hook is not recognized, so it stays reportable.
 - Resource services call `LogResourceRequestFailure` /
   `LogDynamicResourceRequestFailure` (via
   `common.Dependencies.LogRequestFailure`): cancellation logs at `DEBUG`, other
@@ -319,10 +355,10 @@ disconnect, poller shutdown) is expected and never reported.
 - The known-only credential classifier keeps expected auth and connectivity
   outcomes in the local log: wrapped auth-state errors, raw 401s or helper
   failures, API-server unavailable/timeouts, recognized DNS/TCP/TLS failures,
-  dropped HTTP/2 connections (lost, client-closed, GOAWAY), and an EOF inside a
-  request error (a bare EOF still reports). Unrecognized errors report. Structured 403s, refresh-domain permission
-  denials, and NotFound stay local; permission decisions and returned errors
-  are unchanged.
+  dropped HTTP/2 connections (lost, client-closed, GOAWAY, stream reset), and
+  an EOF or unexpected EOF inside a request error (a bare EOF still reports).
+  Unrecognized errors report. App refresh-domain permission denials stay
+  local too; permission decisions and returned errors are unchanged.
 - The auth recovery loop separately treats an unknown probe failure as
   connectivity, because an inconclusive probe must not invalidate credentials.
 - `logsources.ErrorCapture` entries (third-party stderr such as klog, routed by

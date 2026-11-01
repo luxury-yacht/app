@@ -15,10 +15,10 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 )
 
-// Actions are offered only after the UI permission gate allows them, so a
-// permission rejection of an offered action means the gate and the server
-// disagree: it is reported (expected: false) and names the target.
-func TestGatedActionPermissionRejectionIsUnexpected(t *testing.T) {
+// A permission rejection of an offered action is the cluster's answer, never
+// reported (expected), but no view presents it, so it is marked a user action
+// for the UI to show, and names the target.
+func TestGatedActionPermissionRejectionIsShownNotReported(t *testing.T) {
 	const clusterID = "cluster-a"
 	podRef := &errorstatus.ObjectRef{ClusterID: clusterID, Version: "v1", Kind: "Pod", Namespace: "default", Name: "web"}
 	newCluster := func(configure func(*cgofake.Clientset)) *resourceGatewayFixture {
@@ -44,7 +44,8 @@ func TestGatedActionPermissionRejectionIsUnexpected(t *testing.T) {
 		status := errorstatus.Classify(deletePod(fixture))
 
 		require.Equal(t, errorstatus.ReasonForbidden, status.Reason)
-		require.False(t, status.Expected)
+		require.True(t, status.Expected)
+		require.True(t, status.UserAction)
 		require.Equal(t, podRef, status.Ref)
 	})
 
@@ -59,12 +60,13 @@ func TestGatedActionPermissionRejectionIsUnexpected(t *testing.T) {
 		status := errorstatus.Classify(deletePod(fixture))
 
 		require.Equal(t, errorstatus.ReasonForbidden, status.Reason)
-		require.False(t, status.Expected)
+		require.True(t, status.Expected)
+		require.True(t, status.UserAction)
 		require.Equal(t, podRef, status.Ref)
 	})
 }
 
-func TestYAMLApplyPermissionRejectionIsUnexpected(t *testing.T) {
+func TestYAMLApplyPermissionRejectionIsShownNotReported(t *testing.T) {
 	request := ObjectYAMLMutationRequest{
 		BaseYAML:   baseYAML(),
 		YAML:       baseYAML(),
@@ -85,7 +87,8 @@ func TestYAMLApplyPermissionRejectionIsUnexpected(t *testing.T) {
 		status := errorstatus.Classify(err)
 
 		require.Equal(t, errorstatus.ReasonForbidden, status.Reason)
-		require.False(t, status.Expected)
+		require.True(t, status.Expected)
+		require.True(t, status.UserAction)
 	})
 
 	t.Run("API server denies the patch", func(t *testing.T) {
@@ -98,7 +101,8 @@ func TestYAMLApplyPermissionRejectionIsUnexpected(t *testing.T) {
 		status := errorstatus.Classify(err)
 
 		require.Equal(t, errorstatus.ReasonForbidden, status.Reason)
-		require.False(t, status.Expected)
+		require.True(t, status.Expected)
+		require.True(t, status.UserAction)
 	})
 }
 

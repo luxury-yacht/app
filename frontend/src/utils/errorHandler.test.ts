@@ -95,7 +95,7 @@ describe('ErrorHandler', () => {
     expect(details.retryable).toBe(true);
   });
 
-  it('shows and reports a conflict whose message mentions a token', () => {
+  it('shows a conflict whose message mentions a token', () => {
     const listener = vi.fn();
     handler.subscribe(listener);
     const conflict = bindingRejection(
@@ -119,13 +119,13 @@ describe('ErrorHandler', () => {
     );
   });
 
-  // The UI offers an action only after its permission gate allows it, so a
-  // denial there is a bug to see and report.
-  it('shows and reports a gated action the server still denies', () => {
+  // No view presents a denied user action, so it is shown even though the
+  // denial is the cluster's answer rather than an app failure.
+  it('shows a denied user action', () => {
     const listener = vi.fn();
     handler.subscribe(listener);
     const denial = bindingRejection(
-      makeErrorStatus('Forbidden', 'deployments.apps "web" is forbidden', { expected: false })
+      makeErrorStatus('Forbidden', 'deployments.apps "web" is forbidden', { userAction: true })
     );
 
     const details = handler.handle(denial, { action: 'scaleWorkload' });
@@ -133,7 +133,6 @@ describe('ErrorHandler', () => {
     expect(details.category).toBe(ErrorCategory.PERMISSION);
     expect(listener).toHaveBeenCalledWith(details);
     expect(handler.getHistory()).toContainEqual(details);
-    expect(telemetryMocks.captureUserVisibleError).toHaveBeenCalledOnce();
   });
 
   it.each([
