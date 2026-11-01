@@ -115,6 +115,8 @@ describe('DataManagementSection', () => {
 
     expect(status()).toBe('Settings imported.');
     expect(errorReporting().getAttribute('aria-checked')).toBe('true');
+    // Every other open window reloads the imported settings.
+    expect(app.events.emitted('settings:preferences-changed')).toHaveLength(1);
   });
 
   it('reports imported settings it cannot read back, and keeps the current ones', async () => {
@@ -149,6 +151,8 @@ describe('DataManagementSection', () => {
     expect(status()).toBe('Favorites imported.');
     expect(favoriteNames).toEqual(['Prod pods']);
     expect(favoriteClusters).toEqual(['/kube/config:prod']);
+    // Every other open window reloads the imported favorites.
+    expect(app.events.emitted('favorites:library-changed')).toHaveLength(1);
   });
 
   it.each([
@@ -191,6 +195,8 @@ describe('DataManagementSection', () => {
       if (read) {
         expect(app.backend.calls(read)).toHaveLength(readsBefore);
       }
+      expect(app.events.emitted('settings:preferences-changed')).toEqual([]);
+      expect(app.events.emitted('favorites:library-changed')).toEqual([]);
     }
   );
 

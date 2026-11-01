@@ -63,8 +63,8 @@ same slot.
   `favorites:library-changed`; each window then force-reloads both lists, as
   preferences do with `settings:preferences-changed`. A reload that overlaps a
   saved change or another forced reload reads `favorites.json` again rather
-  than adopting the older copy. An import reloads only the importing window,
-  like a settings import.
+  than adopting the older copy. A favorites or settings import reloads the
+  importing window, then broadcasts so every other window reloads too.
 
 ## Sidebar Organization
 

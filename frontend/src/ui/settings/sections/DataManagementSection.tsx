@@ -7,8 +7,12 @@ import {
   ImportFavorites,
   ImportSettings,
 } from '@/core/backend-api';
-import { hydrateFavorites } from '@/core/persistence/favorites';
-import { hydrateAppPreferences, setErrorReportingEnabled } from '@/core/settings/appPreferences';
+import { reloadImportedFavorites } from '@/core/persistence/favorites';
+import {
+  hydrateAppPreferences,
+  reloadImportedAppPreferences,
+  setErrorReportingEnabled,
+} from '@/core/settings/appPreferences';
 import { usePreference } from '@/core/settings/usePreference';
 import { SettingRow } from './SettingsControls';
 
@@ -67,9 +71,9 @@ function DataManagementSection() {
         return;
       }
       if (nextOperation === 'import-settings') {
-        await hydrateAppPreferences({ force: true });
+        await reloadImportedAppPreferences();
       } else if (nextOperation === 'import-favorites') {
-        await hydrateFavorites({ force: true });
+        await reloadImportedFavorites();
       }
       setStatus(success);
     } catch (error) {

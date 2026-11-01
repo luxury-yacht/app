@@ -248,6 +248,16 @@ export const hydrateFavorites = async (options?: { force?: boolean }): Promise<F
   return cachedFavorites;
 };
 
+/**
+ * Reloads favorites.json after an import replaced it, and tells every app
+ * window to reload it too.
+ */
+export const reloadImportedFavorites = async (): Promise<Favorite[]> => {
+  const favorites = await hydrateFavorites({ force: true });
+  await publishSavedChange();
+  return favorites;
+};
+
 /** Returns the cached favorites list synchronously. */
 export const getFavorites = (): Favorite[] => cachedFavorites;
 
