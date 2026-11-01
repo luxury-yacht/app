@@ -40,6 +40,7 @@ vi.mock('@core/backend-api', () => ({
 
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => true,
+  emitBroadcastEvent: () => Promise.resolve(true),
 }));
 
 const makeFavorite = (overrides: Partial<Favorite> = {}): Favorite => ({

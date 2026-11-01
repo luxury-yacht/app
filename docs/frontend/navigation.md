@@ -59,6 +59,12 @@ same slot.
   `FavoritesContext`; the command palette lists favorite kubeconfigs first,
   then by context and file. A favorite whose kubeconfig disappears stays saved
   and returns to the top when the context is discovered again.
+- Every saved favorites change, view or cluster, broadcasts
+  `favorites:library-changed`; each window then force-reloads both lists, as
+  preferences do with `settings:preferences-changed`. A reload that overlaps a
+  saved change or another forced reload reads `favorites.json` again rather
+  than adopting the older copy. An import reloads only the importing window,
+  like a settings import.
 
 ## Sidebar Organization
 

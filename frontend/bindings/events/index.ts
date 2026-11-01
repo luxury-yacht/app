@@ -124,6 +124,11 @@ export const DebugToggleMapOverlay = "debug:toggle-map-overlay";
 export const DebugTogglePanelOverlay = "debug:toggle-panel-overlay";
 
 /**
+ * Name of the custom event "favorites:library-changed".
+ */
+export const FavoritesLibraryChanged = "favorites:library-changed";
+
+/**
  * Name of the custom event "kubeconfig:available-changed".
  */
 export const KubeconfigAvailableChanged = "kubeconfig:available-changed";

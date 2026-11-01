@@ -277,6 +277,38 @@ describe('ClusterTabs', () => {
     expect(pickerContexts()).toEqual(['alpha', 'bravo']);
   });
 
+  it('tells the other windows when it favorites a cluster, and reloads when another window does', async () => {
+    const [alpha, bravo] = openClusters('alpha', 'bravo');
+    view = await app.mountApp();
+
+    await openMenu('bravo');
+    await choose('Favorite');
+    expect(app.events.emitted('favorites:library-changed')).toHaveLength(1);
+
+    // Another window favorites alpha.
+    app.backend.answer('GetFavoriteClusters', () => [bravo.selection, alpha.selection]);
+    await act(async () => {
+      app.events.emit('favorites:library-changed');
+    });
+    await app.settle();
+
+    expect(await openMenu('alpha')).toContain('Unfavorite');
+  });
+
+  it('keeps a favorite chosen while the saved favorites are still loading', async () => {
+    const [, bravo] = openClusters('alpha', 'bravo');
+    const release = app.backend.hold('GetFavorites');
+    view = await app.mountApp();
+
+    await openMenu('bravo');
+    await choose('Favorite');
+    await act(async () => release());
+    await app.settle();
+
+    expect(app.backend.calls('SetClusterFavorite')).toEqual([[bravo.selection, true]]);
+    expect(await openMenu('bravo')).toContain('Unfavorite');
+  });
+
   it('dismisses a tab’s menu when its cluster closes and does not revive it on reopen', async () => {
     const [, b] = openClusters('a', 'b');
     view = await app.mountApp();

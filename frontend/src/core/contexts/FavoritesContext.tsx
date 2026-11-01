@@ -22,6 +22,7 @@ import {
   useState,
 } from 'react';
 import { isClusterOperationalState } from '@/core/contexts/clusterLifecycleState';
+import { desktopRuntimeAvailable, onBroadcastEvent } from '@/core/desktop-runtime';
 import {
   favoriteMatchesCluster,
   isClusterSpecificFavorite,
@@ -220,6 +221,18 @@ export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }
     });
   }, []);
   useEffect(() => subscribeFavoriteClusters(setFavoriteClusters), []);
+
+  // A window that saves favorites tells every window to reload favorites.json.
+  useEffect(
+    () =>
+      desktopRuntimeAvailable()
+        ? onBroadcastEvent('favorites:library-changed', () => {
+            // hydrateFavorites reports backend failures itself and never rejects.
+            void hydrateFavorites({ force: true });
+          })
+        : undefined,
+    []
+  );
 
   const readyFavorite =
     pendingFavorite &&
