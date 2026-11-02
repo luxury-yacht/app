@@ -305,6 +305,7 @@ export function DockablePanelGroup({
         target.style.setProperty('--dock-bottom-offset', '0px');
       };
     }
+    return undefined;
   }, [
     panelState.position,
     panelState.size.width,

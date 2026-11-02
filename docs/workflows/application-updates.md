@@ -122,10 +122,13 @@ requires the platform/architecture payload to be enabled.
   channel, and per payload the immutable asset URL, filename, size, SHA-512
   digest, and Ed25519ph signature.
 - The runtime picks an eligible release, then fetches that release's
-  `updater.json`. Missing, duplicate, oversized, malformed, or mismatched
-  metadata (URL, filename, size, platform, architecture, version, channel,
-  digest, signature) fails closed. Wails verifies the payload against the
-  manifest and the embedded public key.
+  `updater.json` from its public download URL, built from the repository and
+  tag. Wails exposes only the API asset URL, which has no sibling path and is
+  not the URL the manifest signs, so the payload download uses the public URL
+  too. Missing, duplicate, oversized, malformed, or mismatched metadata (URL,
+  filename, size, platform, architecture, version, channel, digest, signature)
+  fails closed. Wails verifies the payload against the manifest and the embedded
+  public key.
 - Release tooling takes the target list from `build/config.yml` and exact
   payload names, rejecting directories, globs, installers in place of payloads,
   duplicates, missing targets, and ambiguous files.

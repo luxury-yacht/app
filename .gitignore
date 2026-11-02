@@ -26,6 +26,8 @@ go.work.sum
 # Build output. Wails v3's build definitions and platform metadata are source;
 # only generated products under these paths are ignored.
 bin/
+# `wails3 tool prepare-macos-output` may replace bin with a link, which bin/ misses.
+/bin
 build/coverage/
 build/linux/appimage/build/
 build/linux/*.desktop

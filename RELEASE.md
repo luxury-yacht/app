@@ -107,11 +107,8 @@ If the release includes backend changes, run the benchmarks and compare the resu
 wails3 task qc:benchmark
 ```
 
-1. Update `info.version` in [build/config.yml](build/config.yml), then run
-   `wails3 task common:update:build-assets` to refresh platform metadata. The
-   upstream updater overwrites generated build assets, so review the resulting
-   diff and retain the repository's interface-binding, desktop-only, GTK4-only,
-   metadata, and packaging choices before committing.
+1. Update `info.version` in [build/config.yml](build/config.yml). Build tasks
+   render the platform manifests from it, so no other file needs to change.
 2. Commit and push the version change.
 3. Create and push the matching tag. The `release` workflow builds and
    publishes the release:

@@ -33,8 +33,9 @@ type gitHubManifestUpdateProviderConfig struct {
 }
 
 type gitHubManifestUpdateProvider struct {
-	releases *githubprovider.Provider
-	client   *http.Client
+	repository string
+	releases   *githubprovider.Provider
+	client     *http.Client
 }
 
 type releaseUpdateManifest struct {
@@ -89,7 +90,7 @@ func newGitHubManifestUpdateProvider(
 	if err != nil {
 		return nil, err
 	}
-	return &gitHubManifestUpdateProvider{releases: releases, client: client}, nil
+	return &gitHubManifestUpdateProvider{repository: repository, releases: releases, client: client}, nil
 }
 
 func (provider *gitHubManifestUpdateProvider) Name() string {
@@ -104,15 +105,12 @@ func (provider *gitHubManifestUpdateProvider) Check(
 	if err != nil || release == nil {
 		return release, err
 	}
-	selectedURL, ok := release.Metadata["github.asset.url"].(string)
-	if !ok || strings.TrimSpace(selectedURL) == "" {
-		return nil, fmt.Errorf("GitHub release is missing the selected updater artifact URL")
+	tag, ok := release.Metadata["github.release.tag"].(string)
+	if !ok || strings.TrimSpace(tag) == "" {
+		return nil, fmt.Errorf("GitHub release is missing its tag")
 	}
-	manifestURL, err := siblingReleaseAssetURL(selectedURL, updateManifestAssetName)
-	if err != nil {
-		return nil, err
-	}
-	manifest, err := provider.fetchManifest(ctx, manifestURL)
+	selectedURL := provider.releaseAssetURL(tag, release.Artifact.Filename)
+	manifest, err := provider.fetchManifest(ctx, provider.releaseAssetURL(tag, updateManifestAssetName))
 	if err != nil {
 		return nil, err
 	}
@@ -128,6 +126,9 @@ func (provider *gitHubManifestUpdateProvider) Check(
 	release.Channel = channel
 	release.Artifact = artifact
 	release.Verification = verification
+	// Wails' Download reads this key, which it set to the API asset URL. Replace
+	// it so the file fetched is at the URL the signed manifest just authenticated.
+	release.Metadata["github.asset.url"] = selectedURL
 	return release, nil
 }
 
@@ -164,19 +165,15 @@ func matchUpdaterReleaseAsset(
 	return -1
 }
 
-func siblingReleaseAssetURL(selectedURL, siblingName string) (string, error) {
-	parsed, err := url.Parse(strings.TrimSpace(selectedURL))
-	if err != nil {
-		return "", fmt.Errorf("parse selected updater artifact URL: %w", err)
-	}
-	if (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
-		return "", fmt.Errorf("selected updater artifact URL must use HTTP(S)")
-	}
-	parsed.Path = path.Join(path.Dir(parsed.Path), siblingName)
-	parsed.RawPath = ""
-	parsed.RawQuery = ""
-	parsed.Fragment = ""
-	return parsed.String(), nil
+// releaseAssetURL returns the public download URL, the form release signing puts
+// in updater.json. Wails only exposes API asset URLs, which have no sibling path.
+func (provider *gitHubManifestUpdateProvider) releaseAssetURL(tag, name string) string {
+	return fmt.Sprintf(
+		"https://github.com/%s/releases/download/%s/%s",
+		provider.repository,
+		url.PathEscape(tag),
+		url.PathEscape(name),
+	)
 }
 
 func (provider *gitHubManifestUpdateProvider) fetchManifest(

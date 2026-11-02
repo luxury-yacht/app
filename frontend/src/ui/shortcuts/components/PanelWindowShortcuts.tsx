@@ -179,6 +179,7 @@ export function PanelWindowShortcuts({
             if (request.targetKind === 'new-window') {
               return beginPanelWindowOpen(descriptor.windowName, tornOffTabSnapshot(request));
             }
+            return undefined;
           })
           .catch((error) => {
             void failPanelTabTransfer(descriptor.windowName, request.transferId);

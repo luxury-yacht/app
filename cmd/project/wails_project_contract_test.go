@@ -672,6 +672,21 @@ func TestBuildDownloadsAreHardened(t *testing.T) {
 	require.Contains(t, appImageBuild, "sha256sum -c -")
 }
 
+// Assets.car needs Xcode 26. A `generates` entry that a host never creates makes
+// Task rerun the icons on every build there, rewriting the tracked icon files.
+func TestIconGenerationStaysUpToDateWithoutXcode(t *testing.T) {
+	var taskfile struct {
+		Tasks map[string]struct {
+			Generates []string `yaml:"generates"`
+		} `yaml:"tasks"`
+	}
+	require.NoError(t, yaml.Unmarshal([]byte(readTestFile(t, repositoryPath("build", "Taskfile.yml"))), &taskfile))
+	require.ElementsMatch(t,
+		[]string{"darwin/icons.icns", "windows/icon.ico"},
+		taskfile.Tasks["generate:icons"].Generates,
+	)
+}
+
 func TestWailsProjectGeneratesModernMacOSIconAssets(t *testing.T) {
 	taskfile, err := os.ReadFile(repositoryPath("build", "Taskfile.yml"))
 	require.NoError(t, err)
