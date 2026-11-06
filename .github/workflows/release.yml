@@ -5,8 +5,8 @@
 #                   build-linux
 #
 # A tag push publishes a release. A manual run is a dry run unless "Create
-# GitHub release" is checked; dry runs can skip the tests, build only some
-# platforms, and try Windows signing with the SignPath test certificate.
+# GitHub release" is checked; dry runs can skip the tests and build only some
+# platforms.
 name: Release
 
 on:
@@ -19,11 +19,6 @@ on:
         type: boolean
       skip_tests:
         description: "Skip the test job (dry runs only)"
-        required: false
-        default: false
-        type: boolean
-      sign_windows:
-        description: "Sign Windows builds with the SignPath test certificate (dry runs only)"
         required: false
         default: false
         type: boolean
@@ -56,17 +51,12 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       publish: ${{ steps.plan.outputs.publish }}
-      sign_windows: ${{ steps.plan.outputs.sign_windows }}
     steps:
       - name: Check run options
         id: plan
         env:
           PUBLISH: ${{ github.event_name == 'push' || github.event.inputs.release == 'true' }}
           SKIP_TESTS: ${{ github.event.inputs.skip_tests == 'true' }}
-          SIGN_WINDOWS_REQUESTED: ${{ github.event.inputs.sign_windows == 'true' }}
-          # Published releases sign Windows builds only when this is "true". Turn
-          # it on once SignPath Foundation issues the release certificate.
-          RELEASES_SIGN_WINDOWS: "false"
           # Null on tag pushes, which have no run options.
           INPUTS: ${{ toJSON(github.event.inputs) }}
         run: |
@@ -76,19 +66,11 @@ jobs:
               echo "::error::A published release must run the tests and build every platform."
               exit 1
             fi
-            sign_windows="$RELEASES_SIGN_WINDOWS"
-          else
-            if jq -e 'length > 0 and all(. == "false")' <<<"$builds" >/dev/null; then
-              echo "::error::Select at least one platform to build."
-              exit 1
-            fi
-            sign_windows="$SIGN_WINDOWS_REQUESTED"
+          elif jq -e 'length > 0 and all(. == "false")' <<<"$builds" >/dev/null; then
+            echo "::error::Select at least one platform to build."
+            exit 1
           fi
-          [ "$sign_windows" = "true" ] || sign_windows=false
-          {
-            echo "publish=$PUBLISH"
-            echo "sign_windows=$sign_windows"
-          } >> "$GITHUB_OUTPUT"
+          echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
 
   test:
     needs:
@@ -219,20 +201,12 @@ jobs:
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
-      # SignPath reads this run's job details and downloads the unsigned files.
-      actions: read
     env:
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
       SENTRY_BACKEND_DSN: ${{ secrets.SENTRY_BACKEND_DSN }}
       SENTRY_FRONTEND_DSN: ${{ secrets.SENTRY_FRONTEND_DSN }}
       SENTRY_FRONTEND_PROJECT: ${{ secrets.SENTRY_FRONTEND_PROJECT }}
       SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
-      # Windows signing is optional until the SignPath release certificate is
-      # issued; the plan job decides whether this run signs.
-      SIGN_WINDOWS: ${{ needs.plan.outputs.sign_windows }}
-      # Releases use the trusted certificate and need approval in SignPath;
-      # dry runs use the test certificate and are signed without approval.
-      SIGNPATH_SIGNING_POLICY: ${{ needs.plan.outputs.publish == 'true' && 'release-signing' || 'test-signing' }}
     defaults:
       run:
         shell: pwsh
@@ -248,29 +222,11 @@ jobs:
         uses: ./.github/actions/install-nsis
 
       - name: Build executable
-        id: build
         run: |
           # Fail on any failing command, not just the last one the runner checks.
           $PSNativeCommandUseErrorActionPreference = $true
           go test ./internal/updatetemp ./internal/updateidentity ./internal/windowsinstall ./backend -run Windows -count=1
           wails3 task windows:build ARCH=${{ matrix.arch }}
-          $config = go run ./cmd/project config | ConvertFrom-Json
-          "version=$($config.version)" >> $env:GITHUB_OUTPUT
-          "executable=bin/$(go run ./cmd/project binary-name).exe" >> $env:GITHUB_OUTPUT
-
-      # Both installers and the updater payload carry this executable, so it is
-      # signed before packaging.
-      - name: Sign executable
-        if: env.SIGN_WINDOWS == 'true'
-        uses: ./.github/actions/windows-signing
-        with:
-          path: ${{ steps.build.outputs.executable }}
-          artifact-name: signpath-windows-executable-${{ matrix.arch }}
-          artifact-configuration: windows-exe
-          signing-policy: ${{ env.SIGNPATH_SIGNING_POLICY }}
-          version: ${{ steps.build.outputs.version }}
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
 
       - name: Package installers and updater
         run: |
@@ -288,18 +244,6 @@ jobs:
           $systemInstaller = Get-ChildItem "bin/*-windows-${{ matrix.arch }}-system-installer.exe" -File -ErrorAction Stop
           if ($systemInstaller.Count -ne 1) { throw "Expected exactly one Windows system installer" }
           ./build/windows/package-drill.ps1 -UserInstaller $userInstaller.FullName -SystemInstaller $systemInstaller.FullName -ExpectedVersion $config.version -ProductName $config.productName -UninstallRegistryPath $config.windowsUninstallRegistryPath
-
-      - name: Sign installers
-        if: env.SIGN_WINDOWS == 'true'
-        uses: ./.github/actions/windows-signing
-        with:
-          path: bin/*-windows-${{ matrix.arch }}-*-installer.exe
-          artifact-name: signpath-windows-installers-${{ matrix.arch }}
-          artifact-configuration: windows-installers
-          signing-policy: ${{ env.SIGNPATH_SIGNING_POLICY }}
-          version: ${{ steps.build.outputs.version }}
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v7
@@ -385,8 +329,6 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v8
         with:
-          # Excludes the unsigned signpath-* uploads, which share release file names.
-          pattern: artifacts-*
           path: ./artifacts
 
       - name: Materialize updater signing key

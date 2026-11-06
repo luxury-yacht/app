@@ -57,23 +57,6 @@ The signed macOS build additionally reads:
 | `APPLE_APP_PASSWORD` | App-specific Apple password |
 | `APPLE_TEAM_ID` | Apple developer team identifier |
 
-The signed Windows build additionally reads:
-
-| Secret | Purpose |
-| --- | --- |
-| `SIGNPATH_API_TOKEN` | API token of the SignPath user that submits signing requests |
-| `SIGNPATH_ORGANIZATION_ID` | SignPath organization identifier |
-
-The [SignPath GitHub App](https://github.com/apps/signpath) must be installed
-on the `luxury-yacht` organization with access to this repository; the signing
-step fails with "Failed to retrieve GitHub App token" without it.
-The SignPath project `app` must have the `windows-exe` and
-`windows-installers` artifact configurations and the `test-signing` and
-`release-signing` policies. Dry runs use `test-signing`; tag pushes and checked
-release dispatches use `release-signing`, which needs approval in SignPath for
-each executable and installer signing request. See
-[CODE_SIGNING.md](CODE_SIGNING.md).
-
 `RELEASES_REPO_TOKEN` authorizes publishing the generated artifacts to the GitHub release.
 
 ## Testing Release Workflow Changes
