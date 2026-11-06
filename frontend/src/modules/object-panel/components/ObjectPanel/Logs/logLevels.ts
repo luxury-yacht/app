@@ -128,7 +128,7 @@ const PLAIN_TEXT_WINDOW = 100;
 const LEVEL_WORDS =
   'trace|debug|info|notice|warn|warning|error|err|fatal|critical|crit|panic|severe|alert|emerg|emergency';
 // [error], [WARN], apache's [core:warn]
-const BRACKETED_LEVEL = new RegExp(`\\[\\s*(?:\\w+:)?(${LEVEL_WORDS})\\d?\\s*\\]`, 'i');
+const BRACKETED_LEVEL = new RegExp(String.raw`\[\s*(?:\w+:)?(${LEVEL_WORDS})\d?\s*\]`, 'i');
 // level=warn inside a line that is not entirely logfmt
 const LEVEL_PAIR = /\b(?:level|lvl|severity)=["']?([a-z]+)/i;
 // Bare words only in capitals, so "info" or "errors" in prose never match.

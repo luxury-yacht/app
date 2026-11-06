@@ -60,13 +60,15 @@ const readEscape = (text: string, start: number): { value: string; end: number }
   if (char !== undefined) {
     return { value: char, end: start + 2 };
   }
+  const asWritten = { value: text.slice(start, start + 2), end: start + 2 };
   const code = CODE_ESCAPES[kind];
-  const digits = code ? text.slice(start + 2, start + 2 + code.digits) : '';
-  const point = Number.parseInt(digits, 16);
-  if (code && digits.length === code.digits && HEX_DIGITS.test(digits) && point <= code.max) {
-    return { value: String.fromCodePoint(point), end: start + 2 + code.digits };
+  if (!code) {
+    return asWritten;
   }
-  return { value: text.slice(start, start + 2), end: start + 2 };
+  const digits = text.slice(start + 2, start + 2 + code.digits);
+  const point = Number.parseInt(digits, 16);
+  const valid = digits.length === code.digits && HEX_DIGITS.test(digits) && point <= code.max;
+  return valid ? { value: String.fromCodePoint(point), end: start + 2 + code.digits } : asWritten;
 };
 
 // Reads a double-quoted value starting at `start` (the opening quote). Returns
