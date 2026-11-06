@@ -31,6 +31,11 @@ updates:
       day: 'monday'
       time: '09:00'
     open-pull-requests-limit: 5
+    # Matches min-release-age in frontend/.npmrc, which refuses anything newer.
+    cooldown:
+      default-days: 7
+      exclude:
+        - '@wailsio/runtime'
     labels:
       - 'dependencies'
       - 'javascript'

@@ -7,6 +7,10 @@ import (
 	"path/filepath"
 )
 
+// wailsMacOSOutputMarker is the file `wails3 tool prepare-macos-output` keeps in
+// each output directory it has checked or relocated.
+const wailsMacOSOutputMarker = ".wails-provider-checked"
+
 type cleanConfig struct {
 	artifactsDir string
 	buildDir     string
@@ -51,7 +55,7 @@ func cleanBuildOutputs(cfg cleanConfig) error {
 		if path == "" {
 			continue
 		}
-		if err := os.RemoveAll(path); err != nil {
+		if err := removeBuildOutput(path); err != nil {
 			cleanErrors = append(cleanErrors, fmt.Errorf("remove %q: %w", path, err))
 		}
 	}
@@ -59,6 +63,34 @@ func cleanBuildOutputs(cfg cleanConfig) error {
 		cleanErrors = append(cleanErrors, err)
 	}
 	return errors.Join(cleanErrors...)
+}
+
+// removeBuildOutput deletes a generated path. A link to relocated macOS output
+// takes that directory with it, because `wails3 tool prepare-macos-output`
+// refuses to relocate over an existing target and the next build would fail.
+// Any other link loses only the link.
+func removeBuildOutput(path string) error {
+	if target, relocated := relocatedMacOSOutput(path); relocated {
+		if err := os.RemoveAll(target); err != nil {
+			return err
+		}
+	}
+	return os.RemoveAll(path)
+}
+
+func relocatedMacOSOutput(path string) (string, bool) {
+	info, err := os.Lstat(path)
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		return "", false
+	}
+	target, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return "", false
+	}
+	if _, err := os.Stat(filepath.Join(target, wailsMacOSOutputMarker)); err != nil {
+		return "", false
+	}
+	return target, true
 }
 
 func resetBuildManifest(path string) error {

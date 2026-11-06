@@ -672,6 +672,21 @@ func TestBuildDownloadsAreHardened(t *testing.T) {
 	require.Contains(t, appImageBuild, "sha256sum -c -")
 }
 
+// Assets.car needs Xcode 26. A `generates` entry that a host never creates makes
+// Task rerun the icons on every build there, rewriting the tracked icon files.
+func TestIconGenerationStaysUpToDateWithoutXcode(t *testing.T) {
+	var taskfile struct {
+		Tasks map[string]struct {
+			Generates []string `yaml:"generates"`
+		} `yaml:"tasks"`
+	}
+	require.NoError(t, yaml.Unmarshal([]byte(readTestFile(t, repositoryPath("build", "Taskfile.yml"))), &taskfile))
+	require.ElementsMatch(t,
+		[]string{"darwin/icons.icns", "windows/icon.ico"},
+		taskfile.Tasks["generate:icons"].Generates,
+	)
+}
+
 func TestWailsProjectGeneratesModernMacOSIconAssets(t *testing.T) {
 	taskfile, err := os.ReadFile(repositoryPath("build", "Taskfile.yml"))
 	require.NoError(t, err)
@@ -933,99 +948,14 @@ func TestWindowsReleasePublishesAndDrillsBothInstallerScopes(t *testing.T) {
 	require.Contains(t, workflow, "-UninstallRegistryPath $config.windowsUninstallRegistryPath")
 }
 
-// Both installers and the updater payload carry the built executable, so it
-// must be signed before packaging, and the installers signed after the drill.
-func TestWindowsReleaseSignsTheExecutableBeforePackagingAndTheInstallersAfter(t *testing.T) {
+// The runner only checks pwsh's last exit code, so an earlier failing test or
+// validator would otherwise let an invalid build reach the release. The job
+// only reads the repository.
+func TestWindowsReleaseStopsOnFailingCommandsWithReadOnlyAccess(t *testing.T) {
 	job := readReleaseWorkflow(t).Jobs["build-windows"]
-	previous := -1
-	for _, name := range []string{"Build executable", "Sign executable", "Package installers and updater", "Sign installers", "Upload release artifacts"} {
-		index := job.stepIndex(name)
-		require.Greaterf(t, index, previous, "step %q must follow the previous Windows release step", name)
-		previous = index
-	}
-	build := job.step("Build executable")
-	signExecutable := job.step("Sign executable")
-	packaging := job.step("Package installers and updater")
-	signInstallers := job.step("Sign installers")
-	require.Contains(t, build.Run, "wails3 task windows:build ARCH=${{ matrix.arch }}")
-	require.Contains(t, packaging.Run, "wails3 task windows:package:from-built ARCH=${{ matrix.arch }}")
-	require.Contains(t, packaging.Run, "build/windows/package-drill.ps1")
-	require.Equal(t, "${{ steps.build.outputs.executable }}", signExecutable.With["path"])
-	require.Equal(t, "windows-exe", signExecutable.With["artifact-configuration"])
-	require.Equal(t, "bin/*-windows-${{ matrix.arch }}-*-installer.exe", signInstallers.With["path"])
-	require.Equal(t, "windows-installers", signInstallers.With["artifact-configuration"])
-
-	// Signing is optional until the release certificate exists, so packaging
-	// must also work from the unsigned executable.
-	for _, signing := range []releaseWorkflowStep{signExecutable, signInstallers} {
-		require.Equal(t, "./.github/actions/windows-signing", signing.Uses)
-		require.Equal(t, "env.SIGN_WINDOWS == 'true'", signing.If)
-		require.Equal(t, "${{ env.SIGNPATH_SIGNING_POLICY }}", signing.With["signing-policy"])
-	}
-	require.Empty(t, build.If)
-	require.Empty(t, packaging.If)
-	require.Equal(t, "${{ needs.plan.outputs.sign_windows }}", job.Env["SIGN_WINDOWS"])
-	require.Equal(t, "${{ needs.plan.outputs.publish == 'true' && 'release-signing' || 'test-signing' }}", job.Env["SIGNPATH_SIGNING_POLICY"])
-	// SignPath reads the run's job details and downloads the unsigned artifacts with this token.
-	require.Equal(t, map[string]string{"contents": "read", "actions": "read"}, job.Permissions)
-
-	// The runner only checks pwsh's last exit code, so an earlier failing test
-	// or validator would otherwise let an invalid build be signed and published.
-	for _, step := range []releaseWorkflowStep{build, packaging} {
-		require.Containsf(t, step.Run, "$PSNativeCommandUseErrorActionPreference = $true", "%q must stop on failing commands", step.Name)
-	}
-
-	// The signing action replaces each file with its signed copy, then checks it.
-	action := readTestFile(t, repositoryPath(".github", "actions", "windows-signing", "action.yaml"))
-	previous = -1
-	for _, stage := range []string{
-		"uses: actions/upload-artifact@v7",
-		"uses: signpath/github-action-submit-signing-request@v3",
-		"Copy-Item -LiteralPath $signed -Destination $file.FullName -Force",
-		"Get-AuthenticodeSignature -LiteralPath $file.FullName",
-	} {
-		index := strings.Index(action, stage)
-		require.Greaterf(t, index, previous, "%q must follow the previous signing stage", stage)
-		previous = index
-	}
-	require.Contains(t, action, "github-artifact-id: ${{ steps.upload.outputs.artifact-id }}")
-	require.Contains(t, action, "$env:SIGNING_POLICY -eq 'release-signing' -and $signature.Status -ne 'Valid'")
-
-	// Rebuilding here would replace the signed executable with an unsigned one.
-	windowsTaskfile := readTestFile(t, repositoryPath("build", "windows", "Taskfile.yml"))
-	fromBuiltStart := strings.Index(windowsTaskfile, "\n  package:from-built:\n")
-	require.GreaterOrEqual(t, fromBuiltStart, 0)
-	fromBuilt := windowsTaskfile[fromBuiltStart+1:]
-	fromBuilt = fromBuilt[:strings.Index(fromBuilt, "\n\n")]
-	require.NotContains(t, fromBuilt, "- task: build")
-	require.Contains(t, fromBuilt, "INSTALL_SCOPE: user")
-	require.Contains(t, fromBuilt, "INSTALL_SCOPE: machine")
-}
-
-// Unsigned copies uploaded for SignPath share the final file names, so release
-// preparation must download only the per-platform release artifacts.
-func TestReleasePreparationExcludesUnsignedSigningArtifacts(t *testing.T) {
-	jobs := readReleaseWorkflow(t).Jobs
-	require.Equal(t, "artifacts-*", jobs["prepare-release"].step("Download all artifacts").With["pattern"])
-
-	var releaseUploads, signingUploads []string
-	for _, build := range releaseBuildJobs {
-		for _, step := range jobs[build.job].Steps {
-			switch {
-			case strings.HasPrefix(step.Uses, "actions/upload-artifact@"):
-				releaseUploads = append(releaseUploads, step.With["name"])
-			case step.Uses == "./.github/actions/windows-signing":
-				signingUploads = append(signingUploads, step.With["artifact-name"])
-			}
-		}
-	}
-	require.Len(t, releaseUploads, len(releaseBuildJobs))
-	for _, name := range releaseUploads {
-		require.Truef(t, strings.HasPrefix(name, "artifacts-"), "release artifact %q must match the download pattern", name)
-	}
-	require.Len(t, signingUploads, 2)
-	for _, name := range signingUploads {
-		require.Falsef(t, strings.HasPrefix(name, "artifacts-"), "signing upload %q must not reach release preparation", name)
+	require.Equal(t, map[string]string{"contents": "read"}, job.Permissions)
+	for _, name := range []string{"Build executable", "Package installers and updater"} {
+		require.Containsf(t, job.step(name).Run, "$PSNativeCommandUseErrorActionPreference = $true", "%q must stop on failing commands", name)
 	}
 }
 
@@ -1035,6 +965,11 @@ func TestReleasePreparationExcludesUnsignedSigningArtifacts(t *testing.T) {
 func TestReleaseDispatchCanNarrowDryRunsButNeverAPublishedRelease(t *testing.T) {
 	workflow := readReleaseWorkflow(t)
 	inputs := workflow.On.WorkflowDispatch.Inputs
+	inputNames := make([]string, 0, len(inputs))
+	for name := range inputs {
+		inputNames = append(inputNames, name)
+	}
+	require.ElementsMatch(t, []string{"release", "skip_tests", "build_macos", "build_windows", "build_linux"}, inputNames)
 	buildInputs := map[string]string{}
 	for _, build := range releaseBuildJobs {
 		require.Equal(t, "boolean", inputs[build.input].Type, build.input)
@@ -1048,7 +983,7 @@ func TestReleaseDispatchCanNarrowDryRunsButNeverAPublishedRelease(t *testing.T) 
 	require.Equal(t, "${{ !cancelled() && needs.build-macos.result == 'success' && needs.build-windows.result == 'success' && needs.build-linux.result == 'success' }}", workflow.Jobs["prepare-release"].If)
 
 	dispatch := func(release string, overrides map[string]string) map[string]string {
-		values := map[string]string{"release": release, "skip_tests": "false", "sign_windows": "false"}
+		values := map[string]string{"release": release, "skip_tests": "false"}
 		for input, value := range buildInputs {
 			values[input] = value
 		}
@@ -1060,10 +995,10 @@ func TestReleaseDispatchCanNarrowDryRunsButNeverAPublishedRelease(t *testing.T) 
 
 	tagPush := runReleasePlan(t, nil, true, false)
 	require.NoError(t, tagPush.err)
-	require.Equal(t, "true", tagPush.outputs["publish"])
+	require.Equal(t, map[string]string{"publish": "true"}, tagPush.outputs)
 	narrowed := runReleasePlan(t, dispatch("false", map[string]string{"build_macos": "false", "build_linux": "false"}), false, true)
 	require.NoError(t, narrowed.err)
-	require.Equal(t, "false", narrowed.outputs["publish"])
+	require.Equal(t, map[string]string{"publish": "false"}, narrowed.outputs)
 
 	require.Error(t, runReleasePlan(t, dispatch("false", map[string]string{"build_macos": "false", "build_windows": "false", "build_linux": "false"}), false, false).err, "a run must select a platform")
 	require.Error(t, runReleasePlan(t, dispatch("true", map[string]string{"build_windows": "false"}), true, false).err, "a release must build every platform")
@@ -1072,36 +1007,7 @@ func TestReleaseDispatchCanNarrowDryRunsButNeverAPublishedRelease(t *testing.T) 
 	plan := workflow.Jobs["plan"].step("Check run options")
 	require.Equal(t, "${{ github.event_name == 'push' || github.event.inputs.release == 'true' }}", plan.Env["PUBLISH"])
 	require.Equal(t, "${{ github.event.inputs.skip_tests == 'true' }}", plan.Env["SKIP_TESTS"])
-	require.Equal(t, "${{ github.event.inputs.sign_windows == 'true' }}", plan.Env["SIGN_WINDOWS_REQUESTED"])
 	require.Equal(t, "${{ toJSON(github.event.inputs) }}", plan.Env["INPUTS"])
-}
-
-// Windows signing waits on the SignPath release certificate: a dry run signs
-// with the test certificate only when asked, and a published release follows
-// the workflow's RELEASES_SIGN_WINDOWS setting whatever the checkbox says.
-func TestWindowsSigningIsOptInForDryRunsAndAWorkflowSettingForReleases(t *testing.T) {
-	input, found := readReleaseWorkflow(t).On.WorkflowDispatch.Inputs["sign_windows"]
-	require.True(t, found, "missing sign_windows dispatch input")
-	require.Equal(t, "boolean", input.Type)
-
-	dispatch := func(release, signWindows string) map[string]string {
-		return map[string]string{"release": release, "skip_tests": "false", "sign_windows": signWindows}
-	}
-	for _, signWindows := range []string{"true", "false"} {
-		dryRun := runReleasePlan(t, dispatch("false", signWindows), false, false)
-		require.NoError(t, dryRun.err)
-		require.Equal(t, signWindows, dryRun.outputs["sign_windows"], "dry run checkbox %s", signWindows)
-	}
-	for _, setting := range []string{"true", "false"} {
-		tagPush := runReleasePlan(t, nil, true, false, "RELEASES_SIGN_WINDOWS="+setting)
-		require.NoError(t, tagPush.err)
-		require.Equal(t, setting, tagPush.outputs["sign_windows"], "tag push with setting %s", setting)
-		for _, signWindows := range []string{"true", "false"} {
-			release := runReleasePlan(t, dispatch("true", signWindows), true, false, "RELEASES_SIGN_WINDOWS="+setting)
-			require.NoError(t, release.err)
-			require.Equal(t, setting, release.outputs["sign_windows"], "release with setting %s and checkbox %s", setting, signWindows)
-		}
-	}
 }
 
 // releaseBuildJobs lists each platform build job with the GOOS it builds and
@@ -1129,7 +1035,6 @@ type releaseWorkflowJob struct {
 	If          string            `yaml:"if"`
 	RunsOn      string            `yaml:"runs-on"`
 	Permissions map[string]string `yaml:"permissions"`
-	Env         map[string]string `yaml:"env"`
 	Strategy    struct {
 		Matrix struct {
 			Include []map[string]string `yaml:"include"`
@@ -1141,8 +1046,6 @@ type releaseWorkflowJob struct {
 type releaseWorkflowStep struct {
 	Name string            `yaml:"name"`
 	ID   string            `yaml:"id"`
-	If   string            `yaml:"if"`
-	Uses string            `yaml:"uses"`
 	With map[string]string `yaml:"with"`
 	Env  map[string]string `yaml:"env"`
 	Run  string            `yaml:"run"`
@@ -1173,9 +1076,8 @@ type releasePlan struct {
 
 // runReleasePlan executes the workflow's real plan step the way the runner
 // does, with its GitHub expressions resolved from the given dispatch inputs.
-// Nil inputs model a tag push, which has none; env entries override the step's
-// own environment.
-func runReleasePlan(t *testing.T, inputs map[string]string, publish, skipTests bool, env ...string) releasePlan {
+// Nil inputs model a tag push, which has none.
+func runReleasePlan(t *testing.T, inputs map[string]string, publish, skipTests bool) releasePlan {
 	t.Helper()
 	planJob, found := readReleaseWorkflow(t).Jobs["plan"]
 	require.True(t, found, "missing plan job")
@@ -1188,14 +1090,11 @@ func runReleasePlan(t *testing.T, inputs map[string]string, publish, skipTests b
 	outputPath := filepath.Join(t.TempDir(), "github-output")
 	command := exec.Command("bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", step.Run)
 	command.Env = append(os.Environ(),
-		"RELEASES_SIGN_WINDOWS="+step.Env["RELEASES_SIGN_WINDOWS"],
 		"INPUTS="+string(inputsJSON),
 		fmt.Sprintf("PUBLISH=%t", publish),
 		fmt.Sprintf("SKIP_TESTS=%t", skipTests),
-		fmt.Sprintf("SIGN_WINDOWS_REQUESTED=%t", inputs["sign_windows"] == "true"),
 		"GITHUB_OUTPUT="+outputPath,
 	)
-	command.Env = append(command.Env, env...)
 	plan := releasePlan{outputs: map[string]string{}}
 	if output, err := command.CombinedOutput(); err != nil {
 		plan.err = fmt.Errorf("%w: %s", err, output)

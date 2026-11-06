@@ -78,13 +78,6 @@ requires the platform/architecture payload to be enabled.
   preservation, side-by-side refusal, and cleanup after partial failure. The
   premerge gate cross-vets both architectures. Wails refuses a download unless
   its SHA-512 digest and Ed25519ph signature match the embedded public key.
-- Release CI Authenticode-signs through SignPath in two requests per
-  architecture: the built executable before the raw updater copy and NSIS
-  packaging (`windows:package:from-built` must not rebuild it), then both
-  installers after the drill. Authenticode is distribution trust, not the
-  payload integrity boundary; artifact format and eligibility are unchanged.
-  The NSIS-generated `uninstall.exe` is written at install time and stays
-  unsigned.
 
 ### Linux distributions
 
@@ -122,10 +115,13 @@ requires the platform/architecture payload to be enabled.
   channel, and per payload the immutable asset URL, filename, size, SHA-512
   digest, and Ed25519ph signature.
 - The runtime picks an eligible release, then fetches that release's
-  `updater.json`. Missing, duplicate, oversized, malformed, or mismatched
-  metadata (URL, filename, size, platform, architecture, version, channel,
-  digest, signature) fails closed. Wails verifies the payload against the
-  manifest and the embedded public key.
+  `updater.json` from its public download URL, built from the repository and
+  tag. Wails exposes only the API asset URL, which has no sibling path and is
+  not the URL the manifest signs, so the payload download uses the public URL
+  too. Missing, duplicate, oversized, malformed, or mismatched metadata (URL,
+  filename, size, platform, architecture, version, channel, digest, signature)
+  fails closed. Wails verifies the payload against the manifest and the embedded
+  public key.
 - Release tooling takes the target list from `build/config.yml` and exact
   payload names, rejecting directories, globs, installers in place of payloads,
   duplicates, missing targets, and ambiguous files.

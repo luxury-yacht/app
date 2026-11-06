@@ -3,7 +3,7 @@
 # frontend/package.json must mirror these values.
 go = "1.27.3"
 node = "26.13.0"
-npm = "12.2.1"
+npm = "12.2.2"
 "go:honnef.co/go/tools/cmd/staticcheck" = "0.8.2"
 trivy = "0.76.1"
 "go:github.com/wailsapp/wails/v3/cmd/wails3" = "3.1.0"

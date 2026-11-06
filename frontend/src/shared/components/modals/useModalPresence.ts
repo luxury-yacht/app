@@ -17,6 +17,7 @@ export function useModalPresence(isOpen: boolean) {
       }, 200);
       return () => clearTimeout(timer);
     }
+    return undefined;
   }, [isOpen, shouldRender]);
 
   return { isClosing, shouldRender };

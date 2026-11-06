@@ -34,6 +34,7 @@ vi.mock('@core/backend-api', () => ({
     if (backendMocks.failure) {
       return Promise.reject(backendMocks.failure);
     }
+    return undefined;
   },
   LogAppLogsFromFrontendWithCluster: (
     level: string,
@@ -46,6 +47,7 @@ vi.mock('@core/backend-api', () => ({
     if (backendMocks.failure) {
       return Promise.reject(backendMocks.failure);
     }
+    return undefined;
   },
 }));
 

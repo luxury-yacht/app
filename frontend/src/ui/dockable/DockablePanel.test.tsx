@@ -152,6 +152,7 @@ describe('DockablePanel', () => {
           const timer = setTimeout(() => setOpened(true), 30);
           return () => clearTimeout(timer);
         }
+        return undefined;
       }, [opening]);
       if (opening && !opened) {
         return <span>Opening related object</span>;
