@@ -14,8 +14,8 @@ Panel; they are neither Application nor Node Logs. Viewer controls come from the
   `resources/<kind>/logstarget.go`): its pods now and the watch, with the
   ownership check, that follows them. Workload targets resolve to bounded
   pod/container targets before retrieval.
-- Frontend filters (search, regex, display mode, timestamps, wrap, ANSI) never
-  change backend target identity. Previous logs, history size, follow,
+- Frontend filters (search, regex, log levels, display mode, timestamps, wrap,
+  ANSI) never change backend target identity. Previous logs, history size, follow,
   timestamps, and target caps are backend query concerns.
 - Source selection is explicit `all` / `some` / `none`
   (`logFilterSelection.ts`). `none` yields an empty result and carries

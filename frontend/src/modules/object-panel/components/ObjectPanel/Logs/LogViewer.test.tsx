@@ -502,12 +502,12 @@ describe('LogViewer active pod synchronisation', () => {
     await app.settle();
   };
 
-  const dropdown = (name: 'pods' | 'containers') =>
+  const dropdown = (name: 'pods' | 'containers' | 'log levels') =>
     requireValue(
       container().querySelector<HTMLSelectElement>(`[data-testid="logs-${name}-dropdown"]`),
       `expected the ${name} dropdown`
     );
-  const dropdownLabel = (name: 'pods' | 'containers') =>
+  const dropdownLabel = (name: 'pods' | 'containers' | 'log levels') =>
     container().querySelector(`[data-testid="logs-${name}-dropdown-value"]`)?.textContent;
 
   const shownLines = () =>
@@ -1867,6 +1867,54 @@ describe('LogViewer active pod synchronisation', () => {
     );
     expect(dropdownLabel('pods')).toBe('Pods (0)');
     expect(dropdownLabel('containers')).toBe('Containers (1)');
+  });
+
+  it('filters by log level, keeping a stack trace with its error line', async () => {
+    await openLogs(
+      [
+        logLine('web-1', 'booting', at(0)),
+        logLine('web-1', '{"level":"error","msg":"crash"}', at(1)),
+        logLine('web-1', '    at Server.listen (server.js:10)', at(2)),
+        logLine('web-1', 'level=info msg=ready', at(3)),
+        logLine('web-1', 'W1106 12:00:00.000001       1 sync.go:7] "Slow sync"', at(4)),
+      ],
+      { activePodNames: ['web-1'] }
+    );
+    const optionLabels = Array.from(dropdown('log levels').options).map((option) => option.text);
+    expect(optionLabels).toEqual(['Info', 'Warning', 'Error', 'No level']);
+    expect(dropdownLabel('log levels')).toBe('Log Levels');
+
+    await setMultiSelectValues(dropdown('log levels'), ['error']);
+
+    expect(dropdownLabel('log levels')).toBe('Log Levels (1)');
+    expect(shownLines()).toEqual([
+      expect.stringContaining('crash'),
+      expect.stringContaining('Server.listen'),
+    ]);
+    expect(chipStrip()?.textContent).toContain('Level: Error');
+    // The level filter is frontend-only: the stream keeps reading every line.
+    expect(last(streamRequests())).toEqual(expect.objectContaining({ selectedFilters: [] }));
+
+    // The choice survives a remount, as switching clusters does.
+    await remountViewer({ activePodNames: ['web-1'] });
+    expect(dropdownLabel('log levels')).toBe('Log Levels (1)');
+    expect(shownLines()).toHaveLength(2);
+
+    await click(requireControl('Remove filter Level: Error'));
+    expect(shownLines()).toHaveLength(5);
+
+    await setMultiSelectValues(dropdown('log levels'), []);
+    expect(shownLines()).toEqual([expect.stringContaining('No logs match the current filters')]);
+
+    await click(requireControl('Clear all filters'));
+    expect(shownLines()).toHaveLength(5);
+    expect(dropdownLabel('log levels')).toBe('Log Levels');
+  });
+
+  it('offers no level filter when no line has a level', async () => {
+    await openLogs();
+
+    expect(container().querySelector('[data-testid="logs-log levels-dropdown"]')).toBeNull();
   });
 
   // Without a pod list, the Pods dropdown offers the pods with lines. Choosing

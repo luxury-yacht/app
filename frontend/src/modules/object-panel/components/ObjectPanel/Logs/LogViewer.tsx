@@ -89,6 +89,7 @@ import {
   logFilterSelectionMatchesNone,
   pruneLogFilterSelectionToOptions,
 } from './logFilterSelection';
+import { logLevelFilterOptions } from './logLevels';
 import type { ParsedLogEntry } from './logOptionsReducer';
 import { isValidRegexPattern } from './logSearch';
 import { clearLogSearch } from './logSearchChips';
@@ -373,8 +374,10 @@ const shownContainerLogCount = (
 
 const hasActiveLogResultFilter = (
   selectedFilters: Parameters<typeof isNarrowingFilterSelection>[0],
-  textFilterHidesLines: boolean
-): boolean => isNarrowingFilterSelection(selectedFilters) || textFilterHidesLines;
+  textFilterHidesLines: boolean,
+  levelFilterHidesLines: boolean
+): boolean =>
+  isNarrowingFilterSelection(selectedFilters) || textFilterHidesLines || levelFilterHidesLines;
 
 const LogViewerInner: React.FC<LogViewerProps> = ({
   target,
@@ -414,6 +417,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     filterMode,
     caseSensitiveMatches,
     regexMatches,
+    levelFilter,
     displayMode,
     expandedRows,
   } = state;
@@ -663,6 +667,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     filteredEntries,
     hasVisibleLines,
     textFilterHidesLines,
+    logLevels,
+    levelFilterHidesLines,
     highlightRegex,
     canParseLogs: canParseContainerLogs,
     parsedRows,
@@ -677,6 +683,10 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     metadataColumns,
     exportValue: exportTableValue,
   });
+  const levelOptions = useMemo(
+    () => logLevelFilterOptions(logLevels, levelFilter),
+    [levelFilter, logLevels]
+  );
   // A new source selection restarts the live stream; previous logs refetch on
   // their own, and a stopped stream picks the selection up when it starts.
   useEffect(() => {
@@ -776,6 +786,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       showPreviousContainerLogs,
       selectedFilterValues,
       selectorOptionLabelsByValue,
+      levelFilter,
       filterMode,
       caseSensitiveMatches,
       dispatch,
@@ -785,6 +796,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     caseSensitiveMatches,
     filterMode,
     hasInvalidRegex,
+    levelFilter,
     regexMatches,
     selectedFilterValues,
     selectorOptionLabelsByValue,
@@ -812,7 +824,10 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     entryCount: logEntries.length,
     showPreviousContainerLogs,
     issues: source.issues,
-    hasNarrowingFilter: textFilter.trim().length > 0 || isNarrowingFilterSelection(selectedFilters),
+    hasNarrowingFilter:
+      textFilter.trim().length > 0 ||
+      isNarrowingFilterSelection(selectedFilters) ||
+      levelFilterHidesLines,
     streamExpected,
     hasSnapshot: live.hasSnapshot,
   });
@@ -867,7 +882,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     () => logEntries.some((entry) => containsAnsi(entry.line)),
     [logEntries]
   );
-  const hasActiveResultFilter = hasActiveLogResultFilter(selectedFilters, textFilterHidesLines);
+  const hasActiveResultFilter = hasActiveLogResultFilter(
+    selectedFilters,
+    textFilterHidesLines,
+    levelFilterHidesLines
+  );
 
   useRawViewFallback({
     displayMode,
@@ -1019,6 +1038,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       podOptions={podOptions}
       containerOptions={containerOptions}
       selectedFilters={selectedFilters}
+      levelOptions={levelOptions}
       filterInputRef={filterInputRef}
       searchRowId={searchRowId}
       searchOptions={state}

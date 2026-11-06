@@ -121,6 +121,7 @@ export interface LogViewerPrefs {
   filterMode: LogFilterMode;
   caseSensitiveMatches: boolean;
   regexMatches: boolean;
+  levelFilter: MultiSelectFilterSelection;
   displayMode: LogDisplayMode;
   expandedRows: string[];
   showPreviousContainerLogs: boolean;

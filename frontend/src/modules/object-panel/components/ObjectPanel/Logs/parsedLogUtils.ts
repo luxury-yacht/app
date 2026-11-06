@@ -1,5 +1,6 @@
 import { compareUtf16Strings } from '@/shared/utils/sort';
 import { stripAnsi } from './ansi';
+import { parseStructuredLogLine } from './logLineFormats';
 import type { ParsedLogEntry } from './logOptionsReducer';
 
 export const formatParsedValue = (value: unknown): string => {
@@ -14,26 +15,6 @@ export const formatParsedValue = (value: unknown): string => {
   }
   const stringified = String(value);
   return stringified.length > 0 ? stringified : '-';
-};
-
-// Only text whose first visible character is "{" can parse to an object;
-// checking first keeps plain-text lines from throwing in JSON.parse.
-const OBJECT_START = /^\s*\{/;
-
-export const tryParseJSONObject = (line: string): Record<string, unknown> | null => {
-  const text = stripAnsi(line);
-  if (!OBJECT_START.test(text)) {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(text);
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      return null;
-    }
-    return Object.keys(parsed).length > 0 ? (parsed as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
 };
 
 export const deriveParsedLogFieldKeys = (entries: ParsedLogEntry[]): string[] => {
@@ -51,8 +32,9 @@ export const deriveParsedLogFieldKeys = (entries: ParsedLogEntry[]): string[] =>
 };
 
 /**
- * The line as a view shows it. Only the Pretty view parses it; a caller that has
- * already parsed the line passes the result as `parsedJson`.
+ * The line as a view shows it. Only the Pretty view parses it (JSON, klog, or
+ * logfmt, shown as indented JSON); a caller that has already parsed the line
+ * passes the result as `parsedJson`.
  */
 export const formatRawOrPrettyJsonLine = (
   line: string,
@@ -64,7 +46,7 @@ export const formatRawOrPrettyJsonLine = (
   if (displayMode !== 'pretty') {
     return normalizedLine;
   }
-  const parsed = parsedJson === undefined ? tryParseJSONObject(line) : parsedJson;
+  const parsed = parsedJson === undefined ? parseStructuredLogLine(line) : parsedJson;
   if (!parsed) {
     return normalizedLine;
   }

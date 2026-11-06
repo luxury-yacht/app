@@ -1,6 +1,5 @@
 ### Added
 
-- Favorite clusters:
-  - Right-click a cluster tab and choose Favorite or Unfavorite.
-  - Open Cluster lists favorite clusters first, marked with a heart.
-  - Export and import of favorites includes clusters.
+- Log viewer improvements
+  - `logfmt` and `klog` formats are now recognized and offer Pretty and Table formatting options.
+  - Filter by log level from the new Log Levels dropdown. The app makes a best-effort guess to determine the log level from unstructured log lines, and mulitline logs such as stack traces inherit the level of the previous log line.

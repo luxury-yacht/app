@@ -79,6 +79,7 @@ export const extractLogViewerPrefs = (state: LogViewerState): LogViewerPrefs => 
   filterMode: state.filterMode,
   caseSensitiveMatches: state.caseSensitiveMatches,
   regexMatches: state.regexMatches,
+  levelFilter: state.levelFilter,
   displayMode: state.displayMode,
   expandedRows: Array.from(state.expandedRows),
   showPreviousContainerLogs: state.mode.kind === 'previous',
@@ -104,6 +105,7 @@ export const applyLogViewerPrefs = (
   filterMode: prefs.filterMode,
   caseSensitiveMatches: prefs.caseSensitiveMatches ?? false,
   regexMatches: prefs.regexMatches ?? false,
+  levelFilter: prefs.levelFilter ?? ALL_MULTISELECT_FILTER,
   displayMode: prefs.displayMode,
   expandedRows: new Set(prefs.expandedRows),
   // Rehydrate into the previous-logs view (not loading — the fetch reprimes on
@@ -123,6 +125,7 @@ const resetForNewScope = (state: LogViewerState): LogViewerState => ({
   filterMode: 'all',
   caseSensitiveMatches: false,
   regexMatches: false,
+  levelFilter: ALL_MULTISELECT_FILTER,
   displayMode: 'raw',
   expandedRows: new Set<string>(),
   mode: LIVE_MODE,

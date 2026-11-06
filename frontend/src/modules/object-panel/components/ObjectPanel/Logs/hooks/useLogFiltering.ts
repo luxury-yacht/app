@@ -11,6 +11,7 @@ import {
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import { useCallback, useMemo } from 'react';
 import type { ContainerLogsEntry } from '@/core/refresh/types';
+import { logContainerKind } from '../containerLogFilters';
 import {
   classifySelectedLogSources,
   logFilterSelectionMatchesNone,
@@ -74,10 +75,14 @@ const containerLogSearchTexts = (entry: ContainerLogsEntry): string[] => [
 
 const containerLogLine = (entry: ContainerLogsEntry): string => entry.line;
 
+// Each container of each pod writes its own lines, so levels inherit within one.
+const containerLogSourceKey = (entry: ContainerLogsEntry): string =>
+  `${entry.pod}\u0000${logContainerKind(entry)}\u0000${entry.container}`;
+
 /**
  * Applies the container source selection, then the shared presentation
- * pipeline (text filter and JSON detection). Container search also matches pod
- * and container names.
+ * pipeline (structured and level detection, level and text filters). Container
+ * search also matches pod and container names.
  */
 export function useLogFiltering({
   logEntries,
@@ -116,6 +121,7 @@ export function useLogFiltering({
     options,
     searchTexts: containerLogSearchTexts,
     lineOf: containerLogLine,
+    sourceKeyOf: containerLogSourceKey,
     parsedMetadata,
     metadataColumns,
     exportValue,

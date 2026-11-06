@@ -9,7 +9,12 @@ import ActiveFilterChips, { type ActiveFilterChip } from '@shared/components/Act
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { normalizeDropdownValue } from '@shared/components/dropdowns/dropdownValue';
-import type { MultiSelectFilterSelection } from '@shared/components/dropdowns/multiSelectFilterSelection';
+import {
+  filterSelectionFromDropdownValues,
+  filterSelectionToDropdownValues,
+  type MultiSelectFilterSelection,
+  multiSelectFilterTriggerLabel,
+} from '@shared/components/dropdowns/multiSelectFilterSelection';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import LogResumeScrollingButton from '@shared/components/logs/LogResumeScrollingButton';
@@ -155,11 +160,39 @@ const LogSourceDropdown = ({
   />
 );
 
+type LogLevelDropdownProps = {
+  options: DropdownOption[];
+  levelFilter: MultiSelectFilterSelection;
+  dispatch: React.Dispatch<LogViewerAction>;
+};
+
+// The levels the shown logs hold; a frontend filter like the text filter. Same
+// control as the Application Logs level filter.
+const LogLevelDropdown = ({ options, levelFilter, dispatch }: LogLevelDropdownProps) => (
+  <Dropdown
+    options={options}
+    value={filterSelectionToDropdownValues(levelFilter, options)}
+    onChange={(value) =>
+      dispatch({
+        type: 'SET_LEVEL_FILTER',
+        payload: filterSelectionFromDropdownValues(normalizeDropdownValue(value), options),
+      })
+    }
+    multiple
+    showBulkActions
+    ariaLabel="Log Levels"
+    renderValue={(value) =>
+      multiSelectFilterTriggerLabel('Log Levels', levelFilter, normalizeDropdownValue(value))
+    }
+  />
+);
+
 type LogViewerControlsProps = {
   activeFilterChips: ActiveFilterChip[];
   podOptions: DropdownOption[];
   containerOptions: DropdownOption[];
   selectedFilters: MultiSelectFilterSelection;
+  levelOptions: DropdownOption[];
   filterInputRef: React.RefObject<HTMLInputElement | null>;
   searchRowId: string;
   searchOptions: LogOptionsState;
@@ -173,6 +206,7 @@ export const LogViewerControls = ({
   podOptions,
   containerOptions,
   selectedFilters,
+  levelOptions,
   filterInputRef,
   searchRowId,
   searchOptions,
@@ -187,7 +221,7 @@ export const LogViewerControls = ({
     >
       <div className="logs-viewer-controls-left">
         <LogBufferFullIndicator shown={bufferFullShown} />
-        {(podOptions.length > 0 || containerOptions.length > 0) && (
+        {(podOptions.length > 0 || containerOptions.length > 0 || levelOptions.length > 0) && (
           <div className="logs-viewer-control-group">
             {podOptions.length > 0 && (
               <LogSourceDropdown
@@ -206,6 +240,13 @@ export const LogViewerControls = ({
                 options={containerOptions}
                 allOptions={allOptions}
                 selectedFilters={selectedFilters}
+                dispatch={dispatch}
+              />
+            )}
+            {levelOptions.length > 0 && (
+              <LogLevelDropdown
+                options={levelOptions}
+                levelFilter={searchOptions.levelFilter}
                 dispatch={dispatch}
               />
             )}

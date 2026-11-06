@@ -201,6 +201,7 @@ describe.runIf(process.env.LOGS_BENCHMARK === '1')('Logs tab stream-batch benchm
       filterMode: 'filtered',
       caseSensitiveMatches: false,
       regexMatches: false,
+      levelFilter: { mode: 'all' },
       displayMode,
       expandedRows: [],
       showPreviousContainerLogs: false,

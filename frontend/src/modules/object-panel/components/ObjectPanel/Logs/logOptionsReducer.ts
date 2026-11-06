@@ -5,6 +5,10 @@
  * viewer composes this state with its own source fields.
  */
 
+import {
+  ALL_MULTISELECT_FILTER,
+  type MultiSelectFilterSelection,
+} from '@shared/components/dropdowns/multiSelectFilterSelection';
 import type { LogDisplayMode, LogFilterMode } from '../types';
 
 export interface ParsedLogEntry {
@@ -28,6 +32,8 @@ export interface LogOptionsState {
   filterMode: LogFilterMode;
   caseSensitiveMatches: boolean;
   regexMatches: boolean;
+  /** Which log levels are shown (logLevels.ts values); a frontend filter. */
+  levelFilter: MultiSelectFilterSelection;
   wrapText: boolean;
   showAnsiColors: boolean;
   displayMode: LogDisplayMode;
@@ -42,6 +48,7 @@ export type LogOptionsAction =
   | { type: 'SET_FILTER_MODE'; payload: LogFilterMode }
   | { type: 'TOGGLE_CASE_SENSITIVE_MATCHES' }
   | { type: 'TOGGLE_REGEX_MATCHES' }
+  | { type: 'SET_LEVEL_FILTER'; payload: MultiSelectFilterSelection }
   | { type: 'TOGGLE_WRAP_TEXT' }
   | { type: 'TOGGLE_SHOW_ANSI_COLORS' }
   | { type: 'TOGGLE_PARSED_VIEW' }
@@ -57,6 +64,7 @@ const LOG_OPTIONS_ACTION_TYPES = new Set<string>(
     SET_FILTER_MODE: true,
     TOGGLE_CASE_SENSITIVE_MATCHES: true,
     TOGGLE_REGEX_MATCHES: true,
+    SET_LEVEL_FILTER: true,
     TOGGLE_WRAP_TEXT: true,
     TOGGLE_SHOW_ANSI_COLORS: true,
     TOGGLE_PARSED_VIEW: true,
@@ -75,6 +83,7 @@ export const initialLogOptionsState: LogOptionsState = {
   filterMode: 'all',
   caseSensitiveMatches: false,
   regexMatches: false,
+  levelFilter: ALL_MULTISELECT_FILTER,
   wrapText: true,
   showAnsiColors: true,
   displayMode: 'raw',
@@ -133,6 +142,8 @@ export function logOptionsReducer<S extends LogOptionsState>(
       return { ...state, searchOpen: action.payload };
     case 'SET_TEXT_FILTER':
       return { ...state, textFilter: action.payload };
+    case 'SET_LEVEL_FILTER':
+      return { ...state, levelFilter: action.payload };
     case 'TOGGLE_WRAP_TEXT':
       return { ...state, wrapText: !state.wrapText };
     case 'TOGGLE_SHOW_ANSI_COLORS':
