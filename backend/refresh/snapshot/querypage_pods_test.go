@@ -161,9 +161,13 @@ func TestPodsQueryViaStoreEquivalent(t *testing.T) {
 		{matchNone: true},
 	}
 
-	for _, sf := range sorts {
-		for _, d := range dirs {
-			for _, f := range filts {
+	for sortIndex, sf := range sorts {
+		for dirIndex, d := range dirs {
+			for filterIndex, f := range filts {
+				// Race builds still run every sort, direction, and filter.
+				if !testsupport.SampleCaseUnderRace(4, sortIndex, dirIndex, filterIndex) {
+					continue
+				}
 				base := typedTableQuery{
 					Enabled: true,
 					Request: ResourceQueryRequest{

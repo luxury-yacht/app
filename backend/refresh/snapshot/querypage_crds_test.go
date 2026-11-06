@@ -3,6 +3,7 @@ package snapshot
 import (
 	"fmt"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/testsupport"
 	"slices"
 	"testing"
 )
@@ -72,9 +73,13 @@ func TestClusterCRDQueryViaStoreEquivalent(t *testing.T) {
 		{search: "alias-1"},
 	}
 
-	for _, sf := range sorts {
-		for _, d := range dirs {
-			for _, f := range filts {
+	for sortIndex, sf := range sorts {
+		for dirIndex, d := range dirs {
+			for filterIndex, f := range filts {
+				// Race builds still run every sort, direction, and filter.
+				if !testsupport.SampleCaseUnderRace(4, sortIndex, dirIndex, filterIndex) {
+					continue
+				}
 				base := typedTableQuery{
 					Enabled: true,
 					Request: ResourceQueryRequest{

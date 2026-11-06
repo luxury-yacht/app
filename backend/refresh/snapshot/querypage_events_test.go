@@ -3,6 +3,7 @@ package snapshot
 import (
 	"fmt"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/testsupport"
 	"reflect"
 	"slices"
 	"testing"
@@ -224,9 +225,13 @@ func TestNamespaceEventsQueryViaStoreEquivalent(t *testing.T) {
 		{facets: map[string][]string{"reasons": {"BackOff", "Started"}, "sources": {"kubelet"}}},
 	}
 
-	for _, sf := range sorts {
-		for _, d := range dirs {
-			for _, f := range filts {
+	for sortIndex, sf := range sorts {
+		for dirIndex, d := range dirs {
+			for filterIndex, f := range filts {
+				// Race builds still run every sort, direction, and filter.
+				if !testsupport.SampleCaseUnderRace(4, sortIndex, dirIndex, filterIndex) {
+					continue
+				}
 				base := typedTableQuery{
 					Enabled: true,
 					Request: ResourceQueryRequest{
@@ -313,9 +318,13 @@ func TestClusterEventsQueryViaStoreEquivalent(t *testing.T) {
 		{facets: map[string][]string{"reasons": {"NodeNotReady"}, "sources": {"kubelet"}}},
 	}
 
-	for _, sf := range sorts {
-		for _, d := range dirs {
-			for _, f := range filts {
+	for sortIndex, sf := range sorts {
+		for dirIndex, d := range dirs {
+			for filterIndex, f := range filts {
+				// Race builds still run every sort, direction, and filter.
+				if !testsupport.SampleCaseUnderRace(4, sortIndex, dirIndex, filterIndex) {
+					continue
+				}
 				base := typedTableQuery{
 					Enabled: true,
 					Request: ResourceQueryRequest{

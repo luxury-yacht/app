@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/internal/errorcapture"
@@ -32,6 +33,7 @@ func runIsolatedBackendTests(m *testing.M) int {
 		return 1
 	}
 	defer os.RemoveAll(stateRoot)
+	pinGoToolchainDirs()
 	for key, directory := range map[string]string{
 		"HOME":            stateRoot,
 		"XDG_CONFIG_HOME": filepath.Join(stateRoot, "config"),
@@ -44,4 +46,42 @@ func runIsolatedBackendTests(m *testing.M) int {
 		}
 	}
 	return m.Run()
+}
+
+// pinGoToolchainDirs keeps go subprocesses (the refresh-contract renderer's
+// packages.Load) on the real build and module caches. Go derives their defaults
+// from HOME, so after isolation every load rebuilt from an empty cache (~20 s).
+// It resolves Go's documented defaults itself: running `go env` here would
+// write Go telemetry under the inherited HOME before isolation.
+func pinGoToolchainDirs() {
+	configDir, configErr := os.UserConfigDir()
+	cacheDir, cacheErr := os.UserCacheDir()
+	home, homeErr := os.UserHomeDir()
+	if configErr != nil || cacheErr != nil || homeErr != nil {
+		return
+	}
+	goEnvFile := os.Getenv("GOENV")
+	if goEnvFile == "" {
+		goEnvFile = filepath.Join(configDir, "go", "env")
+		_ = os.Setenv("GOENV", goEnvFile)
+	}
+	// Settings saved with `go env -w` live in that file and must keep winning.
+	saved, _ := os.ReadFile(goEnvFile)
+	for key, fallback := range map[string]string{
+		"GOCACHE": filepath.Join(cacheDir, "go-build"),
+		"GOPATH":  filepath.Join(home, "go"),
+	} {
+		if os.Getenv(key) == "" && !goEnvFileSets(string(saved), key) {
+			_ = os.Setenv(key, fallback)
+		}
+	}
+}
+
+func goEnvFileSets(content, key string) bool {
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), key+"=") {
+			return true
+		}
+	}
+	return false
 }

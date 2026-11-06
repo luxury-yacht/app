@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/testsupport"
 	"k8s.io/utils/ptr"
 )
 
@@ -80,9 +81,13 @@ func TestNodeQueryViaStoreEquivalent(t *testing.T) {
 		{statuses: []string{"Ready", "Unknown"}},
 	}
 
-	for _, sf := range sorts {
-		for _, d := range dirs {
-			for _, f := range filts {
+	for sortIndex, sf := range sorts {
+		for dirIndex, d := range dirs {
+			for filterIndex, f := range filts {
+				// Race builds still run every sort, direction, and filter.
+				if !testsupport.SampleCaseUnderRace(4, sortIndex, dirIndex, filterIndex) {
+					continue
+				}
 				base := typedTableQuery{
 					Enabled: true,
 					Request: ResourceQueryRequest{

@@ -88,6 +88,12 @@
   gap: var(--spacing-sm);
 }
 
+/* A lone status sentence (e.g. updates disabled in this build) has no
+   left-aligned actions or notes to line up with, so it centers under the hero. */
+.about-update-summary:only-child {
+  text-align: center;
+}
+
 .about-update-message {
   margin: 0;
   color: var(--color-text);

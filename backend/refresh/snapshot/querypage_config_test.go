@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
+	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
 // makeConfigRows builds varied ConfigSummary rows with deliberate ties on kind,
@@ -158,9 +159,13 @@ func TestConfigQueryViaStoreEquivalent(t *testing.T) {
 		{search: "secret"},
 	}
 
-	for _, sf := range sorts {
-		for _, d := range dirs {
-			for _, f := range filts {
+	for sortIndex, sf := range sorts {
+		for dirIndex, d := range dirs {
+			for filterIndex, f := range filts {
+				// Race builds still run every sort, direction, and filter.
+				if !testsupport.SampleCaseUnderRace(4, sortIndex, dirIndex, filterIndex) {
+					continue
+				}
 				base := typedTableQuery{
 					Enabled: true,
 					Request: ResourceQueryRequest{
