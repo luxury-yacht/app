@@ -14,6 +14,7 @@ import { type Dispatch, useCallback, useDeferredValue, useEffect, useMemo, useRe
 import { stripAnsi } from '../ansi';
 import {
   detectLogLevel,
+  type InheritedLevelMemory,
   type LogLevel,
   type LogLevelSummary,
   logLevelMatcher,
@@ -229,9 +230,25 @@ const useLineAnalysis = <T>(lineOf: (entry: T) => string, sourceKeyOf: (entry: T
   return { analyzeAll, jsonOf };
 };
 
-const levelOfAnalysis = (analysis: LineAnalysis) => analysis.level;
-const sourceOfAnalysis = (analysis: LineAnalysis) => analysis.source;
 const hasFields = (analysis: LineAnalysis) => analysis.fields !== null;
+
+const isObjectEntry = (entry: unknown): entry is object =>
+  typeof entry === 'object' && entry !== null;
+
+// The level each entry inherited, by entry object, so a stack trace keeps its
+// error line's level after the buffer evicts that line, across batches and
+// remounts. Eviction keeps the entries it retains; a new snapshot or source
+// brings new objects, so nothing carries over to another source. Plain string
+// lines have no identity and get no memory.
+const inheritedLevels = new WeakMap<object, LogLevel>();
+const ENTRY_LEVEL_MEMORY: InheritedLevelMemory<unknown> = {
+  recall: (entry) => (isObjectEntry(entry) ? inheritedLevels.get(entry) : undefined),
+  remember: (entry, level) => {
+    if (isObjectEntry(entry)) {
+      inheritedLevels.set(entry, level);
+    }
+  },
+};
 
 // Levels resolve over every entry before any filter, so a line keeps the level
 // it inherits even when the line it inherits from is filtered out.
@@ -241,8 +258,14 @@ const useLevelFilter = <T>(
   levelFilter: LogOptionsState['levelFilter']
 ) => {
   const { levels, summary } = useMemo(
-    () => resolveLogLevels(analyses, levelOfAnalysis, sourceOfAnalysis),
-    [analyses]
+    () =>
+      resolveLogLevels(
+        entries,
+        (_, index) => analyses[index]?.level ?? null,
+        (_, index) => analyses[index]?.source ?? '',
+        ENTRY_LEVEL_MEMORY
+      ),
+    [analyses, entries]
   );
   const matcher = useMemo(() => logLevelMatcher(levelFilter), [levelFilter]);
   const levelEntries = useMemo(

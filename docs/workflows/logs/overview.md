@@ -37,7 +37,11 @@ features; Node Logs passes neither.
   field, or a level word in the first 100 characters of plain text), levels
   resolved before any filter (an unleveled line takes the last level from its
   own source, `sourceKeyOf`; Container Logs keys by pod and container, so a
-  stack trace stays with its error line; nothing to inherit is No level), the
+  stack trace stays with its error line; nothing to inherit is No level). An
+  inherited level is remembered per entry object, so lines keep it after
+  eviction drops their source line and across remounts; a line still in the
+  buffer wins over the memory, and a new snapshot or source brings new objects.
+  Plain string lines (Node Logs) have no identity and no memory. Then the
   level filter, then the deferred text filter (the viewer supplies an entry's
   match texts; container search also matches pod and container names), the
   parsed table (rows, columns, CSV;
@@ -47,8 +51,9 @@ features; Node Logs passes neither.
   rows from entries, so pod, container, and timestamp come from the entry,
   never the message text. `useRawViewFallback` returns Pretty and Table to raw
   only when lines are shown and none is structured; an empty log keeps the
-  view. klog and logfmt values stay strings; Pretty shows any structured line
-  as indented JSON.
+  view. klog and logfmt values stay strings, with Go quoting escapes decoded
+  (an escape it does not know, or a `\x` byte above 0x7F, stays as written);
+  Pretty shows any structured line as indented JSON.
 - `logToolbar.tsx`: icon bar, search row (`LogSearchRow`), and log count
   (`renderLogCount`, "shown/total logs", only while a filter hides lines, in
   the active-filters strip left of Clear all).

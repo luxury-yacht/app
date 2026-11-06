@@ -74,6 +74,56 @@ describe('resolveLogLevels', () => {
     expect(resolved.levels).toEqual(['error', null, 'error', 'info', 'info']);
     expect(resolved.summary).toEqual({ levels: ['info', 'error'], hasUnleveled: true });
   });
+
+  it('keeps an inherited level once the line it came from leaves the buffer', () => {
+    const remembered = new Map<Line, LogLevel>();
+    const memory = {
+      recall: (line: Line) => remembered.get(line),
+      remember: (line: Line, level: LogLevel) => remembered.set(line, level),
+    };
+    const resolve = (lines: Line[]) =>
+      resolveLogLevels(
+        lines,
+        (line) => line.level,
+        (line) => line.source,
+        memory
+      );
+    const header: Line = { source: 'a', level: 'error' };
+    const frame: Line = { source: 'a', level: null };
+    const nextFrame: Line = { source: 'a', level: null };
+    resolve([header, frame]);
+
+    // The buffer dropped the header; a new frame arrives after the old one.
+    const resolved = resolve([frame, nextFrame]);
+
+    expect(resolved.levels).toEqual(['error', 'error']);
+    expect(resolved.summary).toEqual({ levels: ['error'], hasUnleveled: false });
+  });
+
+  it('prefers a leveled line still in the buffer over a remembered level', () => {
+    const remembered = new Map<Line, LogLevel>();
+    const memory = {
+      recall: (line: Line) => remembered.get(line),
+      remember: (line: Line, level: LogLevel) => remembered.set(line, level),
+    };
+    const frame: Line = { source: 'a', level: null };
+    resolveLogLevels(
+      [{ source: 'a', level: 'error' }, frame],
+      (line) => line.level,
+      (line) => line.source,
+      memory
+    );
+
+    // History arrives late: a warning that was written just before the frame.
+    const resolved = resolveLogLevels(
+      [{ source: 'a', level: 'warn' }, frame],
+      (line) => line.level,
+      (line) => line.source,
+      memory
+    );
+
+    expect(resolved.levels).toEqual(['warn', 'warn']);
+  });
 });
 
 describe('logLevelFilterOptions', () => {

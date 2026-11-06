@@ -160,28 +160,61 @@ export const detectLogLevel = (line: string, fields: LogLineFields | null): LogL
 export type LogLevelSummary = { levels: LogLevel[]; hasUnleveled: boolean };
 
 /**
+ * Levels entries inherited in earlier passes. The buffer drops its oldest
+ * lines, so a stack trace can outlive the error line it belongs to; recalling
+ * the level it inherited keeps it with that error.
+ */
+export type InheritedLevelMemory<T> = {
+  recall: (entry: T) => LogLevel | undefined;
+  remember: (entry: T, level: LogLevel) => void;
+};
+
+const NO_MEMORY: InheritedLevelMemory<unknown> = {
+  recall: () => undefined,
+  remember: () => undefined,
+};
+
+// A level from an earlier line of the source in this pass wins (it may have
+// arrived late, in time order); without one, the level the entry inherited
+// before that line left the buffer.
+const inheritLevel = <T>(
+  entry: T,
+  previous: LogLevel | undefined,
+  memory: InheritedLevelMemory<T>
+): LogLevel | null => {
+  if (previous === undefined) {
+    return memory.recall(entry) ?? null;
+  }
+  if (memory.recall(entry) !== previous) {
+    memory.remember(entry, previous);
+  }
+  return previous;
+};
+
+/**
  * Each entry's level, in order: its own, else the last level seen from the same
- * source (a stack trace keeps its error line's level), else null.
+ * source (a stack trace keeps its error line's level), else the level it
+ * inherited in an earlier pass, else null.
  */
 export const resolveLogLevels = <T>(
   entries: readonly T[],
   ownLevelOf: (entry: T, index: number) => LogLevel | null,
-  sourceKeyOf: (entry: T) => string
+  sourceKeyOf: (entry: T, index: number) => string,
+  memory: InheritedLevelMemory<T> = NO_MEMORY
 ): { levels: (LogLevel | null)[]; summary: LogLevelSummary } => {
   const lastBySource = new Map<string, LogLevel>();
   const found = new Set<LogLevel>();
   let hasUnleveled = false;
   const levels = entries.map((entry, index) => {
-    const key = sourceKeyOf(entry);
-    const own = ownLevelOf(entry, index);
-    if (own) {
-      lastBySource.set(key, own);
-      found.add(own);
-      return own;
+    const key = sourceKeyOf(entry, index);
+    const level = ownLevelOf(entry, index) ?? inheritLevel(entry, lastBySource.get(key), memory);
+    if (level) {
+      lastBySource.set(key, level);
+      found.add(level);
+    } else {
+      hasUnleveled = true;
     }
-    const inherited = lastBySource.get(key) ?? null;
-    hasUnleveled ||= inherited === null;
-    return inherited;
+    return level;
   });
   return {
     levels,

@@ -1911,6 +1911,46 @@ describe('LogViewer active pod synchronisation', () => {
     expect(dropdownLabel('log levels')).toBe('Log Levels');
   });
 
+  it('keeps a stack trace under Error after the buffer drops its error line', async () => {
+    // A small buffer, so the next line evicts the oldest.
+    const bufferSize = SPECS.objPanelLogsBufferMaxSize.min;
+    app.preferences({ objPanelLogsBufferMaxSize: bufferSize });
+    const frame = (index: number) => logLine('web-1', `    at frame ${index}`, at(index));
+    const logCount = () => chipStrip()?.querySelector('.logs-viewer-count')?.textContent;
+    const pods = { activePodNames: ['web-1', 'web-2'] };
+    // The error line, its stack frames, and one unleveled line from another pod.
+    const shownUnderError = `${bufferSize - 1}/${bufferSize} logs`;
+    try {
+      await openLogs(
+        [
+          logLine('web-1', '{"level":"error","msg":"crash"}', at(0)),
+          ...Array.from({ length: bufferSize - 2 }, (_, index) => frame(index + 1)),
+          logLine('web-2', 'plain output', at(bufferSize - 1)),
+        ],
+        pods
+      );
+      await setMultiSelectValues(dropdown('log levels'), ['error']);
+      expect(logCount()).toBe(shownUnderError);
+
+      // The next frame pushes the error line out of the buffer.
+      await sendLines([frame(bufferSize)]);
+
+      expect(logCount()).toBe(shownUnderError);
+      expect(Array.from(dropdown('log levels').options).map((option) => option.text)).toEqual([
+        'Error',
+        'No level',
+      ]);
+
+      // Switching clusters remounts the viewer over the same buffer.
+      await remountViewer(pods);
+      expect(logCount()).toBe(shownUnderError);
+    } finally {
+      // The stream manager keeps the buffer size across tests.
+      setObjPanelLogsBufferMaxSize(SPECS.objPanelLogsBufferMaxSize.defaultValue);
+      await app.settle();
+    }
+  });
+
   it('offers no level filter when no line has a level', async () => {
     await openLogs();
 

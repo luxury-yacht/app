@@ -30,24 +30,63 @@ const parseJsonObject = (text: string): LogLineFields | null => {
   }
 };
 
-const QUOTE_ESCAPES: Record<string, string> = { n: '\n', t: '\t', r: '\r' };
+// The escapes Go's strconv.Quote (klog) and go-logfmt write.
+const CHAR_ESCAPES: Record<string, string> = {
+  a: '\u0007',
+  b: '\b',
+  f: '\f',
+  n: '\n',
+  r: '\r',
+  t: '\t',
+  v: '\v',
+  '\\': '\\',
+  '"': '"',
+  "'": "'",
+};
+// \xHH is a byte: below 0x80 it is that character; higher bytes are invalid
+// UTF-8 on their own, so they stay as written.
+const CODE_ESCAPES: Record<string, { digits: number; max: number }> = {
+  x: { digits: 2, max: 0x7f },
+  u: { digits: 4, max: 0xffff },
+  U: { digits: 8, max: 0x10ffff },
+};
+const HEX_DIGITS = /^[0-9a-fA-F]+$/;
+
+// Decodes the escape whose backslash is at `start`. An escape it does not know,
+// or a malformed one, is kept as written rather than losing its backslash.
+const readEscape = (text: string, start: number): { value: string; end: number } => {
+  const kind = text.charAt(start + 1);
+  const char = CHAR_ESCAPES[kind];
+  if (char !== undefined) {
+    return { value: char, end: start + 2 };
+  }
+  const code = CODE_ESCAPES[kind];
+  const digits = code ? text.slice(start + 2, start + 2 + code.digits) : '';
+  const point = Number.parseInt(digits, 16);
+  if (code && digits.length === code.digits && HEX_DIGITS.test(digits) && point <= code.max) {
+    return { value: String.fromCodePoint(point), end: start + 2 + code.digits };
+  }
+  return { value: text.slice(start, start + 2), end: start + 2 };
+};
 
 // Reads a double-quoted value starting at `start` (the opening quote). Returns
 // the unquoted text and the index after the closing quote, or null when the
 // quote never closes.
 const readQuoted = (text: string, start: number): { value: string; end: number } | null => {
   let value = '';
-  for (let index = start + 1; index < text.length; index += 1) {
+  let index = start + 1;
+  while (index < text.length) {
     const char = text.charAt(index);
     if (char === '"') {
       return { value, end: index + 1 };
     }
     if (char === '\\' && index + 1 < text.length) {
-      index += 1;
-      const escaped = text.charAt(index);
-      value += QUOTE_ESCAPES[escaped] ?? escaped;
+      const decoded = readEscape(text, index);
+      value += decoded.value;
+      index = decoded.end;
     } else {
       value += char;
+      index += 1;
     }
   }
   return null;

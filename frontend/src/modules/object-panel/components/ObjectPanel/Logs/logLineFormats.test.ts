@@ -42,6 +42,21 @@ describe('parseStructuredLogLine', () => {
     });
   });
 
+  it('decodes the escapes Go quoting writes and keeps any other escape as written', () => {
+    // klog quotes with strconv.Quote; go-logfmt writes \u00XX for control characters.
+    const value = String.raw`"nul\x00 bell\a tab\t eé smile\U0001F600 quote\" slash\\ byte\xff odd\q"`;
+    const expected = 'nul\u0000 bell\u0007 tab\t eé smile😀 quote" slash\\ byte\\xff odd\\q';
+
+    expect(
+      parseStructuredLogLine(`I1106 12:00:00.000001       1 a.go:1] "Read" data=${value}`)?.data
+    ).toBe(expected);
+    expect(parseStructuredLogLine(`level=info data=${value}`)?.data).toBe(expected);
+    // A malformed escape at the end of the value is kept, not dropped.
+    expect(parseStructuredLogLine(String.raw`level=info data="cut \u12"`)?.data).toBe(
+      String.raw`cut \u12`
+    );
+  });
+
   it('keeps prose with an occasional key=value as plain text', () => {
     expect(parseStructuredLogLine('connecting to host=db')).toBeNull();
     expect(parseStructuredLogLine('retries=3')).toBeNull();
