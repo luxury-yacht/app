@@ -179,9 +179,11 @@ test sets the backend wall time. Spend a test's time on its own work:
 - A test client built from a `rest.Config` sets `QPS: -1`. Client-go's default
   5 QPS limiter otherwise throttles startup's dozens of access reviews.
 - Exhaustive oracle products sample with `testsupport.SampleCaseUnderRace`
-  ([race_sample.go](../../backend/testsupport/race_sample.go)): race builds run a
-  covering subset and plain builds the whole product. Never skip them under race;
-  `qc:prerelease` runs only `test:race`.
+  ([race_sample.go](../../backend/testsupport/race_sample.go)): race builds run
+  every unfiltered case plus a covering subset of the filtered ones, and plain
+  builds the whole product. Put each filter's match-all value at index 0, because
+  a narrow filter can leave rows that tie on the sort key. Never skip them under
+  race; `qc:prerelease` runs only `test:race`.
 
 Find slow tests from per-test `Elapsed` in `go test -json -count=1 ./...` and per
 file in Vitest's JSON reporter, and compare before and after a change.

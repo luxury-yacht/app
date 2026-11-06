@@ -228,8 +228,9 @@ func TestNamespaceEventsQueryViaStoreEquivalent(t *testing.T) {
 	for sortIndex, sf := range sorts {
 		for dirIndex, d := range dirs {
 			for filterIndex, f := range filts {
-				// Race builds still run every sort, direction, and filter.
-				if !testsupport.SampleCaseUnderRace(4, sortIndex, dirIndex, filterIndex) {
+				// Race builds run every sort and direction unfiltered and sample
+				// the filtered cases, still covering every filter.
+				if !testsupport.SampleCaseUnderRace(4, []int{filterIndex}, []int{sortIndex, dirIndex}) {
 					continue
 				}
 				base := typedTableQuery{
@@ -321,8 +322,9 @@ func TestClusterEventsQueryViaStoreEquivalent(t *testing.T) {
 	for sortIndex, sf := range sorts {
 		for dirIndex, d := range dirs {
 			for filterIndex, f := range filts {
-				// Race builds still run every sort, direction, and filter.
-				if !testsupport.SampleCaseUnderRace(4, sortIndex, dirIndex, filterIndex) {
+				// Race builds run every sort and direction unfiltered and sample
+				// the filtered cases, still covering every filter.
+				if !testsupport.SampleCaseUnderRace(4, []int{filterIndex}, []int{sortIndex, dirIndex}) {
 					continue
 				}
 				base := typedTableQuery{

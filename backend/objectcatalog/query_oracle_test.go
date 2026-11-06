@@ -7,7 +7,8 @@
  * sort × direction × namespace filter × gvk filter × search term × page size —
  * compares the engine's full, page-walked result against an independent brute-force
  * oracle computed in plain Go. Plain builds walk the whole matrix; race builds walk
- * a pairwise-covering tenth of it (testsupport.SampleCaseUnderRace).
+ * every unfiltered case plus a pairwise-covering tenth of the rest
+ * (testsupport.SampleCaseUnderRace).
  *
  * The oracle replicates the engine's EXACT total order: the per-field encoded sort
  * value (query_engine.go newCatalogQueryStoreSchema) with the engine's direction
@@ -306,8 +307,11 @@ func TestCatalogQueryMatchesBruteForceOracle(t *testing.T) {
 				for kindIndex, kindFilter := range kindFilters {
 					for searchIndex, search := range searches {
 						for limitIndex, limit := range pageSizes {
-							// Race builds still run every value and every pair of values.
-							if !testsupport.SampleCaseUnderRace(10, seedIndex, sortIndex, nsIndex, kindIndex, searchIndex, limitIndex) {
+							// Race builds run every seed, sort, and page size unfiltered and
+							// sample the filtered cases, still covering every pair of values.
+							if !testsupport.SampleCaseUnderRace(10,
+								[]int{nsIndex, kindIndex, searchIndex},
+								[]int{seedIndex, sortIndex, limitIndex}) {
 								continue
 							}
 							opts := QueryOptions{
