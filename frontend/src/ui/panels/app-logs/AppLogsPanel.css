@@ -110,26 +110,11 @@
   min-height: 0;
 }
 
-/* The shared log table (LogTable.css) owns cell layout, wrapping, and expansion,
-   as in the Logs tab's Table format; Application Logs keeps only its colours. */
+/* The shared log table (LogTable.css) owns cell layout, wrapping, expansion, and
+   the level colours, as in the Logs tab's Table format; Application Logs keeps
+   only its other column colours. */
 .log-timestamp {
   color: var(--color-text-tertiary);
-}
-
-.log-level.DEBUG {
-  color: var(--log-level-debug);
-}
-
-.log-level.INFO {
-  color: var(--log-level-info);
-}
-
-.log-level.WARN {
-  color: var(--log-level-warn);
-}
-
-.log-level.ERROR {
-  color: var(--log-level-error);
 }
 
 .log-source {

@@ -77,3 +77,21 @@
   overflow: visible;
   text-overflow: clip;
 }
+
+/* Level text colours, shared by the Application Logs Level column and the
+   Logs tab's Table-format level column. */
+.log-level.DEBUG {
+  color: var(--log-level-debug);
+}
+
+.log-level.INFO {
+  color: var(--log-level-info);
+}
+
+.log-level.WARN {
+  color: var(--log-level-warn);
+}
+
+.log-level.ERROR {
+  color: var(--log-level-error);
+}

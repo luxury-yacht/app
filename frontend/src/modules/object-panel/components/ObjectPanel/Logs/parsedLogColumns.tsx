@@ -8,7 +8,9 @@
  */
 
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
+import type React from 'react';
 import { buildCsv } from './logExport';
+import { isLevelFieldKey, type LogLevel, logLevelOfValue } from './logLevels';
 import type { ParsedLogEntry } from './logOptionsReducer';
 import { formatParsedValue } from './parsedLogUtils';
 
@@ -33,7 +35,24 @@ export const PARSED_TIMESTAMP_MIN_WIDTH = 80;
 const PARSED_COLUMN_AUTOSIZE_MAX_WIDTH = 520;
 export const PARSED_TIMESTAMP_AUTOSIZE_MAX_WIDTH = 280;
 const TIMESTAMP_FIELD_KEYS: ReadonlySet<string> = new Set(['timestamp', 'time', 'ts']);
-const LEVEL_FIELD_KEYS: ReadonlySet<string> = new Set(['level', 'severity', 'log_level']);
+
+// The Application Logs level colors (shared LogTable.css): fatal takes the error
+// color, and trace, like a value that names no level, stays plain.
+const LEVEL_CLASS: Partial<Record<LogLevel, string>> = {
+  debug: 'DEBUG',
+  info: 'INFO',
+  warn: 'WARN',
+  error: 'ERROR',
+  fatal: 'ERROR',
+};
+
+// The value as written, colored by the level it names.
+const renderLevelCell = (value: unknown): React.ReactNode => {
+  const level = logLevelOfValue(value);
+  const levelClass = level ? LEVEL_CLASS[level] : undefined;
+  const text = formatParsedValue(value);
+  return levelClass ? <span className={`log-level ${levelClass}`}>{text}</span> : text;
+};
 
 export function buildParsedLogDataColumns(
   derivedFieldKeys: string[],
@@ -53,7 +72,8 @@ export function buildParsedLogDataColumns(
     });
   }
 
-  const jsonLevelKey = derivedFieldKeys.find((key) => LEVEL_FIELD_KEYS.has(key));
+  // The level column is the field level detection reads (logLevels.ts).
+  const jsonLevelKey = derivedFieldKeys.find(isLevelFieldKey);
   if (jsonLevelKey) {
     columns.push({
       key: jsonLevelKey,
@@ -61,7 +81,7 @@ export function buildParsedLogDataColumns(
       sortable: false,
       minWidth: PARSED_COLUMN_MIN_WIDTH,
       autoSizeMaxWidth: PARSED_COLUMN_AUTOSIZE_MAX_WIDTH,
-      render: (item: ParsedLogEntry) => formatParsedValue(item.data[jsonLevelKey]),
+      render: (item: ParsedLogEntry) => renderLevelCell(item.data[jsonLevelKey]),
     });
   }
 
