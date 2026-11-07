@@ -191,7 +191,6 @@
   pointer-events: none;
 }
 
-.dockable-panel__resize-handle:has(input:focus-visible)::after,
 .dockable-panel__resize-handle:has(input.keyboard-programmatic-focus)::after {
   background: var(--color-accent);
 }

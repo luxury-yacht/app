@@ -1,7 +1,11 @@
 /* ==========================================================================
    Focus State Utilities
    ==========================================================================
-   Shared keyboard focus presentation for native and programmatic navigation.
+   Shared keyboard focus presentation. The highlight follows keyboard
+   navigation only: the `keyboard-programmatic-focus` marker that
+   useKeyboardFocusIndicator sets after Tab or a navigation key and clears on
+   pointer use. WebKit's :focus-visible is not a highlight signal; it also
+   matches after shortcuts and focus returned by closing a modal or palette.
    ========================================================================== */
 
 /* Remove default outline for mouse users */
@@ -10,8 +14,8 @@
 }
 
 /* App scope gives the shared treatment precedence over component focus rules,
-   including styles loaded later by lazy views. The programmatic marker covers
-   Tab and Control+Tab immediately after pointer use in native WebKit. */
+   including styles loaded later by lazy views. Native :focus-visible outlines
+   are cleared too, so component and default outlines never show. */
 :root
   body
   :is(:focus-visible, .keyboard-programmatic-focus:focus):not(
@@ -27,17 +31,12 @@
   box-shadow: none;
 }
 
-/* Editable fields can match :focus-visible after a click. Tint them only
-   when the shared keyboard-navigation observer marks their focus.
-   Menus and their options retain their own background and selection colors.
-   Region roots never fill: WebKit focuses an open panel <dialog> with
-   :focus-visible when its native window becomes key, without keyboard use. */
+/* Only the keyboard-navigation marker fills. Menus and their options retain
+   their own background and selection colors. Region roots (main content and
+   panel groups) never fill; their controls do. */
 :root
   body
-  :is(
-    :focus-visible:not(input, textarea, [contenteditable]),
-    .keyboard-programmatic-focus:focus
-  ):not(
+  .keyboard-programmatic-focus:focus:not(
     :where(
       .dropdown-menu,
       [role="menu"],
@@ -58,10 +57,7 @@
   ),
 :root
   body
-  :is(
-    :focus-visible:not(input, textarea, [contenteditable]),
-    .keyboard-programmatic-focus:focus
-  ):not(
+  .keyboard-programmatic-focus:focus:not(
     :where(
       .dropdown-menu,
       [role="menu"],
@@ -84,11 +80,11 @@
   color: var(--color-text);
 }
 
-a:focus-visible {
+a.keyboard-programmatic-focus:focus {
   border-radius: var(--border-radius-xs);
 }
 
-[role="tab"]:focus-visible {
+[role="tab"].keyboard-programmatic-focus:focus {
   border-radius: var(--border-radius-sm);
 }
 
@@ -122,8 +118,8 @@ a:focus-visible {
   .keyboard-region-outline {
     outline-color: Highlight;
   }
-  :root body :is(:focus-visible, .keyboard-programmatic-focus:focus),
-  :root body :is(:focus-visible, .keyboard-programmatic-focus:focus):hover,
+  :root body .keyboard-programmatic-focus:focus,
+  :root body .keyboard-programmatic-focus:focus:hover,
   :root body .sidebar-item.keyboard-preview,
   :root body .sidebar-item.keyboard-preview:hover {
     outline: var(--focus-system-outline-width) solid Highlight;
