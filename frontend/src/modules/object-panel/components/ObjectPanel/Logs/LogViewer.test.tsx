@@ -1472,6 +1472,35 @@ describe('LogViewer active pod synchronisation', () => {
     expect(count()).toBe('1/3 logs');
   });
 
+  it('colors the Level column in the Table view by the detected level', async () => {
+    tableMockState.renderRows = true;
+    await openLogs([
+      logLine('web-1', '{"level":"debug","msg":"a"}', at(0)),
+      logLine('web-1', '{"level":"INFO","msg":"b"}', at(1)),
+      logLine('web-1', '{"level":"warning","msg":"c"}', at(2)),
+      logLine('web-1', '{"level":"error","msg":"d"}', at(3)),
+      logLine('web-1', '{"level":"fatal","msg":"e"}', at(4)),
+      logLine('web-1', '{"level":"custom","msg":"f"}', at(5)),
+    ]);
+
+    await showLogFormat('Table');
+
+    // The cell keeps the text as written; fatal takes the error color, and a
+    // value that is not a level stays plain.
+    const levelCells = Array.from(container().querySelectorAll('.log-level')).map((cell) => [
+      cell.textContent,
+      cell.className,
+    ]);
+    expect(levelCells).toEqual([
+      ['debug', 'log-level DEBUG'],
+      ['INFO', 'log-level INFO'],
+      ['warning', 'log-level WARN'],
+      ['error', 'log-level ERROR'],
+      ['fatal', 'log-level ERROR'],
+    ]);
+    expect(container().textContent).toContain('custom');
+  });
+
   const searchShortcut = () => press('f', isMacPlatform() ? { metaKey: true } : { ctrlKey: true });
 
   it('disables search, timestamps and wrap, and their shortcuts, until a log line arrives', async () => {

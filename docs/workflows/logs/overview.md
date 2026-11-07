@@ -93,9 +93,12 @@ features; Node Logs passes neither.
   included) get a 3px bar in the Application Logs level color at their left
   edge (`data-level-marker`), and every row leaves room for it while markers
   show. A row's level is its cached own level or the inherited level the
-  resolve pass remembered, so nothing is rebuilt per batch. The Table view keeps its level column instead.
-  Only Container Logs shows the filter and markers so far; Node Logs runs the
-  same detection with the filter left at all levels.
+  resolve pass remembered, so nothing is rebuilt per batch. In the Table view
+  the level column's text takes the level colors (info too, as in Application
+  Logs; trace and non-level values stay plain) from the `.log-level` classes in
+  `LogTable.css`, which both log tables share. Only Container Logs shows the
+  filter and markers so far; Node Logs runs the same detection with the filter
+  left at all levels, and its Table view colors the level column too.
 - `hooks/useLogKeyboardShortcuts.ts`: shared shortcuts; `T` (timestamps) and
   `V` (previous logs) exist only when the viewer passes those features.
 - Shared with Application Logs: `@shared/hooks/useLogScrollRestoration.ts`

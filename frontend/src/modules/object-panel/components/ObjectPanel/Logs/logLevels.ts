@@ -76,7 +76,8 @@ const LEVEL_ALIASES: Record<string, LogLevel> = {
 const NUMERIC_LEVELS: readonly LogLevel[] = LOG_LEVELS;
 const MIN_NUMERIC_LEVEL = 10;
 
-const levelFromValue = (value: unknown): LogLevel | null => {
+/** The level a level field's value names ("warning", "INFO+2", 30, …), or null. */
+export const logLevelOfValue = (value: unknown): LogLevel | null => {
   if (typeof value === 'number') {
     if (!Number.isFinite(value) || value < MIN_NUMERIC_LEVEL) {
       return null;
@@ -120,7 +121,7 @@ const levelFromFields = (fields: LogLineFields): LogLevel | null => {
       bestRank = rank;
     }
   }
-  return bestKey === null ? null : levelFromValue(fields[bestKey]);
+  return bestKey === null ? null : logLevelOfValue(fields[bestKey]);
 };
 
 // A plain-text level must appear near the start, where log prefixes put it.
@@ -146,7 +147,7 @@ const levelFromPlainText = (line: string): LogLevel | null => {
       earliest = match;
     }
   }
-  return earliest ? levelFromValue(earliest[1]) : null;
+  return earliest ? logLevelOfValue(earliest[1]) : null;
 };
 
 /**
