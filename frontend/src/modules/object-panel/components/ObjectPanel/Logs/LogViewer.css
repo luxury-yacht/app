@@ -227,23 +227,27 @@
   -webkit-user-select: text;
 }
 
-/* Level markers: while they show, every line leaves room at its left edge, and
-   debug, warning and error lines (inherited stack-trace lines included) get a
-   bar there in the Application Logs level color. */
+/* Level markers: while they show, every line has a 3px left border, and debug,
+   warning and error lines (inherited stack-trace lines included) color it in the
+   Application Logs level color. A border, not an inset box-shadow: WebKit draws
+   an inset shadow as a cut-out and leaves 1px horizontal slivers at the
+   fractional row offsets of the virtualized list. Text stays where the padding
+   alone would put it. */
 .logs-viewer-content--level-markers .log-viewer-line {
-  padding-left: calc(var(--spacing-lg) + var(--spacing-sm));
+  border-left: 3px solid transparent;
+  padding-left: calc(var(--spacing-lg) + var(--spacing-sm) - 3px);
 }
 
-.log-viewer-line[data-level-marker="debug"] {
-  box-shadow: inset 3px 0 0 var(--log-level-debug);
+.logs-viewer-content--level-markers .log-viewer-line[data-level-marker="debug"] {
+  border-left-color: var(--log-level-debug);
 }
 
-.log-viewer-line[data-level-marker="warn"] {
-  box-shadow: inset 3px 0 0 var(--log-level-warn);
+.logs-viewer-content--level-markers .log-viewer-line[data-level-marker="warn"] {
+  border-left-color: var(--log-level-warn);
 }
 
-.log-viewer-line[data-level-marker="error"] {
-  box-shadow: inset 3px 0 0 var(--log-level-error);
+.logs-viewer-content--level-markers .log-viewer-line[data-level-marker="error"] {
+  border-left-color: var(--log-level-error);
 }
 
 /* No wrap mode - disable text wrapping */
