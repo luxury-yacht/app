@@ -166,6 +166,50 @@ describe('useModalFocusTrap', () => {
     root = ReactDOM.createRoot(container);
   });
 
+  const renderModal = async (disabled: boolean) => {
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <TestModal disabled={disabled} />
+        </KeyboardProvider>
+      );
+    });
+  };
+
+  it('returns focus to a clicked control without the keyboard focus cue', async () => {
+    await renderModal(true);
+    act(() => {
+      outsideButton.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+      outsideButton.click();
+    });
+    expect(document.activeElement).toBe(outsideButton);
+
+    await renderModal(false);
+    expect(document.activeElement).toBe(document.querySelector('.modal-container input'));
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    await renderModal(true);
+
+    expect(document.activeElement).toBe(outsideButton);
+    expect(outsideButton.classList.contains('keyboard-programmatic-focus')).toBe(false);
+  });
+
+  it('keeps the keyboard focus cue on the restored control during Tab navigation', async () => {
+    await renderModal(true);
+    outsideButton.focus();
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+    });
+    expect(outsideButton.classList.contains('keyboard-programmatic-focus')).toBe(true);
+
+    await renderModal(false);
+    await renderModal(true);
+
+    expect(document.activeElement).toBe(outsideButton);
+    expect(outsideButton.classList.contains('keyboard-programmatic-focus')).toBe(true);
+  });
+
   it('does nothing when disabled', async () => {
     outsideButton.focus();
 

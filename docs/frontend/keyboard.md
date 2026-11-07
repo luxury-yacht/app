@@ -42,18 +42,30 @@ Owners: `frontend/src/ui/shortcuts/{context.tsx,surfaces.ts,hooks.ts}`
   WebKit pointer behavior cannot leave the next key in the old region. Its
   shared focus observer runs before local capture handlers and clears keyboard
   indication on pointer use and provider cleanup.
-- `frontend/styles/utilities/focus.css` owns the keyboard background highlight,
-  including programmatic focus after pointer use. Editable fields need the
-  shared keyboard marker so clicking does not tint them; typing clears it until
-  the next keyboard focus move. Dropdown/context-menu backgrounds and option
-  colors, YAML editors, log output, and region roots (main content and panel
-  groups) are excluded; WebKit focuses an open panel `<dialog>` as
-  `:focus-visible` when its native window becomes key. Forced-color mode keeps a
-  system outline.
+- The focus highlight follows keyboard navigation only. Tab, Shift+Tab, or
+  Control+Tab starts it; so does an arrow, Home, End, PageUp, or PageDown key
+  without Command/Control/Alt outside a typing field (`isInputElement`), but
+  only when focus moves before the next task (list owners move it from their
+  key handlers). Pointer use ends it. While it lasts, the shared observer marks
+  each focused control `keyboard-programmatic-focus`, including focus returned
+  by closing a modal or the palette. Shortcuts, opening or closing the palette
+  or a modal, keys typed in fields, and navigation keys that only scroll never
+  start it.
+- `frontend/styles/utilities/focus.css` owns the keyboard background highlight
+  and keys it, and any component focus visuals, on that marker. Never style
+  focus cues with `:focus-visible`: WebKit matches it after shortcuts and
+  programmatic focus moves (such as closing the palette after a click), so it
+  highlights controls the user never navigated to. The shared rule only clears
+  `:focus-visible` outlines. Text-field focus styling may stay on `:focus` or
+  `:focus-visible`. Typing clears the marker until the next keyboard focus
+  move. Dropdown/context-menu backgrounds and option colors, YAML editors, log
+  output, and region roots (main content and panel groups) are excluded.
+  Forced-color mode keeps a system outline on the marker.
 - The first Tab after pointer use and each region change briefly outline the
-  destination region. `ui/shortcuts/regionFocusIndicator.ts` waits for the
-  final focus target, accounts for app zoom, and cleans up frames and overlays.
-  Never change region layout or overflow to show the cue.
+  destination region; arrow-key navigation never does.
+  `ui/shortcuts/regionFocusIndicator.ts` waits for the final focus target,
+  accounts for app zoom, and cleans up frames and overlays. Never change region
+  layout or overflow to show the cue.
 - `data-tab-native="true"` surfaces (shell terminals) keep ordinary Tab;
   Control+Tab leaves them. Blocking dialogs and the palette keep region
   commands inside themselves.

@@ -153,7 +153,7 @@
 }
 
 .tab-item-shell:hover .tab-item__close,
-.tab-item-shell:has(:focus-visible, .keyboard-programmatic-focus:focus) .tab-item__close {
+.tab-item-shell:has(.keyboard-programmatic-focus:focus) .tab-item__close {
   opacity: 1;
   pointer-events: auto;
 }

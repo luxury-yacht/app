@@ -277,7 +277,9 @@
   display: block;
 }
 
-.sessions-status-message .as-shell-session-jump:focus-visible .as-shell-open-affordance,
+.sessions-status-message
+  .as-shell-session-jump.keyboard-programmatic-focus:focus
+  .as-shell-open-affordance,
 .sessions-status-message .as-shell-session-jump:hover:not(:disabled) .as-shell-open-affordance {
   color: var(--color-accent);
   opacity: 1;
@@ -368,7 +370,7 @@
 }
 
 .sessions-status-message .as-compact-icon-action:hover:not(:disabled),
-.sessions-status-message .as-compact-icon-action:focus-visible {
+.sessions-status-message .as-compact-icon-action.keyboard-programmatic-focus:focus {
   background: none;
   color: var(--color-error);
   opacity: 1;
@@ -377,12 +379,12 @@
 }
 
 .sessions-status-message .as-compact-icon-action.as-warning:hover:not(:disabled),
-.sessions-status-message .as-compact-icon-action.as-warning:focus-visible {
+.sessions-status-message .as-compact-icon-action.as-warning.keyboard-programmatic-focus:focus {
   color: var(--color-error);
 }
 
 .sessions-status-message .as-compact-icon-action.as-danger:hover:not(:disabled),
-.sessions-status-message .as-compact-icon-action.as-danger:focus-visible {
+.sessions-status-message .as-compact-icon-action.as-danger.keyboard-programmatic-focus:focus {
   color: var(--color-error);
 }
 

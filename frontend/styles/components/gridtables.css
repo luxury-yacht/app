@@ -554,13 +554,13 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
 }
 
 .gridtable-column-edit-action:hover,
-.gridtable-column-edit-action:focus-visible {
+.gridtable-column-edit-action.keyboard-programmatic-focus:focus {
   color: var(--color-text);
   background: var(--color-bg-tertiary);
 }
 
 .gridtable-column-delete-action:hover,
-.gridtable-column-delete-action:focus-visible {
+.gridtable-column-delete-action.keyboard-programmatic-focus:focus {
   color: var(--color-error-text);
   background: var(--color-error-bg);
 }
@@ -572,7 +572,7 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
 }
 
 .gridtable-column-drag-handle:hover,
-.gridtable-column-drag-handle:focus-visible {
+.gridtable-column-drag-handle.keyboard-programmatic-focus:focus {
   color: var(--color-text-secondary);
 }
 
@@ -586,7 +586,7 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   opacity: 0.4;
 }
 
-.gridtable-column-drag-handle:focus-visible,
+.gridtable-column-drag-handle.keyboard-programmatic-focus:focus,
 .dropdown-option-row.highlighted .gridtable-column-drag-handle,
 .dropdown-option-row[data-column-key]:hover .gridtable-column-drag-handle {
   opacity: 1;

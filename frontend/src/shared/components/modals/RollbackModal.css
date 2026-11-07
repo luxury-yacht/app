@@ -61,7 +61,7 @@
   border-left-color: var(--color-accent);
 }
 
-.rollback-revision-item:focus-visible {
+.rollback-revision-item.keyboard-programmatic-focus:focus {
   background-color: var(--grid-bg-hover, var(--color-bg-tertiary));
   border-left-color: var(--color-accent);
 }
