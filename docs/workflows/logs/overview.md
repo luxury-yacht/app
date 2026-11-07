@@ -87,8 +87,15 @@ features; Node Logs passes neither.
   labels as the Application Logs level filter), listing the levels present plus
   any chosen level the buffer no longer holds, then No level; hidden while no
   line has a level. A frontend filter; the backend still reads every line.
-  Only Container Logs shows it so far; Node Logs runs the same detection with
-  the filter left at all levels.
+  Its action row adds a Markers toggle (on by default, saved with the tab's
+  options): raw and Pretty rows of debug, warning and error entries (fatal
+  shows as error, trace and info stay plain; inherited stack-trace lines
+  included) get a 3px bar in the Application Logs level color at their left
+  edge (`data-level-marker`), and every row leaves room for it while markers
+  show. A row's level is its cached own level or the inherited level the
+  resolve pass remembered, so nothing is rebuilt per batch. The Table view keeps its level column instead.
+  Only Container Logs shows the filter and markers so far; Node Logs runs the
+  same detection with the filter left at all levels.
 - `hooks/useLogKeyboardShortcuts.ts`: shared shortcuts; `T` (timestamps) and
   `V` (previous logs) exist only when the viewer passes those features.
 - Shared with Application Logs: `@shared/hooks/useLogScrollRestoration.ts`

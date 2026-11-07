@@ -34,6 +34,8 @@ export interface LogOptionsState {
   regexMatches: boolean;
   /** Which log levels are shown (logLevels.ts values); a frontend filter. */
   levelFilter: MultiSelectFilterSelection;
+  /** Whether warning and error lines show a level marker. */
+  showLevelMarkers: boolean;
   wrapText: boolean;
   showAnsiColors: boolean;
   displayMode: LogDisplayMode;
@@ -49,6 +51,7 @@ export type LogOptionsAction =
   | { type: 'TOGGLE_CASE_SENSITIVE_MATCHES' }
   | { type: 'TOGGLE_REGEX_MATCHES' }
   | { type: 'SET_LEVEL_FILTER'; payload: MultiSelectFilterSelection }
+  | { type: 'TOGGLE_LEVEL_MARKERS' }
   | { type: 'TOGGLE_WRAP_TEXT' }
   | { type: 'TOGGLE_SHOW_ANSI_COLORS' }
   | { type: 'TOGGLE_PARSED_VIEW' }
@@ -65,6 +68,7 @@ const LOG_OPTIONS_ACTION_TYPES = new Set<string>(
     TOGGLE_CASE_SENSITIVE_MATCHES: true,
     TOGGLE_REGEX_MATCHES: true,
     SET_LEVEL_FILTER: true,
+    TOGGLE_LEVEL_MARKERS: true,
     TOGGLE_WRAP_TEXT: true,
     TOGGLE_SHOW_ANSI_COLORS: true,
     TOGGLE_PARSED_VIEW: true,
@@ -84,6 +88,7 @@ export const initialLogOptionsState: LogOptionsState = {
   caseSensitiveMatches: false,
   regexMatches: false,
   levelFilter: ALL_MULTISELECT_FILTER,
+  showLevelMarkers: true,
   wrapText: true,
   showAnsiColors: true,
   displayMode: 'raw',
@@ -144,6 +149,8 @@ export function logOptionsReducer<S extends LogOptionsState>(
       return { ...state, textFilter: action.payload };
     case 'SET_LEVEL_FILTER':
       return { ...state, levelFilter: action.payload };
+    case 'TOGGLE_LEVEL_MARKERS':
+      return { ...state, showLevelMarkers: !state.showLevelMarkers };
     case 'TOGGLE_WRAP_TEXT':
       return { ...state, wrapText: !state.wrapText };
     case 'TOGGLE_SHOW_ANSI_COLORS':

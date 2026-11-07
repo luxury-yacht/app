@@ -80,6 +80,7 @@ export const extractLogViewerPrefs = (state: LogViewerState): LogViewerPrefs => 
   caseSensitiveMatches: state.caseSensitiveMatches,
   regexMatches: state.regexMatches,
   levelFilter: state.levelFilter,
+  showLevelMarkers: state.showLevelMarkers,
   displayMode: state.displayMode,
   expandedRows: Array.from(state.expandedRows),
   showPreviousContainerLogs: state.mode.kind === 'previous',
@@ -106,6 +107,7 @@ export const applyLogViewerPrefs = (
   caseSensitiveMatches: prefs.caseSensitiveMatches ?? false,
   regexMatches: prefs.regexMatches ?? false,
   levelFilter: prefs.levelFilter ?? ALL_MULTISELECT_FILTER,
+  showLevelMarkers: prefs.showLevelMarkers ?? true,
   displayMode: prefs.displayMode,
   expandedRows: new Set(prefs.expandedRows),
   // Rehydrate into the previous-logs view (not loading — the fetch reprimes on

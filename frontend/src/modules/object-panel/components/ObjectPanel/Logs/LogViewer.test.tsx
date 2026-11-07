@@ -42,76 +42,87 @@ import { isMacPlatform } from '@/utils/platform';
 import LogViewer from './LogViewer';
 import type { ParsedLogEntry } from './logOptionsReducer';
 
-vi.mock('@shared/components/dropdowns/Dropdown', () => ({
-  Dropdown: ({
-    value = '',
-    onChange,
-    options = [],
-    multiple = false,
-    renderValue,
-    ariaLabel,
-  }: {
-    value?: string | string[];
-    onChange?: (v: string | string[]) => void;
-    options?: Array<{ label?: string; value: string; disabled?: boolean }>;
-    multiple?: boolean;
-    ariaLabel?: string;
-    renderValue?: (
-      value: string | string[],
-      options: Array<{ label: string; value: string }>
-    ) => React.ReactNode;
-  }) => {
-    const testId =
-      multiple && ariaLabel
-        ? `logs-${ariaLabel.toLowerCase()}-dropdown`
-        : multiple ||
-            options?.some((opt) => opt?.label === 'All') ||
-            options?.some(
-              (opt) => typeof opt?.label === 'string' && opt.label.startsWith('All ')
-            ) ||
-            options?.some(
-              (opt) =>
-                typeof opt?.label === 'string' &&
-                opt.label.startsWith('Containers and Init Containers')
-            )
-          ? 'pod-container-dropdown'
-          : options?.some((opt) => opt?.label === 'Auto-scroll')
-            ? 'pod-options-dropdown'
-            : 'pod-filter-dropdown';
-    return (
-      <>
-        <span data-testid={`${testId}-value`}>
-          {renderValue?.(
-            value,
-            options.map((opt) => ({ value: opt.value, label: opt.label ?? opt.value }))
-          )}
-        </span>
-        <select
-          data-testid={testId}
-          multiple={multiple}
-          value={value}
-          onChange={(event) => {
-            const target = event.target as HTMLSelectElement;
-            onChange?.(
-              multiple
-                ? Array.from(target.selectedOptions).map((option) => option.value)
-                : target.value
-            );
-          }}
-        >
-          {withStableListKeys(
-            options ?? [],
-            (opt) => `${opt?.value ?? ''}:${opt?.label ?? ''}`
-          ).map(({ key, value: opt }) => (
-            <option key={key} value={opt?.value} disabled={Boolean(opt?.disabled)}>
-              {opt?.label ?? opt?.value}
-            </option>
-          ))}
-        </select>
-      </>
-    );
-  },
-}));
+vi.mock('@shared/components/dropdowns/Dropdown', () => {
+  type MenuActions =
+    | React.ReactNode
+    | ((context: { closeDropdown: () => void }) => React.ReactNode);
+  // The menu's extra actions (Log Levels: the Markers toggle), shown beside the options.
+  const MenuActions = ({ actions }: { actions?: MenuActions }) =>
+    typeof actions === 'function' ? actions({ closeDropdown: () => undefined }) : (actions ?? null);
+  return {
+    Dropdown: ({
+      value = '',
+      onChange,
+      options = [],
+      multiple = false,
+      renderValue,
+      ariaLabel,
+      additionalBulkActions,
+    }: {
+      value?: string | string[];
+      onChange?: (v: string | string[]) => void;
+      options?: Array<{ label?: string; value: string; disabled?: boolean }>;
+      multiple?: boolean;
+      ariaLabel?: string;
+      renderValue?: (
+        value: string | string[],
+        options: Array<{ label: string; value: string }>
+      ) => React.ReactNode;
+      additionalBulkActions?: MenuActions;
+    }) => {
+      const testId =
+        multiple && ariaLabel
+          ? `logs-${ariaLabel.toLowerCase()}-dropdown`
+          : multiple ||
+              options?.some((opt) => opt?.label === 'All') ||
+              options?.some(
+                (opt) => typeof opt?.label === 'string' && opt.label.startsWith('All ')
+              ) ||
+              options?.some(
+                (opt) =>
+                  typeof opt?.label === 'string' &&
+                  opt.label.startsWith('Containers and Init Containers')
+              )
+            ? 'pod-container-dropdown'
+            : options?.some((opt) => opt?.label === 'Auto-scroll')
+              ? 'pod-options-dropdown'
+              : 'pod-filter-dropdown';
+      return (
+        <>
+          <span data-testid={`${testId}-value`}>
+            {renderValue?.(
+              value,
+              options.map((opt) => ({ value: opt.value, label: opt.label ?? opt.value }))
+            )}
+          </span>
+          <select
+            data-testid={testId}
+            multiple={multiple}
+            value={value}
+            onChange={(event) => {
+              const target = event.target as HTMLSelectElement;
+              onChange?.(
+                multiple
+                  ? Array.from(target.selectedOptions).map((option) => option.value)
+                  : target.value
+              );
+            }}
+          >
+            {withStableListKeys(
+              options ?? [],
+              (opt) => `${opt?.value ?? ''}:${opt?.label ?? ''}`
+            ).map(({ key, value: opt }) => (
+              <option key={key} value={opt?.value} disabled={Boolean(opt?.disabled)}>
+                {opt?.label ?? opt?.value}
+              </option>
+            ))}
+          </select>
+          <MenuActions actions={additionalBulkActions} />
+        </>
+      );
+    },
+  };
+});
 
 const tableMockState = vi.hoisted(() => ({ renderRows: false }));
 
@@ -1949,6 +1960,40 @@ describe('LogViewer active pod synchronisation', () => {
       setObjPanelLogsBufferMaxSize(SPECS.objPanelLogsBufferMaxSize.defaultValue);
       await app.settle();
     }
+  });
+
+  it('marks debug, warning, and error lines, stack traces included, until markers are turned off', async () => {
+    await openLogs(
+      [
+        logLine('web-1', 'booting', at(0)),
+        logLine('web-1', 'level=info msg=ready', at(1)),
+        logLine('web-1', 'level=debug msg="cache miss"', at(2)),
+        logLine('web-1', '{"level":"error","msg":"crash"}', at(3)),
+        logLine('web-1', '    at Server.listen (server.js:10)', at(4)),
+        logLine('web-1', 'W1106 12:00:00.000001       1 sync.go:7] "Slow sync"', at(5)),
+        logLine('web-1', '{"level":"fatal","msg":"giving up"}', at(6)),
+      ],
+      { activePodNames: ['web-1'] }
+    );
+    const markers = () =>
+      Array.from(container().querySelectorAll('.log-viewer-line')).map(
+        (line) => line.getAttribute('data-level-marker') ?? 'none'
+      );
+    const unmarked = Array.from({ length: 7 }, () => 'none');
+    const markersToggle = () => requireControl('Show level markers');
+
+    // Info and unleveled lines stay plain; fatal shows as an error.
+    expect(markers()).toEqual(['none', 'none', 'debug', 'error', 'error', 'warn', 'error']);
+    expect(markersToggle().getAttribute('aria-pressed')).toBe('true');
+
+    await click(markersToggle());
+
+    expect(markers()).toEqual(unmarked);
+    expect(markersToggle().getAttribute('aria-pressed')).toBe('false');
+
+    // The choice is saved with the tab's options.
+    await remountViewer({ activePodNames: ['web-1'] });
+    expect(markers()).toEqual(unmarked);
   });
 
   it('offers no level filter when no line has a level', async () => {

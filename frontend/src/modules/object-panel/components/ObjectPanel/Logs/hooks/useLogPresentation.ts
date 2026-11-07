@@ -71,6 +71,12 @@ export type LogPresentation<T> = {
   logLevels: LogLevelSummary;
   /** Whether the level filter narrows the lines: not every level is chosen. */
   levelFilterHidesLines: boolean;
+  /**
+   * An entry's level, its own or inherited; null when it has none. Plain string
+   * lines have no identity to remember an inherited level by, so they report
+   * their own level only.
+   */
+  levelOf: (entry: T) => LogLevel | null;
   /** Matches to highlight in the shown lines; none in Invert, which shows the others. */
   highlightRegex: RegExp | null;
   /** The parsed JSON table, only in the table view: rows and columns. */
@@ -216,18 +222,18 @@ const useLineAnalysis = <T>(lineOf: (entry: T) => string, sourceKeyOf: (entry: T
     },
     [accessors]
   );
-  const jsonOf = useCallback(
-    (entry: T): LogLineFields | null => {
+  const analysisOf = useCallback(
+    (entry: T): LineAnalysis => {
       if (typeof entry === 'object' && entry !== null) {
-        return analyzeObjectEntry(objectCache.current, entry, accessors).fields;
+        return analyzeObjectEntry(objectCache.current, entry, accessors);
       }
       const line = accessors.lineOf(entry);
-      return (stringCache.current.get(line) ?? analyzeLine(line, accessors.sourceKeyOf(entry)))
-        .fields;
+      return stringCache.current.get(line) ?? analyzeLine(line, accessors.sourceKeyOf(entry));
     },
     [accessors]
   );
-  return { analyzeAll, jsonOf };
+  const jsonOf = useCallback((entry: T) => analysisOf(entry).fields, [analysisOf]);
+  return { analyzeAll, analysisOf, jsonOf };
 };
 
 const hasFields = (analysis: LineAnalysis) => analysis.fields !== null;
@@ -255,6 +261,7 @@ const ENTRY_LEVEL_MEMORY: InheritedLevelMemory<unknown> = {
 const useLevelFilter = <T>(
   entries: T[],
   analyses: LineAnalysis[],
+  analysisOf: (entry: T) => LineAnalysis,
   levelFilter: LogOptionsState['levelFilter']
 ) => {
   const { levels, summary } = useMemo(
@@ -272,7 +279,14 @@ const useLevelFilter = <T>(
     () => (matcher ? entries.filter((_, index) => matcher(levels[index] ?? null)) : entries),
     [entries, levels, matcher]
   );
-  return { levelEntries, logLevels: summary, levelFilterHidesLines: matcher !== null };
+  // The cached own level, else the level the pass above remembered the entry
+  // inheriting; a lookup per rendered row, no table rebuilt each batch.
+  const levelOf = useCallback(
+    (entry: T): LogLevel | null =>
+      analysisOf(entry).level ?? ENTRY_LEVEL_MEMORY.recall(entry) ?? null,
+    [analysisOf]
+  );
+  return { levelEntries, logLevels: summary, levelFilterHidesLines: matcher !== null, levelOf };
 };
 
 export function useLogPresentation<T>(source: LogPresentationSource<T>): LogPresentation<T> {
@@ -286,11 +300,12 @@ export function useLogPresentation<T>(source: LogPresentationSource<T>): LogPres
   } = source;
   const { displayMode, filterMode, regexMatches, caseSensitiveMatches, levelFilter } =
     source.options;
-  const { analyzeAll, jsonOf } = useLineAnalysis(lineOf, sourceKeyOf);
+  const { analyzeAll, analysisOf, jsonOf } = useLineAnalysis(lineOf, sourceKeyOf);
   const analyses = useMemo(() => analyzeAll(entries), [analyzeAll, entries]);
-  const { levelEntries, logLevels, levelFilterHidesLines } = useLevelFilter(
+  const { levelEntries, logLevels, levelFilterHidesLines, levelOf } = useLevelFilter(
     entries,
     analyses,
+    analysisOf,
     levelFilter
   );
   const { filterText, filteredEntries, hasInvalidRegex } = useTextFilter({
@@ -360,6 +375,7 @@ export function useLogPresentation<T>(source: LogPresentationSource<T>): LogPres
     textFilterHidesLines: filterMode !== 'all' && filterText.trim().length > 0,
     logLevels,
     levelFilterHidesLines,
+    levelOf,
     highlightRegex,
     parsedRows,
     tableColumns,

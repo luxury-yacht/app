@@ -227,6 +227,25 @@
   -webkit-user-select: text;
 }
 
+/* Level markers: while they show, every line leaves room at its left edge, and
+   debug, warning and error lines (inherited stack-trace lines included) get a
+   bar there in the Application Logs level color. */
+.logs-viewer-content--level-markers .log-viewer-line {
+  padding-left: calc(var(--spacing-lg) + var(--spacing-sm));
+}
+
+.log-viewer-line[data-level-marker="debug"] {
+  box-shadow: inset 3px 0 0 var(--log-level-debug);
+}
+
+.log-viewer-line[data-level-marker="warn"] {
+  box-shadow: inset 3px 0 0 var(--log-level-warn);
+}
+
+.log-viewer-line[data-level-marker="error"] {
+  box-shadow: inset 3px 0 0 var(--log-level-error);
+}
+
 /* No wrap mode - disable text wrapping */
 .logs-viewer-text.no-wrap .log-viewer-line {
   white-space: pre;

@@ -222,6 +222,19 @@ export const resolveLogLevels = <T>(
   };
 };
 
+/** The marker a line shows for its level: debug, warnings, and errors (fatal included). */
+export type LogLevelMarker = 'debug' | 'warn' | 'error';
+
+const LEVEL_MARKERS: Partial<Record<LogLevel, LogLevelMarker>> = {
+  debug: 'debug',
+  warn: 'warn',
+  error: 'error',
+  fatal: 'error',
+};
+
+export const logLevelMarker = (level: LogLevel | null): LogLevelMarker | null =>
+  level ? (LEVEL_MARKERS[level] ?? null) : null;
+
 /** Tests a resolved level against the filter; null when every level is shown. */
 export const logLevelMatcher = (
   selection: MultiSelectFilterSelection

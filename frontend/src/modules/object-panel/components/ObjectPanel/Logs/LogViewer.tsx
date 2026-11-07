@@ -89,7 +89,13 @@ import {
   logFilterSelectionMatchesNone,
   pruneLogFilterSelectionToOptions,
 } from './logFilterSelection';
-import { logLevelFilterOptions } from './logLevels';
+import {
+  type LogLevel,
+  type LogLevelMarker,
+  type LogLevelSummary,
+  logLevelFilterOptions,
+  logLevelMarker,
+} from './logLevels';
 import type { ParsedLogEntry } from './logOptionsReducer';
 import { isValidRegexPattern } from './logSearch';
 import { clearLogSearch } from './logSearchChips';
@@ -372,6 +378,26 @@ const shownContainerLogCount = (
   filteredCount: number
 ): number => (isParsedView ? parsedCount : filteredCount);
 
+type RowLevelMarkers = {
+  /** Markers show: turned on, and some line has a level. */
+  shown: boolean;
+  markerOf: (row: ContainerLogRow) => LogLevelMarker | null;
+};
+
+const NO_ROW_LEVEL_MARKERS: RowLevelMarkers = { shown: false, markerOf: () => null };
+
+const rowLevelMarkers = (
+  showLevelMarkers: boolean,
+  logLevels: LogLevelSummary,
+  levelOf: (entry: ContainerLogsEntry) => LogLevel | null
+): RowLevelMarkers =>
+  showLevelMarkers && logLevels.levels.length > 0
+    ? {
+        shown: true,
+        markerOf: (row) => (row.entry ? logLevelMarker(levelOf(row.entry)) : null),
+      }
+    : NO_ROW_LEVEL_MARKERS;
+
 const hasActiveLogResultFilter = (
   selectedFilters: Parameters<typeof isNarrowingFilterSelection>[0],
   textFilterHidesLines: boolean,
@@ -418,6 +444,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     caseSensitiveMatches,
     regexMatches,
     levelFilter,
+    showLevelMarkers,
     displayMode,
     expandedRows,
   } = state;
@@ -669,6 +696,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     textFilterHidesLines,
     logLevels,
     levelFilterHidesLines,
+    levelOf,
     highlightRegex,
     canParseLogs: canParseContainerLogs,
     parsedRows,
@@ -902,6 +930,10 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     plainSegmentWrapper: 'fragment',
   });
 
+  const levelMarkers = useMemo(
+    () => rowLevelMarkers(showLevelMarkers, logLevels, levelOf),
+    [levelOf, logLevels, showLevelMarkers]
+  );
   const renderRawLogRow = useCallback(
     (row: ContainerLogRow) =>
       renderContainerLogRow({
@@ -910,8 +942,15 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         selectPod: handleSelectPodFilter,
         selectContainer: handleSelectContainerFilter,
         renderMessage: renderMessageContent,
+        levelMarker: levelMarkers.markerOf(row),
       }),
-    [handleSelectContainerFilter, handleSelectPodFilter, podColors, renderMessageContent]
+    [
+      handleSelectContainerFilter,
+      handleSelectPodFilter,
+      levelMarkers,
+      podColors,
+      renderMessageContent,
+    ]
   );
 
   useLogScopeContainers({
@@ -1058,6 +1097,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       logsContentRef={logsContentRef}
       renderedLogContent={renderedLogContent}
       isParsedView={isParsedView}
+      showLevelMarkers={levelMarkers.shown}
       isTailFollowing={isTailFollowing}
       resumeScrolling={handleResumeScrolling}
     />
