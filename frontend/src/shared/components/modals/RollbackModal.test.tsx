@@ -2,7 +2,7 @@
  * frontend/src/shared/components/modals/RollbackModal.test.tsx
  *
  * Test suite for RollbackModal.
- * Covers loading, error, empty, auto-select, and title rendering behaviors.
+ * Covers loading, error, empty, auto-select, comparison sides, and revision picking.
  */
 
 import { KeyboardProvider } from '@ui/shortcuts/context';
@@ -13,12 +13,14 @@ import RollbackModal from './RollbackModal';
 
 // Hoisted mock for the Wails backend bindings.
 const backendMocks = vi.hoisted(() => ({
+  GetClusterWorkspaceStateForWindow: vi.fn(),
   GetRevisionHistory: vi.fn(),
   RunObjectAction: vi.fn(),
 }));
 const handleInlineMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@core/backend-api', () => ({
+  GetClusterWorkspaceStateForWindow: backendMocks.GetClusterWorkspaceStateForWindow,
   GetRevisionHistory: backendMocks.GetRevisionHistory,
   RunObjectAction: backendMocks.RunObjectAction,
 }));
@@ -45,6 +47,32 @@ const makeRevision = (
 const buildLargeRollbackTemplate = (lineCount: number) =>
   Array.from({ length: lineCount }, (_, index) => `line-${index + 1}`).join('\n');
 
+const currentSide = () =>
+  document.querySelector('[data-testid="rollback-current"]')?.textContent ?? '';
+
+const targetSide = () =>
+  document.querySelector('[data-testid="rollback-target"]')?.textContent ?? '';
+
+const revisionPicker = () =>
+  document.querySelector<HTMLButtonElement>('[aria-label="Revision to roll back to"]');
+
+const revisionOptions = () =>
+  Array.from(document.querySelectorAll<HTMLElement>('.dropdown-option'));
+
+const openRevisionPicker = async () => {
+  await act(async () => {
+    revisionPicker()?.click();
+  });
+};
+
+const diffSide = (side: 'left' | 'right') =>
+  Array.from(document.querySelectorAll(`.object-diff-cell-${side} .object-diff-line-text`))
+    .map((line) => line.textContent)
+    .join('\n');
+
+const diffOnlyToggle = () =>
+  document.querySelector<HTMLInputElement>('.rollback-modal-footer input[type="checkbox"]');
+
 describe('RollbackModal', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
@@ -64,6 +92,14 @@ describe('RollbackModal', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
+    // The confirmation names its cluster through the workspace store.
+    backendMocks.GetClusterWorkspaceStateForWindow.mockResolvedValue({
+      selectedKubeconfigs: [],
+      visibleClusterId: '',
+      clusters: {},
+    });
+    // jsdom has no layout, so it does not implement scrollIntoView for the open menu.
+    HTMLElement.prototype.scrollIntoView = vi.fn();
     backendMocks.GetRevisionHistory.mockReset();
     backendMocks.RunObjectAction.mockReset();
     handleInlineMock.mockReset();
@@ -106,7 +142,7 @@ describe('RollbackModal', () => {
     expect(backendMocks.GetRevisionHistory).not.toHaveBeenCalled();
   });
 
-  it('renders loading state then revision list', async () => {
+  it('renders loading state then both revisions being compared', async () => {
     // Create a deferred promise so we can assert the loading state.
     let resolveRevisions!: (value: unknown) => void;
     const pending = new Promise((resolve) => {
@@ -125,10 +161,10 @@ describe('RollbackModal', () => {
       await Promise.resolve();
     });
 
-    // Loading should be gone; revision list should be present.
+    // Loading should be gone; the comparison should name both revisions.
     expect(document.querySelector('[data-testid="rollback-loading"]')).toBeNull();
-    expect(document.querySelector('[data-testid="rollback-revision-list"]')).not.toBeNull();
-    expect(document.querySelectorAll('.rollback-revision-item')).toHaveLength(3);
+    expect(currentSide()).toContain('Revision 3');
+    expect(revisionPicker()?.textContent).toContain('Revision 2');
   });
 
   it('auto-selects most recent non-current revision', async () => {
@@ -183,9 +219,127 @@ describe('RollbackModal', () => {
     const emptyEl = document.querySelector('[data-testid="rollback-empty"]');
     expect(emptyEl).not.toBeNull();
     expect(emptyEl?.textContent).toBe('No previous revisions available for rollback');
+    expect(diffOnlyToggle()).toBeNull();
   });
 
-  it('marks the current revision as disabled and unselectable', async () => {
+  it('compares the current revision on the left with the rollback target on the right', async () => {
+    backendMocks.GetRevisionHistory.mockResolvedValue([
+      makeRevision(3, true, { content: 'image: demo:v3', changeCause: 'canary' }),
+      makeRevision(2, false, { content: 'image: demo:v2', changeCause: 'hotfix' }),
+    ]);
+
+    await renderModal();
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(currentSide()).toContain('canary');
+    expect(targetSide()).toContain('hotfix');
+    expect(diffSide('left')).toContain('image: demo:v3');
+    expect(diffSide('right')).toContain('image: demo:v2');
+  });
+
+  it('offers only earlier revisions as rollback targets, newest first', async () => {
+    backendMocks.GetRevisionHistory.mockResolvedValue([
+      makeRevision(1, false),
+      makeRevision(3, true),
+      makeRevision(2, false),
+    ]);
+
+    await renderModal();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await openRevisionPicker();
+
+    const labels = revisionOptions().map((option) => option.textContent ?? '');
+    expect(labels).toHaveLength(2);
+    expect(labels[0]).toContain('Revision 2');
+    expect(labels[1]).toContain('Revision 1');
+  });
+
+  it('rolls back to the revision chosen in the picker', async () => {
+    backendMocks.GetRevisionHistory.mockResolvedValue([
+      makeRevision(3, true, { content: 'image: demo:v3' }),
+      makeRevision(2, false, { content: 'image: demo:v2' }),
+      makeRevision(1, false, { content: 'image: demo:v1', changeCause: 'first release' }),
+    ]);
+    backendMocks.RunObjectAction.mockResolvedValue({});
+
+    await renderModal();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await openRevisionPicker();
+    await act(async () => {
+      revisionOptions()[1]?.click();
+    });
+
+    expect(targetSide()).toContain('first release');
+    expect(diffSide('left')).toContain('image: demo:v3');
+    expect(diffSide('right')).toContain('image: demo:v1');
+
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('.rollback-modal-footer .button.warning')?.click();
+    });
+    await act(async () => {
+      document
+        .querySelector<HTMLButtonElement>('.confirmation-modal-footer .button.warning')
+        ?.click();
+    });
+
+    expect(backendMocks.RunObjectAction).toHaveBeenCalledWith({
+      action: 'rollback',
+      revision: 1,
+      target: expect.objectContaining({
+        clusterId: 'cluster-1',
+        group: 'apps',
+        version: 'v1',
+        kind: 'Deployment',
+        namespace: 'default',
+        name: 'my-deploy',
+      }),
+    });
+    expect(defaultProps.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not name a current revision when the history marks none', async () => {
+    backendMocks.GetRevisionHistory.mockResolvedValue([
+      makeRevision(2, false),
+      makeRevision(1, false),
+    ]);
+
+    await renderModal();
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(currentSide()).not.toContain('Revision');
+    expect(revisionPicker()?.textContent).toContain('Revision 2');
+    expect(document.querySelector('.object-diff-table')).toBeNull();
+  });
+
+  it('narrows the comparison to changed lines with Diff only', async () => {
+    backendMocks.GetRevisionHistory.mockResolvedValue([
+      makeRevision(2, true, { content: 'kind: same\nimage: demo:v2' }),
+      makeRevision(1, false, { content: 'kind: same\nimage: demo:v1' }),
+    ]);
+
+    await renderModal();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(diffSide('left')).toContain('kind: same');
+
+    await act(async () => {
+      diffOnlyToggle()?.click();
+    });
+
+    expect(diffSide('left')).not.toContain('kind: same');
+    expect(diffSide('left')).toContain('image: demo:v2');
+  });
+
+  it('closes the open revision picker on Escape before closing the modal', async () => {
     backendMocks.GetRevisionHistory.mockResolvedValue([
       makeRevision(3, true),
       makeRevision(2, false),
@@ -195,12 +349,25 @@ describe('RollbackModal', () => {
     await act(async () => {
       await Promise.resolve();
     });
+    revisionPicker()?.focus();
+    await openRevisionPicker();
+    expect(revisionOptions()).toHaveLength(1);
 
-    const currentItem = document.querySelector('[data-testid="revision-item-3"]');
-    expect(currentItem?.classList.contains('rollback-revision-item--disabled')).toBe(true);
+    const pressEscape = async () => {
+      await act(async () => {
+        revisionPicker()?.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+        );
+        await Promise.resolve();
+      });
+    };
 
-    // It should have the "current" badge.
-    expect(currentItem?.querySelector('.rollback-revision-badge')?.textContent).toBe('current');
+    await pressEscape();
+    expect(revisionOptions()).toHaveLength(0);
+    expect(defaultProps.onClose).not.toHaveBeenCalled();
+
+    await pressEscape();
+    expect(defaultProps.onClose).toHaveBeenCalledTimes(1);
   });
 
   it('closes on Escape through the keyboard surface manager', async () => {
@@ -292,8 +459,8 @@ describe('RollbackModal', () => {
     await act(async () => {
       finishOld([makeRevision(3, true), makeRevision(2, false)]);
     });
-    expect(document.querySelector('[data-testid="revision-item-7"]')).not.toBeNull();
-    expect(document.querySelector('[data-testid="revision-item-2"]')).toBeNull();
+    expect(currentSide()).toContain('Revision 8');
+    expect(revisionPicker()?.textContent).toContain('Revision 7');
   });
 
   it('releases the mutation boundary and reports invalid action identity', async () => {

@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/luxury-yacht/app/backend/kind/kindspec"
@@ -39,6 +40,14 @@ func workloadCurrentReplicas(ctx context.Context, client kubernetes.Interface, n
 	return *obj.Spec.Replicas, nil
 }
 
+// deploymentTemplateOf returns a ReplicaSet's pod template as its Deployment holds
+// it, without the pod-template-hash label the controller adds to each ReplicaSet.
+func deploymentTemplateOf(rs *appsv1.ReplicaSet) *corev1.PodTemplateSpec {
+	template := rs.Spec.Template.DeepCopy()
+	delete(template.Labels, appsv1.DefaultDeploymentUniqueLabelKey)
+	return template
+}
+
 func revisionHistory(ctx context.Context, client kubernetes.Interface, namespace, name string) ([]common.WorkloadRevision, error) {
 	deploy, err := client.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
@@ -63,7 +72,7 @@ func revisionHistory(ctx context.Context, client kubernetes.Interface, namespace
 		if err != nil {
 			continue
 		}
-		podTemplateYAML, err := common.MarshalPodTemplate(&rs.Spec.Template)
+		podTemplateYAML, err := common.MarshalPodTemplate(deploymentTemplateOf(rs))
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal pod template for replicaset %s: %w", rs.Name, err)
 		}

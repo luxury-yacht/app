@@ -2,10 +2,10 @@
  * frontend/src/shared/components/modals/RollbackModal.tsx
  *
  * Modal for viewing revision history and rolling back a workload or Helm release.
- * Left panel shows a scrollable revision list; right panel shows a
- * side-by-side diff between what the current and selected revisions apply (a
- * workload's pod template, a release's manifest), with history loaded from a
- * full object ref.
+ * The current revision sits above the left side of a side-by-side diff and a
+ * picker for the rollback target above the right side. The diff compares what
+ * each revision applies (a workload's pod template, a release's manifest), with
+ * history loaded from a full object ref.
  */
 
 import type { backend } from '@core/backend-api/models';
@@ -19,6 +19,9 @@ import {
   mergeDiffLines,
 } from '@shared/components/diff/diffUtils';
 import { computeBudgetedLineDiff } from '@shared/components/diff/lineDiff';
+import Dropdown from '@shared/components/dropdowns/Dropdown/Dropdown';
+import type { DropdownOption } from '@shared/components/dropdowns/Dropdown/types';
+import { normalizeDropdownValue } from '@shared/components/dropdowns/dropdownValue';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { RollbackIcon } from '@shared/components/icons/SharedIcons';
 import { errorHandler } from '@utils/errorHandler';
@@ -74,6 +77,142 @@ const formatAge = (isoString: string): string => {
   }
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
+};
+
+type RevisionOption = DropdownOption<backend.RevisionEntry>;
+
+const renderRevisionOption = (option: RevisionOption) => (
+  <span className="rollback-revision-option">
+    <span>{option.label}</span>
+    {!!option.metadata?.changeCause && (
+      <span className="rollback-revision-option-cause">{option.metadata.changeCause}</span>
+    )}
+  </span>
+);
+
+const RevisionCause = ({ entry }: { entry: backend.RevisionEntry | null }) => (
+  <div className="rollback-comparison-cause" title={entry?.changeCause || undefined}>
+    {entry?.changeCause}
+  </div>
+);
+
+interface RollbackComparisonProps {
+  currentEntry: backend.RevisionEntry | null;
+  selectedEntry: backend.RevisionEntry | null;
+  targets: backend.RevisionEntry[];
+  onSelectRevision: (revision: number) => void;
+}
+
+/** Names the two revisions being compared, each above its side of the diff. */
+const RollbackComparison = ({
+  currentEntry,
+  selectedEntry,
+  targets,
+  onSelectRevision,
+}: RollbackComparisonProps) => {
+  const options = useMemo<RevisionOption[]>(
+    () =>
+      targets.map((entry) => ({
+        value: String(entry.revision),
+        label: `Revision ${entry.revision} · ${formatAge(entry.createdAt)}`,
+        metadata: entry,
+      })),
+    [targets]
+  );
+
+  return (
+    <div className="rollback-comparison">
+      <div className="rollback-comparison-side" data-testid="rollback-current">
+        <span className="rollback-role rollback-role--current">Current</span>
+        <div className="rollback-comparison-revision">
+          {currentEntry ? (
+            <>
+              Revision {currentEntry.revision}
+              <span className="rollback-comparison-age">{formatAge(currentEntry.createdAt)}</span>
+            </>
+          ) : (
+            'Not available'
+          )}
+        </div>
+        <RevisionCause entry={currentEntry} />
+      </div>
+      <div className="rollback-comparison-side" data-testid="rollback-target">
+        <span className="rollback-role rollback-role--target">Rollback to</span>
+        <Dropdown
+          options={options}
+          value={String(selectedEntry?.revision ?? '')}
+          onChange={(value) => {
+            const [revision] = normalizeDropdownValue(value);
+            if (revision) {
+              onSelectRevision(Number(revision));
+            }
+          }}
+          renderOption={renderRevisionOption}
+          ariaLabel="Revision to roll back to"
+        />
+        <RevisionCause entry={selectedEntry} />
+      </div>
+    </div>
+  );
+};
+
+interface RollbackDiffProps {
+  currentEntry: backend.RevisionEntry | null;
+  selectedEntry: backend.RevisionEntry | null;
+  diffOnly: boolean;
+}
+
+/** Diffs what the current revision applies (left) against the rollback target (right). */
+const RollbackDiff = ({ currentEntry, selectedEntry, diffOnly }: RollbackDiffProps) => {
+  const diffResult = useMemo(() => {
+    if (!currentEntry || !selectedEntry) {
+      return null;
+    }
+    const raw = computeBudgetedLineDiff(
+      currentEntry.content,
+      selectedEntry.content,
+      ROLLBACK_DIFF_BUDGETS
+    );
+
+    return {
+      lines: raw.tooLarge ? [] : mergeDiffLines(raw.lines),
+      leftText: currentEntry.content,
+      rightText: selectedEntry.content,
+      tooLarge: raw.tooLarge,
+      tooLargeReason: raw.tooLargeReason,
+      leftLineCount: raw.leftLineCount,
+      rightLineCount: raw.rightLineCount,
+    } satisfies RollbackDiffState;
+  }, [currentEntry, selectedEntry]);
+
+  const visibleDiffRows = useMemo(
+    () => (diffResult ? countVisibleDiffRows(diffResult.lines, diffOnly) : 0),
+    [diffOnly, diffResult]
+  );
+
+  if (!diffResult) {
+    return null;
+  }
+  if (diffResult.tooLarge || visibleDiffRows > ROLLBACK_DIFF_BUDGETS.maxRenderableRows) {
+    return (
+      <div className="rollback-diff-warning" data-testid="rollback-diff-warning">
+        {getDiffTooLargeMessage(
+          diffResult,
+          visibleDiffRows,
+          ROLLBACK_DIFF_BUDGETS,
+          ROLLBACK_DIFF_TOO_LARGE_MESSAGE
+        )}
+      </div>
+    );
+  }
+  return (
+    <DiffViewer
+      lines={diffResult.lines}
+      leftText={diffResult.leftText}
+      rightText={diffResult.rightText}
+      showDiffOnly={diffOnly}
+    />
+  );
 };
 
 const RollbackModal = ({
@@ -171,42 +310,9 @@ const RollbackModal = ({
     [revisions, selectedRevision]
   );
 
-  // Whether there are any non-current revisions to roll back to.
-  const hasNonCurrentRevisions = useMemo(() => revisions.some((r) => !r.current), [revisions]);
-
-  // Compute diff lines between what the current and selected revisions apply.
-  const diffResult = useMemo(() => {
-    if (!currentEntry || !selectedEntry) {
-      return null;
-    }
-    const raw = computeBudgetedLineDiff(
-      currentEntry.content,
-      selectedEntry.content,
-      ROLLBACK_DIFF_BUDGETS
-    );
-
-    return {
-      lines: raw.tooLarge ? [] : mergeDiffLines(raw.lines),
-      leftText: currentEntry.content,
-      rightText: selectedEntry.content,
-      tooLarge: raw.tooLarge,
-      tooLargeReason: raw.tooLargeReason,
-      leftLineCount: raw.leftLineCount,
-      rightLineCount: raw.rightLineCount,
-    } satisfies RollbackDiffState;
-  }, [currentEntry, selectedEntry]);
-
-  const visibleDiffRows = useMemo(
-    () => (diffResult ? countVisibleDiffRows(diffResult.lines, diffOnly) : 0),
-    [diffOnly, diffResult]
-  );
-  const renderTooLarge = visibleDiffRows > ROLLBACK_DIFF_BUDGETS.maxRenderableRows;
-  const diffTooLargeMessage = getDiffTooLargeMessage(
-    diffResult,
-    visibleDiffRows,
-    ROLLBACK_DIFF_BUDGETS,
-    ROLLBACK_DIFF_TOO_LARGE_MESSAGE
-  );
+  // The revisions a rollback can target.
+  const targets = useMemo(() => revisions.filter((r) => !r.current), [revisions]);
+  const showComparison = !loading && !fetchError && targets.length > 0;
 
   // Handle rollback confirmation.
   const handleRollback = useCallback(async () => {
@@ -284,88 +390,42 @@ const RollbackModal = ({
         </div>
       )}
 
-      {!loading && !fetchError && !hasNonCurrentRevisions && (
+      {!loading && !fetchError && targets.length === 0 && (
         <div className="rollback-empty" data-testid="rollback-empty">
           No previous revisions available for rollback
         </div>
       )}
 
-      {!loading && !fetchError && hasNonCurrentRevisions && (
+      {!!showComparison && (
         <div className="rollback-body">
-          {/* Left panel: revision list */}
-          <div className="rollback-revision-list" data-testid="rollback-revision-list">
-            {revisions.map((entry) => {
-              const isCurrent = entry.current;
-              const isSelected = entry.revision === selectedRevision;
-              const classNames = [
-                'rollback-revision-item',
-                isSelected ? 'rollback-revision-item--selected' : '',
-                isCurrent ? 'rollback-revision-item--disabled' : '',
-              ]
-                .filter(Boolean)
-                .join(' ');
-
-              return (
-                <button
-                  key={entry.revision}
-                  type="button"
-                  className={classNames}
-                  disabled={isCurrent}
-                  onClick={() => setSelectedRevision(entry.revision)}
-                  data-testid={`revision-item-${entry.revision}`}
-                >
-                  <div className="rollback-revision-item-header">
-                    <span className="rollback-revision-number">Revision {entry.revision}</span>
-                    {!!isCurrent && <span className="rollback-revision-badge">current</span>}
-                  </div>
-                  <span className="rollback-revision-age">{formatAge(entry.createdAt)}</span>
-                  {!!entry.changeCause && (
-                    <span className="rollback-revision-cause" title={entry.changeCause}>
-                      {entry.changeCause}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Right panel: diff viewer */}
-          <div className="rollback-diff-panel">
-            <div className="rollback-diff-header">
-              <span className="rollback-diff-label">
-                Current &rarr; Revision {selectedRevision}
-              </span>
-              <label className="rollback-diff-only-toggle">
-                <input
-                  type="checkbox"
-                  checked={diffOnly}
-                  onChange={(e) => setDiffOnly(e.target.checked)}
-                />
-                {'Diff only'}
-              </label>
-            </div>
-            <div className="rollback-diff-content">
-              {diffResult?.tooLarge || renderTooLarge ? (
-                <div className="rollback-diff-warning" data-testid="rollback-diff-warning">
-                  {diffTooLargeMessage}
-                </div>
-              ) : (
-                diffResult && (
-                  <DiffViewer
-                    lines={diffResult.lines}
-                    leftText={diffResult.leftText}
-                    rightText={diffResult.rightText}
-                    showDiffOnly={diffOnly}
-                  />
-                )
-              )}
-            </div>
+          <RollbackComparison
+            currentEntry={currentEntry}
+            selectedEntry={selectedEntry}
+            targets={targets}
+            onSelectRevision={setSelectedRevision}
+          />
+          <div className="rollback-diff-content">
+            <RollbackDiff
+              currentEntry={currentEntry}
+              selectedEntry={selectedEntry}
+              diffOnly={diffOnly}
+            />
           </div>
         </div>
       )}
 
       {/* Footer */}
       <div className="rollback-modal-footer">
+        {!!showComparison && (
+          <label className="rollback-diff-only-toggle">
+            <input
+              type="checkbox"
+              checked={diffOnly}
+              onChange={(e) => setDiffOnly(e.target.checked)}
+            />
+            {'Diff only'}
+          </label>
+        )}
         {!!rollbackError && (
           <span className="rollback-modal-footer-error" title={rollbackError}>
             <ErrorSurface kind="reported" message={rollbackError} />
@@ -393,7 +453,8 @@ const RollbackModal = ({
       <ConfirmationModal
         isOpen={confirmOpen}
         title="Confirm Rollback"
-        message={`Are you sure you want to roll back ${kind} "${name}" to revision ${selectedRevision}? This action cannot be undone.`}
+        target={{ clusterId, group, kind, name, namespace }}
+        message={`This will roll back to revision ${selectedRevision}, replacing the current revision.`}
         confirmText="Rollback"
         cancelText="Cancel"
         confirmButtonClass="warning"

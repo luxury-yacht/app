@@ -548,6 +548,34 @@ func TestRollbackWorkloadDeployment(t *testing.T) {
 		"deployment container image should be rolled back to nginx:1.23")
 }
 
+// A ReplicaSet's template carries the controller's pod-template-hash label, which
+// differs on every revision and is not part of the Deployment's own template. It
+// must not appear as a change in the history or be written back by a rollback.
+func TestDeploymentRevisionsOmitReplicaSetHashLabel(t *testing.T) {
+	objects := rollbackDeploymentObjects()
+	for _, object := range objects {
+		if replicaSet, ok := object.(*appsv1.ReplicaSet); ok {
+			replicaSet.Spec.Template.Labels[appsv1.DefaultDeploymentUniqueLabelKey] = replicaSet.Name + "-hash"
+		}
+	}
+	client := cgofake.NewClientset(objects...)
+	app := buildRevisionHistoryGateway(client)
+	target := resourcemodel.ResourceRef{ClusterID: "config:ctx", Namespace: "default", Group: "apps", Version: "v1", Kind: "Deployment", Name: "webapp"}
+
+	entries, err := app.GetRevisionHistory(target)
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+	for _, entry := range entries {
+		require.NotContains(t, entry.Content, appsv1.DefaultDeploymentUniqueLabelKey)
+		require.Contains(t, entry.Content, "app: webapp")
+	}
+
+	require.NoError(t, app.rollbackWorkloadAction(target, 1))
+	updated, err := client.AppsV1().Deployments("default").Get(t.Context(), "webapp", metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"app": "webapp"}, updated.Spec.Template.Labels)
+}
+
 // TestRollbackWorkloadStatefulSet verifies that rolling back a StatefulSet to a previous
 // revision replaces its pod template using the stored ControllerRevision data.
 // A user who may not update the workload must not be able to roll it back, and

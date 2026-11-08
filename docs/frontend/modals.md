@@ -31,6 +31,9 @@ focus trap, backdrop, Escape handling, or app-background blocking.
   source props while open but never overwrite user-edited form state;
   reopening starts a new draft from the latest props.
 - Destructive or long-running actions need clear disabled/loading/error states.
+- A confirmation of an action on a cluster object passes `target`, so the modal
+  names its kind, name, namespace, and cluster (resolved from `clusterId`). Its
+  message states the consequence and does not repeat the object.
 - Nested modals only through the shared stack.
 - Size modals with the shared `--modal-viewport-height` and
   `--modal-viewport-width`, which account for app zoom; never raw `vh`/`vw`

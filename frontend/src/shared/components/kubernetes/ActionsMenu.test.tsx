@@ -118,6 +118,20 @@ const dialogButton = (label: string) =>
     `expected the dialog’s ${label} button`
   );
 
+const confirmationTarget = () => {
+  const block = requireValue(
+    document.querySelector('.confirmation-modal-target'),
+    'expected the confirmation to name its target'
+  );
+  return {
+    kind: block.querySelector('.kind-badge')?.textContent,
+    name: block.querySelector('.confirmation-modal-target-name')?.textContent,
+    lines: Array.from(block.querySelectorAll('.confirmation-modal-target-line')).map(
+      (line) => line.textContent
+    ),
+  };
+};
+
 const actionCalls = () => app.backend.calls('RunObjectAction').map(([request]) => request);
 const target = (identity: ObjectIdentity) => ({ clusterId: dev.clusterId, ...identity });
 const detailReads = (object: TestObject) =>
@@ -172,6 +186,29 @@ describe('an object panel’s Actions menu', () => {
 
     expect(actionCalls()).toEqual([{ action: 'delete', target: target(deployment) }]);
     expect(view.openPanels()).toEqual([]);
+  });
+
+  it('names the object, its namespace, and its cluster before a delete', async () => {
+    await openPanel(deployment, deploymentDetail());
+    await openActions();
+
+    await click(menuItem('Delete'));
+
+    expect(confirmationTarget()).toEqual({
+      kind: 'Deployment',
+      name: 'web',
+      lines: ['Namespace default', `Cluster ${dev.clusterName}`],
+    });
+  });
+
+  it('names the kind by its short name when short resource names are on', async () => {
+    app.preferences({ useShortResourceNames: true });
+    await openPanel(deployment, deploymentDetail());
+    await openActions();
+
+    await click(menuItem('Restart'));
+
+    expect(confirmationTarget().kind).toBe('deploy');
   });
 
   it('runs nothing when the user cancels a restart or delete', async () => {
@@ -374,6 +411,12 @@ describe('an object panel’s Actions menu', () => {
     await openActions();
 
     await click(menuItem('Cordon'));
+    // A node has no namespace, so the confirmation names only its cluster.
+    expect(confirmationTarget()).toEqual({
+      kind: 'Node',
+      name: 'node-1',
+      lines: [`Cluster ${dev.clusterName}`],
+    });
     await click(dialogButton('Cordon'));
 
     expect(actionCalls()).toEqual([{ action: 'cordon', target: target(node) }]);
@@ -443,6 +486,18 @@ describe('finalizer removal from a terminating object’s Details', () => {
 
     const dialog = requireValue(document.querySelector('[role="dialog"]'), 'expected the dialog');
     expect(dialog.textContent?.includes('Less than 5 minutes has elapsed')).toBe(warns);
+  });
+
+  it('names the finalizer being removed alongside its object', async () => {
+    await openTerminating();
+
+    await requestRemoval();
+
+    expect(confirmationTarget()).toEqual({
+      kind: 'Deployment',
+      name: 'web',
+      lines: ['Namespace default', `Cluster ${dev.clusterName}`, 'Finalizer example.com/cleanup'],
+    });
   });
 
   it('runs nothing on Cancel, and reports a refused removal without re-reading the object', async () => {

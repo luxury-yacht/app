@@ -35,7 +35,10 @@ import type {
   PermissionStatus,
 } from '@shared/actions/objectActionPolicy';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import ConfirmationModal, {
+  type ConfirmationModalTarget,
+  type ConfirmationModalTargetDetail,
+} from '@shared/components/modals/ConfirmationModal';
 import RollbackModal from '@shared/components/modals/RollbackModal';
 import ScaleModal from '@shared/components/modals/ScaleModal';
 import {
@@ -103,7 +106,9 @@ interface ScaleState {
 
 interface ConfirmationSpec {
   title: string;
-  message: string;
+  target: ConfirmationModalTarget;
+  targetDetail?: ConfirmationModalTargetDetail;
+  message?: string;
   notice?: string;
   warning?: string;
   confirmText: string;
@@ -118,7 +123,8 @@ const restartConfirmation = (
   onCancel: () => void
 ): ConfirmationSpec => ({
   title: `Restart ${target.kind || 'Workload'}`,
-  message: `Are you sure you want to restart ${target.kind.toLowerCase()} "${target.name}"?\n\nThis will perform a rolling restart of all pods.`,
+  target,
+  message: 'This will perform a rolling restart of all pods.',
   confirmText: 'Restart',
   confirmButtonClass: 'danger',
   onConfirm,
@@ -136,7 +142,8 @@ const deleteConfirmation = (
     Boolean(lookupObjectActionKindCapability(target)?.drain) && !target.unschedulable;
   return {
     title: `Delete ${target.kind || 'Resource'}`,
-    message: `Are you sure you want to delete ${target.kind.toLowerCase()} "${target.name}"?\n\nThis action cannot be undone.`,
+    target,
+    message: 'This action cannot be undone.',
     warning: isUndrainedNode
       ? 'This node has not been drained. Pods running on it will be terminated abruptly when the node is removed.'
       : undefined,
@@ -153,7 +160,8 @@ const triggerConfirmation = (
   onCancel: () => void
 ): ConfirmationSpec => ({
   title: 'Trigger CronJob',
-  message: `Create a new Job from CronJob "${target.name}" immediately?`,
+  target,
+  message: 'This will create a new Job immediately.',
   confirmText: 'Trigger',
   confirmButtonClass: undefined,
   onConfirm,
@@ -166,7 +174,7 @@ const scaleToZeroConfirmation = (
   onCancel: () => void
 ): ConfirmationSpec => ({
   title: 'Scale to 0',
-  message: `Scale ${object.kind.toLowerCase()} "${object.name}" to 0 replicas?`,
+  target: object,
   warning: 'This will stop currently running pods for this workload.',
   confirmText: 'Scale to 0',
   confirmButtonClass: 'danger',
@@ -204,7 +212,8 @@ const finalizerRemovalConfirmation = (
   onCancel: () => void
 ): ConfirmationSpec => ({
   title: 'Remove Finalizer',
-  message: `Remove finalizer "${finalizer}" from ${object.kind.toLowerCase()} "${object.name}"?`,
+  target: object,
+  targetDetail: { label: 'Finalizer', value: finalizer },
   notice: deletionIsWithinFinalizerCleanupGrace(deletionTimestamp)
     ? RECENT_FINALIZER_REMOVAL_NOTICE
     : undefined,
@@ -797,7 +806,9 @@ export const useObjectActionController = ({
         <ConfirmationModal
           isOpen={Boolean(confirmation)}
           title={confirmation?.title ?? ''}
-          message={confirmation?.message ?? ''}
+          target={confirmation?.target}
+          targetDetail={confirmation?.targetDetail}
+          message={confirmation?.message}
           notice={confirmation?.notice}
           warning={confirmation?.warning}
           confirmText={confirmation?.confirmText ?? 'Confirm'}
