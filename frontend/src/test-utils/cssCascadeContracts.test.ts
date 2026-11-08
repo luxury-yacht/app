@@ -164,7 +164,6 @@ describe('strict CSS cascade contracts', () => {
         'src/ui/dockable/DockablePanel.css',
         'src/ui/status/SessionsStatus.css',
         'src/shared/components/tables/TablePaginationControls.css',
-        'src/shared/components/modals/RollbackModal.css',
         'src/shared/components/diff/DiffViewer.css',
         'src/modules/cluster/components/ClusterOverview.css',
       ].map((path) => resolveAllThemeVars(readProjectFile(path)))
@@ -174,7 +173,6 @@ describe('strict CSS cascade contracts', () => {
       <input class="origin" aria-label="Origin" />
       <header class="app-header"><button class="app-header-drag-control" tabindex="-1">Title</button></header>
       <button class="table-pagination-button">Next</button>
-      <button class="rollback-revision-item">Revision</button>
       <div class="recent-events__row--clickable" tabindex="0">Event</div>
       <div class="pod-status-card--clickable" tabindex="0">Pods</div>
       <div class="sessions-status-message">
