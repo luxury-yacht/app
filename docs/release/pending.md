@@ -1,6 +1,7 @@
 ### Changed
 
 - The Rollback dialog labels the Current revision and the revision to roll back to above a wider diff, and picks the revision from a dropdown instead of a list.
+- Warning dialogs such as Delete, Restart, and Scale to 0 show the kind, name, namespace, and cluster of the object being acted on.
 
 ### Fixed
 

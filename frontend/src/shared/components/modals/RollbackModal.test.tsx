@@ -13,12 +13,14 @@ import RollbackModal from './RollbackModal';
 
 // Hoisted mock for the Wails backend bindings.
 const backendMocks = vi.hoisted(() => ({
+  GetClusterWorkspaceStateForWindow: vi.fn(),
   GetRevisionHistory: vi.fn(),
   RunObjectAction: vi.fn(),
 }));
 const handleInlineMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@core/backend-api', () => ({
+  GetClusterWorkspaceStateForWindow: backendMocks.GetClusterWorkspaceStateForWindow,
   GetRevisionHistory: backendMocks.GetRevisionHistory,
   RunObjectAction: backendMocks.RunObjectAction,
 }));
@@ -90,6 +92,12 @@ describe('RollbackModal', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
+    // The confirmation names its cluster through the workspace store.
+    backendMocks.GetClusterWorkspaceStateForWindow.mockResolvedValue({
+      selectedKubeconfigs: [],
+      visibleClusterId: '',
+      clusters: {},
+    });
     // jsdom has no layout, so it does not implement scrollIntoView for the open menu.
     HTMLElement.prototype.scrollIntoView = vi.fn();
     backendMocks.GetRevisionHistory.mockReset();

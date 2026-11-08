@@ -453,7 +453,8 @@ const RollbackModal = ({
       <ConfirmationModal
         isOpen={confirmOpen}
         title="Confirm Rollback"
-        message={`Are you sure you want to roll back ${kind} "${name}" to revision ${selectedRevision}? This action cannot be undone.`}
+        target={{ clusterId, group, kind, name, namespace }}
+        message={`This will roll back to revision ${selectedRevision}, replacing the current revision.`}
         confirmText="Rollback"
         cancelText="Cancel"
         confirmButtonClass="warning"

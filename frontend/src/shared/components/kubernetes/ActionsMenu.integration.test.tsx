@@ -131,6 +131,18 @@ describe('ActionsMenu + real permission store', () => {
     await act(async () => {
       buttonNamed(dialog, 'Rollback to Revision 2').click();
     });
+    const rollbackTarget = requireValue(
+      document.body.querySelector('.confirmation-modal-target'),
+      'expected the rollback confirmation to name its target'
+    );
+    expect(rollbackTarget.querySelector('.confirmation-modal-target-name')?.textContent).toBe(
+      'shop'
+    );
+    expect(
+      Array.from(rollbackTarget.querySelectorAll('.confirmation-modal-target-line')).map(
+        (line) => line.textContent
+      )
+    ).toEqual(['Namespace team-a', `Cluster ${dev.clusterName}`]);
     await act(async () => {
       buttonNamed(
         requireValue(
