@@ -1,7 +1,8 @@
 ### Changed
 
-- The Rollback dialog labels the Current revision and the revision to roll back to above a wider diff, and picks the revision from a dropdown instead of a list.
-- Warning dialogs such as Delete, Restart, and Scale to 0 show the kind, name, namespace, and cluster of the object being acted on.
+- Redesigned rollback and confirmations modals.
+  - Rollback modal makes the current and rollback diffs clearer, and gives more horizontal space for comparison.
+  - Confirmation modals show the object being acted on much more prominently.
 
 ### Fixed
 
