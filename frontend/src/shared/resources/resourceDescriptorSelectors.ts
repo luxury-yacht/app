@@ -5,6 +5,7 @@
  * filtering, metadata extraction, and stable row identity builders.
  */
 
+import { scaleTargetApiVersion } from '@shared/constants/builtinGroupVersions';
 import {
   buildHelmReleaseRowKey,
   buildKindedNamespacedRowKey,
@@ -106,6 +107,6 @@ export const parseAutoscalingTarget = (
   return {
     kind: kindPart,
     name: nameParts.join('/'),
-    apiVersion: apiVersion ?? undefined,
+    apiVersion: scaleTargetApiVersion(kindPart, apiVersion) ?? undefined,
   };
 };

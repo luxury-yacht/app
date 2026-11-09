@@ -83,6 +83,16 @@ describe('resourceDescriptorSelectors', () => {
       apiVersion: 'apps/v1',
     });
     expect(parseAutoscalingTarget('Deployment')).toBeUndefined();
+    // The HPA controller ignores the version, and the backend only serves the current one.
+    expect(parseAutoscalingTarget('Deployment/api', 'apps/v1beta2')?.apiVersion).toBe('apps/v1');
+    // A custom resource keeps the version written, even one that reuses a built-in kind.
+    expect(parseAutoscalingTarget('Deployment/api', 'example.com/v1beta1')?.apiVersion).toBe(
+      'example.com/v1beta1'
+    );
+    expect(parseAutoscalingTarget('Widget/api', 'example.com/v1beta1')?.apiVersion).toBe(
+      'example.com/v1beta1'
+    );
+    expect(parseAutoscalingTarget('Deployment/api', '')?.apiVersion).toBe('');
     expect(resourceKindsMeta({ kinds: ['Deployment'] })).toEqual({ kinds: ['Deployment'] });
     expect(resourceKindsMeta(null)).toEqual({ kinds: [] });
   });

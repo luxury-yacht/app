@@ -20,3 +20,16 @@ func TestTargetKeyMatchesAcrossVersionsButNotAcrossIdentity(t *testing.T) {
 		}
 	}
 }
+
+// The frontend builds the target's link from this apiVersion, and resolves a built-in
+// kind itself when it is empty. A group with no version would give it nothing to use.
+func TestScaleTargetWithoutAVersionKeepsItsGroupButReportsNoAPIVersion(t *testing.T) {
+	link := scaleTargetLink("cluster-a", "team-a", "apps/", "Deployment", "web")
+
+	if link.Ref != nil || link.Display == nil || link.Display.Group != "apps" {
+		t.Fatalf("the group is needed to match the workload: %#v", link)
+	}
+	if got := scaleTargetAPIVersion(link); got != "" {
+		t.Fatalf("got apiVersion %q, want none", got)
+	}
+}
