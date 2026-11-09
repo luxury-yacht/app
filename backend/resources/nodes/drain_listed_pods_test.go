@@ -16,6 +16,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -389,4 +390,122 @@ func TestServiceDrainDoesNotClaimAReplacedNodeIsStillCordoned(t *testing.T) {
 	for _, event := range job.Events {
 		require.NotEqual(t, nodemaintenance.DrainPhaseCordonRetained, event.Phase, "the node it cordoned is gone")
 	}
+}
+
+// kubectl treats any 404 as the pod being gone, but an admission webhook can answer
+// 404 about something else while the pod is still running.
+func TestServiceDrainFailsWhenA404IsNotAboutTheListedPod(t *testing.T) {
+	for _, mode := range podRemovalModes() {
+		t.Run(mode.name, func(t *testing.T) {
+			service, client, node := newNodeService(t)
+			addNodePatchReactor(t, client)
+			applyRemovalMode(t, client, mode)
+			refuse := func(string) error {
+				return apierrors.NewNotFound(corev1.Resource("configmaps"), "required-config")
+			}
+			answerEvictions(client, refuse)
+			refuseDeletes(client, refuse)
+
+			// Counted as removed, kubectl would wait on these pods for as long as ctx lives.
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			err := service.Drain(ctx, node.Name, "", mode.options)
+
+			require.Error(t, err, "the pods are still running")
+			require.NoError(t, ctx.Err(), "the drain should fail, not wait on pods that were never removed")
+			pods, listErr := client.CoreV1().Pods(drainPodNamespace).List(context.Background(), metav1.ListOptions{})
+			require.NoError(t, listErr)
+			require.Len(t, pods.Items, 2)
+		})
+	}
+}
+
+const evictionSupportedResources = `{"kind":"APIResourceList","groupVersion":"v1","resources":[{"name":"pods/eviction","singularName":"","namespaced":true,"group":"policy","version":"v1","kind":"Eviction","verbs":["create"]}]}`
+
+// kubectl checks its timer before evicting. A slow read after that check must not
+// let the eviction go out once the drain's timeout has passed.
+func TestServiceDrainSubmitsNoEvictionAfterItsTimeout(t *testing.T) {
+	var evictions atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/api/v1":
+			fmt.Fprint(w, evictionSupportedResources)
+		case strings.HasSuffix(r.URL.Path, "/eviction"):
+			evictions.Add(1)
+			fmt.Fprint(w, `{"kind":"Status","apiVersion":"v1","status":"Success"}`)
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/pods/app-0"):
+			select {
+			case <-r.Context().Done():
+			case <-time.After(1500 * time.Millisecond):
+				fmt.Fprint(w, `{"metadata":{"name":"app-0","namespace":"frontend","uid":"uid-app-0"}}`)
+			}
+		case strings.HasSuffix(r.URL.Path, "/pods"):
+			fmt.Fprint(w, drainablePodList)
+		default:
+			fmt.Fprint(w, `{}`)
+		}
+	}))
+	t.Cleanup(func() {
+		server.CloseClientConnections()
+		server.Close()
+	})
+	client, err := kubernetes.NewForConfig(&rest.Config{Host: server.URL, QPS: -1})
+	require.NoError(t, err)
+	store := nodemaintenance.NewStore(5)
+	service := nodes.NewService(testsupport.NewResourceDependencies(
+		testsupport.WithDepsKubeClient(client),
+		testsupport.WithDepsLogger(applog.Noop),
+	), store)
+	timeout := 1
+	options := drainOptionsFor(false, false)
+	options.TimeoutSeconds = &timeout
+
+	job := runDrainToCompletion(t, context.Background(), service, store, "node-1", "", options)
+	time.Sleep(700 * time.Millisecond) // past the read the stub holds open
+
+	require.Equal(t, nodemaintenance.DrainStatusFailed, job.Status, "got: %s", job.Message)
+	require.Zero(t, evictions.Load(), "the eviction went out after the timeout")
+}
+
+// A plain 404 on the read is an unserved endpoint or a proxy, not a missing pod, so
+// the removal still goes out, bound to the listed UID.
+func TestServiceDrainDoesNotCountAPlain404ReadAsThePodBeingGone(t *testing.T) {
+	for _, mode := range podRemovalModes() {
+		t.Run(mode.name, func(t *testing.T) {
+			service, client, node := newNodeService(t)
+			addNodePatchReactor(t, client)
+			applyRemovalMode(t, client, mode)
+			answerEvictions(client, acceptAll)
+			client.Fake.PrependReactor("get", "pods", func(cgotesting.Action) (bool, runtime.Object, error) {
+				return true, nil, apierrors.NewGenericServerResponse(404, "GET", corev1.Resource("pods"), "app-0", "404 page not found", 0, true)
+			})
+
+			require.NoError(t, service.Drain(context.Background(), node.Name, "", mode.options))
+
+			require.ElementsMatch(t, []podRemoval{
+				{name: "app-0", uid: "uid-app-0"},
+				{name: "app-1", uid: "uid-app-1"},
+			}, podRemovals(client))
+		})
+	}
+}
+
+// A webhook that times out reports "context deadline exceeded" in its own words,
+// seconds into a drain whose timeout is minutes away.
+func TestServiceDrainOnlyReportsATimeoutWhenItsTimeoutPassed(t *testing.T) {
+	service, store, client, node := newNodeServiceWithStore(t)
+	addNodePatchReactor(t, client)
+	refuseDeletes(client, func(name string) error {
+		return apierrors.NewInternalError(fmt.Errorf("failed to call webhook: context deadline exceeded"))
+	})
+	timeout := 300
+	options := drainOptionsFor(true, false)
+	options.TimeoutSeconds = &timeout
+
+	job := runDrainToCompletion(t, context.Background(), service, store, node.Name, "", options)
+
+	require.Equal(t, nodemaintenance.DrainStatusFailed, job.Status)
+	require.NotContains(t, job.Message, "drain timed out")
 }

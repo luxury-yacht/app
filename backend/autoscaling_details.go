@@ -54,7 +54,8 @@ func isWorkloadHPAManaged(ctx context.Context, deps common.Dependencies, target 
 	for _, hpa := range hpas.Items {
 		ref := hpa.Spec.ScaleTargetRef
 		refGVK := schema.FromAPIVersionAndKind(ref.APIVersion, ref.Kind)
-		if ref.Name == target.Name && refGVK == targetGVK {
+		// The HPA controller finds its target by group and kind, whatever the version.
+		if ref.Name == target.Name && refGVK.GroupKind() == targetGVK.GroupKind() {
 			return true, nil
 		}
 	}

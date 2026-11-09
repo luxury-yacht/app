@@ -150,11 +150,12 @@ func TestRunObjectActionNeverWaitsOnTheClusterWithoutADeadline(t *testing.T) {
 			for _, request := range sent {
 				wrote = wrote || isClusterWrite(request)
 				require.True(t, request.hasDeadline, "%s %s has no deadline", request.method, request.path)
-				limit := config.ObjectActionRequestTimeout
+				require.LessOrEqual(t, request.remaining, config.ObjectActionRequestTimeout, "%s %s", request.method, request.path)
+				// A slow permission check is not a cluster that stopped answering: it
+				// shares the action's deadline rather than failing the action sooner.
 				if strings.HasSuffix(request.path, "selfsubjectaccessreviews") {
-					limit = config.PermissionCheckTimeout
+					require.Greater(t, request.remaining, config.PermissionCheckTimeout)
 				}
-				require.LessOrEqual(t, request.remaining, limit, "%s %s", request.method, request.path)
 			}
 			require.True(t, wrote, "expected a write to the cluster, sent %v", sent)
 		})
@@ -207,6 +208,7 @@ func TestRunObjectActionSaysWhenTheClusterDidNotAnswer(t *testing.T) {
 	status := errorstatus.Classify(err)
 	require.Equal(t, errorstatus.ReasonDeadlineExceeded, status.Reason, "the batch stops starting objects on this reason")
 	require.True(t, status.Expected, "a cluster that does not answer is not an application failure")
+	require.False(t, status.Retryable, "the write may have landed, so repeating it is not safe")
 }
 
 // A permission check is the first request of every action. When the cluster fails

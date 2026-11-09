@@ -60,6 +60,7 @@ import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { queryPermissionChecks, useUserPermissions } from '@/core/capabilities';
 import { useClusterNameResolver } from '@/core/cluster-workspace/useClusterWorkspace';
+import type { ErrorStatus, ErrorStatusReason } from '@/core/refresh/types';
 import { errorHandler } from '@/utils/errorHandler';
 import { errorStatusOf } from '@/utils/errorStatus';
 
@@ -98,8 +99,6 @@ interface BatchActionDefinition {
   run: (target: ObjectActionTargetRef, batch: BatchRun) => Promise<unknown>;
   /** A dialog that gathers input first; other actions go straight to confirmation. */
   prompt?: 'scale' | 'drain';
-  /** Set when repeating the action could do harm: no Retry is offered, and this says why. */
-  noRetryReason?: string;
 }
 
 const BATCH_ACTIONS: readonly BatchActionDefinition[] = [
@@ -112,8 +111,6 @@ const BATCH_ACTIONS: readonly BatchActionDefinition[] = [
     message: () => 'This will perform a rolling restart of all pods.',
     covers: (policy) => policy.restartEnabled,
     run: (target) => runObjectRestart(target),
-    noRetryReason:
-      'A failed restart may still have started, so check the workload before restarting it again.',
   },
   {
     id: 'scale',
@@ -205,7 +202,7 @@ interface BatchRun {
 interface BatchFailure {
   entry: BatchEntry;
   reason: string;
-  outcome: 'failed' | 'no-answer' | 'not-started';
+  outcome: 'failed' | 'unknown' | 'no-answer' | 'not-started';
 }
 
 type BatchDialog =
@@ -275,19 +272,31 @@ const targetDetailsTable = (
 
 const OUTCOME_LABELS: Record<BatchFailure['outcome'], string> = {
   failed: 'Failed',
-  'no-answer': 'No answer',
+  unknown: 'Unknown',
+  'no-answer': 'Unknown',
   'not-started': 'Not started',
 };
 
-/** The list of failures, saying what happened to each object when that differs. */
+const countOutcomes = (failed: readonly BatchFailure[], label: string): number =>
+  failed.filter((failure) => OUTCOME_LABELS[failure.outcome] === label).length;
+
+const resultSummary = (failed: readonly BatchFailure[]): string => {
+  const parts = ['Failed', 'Unknown', 'Not started'].flatMap((label) => {
+    const count = countOutcomes(failed, label);
+    return count > 0 ? [`${count} ${label.toLowerCase()}`] : [];
+  });
+  return `${parts.join(', ')}.`;
+};
+
+/** The list of failures, saying what happened to each object unless all were refused. */
 const failureDetailsTable = (run: BatchRun, failed: readonly BatchFailure[]) => {
-  const mixed = unique(failed.map((failure) => failure.outcome)).length > 1;
+  const allRefused = failed.every((failure) => failure.outcome === 'failed');
   const table = targetDetailsTable(
     run.entries.map((entry) => entry.object),
     failed.map(({ entry }) => entry.object),
-    mixed ? 'Name' : 'Failed'
+    allRefused ? 'Failed' : 'Name'
   );
-  if (!mixed) {
+  if (allRefused) {
     return table;
   }
   return {
@@ -308,6 +317,32 @@ const notStartedFailure = (entry: BatchEntry): BatchFailure => ({
   reason: 'The remaining objects were not started because the cluster stopped answering.',
   outcome: 'not-started',
 });
+
+// The API server turned these down, or the request was never sent, so the object
+// did not change. After any other error the write may still have landed. That
+// includes CredentialsRejected, which can be read from an error's text, and
+// BadRequest, which can mean a response that could not be decoded.
+const REFUSAL_REASONS: ReadonlySet<ErrorStatusReason> = new Set<ErrorStatusReason>([
+  'Unauthorized',
+  'Forbidden',
+  'NotFound',
+  'AlreadyExists',
+  'Conflict',
+  'Gone',
+  'Invalid',
+  'TooManyRequests',
+  'ClusterNotReady',
+]);
+
+const failureOutcome = (status: ErrorStatus | null): BatchFailure['outcome'] => {
+  if (status?.reason === 'DeadlineExceeded') {
+    return 'no-answer';
+  }
+  return status && REFUSAL_REASONS.has(status.reason) ? 'failed' : 'unknown';
+};
+
+const UNKNOWN_OUTCOME_NOTE =
+  'Objects marked Unknown may have changed despite the error, so check them before running this again.';
 
 /** Runs one object; returns its failure, or null when the batch can count it done. */
 const runEntry = async (run: BatchRun, entry: BatchEntry): Promise<BatchFailure | null> => {
@@ -333,8 +368,7 @@ const runEntry = async (run: BatchRun, entry: BatchEntry): Promise<BatchFailure 
       kind: object.kind,
       name: object.name,
     });
-    const outcome = status?.reason === 'DeadlineExceeded' ? 'no-answer' : 'failed';
-    return { entry, reason: errorReason(error), outcome };
+    return { entry, reason: errorReason(error), outcome: failureOutcome(status) };
   }
 };
 
@@ -352,8 +386,8 @@ const executeBatch = async (
       if (failure) {
         failed.push(failure);
       }
-      // Each call waits out its deadline, so more calls would only hold the
-      // dialog open against a cluster that is not responding.
+      // More calls would only hold the dialog open against a cluster that is not
+      // responding. Even a permission check going unanswered stops the batch.
       if (failure?.outcome === 'no-answer') {
         failed.push(...queue.splice(0).map(notStartedFailure));
       }
@@ -626,12 +660,9 @@ export function useBatchObjectActions<T>({
   const renderResults = (run: BatchRun, failed: BatchFailure[]) => {
     const total = run.entries.length;
     const noun = countNoun(run.entries.map((entry) => entry.object));
-    const { noRetryReason } = run.definition;
-    const notStarted = failed.filter((failure) => failure.outcome === 'not-started').length;
-    const summary =
-      notStarted > 0
-        ? `${failed.length - notStarted} failed, ${notStarted} not started.`
-        : `${failed.length} failed.`;
+    // Repeating a write that may have landed could undo a later change, so with any
+    // unknown outcome the rows stay selected and running again is a new, confirmed action.
+    const unknownNote = countOutcomes(failed, 'Unknown') > 0 ? UNKNOWN_OUTCOME_NOTE : undefined;
     // A run keeps going across a scope change, so this can open over another cluster.
     const { target } = confirmationProps(run, resolveClusterName);
     const scope = target
@@ -645,14 +676,14 @@ export function useBatchObjectActions<T>({
         isOpen
         title={`${run.definition.past} ${total - failed.length} of ${total} ${noun}`}
         target={target}
-        message={[scope, summary, noRetryReason].filter(Boolean).join(' ')}
+        message={[scope, resultSummary(failed), unknownNote].filter(Boolean).join(' ')}
         detailsTable={failureDetailsTable(run, failed)}
         warning={unique(failed.map((failure) => failure.reason)).join(' ')}
         cancelText="Close"
         confirmText={`Retry ${failed.length}`}
         confirmButtonClass="generic"
         onConfirm={
-          noRetryReason
+          unknownNote
             ? undefined
             : () => retry({ ...run, entries: failed.map(({ entry }) => entry), skipped: 0 })
         }

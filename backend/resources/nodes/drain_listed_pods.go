@@ -11,6 +11,7 @@ package nodes
 
 import (
 	"context"
+	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -98,27 +99,34 @@ func (d fetchedCoreResources) ServerResourcesForGroupVersion(groupVersion string
 
 // remove sends one removal attempt for a listed pod. It reads the pod first because
 // an eviction spends the replacement's disruption budget before the API server looks
-// at the UID. It reads again after a refusal because the server can answer a UID
-// mismatch with 429, and only the pod's current UID tells that from a refusal about
-// the listed pod.
+// at the UID. It reads again after any refusal, because neither a 429 nor a 404 says
+// which pod it was about; only the pod's current UID can.
 func (c listedPodsClient) remove(ctx context.Context, namespace, name string, send func(*metav1.Preconditions) error) error {
 	uid := c.uids[types.NamespacedName{Namespace: namespace, Name: name}]
 	if c.listedPodGone(ctx, namespace, name, uid) {
 		return apierrors.NewNotFound(corev1.Resource("pods"), name)
 	}
 	err := send(common.DeleteOptionsForUID(string(uid)).Preconditions)
-	if err != nil && !apierrors.IsNotFound(err) && c.listedPodGone(ctx, namespace, name, uid) {
+	if err == nil {
+		return nil
+	}
+	if c.listedPodGone(ctx, namespace, name, uid) {
 		return apierrors.NewNotFound(corev1.Resource("pods"), name)
+	}
+	if apierrors.IsNotFound(err) {
+		// A webhook's 404 about something else. kubectl would count the pod as removed.
+		return fmt.Errorf("pod %s/%s was not removed: %s", namespace, name, err.Error())
 	}
 	return err
 }
 
 // listedPodGone reports whether the name is confirmed to no longer hold the listed
-// pod. A failed read proves nothing, so the request still goes out bound to the UID.
+// pod. A failed read proves nothing, including a plain 404 from something other than
+// the API server, so the request still goes out bound to the UID.
 func (c listedPodsClient) listedPodGone(ctx context.Context, namespace, name string, uid types.UID) bool {
 	pod, err := c.Interface.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		return apierrors.IsNotFound(err)
+		return apierrors.IsNotFound(err) && !apierrors.IsUnexpectedServerError(err)
 	}
 	return pod.UID != uid
 }

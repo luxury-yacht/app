@@ -189,7 +189,7 @@ func errUnsupportedActionTarget(action string, target ObjectActionTargetRef, api
 }
 
 func (g *ResourceGateway) deleteObjectAction(ctx context.Context, target ObjectActionTargetRef, force bool) error {
-	return confirmDeletedObjectAbsence(target, g.dispatchObjectDelete(ctx, target, force))
+	return g.confirmDeletedObjectAbsence(ctx, target, g.dispatchObjectDelete(ctx, target, force))
 }
 
 func (g *ResourceGateway) dispatchObjectDelete(ctx context.Context, target ObjectActionTargetRef, force bool) error {
@@ -208,16 +208,21 @@ func (g *ResourceGateway) dispatchObjectDelete(ctx context.Context, target Objec
 	}
 }
 
-// confirmDeletedObjectAbsence names the target on a delete's 404 only when the
-// Kubernetes API reported that object missing. A 404 it did not produce, such as the
-// plain one for an API version the cluster stopped serving, says nothing about
-// whether the object exists; client-go marks those as unexpected responses.
-func confirmDeletedObjectAbsence(target ObjectActionTargetRef, err error) error {
-	if !apierrors.IsNotFound(err) || apierrors.IsUnexpectedServerError(err) {
+// confirmDeletedObjectAbsence names the target on a delete's 404 only once a read of
+// that exact object also finds nothing. The delete's own 404 proves nothing: an
+// admission webhook can answer with any status, while reads never pass through one.
+// An API version the cluster stopped serving answers 404 to reads too; client-go
+// marks those as unexpected responses.
+func (g *ResourceGateway) confirmDeletedObjectAbsence(ctx context.Context, target ObjectActionTargetRef, err error) error {
+	if !apierrors.IsNotFound(err) {
 		return err
 	}
-	var api apierrors.APIStatus
-	if !errors.As(err, &api) || api.Status().Details == nil || api.Status().Details.Name != target.Name {
+	deps, _, resolveErr := g.resolveClusterDependencies(target.ClusterID)
+	if resolveErr != nil {
+		return err
+	}
+	_, readErr := fetchObjectByGVK(ctx, deps, objectActionTargetGVK(target), target.Namespace, target.Name)
+	if !apierrors.IsNotFound(readErr) || apierrors.IsUnexpectedServerError(readErr) {
 		return err
 	}
 	return errorstatus.ObjectNotFound(objectActionStatusRef(target), err)

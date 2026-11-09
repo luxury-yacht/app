@@ -300,11 +300,14 @@ func (s *Service) runKubectlDrain(ctx context.Context, nodeName, uid string, opt
 	}
 
 	job.AddInfo(nodemaintenance.DrainPhaseWait, "Waiting for pods to terminate")
+	removalCtx, cancelRemoval := withDrainTimeout(ctx, drainer.Timeout)
+	defer cancelRemoval()
+	drainer.Ctx = removalCtx
 	if err := drainer.DeleteOrEvictPods(pods); err != nil {
 		if ctx.Err() != nil {
 			return err
 		}
-		if isDrainTimeoutError(err, drainer.Timeout) {
+		if errors.Is(removalCtx.Err(), context.DeadlineExceeded) {
 			err = fmt.Errorf("drain timed out after %s while waiting for pods to terminate: %w", drainer.Timeout, err)
 		}
 		job.AddInfo(nodemaintenance.DrainPhaseError, err.Error())
@@ -312,6 +315,16 @@ func (s *Service) runKubectlDrain(ctx context.Context, nodeName, uid string, opt
 	}
 	job.AddInfo(nodemaintenance.DrainPhaseWaitComplete, "All pods drained")
 	return nil
+}
+
+// withDrainTimeout puts the drain's timeout on kubectl's requests too. Its own timer
+// is checked only between them, so a slow request could outlast it and the next
+// eviction still go out.
+func withDrainTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if timeout <= 0 {
+		return context.WithCancel(ctx)
+	}
+	return context.WithTimeout(ctx, timeout)
 }
 
 func (s *Service) newDrainHelper(ctx context.Context, options restypes.DrainNodeOptions, job *nodemaintenance.DrainJob) *kubectldrain.Helper {
@@ -404,18 +417,6 @@ func removePodWithoutWait(drainer *kubectldrain.Helper, pod corev1.Pod, mode pod
 		return fmt.Errorf("error when %s pod %s/%s: %w", drainOperationGerund(mode.usingEviction), pod.Namespace, pod.Name, err)
 	}
 	return nil
-}
-
-func isDrainTimeoutError(err error, timeout time.Duration) bool {
-	if timeout <= 0 || err == nil {
-		return false
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	message := err.Error()
-	return strings.Contains(message, "global timeout reached") ||
-		strings.Contains(message, "context deadline exceeded")
 }
 
 func drainOperationLabel(options restypes.DrainNodeOptions) string {

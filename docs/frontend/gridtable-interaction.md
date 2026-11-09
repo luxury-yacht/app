@@ -151,16 +151,16 @@ virtualization, and native table accessibility. Apply the
   again after listing pods, so it only removes pods from the selected node. A
   replacement created under the same name is left alone, and a row with no UID
   is not offered any action.
-- A failed restart offers no Retry: it may have started despite the error, and
-  repeating it would roll the workload again. Failed rows stay selected, so
-  restarting them is a new, confirmed action.
 - A drain removes only the pods it listed: each eviction or delete carries the
   listed pod's UID, and a pod recreated under that name counts as already removed.
-- A delete counts as done on a 404 only when the backend confirms that exact
-  object is missing. Other 404s, such as for an API version no longer served, stay
-  failures.
+- A delete counts as done on a 404 only when a read of that exact object also finds
+  nothing. An admission webhook can answer a delete with any status, and an API
+  version no longer served answers 404 to everything; both stay failures.
+- Retry is offered only when every failure is a definite refusal. After any other
+  error the write may still have landed, so those rows show as Unknown, stay
+  selected, and running again is a new, confirmed action against current data.
 - Each object holds its slot until its backend call returns, so results and Retry
-  wait for every call under way. The backend ends a call after 70 seconds, longer
+  wait for every call under way. The backend ends a call within 70 seconds, longer
   than the API server's own limit, and reports that the cluster did not answer.
   That answer stops the batch starting more objects, which are listed as not
   started. Failures also go to the app error pipeline, which keeps expected cluster

@@ -287,10 +287,10 @@ func withExplicitReason(err error, reason Reason, retryable, expected bool) erro
 }
 
 // NoAnswerInTime marks err as a request the app stopped waiting on at its own
-// deadline. It is the cluster's silence, not an application failure, and the
-// cluster may still have carried the request out.
+// deadline. It is the cluster's silence, not an application failure. The cluster
+// may still have carried the request out, so repeating it is not known to be safe.
 func NoAnswerInTime(err error) error {
-	return withExplicitReason(err, ReasonDeadlineExceeded, true, true)
+	return withExplicitReason(err, ReasonDeadlineExceeded, false, true)
 }
 
 // Conflict marks err as an action the app refused because of the current state of

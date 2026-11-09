@@ -276,7 +276,15 @@ func TestScaleWorkloadRestrictsHPAManagedWorkloads(t *testing.T) {
 		currentReplicas int32
 		requestReplicas int
 		wantErr         string
+		hpaAPIVersion   string
 	}{
+		{
+			name:            "blocks an HPA written against an older API version",
+			currentReplicas: 3,
+			requestReplicas: 5,
+			wantErr:         "manual scale is disabled for HPA-managed Deployment default/demo",
+			hpaAPIVersion:   "apps/v1beta2",
+		},
 		{
 			name:            "blocks arbitrary scale",
 			currentReplicas: 3,
@@ -309,11 +317,15 @@ func TestScaleWorkloadRestrictsHPAManagedWorkloads(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
 				Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
 			}
+			hpaAPIVersion := tc.hpaAPIVersion
+			if hpaAPIVersion == "" {
+				hpaAPIVersion = "apps/v1"
+			}
 			hpa := &autoscalingv1.HorizontalPodAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{Name: "demo-hpa", Namespace: "default"},
 				Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
 					ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{
-						APIVersion: "apps/v1",
+						APIVersion: hpaAPIVersion,
 						Kind:       "Deployment",
 						Name:       "demo",
 					},

@@ -135,6 +135,11 @@ const selectedRowNames = () =>
     .filter((row) => row.dataset.rowSelected === 'true')
     .map((row) => row.textContent?.trim());
 const actionCalls = () => app.backend.calls('RunObjectAction').map(([request]) => request);
+const footerButtons = () =>
+  Array.from(
+    modal()?.querySelectorAll('.confirmation-modal-footer button') ?? [],
+    (button) => button.textContent
+  );
 const detailColumns = () =>
   Array.from(modal()?.querySelectorAll('thead th') ?? [], (cell) => cell.textContent);
 const detailRows = () =>
@@ -298,7 +303,7 @@ describe('useBatchObjectActions', () => {
     let blocked = true;
     app.backend.answer('RunObjectAction', (request) => {
       if (blocked && (request as { target: { name: string } }).target.name === 'b') {
-        throw new Error('denied by admission webhook');
+        throw clusterRefusal('Forbidden', 'denied by admission webhook');
       }
       return {};
     });
@@ -448,7 +453,7 @@ describe('useBatchObjectActions', () => {
     const { clusterId } = devCluster();
     app.backend.answer('RunObjectAction', (request) => {
       if ((request as { target: { group: string } }).target.group === 'kinda.rocks') {
-        throw new Error('denied by admission webhook');
+        throw clusterRefusal('Forbidden', 'denied by admission webhook');
       }
       return {};
     });
@@ -619,7 +624,7 @@ describe('useBatchObjectActions', () => {
     let failing = true;
     app.backend.answer('RunObjectAction', () => {
       if (failing) {
-        throw new Error('etcd timeout');
+        throw clusterRefusal('Conflict', 'the object changed');
       }
       return {};
     });
@@ -822,16 +827,94 @@ describe('useBatchObjectActions', () => {
       expect(selectedRowNames()).toEqual(['a', 'f', 'g']);
       expect(detailColumns()).toEqual(['Name', 'Result']);
       expect(detailRows()).toEqual([
-        ['a', 'No answer'],
+        ['a', 'Unknown'],
         ['f', 'Not started'],
         ['g', 'Not started'],
       ]);
+      expect(footerButtons()).toEqual(['Close']);
+    });
 
-      app.backend.answer('RunObjectAction', () => ({}));
-      await click(modalButton('Retry 3'));
+    it('offers Retry on a restart the cluster refused, which never started', async () => {
+      const { clusterId } = devCluster();
+      let refusing = true;
+      app.backend.answer('RunObjectAction', () => {
+        if (refusing) {
+          throw clusterRefusal('Forbidden', 'denied by admission webhook');
+        }
+        return {};
+      });
+      await mount(
+        <BatchTable
+          allowedActions={['restart']}
+          rows={[makeRow(clusterId, 'Deployment', 'apps', 'a', { hpaManaged: false })]}
+        />
+      );
+      await selectAllRows();
+      await click(batchAction('Restart 1'));
+      await click(modalButton('Restart 1'));
+      expect(footerButtons()).toEqual(['Close', 'Retry 1']);
 
-      expect(sentNames().slice(5)).toEqual(['a', 'f', 'g']);
+      refusing = false;
+      await click(modalButton('Retry 1'));
+
+      expect(actionCalls()).toHaveLength(2);
       expect(modal()).toBeNull();
+    });
+
+    // These two can come from reading an error's text or from a response that could
+    // not be decoded, so they do not show the write was turned down.
+    it.each(['CredentialsRejected', 'BadRequest'] as const)(
+      'does not treat %s as proof the write never landed',
+      async (reason) => {
+        const { clusterId } = devCluster();
+        app.backend.answer('RunObjectAction', () => {
+          throw clusterRefusal(reason, 'failed after the request was sent');
+        });
+        await mount(<BatchTable rows={[makeRow(clusterId, 'Pod', '', 'a')]} />);
+        await selectAllRows();
+        await click(batchAction('Delete 1'));
+        await click(modalButton('Delete 1'));
+
+        expect(detailRows()).toEqual([['a', 'Unknown']]);
+        expect(footerButtons()).toEqual(['Close']);
+      }
+    );
+
+    it('offers no Retry while any object may have changed despite the error', async () => {
+      const { clusterId } = devCluster();
+      app.backend.answer('RunObjectAction', (request) => {
+        if ((request as { target: { name: string } }).target.name === 'refused') {
+          throw clusterRefusal('Forbidden', 'denied');
+        }
+        throw clusterRefusal('InternalError', 'etcd timed out after the write');
+      });
+      await mount(
+        <BatchTable
+          allowedActions={['scale']}
+          rows={[
+            makeRow(clusterId, 'Deployment', 'apps', 'refused', { hpaManaged: false }),
+            makeRow(clusterId, 'Deployment', 'apps', 'unclear', { hpaManaged: false }),
+          ]}
+        />
+      );
+      await selectAllRows();
+      await click(batchAction('Scale 2'));
+      await click(
+        requireValue(
+          Array.from(
+            document.body.querySelectorAll<HTMLButtonElement>('.scale-modal-footer button')
+          ).find((button) => button.textContent === 'Scale'),
+          'Scale button'
+        )
+      );
+      await click(modalButton('Scale 2'));
+
+      expect(detailRows()).toEqual([
+        ['refused', 'Failed'],
+        ['unclear', 'Unknown'],
+      ]);
+      expect(footerButtons()).toEqual(['Close']);
+      expect(selectedRowNames()).toEqual(['refused', 'unclear']);
     });
   });
 
@@ -910,7 +993,7 @@ describe('useBatchObjectActions', () => {
     let refused = true;
     app.backend.answer('RunObjectAction', (request) => {
       if (refused && (request as { target: { name: string } }).target.name === 'b') {
-        throw new Error('drain already running for node b');
+        throw clusterRefusal('Conflict', 'drain already running for node b');
       }
       return {};
     });
