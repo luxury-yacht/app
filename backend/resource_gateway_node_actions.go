@@ -129,7 +129,7 @@ func (g *ResourceGateway) deleteNodeAction(target ObjectActionTargetRef, force b
 	}); err != nil {
 		return err
 	}
-	if err := nodes.NewService(deps, g.nodeMaintenanceStore).Delete(ctx, target.Name, force); err != nil {
+	if err := nodes.NewService(deps, g.nodeMaintenanceStore).Delete(ctx, target.Name, force, target.UID); err != nil {
 		return err
 	}
 	g.clearNodeCaches(selectionKey, target.Name)

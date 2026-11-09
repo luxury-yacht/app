@@ -307,9 +307,9 @@ describe('NsViewPods', () => {
   it('deletes the pods picked in batch-select mode, each with its full identity', async () => {
     app.backend.answer('RunObjectAction', () => ({}));
     await start([
-      pod({ ref: { name: 'api-0' } }),
-      pod({ ref: { name: 'api-1' } }),
-      pod({ ref: { name: 'api-2' } }),
+      pod({ ref: { name: 'api-0', uid: 'uid-api-0' } }),
+      pod({ ref: { name: 'api-1', uid: 'uid-api-1' } }),
+      pod({ ref: { name: 'api-2', uid: 'uid-api-2' } }),
     ]);
     const toolbarButton = (label: string) =>
       requireValue(
@@ -356,6 +356,7 @@ describe('NsViewPods', () => {
           kind: 'Pod',
           namespace: 'team-a',
           name,
+          uid: `uid-${name}`,
         },
       }))
     );

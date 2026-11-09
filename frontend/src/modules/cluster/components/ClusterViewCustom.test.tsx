@@ -352,6 +352,67 @@ describe('ClusterViewCustom', () => {
     ]);
   });
 
+  it('holds batch actions while a re-sorted catalog page is out, keeping the rows on screen', async () => {
+    const items = () => [catalogItem(widget), catalogItem(dbCluster)];
+    serveCatalog(items);
+    await start();
+    await act(async () =>
+      requireValue(
+        view.container.querySelector<HTMLElement>('.icon-bar-button[aria-label="Batch select"]'),
+        'Batch select'
+      ).click()
+    );
+    await act(async () =>
+      requireValue(
+        view.container.querySelector<HTMLElement>('thead input[type="checkbox"]'),
+        'header checkbox'
+      ).click()
+    );
+    await app.settle();
+    const deleteAll = () =>
+      requireValue(
+        Array.from(
+          view.container.querySelectorAll<HTMLButtonElement>('.gridtable-batch-action')
+        ).find(
+          (button) =>
+            button.querySelector('.gridtable-batch-action-label')?.textContent === 'Delete 2'
+        ),
+        'Delete 2'
+      );
+    expect(deleteAll().disabled).toBe(false);
+
+    const parked: Array<() => void> = [];
+    app.snapshots.respond((request) =>
+      isCustomCatalogRead(request)
+        ? new Promise<Response>((resolve) => {
+            parked.push(() =>
+              resolve(snapshotResponse({ ...request, version: 2, payload: catalogPage(items()) }))
+            );
+          })
+        : undefined
+    );
+    await act(async () =>
+      requireValue(
+        view.container.querySelector<HTMLElement>('th[data-column="name"] .gridtable-sort-button'),
+        'Name sort'
+      ).click()
+    );
+    await app.settle();
+
+    expect(tableRows()).toHaveLength(2);
+    expect(deleteAll().disabled).toBe(true);
+
+    app.snapshots.respond(null);
+    await act(async () => {
+      parked.splice(0).forEach((answer) => {
+        answer();
+      });
+    });
+    await app.settle();
+
+    expect(deleteAll().disabled).toBe(false);
+  });
+
   it('names a permission denial when the catalog refuses the read', async () => {
     app.snapshots.respond((request) =>
       isCustomCatalogRead(request)

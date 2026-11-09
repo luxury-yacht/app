@@ -80,7 +80,7 @@ func TestServiceDeleteHonorsForce(t *testing.T) {
 		return false, nil, nil
 	})
 
-	require.NoError(t, service.Delete(context.Background(), node.Name, true))
+	require.NoError(t, service.Delete(context.Background(), node.Name, true, ""))
 	require.NotNil(t, recordedGrace)
 	require.Equal(t, int64(0), *recordedGrace)
 }
@@ -97,7 +97,7 @@ func TestServiceDeleteWithoutForceUsesDefaultGrace(t *testing.T) {
 		return false, nil, nil
 	})
 
-	require.NoError(t, service.Delete(context.Background(), node.Name, false))
+	require.NoError(t, service.Delete(context.Background(), node.Name, false, ""))
 	require.False(t, recordedGraceSeen, "default delete should not force grace period")
 }
 
@@ -107,7 +107,7 @@ func TestServiceDeleteReturnsEnsureClientError(t *testing.T) {
 	)
 	service := nodes.NewService(deps, nodemaintenance.NewStore(5))
 
-	err := service.Delete(context.Background(), "node-1", false)
+	err := service.Delete(context.Background(), "node-1", false, "")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "ensure failed")
 }

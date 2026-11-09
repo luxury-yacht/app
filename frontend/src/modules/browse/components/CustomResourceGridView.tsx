@@ -296,6 +296,7 @@ export function CustomResourceGridFrame({
     error: catalogError,
     fetchAllRows,
     pagination,
+    pageStale,
   } = catalog;
 
   const batchActions = useBatchObjectActions<CustomResourceGridRow>({
@@ -330,6 +331,7 @@ export function CustomResourceGridFrame({
     error: catalogError ?? emptyError ?? null,
     // Per-view identity so a revisit replays the last page instead of a spinner.
     cacheKey: `${idPrefix}|${parts.selectedClusterId ?? ''}|${cacheKeySuffix}`,
+    pageStale,
   });
 
   return (

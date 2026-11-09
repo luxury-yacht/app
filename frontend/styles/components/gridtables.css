@@ -533,8 +533,15 @@ body.dock-right-open.dock-bottom-open .content-body .gridtable-wrapper {
   cursor: pointer;
 }
 
-.gridtable-batch-action:hover {
+.gridtable-batch-action:hover:not(:disabled) {
   background-color: var(--color-bg);
+}
+
+/* The delay keeps an ordinary filter refetch from flashing the bar. */
+.gridtable-batch-action:disabled {
+  opacity: 0.5;
+  cursor: default;
+  transition: opacity 120ms ease 400ms;
 }
 
 .gridtable-batch-action-icon {

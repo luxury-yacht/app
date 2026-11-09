@@ -18,6 +18,7 @@
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import GridTable, { type GridTableProps } from '@shared/components/tables/GridTable';
 import type React from 'react';
+import { useMemo } from 'react';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import {
   type ResourceInventorySourceState,
@@ -56,9 +57,17 @@ export default function ResourceInventoryTable<T>({
   favModal,
   allowPartial,
   suppressEmptyWarning,
+  batchSelection,
   ...tableProps
 }: Readonly<ResourceInventoryTableProps<T>>) {
   const render = useResourceInventoryTable(source);
+  // Quiet filtering keeps the old rows on screen while a new query is out; batch
+  // actions wait until the rows they would act on are the query's own.
+  const actionsPending = Boolean(source.pageStale);
+  const gatedBatchSelection = useMemo(
+    () => batchSelection && { ...batchSelection, actionsPending },
+    [actionsPending, batchSelection]
+  );
   // The binding owns local table ordering. Use its rows while the controller is
   // rendering the live source; when the controller substitutes cached rows for
   // a transient empty refresh, keep those replay rows because the binding was
@@ -110,6 +119,7 @@ export default function ResourceInventoryTable<T>({
         <GridTable<T>
           {...gridTableProps}
           {...tableProps}
+          batchSelection={gatedBatchSelection}
           data={tableRows}
           filters={filters}
           loading={updatingMessage ? false : render.showRefreshOverlay}

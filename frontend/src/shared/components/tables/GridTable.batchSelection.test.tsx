@@ -52,8 +52,14 @@ const runDelete = vi.fn();
 
 function BatchTable({
   getActionsOverride,
+  actionsPending,
   ...props
-}: Readonly<Partial<GridTableProps<Row>> & { getActionsOverride?: () => GridTableBatchAction[] }>) {
+}: Readonly<
+  Partial<GridTableProps<Row>> & {
+    getActionsOverride?: () => GridTableBatchAction[];
+    actionsPending?: boolean;
+  }
+>) {
   const [active, setActive] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(new Set());
   return (
@@ -68,6 +74,7 @@ function BatchTable({
         onActiveChange: setActive,
         selectedKeys,
         onSelectedKeysChange: setSelectedKeys,
+        actionsPending,
         getActions: (selected) => {
           getActionsSpy(selected.map(({ row }) => row));
           if (getActionsOverride) {
@@ -285,6 +292,19 @@ describe('GridTable batch-select mode', () => {
 
     expect(checkedRows()).toEqual(['alpha']);
     expect(batchBar()).toBeNull();
+  });
+
+  it('keeps actions on the bar but unusable while the rows on screen are being replaced', async () => {
+    runDelete.mockClear();
+    await view.show(<BatchTable actionsPending />);
+    await enterBatchMode();
+    await click(rowCell(0));
+
+    const action = requireValue(batchAction('Delete 1'), 'Delete 1');
+    expect(action.disabled).toBe(true);
+    await click(action);
+
+    expect(runDelete).not.toHaveBeenCalled();
   });
 
   it('forgets the mode when the button is pressed again', async () => {

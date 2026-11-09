@@ -91,8 +91,12 @@ interface BatchActionDefinition {
   icon: React.ReactNode;
   danger: boolean;
   message: (replicas: number) => string;
-  covers: (policy: ObjectActionPolicy) => boolean;
-  run: (target: ObjectActionTargetRef, batch: BatchRun) => Promise<unknown>;
+  covers: (policy: ObjectActionPolicy, object: ObjectActionData) => boolean;
+  run: (
+    target: ObjectActionTargetRef,
+    batch: BatchRun,
+    object: ObjectActionData
+  ) => Promise<unknown>;
   /** A dialog that gathers input first; other actions go straight to confirmation. */
   prompt?: 'scale' | 'drain';
 }
@@ -177,8 +181,10 @@ const BATCH_ACTIONS: readonly BatchActionDefinition[] = [
     icon: <DeleteIcon width={16} height={16} />,
     danger: true,
     message: () => 'This action cannot be undone.',
-    covers: (policy) => policy.deleteEnabled,
-    run: (target) => runObjectDelete(target),
+    // Tied to the UID of the row the user saw: a retry after a lost response
+    // must fail rather than remove a replacement created under the same name.
+    covers: (policy, object) => policy.deleteEnabled && Boolean(object.uid),
+    run: (target, _batch, object) => runObjectDelete({ ...target, uid: object.uid }),
   },
 ];
 
@@ -216,12 +222,53 @@ const pluralKind = (kind: string): string => {
   return /(s|x|ch|sh)$/i.test(kind) ? `${kind}es` : `${kind}s`;
 };
 
+// Custom resources from different API groups can share a kind name.
+const gvkOf = (object: ObjectActionData): string =>
+  `${object.group}/${object.version}/${object.kind}`;
+
+const apiVersionOf = (object: ObjectActionData): string =>
+  object.group ? `${object.group}/${object.version}` : object.version;
+
 const countNoun = (objects: readonly ObjectActionData[]): string => {
-  const kinds = unique(objects.map((object) => object.kind));
-  if (kinds.length > 1) {
+  if (unique(objects.map(gvkOf)).length > 1) {
     return 'Objects';
   }
-  return objects.length === 1 ? kinds[0] : pluralKind(kinds[0]);
+  const { kind } = objects[0];
+  return objects.length === 1 ? kind : pluralKind(kind);
+};
+
+/**
+ * Lists `shown` with only the columns needed to tell every object in `objects`
+ * apart, so a list of failures reads the same as the confirmation before it.
+ */
+const targetDetailsTable = (
+  objects: readonly ObjectActionData[],
+  shown: readonly ObjectActionData[],
+  nameHeader: string
+) => {
+  const gvks = unique(objects.map(gvkOf)).length;
+  const kindNames = unique(objects.map((object) => object.kind)).length;
+  const namespaces = unique(objects.map((object) => object.namespace ?? '')).length;
+  const columns = [
+    { header: 'Kind', needed: gvks > 1, valueOf: (object: ObjectActionData) => object.kind },
+    { header: 'API Version', needed: gvks > kindNames, valueOf: apiVersionOf },
+    {
+      header: 'Namespace',
+      needed: namespaces > 1,
+      valueOf: (object: ObjectActionData) => object.namespace ?? '',
+    },
+    {
+      header: nameHeader,
+      needed: true,
+      monospace: true,
+      valueOf: (object: ObjectActionData) => object.name,
+    },
+  ].filter((column) => column.needed);
+  return {
+    longList: true,
+    columns: columns.map(({ header, monospace }) => ({ header, monospace })),
+    rows: shown.map((object) => columns.map((column) => column.valueOf(object))),
+  };
 };
 
 const undrainedWarning = (objects: readonly ObjectActionData[]): string | undefined => {
@@ -231,8 +278,8 @@ const undrainedWarning = (objects: readonly ObjectActionData[]): string | undefi
   }
   const total = `${undrained} of ${objects.length} ${objects.length === 1 ? 'node' : 'nodes'}`;
   return undrained === 1
-    ? `${total} has not been drained. Its pods will be terminated abruptly when the node is removed.`
-    : `${total} have not been drained. Their pods will be terminated abruptly when the nodes are removed.`;
+    ? `${total} has no recorded drain. Any pods still on it will be terminated abruptly when the node is removed.`
+    : `${total} have no recorded drain. Any pods still on them will be terminated abruptly when the nodes are removed.`;
 };
 
 const actionTitle = (label: string, eligible: number, total: number): string =>
@@ -252,7 +299,11 @@ const executeBatch = async (
     for (let entry = queue.shift(); entry; entry = queue.shift()) {
       try {
         const label = objectActionLabel(run.definition.actionId);
-        await run.definition.run(actionTargetFor(entry.object, label.toLowerCase()), run);
+        await run.definition.run(
+          actionTargetFor(entry.object, label.toLowerCase()),
+          run,
+          entry.object
+        );
       } catch (error) {
         failed.push({ entry, reason: errorReason(error) });
       }
@@ -288,19 +339,18 @@ const confirmationProps = (
 ) => {
   const { definition, entries, skipped, replicas } = run;
   const objects = entries.map((entry) => entry.object);
-  const kinds = unique(objects.map((object) => object.kind));
   const namespaces = unique(objects.map((object) => object.namespace ?? ''));
   const clusters = unique(objects.map((object) => object.clusterId));
   const label = objectActionLabel(definition.actionId);
   const noun = countNoun(objects);
-  const oneKind = kinds.length === 1 && clusters.length === 1;
+  const oneKind = unique(objects.map(gvkOf)).length === 1 && clusters.length === 1;
   return {
     title: `${label} ${objects.length} ${noun}`,
     target: oneKind
       ? {
           clusterId: clusters[0],
           group: objects[0].group,
-          kind: kinds[0],
+          kind: objects[0].kind,
           name: `${objects.length} ${noun.toLowerCase()}`,
           namespace: namespaces.length === 1 ? namespaces[0] : undefined,
         }
@@ -311,19 +361,7 @@ const confirmationProps = (
     ]
       .filter(Boolean)
       .join(' '),
-    detailsTable: {
-      longList: true,
-      columns: [
-        ...(kinds.length > 1 ? [{ header: 'Kind' }] : []),
-        ...(namespaces.length > 1 ? [{ header: 'Namespace' }] : []),
-        { header: 'Name', monospace: true },
-      ],
-      rows: objects.map((object) => [
-        ...(kinds.length > 1 ? [object.kind] : []),
-        ...(namespaces.length > 1 ? [object.namespace ?? ''] : []),
-        object.name,
-      ]),
-    },
+    detailsTable: targetDetailsTable(objects, objects, 'Name'),
     notice: skipped
       ? `${skipped} selected ${skipped === 1 ? 'object is' : 'objects are'} skipped: not supported or not permitted.`
       : undefined,
@@ -369,14 +407,22 @@ export function useBatchObjectActions<T>({
   const resolveClusterName = useClusterNameResolver();
   const [stored, setStored] = useState(() => initialBatchState(scopeKey));
   const [dialog, setDialog] = useState<BatchDialog | null>(null);
-  const state = stored.scopeKey === scopeKey ? stored : initialBatchState(scopeKey);
+  // Reset while rendering so the old scope's selection is never painted under the
+  // new one, and is gone if the mounted view returns to the old scope later. A
+  // running batch keeps its dialog: it cannot be recalled, so it must report.
+  if (stored.scopeKey !== scopeKey) {
+    setStored(initialBatchState(scopeKey));
+    if (dialog && dialog.stage !== 'running') {
+      setDialog(null);
+    }
+  }
 
   const update = useCallback(
     (change: Partial<Omit<BatchState, 'scopeKey'>>) => {
-      setStored((previous) => ({
-        ...(previous.scopeKey === scopeKey ? previous : initialBatchState(scopeKey)),
-        ...change,
-      }));
+      // A batch that finishes after the table moved on must not touch the new scope.
+      setStored((previous) =>
+        previous.scopeKey === scopeKey ? { ...previous, ...change } : previous
+      );
     },
     [scopeKey]
   );
@@ -424,7 +470,7 @@ export function useBatchObjectActions<T>({
       return BATCH_ACTIONS.filter(
         (definition) => !allowedActions || allowedActions.includes(definition.id)
       ).flatMap((definition) => {
-        const entries = rows.filter(({ policy }) => definition.covers(policy));
+        const entries = rows.filter(({ policy, object }) => definition.covers(policy, object));
         if (entries.length === 0) {
           return [];
         }
@@ -450,13 +496,13 @@ export function useBatchObjectActions<T>({
 
   const batchSelection = useMemo<GridTableBatchSelection<T>>(
     () => ({
-      active: state.active,
+      active: stored.active,
       onActiveChange: (active) => update({ active }),
-      selectedKeys: state.selectedKeys,
+      selectedKeys: stored.selectedKeys,
       onSelectedKeysChange: (selectedKeys) => update({ selectedKeys }),
       getActions,
     }),
-    [getActions, state.active, state.selectedKeys, update]
+    [getActions, stored.active, stored.selectedKeys, update]
   );
 
   const closeDialog = () => setDialog(null);
@@ -499,11 +545,11 @@ export function useBatchObjectActions<T>({
         isOpen
         title={`${run.definition.past} ${total - failed.length} of ${total} ${noun}`}
         message={`${failed.length} failed and stayed selected.`}
-        detailsTable={{
-          longList: true,
-          columns: [{ header: 'Failed', monospace: true }],
-          rows: failed.map(({ entry }) => [entry.object.name]),
-        }}
+        detailsTable={targetDetailsTable(
+          run.entries.map((entry) => entry.object),
+          failed.map(({ entry }) => entry.object),
+          'Failed'
+        )}
         warning={unique(failed.map((failure) => failure.reason)).join(' ')}
         cancelText="Close"
         confirmText={`Retry ${failed.length}`}

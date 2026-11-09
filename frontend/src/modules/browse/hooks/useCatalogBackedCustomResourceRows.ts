@@ -39,6 +39,7 @@ export function useCatalogBackedCustomResourceRows({
     unfilteredTotal,
     totalIsExact,
     pagination,
+    pageStale,
     fetchAllRows: fetchAllCatalogItems,
   } = useBrowseCatalog({
     enabled: persistence.hydrated,
@@ -77,6 +78,7 @@ export function useCatalogBackedCustomResourceRows({
     totalCount,
     unfilteredTotal,
     totalIsExact,
+    pageStale,
     fetchAllRows,
     // Assembled once in useBrowseCatalog; the views' `{...pagination}` spread
     // and the catalog footer both read this object.

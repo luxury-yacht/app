@@ -240,6 +240,8 @@ export interface GridTableBatchSelection<T> {
   selectedKeys: ReadonlySet<string>;
   onSelectedKeysChange: (keys: ReadonlySet<string>) => void;
   getActions: (selected: GridTableBatchSelectedRow<T>[]) => GridTableBatchAction[];
+  /** The rows on screen are about to be replaced; actions show but cannot run yet. */
+  actionsPending?: boolean;
 }
 
 export interface GridTableProps<T> {

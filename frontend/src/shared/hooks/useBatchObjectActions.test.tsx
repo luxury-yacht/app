@@ -26,10 +26,12 @@ function BatchTable({
   rows,
   scopeKey = 'scope-a',
   allowedActions,
+  rowKey = keyOf,
 }: Readonly<{
   rows: ObjectActionData[];
   scopeKey?: string;
   allowedActions?: readonly BatchObjectActionId[];
+  rowKey?: (row: ObjectActionData) => string;
 }>) {
   const batch = useBatchObjectActions<ObjectActionData>({ getObject, scopeKey, allowedActions });
   return (
@@ -37,7 +39,7 @@ function BatchTable({
       <GridTable<ObjectActionData>
         data={rows}
         columns={[{ key: 'name', header: 'Name', render: (row) => row.name }]}
-        keyExtractor={keyOf}
+        keyExtractor={rowKey}
         filters={{ enabled: true }}
         virtualization={{ enabled: false }}
         batchSelection={batch.batchSelection}
@@ -67,6 +69,7 @@ const makeRow = (
   version: 'v1',
   name,
   namespace: 'team-a',
+  uid: `uid-${name}`,
   ...extra,
 });
 
@@ -201,12 +204,32 @@ describe('useBatchObjectActions', () => {
     expect(actionCalls()).toEqual(
       ['a', 'b'].map((name) => ({
         action: OBJECT_ACTIONS.delete,
-        target: { clusterId, group: '', version: 'v1', kind: 'Pod', namespace: 'team-a', name },
+        target: {
+          clusterId,
+          group: '',
+          version: 'v1',
+          kind: 'Pod',
+          namespace: 'team-a',
+          name,
+          uid: `uid-${name}`,
+        },
       }))
     );
     expect(modal()).toBeNull();
     expect(view.container.querySelectorAll('input[type="checkbox"]')).toHaveLength(0);
     expect(toolbarButton('Batch select')).not.toBeNull();
+  });
+
+  it('leaves a row with no UID out of Delete, since a retry could not be tied to that object', async () => {
+    const { clusterId } = devCluster();
+    await mount(
+      <BatchTable
+        rows={[makeRow(clusterId, 'Pod', '', 'a'), makeRow(clusterId, 'Pod', '', 'b', { uid: '' })]}
+      />
+    );
+    await selectAllRows();
+
+    expect(batchLabels()).toEqual(['Delete 1 of 2']);
   });
 
   it('keeps only the failed rows selected and retries just those', async () => {
@@ -234,7 +257,7 @@ describe('useBatchObjectActions', () => {
     await click(modalButton('Retry 1'));
 
     expect(actionCalls().slice(callsBeforeRetry)).toEqual([
-      expect.objectContaining({ target: expect.objectContaining({ name: 'b' }) }),
+      expect.objectContaining({ target: expect.objectContaining({ name: 'b', uid: 'uid-b' }) }),
     ]);
     expect(modal()).toBeNull();
     expect(toolbarButton('Batch select')).not.toBeNull();
@@ -332,6 +355,70 @@ describe('useBatchObjectActions', () => {
     expect(modal()?.textContent).toContain(`2 namespaces on cluster ${clusterName}`);
   });
 
+  const detailColumns = () =>
+    Array.from(modal()?.querySelectorAll('thead th') ?? [], (cell) => cell.textContent);
+  const detailRows = () =>
+    Array.from(modal()?.querySelectorAll('tbody tr') ?? [], (row) =>
+      Array.from(row.querySelectorAll('td'), (cell) => cell.textContent)
+    );
+  const collidingDatabases = (clusterId: string) => [
+    makeRow(clusterId, 'DBInstance', 'rds.services.k8s.aws', 'orders', { version: 'v1alpha1' }),
+    makeRow(clusterId, 'DBInstance', 'kinda.rocks', 'orders', { version: 'v1beta1' }),
+  ];
+  const databaseKey = (row: ObjectActionData) => `${row.group}/${row.version}/${row.kind}`;
+
+  it('tells same-named kinds from different API groups apart before deleting them', async () => {
+    const { clusterId } = devCluster();
+    await mount(<BatchTable rows={collidingDatabases(clusterId)} rowKey={databaseKey} />);
+    await selectAllRows();
+
+    await click(batchAction('Delete 2'));
+
+    // The two kinds must not collapse into one group's badge and a plural count.
+    expect(modalTitle()).toBe('Delete 2 Objects');
+    expect(modal()?.querySelector('.confirmation-modal-target')).toBeNull();
+    expect(detailColumns()).toEqual(['Kind', 'API Version', 'Name']);
+    expect(detailRows()).toEqual([
+      ['DBInstance', 'rds.services.k8s.aws/v1alpha1', 'orders'],
+      ['DBInstance', 'kinda.rocks/v1beta1', 'orders'],
+    ]);
+  });
+
+  it('keeps the API version on a failed row so the retry names the right object', async () => {
+    const { clusterId } = devCluster();
+    app.backend.answer('RunObjectAction', (request) => {
+      if ((request as { target: { group: string } }).target.group === 'kinda.rocks') {
+        throw new Error('denied by admission webhook');
+      }
+      return {};
+    });
+    await mount(<BatchTable rows={collidingDatabases(clusterId)} rowKey={databaseKey} />);
+    await selectAllRows();
+    await click(batchAction('Delete 2'));
+    await click(modalButton('Delete 2'));
+
+    expect(modalTitle()).toBe('Deleted 1 of 2 Objects');
+    expect(detailColumns()).toEqual(['Kind', 'API Version', 'Failed']);
+    expect(detailRows()).toEqual([['DBInstance', 'kinda.rocks/v1beta1', 'orders']]);
+  });
+
+  it('shows no API version when the kind names already tell the rows apart', async () => {
+    const { clusterId } = devCluster();
+    await mount(
+      <BatchTable
+        rows={[
+          makeRow(clusterId, 'Deployment', 'apps', 'web', { hpaManaged: false }),
+          makeRow(clusterId, 'CronJob', 'batch', 'nightly'),
+        ]}
+      />
+    );
+    await selectAllRows();
+
+    await click(batchAction('Delete 2'));
+
+    expect(detailColumns()).toEqual(['Kind', 'Name']);
+  });
+
   it('leaves batch mode when the table moves to another scope', async () => {
     const { clusterId } = devCluster();
     const rows = [makeRow(clusterId, 'Pod', '', 'a')];
@@ -349,6 +436,55 @@ describe('useBatchObjectActions', () => {
     expect(toolbarButton('Batch select')).not.toBeNull();
   });
 
+  it('does not bring back an earlier selection when the table returns to its scope', async () => {
+    const { clusterId } = devCluster();
+    const rows = [makeRow(clusterId, 'Pod', '', 'a')];
+    await mount(<BatchTable rows={rows} scopeKey="scope-a" />);
+    await selectAllRows();
+    expect(batchLabels()).toEqual(['Delete 1']);
+
+    await view.show(<BatchTable rows={rows} scopeKey="scope-b" />);
+    await view.show(<BatchTable rows={rows} scopeKey="scope-a" />);
+
+    expect(view.container.querySelectorAll('.gridtable-row input[type="checkbox"]')).toHaveLength(
+      0
+    );
+    expect(batchLabels()).toEqual([]);
+  });
+
+  it('closes a confirmation for the old scope when the table moves on', async () => {
+    const { clusterId } = devCluster();
+    const rows = [makeRow(clusterId, 'Pod', '', 'a')];
+    await mount(<BatchTable rows={rows} scopeKey="scope-a" />);
+    await selectAllRows();
+    await click(batchAction('Delete 1'));
+    expect(modal()).not.toBeNull();
+
+    await view.show(<BatchTable rows={rows} scopeKey="scope-b" />);
+
+    expect(modal()).toBeNull();
+  });
+
+  it('leaves the new scope alone when a batch from the old scope finishes', async () => {
+    const { clusterId } = devCluster();
+    app.backend.answer('RunObjectAction', () => ({}));
+    const release = app.backend.hold('RunObjectAction');
+    const rows = [makeRow(clusterId, 'Pod', '', 'a')];
+    await mount(<BatchTable rows={rows} scopeKey="scope-a" />);
+    await selectAllRows();
+    await click(batchAction('Delete 1'));
+    await click(modalButton('Delete 1'));
+
+    await view.show(<BatchTable rows={rows} scopeKey="scope-b" />);
+    await click(requireToolbarButton('Batch select'));
+    await act(async () => {
+      release();
+    });
+    await app.settle();
+
+    expect(toolbarButton('Exit batch select')).not.toBeNull();
+  });
+
   const nodeRow = (clusterId: string, name: string, extra: Partial<ObjectActionData> = {}) =>
     makeRow(clusterId, 'Node', '', name, { namespace: '', ...extra });
   const modalWarning = () => document.body.querySelector('.confirmation-modal-warning');
@@ -363,30 +499,34 @@ describe('useBatchObjectActions', () => {
       `drain option ${name}`
     );
 
-  it('warns how many selected nodes have not been drained before deleting them', async () => {
-    const { clusterId } = devCluster();
-    await mount(
-      <BatchTable
-        allowedActions={['delete']}
-        rows={[nodeRow(clusterId, 'a'), nodeRow(clusterId, 'b', { unschedulable: true })]}
-      />
-    );
-    await selectAllRows();
-
-    await click(batchAction('Delete 2'));
-
-    expect(modalTitle()).toBe('Delete 2 Nodes');
-    expect(modalWarning()?.textContent).toContain('1 of 2 nodes has not been drained');
-  });
-
-  it('does not warn when every selected node has been cordoned', async () => {
+  it('counts only the selected nodes with a finished drain as safe to delete', async () => {
     const { clusterId } = devCluster();
     await mount(
       <BatchTable
         allowedActions={['delete']}
         rows={[
-          nodeRow(clusterId, 'a', { unschedulable: true }),
-          nodeRow(clusterId, 'b', { unschedulable: true }),
+          nodeRow(clusterId, 'never-touched'),
+          nodeRow(clusterId, 'only-cordoned', { unschedulable: true }),
+          nodeRow(clusterId, 'drained', { unschedulable: true, drainCompleted: true }),
+        ]}
+      />
+    );
+    await selectAllRows();
+
+    await click(batchAction('Delete 3'));
+
+    expect(modalTitle()).toBe('Delete 3 Nodes');
+    expect(modalWarning()?.textContent).toContain('2 of 3 nodes');
+  });
+
+  it('does not warn when every selected node finished draining', async () => {
+    const { clusterId } = devCluster();
+    await mount(
+      <BatchTable
+        allowedActions={['delete']}
+        rows={[
+          nodeRow(clusterId, 'a', { unschedulable: true, drainCompleted: true }),
+          nodeRow(clusterId, 'b', { unschedulable: true, drainCompleted: true }),
         ]}
       />
     );
@@ -395,6 +535,21 @@ describe('useBatchObjectActions', () => {
     await click(batchAction('Delete 2'));
 
     expect(modalWarning()).toBeNull();
+  });
+
+  it('warns about a node whose drain finished but which is schedulable again', async () => {
+    const { clusterId } = devCluster();
+    await mount(
+      <BatchTable
+        allowedActions={['delete']}
+        rows={[nodeRow(clusterId, 'a', { unschedulable: false, drainCompleted: true })]}
+      />
+    );
+    await selectAllRows();
+
+    await click(batchAction('Delete 1'));
+
+    expect(modalWarning()?.textContent).toContain('1 of 1 node');
   });
 
   it('drains every selected node with the one set of options chosen', async () => {

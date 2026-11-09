@@ -18,16 +18,16 @@ import (
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // DeleteByGVK removes a Kubernetes resource identified by its
 // GroupVersionKind, namespace, and name. The group/version is honored
 // strictly: if two CRDs share a Kind, the caller picks which one is
-// targeted. Returns an error if the resource cannot be resolved, if the
-// dynamic client is unavailable, or if the delete call itself fails.
-func (s *Service) DeleteByGVK(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) error {
+// targeted. A non-empty uid limits the delete to that object. Returns an error
+// if the resource cannot be resolved, if the dynamic client is unavailable, or
+// if the delete call itself fails.
+func (s *Service) DeleteByGVK(ctx context.Context, gvk schema.GroupVersionKind, namespace, name, uid string) error {
 	if gvk.Kind == "" {
 		return fmt.Errorf("kind is required")
 	}
@@ -38,18 +38,9 @@ func (s *Service) DeleteByGVK(ctx context.Context, gvk schema.GroupVersionKind, 
 		return fmt.Errorf("name is required")
 	}
 
-	if s.deps.ResourceResolver == nil {
-		return fmt.Errorf("resource resolver not initialized")
-	}
-	resolved, ok, err := s.deps.ResourceResolver.ResolveResourceForGVK(ctx, gvk)
+	resolved, err := s.resolveDeleteTarget(ctx, gvk)
 	if err != nil {
-		err = s.logError(err, fmt.Sprintf("Failed to resolve GVR for %s", gvk.String()))
-		return fmt.Errorf("failed to resolve %s: %w", gvk.String(), err)
-	}
-	if !ok {
-		err := fmt.Errorf("unable to resolve resource for %s", gvk.String())
-		err = s.logError(err, fmt.Sprintf("Failed to resolve GVR for %s", gvk.String()))
-		return fmt.Errorf("failed to resolve %s: %w", gvk.String(), err)
+		return err
 	}
 	gvr := resolved.GVR()
 	isNamespaced := resolved.Namespaced
@@ -60,14 +51,15 @@ func (s *Service) DeleteByGVK(ctx context.Context, gvk schema.GroupVersionKind, 
 		return fmt.Errorf("failed to create dynamic client: %w", err)
 	}
 
+	deleteOptions := common.DeleteOptionsForUID(uid)
 	var deleteErr error
 	if isNamespaced {
 		if namespace == "" {
 			return fmt.Errorf("namespaced resource %s requires a namespace", gvr.String())
 		}
-		deleteErr = dynamicClient.Resource(gvr).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+		deleteErr = dynamicClient.Resource(gvr).Namespace(namespace).Delete(ctx, name, deleteOptions)
 	} else {
-		deleteErr = dynamicClient.Resource(gvr).Delete(ctx, name, metav1.DeleteOptions{})
+		deleteErr = dynamicClient.Resource(gvr).Delete(ctx, name, deleteOptions)
 	}
 
 	if deleteErr != nil {
@@ -89,4 +81,20 @@ func (s *Service) DeleteByGVK(ctx context.Context, gvk schema.GroupVersionKind, 
 		s.logInfo(fmt.Sprintf("Deleted %s %s/%s", gvk.String(), namespace, name))
 	}
 	return nil
+}
+
+// resolveDeleteTarget finds the resource for gvk through the injected resolver.
+func (s *Service) resolveDeleteTarget(ctx context.Context, gvk schema.GroupVersionKind) (common.ResolvedResource, error) {
+	if s.deps.ResourceResolver == nil {
+		return common.ResolvedResource{}, fmt.Errorf("resource resolver not initialized")
+	}
+	resolved, ok, err := s.deps.ResourceResolver.ResolveResourceForGVK(ctx, gvk)
+	if err == nil && !ok {
+		err = fmt.Errorf("unable to resolve resource for %s", gvk.String())
+	}
+	if err != nil {
+		err = s.logError(err, fmt.Sprintf("Failed to resolve GVR for %s", gvk.String()))
+		return common.ResolvedResource{}, fmt.Errorf("failed to resolve %s: %w", gvk.String(), err)
+	}
+	return resolved, nil
 }

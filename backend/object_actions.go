@@ -121,7 +121,9 @@ func objectActionTargetGVK(t ObjectActionTargetRef) schema.GroupVersionKind {
 }
 
 func normalizeObjectActionTarget(t ObjectActionTargetRef) ObjectActionTargetRef {
-	return objectActionTarget(t.ClusterID, t.Group, t.Version, t.Kind, t.Namespace, t.Name)
+	normalized := objectActionTarget(t.ClusterID, t.Group, t.Version, t.Kind, t.Namespace, t.Name)
+	normalized.UID = strings.TrimSpace(t.UID)
+	return normalized
 }
 
 func validateObjectActionTarget(target ObjectActionTargetRef) (ObjectActionTargetRef, error) {

@@ -25,7 +25,7 @@ import {
   makePodSnapshotPayload,
 } from '@/core/refresh/refreshContractTestBuilders';
 import { buildClusterRefreshScope, parseRefreshScope } from '@/core/refresh/scopeSelector';
-import type { ClusterNodeSnapshotEntry } from '@/core/refresh/types';
+import type { ClusterNodeSnapshotEntry, NodeMaintenanceDrainJob } from '@/core/refresh/types';
 import {
   installAppStateHarness,
   type MountedApp,
@@ -49,7 +49,10 @@ const nodeIdentity = (name: string): ObjectIdentity => ({
 
 /** A node row as backend/refresh/snapshot/nodes.go projects it, in the visible cluster. */
 const node = (name: string, overrides: Partial<ClusterNodeSnapshotEntry> = {}) =>
-  makeClusterNodeSnapshotEntry({ ...overrides, ref: { clusterId: dev.clusterId, name } });
+  makeClusterNodeSnapshotEntry({
+    ...overrides,
+    ref: { clusterId: dev.clusterId, name, uid: `uid-${name}` },
+  });
 
 const clusterFields = () => ({ clusterId: dev.clusterId, clusterName: dev.clusterName });
 
@@ -78,15 +81,38 @@ const serveNodePods = () => {
   });
 };
 
-const startCluster = () => {
+type DrainJobFixture = Pick<NodeMaintenanceDrainJob, 'status' | 'startedAt'> & {
+  skipWaitForPodsToTerminate?: boolean;
+};
+
+/** A drain job on `nodeName` as backend/nodemaintenance/store.go reports it. */
+const drainJob = (
+  nodeName: string,
+  { status, startedAt, skipWaitForPodsToTerminate = false }: DrainJobFixture
+): NodeMaintenanceDrainJob => ({
+  clusterId: dev.clusterId,
+  id: `${nodeName}-${startedAt}`,
+  nodeName,
+  status,
+  startedAt,
+  options: {
+    ignoreDaemonSets: true,
+    deleteEmptyDirData: true,
+    force: false,
+    disableEviction: false,
+    skipWaitForPodsToTerminate,
+  },
+});
+
+const startCluster = (drains: () => NodeMaintenanceDrainJob[] = () => []) => {
   dev = app.cluster({ name: 'dev', context: 'alpha' });
   app.namespaces(dev, ['team-a']);
   app.startScreen(dev);
-  // The view follows the cluster's drain jobs (backend/node_maintenance.go); none here.
+  // The view follows the cluster's drain jobs (backend/node_maintenance.go).
   app.snapshots.serve(
     'object-maintenance',
     buildClusterRefreshScope('object-maintenance', dev.clusterId),
-    { ...clusterFields(), drains: [] }
+    { ...clusterFields(), drains: drains() }
   );
 };
 
@@ -95,8 +121,11 @@ const openView = async () => {
   await view.goTo({ clusterView: 'nodes' });
 };
 
-const start = async (rows: () => ClusterNodeSnapshotEntry[] = () => [node('node-1')]) => {
-  startCluster();
+const start = async (
+  rows: () => ClusterNodeSnapshotEntry[] = () => [node('node-1')],
+  drains?: () => NodeMaintenanceDrainJob[]
+) => {
+  startCluster(drains);
   app.serveTable(dev, 'nodes', { rows: rows() });
   serveNodePods();
   await openView();
@@ -474,6 +503,121 @@ describe('ClusterViewNodes', () => {
         (label) => label.textContent
       )
     ).toEqual(['Cordon 1 of 2', 'Uncordon 1 of 2', 'Drain 2', 'Delete 2']);
+  });
+
+  const selectEveryNode = async () => {
+    await click(
+      requireValue(
+        view.container.querySelector<HTMLElement>('.icon-bar-button[aria-label="Batch select"]'),
+        'Batch select'
+      )
+    );
+    await click(
+      requireValue(
+        view.container.querySelector<HTMLElement>('thead input[type="checkbox"]'),
+        'header checkbox'
+      )
+    );
+    await app.settle();
+  };
+  const batchButton = (label: string) =>
+    requireValue(
+      Array.from(
+        view.container.querySelectorAll<HTMLButtonElement>('.gridtable-batch-action')
+      ).find(
+        (button) => button.querySelector('.gridtable-batch-action-label')?.textContent === label
+      ),
+      label
+    );
+  const deleteWarning = async () => {
+    await selectEveryNode();
+    await click(batchButton('Delete 1'));
+    return document.body.querySelector('.confirmation-modal-warning');
+  };
+
+  it.each<[string, DrainJobFixture[]]>([
+    ['was only cordoned', []],
+    ['is still draining', [{ status: 'running', startedAt: 100 }]],
+    ['failed to drain and kept its cordon', [{ status: 'failed', startedAt: 100 }]],
+    ['had its drain cancelled', [{ status: 'cancelled', startedAt: 100 }]],
+    [
+      'failed its latest drain after an earlier one finished',
+      [
+        { status: 'succeeded', startedAt: 100 },
+        { status: 'failed', startedAt: 200 },
+      ],
+    ],
+    [
+      'drained without waiting for its pods to stop',
+      [{ status: 'succeeded', startedAt: 100, skipWaitForPodsToTerminate: true }],
+    ],
+  ])('warns before deleting a cordoned node that %s', async (_case, jobs) => {
+    await start(
+      () => [node('node-1', { unschedulable: true })],
+      () => jobs.map((job) => drainJob('node-1', job))
+    );
+
+    expect((await deleteWarning())?.textContent).toContain('1 of 1 node');
+  });
+
+  it('does not warn before deleting a cordoned node whose latest drain finished', async () => {
+    await start(
+      () => [node('node-1', { unschedulable: true })],
+      () => [
+        drainJob('node-1', { status: 'failed', startedAt: 100 }),
+        drainJob('node-1', { status: 'succeeded', startedAt: 200 }),
+      ]
+    );
+
+    expect(await deleteWarning()).toBeNull();
+  });
+
+  it('holds batch actions while a re-sort is out, keeping the rows on screen', async () => {
+    await start(() => [node('node-1'), node('node-2')]);
+    await selectEveryNode();
+    expect(batchButton('Delete 2').disabled).toBe(false);
+
+    // The re-sorted page is in flight until the backend answers it.
+    const parked: Array<() => void> = [];
+    app.snapshots.respond(({ domain, scope }) =>
+      domain === 'nodes'
+        ? new Promise<Response>((resolve) => {
+            parked.push(() =>
+              resolve(
+                snapshotResponse({
+                  domain,
+                  scope,
+                  version: 2,
+                  payload: makeClusterNodeSnapshotPayload({
+                    ...clusterFields(),
+                    rows: [node('node-1'), node('node-2')],
+                    total: 2,
+                  }),
+                })
+              )
+            );
+          })
+        : undefined
+    );
+    await click(
+      requireValue(
+        view.container.querySelector<HTMLElement>('th[data-column="name"] .gridtable-sort-button'),
+        'Name sort'
+      )
+    );
+
+    expect(nodeNames()).toEqual(['node-1', 'node-2']);
+    expect(batchButton('Delete 2').disabled).toBe(true);
+
+    app.snapshots.respond(null);
+    await act(async () => {
+      parked.splice(0).forEach((answer) => {
+        answer();
+      });
+    });
+    await app.settle();
+
+    expect(batchButton('Delete 2').disabled).toBe(false);
   });
 
   it('re-reads the cluster’s drain jobs after a batch drain starts', async () => {

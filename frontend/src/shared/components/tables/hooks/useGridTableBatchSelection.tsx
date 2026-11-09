@@ -83,7 +83,10 @@ const BatchHeaderCheckbox: React.FC = () => {
 };
 
 /** Floats over the bottom of the table while the selected rows have an action. */
-const GridTableBatchBar: React.FC<{ actions: GridTableBatchAction[] }> = ({ actions }) => (
+const GridTableBatchBar: React.FC<{ actions: GridTableBatchAction[]; pending: boolean }> = ({
+  actions,
+  pending,
+}) => (
   <div className="gridtable-batch-bar-anchor">
     <div className="gridtable-batch-bar" role="toolbar" aria-label="Batch Operations">
       <span className="gridtable-batch-bar-title">Batch Operations</span>
@@ -92,6 +95,7 @@ const GridTableBatchBar: React.FC<{ actions: GridTableBatchAction[] }> = ({ acti
           key={action.id}
           type="button"
           className={`gridtable-batch-action${action.danger ? ' gridtable-batch-action--danger' : ''}`}
+          disabled={pending}
           onClick={action.onRun}
         >
           <span className="gridtable-batch-action-icon">{action.icon}</span>
@@ -317,7 +321,9 @@ export function useGridTableBatchSelection<T>({
   );
 
   const bar =
-    selectedVisibleCount > 0 && actions.length > 0 ? <GridTableBatchBar actions={actions} /> : null;
+    selectedVisibleCount > 0 && actions.length > 0 ? (
+      <GridTableBatchBar actions={actions} pending={Boolean(batchSelection?.actionsPending)} />
+    ) : null;
 
   return {
     active,

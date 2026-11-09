@@ -31,7 +31,7 @@ func (g *ResourceGateway) deleteGenericResourceAction(target ObjectActionTargetR
 		return err
 	}
 	service := generic.NewService(deps)
-	if err := service.DeleteByGVK(ctx, objectActionTargetGVK(target), target.Namespace, target.Name); err != nil {
+	if err := service.DeleteByGVK(ctx, objectActionTargetGVK(target), target.Namespace, target.Name, target.UID); err != nil {
 		return err
 	}
 	g.invalidateResponseCacheForGVK(selectionKey, objectActionTargetGVK(target), target.Namespace, target.Name)

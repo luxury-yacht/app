@@ -160,6 +160,23 @@ export const useNodeMaintenanceActions = ({
     [aggregateDrains]
   );
 
+  // True only when the node's most recent drain finished and waited for its pods
+  // to stop. An earlier success says nothing about a later failed or running drain.
+  const hasCompletedDrain = useCallback(
+    (clusterId: string, nodeName: string): boolean => {
+      const cid = clusterId.trim();
+      const name = nodeName.trim().toLowerCase();
+      const latest = aggregateDrains
+        .filter((job) => job.clusterId === cid && job.nodeName === name)
+        .reduce<NodeMaintenanceDrainJob | null>(
+          (newest, job) => (!newest || job.startedAt > newest.startedAt ? job : newest),
+          null
+        );
+      return latest?.status === 'succeeded' && !latest.options.skipWaitForPodsToTerminate;
+    },
+    [aggregateDrains]
+  );
+
   // Shows drains started outside the drain modal without waiting for the next poll.
   const refreshDrains = useCallback(() => {
     for (const scope of watchedAggregateScopes) {
@@ -276,6 +293,7 @@ export const useNodeMaintenanceActions = ({
     openCordonFor,
     openDrainFor,
     activeDrainFor,
+    hasCompletedDrain,
     refreshDrains,
   };
 };

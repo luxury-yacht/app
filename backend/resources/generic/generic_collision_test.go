@@ -132,7 +132,7 @@ func TestServiceDeleteByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 
 		err := service.DeleteByGVK(context.Background(), schema.GroupVersionKind{
 			Group: "rds.services.k8s.aws", Version: "v1alpha1", Kind: "DBInstance",
-		}, "default", "my-db")
+		}, "default", "my-db", "")
 		if err != nil {
 			t.Fatalf("DeleteByGVK returned error for ACK: %v", err)
 		}
@@ -164,7 +164,7 @@ func TestServiceDeleteByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 
 		err := service.DeleteByGVK(context.Background(), schema.GroupVersionKind{
 			Group: "kinda.rocks", Version: "v1beta1", Kind: "DbInstance",
-		}, "default", "my-db")
+		}, "default", "my-db", "")
 		if err != nil {
 			t.Fatalf("DeleteByGVK returned error for kinda.rocks: %v", err)
 		}

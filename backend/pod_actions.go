@@ -32,7 +32,7 @@ func (g *ResourceGateway) deletePodAction(target ObjectActionTargetRef) error {
 	}); err != nil {
 		return err
 	}
-	if err := pods.DeletePod(ctx, deps, target.Namespace, target.Name); err != nil {
+	if err := pods.DeletePod(ctx, deps, target.Namespace, target.Name, target.UID); err != nil {
 		return err
 	}
 	g.invalidateResponseCacheForGVK(selectionKey, objectActionTargetGVK(target), target.Namespace, target.Name)

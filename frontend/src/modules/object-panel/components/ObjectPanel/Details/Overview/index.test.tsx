@@ -12,6 +12,7 @@
 
 import { act } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
 import {
   installAppStateHarness,
   type MountedApp,
@@ -94,6 +95,52 @@ describe('an opened panel’s Overview', () => {
         name: 'demo',
       }),
       currentReplicas: 5,
+    });
+  });
+
+  it('tells the actions menu when a node’s latest drain finished, so Delete does not warn', async () => {
+    const node = servePanel(
+      { group: '', version: 'v1', kind: 'Node', namespace: '', name: 'node-1' },
+      'node',
+      { name: 'node-1', unschedulable: true }
+    );
+    app.snapshots.serve(
+      'object-maintenance',
+      buildClusterRefreshScope('object-maintenance', dev.clusterId),
+      {
+        clusterId: dev.clusterId,
+        clusterName: dev.clusterName,
+        drains: [
+          {
+            clusterId: dev.clusterId,
+            id: 'drain-1',
+            nodeName: 'node-1',
+            status: 'succeeded',
+            startedAt: 100,
+            options: {
+              ignoreDaemonSets: true,
+              deleteEmptyDirData: true,
+              force: false,
+              disableEviction: false,
+              skipWaitForPodsToTerminate: false,
+            },
+          },
+        ],
+      }
+    );
+
+    // A node's panel also follows the cluster's nodes list and offers node logs.
+    app.serveTable(dev, 'nodes', { rows: [] });
+    app.backend.answer('DiscoverNodeLogs', () => ({
+      supported: false,
+      sources: [],
+      reason: 'node log query is not enabled',
+    }));
+
+    await openPanel(node);
+
+    expect(lastActionsMenu()).toMatchObject({
+      object: expect.objectContaining({ unschedulable: true, drainCompleted: true }),
     });
   });
 

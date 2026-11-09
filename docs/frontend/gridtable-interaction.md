@@ -129,16 +129,30 @@ virtualization, and native table accessibility. Apply the
   neither counted nor acted on, and the header checkbox covers the rows shown.
   Query-wide selection stays out, per the
   [large-data contract](../architecture/large-data.md#contract).
+- Query-backed tables keep the last page on screen while a new one loads, so the
+  source reports `pageStale` until the rows are the current query's page. The
+  bar's actions stay visible but disabled until then. A live refetch of the same
+  page does not set it, and a new query that fails keeps it set.
+- Batch state belongs to `scopeKey`. It resets on any scope change, so a mounted
+  view that returns to an earlier scope does not bring its selection back. A
+  batch still running reports its result but cannot change the new scope.
 - The checkbox column joins after the column order and visibility controllers,
   which keeps it out of the Columns menu, saved table state, and downloads. Its
   checkboxes read selection from context because cells are cached by row.
 - Each selected object runs through `RunObjectAction` with its complete
   identity, a few at a time. A partial failure keeps the failed rows selected.
+- Delete also sends the row's UID, which the backend turns into a delete
+  precondition, so retrying after a lost response cannot remove a replacement
+  created under the same name. A row with no UID is not offered Delete.
+- Confirmations and failure lists group by group, version, and kind. They add an
+  API Version column when one kind name spans several API versions.
 - A view that lists kinds too consequential to remove several at a time does not
   opt in: Browse, CRDs, Namespaces, and Helm.
 - Nodes add Drain, which takes one set of options for every selected node and
   starts one job per node, so the drains run at the same time. Deleting nodes
-  warns how many of them have not been drained.
+  warns how many of them lack a completed drain. A node counts as drained only
+  while it is still cordoned and its newest drain job succeeded after waiting
+  for its pods. A cordon alone is not evidence, since a failed drain keeps it.
 
 ## DOM And Identity Rules
 

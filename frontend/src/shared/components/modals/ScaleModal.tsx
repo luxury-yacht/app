@@ -97,6 +97,56 @@ const ReplicaStepButton = ({
   </button>
 );
 
+const ReplicaField = ({
+  inputId,
+  value,
+  replicaText,
+  loading,
+  cannotApply,
+  onApply,
+  onValueChange,
+}: Readonly<{
+  inputId: string;
+  value: number;
+  replicaText: ReturnType<typeof useReplicaText>;
+  loading: boolean;
+  cannotApply: boolean;
+  onApply: () => void;
+  onValueChange: (value: number) => void;
+}>) => (
+  <div className="scale-input-group">
+    <ReplicaStepButton
+      label="Decrease replicas"
+      disabled={loading || value <= 0}
+      onClick={() => onValueChange(clampReplicas(value - 1))}
+    >
+      <MinusIcon width={12} height={12} />
+    </ReplicaStepButton>
+    <input
+      id={inputId}
+      type="text"
+      inputMode="numeric"
+      value={replicaText.text}
+      onChange={replicaText.handleChange}
+      onBlur={replicaText.handleBlur}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && !cannotApply) {
+          onApply();
+        }
+      }}
+      className="scale-input"
+      disabled={loading}
+    />
+    <ReplicaStepButton
+      label="Increase replicas"
+      disabled={loading || value >= MAX_REPLICAS}
+      onClick={() => onValueChange(clampReplicas(value + 1))}
+    >
+      <PlusIcon width={12} height={12} />
+    </ReplicaStepButton>
+  </div>
+);
+
 const ScaleModal = ({
   isOpen,
   kind,
@@ -163,37 +213,15 @@ const ScaleModal = ({
           <label className="scale-modal-label" htmlFor={`${elementIdPrefix}-scale-replicas`}>
             Replicas:
           </label>
-          <div className="scale-input-group">
-            <ReplicaStepButton
-              label="Decrease replicas"
-              disabled={loading || value <= 0}
-              onClick={() => onValueChange(clampReplicas(value - 1))}
-            >
-              <MinusIcon width={12} height={12} />
-            </ReplicaStepButton>
-            <input
-              id={`${elementIdPrefix}-scale-replicas`}
-              type="text"
-              inputMode="numeric"
-              value={replicaText.text}
-              onChange={replicaText.handleChange}
-              onBlur={replicaText.handleBlur}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !cannotApply) {
-                  onApply();
-                }
-              }}
-              className="scale-input"
-              disabled={loading}
-            />
-            <ReplicaStepButton
-              label="Increase replicas"
-              disabled={loading || value >= MAX_REPLICAS}
-              onClick={() => onValueChange(clampReplicas(value + 1))}
-            >
-              <PlusIcon width={12} height={12} />
-            </ReplicaStepButton>
-          </div>
+          <ReplicaField
+            inputId={`${elementIdPrefix}-scale-replicas`}
+            value={value}
+            replicaText={replicaText}
+            loading={loading}
+            cannotApply={cannotApply}
+            onApply={onApply}
+            onValueChange={onValueChange}
+          />
         </div>
       </div>
       {!!error && (

@@ -132,10 +132,12 @@ const restartConfirmation = (
   onCancel,
 });
 
-// Deleting a node that drains (its drain facet) and is still schedulable warns
-// that its pods stop abruptly.
+// Deleting a node that drains (its drain facet) warns that its pods stop
+// abruptly unless its drain is known to have finished and it is still cordoned.
+// A cordon alone proves nothing: a drain cordons first and keeps it on failure.
 export const isUndrainedNode = (target: ObjectActionData): boolean =>
-  Boolean(lookupObjectActionKindCapability(target)?.drain) && !target.unschedulable;
+  Boolean(lookupObjectActionKindCapability(target)?.drain) &&
+  !(target.unschedulable && target.drainCompleted);
 
 const deleteConfirmation = (
   target: ObjectActionData,
@@ -147,7 +149,7 @@ const deleteConfirmation = (
     target,
     message: 'This action cannot be undone.',
     warning: isUndrainedNode(target)
-      ? 'This node has not been drained. Pods running on it will be terminated abruptly when the node is removed.'
+      ? 'No completed drain is recorded for this node. Any pods still on it will be terminated abruptly when the node is removed.'
       : undefined,
     confirmText: 'Delete',
     confirmButtonClass: 'danger',

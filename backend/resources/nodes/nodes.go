@@ -409,13 +409,14 @@ func drainPodErrorPhase(usingEviction bool) nodemaintenance.DrainEventPhase {
 	return nodemaintenance.DrainPhaseDeleteError
 }
 
-// Delete removes a node from the cluster.
-func (s *Service) Delete(ctx context.Context, nodeName string, force bool) error {
+// Delete removes a node from the cluster. A non-empty uid limits the delete to
+// that node.
+func (s *Service) Delete(ctx context.Context, nodeName string, force bool, uid string) error {
 	if err := s.ensureClient("Nodes"); err != nil {
 		return err
 	}
 
-	deleteOptions := metav1.DeleteOptions{}
+	deleteOptions := common.DeleteOptionsForUID(uid)
 	if force {
 		zero := int64(0)
 		deleteOptions.GracePeriodSeconds = &zero
