@@ -208,3 +208,46 @@ func TestObjectMapFindsACustomScaleTargetAtItsServedVersion(t *testing.T) {
 
 	assertEdge(t, snap.Payload.(ObjectMapSnapshotPayload), "HorizontalPodAutoscaler", "web", "Widget", "web", "scales")
 }
+
+// A workload already in the graph is the answer whatever the catalog holds: it may
+// not have published the workload yet, or may still list one that was deleted.
+func TestObjectMapFindsACollectedScaleTargetWhateverTheCatalogHolds(t *testing.T) {
+	stale := objectMapCatalogRow("apps", "v1", "Deployment", "deployments", "default", "web", "deleted-uid", "")
+	catalogs := map[string]func(*testing.T, *objectMapBuilder){
+		"no catalog":                       func(_ *testing.T, builder *objectMapBuilder) { builder.catalogService = nil },
+		"catalog has not published it yet": func(t *testing.T, builder *objectMapBuilder) { withObjectMapCatalog(t, builder) },
+		"catalog holds a deleted object's UID": func(t *testing.T, builder *objectMapBuilder) {
+			catalog := seedCatalogService(t, []objectcatalog.Summary{stale})
+			seedCatalogDescriptors(t, catalog, objectcatalog.Descriptor{
+				Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments",
+				Namespaced: true, Scope: objectcatalog.ScopeNamespace,
+			})
+			builder.catalogService = func() *objectcatalog.Service { return catalog }
+		},
+	}
+	for name, configure := range catalogs {
+		for _, apiVersion := range []string{"apps/v1beta2", "apps/"} {
+			t.Run(name+" "+apiVersion, func(t *testing.T) {
+				builder := newObjectMapTestBuilder(t, fake.NewSimpleClientset(
+					deploymentFixture("default", "web", "deploy-uid", "", ""),
+					scaledByHPA(apiVersion, "Deployment", "web"),
+				))
+				configure(t, builder)
+				ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"})
+
+				snap, err := builder.Build(ctx, "default:autoscaling/v2:HorizontalPodAutoscaler:web")
+				require.NoError(t, err)
+
+				payload := snap.Payload.(ObjectMapSnapshotPayload)
+				assertEdge(t, payload, "HorizontalPodAutoscaler", "web", "Deployment", "web", "scales")
+				uids := []string{}
+				for _, node := range payload.Nodes {
+					if node.Ref.Kind == "Deployment" {
+						uids = append(uids, node.Ref.UID)
+					}
+				}
+				require.Equal(t, []string{"deploy-uid"}, uids, "the edge must reach the workload that exists")
+			})
+		}
+	}
+}

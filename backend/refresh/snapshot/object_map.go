@@ -188,6 +188,8 @@ type objectMapIndex struct {
 	// custom resource that owns a ReplicaSet), looked up on demand. nil when
 	// no catalog is available.
 	catalog *objectcatalog.Service
+	// collectedWorkloads finds a collected scalable workload by what an HPA names.
+	collectedWorkloads map[string]*objectMapRecord
 	// hpaManagedTargets and hpaDataComplete keep the HPA data this build read, so
 	// a workload added from the catalog later gets the same ownership answer.
 	// hpaDataComplete is nil until that data has been read.
@@ -315,6 +317,7 @@ func newObjectMapIndex(meta ClusterMeta, allowedNamespaces []string) *objectMapI
 		byUID:   make(map[string]*objectMapRecord),
 		byIdent: make(map[string]*objectMapRecord),
 
+		collectedWorkloads: make(map[string]*objectMapRecord),
 		collectedResources: make(map[schema.GroupResource]struct{}),
 	}
 }
@@ -426,6 +429,13 @@ func (idx *objectMapIndex) addRecord(record *objectMapRecord) {
 	if record.ref.UID != "" {
 		idx.byUID[record.ref.UID] = record
 	}
+	if isObjectMapScalableWorkload(record.ref) {
+		idx.collectedWorkloads[objectMapWorkloadTargetKey(record.ref)] = record
+	}
+}
+
+func objectMapWorkloadTargetKey(ref ObjectMapReference) string {
+	return hpapkg.TargetKey(ref.Namespace, ref.Group, ref.Kind, ref.Name)
 }
 
 // stampRecord fills the build's cluster identity and reports whether the
@@ -556,6 +566,10 @@ func scaleTargetFromLink(link resourcemodel.ResourceLink) (objectMapScaleTarget,
 	return objectMapScaleTarget{}, false
 }
 
+func (t objectMapScaleTarget) key() string {
+	return hpapkg.TargetKey(t.namespace, t.group, t.kind, t.name)
+}
+
 // hpaManagedActionTargets reads every HPA's scale target from the HPA's projected
 // "scales" edge.
 func (idx *objectMapIndex) hpaManagedActionTargets() map[string]struct{} {
@@ -569,7 +583,7 @@ func (idx *objectMapIndex) hpaManagedActionTargets() map[string]struct{} {
 				continue
 			}
 			if target, ok := scaleTargetFromLink(edge.Link); ok {
-				managedTargets[hpapkg.TargetKey(target.namespace, target.group, target.kind, target.name)] = struct{}{}
+				managedTargets[target.key()] = struct{}{}
 			}
 		}
 	}
@@ -582,7 +596,7 @@ func (idx *objectMapIndex) applyHPAManagedFact(record *objectMapRecord) {
 	if idx.hpaDataComplete == nil || record == nil || !isObjectMapScalableWorkload(record.ref) || !idx.hpaDataComplete(record.ref.Namespace) {
 		return
 	}
-	_, managed := idx.hpaManagedTargets[hpapkg.TargetKey(record.ref.Namespace, record.ref.Group, record.ref.Kind, record.ref.Name)]
+	_, managed := idx.hpaManagedTargets[objectMapWorkloadTargetKey(record.ref)]
 	// Intake facts may be shared by concurrent graph builds. The HPA join
 	// belongs to this snapshot, including when no catalog record was merged.
 	facts := cloneObjectMapActionFacts(record.actionFacts)
@@ -1040,15 +1054,20 @@ func (idx *objectMapIndex) resolveCoreObjectRef(defaultNamespace string, ref *co
 }
 
 // recordForScaleTarget finds an HPA's target. The HPA controller ignores the version
-// in its reference, so one naming another version still means this object, at
-// whichever version the catalog lists it.
+// in its reference, so one naming another version still means this object. A workload
+// already in the graph is the answer; the catalog may not have published it yet, or
+// may still list a deleted one. Only otherwise does the catalog supply the target, at
+// whichever version it lists it.
 func (idx *objectMapIndex) recordForScaleTarget(link resourcemodel.ResourceLink) *objectMapRecord {
-	if record := idx.recordForResourceLink(link); record != nil {
+	target, ok := scaleTargetFromLink(link)
+	if !ok {
+		return nil
+	}
+	if record := idx.collectedWorkloads[target.key()]; record != nil {
 		return record
 	}
-	target, ok := scaleTargetFromLink(link)
-	if !ok || idx.catalog == nil {
-		return nil
+	if record := idx.recordForResourceLink(link); record != nil || idx.catalog == nil {
+		return record
 	}
 	lookup := idx.catalog.LookupObject(target.namespace, target.group, target.kind, target.name)
 	if !lookup.Found {
