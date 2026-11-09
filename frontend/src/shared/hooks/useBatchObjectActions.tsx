@@ -277,9 +277,7 @@ const undrainedWarning = (objects: readonly ObjectActionData[]): string | undefi
     return undefined;
   }
   const total = `${undrained} of ${objects.length} ${objects.length === 1 ? 'node' : 'nodes'}`;
-  return undrained === 1
-    ? `${total} has no recorded drain. Any pods still on it will be terminated abruptly when the node is removed.`
-    : `${total} have no recorded drain. Any pods still on them will be terminated abruptly when the nodes are removed.`;
+  return `${total} may still be running workload pods. They will be terminated abruptly when ${undrained === 1 ? 'the node is' : 'the nodes are'} removed.`;
 };
 
 const actionTitle = (label: string, eligible: number, total: number): string =>
@@ -494,6 +492,10 @@ export function useBatchObjectActions<T>({
     [allowedActions, getObject, permissionMap]
   );
 
+  // A selection is of the object the user checked, not of whatever holds its
+  // name later: a replacement must never inherit a pending destructive action.
+  const getRowInstance = useCallback((row: T) => getObject(row)?.uid, [getObject]);
+
   const batchSelection = useMemo<GridTableBatchSelection<T>>(
     () => ({
       active: stored.active,
@@ -501,8 +503,9 @@ export function useBatchObjectActions<T>({
       selectedKeys: stored.selectedKeys,
       onSelectedKeysChange: (selectedKeys) => update({ selectedKeys }),
       getActions,
+      getRowInstance,
     }),
-    [getActions, stored.active, stored.selectedKeys, update]
+    [getActions, getRowInstance, stored.active, stored.selectedKeys, update]
   );
 
   const closeDialog = () => setDialog(null);

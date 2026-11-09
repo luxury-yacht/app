@@ -49,6 +49,37 @@ func TestServiceNodeReturnsDetails(t *testing.T) {
 	require.Equal(t, int32(1), detail.Restarts)
 }
 
+func TestServiceNodeCountsThePodsRemovingTheNodeWouldStop(t *testing.T) {
+	service, client, node := newNodeService(t)
+	controller := true
+	daemon := testsupport.PodFixture("kube-system", "agent")
+	daemon.Spec.NodeName = node.Name
+	daemon.OwnerReferences = []metav1.OwnerReference{{
+		APIVersion: "apps/v1", Kind: "DaemonSet", Name: "agent", Controller: &controller,
+	}}
+	_, err := client.CoreV1().Pods(daemon.Namespace).Create(context.Background(), daemon, metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	detail, err := service.Node(context.Background(), node.Name)
+
+	require.NoError(t, err)
+	require.Equal(t, 3, detail.PodsCount)
+	require.NotNil(t, detail.EvictablePods)
+	require.Equal(t, 2, *detail.EvictablePods)
+}
+
+func TestServiceNodeLeavesPodCountUnknownWhenPodsCannotBeRead(t *testing.T) {
+	service, client, node := newNodeService(t)
+	client.PrependReactor("list", "pods", func(cgotesting.Action) (bool, runtime.Object, error) {
+		return true, nil, errors.New("list pods denied")
+	})
+
+	detail, err := service.Node(context.Background(), node.Name)
+
+	require.NoError(t, err)
+	require.Nil(t, detail.EvictablePods)
+}
+
 func TestServiceNodeStatusUsesSharedResourceModel(t *testing.T) {
 	service, client, node := newNodeService(t)
 	current, err := client.CoreV1().Nodes().Get(context.Background(), node.Name, metav1.GetOptions{})

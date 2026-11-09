@@ -67,6 +67,7 @@ export interface DetailActionState {
   status?: string;
   ready?: string | number;
   unschedulable?: boolean;
+  evictablePods?: number;
 }
 
 type DetailSections = Omit<ObjectDetailModel, 'objectData' | 'activeDetail' | 'actionState'>;
@@ -286,6 +287,10 @@ const actionStateOf = (details: DetailDTO): DetailActionState => ({
   unschedulable:
     'unschedulable' in details && typeof details.unschedulable === 'boolean'
       ? details.unschedulable
+      : undefined,
+  evictablePods:
+    'evictablePods' in details && typeof details.evictablePods === 'number'
+      ? details.evictablePods
       : undefined,
 });
 

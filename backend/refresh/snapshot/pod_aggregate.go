@@ -53,6 +53,7 @@ func projectPodAggregateFromSummary(pod *corev1.Pod, sources PodOwnerSources, ow
 		Name:               pod.Name,
 		NodeName:           pod.Spec.NodeName,
 		Phase:              string(pod.Status.Phase),
+		DrainExempt:        podres.ExemptFromDrain(pod),
 		ContainerCount:     len(pod.Spec.Containers),
 		InitContainerCount: len(pod.Spec.InitContainers),
 		// The grouping key attributes metrics to the visible owning workload.

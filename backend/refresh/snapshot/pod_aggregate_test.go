@@ -204,6 +204,7 @@ func oraclePodAggregate(pod *corev1.Pod, rsLister appslisters.ReplicaSetLister) 
 		Name:               pod.Name,
 		NodeName:           pod.Spec.NodeName,
 		Phase:              string(pod.Status.Phase),
+		DrainExempt:        podres.ExemptFromDrain(pod),
 		ContainerCount:     len(pod.Spec.Containers),
 		InitContainerCount: len(pod.Spec.InitContainers),
 		OwnerKey:           ownerKeyForPod(pod),

@@ -60,10 +60,25 @@ func (s *Service) Node(ctx context.Context, name string) (*NodeDetails, error) {
 		return nil, fmt.Errorf("failed to get node: %w", err)
 	}
 
-	pods := s.listPodsForNode(ctx, name)
+	pods, podsRead := s.listPodsForNode(ctx, name)
 	nodeMetrics := s.getNodeMetrics(ctx, name)
 
-	return s.buildNodeDetails(node, pods, nodeMetrics), nil
+	details := s.buildNodeDetails(node, pods, nodeMetrics)
+	if podsRead {
+		details.EvictablePods = evictablePodCount(pods)
+	}
+	return details, nil
+}
+
+// evictablePodCount counts the pods that removing their node would stop.
+func evictablePodCount(pods []corev1.Pod) *int {
+	count := 0
+	for i := range pods {
+		if !podres.ExemptFromDrain(&pods[i]) {
+			count++
+		}
+	}
+	return &count
 }
 
 // Cordon marks a node as unschedulable.
@@ -550,10 +565,12 @@ func projectNodeTaints(taints []corev1.Taint) []NodeTaint {
 	return projected
 }
 
-func (s *Service) listPodsForNode(ctx context.Context, name string) []corev1.Pod {
+// listPodsForNode returns the node's pods and whether they could be read. A
+// failed read shows the node without pod data, which is not the same as no pods.
+func (s *Service) listPodsForNode(ctx context.Context, name string) ([]corev1.Pod, bool) {
 	client := s.deps.KubernetesClient
 	if client == nil {
-		return nil
+		return nil, false
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, config.NamespaceOperationTimeout)
@@ -564,9 +581,9 @@ func (s *Service) listPodsForNode(ctx context.Context, name string) []corev1.Pod
 	})
 	if err != nil {
 		s.logInfo(fmt.Sprintf("Failed to list pods for node %s: %v", name, err))
-		return nil
+		return nil, false
 	}
-	return podList.Items
+	return podList.Items, true
 }
 
 func (s *Service) getNodeMetrics(ctx context.Context, name string) corev1.ResourceList {

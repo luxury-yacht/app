@@ -54,6 +54,7 @@ interface ProbeProps {
   sortConfig?: SortConfig | null;
   pageLimit?: number;
   liveDataVersion?: string;
+  enabled?: boolean;
 }
 
 function QueryProbe({
@@ -63,10 +64,11 @@ function QueryProbe({
   sortConfig = NAME_ASC,
   pageLimit,
   liveDataVersion,
+  enabled = true,
 }: Readonly<ProbeProps>) {
   const cluster = clusterId ?? dev.clusterId;
   const result = useTypedResourceQuery<Payload, Row>({
-    enabled: true,
+    enabled,
     clusterId: cluster,
     domain,
     label: 'All Namespaces Pods',
@@ -499,6 +501,14 @@ describe('useTypedResourceQuery', () => {
     const withReason = (reason: string): GridTableFilterState => ({
       ...DEFAULT_GRID_TABLE_FILTER_STATE,
       queryFacets: { reasons: { mode: 'some', values: [reason] } },
+    });
+
+    it('holds while the query is not running yet, since no page can be its own', async () => {
+      await start();
+
+      await view.show(<QueryProbe enabled={false} />);
+
+      expect(current().pageStale).toBe(true);
     });
 
     it('holds from a filter change until that query’s page lands', async () => {

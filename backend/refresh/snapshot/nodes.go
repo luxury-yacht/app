@@ -234,6 +234,7 @@ func (b *NodeBuilder) Build(ctx context.Context, scope string) (*refresh.Snapsho
 			// stale pod counts.
 			storeVersion:  version,
 			podAggregates: podAggregatesFromIngest(b.ingest),
+			podsRead:      podStoreListed(b.ingest),
 			usage: nodeUsageInputs{
 				nodes: nodeUsage, metadata: metadata,
 			},
@@ -261,8 +262,9 @@ func (b *NodeBuilder) ownRows() []NodeSummary {
 func (b *NodeListBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	// Each list task owns its result; RunLimited joins both before these are read.
 	var (
-		nodes []*corev1.Node
-		pods  []*corev1.Pod
+		nodes    []*corev1.Node
+		pods     []*corev1.Pod
+		podsRead bool
 	)
 
 	tasks := []func(context.Context) error{
@@ -279,6 +281,7 @@ func (b *NodeListBuilder) Build(ctx context.Context, scope string) (*refresh.Sna
 			switch {
 			case err == nil:
 				pods = parallel.CopyToPointers(resp.Items)
+				podsRead = true
 				return nil
 			case apierrors.IsForbidden(err):
 				klog.V(2).Info("nodes snapshot: pod list forbidden; rendering node data without pod-derived metrics")
@@ -312,7 +315,7 @@ func (b *NodeListBuilder) Build(ctx context.Context, scope string) (*refresh.Sna
 	}
 	nodeUsage, metadata := latestNodeMetrics(b.metrics)
 	return buildNodeSnapshotFromUsage(ctx, scope, nodeSnapshotInputs{
-		nodes: nodes, podAggregates: aggregates, podsVersion: podsVersion,
+		nodes: nodes, podAggregates: aggregates, podsVersion: podsVersion, podsRead: podsRead,
 		usage: nodeUsageInputs{nodes: nodeUsage, metadata: metadata},
 	})
 }
@@ -337,7 +340,10 @@ type nodeSnapshotInputs struct {
 	// the validator (0 when the caller has no pod versions, e.g. the
 	// single-node stream projection, which never reads the snapshot version).
 	podsVersion uint64
-	usage       nodeUsageInputs
+	// podsRead is false when the pods could not be read, so no aggregates means
+	// unknown rather than none.
+	podsRead bool
+	usage    nodeUsageInputs
 }
 
 func buildNodeSnapshotFromUsage(ctx context.Context, scope string, inputs nodeSnapshotInputs) (*refresh.Snapshot, error) {
@@ -355,6 +361,7 @@ func buildNodeSnapshotFromUsage(ctx context.Context, scope string, inputs nodeSn
 		ownRows:       ownRows,
 		storeVersion:  version,
 		podAggregates: inputs.podAggregates,
+		podsRead:      inputs.podsRead,
 		usage:         inputs.usage,
 	})
 }
@@ -368,6 +375,7 @@ type nodeIngestSnapshotInputs struct {
 	ownRows       []NodeSummary
 	storeVersion  uint64
 	podAggregates []streamrows.PodAggregate
+	podsRead      bool
 	usage         nodeUsageInputs
 }
 
@@ -375,7 +383,12 @@ func buildNodeSnapshotFromIngestUsage(ctx context.Context, scope string, inputs 
 	items := make([]NodeSummary, 0, len(inputs.ownRows))
 	podsByNode := podAggregatesByNode(inputs.podAggregates)
 	for _, own := range inputs.ownRows {
-		items = append(items, reaggregateNodeSummary(own, podsByNode[own.Ref.Name], inputs.usage.nodes))
+		nodePods := podsByNode[own.Ref.Name]
+		row := reaggregateNodeSummary(own, nodePods, inputs.usage.nodes)
+		if inputs.podsRead {
+			row.EvictablePods = evictablePodCount(nodePods)
+		}
+		items = append(items, row)
 	}
 	return finishNodeSnapshot(ctx, scope, items, inputs.storeVersion, inputs.usage.metadata, opts...)
 }

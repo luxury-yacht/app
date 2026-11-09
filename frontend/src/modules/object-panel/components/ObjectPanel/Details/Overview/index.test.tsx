@@ -98,35 +98,16 @@ describe('an opened panel’s Overview', () => {
     });
   });
 
-  it('tells the actions menu when a node’s latest drain finished, so Delete does not warn', async () => {
+  it('tells the actions menu how many workload pods a node still has, so Delete can warn', async () => {
     const node = servePanel(
       { group: '', version: 'v1', kind: 'Node', namespace: '', name: 'node-1' },
       'node',
-      { name: 'node-1', unschedulable: true }
+      { name: 'node-1', unschedulable: true, evictablePods: 0 }
     );
     app.snapshots.serve(
       'object-maintenance',
       buildClusterRefreshScope('object-maintenance', dev.clusterId),
-      {
-        clusterId: dev.clusterId,
-        clusterName: dev.clusterName,
-        drains: [
-          {
-            clusterId: dev.clusterId,
-            id: 'drain-1',
-            nodeName: 'node-1',
-            status: 'succeeded',
-            startedAt: 100,
-            options: {
-              ignoreDaemonSets: true,
-              deleteEmptyDirData: true,
-              force: false,
-              disableEviction: false,
-              skipWaitForPodsToTerminate: false,
-            },
-          },
-        ],
-      }
+      { clusterId: dev.clusterId, clusterName: dev.clusterName, drains: [] }
     );
 
     // A node's panel also follows the cluster's nodes list and offers node logs.
@@ -140,7 +121,7 @@ describe('an opened panel’s Overview', () => {
     await openPanel(node);
 
     expect(lastActionsMenu()).toMatchObject({
-      object: expect.objectContaining({ unschedulable: true, drainCompleted: true }),
+      object: expect.objectContaining({ unschedulable: true, evictablePods: 0 }),
     });
   });
 

@@ -90,6 +90,44 @@ afterEach(() => {
   container.remove();
 });
 
+describe('ResourceInventoryTable batch actions', () => {
+  const batchSelection = {
+    active: true,
+    onActiveChange: vi.fn(),
+    selectedKeys: new Set<string>(),
+    onSelectedKeysChange: vi.fn(),
+    getActions: () => [],
+  };
+  const renderBatchTable = (source: ResourceInventorySourceState<Row>) => {
+    act(() => {
+      root.render(
+        <ResourceInventoryTable<Row>
+          source={source}
+          gridTableProps={{ keyExtractor: (row: Row) => row.name }}
+          spinnerMessage="Loading..."
+          columns={columns}
+          batchSelection={batchSelection}
+        />
+      );
+    });
+  };
+  const actionsPending = () => gridTablePropsRef.current?.batchSelection?.actionsPending;
+
+  it('holds actions on a replayed page until the source supplies its own rows', () => {
+    const rows = [{ name: 'cached' }];
+    renderBatchTable(src({ rows, cacheKey: 'view' }));
+    expect(actionsPending()).toBe(false);
+
+    // A revisit with no query answer yet: the last page stands in for it.
+    renderBatchTable(src({ rows: [], loading: true, loaded: false, cacheKey: 'view' }));
+    expect(gridTablePropsRef.current?.data).toEqual(rows);
+    expect(actionsPending()).toBe(true);
+
+    renderBatchTable(src({ rows: [{ name: 'fresh' }], cacheKey: 'view' }));
+    expect(actionsPending()).toBe(false);
+  });
+});
+
 describe('ResourceInventoryTable error surface', () => {
   it('renders the errored empty state without any in-table banner', () => {
     // Error details belong to the refresh error toasts; the table only

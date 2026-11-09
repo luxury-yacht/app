@@ -436,6 +436,32 @@ describe('useBatchObjectActions', () => {
     expect(toolbarButton('Batch select')).not.toBeNull();
   });
 
+  it('drops a row from the selection when its object is replaced under the same name', async () => {
+    const { clusterId } = devCluster();
+    await mount(<BatchTable rows={[makeRow(clusterId, 'Pod', '', 'a')]} />);
+    await selectAllRows();
+    expect(batchLabels()).toEqual(['Delete 1']);
+
+    // Same row key, different object: the user never checked this one.
+    await view.show(<BatchTable rows={[makeRow(clusterId, 'Pod', '', 'a', { uid: 'uid-new' })]} />);
+
+    expect(batchLabels()).toEqual([]);
+    expect(selectedRowNames()).toEqual([]);
+  });
+
+  it('keeps a row selected when a refresh brings back the same object', async () => {
+    const { clusterId } = devCluster();
+    await mount(<BatchTable rows={[makeRow(clusterId, 'Pod', '', 'a')]} />);
+    await selectAllRows();
+
+    await view.show(
+      <BatchTable rows={[makeRow(clusterId, 'Pod', '', 'a', { status: 'Running' })]} />
+    );
+
+    expect(batchLabels()).toEqual(['Delete 1']);
+    expect(selectedRowNames()).toEqual(['a']);
+  });
+
   it('does not bring back an earlier selection when the table returns to its scope', async () => {
     const { clusterId } = devCluster();
     const rows = [makeRow(clusterId, 'Pod', '', 'a')];
@@ -499,34 +525,35 @@ describe('useBatchObjectActions', () => {
       `drain option ${name}`
     );
 
-  it('counts only the selected nodes with a finished drain as safe to delete', async () => {
+  it('counts only the cordoned nodes known to be empty as safe to delete', async () => {
     const { clusterId } = devCluster();
     await mount(
       <BatchTable
         allowedActions={['delete']}
         rows={[
-          nodeRow(clusterId, 'never-touched'),
-          nodeRow(clusterId, 'only-cordoned', { unschedulable: true }),
-          nodeRow(clusterId, 'drained', { unschedulable: true, drainCompleted: true }),
+          nodeRow(clusterId, 'schedulable'),
+          nodeRow(clusterId, 'pods-unknown', { unschedulable: true }),
+          nodeRow(clusterId, 'pods-left', { unschedulable: true, evictablePods: 2 }),
+          nodeRow(clusterId, 'empty', { unschedulable: true, evictablePods: 0 }),
         ]}
       />
     );
     await selectAllRows();
 
-    await click(batchAction('Delete 3'));
+    await click(batchAction('Delete 4'));
 
-    expect(modalTitle()).toBe('Delete 3 Nodes');
-    expect(modalWarning()?.textContent).toContain('2 of 3 nodes');
+    expect(modalTitle()).toBe('Delete 4 Nodes');
+    expect(modalWarning()?.textContent).toContain('3 of 4 nodes');
   });
 
-  it('does not warn when every selected node finished draining', async () => {
+  it('does not warn when every selected node is cordoned and empty', async () => {
     const { clusterId } = devCluster();
     await mount(
       <BatchTable
         allowedActions={['delete']}
         rows={[
-          nodeRow(clusterId, 'a', { unschedulable: true, drainCompleted: true }),
-          nodeRow(clusterId, 'b', { unschedulable: true, drainCompleted: true }),
+          nodeRow(clusterId, 'a', { unschedulable: true, evictablePods: 0 }),
+          nodeRow(clusterId, 'b', { unschedulable: true, evictablePods: 0 }),
         ]}
       />
     );
@@ -537,12 +564,12 @@ describe('useBatchObjectActions', () => {
     expect(modalWarning()).toBeNull();
   });
 
-  it('warns about a node whose drain finished but which is schedulable again', async () => {
+  it('warns about an empty node that can still be scheduled onto', async () => {
     const { clusterId } = devCluster();
     await mount(
       <BatchTable
         allowedActions={['delete']}
-        rows={[nodeRow(clusterId, 'a', { unschedulable: false, drainCompleted: true })]}
+        rows={[nodeRow(clusterId, 'a', { unschedulable: false, evictablePods: 0 })]}
       />
     );
     await selectAllRows();

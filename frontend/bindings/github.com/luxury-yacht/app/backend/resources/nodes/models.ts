@@ -43,6 +43,12 @@ export interface NodeDetails {
     "podsAllocatable": string;
     "storageCapacity"?: string;
     "podsCount": number;
+
+    /**
+     * EvictablePods counts the pods removing this node would stop. Nil means its
+     * pods could not be read, which is not the same as none.
+     */
+    "evictablePods"?: number | null;
     "restarts": number;
     "cpuRequests": string;
     "cpuLimits": string;

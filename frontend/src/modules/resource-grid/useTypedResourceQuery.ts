@@ -64,9 +64,9 @@ export interface FetchTypedResourceRowsOptions {
 export interface UseTypedResourceQueryResult<TRow, TPayload = unknown> {
   rows: TRow[];
   /**
-   * The rows are not the current query's page: a new query's page is out or
-   * failed, or typed search is waiting for the pause in typing. A live refetch
-   * of the page on screen does not set it.
+   * The rows are not the current query's page: the query is not running yet, a
+   * new query's page is out or failed, or typed search is waiting for the pause
+   * in typing. A live refetch of the page on screen does not set it.
    */
   pageStale: boolean;
   /**
@@ -744,7 +744,8 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
 
   return {
     rows,
-    pageStale: scope !== appliedScope || (filters.search ?? '') !== debouncedSearch,
+    pageStale:
+      scope === null || scope !== appliedScope || (filters.search ?? '') !== debouncedSearch,
     payload,
     loading,
     loaded,

@@ -25,7 +25,7 @@ import {
   makePodSnapshotPayload,
 } from '@/core/refresh/refreshContractTestBuilders';
 import { buildClusterRefreshScope, parseRefreshScope } from '@/core/refresh/scopeSelector';
-import type { ClusterNodeSnapshotEntry, NodeMaintenanceDrainJob } from '@/core/refresh/types';
+import type { ClusterNodeSnapshotEntry } from '@/core/refresh/types';
 import {
   installAppStateHarness,
   type MountedApp,
@@ -81,38 +81,15 @@ const serveNodePods = () => {
   });
 };
 
-type DrainJobFixture = Pick<NodeMaintenanceDrainJob, 'status' | 'startedAt'> & {
-  skipWaitForPodsToTerminate?: boolean;
-};
-
-/** A drain job on `nodeName` as backend/nodemaintenance/store.go reports it. */
-const drainJob = (
-  nodeName: string,
-  { status, startedAt, skipWaitForPodsToTerminate = false }: DrainJobFixture
-): NodeMaintenanceDrainJob => ({
-  clusterId: dev.clusterId,
-  id: `${nodeName}-${startedAt}`,
-  nodeName,
-  status,
-  startedAt,
-  options: {
-    ignoreDaemonSets: true,
-    deleteEmptyDirData: true,
-    force: false,
-    disableEviction: false,
-    skipWaitForPodsToTerminate,
-  },
-});
-
-const startCluster = (drains: () => NodeMaintenanceDrainJob[] = () => []) => {
+const startCluster = () => {
   dev = app.cluster({ name: 'dev', context: 'alpha' });
   app.namespaces(dev, ['team-a']);
   app.startScreen(dev);
-  // The view follows the cluster's drain jobs (backend/node_maintenance.go).
+  // The view follows the cluster's drain jobs (backend/node_maintenance.go); none here.
   app.snapshots.serve(
     'object-maintenance',
     buildClusterRefreshScope('object-maintenance', dev.clusterId),
-    { ...clusterFields(), drains: drains() }
+    { ...clusterFields(), drains: [] }
   );
 };
 
@@ -121,11 +98,8 @@ const openView = async () => {
   await view.goTo({ clusterView: 'nodes' });
 };
 
-const start = async (
-  rows: () => ClusterNodeSnapshotEntry[] = () => [node('node-1')],
-  drains?: () => NodeMaintenanceDrainJob[]
-) => {
-  startCluster(drains);
+const start = async (rows: () => ClusterNodeSnapshotEntry[] = () => [node('node-1')]) => {
+  startCluster();
   app.serveTable(dev, 'nodes', { rows: rows() });
   serveNodePods();
   await openView();
@@ -535,39 +509,18 @@ describe('ClusterViewNodes', () => {
     return document.body.querySelector('.confirmation-modal-warning');
   };
 
-  it.each<[string, DrainJobFixture[]]>([
-    ['was only cordoned', []],
-    ['is still draining', [{ status: 'running', startedAt: 100 }]],
-    ['failed to drain and kept its cordon', [{ status: 'failed', startedAt: 100 }]],
-    ['had its drain cancelled', [{ status: 'cancelled', startedAt: 100 }]],
-    [
-      'failed its latest drain after an earlier one finished',
-      [
-        { status: 'succeeded', startedAt: 100 },
-        { status: 'failed', startedAt: 200 },
-      ],
-    ],
-    [
-      'drained without waiting for its pods to stop',
-      [{ status: 'succeeded', startedAt: 100, skipWaitForPodsToTerminate: true }],
-    ],
-  ])('warns before deleting a cordoned node that %s', async (_case, jobs) => {
-    await start(
-      () => [node('node-1', { unschedulable: true })],
-      () => jobs.map((job) => drainJob('node-1', job))
-    );
+  it.each<[string, Partial<ClusterNodeSnapshotEntry>]>([
+    ['can still be scheduled onto', { unschedulable: false, evictablePods: 0 }],
+    ['is cordoned with workload pods left', { unschedulable: true, evictablePods: 2 }],
+    ['is cordoned but its pods could not be read', { unschedulable: true }],
+  ])('warns before deleting a node that %s', async (_case, fields) => {
+    await start(() => [node('node-1', fields)]);
 
     expect((await deleteWarning())?.textContent).toContain('1 of 1 node');
   });
 
-  it('does not warn before deleting a cordoned node whose latest drain finished', async () => {
-    await start(
-      () => [node('node-1', { unschedulable: true })],
-      () => [
-        drainJob('node-1', { status: 'failed', startedAt: 100 }),
-        drainJob('node-1', { status: 'succeeded', startedAt: 200 }),
-      ]
-    );
+  it('does not warn before deleting a cordoned node with no workload pods left', async () => {
+    await start(() => [node('node-1', { unschedulable: true, evictablePods: 0 })]);
 
     expect(await deleteWarning()).toBeNull();
   });

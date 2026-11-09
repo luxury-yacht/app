@@ -113,6 +113,12 @@ func podRowsFromBundles(bundles []interface{}, include func(streamrows.PodAggreg
 	return aggregates, summaries
 }
 
+// podStoreListed reports whether the pod store holds a completed list, so a node
+// with no aggregates is known to be empty rather than not read yet.
+func podStoreListed(source podAggregateIngestSource) bool {
+	return source != nil && source.StoreResourceVersion(PodGVR) != ""
+}
+
 // podAggregatesFromIngest reads the pod kind's projected PodAggregate rows from the
 // ingest source. A nil source (a unit test with no ingest wired) yields no rows. Rows
 // of an unexpected type are skipped, mirroring the type guards the ingest sinks apply.

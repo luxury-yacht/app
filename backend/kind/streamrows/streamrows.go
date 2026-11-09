@@ -63,6 +63,10 @@ type PodAggregate struct {
 	Name      string
 	NodeName  string
 	Phase     string
+	// DrainExempt marks a pod that removing its node would not disrupt. The zero
+	// value counts the pod, so a row restored from before this field errs toward
+	// warning about it.
+	DrainExempt bool
 
 	ContainerCount     int
 	InitContainerCount int
@@ -469,10 +473,13 @@ type NodeSummary struct {
 	MemoryLimitsBytes      int64             `json:"memoryLimitsBytes,omitempty"`
 	MemoryUsageBytes       *int64            `json:"memoryUsageBytes,omitempty"`
 	Pods                   string            `json:"pods"`
-	PodsCapacity           string            `json:"podsCapacity"`
-	PodsAllocatable        string            `json:"podsAllocatable"`
-	Restarts               int32             `json:"restarts"`
-	Unschedulable          bool              `json:"unschedulable"`
+	// EvictablePods counts the pods removing this node would stop. Nil means its
+	// pods could not be read, which is not the same as none.
+	EvictablePods   *int   `json:"evictablePods,omitempty"`
+	PodsCapacity    string `json:"podsCapacity"`
+	PodsAllocatable string `json:"podsAllocatable"`
+	Restarts        int32  `json:"restarts"`
+	Unschedulable   bool   `json:"unschedulable"`
 	Labels                 map[string]string `json:"labels,omitempty"`
 	Annotations            map[string]string `json:"annotations,omitempty"`
 	Taints                 []NodeTaint       `json:"taints,omitempty"`

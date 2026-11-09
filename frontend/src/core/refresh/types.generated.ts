@@ -714,6 +714,7 @@ export interface ClusterNodeSnapshotEntry {
   memoryLimitsBytes?: number;
   memoryUsageBytes?: number;
   pods: string;
+  evictablePods?: number;
   podsCapacity: string;
   podsAllocatable: string;
   restarts: number;

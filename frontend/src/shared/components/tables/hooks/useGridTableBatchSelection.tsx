@@ -168,12 +168,19 @@ export function useGridTableBatchSelection<T>({
   const active = batchSelection?.active ?? false;
   const selectedKeys = batchSelection?.selectedKeys ?? NO_ROWS_SELECTED;
   const onSelectedKeysChange = batchSelection?.onSelectedKeysChange;
+  const getRowInstance = batchSelection?.getRowInstance;
   const anchorRef = useRef<string | null>(null);
 
-  const visibleKeys = useMemo(
-    () => (active ? tableData.map((row, index) => keyExtractor(row, index)) : []),
-    [active, keyExtractor, tableData]
-  );
+  const visibleKeys = useMemo(() => {
+    if (!active) {
+      return [];
+    }
+    return tableData.map((row, index) => {
+      const key = keyExtractor(row, index);
+      const instance = getRowInstance?.(row);
+      return instance ? `${key}|${instance}` : key;
+    });
+  }, [active, getRowInstance, keyExtractor, tableData]);
   const keyByRow = useMemo(() => {
     const keys = new Map<unknown, string>();
     tableData.forEach((row, index) => {

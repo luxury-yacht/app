@@ -131,8 +131,12 @@ virtualization, and native table accessibility. Apply the
   [large-data contract](../architecture/large-data.md#contract).
 - Query-backed tables keep the last page on screen while a new one loads, so the
   source reports `pageStale` until the rows are the current query's page. The
-  bar's actions stay visible but disabled until then. A live refetch of the same
-  page does not set it, and a new query that fails keeps it set.
+  bar's actions stay visible but disabled until then, and also while cached rows
+  stand in on a revisit. A live refetch of the same page does not set it, and a
+  new query that fails keeps it set.
+- A selection belongs to the object that was checked. Selection keys include the
+  object's UID through `getRowInstance`, so an object deleted and recreated under
+  its name shows up unselected.
 - Batch state belongs to `scopeKey`. It resets on any scope change, so a mounted
   view that returns to an earlier scope does not bring its selection back. A
   batch still running reports its result but cannot change the new scope.
@@ -150,9 +154,10 @@ virtualization, and native table accessibility. Apply the
   opt in: Browse, CRDs, Namespaces, and Helm.
 - Nodes add Drain, which takes one set of options for every selected node and
   starts one job per node, so the drains run at the same time. Deleting nodes
-  warns how many of them lack a completed drain. A node counts as drained only
-  while it is still cordoned and its newest drain job succeeded after waiting
-  for its pods. A cordon alone is not evidence, since a failed drain keeps it.
+  warns how many of them may still run workload pods. A node skips the warning
+  only while it is cordoned and `evictablePods` is 0: the current count of pods
+  its removal would stop, leaving out DaemonSet, static, and finished pods. The
+  backend omits the count when pods could not be read, which always warns.
 
 ## DOM And Identity Rules
 

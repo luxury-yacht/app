@@ -242,6 +242,12 @@ export interface GridTableBatchSelection<T> {
   getActions: (selected: GridTableBatchSelectedRow<T>[]) => GridTableBatchAction[];
   /** The rows on screen are about to be replaced; actions show but cannot run yet. */
   actionsPending?: boolean;
+  /**
+   * Tells apart things that share a row key over time, such as an object deleted
+   * and recreated under its name. A selection belongs to the instance the user
+   * checked, so a replacement shows up unselected.
+   */
+  getRowInstance?: (row: T) => string | undefined;
 }
 
 export interface GridTableProps<T> {

@@ -34,7 +34,10 @@ type NodeDetails struct {
 	PodsAllocatable   string                   `json:"podsAllocatable"`
 	StorageCapacity   string                   `json:"storageCapacity,omitempty"`
 	PodsCount         int                      `json:"podsCount"`
-	Restarts          int32                    `json:"restarts"`
+	// EvictablePods counts the pods removing this node would stop. Nil means its
+	// pods could not be read, which is not the same as none.
+	EvictablePods *int  `json:"evictablePods,omitempty"`
+	Restarts      int32 `json:"restarts"`
 	CPURequests       string                   `json:"cpuRequests"`
 	CPULimits         string                   `json:"cpuLimits"`
 	MemRequests       string                   `json:"memRequests"`

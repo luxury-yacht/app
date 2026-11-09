@@ -310,6 +310,86 @@ func TestNodeListFallbackKeepsRowsWhenPodListForbidden(t *testing.T) {
 	require.Equal(t, ptr.To[int64](650), payload.Rows[0].CPUUsageMilli)
 	require.False(t, payload.Metrics.Stale)
 	require.Equal(t, uint64(1), payload.Metrics.SuccessCount)
+	// Unreadable pods are not the same as no pods.
+	require.Nil(t, payload.Rows[0].EvictablePods)
+}
+
+// podsAroundNode1 is one node's mix of pods: three that removing the node would
+// stop, then pods that belong to the node, finished pods, and another node's pod.
+func podsAroundNode1() []*corev1.Pod {
+	controller := true
+	terminating := metav1.Now()
+	owned := func(kind string) []metav1.OwnerReference {
+		return []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: kind, Name: "owner", Controller: &controller}}
+	}
+	pod := func(name, nodeName string, phase corev1.PodPhase, meta metav1.ObjectMeta) *corev1.Pod {
+		meta.Namespace = "team-a"
+		meta.Name = name
+		meta.ResourceVersion = "5"
+		return &corev1.Pod{
+			ObjectMeta: meta,
+			Spec:       corev1.PodSpec{NodeName: nodeName},
+			Status:     corev1.PodStatus{Phase: phase},
+		}
+	}
+	return []*corev1.Pod{
+		pod("standalone", "node-1", corev1.PodRunning, metav1.ObjectMeta{}),
+		pod("replica", "node-1", corev1.PodRunning, metav1.ObjectMeta{OwnerReferences: owned("ReplicaSet")}),
+		pod("terminating", "node-1", corev1.PodRunning, metav1.ObjectMeta{DeletionTimestamp: &terminating}),
+		pod("daemon", "node-1", corev1.PodRunning, metav1.ObjectMeta{OwnerReferences: owned("DaemonSet")}),
+		pod("static", "node-1", corev1.PodRunning, metav1.ObjectMeta{
+			Annotations: map[string]string{corev1.MirrorPodAnnotationKey: "hash"},
+		}),
+		pod("finished", "node-1", corev1.PodSucceeded, metav1.ObjectMeta{}),
+		pod("crashed", "node-1", corev1.PodFailed, metav1.ObjectMeta{}),
+		pod("elsewhere", "node-2", corev1.PodRunning, metav1.ObjectMeta{}),
+	}
+}
+
+func TestNodeRowCountsThePodsRemovingTheNodeWouldStop(t *testing.T) {
+	meta := testClusterMeta()
+	node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-1", ResourceVersion: "1"}}
+	ctx := WithClusterMeta(context.Background(), meta)
+
+	t.Run("from the pod store", func(t *testing.T) {
+		source := newFakePodAggregateSource(nil, podsAroundNode1()...).withNodes(meta, "1", node)
+		source.resourceVersion = "7"
+
+		snapshot, err := newNodeBuilderForTest(meta, source, node).Build(ctx, "")
+
+		require.NoError(t, err)
+		require.Equal(t, ptr.To(3), snapshot.Payload.(NodeSnapshot).Rows[0].EvictablePods)
+	})
+
+	t.Run("from a direct list", func(t *testing.T) {
+		objects := []runtime.Object{node}
+		for _, pod := range podsAroundNode1() {
+			objects = append(objects, pod)
+		}
+		builder := &NodeListBuilder{client: fake.NewSimpleClientset(objects...), metrics: fakeMetricsProvider{}}
+
+		snapshot, err := builder.Build(ctx, "")
+
+		require.NoError(t, err)
+		require.Equal(t, ptr.To(3), snapshot.Payload.(NodeSnapshot).Rows[0].EvictablePods)
+	})
+}
+
+func TestNodeRowReportsZeroOnlyOncePodsHaveBeenRead(t *testing.T) {
+	meta := testClusterMeta()
+	node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-1", ResourceVersion: "1"}}
+	ctx := WithClusterMeta(context.Background(), meta)
+
+	notListed := newFakePodAggregateSource(nil).withNodes(meta, "1", node)
+	snapshot, err := newNodeBuilderForTest(meta, notListed, node).Build(ctx, "")
+	require.NoError(t, err)
+	require.Nil(t, snapshot.Payload.(NodeSnapshot).Rows[0].EvictablePods, "the pod store has not listed yet")
+
+	listed := notListed
+	listed.resourceVersion = "7"
+	snapshot, err = newNodeBuilderForTest(meta, listed, node).Build(ctx, "")
+	require.NoError(t, err)
+	require.Equal(t, ptr.To(0), snapshot.Payload.(NodeSnapshot).Rows[0].EvictablePods)
 }
 
 // A malformed query scope must be rejected like every other typed builder does

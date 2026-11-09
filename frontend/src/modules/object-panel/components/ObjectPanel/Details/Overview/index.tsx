@@ -119,7 +119,6 @@ const Overview: React.FC<OverviewProps> = (props) => {
   );
   const nodeMaintenance = useNodeMaintenanceActions({ watchClusterIds, panelId });
   const activeDrainJob = isNode ? nodeMaintenance.activeDrainFor(clusterId, props.name) : null;
-  const drainCompleted = isNode && nodeMaintenance.hasCompletedDrain(clusterId, props.name);
   const onOpenDrain =
     isNode && clusterId && props.name
       ? () =>
@@ -205,11 +204,11 @@ const Overview: React.FC<OverviewProps> = (props) => {
       desiredReplicas: currentScaleReplicas,
       hpaManaged,
       unschedulable: typeof props.unschedulable === 'boolean' ? props.unschedulable : undefined,
-      drainCompleted,
+      evictablePods: typeof props.evictablePods === 'number' ? props.evictablePods : undefined,
       portForwardAvailable: props.portForwardAvailable,
     };
   }, [
-    drainCompleted,
+    props.evictablePods,
     props.portForwardAvailable,
     props.ready,
     props.suspend,
