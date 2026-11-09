@@ -135,8 +135,10 @@ virtualization, and native table accessibility. Apply the
 - Each selected object runs through `RunObjectAction` with its complete
   identity, a few at a time. A partial failure keeps the failed rows selected.
 - A view that lists kinds too consequential to remove several at a time does not
-  opt in: Browse, CRDs, Namespaces, and Helm. Nodes offer only cordon and
-  uncordon.
+  opt in: Browse, CRDs, Namespaces, and Helm.
+- Nodes add Drain, which takes one set of options for every selected node and
+  starts one job per node, so the drains run at the same time. Deleting nodes
+  warns how many of them have not been drained.
 
 ## DOM And Identity Rules
 

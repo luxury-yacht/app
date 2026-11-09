@@ -452,7 +452,7 @@ describe('ClusterViewNodes', () => {
     expect(nodeNames()).toEqual(['node-1']);
   });
 
-  it('offers only cordon and uncordon in batch-select mode', async () => {
+  it('offers cordon, uncordon, drain and delete in batch-select mode', async () => {
     await start(() => [node('node-1'), node('node-2', { unschedulable: true })]);
 
     await click(
@@ -473,6 +473,47 @@ describe('ClusterViewNodes', () => {
       Array.from(view.container.querySelectorAll('.gridtable-batch-action-label')).map(
         (label) => label.textContent
       )
-    ).toEqual(['Cordon 1 of 2', 'Uncordon 1 of 2']);
+    ).toEqual(['Cordon 1 of 2', 'Uncordon 1 of 2', 'Drain 2', 'Delete 2']);
+  });
+
+  it('re-reads the cluster’s drain jobs after a batch drain starts', async () => {
+    app.backend.answer('RunObjectAction', () => ({}));
+    await start(() => [node('node-1'), node('node-2')]);
+    const scope = buildClusterRefreshScope('object-maintenance', dev.clusterId);
+    const reads = () =>
+      app.snapshots.reads('object-maintenance').filter((read) => read.scope === scope).length;
+    await click(
+      requireValue(
+        view.container.querySelector<HTMLElement>('.icon-bar-button[aria-label="Batch select"]'),
+        'Batch select'
+      )
+    );
+    await click(
+      requireValue(
+        view.container.querySelector<HTMLElement>('thead input[type="checkbox"]'),
+        'header checkbox'
+      )
+    );
+    await app.settle();
+    await click(
+      requireValue(
+        Array.from(view.container.querySelectorAll<HTMLElement>('.gridtable-batch-action')).find(
+          (button) => button.textContent === 'Drain 2'
+        ),
+        'Drain 2'
+      )
+    );
+    const readsBefore = reads();
+
+    await click(
+      requireValue(
+        document.body.querySelector<HTMLElement>('[data-test="batch-drain-start"]'),
+        'batch drain start'
+      )
+    );
+    await app.settle();
+
+    expect(app.backend.calls('RunObjectAction')).toHaveLength(2);
+    expect(reads()).toBeGreaterThan(readsBefore);
   });
 });

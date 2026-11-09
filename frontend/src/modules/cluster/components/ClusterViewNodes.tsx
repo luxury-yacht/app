@@ -74,8 +74,12 @@ interface NodesTableProps extends NodesViewProps {
 
 const NO_ROW_KEYS: readonly string[] = [];
 const NODES_VIEW_ID = 'cluster-nodes';
-// Deleting or draining a node needs per-node warnings and options.
-const NODE_BATCH_ACTIONS: readonly BatchObjectActionId[] = ['cordon', 'uncordon'];
+const NODE_BATCH_ACTIONS: readonly BatchObjectActionId[] = [
+  'cordon',
+  'uncordon',
+  'drain',
+  'delete',
+];
 
 /*
  * GridTable component for cluster nodes
@@ -410,10 +414,21 @@ const NodesTable: React.FC<NodesTableProps> = React.memo(
       [getActionObject, objectActions]
     );
 
+    const { refreshDrains } = nodeMaintenance;
+    const handleBatchRunComplete = useCallback(
+      (actionId: BatchObjectActionId) => {
+        if (actionId === 'drain') {
+          refreshDrains();
+        }
+      },
+      [refreshDrains]
+    );
+
     const batchActions = useBatchObjectActions<ClusterNodeRow>({
       getObject: getActionObject,
       scopeKey: selectedClusterId ?? '',
       allowedActions: NODE_BATCH_ACTIONS,
+      onRunComplete: handleBatchRunComplete,
     });
 
     return (

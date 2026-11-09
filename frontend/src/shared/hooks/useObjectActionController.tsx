@@ -133,18 +133,19 @@ const restartConfirmation = (
 
 // Deleting a node that drains (its drain facet) and is still schedulable warns
 // that its pods stop abruptly.
+export const isUndrainedNode = (target: ObjectActionData): boolean =>
+  Boolean(lookupObjectActionKindCapability(target)?.drain) && !target.unschedulable;
+
 const deleteConfirmation = (
   target: ObjectActionData,
   onConfirm: () => void,
   onCancel: () => void
 ): ConfirmationSpec => {
-  const isUndrainedNode =
-    Boolean(lookupObjectActionKindCapability(target)?.drain) && !target.unschedulable;
   return {
     title: `Delete ${target.kind || 'Resource'}`,
     target,
     message: 'This action cannot be undone.',
-    warning: isUndrainedNode
+    warning: isUndrainedNode(target)
       ? 'This node has not been drained. Pods running on it will be terminated abruptly when the node is removed.'
       : undefined,
     confirmText: 'Delete',

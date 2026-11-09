@@ -348,4 +348,137 @@ describe('useBatchObjectActions', () => {
     );
     expect(toolbarButton('Batch select')).not.toBeNull();
   });
+
+  const nodeRow = (clusterId: string, name: string, extra: Partial<ObjectActionData> = {}) =>
+    makeRow(clusterId, 'Node', '', name, { namespace: '', ...extra });
+  const modalWarning = () => document.body.querySelector('.confirmation-modal-warning');
+  const drainStart = () =>
+    requireValue(
+      document.body.querySelector<HTMLButtonElement>('[data-test="batch-drain-start"]'),
+      'batch drain start'
+    );
+  const drainOption = (name: string) =>
+    requireValue(
+      document.body.querySelector<HTMLInputElement>(`[data-test="drain-modal-${name}"]`),
+      `drain option ${name}`
+    );
+
+  it('warns how many selected nodes have not been drained before deleting them', async () => {
+    const { clusterId } = devCluster();
+    await mount(
+      <BatchTable
+        allowedActions={['delete']}
+        rows={[nodeRow(clusterId, 'a'), nodeRow(clusterId, 'b', { unschedulable: true })]}
+      />
+    );
+    await selectAllRows();
+
+    await click(batchAction('Delete 2'));
+
+    expect(modalTitle()).toBe('Delete 2 Nodes');
+    expect(modalWarning()?.textContent).toContain('1 of 2 nodes has not been drained');
+  });
+
+  it('does not warn when every selected node has been cordoned', async () => {
+    const { clusterId } = devCluster();
+    await mount(
+      <BatchTable
+        allowedActions={['delete']}
+        rows={[
+          nodeRow(clusterId, 'a', { unschedulable: true }),
+          nodeRow(clusterId, 'b', { unschedulable: true }),
+        ]}
+      />
+    );
+    await selectAllRows();
+
+    await click(batchAction('Delete 2'));
+
+    expect(modalWarning()).toBeNull();
+  });
+
+  it('drains every selected node with the one set of options chosen', async () => {
+    const { clusterId } = devCluster();
+    app.backend.answer('RunObjectAction', () => ({}));
+    await mount(
+      <BatchTable
+        allowedActions={['drain']}
+        rows={[nodeRow(clusterId, 'a'), nodeRow(clusterId, 'b')]}
+      />
+    );
+    await selectAllRows();
+
+    await click(batchAction('Drain 2'));
+    expect(document.body.querySelector('#batch-drain-title')?.textContent).toBe('Drain 2 Nodes');
+    expect(actionCalls()).toEqual([]);
+
+    await click(drainOption('force'));
+    await click(drainStart());
+
+    expect(actionCalls()).toEqual(
+      ['a', 'b'].map((name) => ({
+        action: OBJECT_ACTIONS.startDrain,
+        target: { clusterId, group: '', version: 'v1', kind: 'Node', namespace: '', name },
+        drainOptions: expect.objectContaining({
+          force: true,
+          ignoreDaemonSets: true,
+          deleteEmptyDirData: true,
+        }),
+      }))
+    );
+    expect(document.body.querySelector('.drain-node-modal')).toBeNull();
+    expect(toolbarButton('Batch select')).not.toBeNull();
+  });
+
+  it('blocks the drain when the chosen drain mode is not permitted', async () => {
+    const { clusterId } = devCluster();
+    app.permissions((query) => !(query.verb === 'delete' && query.resourceKind === 'Pod'));
+    await mount(<BatchTable allowedActions={['drain']} rows={[nodeRow(clusterId, 'a')]} />);
+    await selectAllRows();
+    await click(batchAction('Drain 1'));
+    expect(drainStart().disabled).toBe(false);
+
+    await click(drainOption('disable-eviction'));
+
+    expect(drainStart().disabled).toBe(true);
+    expect(
+      document.body.querySelector('[data-test="drain-modal-permission-reason"]')?.textContent
+    ).toContain('permission to delete Pods');
+  });
+
+  it('reports a node whose drain could not start and retries it with the same options', async () => {
+    const { clusterId } = devCluster();
+    let refused = true;
+    app.backend.answer('RunObjectAction', (request) => {
+      if (refused && (request as { target: { name: string } }).target.name === 'b') {
+        throw new Error('drain already running for node b');
+      }
+      return {};
+    });
+    await mount(
+      <BatchTable
+        allowedActions={['drain']}
+        rows={[nodeRow(clusterId, 'a'), nodeRow(clusterId, 'b')]}
+      />
+    );
+    await selectAllRows();
+    await click(batchAction('Drain 2'));
+    await click(drainOption('force'));
+    await click(drainStart());
+
+    expect(modalTitle()).toBe('Started draining 1 of 2 Nodes');
+    expect(modal()?.textContent).toContain('drain already running for node b');
+    expect(selectedRowNames()).toEqual(['b']);
+
+    refused = false;
+    const callsBeforeRetry = actionCalls().length;
+    await click(modalButton('Retry 1'));
+
+    expect(actionCalls().slice(callsBeforeRetry)).toEqual([
+      expect.objectContaining({
+        target: expect.objectContaining({ name: 'b' }),
+        drainOptions: expect.objectContaining({ force: true }),
+      }),
+    ]);
+  });
 });

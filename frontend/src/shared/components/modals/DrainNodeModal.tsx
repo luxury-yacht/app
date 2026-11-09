@@ -25,12 +25,10 @@ import { DrainNodeModalView } from './DrainNodeModalView';
 import {
   buildDrainJobPresentation,
   buildDrainOptionsPayload,
-  DEFAULT_NODE_DRAIN_TIMEOUT_SECONDS,
-  type DrainOptionsState,
-  hasPositiveDrainOption,
   resolveDrainCancelPermissionReason,
   resolveDrainStartPermissionReason,
 } from './drainNodeModalModel';
+import { useDrainOptionsForm } from './useDrainOptionsForm';
 import { useModalFocusTrap } from './useModalFocusTrap';
 import './DrainNodeModal.css';
 
@@ -67,20 +65,20 @@ const DrainNodeModal = ({
   const modalRef = useRef<HTMLDivElement>(null);
   const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
 
-  const [drainOptions, setDrainOptions] = useState<DrainOptionsState>({
-    ignoreDaemonSets: true,
-    deleteEmptyDirData: true,
-    force: false,
-    disableEviction: false,
-    skipWaitForPodsToTerminate: false,
-  });
-  const [customGraceSeconds, setCustomGraceSeconds] = useState(30);
-  const [customTimeoutSeconds, setCustomTimeoutSeconds] = useState(
-    DEFAULT_NODE_DRAIN_TIMEOUT_SECONDS
-  );
   const [drainPending, setDrainPending] = useState(false);
   const [drainError, setDrainError] = useState<string | null>(null);
   const [cancelDrainPending, setCancelDrainPending] = useState(false);
+  const clearDrainError = useCallback(() => setDrainError(null), []);
+  const {
+    options: drainOptions,
+    customGraceSeconds,
+    customTimeoutSeconds,
+    setCustomGraceSeconds,
+    setCustomTimeoutSeconds,
+    updateDrainOption,
+    hasCustomGrace,
+    hasCustomTimeout,
+  } = useDrainOptionsForm(clearDrainError);
 
   const scope = useMemo(() => {
     const trimmedNode = nodeName.trim();
@@ -150,16 +148,6 @@ const DrainNodeModal = ({
     },
   });
 
-  const updateDrainOption = useCallback(
-    <K extends keyof DrainOptionsState>(field: K, value: DrainOptionsState[K]) => {
-      setDrainOptions((previous) => ({ ...previous, [field]: value }));
-      setDrainError(null);
-    },
-    []
-  );
-
-  const hasCustomGrace = hasPositiveDrainOption(drainOptions.gracePeriodSeconds);
-  const hasCustomTimeout = hasPositiveDrainOption(drainOptions.timeoutSeconds);
   const disableEviction = Boolean(drainOptions.disableEviction);
   const selectedStartPermission = permissions
     ? resolveDrainStartPermissionStatus({

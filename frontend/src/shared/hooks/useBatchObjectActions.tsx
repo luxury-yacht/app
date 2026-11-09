@@ -7,6 +7,7 @@
  * complete identity.
  */
 
+import type { types } from '@core/backend-api/models';
 import {
   type ObjectActionTargetRef,
   runCronJobSuspend,
@@ -15,6 +16,7 @@ import {
   runObjectDelete,
   runObjectRestart,
   runObjectScale,
+  runStartDrain,
 } from '@shared/actions/objectActionClient';
 import {
   OBJECT_ACTION_IDS,
@@ -30,9 +32,11 @@ import {
 import {
   CordonIcon,
   DeleteIcon,
+  DrainIcon,
   RestartIcon,
   ScaleIcon,
 } from '@shared/components/icons/SharedIcons';
+import BatchDrainModal from '@shared/components/modals/BatchDrainModal';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import ScaleModal from '@shared/components/modals/ScaleModal';
 import type {
@@ -41,8 +45,13 @@ import type {
   GridTableBatchSelection,
 } from '@shared/components/tables/GridTable.types';
 import {
+  nodeActionPermissionInputs,
+  resolveNodeDrainOperationPermissions,
+} from '@shared/hooks/nodeActionPermissions';
+import {
   actionTargetFor,
   clampReplicas,
+  isUndrainedNode,
   missingPermissionChecks,
   resolveObjectActionPermissions,
 } from '@shared/hooks/useObjectActionController';
@@ -58,6 +67,7 @@ export type BatchObjectActionId =
   | 'resume'
   | 'cordon'
   | 'uncordon'
+  | 'drain'
   | 'delete';
 
 // A few requests at a time keeps a large selection from flooding the API server.
@@ -70,6 +80,7 @@ const ALL_HANDLERS: ObjectActionHandlerAvailability = {
   scale: true,
   delete: true,
   cordon: true,
+  drain: true,
   suspendToggle: true,
 };
 
@@ -81,7 +92,9 @@ interface BatchActionDefinition {
   danger: boolean;
   message: (replicas: number) => string;
   covers: (policy: ObjectActionPolicy) => boolean;
-  run: (target: ObjectActionTargetRef, replicas: number) => Promise<unknown>;
+  run: (target: ObjectActionTargetRef, batch: BatchRun) => Promise<unknown>;
+  /** A dialog that gathers input first; other actions go straight to confirmation. */
+  prompt?: 'scale' | 'drain';
 }
 
 const BATCH_ACTIONS: readonly BatchActionDefinition[] = [
@@ -103,7 +116,8 @@ const BATCH_ACTIONS: readonly BatchActionDefinition[] = [
     danger: false,
     message: (replicas) => `Sets ${replicas} replicas on every selected workload.`,
     covers: (policy) => policy.scaleActionId === OBJECT_ACTION_IDS.scale,
-    run: (target, replicas) => runObjectScale(target, replicas),
+    run: (target, { replicas }) => runObjectScale(target, replicas),
+    prompt: 'scale',
   },
   {
     id: 'suspend',
@@ -146,6 +160,17 @@ const BATCH_ACTIONS: readonly BatchActionDefinition[] = [
     run: (target) => runNodeUncordon(target),
   },
   {
+    id: 'drain',
+    actionId: OBJECT_ACTION_IDS.drain,
+    past: 'Started draining',
+    icon: <DrainIcon width={16} height={16} />,
+    danger: true,
+    message: () => 'Starts a drain on every selected node.',
+    covers: (policy) => policy.drainEnabled,
+    run: (target, { drainOptions }) => runStartDrain(target, drainOptions),
+    prompt: 'drain',
+  },
+  {
     id: 'delete',
     actionId: OBJECT_ACTION_IDS.delete,
     past: 'Deleted',
@@ -167,6 +192,7 @@ interface BatchRun {
   entries: BatchEntry[];
   skipped: number;
   replicas: number;
+  drainOptions?: types.DrainNodeOptions;
 }
 
 interface BatchFailure {
@@ -176,6 +202,7 @@ interface BatchFailure {
 
 type BatchDialog =
   | { stage: 'scale'; run: BatchRun }
+  | { stage: 'drain'; run: BatchRun }
   | { stage: 'confirm'; run: BatchRun }
   | { stage: 'running'; run: BatchRun; done: number }
   | { stage: 'results'; run: BatchRun; failed: BatchFailure[] };
@@ -191,7 +218,21 @@ const pluralKind = (kind: string): string => {
 
 const countNoun = (objects: readonly ObjectActionData[]): string => {
   const kinds = unique(objects.map((object) => object.kind));
-  return kinds.length === 1 ? pluralKind(kinds[0]) : 'Objects';
+  if (kinds.length > 1) {
+    return 'Objects';
+  }
+  return objects.length === 1 ? kinds[0] : pluralKind(kinds[0]);
+};
+
+const undrainedWarning = (objects: readonly ObjectActionData[]): string | undefined => {
+  const undrained = objects.filter(isUndrainedNode).length;
+  if (undrained === 0) {
+    return undefined;
+  }
+  const total = `${undrained} of ${objects.length} ${objects.length === 1 ? 'node' : 'nodes'}`;
+  return undrained === 1
+    ? `${total} has not been drained. Its pods will be terminated abruptly when the node is removed.`
+    : `${total} have not been drained. Their pods will be terminated abruptly when the nodes are removed.`;
 };
 
 const actionTitle = (label: string, eligible: number, total: number): string =>
@@ -211,7 +252,7 @@ const executeBatch = async (
     for (let entry = queue.shift(); entry; entry = queue.shift()) {
       try {
         const label = objectActionLabel(run.definition.actionId);
-        await run.definition.run(actionTargetFor(entry.object, label.toLowerCase()), run.replicas);
+        await run.definition.run(actionTargetFor(entry.object, label.toLowerCase()), run);
       } catch (error) {
         failed.push({ entry, reason: errorReason(error) });
       }
@@ -286,6 +327,7 @@ const confirmationProps = (
     notice: skipped
       ? `${skipped} selected ${skipped === 1 ? 'object is' : 'objects are'} skipped: not supported or not permitted.`
       : undefined,
+    warning: definition.id === 'delete' ? undrainedWarning(objects) : undefined,
     confirmText: `${label} ${objects.length}`,
     confirmButtonClass: definition.danger ? 'danger' : 'generic',
   };
@@ -310,12 +352,15 @@ interface UseBatchObjectActionsOptions<T> {
   scopeKey: string;
   /** Limits the actions this table offers; defaults to all of them. */
   allowedActions?: readonly BatchObjectActionId[];
+  /** Runs when a batch finishes, whether or not every object succeeded. */
+  onRunComplete?: (actionId: BatchObjectActionId) => void;
 }
 
 export function useBatchObjectActions<T>({
   getObject,
   scopeKey,
   allowedActions,
+  onRunComplete,
 }: UseBatchObjectActionsOptions<T>): {
   batchSelection: GridTableBatchSelection<T>;
   modals: React.ReactNode;
@@ -340,6 +385,7 @@ export function useBatchObjectActions<T>({
     async (run: BatchRun) => {
       setDialog({ stage: 'running', run, done: 0 });
       const failed = await executeBatch(run, (done) => setDialog({ stage: 'running', run, done }));
+      onRunComplete?.(run.definition.id);
       if (failed.length === 0) {
         update({ active: false, selectedKeys: NO_ROWS_SELECTED });
         setDialog(null);
@@ -348,7 +394,7 @@ export function useBatchObjectActions<T>({
       update({ selectedKeys: new Set(failed.map((failure) => failure.entry.key)) });
       setDialog({ stage: 'results', run, failed });
     },
-    [update]
+    [onRunComplete, update]
   );
 
   const getActions = useCallback(
@@ -394,7 +440,7 @@ export function useBatchObjectActions<T>({
             icon: definition.icon,
             label: actionTitle(objectActionLabel(definition.actionId), entries.length, rows.length),
             danger: definition.danger,
-            onRun: () => setDialog({ stage: definition.id === 'scale' ? 'scale' : 'confirm', run }),
+            onRun: () => setDialog({ stage: definition.prompt ?? 'confirm', run }),
           },
         ];
       });
@@ -429,6 +475,22 @@ export function useBatchObjectActions<T>({
     />
   );
 
+  const renderDrain = (run: BatchRun) => {
+    const clusterId = run.entries[0].object.clusterId;
+    return (
+      <BatchDrainModal
+        nodeNames={run.entries.map((entry) => entry.object.name)}
+        clusterName={resolveClusterName(clusterId) ?? clusterId}
+        skipped={run.skipped}
+        permissions={resolveNodeDrainOperationPermissions(
+          nodeActionPermissionInputs(permissionMap, { clusterId })
+        )}
+        onClose={closeDialog}
+        onStart={(drainOptions) => void startRun({ ...run, drainOptions })}
+      />
+    );
+  };
+
   const renderResults = (run: BatchRun, failed: BatchFailure[]) => {
     const total = run.entries.length;
     const noun = countNoun(run.entries.map((entry) => entry.object));
@@ -460,6 +522,9 @@ export function useBatchObjectActions<T>({
     }
     if (dialog.stage === 'scale') {
       return renderScale(dialog.run);
+    }
+    if (dialog.stage === 'drain') {
+      return renderDrain(dialog.run);
     }
     if (dialog.stage === 'results') {
       return renderResults(dialog.run, dialog.failed);
