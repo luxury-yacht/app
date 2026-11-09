@@ -75,6 +75,13 @@ export enum Reason {
     ReasonServiceUnavailable = "ServiceUnavailable",
     ReasonCredentialsRejected = "CredentialsRejected",
     ReasonClusterUnreachable = "ClusterUnreachable",
+
+    /**
+     * ReasonRequestInterrupted is one request cut off while the connection and the
+     * cluster stayed up, such as a reset HTTP/2 stream. It says nothing about any
+     * other request.
+     */
+    ReasonRequestInterrupted = "RequestInterrupted",
     ReasonClusterNotReady = "ClusterNotReady",
     ReasonRefreshUnavailable = "RefreshUnavailable",
     ReasonDeadlineExceeded = "DeadlineExceeded",
