@@ -41,6 +41,8 @@ export interface BackendQuerySourceInput<T> {
   partialLabel?: string | null;
   /** Per-view identity for the controller's revisit replay cache. */
   cacheKey?: string;
+  /** The rows are retained from an earlier query while the current one is unanswered. */
+  pageStale?: boolean;
 }
 
 /**
@@ -75,5 +77,6 @@ export function backendQuerySource<T>(
     completeness,
     partialLabel: completeness === 'partial' ? (input.partialLabel ?? null) : null,
     cacheKey: input.cacheKey,
+    pageStale: input.pageStale,
   };
 }

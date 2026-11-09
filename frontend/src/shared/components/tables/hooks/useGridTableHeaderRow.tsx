@@ -30,6 +30,62 @@ export interface UseGridTableHeaderRowParams<T> {
   sortConfig?: { key: string; direction: 'asc' | 'desc' | null } | null;
 }
 
+const columnTitle = <T,>(column: GridColumnDefinition<T>): string =>
+  typeof column.header === 'string' ? column.header : column.key;
+
+const headerAriaSort = <T,>(
+  column: GridColumnDefinition<T>,
+  isSortable: boolean,
+  sortConfig: UseGridTableHeaderRowParams<T>['sortConfig']
+): 'none' | 'ascending' | 'descending' | undefined => {
+  if (!isSortable) {
+    return undefined;
+  }
+  if (sortConfig?.key !== column.key || !sortConfig.direction) {
+    return 'none';
+  }
+  return sortConfig.direction === 'asc' ? 'ascending' : 'descending';
+};
+
+function HeaderLabel<T>({
+  column,
+  isSortable,
+  canReorderColumns,
+  handleHeaderClick,
+  renderSortIndicator,
+}: Readonly<
+  Pick<
+    UseGridTableHeaderRowParams<T>,
+    'canReorderColumns' | 'handleHeaderClick' | 'renderSortIndicator'
+  > & { column: GridColumnDefinition<T>; isSortable: boolean }
+>) {
+  if (column.renderHeader) {
+    return <>{column.renderHeader()}</>;
+  }
+  return (
+    <span className="gridtable-header-label-group">
+      {!!canReorderColumns && (
+        <span className="gridtable-header-drag-handle" aria-hidden="true">
+          ⠿
+        </span>
+      )}
+      {isSortable ? (
+        <button
+          type="button"
+          className="gridtable-sort-button"
+          onClick={() => handleHeaderClick(column)}
+          aria-label={`Sort by ${columnTitle(column)}`}
+        >
+          {column.header}
+          {renderSortIndicator(column.key)}
+        </button>
+      ) : (
+        <span className="gridtable-header-label">{column.header}</span>
+      )}
+    </span>
+  );
+}
+
 export function useGridTableHeaderRow<T>({
   columnRenderModels,
   enableColumnResizing,
@@ -62,16 +118,7 @@ export function useGridTableHeaderRow<T>({
           column.resizable !== false &&
           nextColumn.resizable !== false;
 
-        // Compute aria-sort for this header cell.
-        const ariaSortValue = (() => {
-          if (!isSortable) {
-            return undefined;
-          }
-          if (sortConfig?.key !== column.key || !sortConfig.direction) {
-            return 'none';
-          }
-          return sortConfig.direction === 'asc' ? 'ascending' : 'descending';
-        })();
+        const ariaSortValue = headerAriaSort(column, isSortable, sortConfig);
 
         return (
           <AriaGridColumnHeader
@@ -88,26 +135,13 @@ export function useGridTableHeaderRow<T>({
             style={model.cellStyle}
           >
             <span className="header-content">
-              <span className="gridtable-header-label-group">
-                {!!canReorderColumns && (
-                  <span className="gridtable-header-drag-handle" aria-hidden="true">
-                    ⠿
-                  </span>
-                )}
-                {isSortable ? (
-                  <button
-                    type="button"
-                    className="gridtable-sort-button"
-                    onClick={() => handleHeaderClick(column)}
-                    aria-label={`Sort by ${typeof column.header === 'string' ? column.header : column.key}`}
-                  >
-                    {column.header}
-                    {renderSortIndicator(column.key)}
-                  </button>
-                ) : (
-                  <span className="gridtable-header-label">{column.header}</span>
-                )}
-              </span>
+              <HeaderLabel
+                column={column}
+                isSortable={isSortable}
+                canReorderColumns={canReorderColumns}
+                handleHeaderClick={handleHeaderClick}
+                renderSortIndicator={renderSortIndicator}
+              />
             </span>
             {!!showResizeHandle && (
               <hr
@@ -120,7 +154,7 @@ export function useGridTableHeaderRow<T>({
                   e.stopPropagation();
                   autoSizeColumn(column.key);
                 }}
-                aria-label={`Resize ${typeof column.header === 'string' ? column.header : column.key} column`}
+                aria-label={`Resize ${columnTitle(column)} column`}
                 aria-orientation="vertical"
                 aria-valuemin={getColumnMinWidth(column)}
                 aria-valuemax={getColumnMaxWidth(column)}

@@ -75,6 +75,11 @@ func transportReason(err error) Reason {
 	case credentialerrors.ClassAuth:
 		return ReasonCredentialsRejected
 	case credentialerrors.ClassConnectivity:
+		// Connectivity covers both a lost connection and one request's lost stream.
+		// Only the first says the cluster cannot be reached.
+		if credentialerrors.IsRequestStreamReset(err) {
+			return ReasonRequestInterrupted
+		}
 		return ReasonClusterUnreachable
 	}
 	return ReasonUnknown
@@ -284,6 +289,20 @@ func withExplicitReason(err error, reason Reason, retryable, expected bool) erro
 		status.Retryable = retryable
 		status.Expected = expected
 	}}
+}
+
+// NoAnswerInTime marks err as a request the app stopped waiting on at its own
+// deadline. It is the cluster's silence, not an application failure. The cluster
+// may still have carried the request out, so repeating it is not known to be safe.
+func NoAnswerInTime(err error) error {
+	return withExplicitReason(err, ReasonDeadlineExceeded, false, true)
+}
+
+// Conflict marks err as an action the app refused because of the current state of
+// what it acts on, such as a drain already running on the node. That is routine,
+// not an application failure.
+func Conflict(err error) error {
+	return withExplicitReason(err, ReasonConflict, false, true)
 }
 
 // BadRequest marks err as a rejected request: the caller sent arguments the

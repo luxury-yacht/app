@@ -71,6 +71,8 @@ type UseGridTableFiltersPresentationOptions<T> = {
   fetchAllRows?: () => Promise<T[]>;
   /** Base of the file name Download's Save to File offers. */
   exportFilename?: string;
+  /** The batch-select button. */
+  batchToolbarItems?: IconBarItem[];
 };
 
 export function useGridTableFilterModel<T>({
@@ -113,6 +115,7 @@ export function useGridTableFiltersPresentation<T>({
   getTextContent,
   fetchAllRows,
   exportFilename,
+  batchToolbarItems,
 }: UseGridTableFiltersPresentationOptions<T>): ReactNode {
   const {
     filteringEnabled,
@@ -181,7 +184,15 @@ export function useGridTableFiltersPresentation<T>({
 
   const searchShortcutActive = filteringEnabled && holdsKeyboard;
   const showColumnsDropdown = Boolean(columnsDropdown);
-  const resolvedPreActions = resolvedFilterOptions.preActions;
+  const declaredPreActions = resolvedFilterOptions.preActions;
+  const resolvedPreActions = useMemo<IconBarItem[] | undefined>(() => {
+    if (!batchToolbarItems?.length) {
+      return declaredPreActions;
+    }
+    return declaredPreActions?.length
+      ? [...declaredPreActions, { type: 'separator' }, ...batchToolbarItems]
+      : batchToolbarItems;
+  }, [batchToolbarItems, declaredPreActions]);
 
   // Download copies or saves every matching row when the view can fetch all pages.
   // Otherwise it takes this local row set; local presentation pagination still

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
 )
 
@@ -141,7 +142,7 @@ func (s *Store) StartDrainForClusterIfIdle(nodeName string, opts restypes.DrainN
 		nodeName:  normalizeNodeName(nodeName),
 	}
 	if active := s.activeJobForKeyLocked(key); active != nil {
-		return nil, fmt.Errorf("drain already running for node %s (job %s)", key.nodeName, active.ID)
+		return nil, errorstatus.Conflict(fmt.Errorf("drain already running for node %s (job %s)", key.nodeName, active.ID))
 	}
 
 	return s.startDrainForClusterLocked(nodeName, opts, clusterID, clusterName), nil

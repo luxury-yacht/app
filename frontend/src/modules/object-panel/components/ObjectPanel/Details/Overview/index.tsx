@@ -7,6 +7,7 @@
 
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ActionsMenu } from '@shared/components/kubernetes/ActionsMenu';
+import { clampReplicas } from '@shared/components/modals/scaleModalModel';
 import { useNodeMaintenanceActions } from '@shared/hooks/useNodeMaintenanceActions';
 import type { ObjectActionData } from '@shared/hooks/useObjectActions';
 import { lookupKindFacets } from '@shared/kinds/kindFacets';
@@ -55,8 +56,6 @@ function renderDescriptorOverview<K extends ObjectDetailType>(
 
 // Union type using generic props for all resources
 type OverviewProps = GenericOverviewProps;
-
-const clampReplicas = (value: number): number => Math.max(0, Math.min(9999, value));
 
 const Overview: React.FC<OverviewProps> = (props) => {
   const { objectData, panelId } = useObjectPanel();

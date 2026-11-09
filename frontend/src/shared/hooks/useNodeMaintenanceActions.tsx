@@ -160,6 +160,19 @@ export const useNodeMaintenanceActions = ({
     [aggregateDrains]
   );
 
+  // Shows drains started outside the drain modal without waiting for the next poll.
+  const refreshDrains = useCallback(() => {
+    for (const scope of watchedAggregateScopes) {
+      requestRefreshDomain({ domain: 'object-maintenance', scope, reason: 'user' }).catch(
+        (error: unknown) => {
+          errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
+            source: 'node-maintenance-refresh',
+          });
+        }
+      );
+    }
+  }, [watchedAggregateScopes]);
+
   const openCordonFor = useCallback((target: NodeActionTarget) => {
     setCordonTarget(target);
   }, []);
@@ -263,5 +276,6 @@ export const useNodeMaintenanceActions = ({
     openCordonFor,
     openDrainFor,
     activeDrainFor,
+    refreshDrains,
   };
 };

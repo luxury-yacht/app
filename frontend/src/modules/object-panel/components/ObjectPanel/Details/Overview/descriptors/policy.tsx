@@ -11,6 +11,7 @@ import type { hpa, limitrange, poddisruptionbudget, resourcequota } from '@core/
 import { LiveAgeText } from '@shared/components/LiveAgeText';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
+import { scaleTargetApiVersion } from '@shared/constants/builtinGroupVersions';
 import { buildRequiredRelatedObjectReference } from '@shared/utils/objectIdentity';
 import { resourceLinkToObjectReference } from '@shared/utils/resourceLinkIdentity';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
@@ -307,7 +308,7 @@ const scaleTargetReference = (d: HorizontalPodAutoscalerDetails, context: Overvi
   try {
     return buildRequiredRelatedObjectReference({
       kind: d.scaleTargetRef.kind,
-      apiVersion: d.scaleTargetRef.apiVersion,
+      apiVersion: scaleTargetApiVersion(d.scaleTargetRef.kind, d.scaleTargetRef.apiVersion),
       name: d.scaleTargetRef.name,
       namespace: d.namespace,
       clusterId: context.clusterId ?? undefined,

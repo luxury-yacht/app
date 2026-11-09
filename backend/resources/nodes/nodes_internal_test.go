@@ -47,7 +47,7 @@ func TestStartDrainWithCompletionPassesCreatedJobID(t *testing.T) {
 	service := NewService(deps, nodemaintenance.NewStore(5))
 	completed := make(chan string, 1)
 
-	job, err := service.StartDrainWithCompletion(context.Background(), "missing-"+t.Name(), restypes.DrainNodeOptions{}, func(jobID string) {
+	job, err := service.StartDrainWithCompletion(context.Background(), "missing-"+t.Name(), "", restypes.DrainNodeOptions{}, func(jobID string) {
 		completed <- jobID
 	})
 	require.NoError(t, err)

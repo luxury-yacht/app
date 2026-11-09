@@ -303,4 +303,62 @@ describe('NsViewPods', () => {
     expect(owners.viewState?.viewType).toBe('namespace');
     expect(owners.viewState?.activeNamespaceTab).toBe('pods');
   });
+
+  it('deletes the pods picked in batch-select mode, each with its full identity', async () => {
+    app.backend.answer('RunObjectAction', () => ({}));
+    await start([
+      pod({ ref: { name: 'api-0', uid: 'uid-api-0' } }),
+      pod({ ref: { name: 'api-1', uid: 'uid-api-1' } }),
+      pod({ ref: { name: 'api-2', uid: 'uid-api-2' } }),
+    ]);
+    const toolbarButton = (label: string) =>
+      requireValue(
+        view.container.querySelector<HTMLButtonElement>(`.icon-bar-button[aria-label="${label}"]`),
+        `expected the ${label} button`
+      );
+    const batchAction = (label: string) =>
+      requireValue(
+        Array.from(
+          view.container.querySelectorAll<HTMLButtonElement>('.gridtable-batch-action')
+        ).find(
+          (button) => button.querySelector('.gridtable-batch-action-label')?.textContent === label
+        ),
+        `expected the ${label} action`
+      );
+    const ageCell = (name: string) =>
+      requireValue(
+        rowOf(name).querySelector<HTMLElement>('[data-column="age"]'),
+        `${name} age cell`
+      );
+
+    expect(rowOf('api-0').querySelector('input[type="checkbox"]')).toBeNull();
+    await activate(() => toolbarButton('Batch select').click());
+    await activate(() => ageCell('api-0').click());
+    await activate(() => ageCell('api-2').click());
+    await app.settle();
+    await activate(() => batchAction('Delete 2').click());
+    await activate(() =>
+      requireValue(
+        Array.from(
+          document.body.querySelectorAll<HTMLButtonElement>('.confirmation-modal-footer button')
+        ).find((button) => button.textContent === 'Delete 2'),
+        'expected the confirm button'
+      ).click()
+    );
+
+    expect(app.backend.calls('RunObjectAction').map(([request]) => request)).toEqual(
+      ['api-0', 'api-2'].map((name) => ({
+        action: 'delete',
+        target: {
+          clusterId: dev.clusterId,
+          group: '',
+          version: 'v1',
+          kind: 'Pod',
+          namespace: 'team-a',
+          name,
+          uid: `uid-${name}`,
+        },
+      }))
+    );
+  });
 });

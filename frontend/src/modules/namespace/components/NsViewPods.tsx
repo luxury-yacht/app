@@ -29,6 +29,7 @@ import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import type { GridTableFilterOptions } from '@shared/components/tables/GridTable.types';
 import { formatRestartCount } from '@shared/components/tables/restartCount';
+import { useBatchObjectActions } from '@shared/hooks/useBatchObjectActions';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import {
@@ -382,15 +383,24 @@ export const PodsTable: React.FC<PodsTableProps> = React.memo(
       });
     }, [visiblePermissionTargets]);
 
-    const getContextMenuItems = useCallback(
-      (pod: PodSnapshotEntry): ContextMenuItem[] => {
-        return objectActions.getMenuItems({
-          ...podReference(pod),
-          portForwardAvailable: pod.portForwardAvailable,
-        });
-      },
-      [objectActions, podReference]
+    const getActionObject = useCallback(
+      (pod: PodSnapshotEntry) => ({
+        ...podReference(pod),
+        portForwardAvailable: pod.portForwardAvailable,
+      }),
+      [podReference]
     );
+
+    const getContextMenuItems = useCallback(
+      (pod: PodSnapshotEntry): ContextMenuItem[] =>
+        objectActions.getMenuItems(getActionObject(pod)),
+      [getActionObject, objectActions]
+    );
+
+    const batchActions = useBatchObjectActions<PodSnapshotEntry>({
+      getObject: getActionObject,
+      scopeKey: `${queryClusterId ?? ''}|${namespace}`,
+    });
 
     const emptyMessage = useMemo(() => {
       if (selectionQueryFacets && selectedObject) {
@@ -422,9 +432,11 @@ export const PodsTable: React.FC<PodsTableProps> = React.memo(
           enableContextMenu
           getCustomContextMenuItems={getContextMenuItems}
           emptyMessage={emptyMessage}
+          batchSelection={attachedTo ? undefined : batchActions.batchSelection}
         />
 
         {objectActions.modals}
+        {batchActions.modals}
       </>
     );
   }

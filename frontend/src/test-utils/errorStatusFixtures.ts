@@ -22,6 +22,7 @@ const reasonDefaults: Record<ErrorStatusReason, ReasonDefaults> = {
   InternalError: { code: 500, category: 'SERVER_ERROR', retryable: true, expected: true },
   ServiceUnavailable: { code: 503, category: 'SERVER_ERROR', retryable: true, expected: true },
   ClusterUnreachable: { code: 503, category: 'NETWORK', retryable: true, expected: true },
+  RequestInterrupted: { code: 502, category: 'NETWORK', retryable: true, expected: true },
   ClusterNotReady: { code: 503, category: 'SERVER_ERROR', retryable: true, expected: true },
   RefreshUnavailable: { code: 503, category: 'SERVER_ERROR', retryable: true, expected: true },
   Canceled: { code: 499, category: 'UNKNOWN', retryable: false, expected: true },

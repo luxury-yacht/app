@@ -10,7 +10,7 @@ import { kindDisplayName } from '@shared/kinds/kindDisplay';
 import { getKindBadgeClassName } from '@shared/utils/kindBadgeColors';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type React from 'react';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useClusterNameResolver } from '@/core/cluster-workspace/useClusterWorkspace';
 import { usePreference } from '@/core/settings/usePreference';
 import ModalHeader from './ModalHeader';
@@ -27,6 +27,8 @@ export interface ConfirmationModalTableColumn {
 export interface ConfirmationModalDetailsTable {
   columns: ConfirmationModalTableColumn[];
   rows: string[][];
+  /** The table may hold many rows: it scrolls, and fixed-width values truncate. */
+  longList?: boolean;
 }
 
 /** The cluster object a confirmation acts on. */
@@ -64,8 +66,17 @@ interface ConfirmationModalProps {
   secondaryActionText?: string;
   secondaryActionButtonClass?: string;
   onSecondaryAction?: () => void;
-  onConfirm: () => void;
+  /** Leave out for a dialog that only reports: it then has just the cancel button. */
+  onConfirm?: () => void;
   onCancel: () => void;
+  /** Disables the footer while the confirmed work runs. */
+  busy?: boolean;
+  /**
+   * Names what the dialog asks, for a dialog that stays open while that changes
+   * (confirm, then results, then confirm again). Each new question starts with
+   * focus on the non-destructive action, as opening does.
+   */
+  promptId?: string;
 }
 
 const ConfirmationTarget: React.FC<{
@@ -100,7 +111,9 @@ const ConfirmationTarget: React.FC<{
 const ConfirmationDetailsTable: React.FC<{ table: ConfirmationModalDetailsTable }> = ({
   table,
 }) => (
-  <div className="confirmation-modal-details-scroll">
+  <div
+    className={`confirmation-modal-details-scroll${table.longList ? ' confirmation-modal-details-scroll--long' : ''}`}
+  >
     <table className="confirmation-modal-details-table">
       <thead>
         <tr>
@@ -112,14 +125,20 @@ const ConfirmationDetailsTable: React.FC<{ table: ConfirmationModalDetailsTable 
       <tbody>
         {withStableListKeys(table.rows, (row) => row.join('|')).map(({ key, value: row }) => (
           <tr key={key}>
-            {row.map((cell, columnIndex) => (
-              <td
-                key={table.columns[columnIndex]?.header ?? columnIndex}
-                className={table.columns[columnIndex]?.monospace ? 'monospace' : undefined}
-              >
-                {cell}
-              </td>
-            ))}
+            {row.map((cell, columnIndex) => {
+              const column = table.columns[columnIndex];
+              // A long list truncates its fixed-width values; the full text stays on hover.
+              const fullText = table.longList && column?.monospace ? cell : undefined;
+              return (
+                <td
+                  key={column?.header ?? columnIndex}
+                  className={column?.monospace ? 'monospace' : undefined}
+                  title={fullText}
+                >
+                  {cell}
+                </td>
+              );
+            })}
           </tr>
         ))}
       </tbody>
@@ -143,16 +162,31 @@ const ConfirmationModalContent: React.FC<Omit<ConfirmationModalProps, 'isOpen'>>
   onSecondaryAction,
   onConfirm,
   onCancel,
+  busy = false,
+  promptId = '',
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
 
-  useModalFocusTrap({
+  const { focusDefaultControl } = useModalFocusTrap({
     ref: modalRef,
+    suppressShortcuts: busy,
     onEscape: () => {
       onCancel();
       return true;
     },
   });
+
+  // What the dialog asks now; nothing while its work runs. When it settles on a new
+  // question, the control that held focus may be disabled, gone, or now mean
+  // something destructive, so focus starts again on the non-destructive action.
+  const prompt = busy ? null : promptId;
+  const lastPrompt = useRef(prompt);
+  useEffect(() => {
+    if (prompt !== null && prompt !== lastPrompt.current) {
+      focusDefaultControl();
+    }
+    lastPrompt.current = prompt;
+  }, [prompt, focusDefaultControl]);
 
   return (
     <ModalSurface
@@ -187,12 +221,25 @@ const ConfirmationModalContent: React.FC<Omit<ConfirmationModalProps, 'isOpen'>>
             {secondaryActionText}
           </button>
         )}
-        <button type="button" className="button cancel" onClick={onCancel} data-modal-initial-focus>
+        <button
+          type="button"
+          className="button cancel"
+          onClick={onCancel}
+          disabled={busy}
+          data-modal-initial-focus
+        >
           {cancelText}
         </button>
-        <button type="button" className={`button ${confirmButtonClass}`} onClick={onConfirm}>
-          {confirmText}
-        </button>
+        {!!onConfirm && (
+          <button
+            type="button"
+            className={`button ${confirmButtonClass}`}
+            onClick={onConfirm}
+            disabled={busy}
+          >
+            {confirmText}
+          </button>
+        )}
       </div>
     </ModalSurface>
   );

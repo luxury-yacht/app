@@ -17,6 +17,7 @@ import GridTableBody from '@shared/components/tables/GridTableBody';
 import GridTableHeader from '@shared/components/tables/GridTableHeader';
 import GridTableInitialLoading from '@shared/components/tables/GridTableInitialLoading';
 import GridTableLayout from '@shared/components/tables/GridTableLayout';
+import { GridTableBatchContext } from '@shared/components/tables/hooks/useGridTableBatchSelection';
 import { useGridTableController } from '@shared/components/tables/hooks/useGridTableController';
 
 export type {
@@ -24,6 +25,7 @@ export type {
   ColumnWidthState,
   GridColumnAlignmentOptions,
   GridColumnDefinition,
+  GridTableBatchAction,
   GridTableDiagnosticsMode,
   GridTableFilterConfig,
   GridTableFilterOptions,
@@ -81,6 +83,8 @@ const GridTable = memo(function GridTableComponent<T>(props: GridTableProps<T>) 
     onClearFilters,
     paginationControls,
     wrapWithProfiler,
+    batchContext,
+    batchBar,
   } = useGridTableController<T>(props);
 
   const trailingBoundaryOffset =
@@ -164,6 +168,7 @@ const GridTable = memo(function GridTableComponent<T>(props: GridTableProps<T>) 
       filters={filtersNode}
       header={headerNode}
       body={bodyNode}
+      batchBar={batchBar}
       footer={footerNode}
       contextMenu={
         <>
@@ -174,7 +179,11 @@ const GridTable = memo(function GridTableComponent<T>(props: GridTableProps<T>) 
     />
   );
 
-  return wrapWithProfiler(mainContent);
+  return wrapWithProfiler(
+    <GridTableBatchContext.Provider value={batchContext}>
+      {mainContent}
+    </GridTableBatchContext.Provider>
+  );
 }) as <T>(props: GridTableProps<T>) => React.ReactElement;
 
 export default GridTable;

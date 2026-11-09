@@ -31,6 +31,12 @@ focus trap, backdrop, Escape handling, or app-background blocking.
   source props while open but never overwrite user-edited form state;
   reopening starts a new draft from the latest props.
 - Destructive or long-running actions need clear disabled/loading/error states.
+- `ConfirmationModal` can stay open while what it asks changes: `busy` while its
+  work runs, then a result, then perhaps a new confirmation, each named by
+  `promptId`. Every new question starts with focus on the non-destructive
+  action, moved without scrolling (`focusDefaultControl` from the focus trap),
+  because the control that held focus may be disabled, gone, or now mean
+  something destructive.
 - A confirmation of an action on a cluster object passes `target`, so the modal
   names its kind, name, namespace, and cluster (resolved from `clusterId`). Its
   message states the consequence and does not repeat the object.

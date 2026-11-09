@@ -10,13 +10,13 @@ package backend
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
+	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
 )
 
 // IsWorkloadHPAManaged checks whether any HorizontalPodAutoscaler in the given
@@ -44,7 +44,7 @@ func isWorkloadHPAManaged(ctx context.Context, deps common.Dependencies, target 
 	if err != nil {
 		return false, fmt.Errorf("HPA-managed check not supported: %w", err)
 	}
-	targetGVK := schema.GroupVersionKind{Group: strings.TrimSpace(target.Group), Version: strings.TrimSpace(target.Version), Kind: kind}
+	targetKey := hpapkg.TargetKey(target.Namespace, target.Group, kind, target.Name)
 
 	hpas, err := deps.KubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(target.Namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -53,8 +53,8 @@ func isWorkloadHPAManaged(ctx context.Context, deps common.Dependencies, target 
 
 	for _, hpa := range hpas.Items {
 		ref := hpa.Spec.ScaleTargetRef
-		refGVK := schema.FromAPIVersionAndKind(ref.APIVersion, ref.Kind)
-		if ref.Name == target.Name && refGVK == targetGVK {
+		group := schema.FromAPIVersionAndKind(ref.APIVersion, ref.Kind).Group
+		if hpapkg.TargetKey(hpa.Namespace, group, ref.Kind, ref.Name) == targetKey {
 			return true, nil
 		}
 	}

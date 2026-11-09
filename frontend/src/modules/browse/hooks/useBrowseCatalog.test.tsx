@@ -374,6 +374,62 @@ describe('useBrowseCatalog queries', () => {
     expect(names()).toEqual(['api']);
   });
 
+  it('marks the rows stale from a query change until that query’s page lands', async () => {
+    catalog.items = [item('api'), item('web', { kind: 'Deployment' })];
+    await show();
+    expect(catalogNow().pageStale).toBe(false);
+
+    catalog.hold = (query) => query.getAll('kind').includes('Pod');
+    await show({ kinds: ['Pod'] });
+    expect(names()).toEqual(['api', 'web']);
+    expect(catalogNow().pageStale).toBe(true);
+
+    await releaseHeld();
+    expect(names()).toEqual(['api']);
+    expect(catalogNow().pageStale).toBe(false);
+  });
+
+  it('keeps the rows marked stale when the new query fails', async () => {
+    catalog.items = [item('api'), item('web', { kind: 'Deployment' })];
+    await show();
+
+    catalog.override = (query) =>
+      query.getAll('kind').includes('Pod') ? makeErrorStatus('InternalError', 'boom') : undefined;
+    await show({ kinds: ['Pod'] });
+    await app.settle();
+
+    expect(names()).toEqual(['api', 'web']);
+    expect(catalogNow().pageStale).toBe(true);
+    app.errors.take(() => true);
+  });
+
+  it('marks the rows stale while a typed search waits for the pause in typing', async () => {
+    vi.useFakeTimers();
+    catalog.items = [item('api'), item('web')];
+    await show();
+
+    await show({ search: 'api' });
+
+    expect(catalogNow().pageStale).toBe(true);
+  });
+
+  it('marks the rows stale while the next page is out, and not for a doorbell re-read', async () => {
+    vi.useFakeTimers();
+    catalog.items = ['node-a', 'node-b', 'node-c'].map((name) => item(name, { kind: 'Node' }));
+    await show({ pinnedNamespaces: [], clusterScopedOnly: true });
+
+    catalog.hold = (query) => query.get('continue') === '2';
+    await run(() => catalogNow().handleLoadMore());
+    expect(catalogNow().pageStale).toBe(true);
+    await releaseHeld();
+    expect(names()).toEqual(['node-c']);
+    expect(catalogNow().pageStale).toBe(false);
+
+    catalog.hold = () => true;
+    await ringCatalog();
+    expect(catalogNow().pageStale).toBe(false);
+  });
+
   it('offers the unfiltered scope’s kinds while a filter narrows the page, holding them while the filtered page loads', async () => {
     catalog.items = [item('pod-a'), item('web', { kind: 'Deployment' })];
     await show();

@@ -134,7 +134,12 @@ const resolveActionGVK = (source: ObjectActionIdentitySource, action: string): A
 
   const builtin = resolveBuiltinActionGVK(kind);
   if (supplied.version) {
-    return resolveVersionedActionGVK(supplied, builtin, kind, action);
+    // The backend dispatches a delete on the full identity, so a custom kind that
+    // shares a built-in kind's name is deleted as itself. Other actions need the
+    // real built-in kind.
+    const sharesNameOnly = Boolean(builtin && supplied.group && supplied.group !== builtin.group);
+    const expected = sharesNameOnly && action === OBJECT_ACTIONS.delete ? null : builtin;
+    return resolveVersionedActionGVK(supplied, expected, kind, action);
   }
   if (builtin) {
     return builtin;

@@ -83,6 +83,21 @@ describe('Policy Overview descriptors', () => {
     container = view.container;
   });
 
+  it('opens a built-in scale target at its current version', async () => {
+    await renderDescriptor(hpaDescriptor, {
+      kind: 'HorizontalPodAutoscaler',
+      name: 'hpa',
+      namespace: 'prod',
+      scaleTargetRef: { kind: 'Deployment', name: 'api', apiVersion: 'apps/v1beta2' },
+    });
+
+    await click(getValueForLabel(container, 'Target')?.querySelector('.object-panel-link'));
+
+    expect(view.openPanels()).toEqual([
+      expect.objectContaining({ group: 'apps', version: 'v1', kind: 'Deployment', name: 'api' }),
+    ]);
+  });
+
   it('renders HPA details and links to scale target', async () => {
     await renderDescriptor(hpaDescriptor, {
       kind: 'HorizontalPodAutoscaler',

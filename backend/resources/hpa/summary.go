@@ -40,7 +40,7 @@ func scaleTargetAPIVersion(link resourcemodel.ResourceLink) string {
 		return link.Ref.Group + "/" + link.Ref.Version
 	}
 	if link.Display != nil {
-		if link.Display.Group == "" {
+		if link.Display.Group == "" || link.Display.Version == "" {
 			return link.Display.Version
 		}
 		return link.Display.Group + "/" + link.Display.Version

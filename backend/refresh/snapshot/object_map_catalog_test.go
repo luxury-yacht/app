@@ -126,3 +126,128 @@ func TestObjectMapServedVersionsResolveToOneNode(t *testing.T) {
 	}
 	require.Equal(t, seedIDs[0], seedIDs[1])
 }
+
+func scaledByHPA(apiVersion, kind, name string) *autoscalingv2.HorizontalPodAutoscaler {
+	return &autoscalingv2.HorizontalPodAutoscaler{
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default", UID: types.UID("hpa-uid")},
+		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{APIVersion: apiVersion, Kind: kind, Name: name},
+			MaxReplicas:    3,
+		},
+	}
+}
+
+// The menu offers no Scale action at all while a workload's HPA ownership is unknown,
+// so a workload the map knows only from the catalog needs the same answer as the rest.
+func TestObjectMapGivesACatalogOnlyWorkloadItsHPAOwnership(t *testing.T) {
+	deployment := objectMapCatalogRow("apps", "v1", "Deployment", "deployments", "default", "web", "deploy-uid", "")
+	deployment.ActionFacts = &objectcatalog.ActionFacts{DesiredReplicas: int32Ptr(5)}
+
+	t.Run("managed", func(t *testing.T) {
+		builder := newObjectMapTestBuilder(t, fake.NewSimpleClientset(scaledByHPA("apps/v1", "Deployment", "web")))
+		withObjectMapCatalog(t, builder, deployment)
+		ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"})
+
+		snap, err := builder.Build(ctx, "default:autoscaling/v2:HorizontalPodAutoscaler:web")
+		require.NoError(t, err)
+
+		facts := nodeByKindName(t, snap.Payload.(ObjectMapSnapshotPayload), "Deployment", "web").ActionFacts
+		require.NotNil(t, facts)
+		require.NotNil(t, facts.HPAManaged, "ownership must not stay unknown")
+		require.True(t, *facts.HPAManaged)
+	})
+
+	t.Run("not managed", func(t *testing.T) {
+		rs := replicaSetFixture("default", "web-rs", "rs-uid", "web", "deploy-uid")
+		builder := newObjectMapTestBuilder(t, fake.NewSimpleClientset(rs))
+		withObjectMapCatalog(t, builder, deployment)
+		ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"})
+
+		snap, err := builder.Build(ctx, "default:apps/v1:ReplicaSet:web-rs")
+		require.NoError(t, err)
+
+		facts := nodeByKindName(t, snap.Payload.(ObjectMapSnapshotPayload), "Deployment", "web").ActionFacts
+		require.NotNil(t, facts)
+		require.NotNil(t, facts.HPAManaged, "ownership must not stay unknown")
+		require.False(t, *facts.HPAManaged)
+		require.NotNil(t, facts.DesiredReplicas, "the Scale dialog starts from this count")
+		require.Equal(t, int32(5), *facts.DesiredReplicas)
+	})
+
+	// Scale would open at 0 with no count to start from, so it must stay hidden.
+	t.Run("replica count unknown", func(t *testing.T) {
+		withoutCount := deployment
+		withoutCount.ActionFacts = nil
+		rs := replicaSetFixture("default", "web-rs", "rs-uid", "web", "deploy-uid")
+		builder := newObjectMapTestBuilder(t, fake.NewSimpleClientset(rs))
+		withObjectMapCatalog(t, builder, withoutCount)
+		ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"})
+
+		snap, err := builder.Build(ctx, "default:apps/v1:ReplicaSet:web-rs")
+		require.NoError(t, err)
+
+		require.Nil(t, nodeByKindName(t, snap.Payload.(ObjectMapSnapshotPayload), "Deployment", "web").ActionFacts)
+	})
+}
+
+// An HPA can name a custom workload at a version the catalog lists it under no longer.
+func TestObjectMapFindsACustomScaleTargetAtItsServedVersion(t *testing.T) {
+	builder := newObjectMapTestBuilder(t, fake.NewSimpleClientset(scaledByHPA("example.com/v1beta1", "Widget", "web")))
+	catalog := seedCatalogService(t, []objectcatalog.Summary{
+		objectMapCatalogRow("example.com", "v1", "Widget", "widgets", "default", "web", "widget-uid", ""),
+	})
+	seedCatalogDescriptors(t, catalog, objectcatalog.Descriptor{
+		Group: "example.com", Version: "v1", Kind: "Widget", Resource: "widgets",
+		Namespaced: true, Scope: objectcatalog.ScopeNamespace,
+	})
+	builder.catalogService = func() *objectcatalog.Service { return catalog }
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"})
+
+	snap, err := builder.Build(ctx, "default:autoscaling/v2:HorizontalPodAutoscaler:web")
+	require.NoError(t, err)
+
+	assertEdge(t, snap.Payload.(ObjectMapSnapshotPayload), "HorizontalPodAutoscaler", "web", "Widget", "web", "scales")
+}
+
+// A workload already in the graph is the answer whatever the catalog holds: it may
+// not have published the workload yet, or may still list one that was deleted.
+func TestObjectMapFindsACollectedScaleTargetWhateverTheCatalogHolds(t *testing.T) {
+	stale := objectMapCatalogRow("apps", "v1", "Deployment", "deployments", "default", "web", "deleted-uid", "")
+	catalogs := map[string]func(*testing.T, *objectMapBuilder){
+		"no catalog":                       func(_ *testing.T, builder *objectMapBuilder) { builder.catalogService = nil },
+		"catalog has not published it yet": func(t *testing.T, builder *objectMapBuilder) { withObjectMapCatalog(t, builder) },
+		"catalog holds a deleted object's UID": func(t *testing.T, builder *objectMapBuilder) {
+			catalog := seedCatalogService(t, []objectcatalog.Summary{stale})
+			seedCatalogDescriptors(t, catalog, objectcatalog.Descriptor{
+				Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments",
+				Namespaced: true, Scope: objectcatalog.ScopeNamespace,
+			})
+			builder.catalogService = func() *objectcatalog.Service { return catalog }
+		},
+	}
+	for name, configure := range catalogs {
+		for _, apiVersion := range []string{"apps/v1beta2", "apps/"} {
+			t.Run(name+" "+apiVersion, func(t *testing.T) {
+				builder := newObjectMapTestBuilder(t, fake.NewSimpleClientset(
+					deploymentFixture("default", "web", "deploy-uid", "", ""),
+					scaledByHPA(apiVersion, "Deployment", "web"),
+				))
+				configure(t, builder)
+				ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"})
+
+				snap, err := builder.Build(ctx, "default:autoscaling/v2:HorizontalPodAutoscaler:web")
+				require.NoError(t, err)
+
+				payload := snap.Payload.(ObjectMapSnapshotPayload)
+				assertEdge(t, payload, "HorizontalPodAutoscaler", "web", "Deployment", "web", "scales")
+				uids := []string{}
+				for _, node := range payload.Nodes {
+					if node.Ref.Kind == "Deployment" {
+						uids = append(uids, node.Ref.UID)
+					}
+				}
+				require.Equal(t, []string{"deploy-uid"}, uids, "the edge must reach the workload that exists")
+			})
+		}
+	}
+}

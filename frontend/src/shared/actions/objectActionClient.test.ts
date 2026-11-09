@@ -64,6 +64,27 @@ describe('buildObjectActionTarget', () => {
     });
   });
 
+  describe('a custom kind that shares a built-in kind name', () => {
+    const customPod = {
+      clusterId: 'cluster-a',
+      group: 'custom.example.com',
+      version: 'v1',
+      kind: 'Pod',
+      namespace: 'team-a',
+      name: 'api',
+    };
+
+    it('can be deleted as itself, because delete dispatches on the full identity', () => {
+      expect(buildObjectActionTarget(customPod, 'delete')).toEqual(customPod);
+    });
+
+    it('is refused by actions that need the built-in kind', () => {
+      expect(() =>
+        buildObjectActionTarget({ ...customPod, kind: 'Deployment' }, 'restart')
+      ).toThrow('unsupported group/version');
+    });
+  });
+
   it('resolves registered built-in identity when group and version are omitted', () => {
     expect(
       buildObjectActionTarget(
@@ -114,7 +135,7 @@ describe('buildObjectActionTarget', () => {
           name: 'api',
           ...identity,
         },
-        'delete'
+        'restart'
       )
     ).toThrow(message);
   });

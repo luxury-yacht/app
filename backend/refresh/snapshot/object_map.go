@@ -188,6 +188,13 @@ type objectMapIndex struct {
 	// custom resource that owns a ReplicaSet), looked up on demand. nil when
 	// no catalog is available.
 	catalog *objectcatalog.Service
+	// collectedWorkloads finds a collected scalable workload by what an HPA names.
+	collectedWorkloads map[string]*objectMapRecord
+	// hpaManagedTargets and hpaDataComplete keep the HPA data this build read, so
+	// a workload added from the catalog later gets the same ownership answer.
+	// hpaDataComplete is nil until that data has been read.
+	hpaManagedTargets map[string]struct{}
+	hpaDataComplete   func(namespace string) bool
 }
 
 type objectMapGraph struct {
@@ -310,6 +317,7 @@ func newObjectMapIndex(meta ClusterMeta, allowedNamespaces []string) *objectMapI
 		byUID:   make(map[string]*objectMapRecord),
 		byIdent: make(map[string]*objectMapRecord),
 
+		collectedWorkloads: make(map[string]*objectMapRecord),
 		collectedResources: make(map[schema.GroupResource]struct{}),
 	}
 }
@@ -421,6 +429,13 @@ func (idx *objectMapIndex) addRecord(record *objectMapRecord) {
 	if record.ref.UID != "" {
 		idx.byUID[record.ref.UID] = record
 	}
+	if isObjectMapScalableWorkload(record.ref) {
+		idx.collectedWorkloads[objectMapWorkloadTargetKey(record.ref)] = record
+	}
+}
+
+func objectMapWorkloadTargetKey(ref ObjectMapReference) string {
+	return hpapkg.TargetKey(ref.Namespace, ref.Group, ref.Kind, ref.Name)
 }
 
 // stampRecord fills the build's cluster identity and reports whether the
@@ -475,7 +490,11 @@ func (idx *objectMapIndex) recordByIdentity(namespace, group, version, kind, nam
 // already has a record resolves to that record. A materialized row never takes
 // over an identity a collected record holds.
 func (idx *objectMapIndex) addCatalogRecord(summary objectcatalog.Summary) *objectMapRecord {
-	record := &objectMapRecord{ref: refFromCatalog(idx.meta, summary), creationTimestamp: summary.CreationTimestamp}
+	record := &objectMapRecord{
+		ref:               refFromCatalog(idx.meta, summary),
+		creationTimestamp: summary.CreationTimestamp,
+		actionFacts:       objectMapScaleFactsFromCatalog(summary),
+	}
 	if !idx.stampRecord(record) {
 		return nil
 	}
@@ -493,7 +512,20 @@ func (idx *objectMapIndex) addCatalogRecord(summary objectcatalog.Summary) *obje
 	if record.ref.UID != "" {
 		idx.byUID[record.ref.UID] = record
 	}
+	// The Scale actions start from the replica count. Without one, ownership stays
+	// unknown so the menu offers none of them.
+	if record.actionFacts != nil {
+		idx.applyHPAManagedFact(record)
+	}
 	return record
+}
+
+// objectMapScaleFactsFromCatalog carries the replica count from a catalog row.
+func objectMapScaleFactsFromCatalog(summary objectcatalog.Summary) *ObjectMapActionFacts {
+	if summary.ActionFacts == nil || summary.ActionFacts.DesiredReplicas == nil {
+		return nil
+	}
+	return &ObjectMapActionFacts{DesiredReplicas: summary.ActionFacts.DesiredReplicas}
 }
 
 func objectMapRecordIdentityKey(ref ObjectMapReference) string {
@@ -510,12 +542,36 @@ func (idx *objectMapIndex) enrichActionFacts(hpaSource partitionReadinessReporte
 	if _, collected := idx.collectedResources[HPAGVR.GroupResource()]; !collected {
 		return
 	}
-	known := func(namespace string) bool { return ingestRowsComplete(hpaSource, HPAGVR, namespace) }
-	idx.applyHPAManagedActionFacts(idx.hpaManagedActionTargets(), known)
+	idx.hpaManagedTargets = idx.hpaManagedActionTargets()
+	idx.hpaDataComplete = func(namespace string) bool { return ingestRowsComplete(hpaSource, HPAGVR, namespace) }
+	for _, record := range idx.records {
+		idx.applyHPAManagedFact(record)
+	}
 }
 
-// hpaManagedActionTargets resolves every HPA's scale target through the HPA's
-// projected "scales" edge.
+// objectMapScaleTarget is the object an HPA's "scales" link names.
+type objectMapScaleTarget struct {
+	namespace, group, kind, name string
+}
+
+// scaleTargetFromLink reads a "scales" link. A reference with no version has only
+// the display form, which still names the group and kind the HPA controller uses.
+func scaleTargetFromLink(link resourcemodel.ResourceLink) (objectMapScaleTarget, bool) {
+	switch {
+	case link.Ref != nil:
+		return objectMapScaleTarget{link.Ref.Namespace, link.Ref.Group, link.Ref.Kind, link.Ref.Name}, true
+	case link.Display != nil:
+		return objectMapScaleTarget{link.Display.Namespace, link.Display.Group, link.Display.Kind, link.Display.Name}, true
+	}
+	return objectMapScaleTarget{}, false
+}
+
+func (t objectMapScaleTarget) key() string {
+	return hpapkg.TargetKey(t.namespace, t.group, t.kind, t.name)
+}
+
+// hpaManagedActionTargets reads every HPA's scale target from the HPA's projected
+// "scales" edge.
 func (idx *objectMapIndex) hpaManagedActionTargets() map[string]struct{} {
 	managedTargets := make(map[string]struct{})
 	for _, record := range idx.records {
@@ -526,29 +582,29 @@ func (idx *objectMapIndex) hpaManagedActionTargets() map[string]struct{} {
 			if edge.Type != objectmapspec.EdgeScales {
 				continue
 			}
-			if target := idx.recordForResourceLink(edge.Link); target != nil {
-				managedTargets[objectMapActionTargetKey(target.ref)] = struct{}{}
+			if target, ok := scaleTargetFromLink(edge.Link); ok {
+				managedTargets[target.key()] = struct{}{}
 			}
 		}
 	}
 	return managedTargets
 }
 
-func (idx *objectMapIndex) applyHPAManagedActionFacts(managedTargets map[string]struct{}, known func(namespace string) bool) {
-	for _, record := range idx.records {
-		if record == nil || !isObjectMapScalableWorkload(record.ref) || !known(record.ref.Namespace) {
-			continue
-		}
-		_, managed := managedTargets[objectMapActionTargetKey(record.ref)]
-		// Intake facts may be shared by concurrent graph builds. The HPA join
-		// belongs to this snapshot, including when no catalog record was merged.
-		facts := cloneObjectMapActionFacts(record.actionFacts)
-		if facts == nil {
-			facts = &ObjectMapActionFacts{}
-		}
-		facts.HPAManaged = &managed
-		record.actionFacts = facts
+// applyHPAManagedFact marks one scalable workload HPA-managed or not, once the HPA
+// data has been read and covers its namespace.
+func (idx *objectMapIndex) applyHPAManagedFact(record *objectMapRecord) {
+	if idx.hpaDataComplete == nil || record == nil || !isObjectMapScalableWorkload(record.ref) || !idx.hpaDataComplete(record.ref.Namespace) {
+		return
 	}
+	_, managed := idx.hpaManagedTargets[objectMapWorkloadTargetKey(record.ref)]
+	// Intake facts may be shared by concurrent graph builds. The HPA join
+	// belongs to this snapshot, including when no catalog record was merged.
+	facts := cloneObjectMapActionFacts(record.actionFacts)
+	if facts == nil {
+		facts = &ObjectMapActionFacts{}
+	}
+	facts.HPAManaged = &managed
+	record.actionFacts = facts
 }
 
 // objectMapGraphByKind is each kind's object-map graph role, keyed by Kind, from
@@ -565,16 +621,6 @@ func isObjectMapScalableWorkload(ref ObjectMapReference) bool {
 	// The apps/v1 guard preserves the historical scope (a same-named CRD is not a
 	// scalable workload); the registry supplies the per-kind classification.
 	return ref.Group == "apps" && ref.Version == "v1" && objectMapGraphByKind[ref.Kind].ScalableWorkload
-}
-
-func objectMapActionTargetKey(ref ObjectMapReference) string {
-	return strings.Join([]string{
-		strings.TrimSpace(ref.Namespace),
-		strings.TrimSpace(ref.Group),
-		strings.TrimSpace(ref.Version),
-		strings.TrimSpace(ref.Kind),
-		strings.TrimSpace(ref.Name),
-	}, "\x00")
 }
 
 func objectMapNodeFromRecord(id string, depth int, record *objectMapRecord) ObjectMapNode {
@@ -1007,6 +1053,29 @@ func (idx *objectMapIndex) resolveCoreObjectRef(defaultNamespace string, ref *co
 	return idx.recordByIdentity(namespace, group, version, ref.Kind, ref.Name)
 }
 
+// recordForScaleTarget finds an HPA's target. The HPA controller ignores the version
+// in its reference, so one naming another version still means this object. A workload
+// already in the graph is the answer; the catalog may not have published it yet, or
+// may still list a deleted one. Only otherwise does the catalog supply the target, at
+// whichever version it lists it.
+func (idx *objectMapIndex) recordForScaleTarget(link resourcemodel.ResourceLink) *objectMapRecord {
+	target, ok := scaleTargetFromLink(link)
+	if !ok {
+		return nil
+	}
+	if record := idx.collectedWorkloads[target.key()]; record != nil {
+		return record
+	}
+	if record := idx.recordForResourceLink(link); record != nil || idx.catalog == nil {
+		return record
+	}
+	lookup := idx.catalog.LookupObject(target.namespace, target.group, target.kind, target.name)
+	if !lookup.Found {
+		return nil
+	}
+	return idx.addCatalogRecord(lookup.Summary)
+}
+
 func (idx *objectMapIndex) recordForResourceLink(link resourcemodel.ResourceLink) *objectMapRecord {
 	if link.Ref != nil {
 		return idx.recordByIdentity(link.Ref.Namespace, link.Ref.Group, link.Ref.Version, link.Ref.Kind, link.Ref.Name)
@@ -1102,6 +1171,8 @@ func (idx *objectMapIndex) resolveEdgeTargets(source *objectMapRecord, e objectm
 		return []*objectMapRecord{idx.resolveCoreObjectRef(source.ref.Namespace, e.CoreObjectRef)}
 	case e.ClusterRoleSelector != nil:
 		return idx.clusterRolesMatchingSelector(*e.ClusterRoleSelector)
+	case e.Type == objectmapspec.EdgeScales:
+		return []*objectMapRecord{idx.recordForScaleTarget(e.Link)}
 	default:
 		return []*objectMapRecord{idx.recordForResourceLink(e.Link)}
 	}

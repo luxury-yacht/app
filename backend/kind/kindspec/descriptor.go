@@ -28,6 +28,7 @@ import (
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -38,8 +39,9 @@ import (
 type WorkloadOperations struct {
 	// Restart applies the rollout-restart patch to the workload's pod template.
 	Restart func(ctx context.Context, client kubernetes.Interface, namespace, name string, patch []byte) error
-	// Scale sets the workload's desired replica count via its scale subresource.
-	Scale func(ctx context.Context, client kubernetes.Interface, namespace, name string, replicas int32) error
+	// Scale sets the workload's desired replica count via its scale subresource. A
+	// non-empty uid limits it to that object.
+	Scale func(ctx context.Context, client kubernetes.Interface, namespace, name, uid string, replicas int32) error
 	// CurrentReplicas reads the workload's current desired replica count (1 when unset).
 	CurrentReplicas func(ctx context.Context, client kubernetes.Interface, namespace, name string) (int32, error)
 	// RevisionHistory returns the workload's rollout revision history, newest first.
@@ -49,10 +51,10 @@ type WorkloadOperations struct {
 }
 
 // scaleSpec builds the autoscaling/v1 Scale a kind's Scale op submits; shared so the
-// per-kind ops stay one-liners.
-func ScaleObject(namespace, name string, replicas int32) *autoscalingv1.Scale {
+// per-kind ops stay one-liners. The API server treats a set UID as a precondition.
+func ScaleObject(namespace, name, uid string, replicas int32) *autoscalingv1.Scale {
 	return &autoscalingv1.Scale{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, UID: types.UID(uid)},
 		Spec:       autoscalingv1.ScaleSpec{Replicas: replicas},
 	}
 }

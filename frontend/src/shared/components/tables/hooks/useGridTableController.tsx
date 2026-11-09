@@ -22,6 +22,10 @@ import { useGridTableKeyboardScopes } from '@shared/components/tables/GridTableK
 import { hasNarrowingGridTableFilters } from '@shared/components/tables/gridTableFilterState';
 import { useColumnOrderController } from '@shared/components/tables/hooks/useColumnOrderController';
 import { useColumnVisibilityController } from '@shared/components/tables/hooks/useColumnVisibilityController';
+import {
+  type GridTableBatchContextValue,
+  useGridTableBatchSelection,
+} from '@shared/components/tables/hooks/useGridTableBatchSelection';
 import { useGridTableCellCache } from '@shared/components/tables/hooks/useGridTableCellCache';
 import { useGridTableColumnLayout } from '@shared/components/tables/hooks/useGridTableColumnLayout';
 import { useGridTableColumnsDropdown } from '@shared/components/tables/hooks/useGridTableColumnsDropdown';
@@ -184,6 +188,10 @@ export interface GridTableControllerResult<T> {
 
   // Profiler
   wrapWithProfiler: (node: ReactElement) => ReactElement;
+
+  // Batch select
+  batchContext: GridTableBatchContextValue | null;
+  batchBar: ReactNode;
 }
 
 // ---------------------------------------------------------------------------
@@ -231,6 +239,7 @@ export function useGridTableController<T>({
   diagnosticsLabel,
   diagnosticsMode = 'local',
   rowDetail,
+  batchSelection,
 }: GridTableProps<T>): GridTableControllerResult<T> {
   const sourceData = useMemo<T[]>(
     () => (Array.isArray(inputData) ? inputData : ([] as T[])),
@@ -348,6 +357,16 @@ export function useGridTableController<T>({
         canPageNext,
       };
 
+  const batch = useGridTableBatchSelection<T>({
+    batchSelection,
+    tableData,
+    keyExtractor,
+    orderedColumns,
+    renderedColumns,
+    onColumnWidthsChange,
+    isRowSelected,
+  });
+
   useEffect(() => {
     if (!diagnosticsLabel) {
       previousInputDataRef.current = inputData;
@@ -414,6 +433,7 @@ export function useGridTableController<T>({
     getRowClassName,
     onRowClick,
     onRowPointerClick,
+    onBatchRowPointerClick: batch.handleRowPointerClick,
     onRowSelectionClear,
     enableContextMenu,
     getCustomContextMenuItems,
@@ -441,15 +461,15 @@ export function useGridTableController<T>({
     canResetAutoWidthColumns: layoutCanResetAutoWidthColumns,
     resetAutoWidthColumns: resetLayoutAutoWidthColumns,
   } = useGridTableColumnLayout<T>({
-    columns: orderedColumns,
-    renderedColumns,
+    columns: batch.layoutColumns,
+    renderedColumns: batch.layoutRenderedColumns,
     tableRef,
     wrapperRef,
     tableData,
     controlledColumnWidths,
     externalColumnWidths,
     enableColumnResizing,
-    onColumnWidthsChange,
+    onColumnWidthsChange: batch.saveColumnWidths,
     useShortNames,
     virtualization,
   });
@@ -487,6 +507,7 @@ export function useGridTableController<T>({
     exportFilename,
     // The filter shortcut finds the filter of the table holding the keyboard.
     holdsKeyboard,
+    batchToolbarItems: batch.toolbarItems,
   });
   const filtersNode = (
     <>
@@ -504,7 +525,7 @@ export function useGridTableController<T>({
   );
 
   const { getCachedCellContent } = useGridTableCellCache<T>({
-    renderedColumns,
+    renderedColumns: batch.layoutRenderedColumns,
     getTextContent,
     data: tableData,
   });
@@ -663,8 +684,7 @@ export function useGridTableController<T>({
 
   const { renderSortIndicator, handleHeaderClick, handleHeaderContextMenu, headerContextMenuNode } =
     useGridTableHeaderActions<T>({
-      columns: orderedColumns,
-      lockedColumns,
+      columns: batch.layoutColumns,
       sortConfig,
       onSort,
       applyVisibilityChanges,
@@ -674,7 +694,7 @@ export function useGridTableController<T>({
   const renderRowContent = useGridTableRowRenderer({
     keyExtractor,
     getRowClassName: getRowClassNameWithDetail,
-    isRowSelected,
+    isRowSelected: batch.isRowSelected,
     getRowStyle,
     handleRowClick,
     handleRowMouseEnter,
@@ -696,7 +716,8 @@ export function useGridTableController<T>({
     handleResizeStart,
     handleResizeKeyDown,
     autoSizeColumn,
-    canReorderColumns: filteringEnabled && Boolean(columnsDropdownConfig?.onReorderColumn),
+    canReorderColumns:
+      filteringEnabled && Boolean(columnsDropdownConfig?.onReorderColumn) && !batch.active,
     reorderVisibleColumn,
     sortConfig,
   });
@@ -734,5 +755,7 @@ export function useGridTableController<T>({
     hasActiveFilters,
     onClearFilters: handleFilterReset,
     wrapWithProfiler,
+    batchContext: batch.contextValue,
+    batchBar: batch.bar,
   };
 }

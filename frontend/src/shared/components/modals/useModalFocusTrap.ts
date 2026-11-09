@@ -161,17 +161,29 @@ export const useModalFocusTrap = ({
     return getTabbableElements(ref.current, focusableSelector);
   }, [ref, focusableSelector]);
 
-  const focusFirst = useCallback(() => {
-    const root = ref.current;
-    if (!root) {
-      return false;
+  const focusFirst = useCallback(
+    (options?: FocusOptions) => {
+      const root = ref.current;
+      if (!root) {
+        return false;
+      }
+      const items = getFocusableItems();
+      const target =
+        items.find((item) => item.dataset.modalInitialFocus !== undefined) ?? items[0] ?? root;
+      target.focus(options);
+      return true;
+    },
+    [getFocusableItems, ref]
+  );
+
+  // For a modal that stays open while what it asks changes: focus goes back to the
+  // control it opened on. The modal is already on screen, perhaps scrolled, so the
+  // move must not scroll it.
+  const focusDefaultControl = useCallback(() => {
+    if (!disabled && isTopmostModal(modalIdRef.current)) {
+      focusFirst({ preventScroll: true });
     }
-    const items = getFocusableItems();
-    const target =
-      items.find((item) => item.dataset.modalInitialFocus !== undefined) ?? items[0] ?? root;
-    target.focus();
-    return true;
-  }, [getFocusableItems, ref]);
+  }, [disabled, focusFirst]);
 
   useEffect(() => {
     const root = ref.current;
@@ -268,4 +280,6 @@ export const useModalFocusTrap = ({
       document.removeEventListener('focusin', handleFocusIn, true);
     };
   }, [disabled, focusFirst, getFocusableItems, ref]);
+
+  return { focusDefaultControl };
 };

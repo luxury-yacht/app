@@ -67,6 +67,30 @@ are cleaned up when their cluster goes away.
   `frontend/src/shared/components/modals/DrainNodeModal.tsx`; the active or most
   recent drain attempt stays visible after a drain starts or completes.
 
+## Drain Target Binding
+
+A drain is many writes, so it has no single request to tie to a UID.
+
+- When the target carries the node's UID (batch select always sends it), the
+  cordon patch carries it and it is read again after the pods are listed. The
+  same UID at both points means the selected node held the name while the pods
+  were listed. A node replaced under the same name fails the drain before any
+  pod is removed, and the job does not report it as left cordoned.
+- Every drain removes only the pods it listed.
+  `backend/resources/nodes/drain_listed_pods.go` wraps the kubectl drain
+  helper's client, because the helper removes pods by namespace and name. Each
+  eviction or delete carries the listed pod's UID. The pod is read before each
+  attempt, and nothing is sent once the name is confirmed to hold another pod
+  or none: a pod recreated under the name counts as already removed. A 404 that
+  does not confirm that pod is gone (`errorstatus.ConfirmsObjectAbsent`) fails
+  the drain instead of counting the pod removed.
+- The timeout is how long a drain waits for pods to terminate. While it waits,
+  the timeout also bounds each of the helper's removal requests, so no eviction
+  goes out after it passes. A drain that does not wait for pods has no timeout,
+  and the cordon and the pod list are never under it. A cancelled drain reports
+  cancelled, whatever the helper's own error says.
+- A second drain of a node that has one running is refused as a `Conflict`.
+
 ## Drain Refresh Rule
 
 `object-maintenance` is live app-managed state, not a normal Kubernetes list

@@ -9,6 +9,7 @@ package nodes
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -27,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	kubectldrain "k8s.io/kubectl/pkg/drain"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
@@ -66,51 +69,66 @@ func (s *Service) Node(ctx context.Context, name string) (*NodeDetails, error) {
 	return s.buildNodeDetails(node, pods, nodeMetrics), nil
 }
 
-// Cordon marks a node as unschedulable.
-func (s *Service) Cordon(ctx context.Context, nodeName string) error {
-	return s.setUnschedulable(ctx, nodeName, true)
+// Cordon marks a node as unschedulable. A non-empty uid limits it to that node.
+func (s *Service) Cordon(ctx context.Context, nodeName, uid string) error {
+	return s.setUnschedulable(ctx, nodeName, uid, true)
 }
 
-// Uncordon marks a node as schedulable.
-func (s *Service) Uncordon(ctx context.Context, nodeName string) error {
-	return s.setUnschedulable(ctx, nodeName, false)
+// Uncordon marks a node as schedulable. A non-empty uid limits it to that node.
+func (s *Service) Uncordon(ctx context.Context, nodeName, uid string) error {
+	return s.setUnschedulable(ctx, nodeName, uid, false)
 }
 
-func (s *Service) setUnschedulable(ctx context.Context, nodeName string, unschedulable bool) error {
+func (s *Service) setUnschedulable(ctx context.Context, nodeName, uid string, unschedulable bool) error {
 	if err := s.ensureClient("Nodes"); err != nil {
 		return err
 	}
 
-	node, err := s.deps.KubernetesClient.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	patch, err := json.Marshal(common.SpecPatchForUID(map[string]any{"unschedulable": unschedulable}, uid))
 	if err != nil {
-		return fmt.Errorf("failed to get node %s: %w", nodeName, err)
+		return fmt.Errorf("failed to marshal node patch: %w", err)
 	}
-
-	drainer := &kubectldrain.Helper{
-		Ctx:    ctx,
-		Client: s.deps.KubernetesClient,
-		Out:    io.Discard,
-		ErrOut: io.Discard,
-	}
-	err = kubectldrain.RunCordonOrUncordon(drainer, node, unschedulable)
-	if err != nil {
+	if _, err := s.deps.KubernetesClient.CoreV1().Nodes().Patch(
+		ctx, nodeName, types.StrategicMergePatchType, patch, metav1.PatchOptions{},
+	); err != nil {
 		return fmt.Errorf("failed to patch node %s: %w", nodeName, err)
 	}
 	return nil
 }
 
-// Drain evicts or deletes pods on the node according to the provided options.
-func (s *Service) Drain(ctx context.Context, nodeName string, options restypes.DrainNodeOptions) (err error) {
+// RequireUID refuses when the node now under this name is not the one with this
+// UID. A drain is many writes, so it has no single request to bind to the UID.
+func (s *Service) RequireUID(ctx context.Context, nodeName, uid string) error {
+	if uid == "" {
+		return nil
+	}
+	if err := s.ensureClient("Nodes"); err != nil {
+		return err
+	}
+	node, err := s.deps.KubernetesClient.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to get node %s: %w", nodeName, err)
+	}
+	if string(node.UID) != uid {
+		return apierrors.NewConflict(corev1.Resource("nodes"), nodeName, errors.New("the node was replaced after it was selected"))
+	}
+	return nil
+}
+
+// Drain evicts or deletes pods on the node according to the provided options. A
+// non-empty uid limits it to that node.
+func (s *Service) Drain(ctx context.Context, nodeName, uid string, options restypes.DrainNodeOptions) (err error) {
 	job, err := s.prepareDrainJob(nodeName, options)
 	if err != nil {
 		return err
 	}
 
-	return s.runDrainJob(ctx, job, nodeName, options)
+	return s.runDrainJob(ctx, job, nodeName, uid, options)
 }
 
-// StartDrainWithCompletion starts a drain job and invokes onComplete after the job exits.
-func (s *Service) StartDrainWithCompletion(ctx context.Context, nodeName string, options restypes.DrainNodeOptions, onComplete func(string)) (*nodemaintenance.DrainJob, error) {
+// StartDrainWithCompletion starts a drain job and invokes onComplete after the job
+// exits. A non-empty uid limits it to that node.
+func (s *Service) StartDrainWithCompletion(ctx context.Context, nodeName, uid string, options restypes.DrainNodeOptions, onComplete func(string)) (*nodemaintenance.DrainJob, error) {
 	job, err := s.prepareDrainJob(nodeName, options)
 	if err != nil {
 		return nil, err
@@ -126,7 +144,7 @@ func (s *Service) StartDrainWithCompletion(ctx context.Context, nodeName string,
 		if onComplete != nil {
 			defer onComplete(job.ID)
 		}
-		_ = NewService(deps, store).runDrainJob(ctx, job, nodeName, options)
+		_ = NewService(deps, store).runDrainJob(ctx, job, nodeName, uid, options)
 	}()
 
 	return job, nil
@@ -150,19 +168,42 @@ func (s *Service) requireDrainStore() (*nodemaintenance.Store, error) {
 	return s.drainStore, nil
 }
 
-func (s *Service) runDrainJob(ctx context.Context, job *nodemaintenance.DrainJob, nodeName string, options restypes.DrainNodeOptions) (err error) {
+func (s *Service) runDrainJob(ctx context.Context, job *nodemaintenance.DrainJob, nodeName, uid string, options restypes.DrainNodeOptions) (err error) {
 	cordoned := false
 
 	defer func() {
-		s.finalizeDrain(job, cordoned, err)
+		s.finalizeDrain(job, cordoned, drainFailure(ctx, err))
 	}()
 
-	if err = s.cordonForDrain(ctx, job, nodeName); err != nil {
+	if err = s.cordonForDrain(ctx, job, nodeName, uid); err != nil {
 		return err
 	}
 	cordoned = true
 
-	return s.runKubectlDrain(ctx, nodeName, options, job)
+	return s.runKubectlDrain(ctx, nodeName, uid, options, job)
+}
+
+// drainFailure names a cancelled drain as cancelled. kubectl formats its errors
+// without wrapping them and words a cancellation as a timeout, so only the drain's
+// own context can show it.
+func drainFailure(ctx context.Context, err error) error {
+	if err != nil && errors.Is(ctx.Err(), context.Canceled) {
+		return context.Canceled
+	}
+	return err
+}
+
+// selectedNodeGoneError is a drain stopped because the node it cordoned no longer
+// holds its name, so there is no cordon left to report.
+type selectedNodeGoneError struct{ error }
+
+func (e selectedNodeGoneError) Unwrap() error { return e.error }
+
+func asSelectedNodeGone(err error, nodeName string) error {
+	if apierrors.IsConflict(err) || errorstatus.ConfirmsObjectAbsent(err, corev1.Resource("nodes"), nodeName) {
+		return selectedNodeGoneError{err}
+	}
+	return err
 }
 
 // finalizeDrain updates drain status when the drain operation finishes.
@@ -175,7 +216,8 @@ func (s *Service) finalizeDrain(job *nodemaintenance.DrainJob, cordoned bool, er
 			job.Complete(nodemaintenance.DrainStatusCancelled, "Drain cancelled")
 			return
 		}
-		if cordoned {
+		var nodeGone selectedNodeGoneError
+		if cordoned && !errors.As(err, &nodeGone) {
 			job.AddInfo(nodemaintenance.DrainPhaseCordonRetained, "Node remains cordoned after drain failure")
 		}
 		job.Complete(nodemaintenance.DrainStatusFailed, err.Error())
@@ -185,9 +227,9 @@ func (s *Service) finalizeDrain(job *nodemaintenance.DrainJob, cordoned bool, er
 }
 
 // cordonForDrain marks the node unschedulable and records drain events.
-func (s *Service) cordonForDrain(ctx context.Context, job *nodemaintenance.DrainJob, nodeName string) error {
+func (s *Service) cordonForDrain(ctx context.Context, job *nodemaintenance.DrainJob, nodeName, uid string) error {
 	job.AddInfo(nodemaintenance.DrainPhaseCordon, "Cordoning node")
-	if cordonErr := s.Cordon(ctx, nodeName); cordonErr != nil {
+	if cordonErr := s.Cordon(ctx, nodeName, uid); cordonErr != nil {
 		job.AddInfo(nodemaintenance.DrainPhaseError, fmt.Sprintf("Failed to cordon node: %v", cordonErr))
 		return fmt.Errorf("failed to cordon node before draining: %w", cordonErr)
 	}
@@ -225,7 +267,7 @@ func drainHelperTimeout(options restypes.DrainNodeOptions) time.Duration {
 	return time.Duration(*options.TimeoutSeconds) * time.Second
 }
 
-func (s *Service) runKubectlDrain(ctx context.Context, nodeName string, options restypes.DrainNodeOptions, job *nodemaintenance.DrainJob) error {
+func (s *Service) runKubectlDrain(ctx context.Context, nodeName, uid string, options restypes.DrainNodeOptions, job *nodemaintenance.DrainJob) error {
 	drainer := s.newDrainHelper(ctx, options, job)
 	list, errs := drainer.GetPodsForDeletion(nodeName)
 	if len(errs) > 0 {
@@ -233,11 +275,23 @@ func (s *Service) runKubectlDrain(ctx context.Context, nodeName string, options 
 		job.AddInfo(nodemaintenance.DrainPhaseError, err.Error())
 		return err
 	}
+	// Checked after the list: the same UID at the cordon and here means the selected
+	// node held the name while the pods were listed, and only those pods are removed.
+	if err := s.RequireUID(ctx, nodeName, uid); err != nil {
+		job.AddInfo(nodemaintenance.DrainPhaseError, err.Error())
+		return asSelectedNodeGone(err, nodeName)
+	}
 	if warnings := list.Warnings(); warnings != "" {
 		job.AddInfo(nodemaintenance.DrainPhaseWarning, warnings)
 	}
 
 	pods := list.Pods()
+	removalClient, err := clientForListedPods(ctx, drainer.Client, pods, !options.DisableEviction)
+	if err != nil {
+		job.AddInfo(nodemaintenance.DrainPhaseError, err.Error())
+		return err
+	}
+	drainer.Client = removalClient
 	job.AddInfo(nodemaintenance.DrainPhasePlan, fmt.Sprintf("%s %d pods", drainOperationLabel(options), len(pods)))
 	if options.SkipWaitForPodsToTerminate {
 		job.AddInfo(nodemaintenance.DrainPhaseSkipWait, "Submitting pod deletion or eviction without waiting for termination")
@@ -245,8 +299,14 @@ func (s *Service) runKubectlDrain(ctx context.Context, nodeName string, options 
 	}
 
 	job.AddInfo(nodemaintenance.DrainPhaseWait, "Waiting for pods to terminate")
+	removalCtx, cancelRemoval := withDrainTimeout(ctx, drainer.Timeout)
+	defer cancelRemoval()
+	drainer.Ctx = removalCtx
 	if err := drainer.DeleteOrEvictPods(pods); err != nil {
-		if isDrainTimeoutError(err, drainer.Timeout) {
+		if ctx.Err() != nil {
+			return err
+		}
+		if errors.Is(removalCtx.Err(), context.DeadlineExceeded) {
 			err = fmt.Errorf("drain timed out after %s while waiting for pods to terminate: %w", drainer.Timeout, err)
 		}
 		job.AddInfo(nodemaintenance.DrainPhaseError, err.Error())
@@ -254,6 +314,16 @@ func (s *Service) runKubectlDrain(ctx context.Context, nodeName string, options 
 	}
 	job.AddInfo(nodemaintenance.DrainPhaseWaitComplete, "All pods drained")
 	return nil
+}
+
+// withDrainTimeout puts the drain's timeout on kubectl's requests too. Its own timer
+// is checked only between them, so a slow request could outlast it and the next
+// eviction still go out.
+func withDrainTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if timeout <= 0 {
+		return context.WithCancel(ctx)
+	}
+	return context.WithTimeout(ctx, timeout)
 }
 
 func (s *Service) newDrainHelper(ctx context.Context, options restypes.DrainNodeOptions, job *nodemaintenance.DrainJob) *kubectldrain.Helper {
@@ -348,18 +418,6 @@ func removePodWithoutWait(drainer *kubectldrain.Helper, pod corev1.Pod, mode pod
 	return nil
 }
 
-func isDrainTimeoutError(err error, timeout time.Duration) bool {
-	if timeout <= 0 || err == nil {
-		return false
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	message := err.Error()
-	return strings.Contains(message, "global timeout reached") ||
-		strings.Contains(message, "context deadline exceeded")
-}
-
 func drainOperationLabel(options restypes.DrainNodeOptions) string {
 	if options.DisableEviction {
 		return "Deleting"
@@ -409,13 +467,14 @@ func drainPodErrorPhase(usingEviction bool) nodemaintenance.DrainEventPhase {
 	return nodemaintenance.DrainPhaseDeleteError
 }
 
-// Delete removes a node from the cluster.
-func (s *Service) Delete(ctx context.Context, nodeName string, force bool) error {
+// Delete removes a node from the cluster. A non-empty uid limits the delete to
+// that node.
+func (s *Service) Delete(ctx context.Context, nodeName string, force bool, uid string) error {
 	if err := s.ensureClient("Nodes"); err != nil {
 		return err
 	}
 
-	deleteOptions := metav1.DeleteOptions{}
+	deleteOptions := common.UserDeleteOptions(uid)
 	if force {
 		zero := int64(0)
 		deleteOptions.GracePeriodSeconds = &zero
@@ -550,15 +609,10 @@ func projectNodeTaints(taints []corev1.Taint) []NodeTaint {
 }
 
 func (s *Service) listPodsForNode(ctx context.Context, name string) []corev1.Pod {
-	client := s.deps.KubernetesClient
-	if client == nil {
-		return nil
-	}
-
 	ctx, cancel := context.WithTimeout(ctx, config.NamespaceOperationTimeout)
 	defer cancel()
 
-	podList, err := client.CoreV1().Pods("").List(ctx, metav1.ListOptions{
+	podList, err := s.deps.KubernetesClient.CoreV1().Pods("").List(ctx, metav1.ListOptions{
 		FieldSelector: nodePodFieldSelector(name),
 	})
 	if err != nil {

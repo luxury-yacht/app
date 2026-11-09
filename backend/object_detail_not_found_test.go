@@ -20,6 +20,7 @@ import (
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	clientfake "k8s.io/client-go/kubernetes/fake"
+	clienttesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
@@ -58,7 +59,7 @@ func notFoundTestCustomDeployment(namespace, name string) *unstructured.Unstruct
 // newNotFoundDetailCluster serves apps/v1 Deployments and a same-kind custom
 // resource in example.com. typed seeds the typed detail fetcher's client;
 // live seeds the uncached GVK read that confirms an object is gone.
-func newNotFoundDetailCluster(t *testing.T, typed []runtime.Object, live []runtime.Object) *ResourceGateway {
+func newNotFoundDetailCluster(t *testing.T, typed []runtime.Object, live []runtime.Object, configureLive ...func(*dynamicfake.FakeDynamicClient)) *ResourceGateway {
 	t.Helper()
 	kubeClient := clientfake.NewClientset(typed...)
 	allowSelfSubjectAccessReviews(kubeClient)
@@ -75,6 +76,9 @@ func newNotFoundDetailCluster(t *testing.T, typed []runtime.Object, live []runti
 	dynamicClient := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
 		{Group: "example.com", Version: "v1", Resource: "deployments"}: "DeploymentList",
 	}, live...)
+	for _, configure := range configureLive {
+		configure(dynamicClient)
+	}
 	return newObjectDetailResourceGateway(map[string]*clusterClients{
 		notFoundDetailClusterID: {
 			meta:              ClusterMeta{ID: notFoundDetailClusterID, Name: "ctx"},
@@ -135,6 +139,19 @@ func TestObjectDetailsNotFoundNamesOnlyAConfirmedMissingObject(t *testing.T) {
 
 		require.Equal(t, http.StatusNotFound, recorder.Code)
 		require.Nil(t, status.Ref)
+	})
+
+	t.Run("the read gets a 404 that names no object", func(t *testing.T) {
+		gateway := newNotFoundDetailCluster(t, nil, nil, func(client *dynamicfake.FakeDynamicClient) {
+			client.PrependReactor("get", "deployments", func(clienttesting.Action) (bool, runtime.Object, error) {
+				return true, nil, apierrors.NewGenericServerResponse(http.StatusNotFound, "", schema.GroupResource{}, "", "not found", 0, false)
+			})
+		})
+
+		recorder, status := fetchDeploymentDetailsOverRefresh(t, gateway)
+
+		require.Equal(t, http.StatusNotFound, recorder.Code)
+		require.Nil(t, status.Ref, "the panel would close an object that may still exist")
 	})
 
 	t.Run("same-name objects in another namespace or group", func(t *testing.T) {
