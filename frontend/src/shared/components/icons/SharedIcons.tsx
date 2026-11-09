@@ -979,6 +979,34 @@ export const DownloadIcon: React.FC<FixedColorIconProps> = ({
   </svg>
 );
 
+/** Three list rows, each with an empty box (batch select). */
+export const BatchSelectIcon: React.FC<FixedColorIconProps> = ({
+  width = 24,
+  height = 24,
+  className,
+}) => (
+  <svg
+    viewBox="0 0 24 24"
+    width={width}
+    height={height}
+    className={className}
+    aria-hidden="true"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={1.75}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    focusable="false"
+  >
+    <rect x="3" y="2.125" width="4.25" height="4.25" rx="0.75" />
+    <path d="M11.25 4.25H21" />
+    <rect x="3" y="9.875" width="4.25" height="4.25" rx="0.75" />
+    <path d="M11.25 12H21" />
+    <rect x="3" y="17.625" width="4.25" height="4.25" rx="0.75" />
+    <path d="M11.25 19.75H21" />
+  </svg>
+);
+
 /** Frame split into three columns (table columns). */
 export const ColumnsIcon: React.FC<FixedColorIconProps> = ({
   width = 24,

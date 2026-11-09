@@ -8,7 +8,7 @@
  */
 
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
-import { DropdownSelectAllIcon } from '@shared/components/icons/DropdownIcons';
+import { BatchSelectIcon } from '@shared/components/icons/SharedIcons';
 import type {
   ColumnWidthState,
   GridColumnDefinition,
@@ -85,7 +85,8 @@ const BatchHeaderCheckbox: React.FC = () => {
 /** Floats over the bottom of the table while the selected rows have an action. */
 const GridTableBatchBar: React.FC<{ actions: GridTableBatchAction[] }> = ({ actions }) => (
   <div className="gridtable-batch-bar-anchor">
-    <div className="gridtable-batch-bar" role="toolbar" aria-label="Batch actions">
+    <div className="gridtable-batch-bar" role="toolbar" aria-label="Batch Operations">
+      <span className="gridtable-batch-bar-title">Batch Operations</span>
       {actions.map((action) => (
         <button
           key={action.id}
@@ -299,7 +300,7 @@ export function useGridTableBatchSelection<T>({
       {
         type: 'toggle',
         id: 'gridtable-batch-select',
-        icon: <DropdownSelectAllIcon width={16} height={16} />,
+        icon: <BatchSelectIcon width={18} height={18} />,
         title: active ? 'Exit batch select' : 'Batch select',
         active,
         onClick: () => {

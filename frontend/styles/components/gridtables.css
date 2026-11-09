@@ -511,6 +511,13 @@ body.dock-right-open.dock-bottom-open .content-body .gridtable-wrapper {
   white-space: nowrap;
 }
 
+.gridtable-batch-bar-title {
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+}
+
 .gridtable-batch-action {
   display: inline-flex;
   flex-shrink: 0;
