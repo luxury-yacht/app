@@ -107,6 +107,37 @@ virtualization, and native table accessibility. Apply the
   table's rows, cells, or controls. The parent already takes the dock offsets,
   so a nested table inside the detail does not.
 
+## Batch select
+
+- A table opts in with `batchSelection`, which adds one toolbar button and
+  nothing else to the toolbar. The checkbox column exists only while the mode is
+  on, and a bar of labelled actions, each stating its count, floats over the
+  bottom of the table only while the selected rows have an action, so a table at
+  rest gives up no space to either.
+  `useBatchObjectActions` owns the state and takes eligibility from
+  `resolveObjectActionPolicy` and the object's permission checks, the same
+  answers a row's context menu uses.
+- The bar sits in a zero-height anchor between the body and footer, follows the
+  dock offsets, and stays on one line, scrolling sideways in a table too narrow
+  for it. While it shows, the body gains bottom space so the last rows can
+  scroll out from under it.
+- While the mode is on, a row click selects instead of running
+  `onRowPointerClick`, and Shift extends the range. Links in a row still open
+  their object. The keyboard reaches a row's checkbox as a row control, and
+  `Space` keeps its meaning on the table.
+- Only rows on screen count. Rows hidden by a filter or on another page are
+  neither counted nor acted on, and the header checkbox covers the rows shown.
+  Query-wide selection stays out, per the
+  [large-data contract](../architecture/large-data.md#contract).
+- The checkbox column joins after the column order and visibility controllers,
+  which keeps it out of the Columns menu, saved table state, and downloads. Its
+  checkboxes read selection from context because cells are cached by row.
+- Each selected object runs through `RunObjectAction` with its complete
+  identity, a few at a time. A partial failure keeps the failed rows selected.
+- A view that lists kinds too consequential to remove several at a time does not
+  opt in: Browse, CRDs, Namespaces, and Helm. Nodes offer only cordon and
+  uncordon.
+
 ## DOM And Identity Rules
 
 - Rows render `data-row-key` and cells `data-column`; treat them as data. Look

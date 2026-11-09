@@ -104,6 +104,23 @@
   margin-top: 0.75rem;
 }
 
+/* A long list scrolls inside the modal, and long names truncate so every column stays visible. */
+.confirmation-modal-details-scroll--long {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.confirmation-modal-details-scroll--long + .confirmation-modal-notice {
+  margin-top: 0.75rem;
+}
+
+.confirmation-modal-details-scroll--long td.monospace {
+  width: 100%;
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .confirmation-modal-footer {
   padding: var(--spacing-lg) 1.5rem;
   border-top: 1px solid var(--color-border);

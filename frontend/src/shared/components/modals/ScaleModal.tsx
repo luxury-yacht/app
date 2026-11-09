@@ -25,7 +25,22 @@ interface ScaleModalProps {
   onApply: () => void;
   onScaleToZero?: () => void;
   onValueChange: (value: number) => void;
+  /** Applying the starting value is meaningful, as when scaling many workloads to one count. */
+  allowUnchanged?: boolean;
 }
+
+// Tracks the replica count from when the modal first opens, so the Scale button
+// can stay disabled until the value changes.
+const useValueUnchangedSinceOpen = (isOpen: boolean, value: number): boolean => {
+  const initialValueRef = useRef<number | null>(null);
+  if (isOpen && initialValueRef.current === null) {
+    initialValueRef.current = value;
+  }
+  if (!isOpen) {
+    initialValueRef.current = null;
+  }
+  return value === initialValueRef.current;
+};
 
 const ScaleModal = ({
   isOpen,
@@ -39,6 +54,7 @@ const ScaleModal = ({
   onApply,
   onScaleToZero,
   onValueChange,
+  allowUnchanged = false,
 }: ScaleModalProps) => {
   const elementIdPrefix = useId();
   // Local string state so the user can clear the field while typing.
@@ -49,16 +65,7 @@ const ScaleModal = ({
     setInputText(String(value));
   }, [value]);
 
-  // Track the replica count when the modal first opens so we can disable
-  // the Scale button when the value hasn't changed.
-  const initialValueRef = useRef<number | null>(null);
-  if (isOpen && initialValueRef.current === null) {
-    initialValueRef.current = value;
-  }
-  if (!isOpen) {
-    initialValueRef.current = null;
-  }
-  const unchanged = value === initialValueRef.current;
+  const unchanged = useValueUnchangedSinceOpen(isOpen, value) && !allowUnchanged;
 
   const modalRef = useRef<HTMLDivElement>(null);
 

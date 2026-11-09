@@ -207,4 +207,13 @@ describe('ClusterViewConfig', () => {
     expect(labels).toContain('Open Details');
     expect(labels).not.toContain('Open Map');
   });
+
+  it('offers batch select on an aggregated view', async () => {
+    await start();
+
+    expect(view.container.querySelector('.gridtable-row')).not.toBeNull();
+    expect(
+      view.container.querySelector('.icon-bar-button[aria-label="Batch select"]')
+    ).not.toBeNull();
+  });
 });

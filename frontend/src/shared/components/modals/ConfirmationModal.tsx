@@ -27,6 +27,8 @@ export interface ConfirmationModalTableColumn {
 export interface ConfirmationModalDetailsTable {
   columns: ConfirmationModalTableColumn[];
   rows: string[][];
+  /** The table may hold many rows: it scrolls, and fixed-width values truncate. */
+  longList?: boolean;
 }
 
 /** The cluster object a confirmation acts on. */
@@ -66,6 +68,8 @@ interface ConfirmationModalProps {
   onSecondaryAction?: () => void;
   onConfirm: () => void;
   onCancel: () => void;
+  /** Disables the footer while the confirmed work runs. */
+  busy?: boolean;
 }
 
 const ConfirmationTarget: React.FC<{
@@ -100,7 +104,9 @@ const ConfirmationTarget: React.FC<{
 const ConfirmationDetailsTable: React.FC<{ table: ConfirmationModalDetailsTable }> = ({
   table,
 }) => (
-  <div className="confirmation-modal-details-scroll">
+  <div
+    className={`confirmation-modal-details-scroll${table.longList ? ' confirmation-modal-details-scroll--long' : ''}`}
+  >
     <table className="confirmation-modal-details-table">
       <thead>
         <tr>
@@ -143,6 +149,7 @@ const ConfirmationModalContent: React.FC<Omit<ConfirmationModalProps, 'isOpen'>>
   onSecondaryAction,
   onConfirm,
   onCancel,
+  busy = false,
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
 
@@ -187,10 +194,21 @@ const ConfirmationModalContent: React.FC<Omit<ConfirmationModalProps, 'isOpen'>>
             {secondaryActionText}
           </button>
         )}
-        <button type="button" className="button cancel" onClick={onCancel} data-modal-initial-focus>
+        <button
+          type="button"
+          className="button cancel"
+          onClick={onCancel}
+          disabled={busy}
+          data-modal-initial-focus
+        >
           {cancelText}
         </button>
-        <button type="button" className={`button ${confirmButtonClass}`} onClick={onConfirm}>
+        <button
+          type="button"
+          className={`button ${confirmButtonClass}`}
+          onClick={onConfirm}
+          disabled={busy}
+        >
           {confirmText}
         </button>
       </div>

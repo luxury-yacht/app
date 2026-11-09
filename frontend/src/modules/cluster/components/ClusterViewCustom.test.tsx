@@ -429,4 +429,56 @@ describe('ClusterViewCustom', () => {
     expect(deleteConfirmation()).toBeUndefined();
     expect(app.backend.calls('RunObjectAction')).toEqual([]);
   });
+
+  it('offers batch select on custom resources and deletes with the full identity', async () => {
+    app.backend.answer('RunObjectAction', () => ({}));
+    serveCatalog(() => [catalogItem(widget)]);
+    await start();
+
+    await act(async () => {
+      requireValue(
+        view.container.querySelector<HTMLElement>('.icon-bar-button[aria-label="Batch select"]'),
+        'Batch select'
+      ).click();
+    });
+    await act(async () => {
+      requireValue(
+        view.container.querySelector<HTMLElement>('thead input[type="checkbox"]'),
+        'header checkbox'
+      ).click();
+    });
+    await app.settle();
+
+    await act(async () => {
+      requireValue(
+        Array.from(view.container.querySelectorAll<HTMLElement>('.gridtable-batch-action')).find(
+          (button) =>
+            button.querySelector('.gridtable-batch-action-label')?.textContent === 'Delete 1'
+        ),
+        'Delete 1'
+      ).click();
+    });
+    await act(async () => {
+      requireValue(
+        Array.from(
+          document.body.querySelectorAll<HTMLButtonElement>('.confirmation-modal-footer button')
+        ).find((button) => button.textContent === 'Delete 1'),
+        'confirm'
+      ).click();
+    });
+    await app.settle();
+
+    expect(app.backend.calls('RunObjectAction').map(([request]) => request)).toEqual([
+      {
+        action: 'delete',
+        target: expect.objectContaining({
+          clusterId: dev.clusterId,
+          group: widget.group,
+          version: widget.version,
+          kind: widget.kind,
+          name: widget.name,
+        }),
+      },
+    ]);
+  });
 });

@@ -39,6 +39,8 @@ interface CRDsViewProps {
 const crdsSpec: AggregatedResourceGridViewSpec<CRDsData> = {
   domain: 'cluster-crds',
   viewId: 'cluster-crds',
+  // Deleting a CRD deletes every object of its kind.
+  disableBatchSelect: true,
   supportsCustomMetadataColumns: true,
   labels: { cluster: 'Cluster CRDs' },
   emptyMessage: () => 'No CRDs found',

@@ -648,4 +648,40 @@ describe('NsViewWorkloads', () => {
 
     expect(viewStreams()).toEqual([]);
   });
+
+  it('selects a workload in batch-select mode instead of highlighting it for its pods', async () => {
+    serve([workload('Deployment', 'web'), workload('Deployment', 'api')]);
+    await start();
+    const toolbarButton = (label: string) =>
+      view.container.querySelector<HTMLButtonElement>(`.icon-bar-button[aria-label="${label}"]`);
+
+    const batchActionLabels = () =>
+      Array.from(view.container.querySelectorAll('.gridtable-batch-action-label')).map(
+        (label) => label.textContent
+      );
+
+    await activate(() => requireValue(toolbarButton('Batch select'), 'Batch select').click());
+    await activate(() =>
+      requireValue(rowOf('web').querySelector<HTMLElement>('[data-column="age"]'), 'age').click()
+    );
+    await app.settle();
+
+    expect(rowOf('web').dataset.rowSelected).toBe('true');
+    expect(rowOf('api').dataset.rowSelected).toBeUndefined();
+    expect(batchActionLabels()).toContain('Restart 1');
+    expect(batchActionLabels()).toContain('Scale 1');
+  });
+
+  it('offers batch select on the workloads table, not on a row’s attached pods', async () => {
+    const web = workload('Deployment', 'web');
+    serve([web], [podOf(web, 'web-0')]);
+    await start();
+
+    await activate(() => podsToggle('web').click());
+
+    expect(attachedPodNames('web')).toEqual(['web-0']);
+    expect(
+      view.container.querySelectorAll('.icon-bar-button[aria-label="Batch select"]')
+    ).toHaveLength(1);
+  });
 });

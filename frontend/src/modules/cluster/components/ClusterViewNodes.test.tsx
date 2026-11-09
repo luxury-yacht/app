@@ -451,4 +451,28 @@ describe('ClusterViewNodes', () => {
     await app.settle();
     expect(nodeNames()).toEqual(['node-1']);
   });
+
+  it('offers only cordon and uncordon in batch-select mode', async () => {
+    await start(() => [node('node-1'), node('node-2', { unschedulable: true })]);
+
+    await click(
+      requireValue(
+        view.container.querySelector<HTMLElement>('.icon-bar-button[aria-label="Batch select"]'),
+        'Batch select'
+      )
+    );
+    await click(
+      requireValue(
+        view.container.querySelector<HTMLElement>('thead input[type="checkbox"]'),
+        'header checkbox'
+      )
+    );
+    await app.settle();
+
+    expect(
+      Array.from(view.container.querySelectorAll('.gridtable-batch-action-label')).map(
+        (label) => label.textContent
+      )
+    ).toEqual(['Cordon 1 of 2', 'Uncordon 1 of 2']);
+  });
 });

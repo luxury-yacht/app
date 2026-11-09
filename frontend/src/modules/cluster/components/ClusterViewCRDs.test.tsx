@@ -78,4 +78,18 @@ describe('ClusterViewCRDs', () => {
     // Every row is a CustomResourceDefinition, so there is nothing to filter by kind.
     expect(view.container.querySelector('[name="gridtable-filter-kind"]')).toBeNull();
   });
+
+  // Deleting a CRD deletes every object of its kind, so it stays a one-at-a-time action.
+  it('does not offer batch select', async () => {
+    dev = app.cluster({ name: 'dev', context: 'alpha' });
+    app.namespaces(dev, ['team-a']);
+    app.startScreen(dev);
+    app.preferences({ sidebarClusterExtensionsExpanded: true });
+    app.serveTable(dev, 'cluster-crds', { rows: [crd('foos.example.com')] });
+    view = await app.mountApp();
+    await view.goTo({ clusterView: 'crds' });
+
+    expect(view.container.querySelector('.gridtable-row')).not.toBeNull();
+    expect(view.container.querySelector('.icon-bar-button[aria-label="Batch select"]')).toBeNull();
+  });
 });

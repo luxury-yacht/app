@@ -225,7 +225,7 @@ const finalizerRemovalConfirmation = (
   onCancel,
 });
 
-const clampReplicas = (value: number): number => Math.max(0, Math.min(9999, value));
+export const clampReplicas = (value: number): number => Math.max(0, Math.min(9999, value));
 
 const extractDesiredReplicas = (object: ObjectActionData): number => {
   if (typeof object.desiredReplicas === 'number' && Number.isFinite(object.desiredReplicas)) {
@@ -251,7 +251,7 @@ const portForwardTargetFor = (object: ObjectActionData): PortForwardTarget => ({
   ports: [],
 });
 
-const actionTargetFor = (object: ObjectActionData, action: string) => {
+export const actionTargetFor = (object: ObjectActionData, action: string) => {
   if (object.requiresExplicitVersion && !object.explicitVersionProvided) {
     throw new Error(
       `Cannot ${action} ${object.kind}/${object.name}: version missing on custom resource row`
@@ -297,7 +297,7 @@ const actionIdentitySources = (object: ObjectActionData) => {
   return { capability, source, targetSource: { ...source, kind: object.kind } };
 };
 
-const resolveObjectActionPermissions = (
+export const resolveObjectActionPermissions = (
   object: ObjectActionData,
   permissionMap: PermissionMap
 ): ObjectActionPermissionStatuses => {
@@ -344,7 +344,7 @@ const actionPermissionDescriptors = (object: ObjectActionData) => {
 };
 
 // The checks the permission map has no answer for yet.
-const missingPermissionChecks = (
+export const missingPermissionChecks = (
   object: ObjectActionData,
   permissionMap: PermissionMap
 ): PermissionCheck[] =>
