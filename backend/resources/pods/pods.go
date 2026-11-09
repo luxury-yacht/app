@@ -76,7 +76,7 @@ func (s *Service) DeletePod(ctx context.Context, namespace, name, uid string) er
 		return fmt.Errorf("pod name is required")
 	}
 
-	if err := s.deps.KubernetesClient.CoreV1().Pods(namespace).Delete(ctx, name, common.DeleteOptionsForUID(uid)); err != nil {
+	if err := s.deps.KubernetesClient.CoreV1().Pods(namespace).Delete(ctx, name, common.UserDeleteOptions(uid)); err != nil {
 		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to delete pod %s/%s", namespace, name), "delete", Identity, "Pod")
 		return fmt.Errorf("failed to delete pod: %w", err)
 	}

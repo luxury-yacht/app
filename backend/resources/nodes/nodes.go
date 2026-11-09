@@ -474,7 +474,7 @@ func (s *Service) Delete(ctx context.Context, nodeName string, force bool, uid s
 		return err
 	}
 
-	deleteOptions := common.DeleteOptionsForUID(uid)
+	deleteOptions := common.UserDeleteOptions(uid)
 	if force {
 		zero := int64(0)
 		deleteOptions.GracePeriodSeconds = &zero

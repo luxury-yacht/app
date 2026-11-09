@@ -83,6 +83,18 @@ func TestRunObjectActionDeleteHonorsTheTargetUID(t *testing.T) {
 				actions: dynamicClient.Actions,
 			}
 		}},
+		{"Job", func(t *testing.T) deleteUIDFixture {
+			app := newCollidingDBInstanceCluster(t, clusterID)
+			dynamicClient := app.clusters[clusterID].dynamicClient.(*dynamicfake.FakeDynamicClient)
+			dynamicClient.PrependReactor("delete", "jobs", func(clienttesting.Action) (bool, runtime.Object, error) {
+				return true, nil, nil
+			})
+			return deleteUIDFixture{
+				app:     app,
+				target:  objectActionTarget(clusterID, "batch", "v1", "Job", "default", "nightly"),
+				actions: dynamicClient.Actions,
+			}
+		}},
 	}
 
 	for _, kind := range kinds {
@@ -98,6 +110,18 @@ func TestRunObjectActionDeleteHonorsTheTargetUID(t *testing.T) {
 			require.NotNil(t, preconditions, "the API server has nothing to compare the object against")
 			require.NotNil(t, preconditions.UID)
 			require.Equal(t, types.UID("uid-the-user-saw"), *preconditions.UID)
+		})
+
+		// Left unset, the API server orphans the Pods of a batch/v1 Job.
+		t.Run(kind.name+" takes what it owns with it, as kubectl does", func(t *testing.T) {
+			fixture := kind.setup(t)
+
+			_, err := fixture.app.gateway.RunObjectAction(ObjectActionRequest{Action: ObjectActionDelete, Target: fixture.target})
+			require.NoError(t, err)
+
+			policy := deleteOptionsSent(t, fixture.actions()).PropagationPolicy
+			require.NotNil(t, policy, "the API server would fall back to the kind's own default")
+			require.Equal(t, metav1.DeletePropagationBackground, *policy)
 		})
 
 		t.Run(kind.name+" without a UID is deleted by name", func(t *testing.T) {

@@ -51,7 +51,7 @@ func (s *Service) DeleteByGVK(ctx context.Context, gvk schema.GroupVersionKind, 
 		return fmt.Errorf("failed to create dynamic client: %w", err)
 	}
 
-	deleteOptions := common.DeleteOptionsForUID(uid)
+	deleteOptions := common.UserDeleteOptions(uid)
 	var deleteErr error
 	if isNamespaced {
 		if namespace == "" {
