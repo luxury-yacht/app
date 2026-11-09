@@ -11,12 +11,11 @@
 
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import ContextMenu from '@shared/components/ContextMenu';
+import { clampReplicas } from '@shared/components/modals/scaleModalModel';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import type { ObjectActionData } from '@shared/hooks/useObjectActions';
 import React, { useMemo, useState } from 'react';
 import './ActionsMenu.css';
-
-const clampReplicas = (value: number): number => Math.max(0, Math.min(9999, value));
 
 interface ActionsMenuProps {
   object: ObjectActionData | null;

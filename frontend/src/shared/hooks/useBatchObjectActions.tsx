@@ -39,6 +39,7 @@ import {
 import BatchDrainModal from '@shared/components/modals/BatchDrainModal';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import ScaleModal from '@shared/components/modals/ScaleModal';
+import { clampReplicas } from '@shared/components/modals/scaleModalModel';
 import type {
   GridTableBatchAction,
   GridTableBatchSelectedRow,
@@ -50,7 +51,6 @@ import {
 } from '@shared/hooks/nodeActionPermissions';
 import {
   actionTargetFor,
-  clampReplicas,
   isUndrainedNode,
   missingPermissionChecks,
   resolveObjectActionPermissions,

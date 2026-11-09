@@ -954,6 +954,23 @@ export const PlusIcon: React.FC<FixedColorIconProps> = ({ width = 24, height = 2
   </svg>
 );
 
+export const MinusIcon: React.FC<FixedColorIconProps> = ({
+  width = 24,
+  height = 24,
+  className,
+}) => (
+  <svg
+    viewBox="0 0 16 16"
+    width={width}
+    height={height}
+    className={className}
+    aria-hidden="true"
+    focusable="false"
+  >
+    <path d="M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+  </svg>
+);
+
 /** Arrow down onto a line (download). */
 export const DownloadIcon: React.FC<FixedColorIconProps> = ({
   width = 24,

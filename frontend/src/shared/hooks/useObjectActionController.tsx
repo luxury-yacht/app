@@ -41,6 +41,7 @@ import ConfirmationModal, {
 } from '@shared/components/modals/ConfirmationModal';
 import RollbackModal from '@shared/components/modals/RollbackModal';
 import ScaleModal from '@shared/components/modals/ScaleModal';
+import { clampReplicas } from '@shared/components/modals/scaleModalModel';
 import {
   nodeActionPermissionInputs,
   resolveNodeActionPermissionStatuses,
@@ -225,8 +226,6 @@ const finalizerRemovalConfirmation = (
   onConfirm,
   onCancel,
 });
-
-export const clampReplicas = (value: number): number => Math.max(0, Math.min(9999, value));
 
 const extractDesiredReplicas = (object: ObjectActionData): number => {
   if (typeof object.desiredReplicas === 'number' && Number.isFinite(object.desiredReplicas)) {
