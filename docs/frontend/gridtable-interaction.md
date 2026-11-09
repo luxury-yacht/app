@@ -147,11 +147,17 @@ virtualization, and native table accessibility. Apply the
   identity, a few at a time. A partial failure keeps the failed rows selected.
 - Every batch write also sends the row's UID, and the API server refuses it for
   any other object: a delete precondition, `metadata.uid` in a patch, or the UID
-  on a scale update. A drain is many writes, so it checks the UID before it
-  starts. A replacement created under the same name is left alone, and a row
-  with no UID is not offered any action.
-- A batch restart is stamped once, so retrying after a lost response writes the
-  same value and does not start a second rollout.
+  on a scale update. A drain binds its cordon the same way and checks the UID
+  again after listing pods, so it only removes pods from the selected node. A
+  replacement created under the same name is left alone, and a row with no UID
+  is not offered any action.
+- A failed restart offers no Retry: it may have started despite the error, and
+  repeating it would roll the workload again. Failed rows stay selected, so
+  restarting them is a new, confirmed action.
+- A delete answered NotFound counts as done. Each call has a 30-second deadline,
+  because the running dialog cannot be dismissed; a call that times out is listed
+  as failed and may still complete. Other failures also go to the app error
+  pipeline, which keeps expected cluster outcomes out of Sentry.
 - Confirmations and failure lists group by group, version, and kind. They add an
   API Version column when one kind name spans several API versions.
 - A view that lists kinds too consequential to remove several at a time does not

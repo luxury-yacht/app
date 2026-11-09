@@ -607,7 +607,6 @@ export interface ObjectActionRequest {
     "portForward"?: ObjectActionPortForwardOptions | null;
     "debugContainer"?: ObjectActionDebugContainerOptions | null;
     "revision"?: number | null;
-    "restartedAt"?: string;
     "finalizer"?: string;
     "finalizerPath"?: string;
 }

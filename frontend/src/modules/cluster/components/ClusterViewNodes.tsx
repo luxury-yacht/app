@@ -403,9 +403,17 @@ const NodesTable: React.FC<NodesTableProps> = React.memo(
     });
 
     // Get context menu items
+    const { activeDrainFor } = nodeMaintenance;
     const getActionObject = useCallback(
-      (row: ClusterNodeRow) => ({ ...nodeReference(row), unschedulable: row.unschedulable }),
-      [nodeReference]
+      (row: ClusterNodeRow) => {
+        const reference = nodeReference(row);
+        return {
+          ...reference,
+          unschedulable: row.unschedulable,
+          drainRunning: Boolean(activeDrainFor(reference.clusterId, reference.name)),
+        };
+      },
+      [activeDrainFor, nodeReference]
     );
 
     const getRowContextMenuItems = useCallback(

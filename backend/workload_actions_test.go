@@ -142,7 +142,7 @@ func TestRestartWorkloadAddsRestartAnnotation(t *testing.T) {
 			detailKey := liveDetailCacheKey(tc.kind, "default", "demo")
 			gateway.seedResponseCache(workloadClusterID, detailKey, "stale")
 
-			err := gateway.restartWorkloadAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "apps", Version: "v1", Kind: tc.kind, Name: "demo"}, "")
+			err := gateway.restartWorkloadAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "apps", Version: "v1", Kind: tc.kind, Name: "demo"})
 			require.NoError(t, err)
 			_, cached := gateway.responseCacheLookup(workloadClusterID, detailKey)
 			require.False(t, cached, "expected workload detail cache to be evicted after restart")
@@ -167,11 +167,11 @@ func TestRestartWorkloadErrors(t *testing.T) {
 	allowSelfSubjectAccessReviews(fakeClient)
 	gateway := newWorkloadResourceGateway(fakeClient)
 
-	err := gateway.restartWorkloadAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "batch", Version: "v1", Kind: "Job", Name: "demo"}, "")
+	err := gateway.restartWorkloadAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "batch", Version: "v1", Kind: "Job", Name: "demo"})
 	require.EqualError(t, err, `restart not supported for workload kind "Job"`)
 
 	nilClientGateway := newWorkloadResourceGateway(nil)
-	err = nilClientGateway.restartWorkloadAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "apps", Version: "v1", Kind: "Deployment", Name: "demo"}, "")
+	err = nilClientGateway.restartWorkloadAction(ObjectActionTargetRef{ClusterID: workloadClusterID, Namespace: "default", Group: "apps", Version: "v1", Kind: "Deployment", Name: "demo"})
 	require.EqualError(t, err, "kubernetes client is not initialized")
 }
 
@@ -179,11 +179,11 @@ func TestWorkloadActionsRequireNamespacedObjectIdentity(t *testing.T) {
 	gateway := newResourceGatewayFixture().gateway
 
 	require.EqualError(t,
-		gateway.restartWorkloadAction(ObjectActionTargetRef{ClusterID: "", Namespace: "", Group: "apps", Version: "v1", Kind: "Deployment", Name: "demo"}, ""),
+		gateway.restartWorkloadAction(ObjectActionTargetRef{ClusterID: "", Namespace: "", Group: "apps", Version: "v1", Kind: "Deployment", Name: "demo"}),
 		"namespace is required",
 	)
 	require.EqualError(t,
-		gateway.restartWorkloadAction(ObjectActionTargetRef{ClusterID: "", Namespace: "default", Group: "apps", Version: "v1", Kind: "Deployment", Name: ""}, ""),
+		gateway.restartWorkloadAction(ObjectActionTargetRef{ClusterID: "", Namespace: "default", Group: "apps", Version: "v1", Kind: "Deployment", Name: ""}),
 		"name is required",
 	)
 	require.EqualError(t,

@@ -86,7 +86,7 @@ const BatchDrainModal = ({
         )}
         {skipped > 0 && (
           <div className="drain-node-modal-helper">
-            {skipped} selected {skipped === 1 ? 'object is' : 'objects are'} skipped: not supported
+            {skipped} selected {skipped === 1 ? 'object is' : 'objects are'} skipped: not available
             or not permitted.
           </div>
         )}

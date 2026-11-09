@@ -42,7 +42,7 @@ func TestRestartWorkloadRequiresPatchPermission(t *testing.T) {
 
 	gateway := newResourcePermissionFixture("cluster-a", client, nil).gateway
 
-	err := gateway.restartWorkloadAction(ObjectActionTargetRef{ClusterID: "cluster-a", Namespace: "default", Group: "apps", Version: "v1", Kind: "Deployment", Name: "demo"}, "")
+	err := gateway.restartWorkloadAction(ObjectActionTargetRef{ClusterID: "cluster-a", Namespace: "default", Group: "apps", Version: "v1", Kind: "Deployment", Name: "demo"})
 	if err == nil || !strings.Contains(err.Error(), "permission denied") {
 		t.Fatalf("expected permission denial, got %v", err)
 	}

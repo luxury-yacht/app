@@ -12,10 +12,16 @@ import { OBJECT_ACTIONS } from '@shared/actions/objectActionContract';
 import type { ObjectActionData } from '@shared/actions/objectActionPolicy';
 import GridTable from '@shared/components/tables/GridTable';
 import { act } from 'react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ErrorStatusReason } from '@/core/refresh/types';
 import { installAppStateHarness, type MountedApp } from '@/test-utils/appState/harness';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { requireValue } from '@/test-utils/requireValue';
 import { type BatchObjectActionId, useBatchObjectActions } from './useBatchObjectActions';
+
+/** A rejection as the backend's typed error contract delivers it. */
+const clusterRefusal = (reason: ErrorStatusReason, message: string) =>
+  Object.assign(new Error(message), { cause: makeErrorStatus(reason, message) });
 
 const app = installAppStateHarness();
 const getObject = (row: ObjectActionData) => row;
@@ -128,6 +134,11 @@ const selectedRowNames = () =>
 const actionCalls = () => app.backend.calls('RunObjectAction').map(([request]) => request);
 
 describe('useBatchObjectActions', () => {
+  // A failed write is reported inline; the test that cares asserts it first.
+  afterEach(() => {
+    app.errors.take((record) => record.context?.source === 'useBatchObjectActions');
+  });
+
   it('counts each action by the rows it can act on', async () => {
     const { clusterId } = devCluster();
     await mount(
@@ -220,14 +231,10 @@ describe('useBatchObjectActions', () => {
     expect(toolbarButton('Batch select')).not.toBeNull();
   });
 
-  it('stamps a restart once, so retrying a lost response is not a second rollout', async () => {
+  it('offers no Retry after a failed restart, which may already have rolled out', async () => {
     const { clusterId } = devCluster();
-    let failing = true;
     app.backend.answer('RunObjectAction', () => {
-      if (failing) {
-        throw new Error('connection reset');
-      }
-      return {};
+      throw new Error('connection reset');
     });
     await mount(
       <BatchTable
@@ -239,13 +246,14 @@ describe('useBatchObjectActions', () => {
     await click(batchAction('Restart 1'));
     await click(modalButton('Restart 1'));
 
-    failing = false;
-    await click(modalButton('Retry 1'));
-
-    const [first, retry] = actionCalls();
-    expect(first.target).toEqual(expect.objectContaining({ name: 'a', uid: 'uid-a' }));
-    expect(first.restartedAt).toEqual(expect.any(String));
-    expect(retry.restartedAt).toBe(first.restartedAt);
+    const footer = requireValue(modal(), 'results dialog').querySelectorAll(
+      '.confirmation-modal-footer button'
+    );
+    expect(Array.from(footer, (button) => button.textContent)).toEqual(['Close']);
+    expect(selectedRowNames()).toEqual(['a']);
+    expect(actionCalls()).toEqual([
+      expect.objectContaining({ target: expect.objectContaining({ name: 'a', uid: 'uid-a' }) }),
+    ]);
   });
 
   it('deletes a custom kind that shares a built-in name as itself', async () => {
@@ -630,6 +638,103 @@ describe('useBatchObjectActions', () => {
     expect(actionCalls().slice(callsBeforeRetry)).toEqual([
       expect.objectContaining({ target: expect.objectContaining({ name: 'a', uid: 'uid-a' }) }),
     ]);
+  });
+
+  describe('when an object fails', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('counts a delete as done when the object is already gone', async () => {
+      const { clusterId } = devCluster();
+      app.backend.answer('RunObjectAction', (request) => {
+        if ((request as { target: { name: string } }).target.name === 'gone') {
+          throw clusterRefusal('NotFound', 'pods "gone" not found');
+        }
+        return {};
+      });
+      await mount(
+        <BatchTable
+          rows={[makeRow(clusterId, 'Pod', '', 'a'), makeRow(clusterId, 'Pod', '', 'gone')]}
+        />
+      );
+      await selectAllRows();
+
+      await click(batchAction('Delete 2'));
+      await click(modalButton('Delete 2'));
+
+      expect(modal()).toBeNull();
+      expect(toolbarButton('Batch select')).not.toBeNull();
+    });
+
+    it('still fails a delete refused because a replacement holds the name', async () => {
+      const { clusterId } = devCluster();
+      app.backend.answer('RunObjectAction', () => {
+        throw clusterRefusal('Conflict', 'Precondition failed: UID in precondition');
+      });
+      await mount(<BatchTable rows={[makeRow(clusterId, 'Pod', '', 'a')]} />);
+      await selectAllRows();
+
+      await click(batchAction('Delete 1'));
+      await click(modalButton('Delete 1'));
+
+      expect(modalTitle()).toBe('Deleted 0 of 1 Pod');
+    });
+
+    it('reports the failure to the app error pipeline', async () => {
+      const { clusterId } = devCluster();
+      const failure = new Error('operations coordinator not initialized');
+      app.backend.answer('RunObjectAction', () => {
+        throw failure;
+      });
+      await mount(<BatchTable rows={[makeRow(clusterId, 'Pod', '', 'a')]} />);
+      await selectAllRows();
+
+      await click(batchAction('Delete 1'));
+      await click(modalButton('Delete 1'));
+
+      const reported = app.errors.take((record) => record.context?.name === 'a');
+      expect(reported).toHaveLength(1);
+      expect(reported[0].kinds).toEqual(['inline']);
+      expect(reported[0].context).toMatchObject({ action: 'delete', kind: 'Pod' });
+    });
+
+    it('gives up on a call that never returns, so the dialog can always close', async () => {
+      const { clusterId } = devCluster();
+      app.backend.answer('RunObjectAction', () => ({}));
+      const release = app.backend.hold('RunObjectAction');
+      await mount(<BatchTable rows={[makeRow(clusterId, 'Pod', '', 'a')]} />);
+      await selectAllRows();
+      await click(batchAction('Delete 1'));
+
+      vi.useFakeTimers();
+      await act(async () => {
+        modalButton('Delete 1').click();
+      });
+      expect(modalButton('Cancel').disabled).toBe(true);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+      });
+
+      expect(modalTitle()).toBe('Deleted 0 of 1 Pod');
+      expect(modalButton('Close').disabled).toBe(false);
+      await act(async () => {
+        release();
+      });
+    });
+  });
+
+  it('leaves a node with a drain already running out of Drain', async () => {
+    const { clusterId } = devCluster();
+    await mount(
+      <BatchTable
+        allowedActions={['drain']}
+        rows={[nodeRow(clusterId, 'busy', { drainRunning: true }), nodeRow(clusterId, 'idle')]}
+      />
+    );
+    await selectAllRows();
+
+    expect(batchLabels()).toEqual(['Drain 1 of 2']);
   });
 
   it('drains every selected node with the one set of options chosen', async () => {

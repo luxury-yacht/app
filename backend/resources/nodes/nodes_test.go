@@ -18,10 +18,12 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	types2 "k8s.io/apimachinery/pkg/types"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	"k8s.io/client-go/kubernetes/fake"
 	cgotesting "k8s.io/client-go/testing"
@@ -47,6 +49,65 @@ func TestServiceNodeReturnsDetails(t *testing.T) {
 	require.NotEmpty(t, detail.PodsList)
 	require.Equal(t, "ready", detail.PodsList[0].StatusPresentation)
 	require.Equal(t, int32(1), detail.Restarts)
+}
+
+func nodeWithUID(t *testing.T, client *fake.Clientset, node *corev1.Node, uid types2.UID) {
+	t.Helper()
+	node.UID = uid
+	_, err := client.CoreV1().Nodes().Update(context.Background(), node, metav1.UpdateOptions{})
+	require.NoError(t, err)
+	client.ClearActions()
+}
+
+func skipWaitDrainOptions() types.DrainNodeOptions {
+	return types.DrainNodeOptions{
+		DisableEviction:            true,
+		DeleteEmptyDirData:         true,
+		IgnoreDaemonSets:           true,
+		SkipWaitForPodsToTerminate: true,
+	}
+}
+
+func TestServiceDrainCordonsOnlyTheSelectedNode(t *testing.T) {
+	service, client, node := newNodeService(t)
+	addNodePatchReactor(t, client)
+	nodeWithUID(t, client, node, "uid-selected")
+
+	require.NoError(t, service.Drain(context.Background(), node.Name, "uid-selected", skipWaitDrainOptions()))
+
+	for _, action := range client.Actions() {
+		patch, ok := action.(cgotesting.PatchAction)
+		if !ok || action.GetResource().Resource != "nodes" {
+			continue
+		}
+		var body struct {
+			Metadata struct {
+				UID string `json:"uid"`
+			} `json:"metadata"`
+		}
+		require.NoError(t, json.Unmarshal(patch.GetPatch(), &body))
+		require.Equal(t, "uid-selected", body.Metadata.UID)
+		return
+	}
+	require.Fail(t, "expected the drain to cordon the node")
+}
+
+// The fake clients do not enforce the cordon's UID, which stands in for a node
+// replaced after the cordon landed: the check before pod removal must still stop it.
+func TestServiceDrainRemovesNoPodsOnceTheNodeHasBeenReplaced(t *testing.T) {
+	service, client, node := newNodeService(t)
+	addNodePatchReactor(t, client)
+	nodeWithUID(t, client, node, "uid-replacement")
+
+	err := service.Drain(context.Background(), node.Name, "uid-selected", skipWaitDrainOptions())
+
+	require.True(t, apierrors.IsConflict(err), "got %v", err)
+	for _, action := range client.Actions() {
+		if action.GetResource().Resource != "pods" {
+			continue
+		}
+		require.NotContains(t, []string{"delete", "create"}, action.GetVerb(), "no pod may be removed")
+	}
 }
 
 func TestServiceRequireUIDAcceptsTheNodeItNames(t *testing.T) {
@@ -168,7 +229,7 @@ func TestServiceDrainDeletesPods(t *testing.T) {
 		SkipWaitForPodsToTerminate: true,
 	}
 
-	require.NoError(t, service.Drain(context.Background(), node.Name, options))
+	require.NoError(t, service.Drain(context.Background(), node.Name, "", options))
 
 	list, err := client.CoreV1().Pods("").List(context.Background(), metav1.ListOptions{})
 	require.NoError(t, err)
@@ -195,7 +256,7 @@ func TestServiceDrainDeleteUsesPodDefaultGraceWhenUnset(t *testing.T) {
 		SkipWaitForPodsToTerminate: true,
 	}
 
-	require.NoError(t, service.Drain(context.Background(), node.Name, options))
+	require.NoError(t, service.Drain(context.Background(), node.Name, "", options))
 	require.NotEmpty(t, recordedGrace)
 	for _, grace := range recordedGrace {
 		require.Nil(t, grace, "unset gracePeriodSeconds should omit pod delete grace period")
@@ -227,7 +288,7 @@ func TestServiceDrainEvictionUsesPodDefaultGraceWhenUnset(t *testing.T) {
 		SkipWaitForPodsToTerminate: true,
 	}
 
-	require.NoError(t, service.Drain(context.Background(), node.Name, options))
+	require.NoError(t, service.Drain(context.Background(), node.Name, "", options))
 	require.NotEmpty(t, recordedGrace)
 	for _, grace := range recordedGrace {
 		require.Nil(t, grace, "unset gracePeriodSeconds should omit pod eviction grace period")
@@ -238,11 +299,11 @@ func TestServiceDrainValidatesGracePeriod(t *testing.T) {
 	service, _, node := newNodeService(t)
 
 	negativeGrace := -1
-	err := service.Drain(context.Background(), node.Name, types.DrainNodeOptions{GracePeriodSeconds: &negativeGrace})
+	err := service.Drain(context.Background(), node.Name, "", types.DrainNodeOptions{GracePeriodSeconds: &negativeGrace})
 	require.EqualError(t, err, "gracePeriodSeconds must be non-negative")
 
 	tooLongGrace := 901
-	err = service.Drain(context.Background(), node.Name, types.DrainNodeOptions{GracePeriodSeconds: &tooLongGrace})
+	err = service.Drain(context.Background(), node.Name, "", types.DrainNodeOptions{GracePeriodSeconds: &tooLongGrace})
 	require.EqualError(t, err, "gracePeriodSeconds must be less than or equal to 900")
 }
 
@@ -250,7 +311,7 @@ func TestServiceDrainValidatesTimeout(t *testing.T) {
 	service, _, node := newNodeService(t)
 
 	negativeTimeout := -1
-	err := service.Drain(context.Background(), node.Name, types.DrainNodeOptions{TimeoutSeconds: &negativeTimeout})
+	err := service.Drain(context.Background(), node.Name, "", types.DrainNodeOptions{TimeoutSeconds: &negativeTimeout})
 	require.EqualError(t, err, "timeoutSeconds must be non-negative")
 
 	zeroTimeout := 0
@@ -273,7 +334,7 @@ func TestServiceDrainLeavesNodeCordonedAfterFailure(t *testing.T) {
 	_, err := client.CoreV1().Pods(pod.Namespace).Create(context.Background(), pod, metav1.CreateOptions{})
 	require.NoError(t, err)
 
-	err = service.Drain(context.Background(), node.Name, types.DrainNodeOptions{
+	err = service.Drain(context.Background(), node.Name, "", types.DrainNodeOptions{
 		DeleteEmptyDirData: false,
 		IgnoreDaemonSets:   true,
 	})
@@ -312,12 +373,12 @@ func TestServiceDrainUsesKubectlDaemonSetFiltering(t *testing.T) {
 		DeleteEmptyDirData:         true,
 		SkipWaitForPodsToTerminate: true,
 	}
-	err = service.Drain(context.Background(), node.Name, options)
+	err = service.Drain(context.Background(), node.Name, "", options)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "DaemonSet-managed Pods")
 
 	options.IgnoreDaemonSets = true
-	require.NoError(t, service.Drain(context.Background(), node.Name, options))
+	require.NoError(t, service.Drain(context.Background(), node.Name, "", options))
 }
 
 func TestServiceDrainUsesKubectlUnmanagedPodFiltering(t *testing.T) {
@@ -335,12 +396,12 @@ func TestServiceDrainUsesKubectlUnmanagedPodFiltering(t *testing.T) {
 		IgnoreDaemonSets:           true,
 		SkipWaitForPodsToTerminate: true,
 	}
-	err = service.Drain(context.Background(), node.Name, options)
+	err = service.Drain(context.Background(), node.Name, "", options)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "declare no controller")
 
 	options.Force = true
-	require.NoError(t, service.Drain(context.Background(), node.Name, options))
+	require.NoError(t, service.Drain(context.Background(), node.Name, "", options))
 }
 
 func newNodeService(t *testing.T) (*nodes.Service, *fake.Clientset, *corev1.Node) {

@@ -97,7 +97,6 @@ type ObjectActionRequest struct {
 	PortForward    *ObjectActionPortForwardOptions    `json:"portForward,omitempty"`
 	DebugContainer *ObjectActionDebugContainerOptions `json:"debugContainer,omitempty"`
 	Revision       *int64                             `json:"revision,omitempty"`
-	RestartedAt    string                             `json:"restartedAt,omitempty"`
 	Finalizer      string                             `json:"finalizer,omitempty"`
 	FinalizerPath  string                             `json:"finalizerPath,omitempty"`
 }
@@ -245,7 +244,7 @@ func runRestartObjectAction(invocation objectActionInvocation) (ObjectActionResp
 	if err := requireActionNamespacedTarget(invocation.target, invocation.action); err != nil {
 		return ObjectActionResponse{}, err
 	}
-	return ObjectActionResponse{}, invocation.gateway.restartWorkloadAction(invocation.target, invocation.request.RestartedAt)
+	return ObjectActionResponse{}, invocation.gateway.restartWorkloadAction(invocation.target)
 }
 
 func runScaleObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {

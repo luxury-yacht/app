@@ -143,39 +143,3 @@ func TestStartDrainRefusesANodeReplacedSinceItWasSelected(t *testing.T) {
 
 	require.True(t, apierrors.IsConflict(err), "got %v", err)
 }
-
-func restartStampSent(t *testing.T, actions []clienttesting.Action) string {
-	t.Helper()
-	bodies := patchBodies(t, actions)
-	require.NotEmpty(t, bodies, "expected a patch request")
-	spec := bodies[0]["spec"].(map[string]any)
-	template := spec["template"].(map[string]any)
-	metadata := template["metadata"].(map[string]any)
-	annotations := metadata["annotations"].(map[string]any)
-	return annotations[rolloutAnnotation].(string)
-}
-
-func TestRestartWritesTheCallersStampSoARetryIsNotASecondRollout(t *testing.T) {
-	app, client := uidGuardFixture(t, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"}})
-
-	_, err := app.gateway.RunObjectAction(ObjectActionRequest{
-		Action:      ObjectActionRestart,
-		Target:      objectActionTarget(uidGuardCluster, "apps", "v1", "Deployment", "default", "demo"),
-		RestartedAt: "2026-11-08T10:00:00.123Z",
-	})
-
-	require.NoError(t, err)
-	require.Equal(t, "2026-11-08T10:00:00.123Z", restartStampSent(t, client.Actions()))
-}
-
-func TestRestartRefusesAStampThatIsNotATime(t *testing.T) {
-	app, _ := uidGuardFixture(t, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"}})
-
-	_, err := app.gateway.RunObjectAction(ObjectActionRequest{
-		Action:      ObjectActionRestart,
-		Target:      objectActionTarget(uidGuardCluster, "apps", "v1", "Deployment", "default", "demo"),
-		RestartedAt: "soon",
-	})
-
-	require.Error(t, err)
-}

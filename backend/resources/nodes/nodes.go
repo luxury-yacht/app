@@ -116,18 +116,20 @@ func (s *Service) RequireUID(ctx context.Context, nodeName, uid string) error {
 	return nil
 }
 
-// Drain evicts or deletes pods on the node according to the provided options.
-func (s *Service) Drain(ctx context.Context, nodeName string, options restypes.DrainNodeOptions) (err error) {
+// Drain evicts or deletes pods on the node according to the provided options. A
+// non-empty uid limits it to that node.
+func (s *Service) Drain(ctx context.Context, nodeName, uid string, options restypes.DrainNodeOptions) (err error) {
 	job, err := s.prepareDrainJob(nodeName, options)
 	if err != nil {
 		return err
 	}
 
-	return s.runDrainJob(ctx, job, nodeName, options)
+	return s.runDrainJob(ctx, job, nodeName, uid, options)
 }
 
-// StartDrainWithCompletion starts a drain job and invokes onComplete after the job exits.
-func (s *Service) StartDrainWithCompletion(ctx context.Context, nodeName string, options restypes.DrainNodeOptions, onComplete func(string)) (*nodemaintenance.DrainJob, error) {
+// StartDrainWithCompletion starts a drain job and invokes onComplete after the job
+// exits. A non-empty uid limits it to that node.
+func (s *Service) StartDrainWithCompletion(ctx context.Context, nodeName, uid string, options restypes.DrainNodeOptions, onComplete func(string)) (*nodemaintenance.DrainJob, error) {
 	job, err := s.prepareDrainJob(nodeName, options)
 	if err != nil {
 		return nil, err
@@ -143,7 +145,7 @@ func (s *Service) StartDrainWithCompletion(ctx context.Context, nodeName string,
 		if onComplete != nil {
 			defer onComplete(job.ID)
 		}
-		_ = NewService(deps, store).runDrainJob(ctx, job, nodeName, options)
+		_ = NewService(deps, store).runDrainJob(ctx, job, nodeName, uid, options)
 	}()
 
 	return job, nil
@@ -167,19 +169,19 @@ func (s *Service) requireDrainStore() (*nodemaintenance.Store, error) {
 	return s.drainStore, nil
 }
 
-func (s *Service) runDrainJob(ctx context.Context, job *nodemaintenance.DrainJob, nodeName string, options restypes.DrainNodeOptions) (err error) {
+func (s *Service) runDrainJob(ctx context.Context, job *nodemaintenance.DrainJob, nodeName, uid string, options restypes.DrainNodeOptions) (err error) {
 	cordoned := false
 
 	defer func() {
 		s.finalizeDrain(job, cordoned, err)
 	}()
 
-	if err = s.cordonForDrain(ctx, job, nodeName); err != nil {
+	if err = s.cordonForDrain(ctx, job, nodeName, uid); err != nil {
 		return err
 	}
 	cordoned = true
 
-	return s.runKubectlDrain(ctx, nodeName, options, job)
+	return s.runKubectlDrain(ctx, nodeName, uid, options, job)
 }
 
 // finalizeDrain updates drain status when the drain operation finishes.
@@ -202,9 +204,9 @@ func (s *Service) finalizeDrain(job *nodemaintenance.DrainJob, cordoned bool, er
 }
 
 // cordonForDrain marks the node unschedulable and records drain events.
-func (s *Service) cordonForDrain(ctx context.Context, job *nodemaintenance.DrainJob, nodeName string) error {
+func (s *Service) cordonForDrain(ctx context.Context, job *nodemaintenance.DrainJob, nodeName, uid string) error {
 	job.AddInfo(nodemaintenance.DrainPhaseCordon, "Cordoning node")
-	if cordonErr := s.Cordon(ctx, nodeName, ""); cordonErr != nil {
+	if cordonErr := s.Cordon(ctx, nodeName, uid); cordonErr != nil {
 		job.AddInfo(nodemaintenance.DrainPhaseError, fmt.Sprintf("Failed to cordon node: %v", cordonErr))
 		return fmt.Errorf("failed to cordon node before draining: %w", cordonErr)
 	}
@@ -242,11 +244,17 @@ func drainHelperTimeout(options restypes.DrainNodeOptions) time.Duration {
 	return time.Duration(*options.TimeoutSeconds) * time.Second
 }
 
-func (s *Service) runKubectlDrain(ctx context.Context, nodeName string, options restypes.DrainNodeOptions, job *nodemaintenance.DrainJob) error {
+func (s *Service) runKubectlDrain(ctx context.Context, nodeName, uid string, options restypes.DrainNodeOptions, job *nodemaintenance.DrainJob) error {
 	drainer := s.newDrainHelper(ctx, options, job)
 	list, errs := drainer.GetPodsForDeletion(nodeName)
 	if len(errs) > 0 {
 		err := utilerrors.NewAggregate(errs)
+		job.AddInfo(nodemaintenance.DrainPhaseError, err.Error())
+		return err
+	}
+	// Checked after the list: the same UID at the cordon and here means the listed
+	// pods were on the selected node, and only those pods are removed.
+	if err := s.RequireUID(ctx, nodeName, uid); err != nil {
 		job.AddInfo(nodemaintenance.DrainPhaseError, err.Error())
 		return err
 	}

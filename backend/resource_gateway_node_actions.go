@@ -66,7 +66,7 @@ func (g *ResourceGateway) drainNodeAction(target ObjectActionTargetRef, options 
 	if err := service.RequireUID(ctx, target.Name, target.UID); err != nil {
 		return err
 	}
-	if err := service.Drain(ctx, target.Name, options); err != nil {
+	if err := service.Drain(ctx, target.Name, target.UID, options); err != nil {
 		return err
 	}
 	g.clearNodeCaches(selectionKey, target.Name)
@@ -99,7 +99,7 @@ func (g *ResourceGateway) startDrainNodeAction(target ObjectActionTargetRef, opt
 		return "", fmt.Errorf("operations coordinator not initialized")
 	}
 	operationEpoch := g.operations.clusterOperationEpoch(target.ClusterID)
-	job, err := service.StartDrainWithCompletion(ctx, target.Name, options, func(jobID string) {
+	job, err := service.StartDrainWithCompletion(ctx, target.Name, target.UID, options, func(jobID string) {
 		g.clearNodeCaches(selectionKey, target.Name)
 		if g.operations != nil {
 			g.operations.unregisterRuntimeOperation(jobID)

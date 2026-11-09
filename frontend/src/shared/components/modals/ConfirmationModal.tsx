@@ -66,7 +66,8 @@ interface ConfirmationModalProps {
   secondaryActionText?: string;
   secondaryActionButtonClass?: string;
   onSecondaryAction?: () => void;
-  onConfirm: () => void;
+  /** Leave out for a dialog that only reports: it then has just the cancel button. */
+  onConfirm?: () => void;
   onCancel: () => void;
   /** Disables the footer while the confirmed work runs. */
   busy?: boolean;
@@ -203,14 +204,16 @@ const ConfirmationModalContent: React.FC<Omit<ConfirmationModalProps, 'isOpen'>>
         >
           {cancelText}
         </button>
-        <button
-          type="button"
-          className={`button ${confirmButtonClass}`}
-          onClick={onConfirm}
-          disabled={busy}
-        >
-          {confirmText}
-        </button>
+        {!!onConfirm && (
+          <button
+            type="button"
+            className={`button ${confirmButtonClass}`}
+            onClick={onConfirm}
+            disabled={busy}
+          >
+            {confirmText}
+          </button>
+        )}
       </div>
     </ModalSurface>
   );

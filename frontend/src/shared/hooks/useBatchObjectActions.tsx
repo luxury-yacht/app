@@ -60,6 +60,8 @@ import type React from 'react';
 import { useCallback, useMemo, useState } from 'react';
 import { queryPermissionChecks, useUserPermissions } from '@/core/capabilities';
 import { useClusterNameResolver } from '@/core/cluster-workspace/useClusterWorkspace';
+import { errorHandler } from '@/utils/errorHandler';
+import { errorStatusOf } from '@/utils/errorStatus';
 
 export type BatchObjectActionId =
   | 'restart'
@@ -92,10 +94,12 @@ interface BatchActionDefinition {
   icon: React.ReactNode;
   danger: boolean;
   message: (replicas: number) => string;
-  covers: (policy: ObjectActionPolicy) => boolean;
+  covers: (policy: ObjectActionPolicy, object: ObjectActionData) => boolean;
   run: (target: ObjectActionTargetRef, batch: BatchRun) => Promise<unknown>;
   /** A dialog that gathers input first; other actions go straight to confirmation. */
   prompt?: 'scale' | 'drain';
+  /** Set when repeating the action could do harm: no Retry is offered, and this says why. */
+  noRetryReason?: string;
 }
 
 const BATCH_ACTIONS: readonly BatchActionDefinition[] = [
@@ -107,7 +111,9 @@ const BATCH_ACTIONS: readonly BatchActionDefinition[] = [
     danger: true,
     message: () => 'This will perform a rolling restart of all pods.',
     covers: (policy) => policy.restartEnabled,
-    run: (target, { restartedAt }) => runObjectRestart(target, restartedAt),
+    run: (target) => runObjectRestart(target),
+    noRetryReason:
+      'A failed restart may still have started, so check the workload before restarting it again.',
   },
   {
     id: 'scale',
@@ -167,7 +173,7 @@ const BATCH_ACTIONS: readonly BatchActionDefinition[] = [
     icon: <DrainIcon width={16} height={16} />,
     danger: true,
     message: () => 'Starts a drain on every selected node.',
-    covers: (policy) => policy.drainEnabled,
+    covers: (policy, object) => policy.drainEnabled && !object.drainRunning,
     run: (target, { drainOptions }) => runStartDrain(target, drainOptions),
     prompt: 'drain',
   },
@@ -194,8 +200,6 @@ interface BatchRun {
   skipped: number;
   replicas: number;
   drainOptions?: types.DrainNodeOptions;
-  /** Set once when the batch starts and kept across retries. */
-  restartedAt?: string;
 }
 
 interface BatchFailure {
@@ -274,6 +278,56 @@ const actionTitle = (label: string, eligible: number, total: number): string =>
 const errorReason = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
+// The running dialog cannot be dismissed and the app behind it is inert, so a call
+// that never returns must not hold it open.
+const OBJECT_ACTION_DEADLINE_MS = 30_000;
+
+class ObjectActionDeadlineError extends Error {
+  constructor() {
+    super('The cluster did not answer in time. The action may still complete.');
+  }
+}
+
+const withinDeadline = async <R,>(work: Promise<R>): Promise<R> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new ObjectActionDeadlineError()), OBJECT_ACTION_DEADLINE_MS);
+  });
+  try {
+    return await Promise.race([work, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+/** Runs one object; returns its failure, or null when the batch can count it done. */
+const runEntry = async (run: BatchRun, entry: BatchEntry): Promise<BatchFailure | null> => {
+  const { definition } = run;
+  const { object } = entry;
+  try {
+    const action = objectActionLabel(definition.actionId).toLowerCase();
+    // Bound to the object the user selected: if something else now holds its
+    // name, the API server refuses the write.
+    const target = { ...actionTargetFor(object, action), uid: object.uid };
+    await withinDeadline(definition.run(target, run));
+    return null;
+  } catch (error) {
+    // Already gone is what a delete asked for. A replacement answers Conflict instead.
+    if (definition.id === 'delete' && errorStatusOf(error)?.reason === 'NotFound') {
+      return null;
+    }
+    if (!(error instanceof ObjectActionDeadlineError)) {
+      errorHandler.handleInline(error, {
+        source: 'useBatchObjectActions',
+        action: definition.id,
+        kind: object.kind,
+        name: object.name,
+      });
+    }
+    return { entry, reason: errorReason(error) };
+  }
+};
+
 const executeBatch = async (
   run: BatchRun,
   onProgress: (done: number) => void
@@ -283,17 +337,9 @@ const executeBatch = async (
   let done = 0;
   const worker = async () => {
     for (let entry = queue.shift(); entry; entry = queue.shift()) {
-      try {
-        const label = objectActionLabel(run.definition.actionId);
-        // Bound to the object the user selected: if something else now holds its
-        // name, the API server refuses the write.
-        const target = {
-          ...actionTargetFor(entry.object, label.toLowerCase()),
-          uid: entry.object.uid,
-        };
-        await run.definition.run(target, run);
-      } catch (error) {
-        failed.push({ entry, reason: errorReason(error) });
+      const failure = await runEntry(run, entry);
+      if (failure) {
+        failed.push(failure);
       }
       done += 1;
       onProgress(done);
@@ -351,7 +397,7 @@ const confirmationProps = (
       .join(' '),
     detailsTable: targetDetailsTable(objects, objects, 'Name'),
     notice: skipped
-      ? `${skipped} selected ${skipped === 1 ? 'object is' : 'objects are'} skipped: not supported or not permitted.`
+      ? `${skipped} selected ${skipped === 1 ? 'object is' : 'objects are'} skipped: not available or not permitted.`
       : undefined,
     warning:
       definition.id === 'delete'
@@ -419,10 +465,7 @@ export function useBatchObjectActions<T>({
   );
 
   const startRun = useCallback(
-    async (batch: BatchRun) => {
-      // Stamped once: a retry after a lost response is then the same restart, not
-      // another rollout.
-      const run = { ...batch, restartedAt: batch.restartedAt ?? new Date().toISOString() };
+    async (run: BatchRun) => {
       setDialog({ stage: 'running', run, done: 0 });
       const failed = await executeBatch(run, (done) => setDialog({ stage: 'running', run, done }));
       onRunComplete?.(run.definition.id);
@@ -466,7 +509,7 @@ export function useBatchObjectActions<T>({
       ).flatMap((definition) => {
         // A row with no UID could not be tied to the object the user selected.
         const entries = rows.filter(
-          ({ policy, object }) => Boolean(object.uid) && definition.covers(policy)
+          ({ policy, object }) => Boolean(object.uid) && definition.covers(policy, object)
         );
         if (entries.length === 0) {
           return [];
@@ -553,11 +596,12 @@ export function useBatchObjectActions<T>({
   const renderResults = (run: BatchRun, failed: BatchFailure[]) => {
     const total = run.entries.length;
     const noun = countNoun(run.entries.map((entry) => entry.object));
+    const { noRetryReason } = run.definition;
     return (
       <ConfirmationModal
         isOpen
         title={`${run.definition.past} ${total - failed.length} of ${total} ${noun}`}
-        message={`${failed.length} failed and stayed selected.`}
+        message={[`${failed.length} failed.`, noRetryReason].filter(Boolean).join(' ')}
         detailsTable={targetDetailsTable(
           run.entries.map((entry) => entry.object),
           failed.map(({ entry }) => entry.object),
@@ -567,7 +611,11 @@ export function useBatchObjectActions<T>({
         cancelText="Close"
         confirmText={`Retry ${failed.length}`}
         confirmButtonClass="generic"
-        onConfirm={() => retry({ ...run, entries: failed.map(({ entry }) => entry), skipped: 0 })}
+        onConfirm={
+          noRetryReason
+            ? undefined
+            : () => retry({ ...run, entries: failed.map(({ entry }) => entry), skipped: 0 })
+        }
         onCancel={closeDialog}
       />
     );

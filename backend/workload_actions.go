@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
-	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/kind/kindspec"
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -63,21 +62,7 @@ func validateAppsV1WorkloadAction(action, group, version, kind string, supported
 	return normalizedKind, nil
 }
 
-// restartStamp is the value written to the restart annotation. A caller that may
-// retry supplies one: the same value leaves the pod template unchanged, so retrying
-// after a lost response cannot start a second rollout.
-func restartStamp(restartedAt string) (string, error) {
-	stamp := strings.TrimSpace(restartedAt)
-	if stamp == "" {
-		return time.Now().UTC().Format(time.RFC3339), nil
-	}
-	if _, err := time.Parse(time.RFC3339, stamp); err != nil {
-		return "", errorstatus.BadRequest(fmt.Errorf("restartedAt must be an RFC 3339 time: %w", err))
-	}
-	return stamp, nil
-}
-
-func (g *ResourceGateway) restartWorkloadAction(target ObjectActionTargetRef, restartedAt string) error {
+func (g *ResourceGateway) restartWorkloadAction(target ObjectActionTargetRef) error {
 	if err := requireNamespacedObject(target.Namespace, target.Name); err != nil {
 		return err
 	}
@@ -94,10 +79,7 @@ func (g *ResourceGateway) restartWorkloadAction(target ObjectActionTargetRef, re
 		return fmt.Errorf("kubernetes client is not initialized")
 	}
 
-	annotationValue, err := restartStamp(restartedAt)
-	if err != nil {
-		return err
-	}
+	annotationValue := time.Now().UTC().Format(time.RFC3339)
 	patch := map[string]any{
 		"spec": map[string]any{
 			"template": map[string]any{
