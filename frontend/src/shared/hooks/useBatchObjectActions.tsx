@@ -353,8 +353,10 @@ const UNKNOWN_OUTCOME_NOTE =
  */
 const confirmsTargetGone = (status: ErrorStatus | null, target: ObjectActionTargetRef): boolean => {
   const ref = status?.reason === 'NotFound' ? status.ref : undefined;
+  if (!ref) {
+    return false;
+  }
   return (
-    ref !== undefined &&
     ref.clusterId === target.clusterId &&
     ref.group === target.group &&
     ref.version === target.version &&
@@ -411,20 +413,24 @@ const executeBatch = async (
   const queue = [...run.entries];
   const failed: BatchFailure[] = [];
   let done = 0;
-  const worker = async () => {
-    for (let entry = queue.shift(); entry && !isAbandoned(); entry = queue.shift()) {
-      const failure = await runEntryToOutcome(run, entry);
-      if (failure) {
-        failed.push(failure);
-      }
-      // More calls would only hold the dialog open against a cluster that is not
-      // responding. Even a permission check going unanswered stops the batch.
-      if (failure?.outcome === 'no-answer') {
-        failed.push(...queue.splice(0).map(notStartedFailure));
-      }
-      done += 1;
-      onProgress(done);
+  // One worker runs one object at a time, taking the next when its call returns.
+  const worker = async (): Promise<void> => {
+    const entry = queue.shift();
+    if (!entry || isAbandoned()) {
+      return;
     }
+    const failure = await runEntryToOutcome(run, entry);
+    if (failure) {
+      failed.push(failure);
+    }
+    // More calls would only hold the dialog open against a cluster that is not
+    // responding. Even a permission check going unanswered stops the batch.
+    if (failure?.outcome === 'no-answer') {
+      failed.push(...queue.splice(0).map(notStartedFailure));
+    }
+    done += 1;
+    onProgress(done);
+    return worker();
   };
   await Promise.all(
     Array.from({ length: Math.min(BATCH_CONCURRENCY, queue.length) }, () => worker())
@@ -438,9 +444,8 @@ const scopeMessage = (
 ): string => {
   const namespaces = unique(objects.map((object) => object.namespace ?? '').filter(Boolean));
   const clusters = unique(objects.map((object) => object.clusterId));
-  const where = namespaces.length
-    ? ` in ${namespaces.length} ${namespaces.length === 1 ? 'namespace' : 'namespaces'}`
-    : '';
+  const namespaceNoun = namespaces.length === 1 ? 'namespace' : 'namespaces';
+  const where = namespaces.length ? ` in ${namespaces.length} ${namespaceNoun}` : '';
   const on =
     clusters.length === 1
       ? `on cluster ${resolveClusterName(clusters[0]) ?? clusters[0]}`
@@ -459,6 +464,7 @@ const confirmationProps = (
   const label = objectActionLabel(definition.actionId);
   const noun = countNoun(objects);
   const oneKind = unique(objects.map(gvkOf)).length === 1 && clusters.length === 1;
+  const skippedObjects = skipped === 1 ? 'object is' : 'objects are';
   return {
     title: `${label} ${objects.length} ${noun}`,
     target: oneKind
@@ -478,7 +484,7 @@ const confirmationProps = (
       .join(' '),
     detailsTable: targetDetailsTable(objects, objects, 'Name'),
     notice: skipped
-      ? `${skipped} selected ${skipped === 1 ? 'object is' : 'objects are'} skipped: not available or not permitted.`
+      ? `${skipped} selected ${skippedObjects} skipped: not available or not permitted.`
       : undefined,
     warning:
       definition.id === 'delete'

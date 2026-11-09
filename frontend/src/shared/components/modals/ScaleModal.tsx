@@ -55,7 +55,7 @@ const useReplicaText = (value: number, onValueChange: (value: number) => void) =
   }, [value]);
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const digits = event.target.value.replace(/[^0-9]/g, '');
+    const digits = event.target.value.replace(/\D/g, '');
     if (digits === '') {
       setText('');
       return;
