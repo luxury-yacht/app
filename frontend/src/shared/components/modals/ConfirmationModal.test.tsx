@@ -5,7 +5,7 @@
  * Covers key behaviors and edge cases for ConfirmationModal.
  */
 
-import { KeyboardProvider } from '@ui/shortcuts';
+import { KeyboardProvider, useShortcut } from '@ui/shortcuts';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -59,6 +59,43 @@ describe('ConfirmationModal', () => {
       await Promise.resolve();
     });
   };
+
+  // Running work behind a busy dialog reports to the view that opened it, so app
+  // shortcuts must not navigate away while it runs.
+  it.each([
+    { busy: false, fires: 1 },
+    { busy: true, fires: 0 },
+  ])('app shortcuts with busy=$busy fire $fires time(s)', async ({ busy, fires }) => {
+    const shortcut = vi.fn(() => true);
+    const AppShortcut = () => {
+      useShortcut({ key: 'k', modifiers: { meta: true }, handler: shortcut, description: 'App' });
+      return null;
+    };
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <AppShortcut />
+          <ConfirmationModal
+            isOpen={true}
+            title="Delete resource"
+            message="Are you sure?"
+            busy={busy}
+            onConfirm={vi.fn()}
+            onCancel={vi.fn()}
+          />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      document.body.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true, cancelable: true })
+      );
+    });
+
+    expect(shortcut).toHaveBeenCalledTimes(fires);
+  });
 
   it('does not render when closed', async () => {
     await act(async () => {

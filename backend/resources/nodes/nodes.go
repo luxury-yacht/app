@@ -173,7 +173,7 @@ func (s *Service) runDrainJob(ctx context.Context, job *nodemaintenance.DrainJob
 	cordoned := false
 
 	defer func() {
-		s.finalizeDrain(job, cordoned, err)
+		s.finalizeDrain(job, cordoned, drainFailure(ctx, err))
 	}()
 
 	if err = s.cordonForDrain(ctx, job, nodeName, uid); err != nil {
@@ -182,6 +182,29 @@ func (s *Service) runDrainJob(ctx context.Context, job *nodemaintenance.DrainJob
 	cordoned = true
 
 	return s.runKubectlDrain(ctx, nodeName, uid, options, job)
+}
+
+// drainFailure names a cancelled drain as cancelled. kubectl formats its errors
+// without wrapping them and words a cancellation as a timeout, so only the drain's
+// own context can show it.
+func drainFailure(ctx context.Context, err error) error {
+	if err != nil && errors.Is(ctx.Err(), context.Canceled) {
+		return context.Canceled
+	}
+	return err
+}
+
+// selectedNodeGoneError is a drain stopped because the node it cordoned no longer
+// holds its name, so there is no cordon left to report.
+type selectedNodeGoneError struct{ error }
+
+func (e selectedNodeGoneError) Unwrap() error { return e.error }
+
+func asSelectedNodeGone(err error) error {
+	if apierrors.IsConflict(err) || apierrors.IsNotFound(err) {
+		return selectedNodeGoneError{err}
+	}
+	return err
 }
 
 // finalizeDrain updates drain status when the drain operation finishes.
@@ -194,7 +217,8 @@ func (s *Service) finalizeDrain(job *nodemaintenance.DrainJob, cordoned bool, er
 			job.Complete(nodemaintenance.DrainStatusCancelled, "Drain cancelled")
 			return
 		}
-		if cordoned {
+		var nodeGone selectedNodeGoneError
+		if cordoned && !errors.As(err, &nodeGone) {
 			job.AddInfo(nodemaintenance.DrainPhaseCordonRetained, "Node remains cordoned after drain failure")
 		}
 		job.Complete(nodemaintenance.DrainStatusFailed, err.Error())
@@ -256,13 +280,19 @@ func (s *Service) runKubectlDrain(ctx context.Context, nodeName, uid string, opt
 	// pods were on the selected node, and only those pods are removed.
 	if err := s.RequireUID(ctx, nodeName, uid); err != nil {
 		job.AddInfo(nodemaintenance.DrainPhaseError, err.Error())
-		return err
+		return asSelectedNodeGone(err)
 	}
 	if warnings := list.Warnings(); warnings != "" {
 		job.AddInfo(nodemaintenance.DrainPhaseWarning, warnings)
 	}
 
 	pods := list.Pods()
+	removalClient, err := clientForListedPods(ctx, drainer.Client, pods, !options.DisableEviction)
+	if err != nil {
+		job.AddInfo(nodemaintenance.DrainPhaseError, err.Error())
+		return err
+	}
+	drainer.Client = removalClient
 	job.AddInfo(nodemaintenance.DrainPhasePlan, fmt.Sprintf("%s %d pods", drainOperationLabel(options), len(pods)))
 	if options.SkipWaitForPodsToTerminate {
 		job.AddInfo(nodemaintenance.DrainPhaseSkipWait, "Submitting pod deletion or eviction without waiting for termination")
@@ -271,6 +301,9 @@ func (s *Service) runKubectlDrain(ctx context.Context, nodeName, uid string, opt
 
 	job.AddInfo(nodemaintenance.DrainPhaseWait, "Waiting for pods to terminate")
 	if err := drainer.DeleteOrEvictPods(pods); err != nil {
+		if ctx.Err() != nil {
+			return err
+		}
 		if isDrainTimeoutError(err, drainer.Timeout) {
 			err = fmt.Errorf("drain timed out after %s while waiting for pods to terminate: %w", drainer.Timeout, err)
 		}

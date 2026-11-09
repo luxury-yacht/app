@@ -13,15 +13,18 @@ import type { ObjectActionData } from '@shared/actions/objectActionPolicy';
 import GridTable from '@shared/components/tables/GridTable';
 import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ErrorStatusReason } from '@/core/refresh/types';
+import type { ErrorStatus, ErrorStatusReason } from '@/core/refresh/types';
 import { installAppStateHarness, type MountedApp } from '@/test-utils/appState/harness';
 import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { requireValue } from '@/test-utils/requireValue';
 import { type BatchObjectActionId, useBatchObjectActions } from './useBatchObjectActions';
 
 /** A rejection as the backend's typed error contract delivers it. */
-const clusterRefusal = (reason: ErrorStatusReason, message: string) =>
-  Object.assign(new Error(message), { cause: makeErrorStatus(reason, message) });
+const clusterRefusal = (
+  reason: ErrorStatusReason,
+  message: string,
+  overrides: Partial<ErrorStatus> = {}
+) => Object.assign(new Error(message), { cause: makeErrorStatus(reason, message, overrides) });
 
 const app = installAppStateHarness();
 const getObject = (row: ObjectActionData) => row;
@@ -132,6 +135,12 @@ const selectedRowNames = () =>
     .filter((row) => row.dataset.rowSelected === 'true')
     .map((row) => row.textContent?.trim());
 const actionCalls = () => app.backend.calls('RunObjectAction').map(([request]) => request);
+const detailColumns = () =>
+  Array.from(modal()?.querySelectorAll('thead th') ?? [], (cell) => cell.textContent);
+const detailRows = () =>
+  Array.from(modal()?.querySelectorAll('tbody tr') ?? [], (row) =>
+    Array.from(row.querySelectorAll('td'), (cell) => cell.textContent)
+  );
 
 describe('useBatchObjectActions', () => {
   // A failed write is reported inline; the test that cares asserts it first.
@@ -412,12 +421,6 @@ describe('useBatchObjectActions', () => {
     expect(modal()?.textContent).toContain(`2 namespaces on cluster ${clusterName}`);
   });
 
-  const detailColumns = () =>
-    Array.from(modal()?.querySelectorAll('thead th') ?? [], (cell) => cell.textContent);
-  const detailRows = () =>
-    Array.from(modal()?.querySelectorAll('tbody tr') ?? [], (row) =>
-      Array.from(row.querySelectorAll('td'), (cell) => cell.textContent)
-    );
   const collidingDatabases = (clusterId: string) => [
     makeRow(clusterId, 'DBInstance', 'rds.services.k8s.aws', 'orders', { version: 'v1alpha1' }),
     makeRow(clusterId, 'DBInstance', 'kinda.rocks', 'orders', { version: 'v1beta1' }),
@@ -645,11 +648,20 @@ describe('useBatchObjectActions', () => {
       vi.useRealTimers();
     });
 
-    it('counts a delete as done when the object is already gone', async () => {
+    it('counts a delete as done when the backend confirms the object is gone', async () => {
       const { clusterId } = devCluster();
       app.backend.answer('RunObjectAction', (request) => {
         if ((request as { target: { name: string } }).target.name === 'gone') {
-          throw clusterRefusal('NotFound', 'pods "gone" not found');
+          throw clusterRefusal('NotFound', 'pods "gone" not found', {
+            ref: {
+              clusterId,
+              group: '',
+              version: 'v1',
+              kind: 'Pod',
+              namespace: 'team-a',
+              name: 'gone',
+            },
+          });
         }
         return {};
       });
@@ -665,6 +677,20 @@ describe('useBatchObjectActions', () => {
 
       expect(modal()).toBeNull();
       expect(toolbarButton('Batch select')).not.toBeNull();
+    });
+
+    it('still fails a delete whose 404 says nothing about the object', async () => {
+      const { clusterId } = devCluster();
+      app.backend.answer('RunObjectAction', () => {
+        throw clusterRefusal('NotFound', 'the server could not find the requested resource');
+      });
+      await mount(<BatchTable rows={[makeRow(clusterId, 'Pod', '', 'a')]} />);
+      await selectAllRows();
+
+      await click(batchAction('Delete 1'));
+      await click(modalButton('Delete 1'));
+
+      expect(modalTitle()).toBe('Deleted 0 of 1 Pod');
     });
 
     it('still fails a delete refused because a replacement holds the name', async () => {
@@ -699,28 +725,113 @@ describe('useBatchObjectActions', () => {
       expect(reported[0].context).toMatchObject({ action: 'delete', kind: 'Pod' });
     });
 
-    it('gives up on a call that never returns, so the dialog can always close', async () => {
+    it('keeps each slot busy until its call answers, however long that takes', async () => {
       const { clusterId } = devCluster();
       app.backend.answer('RunObjectAction', () => ({}));
       const release = app.backend.hold('RunObjectAction');
-      await mount(<BatchTable rows={[makeRow(clusterId, 'Pod', '', 'a')]} />);
+      const names = ['a', 'b', 'c', 'd', 'e', 'f'];
+      await mount(<BatchTable rows={names.map((name) => makeRow(clusterId, 'Pod', '', name))} />);
       await selectAllRows();
-      await click(batchAction('Delete 1'));
+      await click(batchAction('Delete 6'));
 
       vi.useFakeTimers();
       await act(async () => {
-        modalButton('Delete 1').click();
+        modalButton('Delete 6').click();
       });
-      expect(modalButton('Cancel').disabled).toBe(true);
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(30_000);
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
       });
 
-      expect(modalTitle()).toBe('Deleted 0 of 1 Pod');
-      expect(modalButton('Close').disabled).toBe(false);
+      expect(actionCalls()).toHaveLength(5);
+      expect(modalButton('Cancel').disabled).toBe(true);
+
+      vi.useRealTimers();
       await act(async () => {
         release();
       });
+      await app.settle();
+
+      expect(actionCalls()).toHaveLength(6);
+      expect(modal()).toBeNull();
+    });
+
+    it('starts nothing more once the view running the batch is gone', async () => {
+      const { clusterId } = devCluster();
+      app.backend.answer('RunObjectAction', () => ({}));
+      const release = app.backend.hold('RunObjectAction');
+      const names = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+      await mount(<BatchTable rows={names.map((name) => makeRow(clusterId, 'Pod', '', name))} />);
+      await selectAllRows();
+      await click(batchAction('Delete 7'));
+      await click(modalButton('Delete 7'));
+      expect(actionCalls()).toHaveLength(5);
+
+      view.unmount();
+      await act(async () => {
+        release();
+      });
+      await app.settle();
+
+      expect(actionCalls()).toHaveLength(5);
+    });
+
+    it('names the cluster on the results, which can appear after moving elsewhere', async () => {
+      const { clusterId } = devCluster();
+      app.backend.answer('RunObjectAction', () => {
+        throw new Error('etcd timeout');
+      });
+      await mount(<BatchTable rows={[makeRow(clusterId, 'Pod', '', 'a')]} />);
+      await selectAllRows();
+      await click(batchAction('Delete 1'));
+      await click(modalButton('Delete 1'));
+
+      expect(modalTitle()).toBe('Deleted 0 of 1 Pod');
+      expect(modal()?.querySelector('.confirmation-modal-target')?.textContent).toContain('alpha');
+    });
+
+    it('starts nothing more once the cluster stops answering', async () => {
+      const { clusterId } = devCluster();
+      const underWay: Array<() => void> = [];
+      app.backend.answer('RunObjectAction', (request) => {
+        if ((request as { target: { name: string } }).target.name === 'a') {
+          throw clusterRefusal('DeadlineExceeded', 'The cluster did not answer in time.');
+        }
+        return new Promise((resolve) => {
+          underWay.push(() => resolve({}));
+        });
+      });
+      const names = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+      await mount(<BatchTable rows={names.map((name) => makeRow(clusterId, 'Pod', '', name))} />);
+      await selectAllRows();
+      await click(batchAction('Delete 7'));
+      await click(modalButton('Delete 7'));
+
+      const sentNames = () => actionCalls().map((call) => call.target.name);
+      expect(sentNames()).toEqual(['a', 'b', 'c', 'd', 'e']);
+      expect(modalButton('Cancel').disabled).toBe(true);
+
+      await act(async () => {
+        underWay.splice(0).forEach((answer) => {
+          answer();
+        });
+      });
+      await app.settle();
+
+      expect(sentNames()).toHaveLength(5);
+      expect(modalTitle()).toBe('Deleted 4 of 7 Pods');
+      expect(selectedRowNames()).toEqual(['a', 'f', 'g']);
+      expect(detailColumns()).toEqual(['Name', 'Result']);
+      expect(detailRows()).toEqual([
+        ['a', 'No answer'],
+        ['f', 'Not started'],
+        ['g', 'Not started'],
+      ]);
+
+      app.backend.answer('RunObjectAction', () => ({}));
+      await click(modalButton('Retry 3'));
+
+      expect(sentNames().slice(5)).toEqual(['a', 'f', 'g']);
+      expect(modal()).toBeNull();
     });
   });
 

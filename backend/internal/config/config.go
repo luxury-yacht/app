@@ -455,6 +455,12 @@ const (
 	// ObjectYAMLMutationRequestTimeout bounds YAML edit/delete operations.
 	ObjectYAMLMutationRequestTimeout = 15 * time.Second
 
+	// ObjectActionRequestTimeout bounds one object action's requests to the
+	// cluster, so a call the cluster never answers fails instead of holding its
+	// caller. It outlasts the API server's own 60-second request limit, so a slow
+	// admission webhook gets its full time and the server's answer arrives first.
+	ObjectActionRequestTimeout = 70 * time.Second
+
 	// KindOnlyDiscoveryTimeout bounds kind-only discovery walks.
 	KindOnlyDiscoveryTimeout = 10 * time.Second
 

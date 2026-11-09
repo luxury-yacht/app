@@ -57,7 +57,7 @@ import {
   resolveObjectActionPermissions,
 } from '@shared/hooks/useObjectActionController';
 import type React from 'react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { queryPermissionChecks, useUserPermissions } from '@/core/capabilities';
 import { useClusterNameResolver } from '@/core/cluster-workspace/useClusterWorkspace';
 import { errorHandler } from '@/utils/errorHandler';
@@ -205,6 +205,7 @@ interface BatchRun {
 interface BatchFailure {
   entry: BatchEntry;
   reason: string;
+  outcome: 'failed' | 'no-answer' | 'not-started';
 }
 
 type BatchDialog =
@@ -272,33 +273,41 @@ const targetDetailsTable = (
   };
 };
 
+const OUTCOME_LABELS: Record<BatchFailure['outcome'], string> = {
+  failed: 'Failed',
+  'no-answer': 'No answer',
+  'not-started': 'Not started',
+};
+
+/** The list of failures, saying what happened to each object when that differs. */
+const failureDetailsTable = (run: BatchRun, failed: readonly BatchFailure[]) => {
+  const mixed = unique(failed.map((failure) => failure.outcome)).length > 1;
+  const table = targetDetailsTable(
+    run.entries.map((entry) => entry.object),
+    failed.map(({ entry }) => entry.object),
+    mixed ? 'Name' : 'Failed'
+  );
+  if (!mixed) {
+    return table;
+  }
+  return {
+    ...table,
+    columns: [...table.columns, { header: 'Result', monospace: undefined }],
+    rows: table.rows.map((row, index) => [...row, OUTCOME_LABELS[failed[index].outcome]]),
+  };
+};
+
 const actionTitle = (label: string, eligible: number, total: number): string =>
   eligible === total ? `${label} ${eligible}` : `${label} ${eligible} of ${total}`;
 
 const errorReason = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
-// The running dialog cannot be dismissed and the app behind it is inert, so a call
-// that never returns must not hold it open.
-const OBJECT_ACTION_DEADLINE_MS = 30_000;
-
-class ObjectActionDeadlineError extends Error {
-  constructor() {
-    super('The cluster did not answer in time. The action may still complete.');
-  }
-}
-
-const withinDeadline = async <R,>(work: Promise<R>): Promise<R> => {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const deadline = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => reject(new ObjectActionDeadlineError()), OBJECT_ACTION_DEADLINE_MS);
-  });
-  try {
-    return await Promise.race([work, deadline]);
-  } finally {
-    clearTimeout(timer);
-  }
-};
+const notStartedFailure = (entry: BatchEntry): BatchFailure => ({
+  entry,
+  reason: 'The remaining objects were not started because the cluster stopped answering.',
+  outcome: 'not-started',
+});
 
 /** Runs one object; returns its failure, or null when the batch can count it done. */
 const runEntry = async (run: BatchRun, entry: BatchEntry): Promise<BatchFailure | null> => {
@@ -309,37 +318,44 @@ const runEntry = async (run: BatchRun, entry: BatchEntry): Promise<BatchFailure 
     // Bound to the object the user selected: if something else now holds its
     // name, the API server refuses the write.
     const target = { ...actionTargetFor(object, action), uid: object.uid };
-    await withinDeadline(definition.run(target, run));
+    await definition.run(target, run);
     return null;
   } catch (error) {
-    // Already gone is what a delete asked for. A replacement answers Conflict instead.
-    if (definition.id === 'delete' && errorStatusOf(error)?.reason === 'NotFound') {
+    const status = errorStatusOf(error);
+    // Already gone is what a delete asked for. The backend names the object only
+    // when it confirmed that exact object is missing; a replacement answers Conflict.
+    if (definition.id === 'delete' && status?.reason === 'NotFound' && status.ref) {
       return null;
     }
-    if (!(error instanceof ObjectActionDeadlineError)) {
-      errorHandler.handleInline(error, {
-        source: 'useBatchObjectActions',
-        action: definition.id,
-        kind: object.kind,
-        name: object.name,
-      });
-    }
-    return { entry, reason: errorReason(error) };
+    errorHandler.handleInline(error, {
+      source: 'useBatchObjectActions',
+      action: definition.id,
+      kind: object.kind,
+      name: object.name,
+    });
+    const outcome = status?.reason === 'DeadlineExceeded' ? 'no-answer' : 'failed';
+    return { entry, reason: errorReason(error), outcome };
   }
 };
 
 const executeBatch = async (
   run: BatchRun,
-  onProgress: (done: number) => void
+  onProgress: (done: number) => void,
+  isAbandoned: () => boolean
 ): Promise<BatchFailure[]> => {
   const queue = [...run.entries];
   const failed: BatchFailure[] = [];
   let done = 0;
   const worker = async () => {
-    for (let entry = queue.shift(); entry; entry = queue.shift()) {
+    for (let entry = queue.shift(); entry && !isAbandoned(); entry = queue.shift()) {
       const failure = await runEntry(run, entry);
       if (failure) {
         failed.push(failure);
+      }
+      // Each call waits out its deadline, so more calls would only hold the
+      // dialog open against a cluster that is not responding.
+      if (failure?.outcome === 'no-answer') {
+        failed.push(...queue.splice(0).map(notStartedFailure));
       }
       done += 1;
       onProgress(done);
@@ -464,10 +480,24 @@ export function useBatchObjectActions<T>({
     [scopeKey]
   );
 
+  // The dialog reports to this view. Once the view is gone nobody can see a result,
+  // so objects still queued stop starting.
+  const abandoned = useRef(false);
+  useEffect(() => {
+    abandoned.current = false;
+    return () => {
+      abandoned.current = true;
+    };
+  }, []);
+
   const startRun = useCallback(
     async (run: BatchRun) => {
       setDialog({ stage: 'running', run, done: 0 });
-      const failed = await executeBatch(run, (done) => setDialog({ stage: 'running', run, done }));
+      const failed = await executeBatch(
+        run,
+        (done) => setDialog({ stage: 'running', run, done }),
+        () => abandoned.current
+      );
       onRunComplete?.(run.definition.id);
       if (failed.length === 0) {
         update({ active: false, selectedKeys: NO_ROWS_SELECTED });
@@ -597,16 +627,26 @@ export function useBatchObjectActions<T>({
     const total = run.entries.length;
     const noun = countNoun(run.entries.map((entry) => entry.object));
     const { noRetryReason } = run.definition;
+    const notStarted = failed.filter((failure) => failure.outcome === 'not-started').length;
+    const summary =
+      notStarted > 0
+        ? `${failed.length - notStarted} failed, ${notStarted} not started.`
+        : `${failed.length} failed.`;
+    // A run keeps going across a scope change, so this can open over another cluster.
+    const { target } = confirmationProps(run, resolveClusterName);
+    const scope = target
+      ? undefined
+      : scopeMessage(
+          run.entries.map((entry) => entry.object),
+          resolveClusterName
+        );
     return (
       <ConfirmationModal
         isOpen
         title={`${run.definition.past} ${total - failed.length} of ${total} ${noun}`}
-        message={[`${failed.length} failed.`, noRetryReason].filter(Boolean).join(' ')}
-        detailsTable={targetDetailsTable(
-          run.entries.map((entry) => entry.object),
-          failed.map(({ entry }) => entry.object),
-          'Failed'
-        )}
+        target={target}
+        message={[scope, summary, noRetryReason].filter(Boolean).join(' ')}
+        detailsTable={failureDetailsTable(run, failed)}
         warning={unique(failed.map((failure) => failure.reason)).join(' ')}
         cancelText="Close"
         confirmText={`Retry ${failed.length}`}
@@ -629,7 +669,7 @@ export function useBatchObjectActions<T>({
       <ConfirmationModal
         isOpen
         {...props}
-        message={running ? `${done} of ${run.entries.length} done.` : props.message}
+        message={running ? `${done} of ${run.entries.length} finished.` : props.message}
         busy={running}
         onConfirm={() => void startRun(run)}
         onCancel={running ? () => undefined : closeDialog}

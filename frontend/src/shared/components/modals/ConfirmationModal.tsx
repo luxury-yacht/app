@@ -156,6 +156,7 @@ const ConfirmationModalContent: React.FC<Omit<ConfirmationModalProps, 'isOpen'>>
 
   useModalFocusTrap({
     ref: modalRef,
+    suppressShortcuts: busy,
     onEscape: () => {
       onCancel();
       return true;

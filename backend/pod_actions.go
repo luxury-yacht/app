@@ -8,9 +8,13 @@
 
 package backend
 
-import "github.com/luxury-yacht/app/backend/resources/pods"
+import (
+	"context"
 
-func (g *ResourceGateway) deletePodAction(target ObjectActionTargetRef) error {
+	"github.com/luxury-yacht/app/backend/resources/pods"
+)
+
+func (g *ResourceGateway) deletePodAction(ctx context.Context, target ObjectActionTargetRef) error {
 	if target.Group != "" || target.Version != "v1" || target.Kind != pods.Identity.Kind {
 		return errUnsupportedActionTarget(ObjectActionDelete, target, "/v1", pods.Identity.Kind)
 	}
@@ -21,7 +25,6 @@ func (g *ResourceGateway) deletePodAction(target ObjectActionTargetRef) error {
 	if err != nil {
 		return err
 	}
-	ctx := g.CtxOrBackground()
 	if err := requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Group:     target.Group,
 		Version:   target.Version,

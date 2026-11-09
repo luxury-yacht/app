@@ -406,6 +406,12 @@ func TestServiceDrainUsesKubectlUnmanagedPodFiltering(t *testing.T) {
 
 func newNodeService(t *testing.T) (*nodes.Service, *fake.Clientset, *corev1.Node) {
 	t.Helper()
+	service, _, client, node := newNodeServiceWithStore(t)
+	return service, client, node
+}
+
+func newNodeServiceWithStore(t *testing.T) (*nodes.Service, *nodemaintenance.Store, *fake.Clientset, *corev1.Node) {
+	t.Helper()
 	now := time.Now()
 
 	node := &corev1.Node{
@@ -446,11 +452,13 @@ func newNodeService(t *testing.T) (*nodes.Service, *fake.Clientset, *corev1.Node
 	}
 
 	podA := testsupport.PodFixture("frontend", "app-0")
+	podA.UID = "uid-app-0"
 	podA.Spec.NodeName = node.Name
 	podA.Status.ContainerStatuses = []corev1.ContainerStatus{{Name: "app", RestartCount: 1, Ready: true}}
 	markControllerManaged(podA)
 
 	podB := testsupport.PodFixture("frontend", "app-1")
+	podB.UID = "uid-app-1"
 	podB.Spec.NodeName = node.Name
 	podB.Status.ContainerStatuses = []corev1.ContainerStatus{{Name: "app", RestartCount: 0, Ready: true}}
 	markControllerManaged(podB)
@@ -463,8 +471,8 @@ func newNodeService(t *testing.T) (*nodes.Service, *fake.Clientset, *corev1.Node
 		testsupport.WithDepsLogger(applog.Noop),
 	)
 
-	service := nodes.NewService(deps, nodemaintenance.NewStore(5))
-	return service, client, node
+	store := nodemaintenance.NewStore(5)
+	return nodes.NewService(deps, store), store, client, node
 }
 
 func markControllerManaged(pod *corev1.Pod) {

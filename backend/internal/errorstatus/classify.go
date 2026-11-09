@@ -286,6 +286,20 @@ func withExplicitReason(err error, reason Reason, retryable, expected bool) erro
 	}}
 }
 
+// NoAnswerInTime marks err as a request the app stopped waiting on at its own
+// deadline. It is the cluster's silence, not an application failure, and the
+// cluster may still have carried the request out.
+func NoAnswerInTime(err error) error {
+	return withExplicitReason(err, ReasonDeadlineExceeded, true, true)
+}
+
+// Conflict marks err as an action the app refused because of the current state of
+// what it acts on, such as a drain already running on the node. That is routine,
+// not an application failure.
+func Conflict(err error) error {
+	return withExplicitReason(err, ReasonConflict, false, true)
+}
+
 // BadRequest marks err as a rejected request: the caller sent arguments the
 // boundary will not accept. Use it where a binding or HTTP handler validates
 // its own input.

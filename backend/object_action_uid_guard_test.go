@@ -10,6 +10,7 @@
 package backend
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -139,7 +140,7 @@ func TestStartDrainRefusesANodeReplacedSinceItWasSelected(t *testing.T) {
 	target := objectActionTarget(uidGuardCluster, "", "v1", "Node", "", "node")
 	target.UID = "uid-the-user-saw"
 
-	_, err := app.gateway.startDrainNodeAction(target, DrainNodeOptions{DisableEviction: true})
+	_, err := app.gateway.startDrainNodeAction(context.Background(), target, DrainNodeOptions{DisableEviction: true})
 
 	require.True(t, apierrors.IsConflict(err), "got %v", err)
 }

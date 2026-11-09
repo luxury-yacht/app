@@ -1,12 +1,13 @@
 package backend
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resources/nodes"
 )
 
-func (g *ResourceGateway) cordonNodeAction(target ObjectActionTargetRef) error {
+func (g *ResourceGateway) cordonNodeAction(ctx context.Context, target ObjectActionTargetRef) error {
 	if err := requireNodeActionTarget(ObjectActionCordon, target); err != nil {
 		return err
 	}
@@ -14,7 +15,6 @@ func (g *ResourceGateway) cordonNodeAction(target ObjectActionTargetRef) error {
 	if err != nil {
 		return err
 	}
-	ctx := g.CtxOrBackground()
 	if err := g.requireNodeMaintenancePermission(ctx, deps, target.Name); err != nil {
 		return err
 	}
@@ -25,7 +25,7 @@ func (g *ResourceGateway) cordonNodeAction(target ObjectActionTargetRef) error {
 	return nil
 }
 
-func (g *ResourceGateway) uncordonNodeAction(target ObjectActionTargetRef) error {
+func (g *ResourceGateway) uncordonNodeAction(ctx context.Context, target ObjectActionTargetRef) error {
 	if err := requireNodeActionTarget(ObjectActionUncordon, target); err != nil {
 		return err
 	}
@@ -33,7 +33,6 @@ func (g *ResourceGateway) uncordonNodeAction(target ObjectActionTargetRef) error
 	if err != nil {
 		return err
 	}
-	ctx := g.CtxOrBackground()
 	if err := g.requireNodeMaintenancePermission(ctx, deps, target.Name); err != nil {
 		return err
 	}
@@ -73,7 +72,7 @@ func (g *ResourceGateway) drainNodeAction(target ObjectActionTargetRef, options 
 	return nil
 }
 
-func (g *ResourceGateway) startDrainNodeAction(target ObjectActionTargetRef, options DrainNodeOptions) (string, error) {
+func (g *ResourceGateway) startDrainNodeAction(ctx context.Context, target ObjectActionTargetRef, options DrainNodeOptions) (string, error) {
 	if err := requireNodeActionTarget(ObjectActionStartDrain, target); err != nil {
 		return "", err
 	}
@@ -84,7 +83,6 @@ func (g *ResourceGateway) startDrainNodeAction(target ObjectActionTargetRef, opt
 	if err != nil {
 		return "", err
 	}
-	ctx := g.CtxOrBackground()
 	if err := g.requireNodeMaintenancePermission(ctx, deps, target.Name); err != nil {
 		return "", err
 	}
@@ -99,7 +97,8 @@ func (g *ResourceGateway) startDrainNodeAction(target ObjectActionTargetRef, opt
 		return "", fmt.Errorf("operations coordinator not initialized")
 	}
 	operationEpoch := g.operations.clusterOperationEpoch(target.ClusterID)
-	job, err := service.StartDrainWithCompletion(ctx, target.Name, target.UID, options, func(jobID string) {
+	// The drain outlives this call, so it runs under the app's context, not ctx.
+	job, err := service.StartDrainWithCompletion(g.CtxOrBackground(), target.Name, target.UID, options, func(jobID string) {
 		g.clearNodeCaches(selectionKey, target.Name)
 		if g.operations != nil {
 			g.operations.unregisterRuntimeOperation(jobID)
@@ -119,7 +118,7 @@ func (g *ResourceGateway) startDrainNodeAction(target ObjectActionTargetRef, opt
 	return job.ID, nil
 }
 
-func (g *ResourceGateway) deleteNodeAction(target ObjectActionTargetRef, force bool) error {
+func (g *ResourceGateway) deleteNodeAction(ctx context.Context, target ObjectActionTargetRef, force bool) error {
 	if err := requireNodeActionTarget(ObjectActionDelete, target); err != nil {
 		return err
 	}
@@ -127,7 +126,6 @@ func (g *ResourceGateway) deleteNodeAction(target ObjectActionTargetRef, force b
 	if err != nil {
 		return err
 	}
-	ctx := g.CtxOrBackground()
 	if err := requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Group:   target.Group,
 		Version: target.Version,

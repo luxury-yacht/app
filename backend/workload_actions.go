@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/kind/kindspec"
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -62,7 +63,7 @@ func validateAppsV1WorkloadAction(action, group, version, kind string, supported
 	return normalizedKind, nil
 }
 
-func (g *ResourceGateway) restartWorkloadAction(target ObjectActionTargetRef) error {
+func (g *ResourceGateway) restartWorkloadAction(ctx context.Context, target ObjectActionTargetRef) error {
 	if err := requireNamespacedObject(target.Namespace, target.Name); err != nil {
 		return err
 	}
@@ -97,8 +98,6 @@ func (g *ResourceGateway) restartWorkloadAction(target ObjectActionTargetRef) er
 		return fmt.Errorf("failed to marshal restart patch: %w", err)
 	}
 
-	ctx := g.CtxOrBackground()
-
 	ops := workloadOperationsByKind[workloadKind]
 	if ops == nil || ops.Restart == nil {
 		return fmt.Errorf("restart not supported for workload kind %q", workloadKind)
@@ -122,7 +121,7 @@ func (g *ResourceGateway) restartWorkloadAction(target ObjectActionTargetRef) er
 	return nil
 }
 
-func (g *ResourceGateway) scaleWorkloadAction(target ObjectActionTargetRef, replicas int) error {
+func (g *ResourceGateway) scaleWorkloadAction(ctx context.Context, target ObjectActionTargetRef, replicas int) error {
 	if err := requireNamespacedObject(target.Namespace, target.Name); err != nil {
 		return err
 	}
@@ -146,8 +145,6 @@ func (g *ResourceGateway) scaleWorkloadAction(target ObjectActionTargetRef, repl
 	if deps.KubernetesClient == nil {
 		return fmt.Errorf("kubernetes client is not initialized")
 	}
-
-	ctx := g.CtxOrBackground()
 
 	if err := ensureHPAManagedScaleAllowed(ctx, deps, target, replicas); err != nil {
 		return err
@@ -201,7 +198,7 @@ func ensureHPAManagedScaleAllowed(ctx context.Context, deps common.Dependencies,
 			return nil
 		}
 	}
-	return fmt.Errorf("manual scale is disabled for HPA-managed %s %s/%s", target.Kind, target.Namespace, target.Name)
+	return errorstatus.Conflict(fmt.Errorf("manual scale is disabled for HPA-managed %s %s/%s", target.Kind, target.Namespace, target.Name))
 }
 
 func currentWorkloadDesiredReplicas(ctx context.Context, deps common.Dependencies, namespace, workloadKind, name string) (int32, error) {
@@ -254,7 +251,7 @@ func (g *ResourceGateway) triggerCronJobAction(target ObjectActionTargetRef) (st
 	return jobName, nil
 }
 
-func (g *ResourceGateway) suspendCronJobAction(target ObjectActionTargetRef, suspend bool) error {
+func (g *ResourceGateway) suspendCronJobAction(ctx context.Context, target ObjectActionTargetRef, suspend bool) error {
 	if target.Group != cronjob.Identity.Group || target.Version != cronjob.Identity.Version || target.Kind != cronjob.Identity.Kind {
 		return errUnsupportedActionTarget(ObjectActionSuspend, target, cronjob.Identity.Group+"/"+cronjob.Identity.Version, cronjob.Identity.Kind)
 	}
@@ -269,7 +266,6 @@ func (g *ResourceGateway) suspendCronJobAction(target ObjectActionTargetRef, sus
 		return fmt.Errorf("kubernetes client is not initialized")
 	}
 
-	ctx := g.CtxOrBackground()
 	if err := requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Group:     cronjob.Identity.Group,
 		Version:   cronjob.Identity.Version,

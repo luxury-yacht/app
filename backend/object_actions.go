@@ -8,15 +8,20 @@
 package backend
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/objectaction"
+	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/nodes"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -58,20 +63,40 @@ type objectActionInvocation struct {
 type objectActionHandler func(objectActionInvocation) (ObjectActionResponse, error)
 
 var objectActionHandlers = map[string]objectActionHandler{
-	ObjectActionDelete:               runDeleteObjectAction,
+	ObjectActionDelete:               boundedObjectAction(runDeleteObjectAction),
 	ObjectActionRemoveFinalizer:      runRemoveFinalizerObjectAction,
-	ObjectActionForceDelete:          runForceDeleteObjectAction,
-	ObjectActionRestart:              runRestartObjectAction,
-	ObjectActionScale:                runScaleObjectAction,
+	ObjectActionForceDelete:          boundedObjectAction(runForceDeleteObjectAction),
+	ObjectActionRestart:              boundedObjectAction(runRestartObjectAction),
+	ObjectActionScale:                boundedObjectAction(runScaleObjectAction),
 	ObjectActionTrigger:              runTriggerObjectAction,
-	ObjectActionSuspend:              runSuspendObjectAction,
-	ObjectActionCordon:               runCordonObjectAction,
-	ObjectActionUncordon:             runUncordonObjectAction,
+	ObjectActionSuspend:              boundedObjectAction(runSuspendObjectAction),
+	ObjectActionCordon:               boundedObjectAction(runCordonObjectAction),
+	ObjectActionUncordon:             boundedObjectAction(runUncordonObjectAction),
 	ObjectActionDrain:                runDrainObjectAction,
-	ObjectActionStartDrain:           runStartDrainObjectAction,
+	ObjectActionStartDrain:           boundedObjectAction(runStartDrainObjectAction),
 	ObjectActionStartPortForward:     runStartPortForwardObjectAction,
 	ObjectActionCreateDebugContainer: runCreateDebugContainerObjectAction,
 	ObjectActionRollback:             runRollbackObjectAction,
+}
+
+const objectActionNoAnswerMessage = "The cluster did not answer in time."
+
+// boundedObjectAction limits how long an action waits on the cluster. The deadline
+// cancels the action's own requests, so none is still running once the caller has
+// its answer. The caller can tell this case apart: it means the cluster stopped
+// responding, not that it refused.
+func boundedObjectAction(
+	handler func(context.Context, objectActionInvocation) (ObjectActionResponse, error),
+) objectActionHandler {
+	return func(invocation objectActionInvocation) (ObjectActionResponse, error) {
+		ctx, cancel := common.WithDefaultTimeout(invocation.gateway.CtxOrBackground(), config.ObjectActionRequestTimeout)
+		defer cancel()
+		response, err := handler(ctx, invocation)
+		if errors.Is(err, context.DeadlineExceeded) {
+			err = errorstatus.NoAnswerInTime(errorstatus.WithMessage(objectActionNoAnswerMessage, err))
+		}
+		return response, err
+	}
 }
 
 // ObjectActionTargetRef is the canonical object identity for state-changing
@@ -163,20 +188,39 @@ func errUnsupportedActionTarget(action string, target ObjectActionTargetRef, api
 	return errorstatus.BadRequest(fmt.Errorf("%s requires %s %s target, got %s %s", action, apiVersion, kind, objectActionTargetGVK(target).GroupVersion().String(), target.Kind))
 }
 
-func (g *ResourceGateway) deleteObjectAction(target ObjectActionTargetRef, force bool) error {
+func (g *ResourceGateway) deleteObjectAction(ctx context.Context, target ObjectActionTargetRef, force bool) error {
+	return confirmDeletedObjectAbsence(target, g.dispatchObjectDelete(ctx, target, force))
+}
+
+func (g *ResourceGateway) dispatchObjectDelete(ctx context.Context, target ObjectActionTargetRef, force bool) error {
 	switch {
 	case target.Group == "" && target.Version == "v1" && target.Kind == pods.Identity.Kind:
-		return g.deletePodAction(target)
+		return g.deletePodAction(ctx, target)
 	case target.Group == "" && target.Version == "v1" && target.Kind == nodes.Identity.Kind:
-		return g.deleteNodeAction(target, force)
+		return g.deleteNodeAction(ctx, target, force)
 	case resourcemodel.IsHelmReleaseGVK(objectActionTargetGVK(target)):
 		return g.deleteHelmReleaseAction(target)
 	default:
 		if force {
 			return errorstatus.BadRequest(fmt.Errorf("force delete is only supported for core/v1 Node"))
 		}
-		return g.deleteGenericResourceAction(target)
+		return g.deleteGenericResourceAction(ctx, target)
 	}
+}
+
+// confirmDeletedObjectAbsence names the target on a delete's 404 only when the
+// Kubernetes API reported that object missing. A 404 it did not produce, such as the
+// plain one for an API version the cluster stopped serving, says nothing about
+// whether the object exists; client-go marks those as unexpected responses.
+func confirmDeletedObjectAbsence(target ObjectActionTargetRef, err error) error {
+	if !apierrors.IsNotFound(err) || apierrors.IsUnexpectedServerError(err) {
+		return err
+	}
+	var api apierrors.APIStatus
+	if !errors.As(err, &api) || api.Status().Details == nil || api.Status().Details.Name != target.Name {
+		return err
+	}
+	return errorstatus.ObjectNotFound(objectActionStatusRef(target), err)
 }
 
 func (g *ResourceGateway) rollbackObjectAction(target ObjectActionTargetRef, revision int64) error {
@@ -214,8 +258,8 @@ func objectActionStatusRef(target ObjectActionTargetRef) errorstatus.ObjectRef {
 	}
 }
 
-func runDeleteObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
-	return ObjectActionResponse{}, invocation.gateway.deleteObjectAction(invocation.target, false)
+func runDeleteObjectAction(ctx context.Context, invocation objectActionInvocation) (ObjectActionResponse, error) {
+	return ObjectActionResponse{}, invocation.gateway.deleteObjectAction(ctx, invocation.target, false)
 }
 
 func runRemoveFinalizerObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
@@ -236,18 +280,18 @@ func runRemoveFinalizerObjectAction(invocation objectActionInvocation) (ObjectAc
 	return ObjectActionResponse{}, invocation.gateway.removeObjectFinalizerAction(invocation.target, finalizer, path)
 }
 
-func runForceDeleteObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
-	return ObjectActionResponse{}, invocation.gateway.deleteObjectAction(invocation.target, true)
+func runForceDeleteObjectAction(ctx context.Context, invocation objectActionInvocation) (ObjectActionResponse, error) {
+	return ObjectActionResponse{}, invocation.gateway.deleteObjectAction(ctx, invocation.target, true)
 }
 
-func runRestartObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
+func runRestartObjectAction(ctx context.Context, invocation objectActionInvocation) (ObjectActionResponse, error) {
 	if err := requireActionNamespacedTarget(invocation.target, invocation.action); err != nil {
 		return ObjectActionResponse{}, err
 	}
-	return ObjectActionResponse{}, invocation.gateway.restartWorkloadAction(invocation.target)
+	return ObjectActionResponse{}, invocation.gateway.restartWorkloadAction(ctx, invocation.target)
 }
 
-func runScaleObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
+func runScaleObjectAction(ctx context.Context, invocation objectActionInvocation) (ObjectActionResponse, error) {
 	replicas, err := requireObjectActionOption(invocation.request.Replicas, "replicas", invocation.action)
 	if err != nil {
 		return ObjectActionResponse{}, err
@@ -255,7 +299,7 @@ func runScaleObjectAction(invocation objectActionInvocation) (ObjectActionRespon
 	if err := requireActionNamespacedTarget(invocation.target, invocation.action); err != nil {
 		return ObjectActionResponse{}, err
 	}
-	return ObjectActionResponse{}, invocation.gateway.scaleWorkloadAction(invocation.target, replicas)
+	return ObjectActionResponse{}, invocation.gateway.scaleWorkloadAction(ctx, invocation.target, replicas)
 }
 
 func runTriggerObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
@@ -266,7 +310,7 @@ func runTriggerObjectAction(invocation objectActionInvocation) (ObjectActionResp
 	return ObjectActionResponse{Name: name}, err
 }
 
-func runSuspendObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
+func runSuspendObjectAction(ctx context.Context, invocation objectActionInvocation) (ObjectActionResponse, error) {
 	suspend, err := requireObjectActionOption(invocation.request.Suspend, "suspend", invocation.action)
 	if err != nil {
 		return ObjectActionResponse{}, err
@@ -274,23 +318,23 @@ func runSuspendObjectAction(invocation objectActionInvocation) (ObjectActionResp
 	if err := requireActionNamespacedTarget(invocation.target, invocation.action); err != nil {
 		return ObjectActionResponse{}, err
 	}
-	return ObjectActionResponse{}, invocation.gateway.suspendCronJobAction(invocation.target, suspend)
+	return ObjectActionResponse{}, invocation.gateway.suspendCronJobAction(ctx, invocation.target, suspend)
 }
 
-func runCordonObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
-	return ObjectActionResponse{}, invocation.gateway.cordonNodeAction(invocation.target)
+func runCordonObjectAction(ctx context.Context, invocation objectActionInvocation) (ObjectActionResponse, error) {
+	return ObjectActionResponse{}, invocation.gateway.cordonNodeAction(ctx, invocation.target)
 }
 
-func runUncordonObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
-	return ObjectActionResponse{}, invocation.gateway.uncordonNodeAction(invocation.target)
+func runUncordonObjectAction(ctx context.Context, invocation objectActionInvocation) (ObjectActionResponse, error) {
+	return ObjectActionResponse{}, invocation.gateway.uncordonNodeAction(ctx, invocation.target)
 }
 
 func runDrainObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
 	return ObjectActionResponse{}, invocation.gateway.drainNodeAction(invocation.target, objectActionDrainOptions(invocation.request))
 }
 
-func runStartDrainObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
-	jobID, err := invocation.gateway.startDrainNodeAction(invocation.target, objectActionDrainOptions(invocation.request))
+func runStartDrainObjectAction(ctx context.Context, invocation objectActionInvocation) (ObjectActionResponse, error) {
+	jobID, err := invocation.gateway.startDrainNodeAction(ctx, invocation.target, objectActionDrainOptions(invocation.request))
 	return ObjectActionResponse{JobID: jobID}, err
 }
 

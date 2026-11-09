@@ -154,10 +154,20 @@ virtualization, and native table accessibility. Apply the
 - A failed restart offers no Retry: it may have started despite the error, and
   repeating it would roll the workload again. Failed rows stay selected, so
   restarting them is a new, confirmed action.
-- A delete answered NotFound counts as done. Each call has a 30-second deadline,
-  because the running dialog cannot be dismissed; a call that times out is listed
-  as failed and may still complete. Other failures also go to the app error
-  pipeline, which keeps expected cluster outcomes out of Sentry.
+- A drain removes only the pods it listed: each eviction or delete carries the
+  listed pod's UID, and a pod recreated under that name counts as already removed.
+- A delete counts as done on a 404 only when the backend confirms that exact
+  object is missing. Other 404s, such as for an API version no longer served, stay
+  failures.
+- Each object holds its slot until its backend call returns, so results and Retry
+  wait for every call under way. The backend ends a call after 70 seconds, longer
+  than the API server's own limit, and reports that the cluster did not answer.
+  That answer stops the batch starting more objects, which are listed as not
+  started. Failures also go to the app error pipeline, which keeps expected cluster
+  outcomes out of Sentry.
+- While a batch runs, its dialog blocks app shortcuts so the view that will report
+  it stays open. If the view goes anyway, such as the cluster closing from the
+  native menu, objects still queued do not start.
 - Confirmations and failure lists group by group, version, and kind. They add an
   API Version column when one kind name spans several API versions.
 - A view that lists kinds too consequential to remove several at a time does not
