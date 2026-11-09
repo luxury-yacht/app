@@ -161,9 +161,9 @@ virtualization, and native table accessibility. Apply the
   selected, and running again is a new, confirmed action against current data.
 - Each object holds its slot until its backend call returns, so results and Retry
   wait for every call under way. The backend ends a call within 70 seconds, longer
-  than the API server's own limit, and reports that the cluster did not answer.
-  That answer stops the batch starting more objects, which are listed as not
-  started. Failures also go to the app error pipeline, which keeps expected cluster
+  than the API server's own limit, and reports that the cluster did not answer. A
+  silent cluster can also fail sooner as an unreachable connection. Either stops
+  the batch starting more objects, which are listed as not started. Failures also go to the app error pipeline, which keeps expected cluster
   outcomes out of Sentry.
 - While a batch runs, its dialog blocks app shortcuts so the view that will report
   it stays open. If the view goes anyway, such as the cluster closing from the

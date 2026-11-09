@@ -794,45 +794,50 @@ describe('useBatchObjectActions', () => {
       expect(modal()?.querySelector('.confirmation-modal-target')?.textContent).toContain('alpha');
     });
 
-    it('starts nothing more once the cluster stops answering', async () => {
-      const { clusterId } = devCluster();
-      const underWay: Array<() => void> = [];
-      app.backend.answer('RunObjectAction', (request) => {
-        if ((request as { target: { name: string } }).target.name === 'a') {
-          throw clusterRefusal('DeadlineExceeded', 'The cluster did not answer in time.');
-        }
-        return new Promise((resolve) => {
-          underWay.push(() => resolve({}));
+    // A silent cluster reaches us either way: our own deadline, or client-go giving up
+    // on the connection first (http2: client connection lost, seen on a real cluster).
+    it.each(['DeadlineExceeded', 'ClusterUnreachable'] as const)(
+      'starts nothing more after %s',
+      async (reason) => {
+        const { clusterId } = devCluster();
+        const underWay: Array<() => void> = [];
+        app.backend.answer('RunObjectAction', (request) => {
+          if ((request as { target: { name: string } }).target.name === 'a') {
+            throw clusterRefusal(reason, 'The cluster did not answer.');
+          }
+          return new Promise((resolve) => {
+            underWay.push(() => resolve({}));
+          });
         });
-      });
-      const names = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
-      await mount(<BatchTable rows={names.map((name) => makeRow(clusterId, 'Pod', '', name))} />);
-      await selectAllRows();
-      await click(batchAction('Delete 7'));
-      await click(modalButton('Delete 7'));
+        const names = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+        await mount(<BatchTable rows={names.map((name) => makeRow(clusterId, 'Pod', '', name))} />);
+        await selectAllRows();
+        await click(batchAction('Delete 7'));
+        await click(modalButton('Delete 7'));
 
-      const sentNames = () => actionCalls().map((call) => call.target.name);
-      expect(sentNames()).toEqual(['a', 'b', 'c', 'd', 'e']);
-      expect(modalButton('Cancel').disabled).toBe(true);
+        const sentNames = () => actionCalls().map((call) => call.target.name);
+        expect(sentNames()).toEqual(['a', 'b', 'c', 'd', 'e']);
+        expect(modalButton('Cancel').disabled).toBe(true);
 
-      await act(async () => {
-        underWay.splice(0).forEach((answer) => {
-          answer();
+        await act(async () => {
+          underWay.splice(0).forEach((answer) => {
+            answer();
+          });
         });
-      });
-      await app.settle();
+        await app.settle();
 
-      expect(sentNames()).toHaveLength(5);
-      expect(modalTitle()).toBe('Deleted 4 of 7 Pods');
-      expect(selectedRowNames()).toEqual(['a', 'f', 'g']);
-      expect(detailColumns()).toEqual(['Name', 'Result']);
-      expect(detailRows()).toEqual([
-        ['a', 'Unknown'],
-        ['f', 'Not started'],
-        ['g', 'Not started'],
-      ]);
-      expect(footerButtons()).toEqual(['Close']);
-    });
+        expect(sentNames()).toHaveLength(5);
+        expect(modalTitle()).toBe('Deleted 4 of 7 Pods');
+        expect(selectedRowNames()).toEqual(['a', 'f', 'g']);
+        expect(detailColumns()).toEqual(['Name', 'Result']);
+        expect(detailRows()).toEqual([
+          ['a', 'Unknown'],
+          ['f', 'Not started'],
+          ['g', 'Not started'],
+        ]);
+        expect(footerButtons()).toEqual(['Close']);
+      }
+    );
 
     it('offers Retry on a restart the cluster refused, which never started', async () => {
       const { clusterId } = devCluster();

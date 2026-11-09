@@ -335,7 +335,9 @@ const REFUSAL_REASONS: ReadonlySet<ErrorStatusReason> = new Set<ErrorStatusReaso
 ]);
 
 const failureOutcome = (status: ErrorStatus | null): BatchFailure['outcome'] => {
-  if (status?.reason === 'DeadlineExceeded') {
+  // A silent cluster shows up as either: our own deadline, or client-go giving up on
+  // the connection first.
+  if (status?.reason === 'DeadlineExceeded' || status?.reason === 'ClusterUnreachable') {
     return 'no-answer';
   }
   return status && REFUSAL_REASONS.has(status.reason) ? 'failed' : 'unknown';
