@@ -204,11 +204,9 @@ const Overview: React.FC<OverviewProps> = (props) => {
       desiredReplicas: currentScaleReplicas,
       hpaManaged,
       unschedulable: typeof props.unschedulable === 'boolean' ? props.unschedulable : undefined,
-      evictablePods: typeof props.evictablePods === 'number' ? props.evictablePods : undefined,
       portForwardAvailable: props.portForwardAvailable,
     };
   }, [
-    props.evictablePods,
     props.portForwardAvailable,
     props.ready,
     props.suspend,

@@ -34,10 +34,7 @@ type NodeDetails struct {
 	PodsAllocatable   string                   `json:"podsAllocatable"`
 	StorageCapacity   string                   `json:"storageCapacity,omitempty"`
 	PodsCount         int                      `json:"podsCount"`
-	// EvictablePods counts the pods removing this node would stop. Nil means its
-	// pods could not be read, which is not the same as none.
-	EvictablePods *int  `json:"evictablePods,omitempty"`
-	Restarts      int32 `json:"restarts"`
+	Restarts          int32                    `json:"restarts"`
 	CPURequests       string                   `json:"cpuRequests"`
 	CPULimits         string                   `json:"cpuLimits"`
 	MemRequests       string                   `json:"memRequests"`
@@ -53,6 +50,14 @@ type NodeDetails struct {
 	Labels            map[string]string        `json:"labels,omitempty"`
 	Annotations       map[string]string        `json:"annotations,omitempty"`
 	PodsList          []restypes.PodSimpleInfo `json:"podsList,omitempty"`
+}
+
+// DrainState is what removing a node would disrupt, read from the API server at
+// the moment it is asked for.
+type DrainState struct {
+	Cordoned bool `json:"cordoned"`
+	// EvictablePods counts the pods removing the node would stop.
+	EvictablePods int `json:"evictablePods"`
 }
 
 // NodeCondition represents a node condition.

@@ -108,17 +108,6 @@ func reaggregateNodeSummary(
 	return summary
 }
 
-// evictablePodCount counts the node's pods that removing it would stop.
-func evictablePodCount(pods []streamrows.PodAggregate) *int {
-	count := 0
-	for _, pod := range pods {
-		if !pod.DrainExempt {
-			count++
-		}
-	}
-	return &count
-}
-
 // nodePodsCapacityValue parses the own row's pods-capacity string (a canonical
 // resource.Quantity.String()) back to its integer value for the pod-count denominator.
 // The round-trip is exact because PodsCapacity was produced by Quantity.String() in

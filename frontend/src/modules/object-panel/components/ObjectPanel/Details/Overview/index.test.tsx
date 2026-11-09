@@ -12,7 +12,6 @@
 
 import { act } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
 import {
   installAppStateHarness,
   type MountedApp,
@@ -95,33 +94,6 @@ describe('an opened panel’s Overview', () => {
         name: 'demo',
       }),
       currentReplicas: 5,
-    });
-  });
-
-  it('tells the actions menu how many workload pods a node still has, so Delete can warn', async () => {
-    const node = servePanel(
-      { group: '', version: 'v1', kind: 'Node', namespace: '', name: 'node-1' },
-      'node',
-      { name: 'node-1', unschedulable: true, evictablePods: 0 }
-    );
-    app.snapshots.serve(
-      'object-maintenance',
-      buildClusterRefreshScope('object-maintenance', dev.clusterId),
-      { clusterId: dev.clusterId, clusterName: dev.clusterName, drains: [] }
-    );
-
-    // A node's panel also follows the cluster's nodes list and offers node logs.
-    app.serveTable(dev, 'nodes', { rows: [] });
-    app.backend.answer('DiscoverNodeLogs', () => ({
-      supported: false,
-      sources: [],
-      reason: 'node log query is not enabled',
-    }));
-
-    await openPanel(node);
-
-    expect(lastActionsMenu()).toMatchObject({
-      object: expect.objectContaining({ unschedulable: true, evictablePods: 0 }),
     });
   });
 

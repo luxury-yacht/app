@@ -49,35 +49,77 @@ func TestServiceNodeReturnsDetails(t *testing.T) {
 	require.Equal(t, int32(1), detail.Restarts)
 }
 
-func TestServiceNodeCountsThePodsRemovingTheNodeWouldStop(t *testing.T) {
+func TestServiceReadDrainStateCountsThePodsRemovingTheNodeWouldStop(t *testing.T) {
 	service, client, node := newNodeService(t)
+	ctx := context.Background()
+	node.Spec.Unschedulable = true
+	_, err := client.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
+	require.NoError(t, err)
+
 	controller := true
-	daemon := testsupport.PodFixture("kube-system", "agent")
-	daemon.Spec.NodeName = node.Name
-	daemon.OwnerReferences = []metav1.OwnerReference{{
-		APIVersion: "apps/v1", Kind: "DaemonSet", Name: "agent", Controller: &controller,
-	}}
-	_, err := client.CoreV1().Pods(daemon.Namespace).Create(context.Background(), daemon, metav1.CreateOptions{})
-	require.NoError(t, err)
+	terminating := metav1.Now()
+	addPod := func(name string, mutate func(*corev1.Pod)) {
+		pod := testsupport.PodFixture("kube-system", name)
+		pod.Spec.NodeName = node.Name
+		mutate(pod)
+		_, err := client.CoreV1().Pods(pod.Namespace).Create(ctx, pod, metav1.CreateOptions{})
+		require.NoError(t, err)
+	}
+	// Still running, so removing the node would stop it (with the fixture's two).
+	addPod("terminating", func(pod *corev1.Pod) { pod.DeletionTimestamp = &terminating })
+	// Belongs to the node.
+	addPod("agent", func(pod *corev1.Pod) {
+		pod.OwnerReferences = []metav1.OwnerReference{{
+			APIVersion: "apps/v1", Kind: "DaemonSet", Name: "agent", Controller: &controller,
+		}}
+	})
+	addPod("static", func(pod *corev1.Pod) {
+		pod.Annotations = map[string]string{corev1.MirrorPodAnnotationKey: "hash"}
+	})
+	// Nothing left to stop.
+	addPod("finished", func(pod *corev1.Pod) { pod.Status.Phase = corev1.PodSucceeded })
+	addPod("crashed", func(pod *corev1.Pod) { pod.Status.Phase = corev1.PodFailed })
+	client.ClearActions()
 
-	detail, err := service.Node(context.Background(), node.Name)
+	state, err := service.ReadDrainState(ctx, node.Name)
 
 	require.NoError(t, err)
-	require.Equal(t, 3, detail.PodsCount)
-	require.NotNil(t, detail.EvictablePods)
-	require.Equal(t, 2, *detail.EvictablePods)
+	require.Equal(t, nodes.DrainState{Cordoned: true, EvictablePods: 3}, state)
+	assertListedPodsClusterWide(t, client, node.Name)
 }
 
-func TestServiceNodeLeavesPodCountUnknownWhenPodsCannotBeRead(t *testing.T) {
+// The count must cover every namespace, whatever namespaces the app itself watches.
+func assertListedPodsClusterWide(t *testing.T, client *fake.Clientset, nodeName string) {
+	t.Helper()
+	for _, action := range client.Actions() {
+		list, ok := action.(cgotesting.ListAction)
+		if !ok || action.GetResource().Resource != "pods" {
+			continue
+		}
+		require.Empty(t, action.GetNamespace())
+		require.Equal(t, "spec.nodeName="+nodeName, list.GetListRestrictions().Fields.String())
+		return
+	}
+	require.Fail(t, "expected a pod list request")
+}
+
+func TestServiceReadDrainStateReportsUnreadablePodsAsAnError(t *testing.T) {
 	service, client, node := newNodeService(t)
 	client.PrependReactor("list", "pods", func(cgotesting.Action) (bool, runtime.Object, error) {
-		return true, nil, errors.New("list pods denied")
+		return true, nil, errors.New("pods is forbidden")
 	})
 
-	detail, err := service.Node(context.Background(), node.Name)
+	_, err := service.ReadDrainState(context.Background(), node.Name)
 
-	require.NoError(t, err)
-	require.Nil(t, detail.EvictablePods)
+	require.ErrorContains(t, err, "pods is forbidden")
+}
+
+func TestServiceReadDrainStateReportsAMissingNodeAsAnError(t *testing.T) {
+	service, _, _ := newNodeService(t)
+
+	_, err := service.ReadDrainState(context.Background(), "gone")
+
+	require.Error(t, err)
 }
 
 func TestServiceNodeStatusUsesSharedResourceModel(t *testing.T) {

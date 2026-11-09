@@ -21,6 +21,7 @@ import type React from 'react';
 import { useMemo } from 'react';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import {
+  type ResourceInventoryRenderState,
   type ResourceInventorySourceState,
   useResourceInventoryTable,
 } from './useResourceInventoryTable';
@@ -46,6 +47,25 @@ interface ResourceInventoryTableProps<T>
   favModal?: React.ReactNode;
   allowPartial?: boolean;
   suppressEmptyWarning?: boolean;
+}
+
+// A genuinely errored empty table must not read as the generic "No data
+// available"; the error detail itself is reported through the refresh error
+// toasts, never an in-table banner. Permission-classified errors are the
+// exception: they are a designed, settled state (a typed 403 from a domain
+// the identity cannot read — e.g. under a namespace scope), so they render
+// the shared "Insufficient permissions" message in place.
+function emptyMessageFor<T>(
+  render: ResourceInventoryRenderState<T>,
+  emptyMessage: string | undefined
+): string | undefined {
+  if (render.isEmpty) {
+    return emptyMessage;
+  }
+  if (render.isPartial && render.rows.length === 0) {
+    return render.partialLabel ?? 'Data is temporarily unavailable';
+  }
+  return render.error ? resolveEmptyStateMessage(render.error, 'Unable to load data') : undefined;
 }
 
 export default function ResourceInventoryTable<T>({
@@ -88,24 +108,6 @@ export default function ResourceInventoryTable<T>({
         }
       : gridTableProps.filters;
 
-  // A genuinely errored empty table must not read as the generic "No data
-  // available"; the error detail itself is reported through the refresh error
-  // toasts, never an in-table banner. Permission-classified errors are the
-  // exception: they are a designed, settled state (a typed 403 from a domain
-  // the identity cannot read — e.g. under a namespace scope), so they render
-  // the shared "Insufficient permissions" message in place.
-  let emptyMessageForState: string | undefined;
-
-  if (render.isEmpty) {
-    emptyMessageForState = emptyMessage;
-  } else if (render.isPartial && render.rows.length === 0) {
-    emptyMessageForState = render.partialLabel ?? 'Data is temporarily unavailable';
-  } else if (render.error) {
-    emptyMessageForState = resolveEmptyStateMessage(render.error, 'Unable to load data');
-  } else {
-    emptyMessageForState = undefined;
-  }
-
   return (
     <>
       <ResourceLoadingBoundary
@@ -128,7 +130,7 @@ export default function ResourceInventoryTable<T>({
               ? { show: render.showRefreshOverlay, message: updatingMessage }
               : undefined
           }
-          emptyMessage={emptyMessageForState}
+          emptyMessage={emptyMessageFor(render, emptyMessage)}
         />
       </ResourceLoadingBoundary>
       {favModal}

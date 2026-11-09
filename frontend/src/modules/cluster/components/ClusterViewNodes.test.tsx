@@ -509,20 +509,62 @@ describe('ClusterViewNodes', () => {
     return document.body.querySelector('.confirmation-modal-warning');
   };
 
-  it.each<[string, Partial<ClusterNodeSnapshotEntry>]>([
-    ['can still be scheduled onto', { unschedulable: false, evictablePods: 0 }],
-    ['is cordoned with workload pods left', { unschedulable: true, evictablePods: 2 }],
-    ['is cordoned but its pods could not be read', { unschedulable: true }],
-  ])('warns before deleting a node that %s', async (_case, fields) => {
-    await start(() => [node('node-1', fields)]);
+  type DrainState = { cordoned: boolean; evictablePods: number };
 
-    expect((await deleteWarning())?.textContent).toContain('1 of 1 node');
-  });
+  /** The API server's answer about the node; null means the read is refused. */
+  const answerDrainState = (state: DrainState | null) =>
+    app.backend.answer('ReadNodeDrainState', () => {
+      if (!state) {
+        throw new Error('pods is forbidden');
+      }
+      return state;
+    });
 
-  it('does not warn before deleting a cordoned node with no workload pods left', async () => {
-    await start(() => [node('node-1', { unschedulable: true, evictablePods: 0 })]);
+  /** The Delete warning when the action comes from the node's row menu. */
+  const rowMenuDeleteWarning = async () => {
+    await act(async () => {
+      requireValue(
+        rowOf('node-1').querySelector<HTMLElement>('[data-column="status"]'),
+        'expected a cell'
+      ).dispatchEvent(
+        new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 })
+      );
+    });
+    await app.settle();
+    await click(
+      requireValue(
+        Array.from(
+          document.body.querySelectorAll<HTMLElement>('[role="menu"] .context-menu-item')
+        ).find((item) => item.querySelector('.context-menu-label')?.textContent?.trim() === 'Delete'),
+        'expected the Delete item'
+      )
+    );
+    await app.settle();
+    return document.body.querySelector('.confirmation-modal-warning');
+  };
 
-    expect(await deleteWarning()).toBeNull();
+  // The row says cordoned in every case: only the live read may clear the warning.
+  describe.each([
+    ['in batch-select mode', deleteWarning],
+    ['from its row menu', rowMenuDeleteWarning],
+  ])('deleting a node %s', (_surface, openDelete) => {
+    it.each<[string, DrainState | null]>([
+      ['can still be scheduled onto', { cordoned: false, evictablePods: 0 }],
+      ['still has workload pods', { cordoned: true, evictablePods: 2 }],
+      ['cannot be read', null],
+    ])('warns when the node %s', async (_case, state) => {
+      answerDrainState(state);
+      await start(() => [node('node-1', { unschedulable: true })]);
+
+      expect((await openDelete())?.textContent).toMatch(/workload pods/i);
+    });
+
+    it('does not warn when the API server confirms it is cordoned and empty', async () => {
+      answerDrainState({ cordoned: true, evictablePods: 0 });
+      await start(() => [node('node-1', { unschedulable: true })]);
+
+      expect(await openDelete()).toBeNull();
+    });
   });
 
   it('holds batch actions while a re-sort is out, keeping the rows on screen', async () => {

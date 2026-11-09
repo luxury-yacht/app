@@ -12,6 +12,7 @@ import (
 	"github.com/luxury-yacht/app/backend/panelmetrics"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/nodes"
 	"github.com/luxury-yacht/app/internal/panelwindow"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -106,6 +107,7 @@ type ResourceCommands interface {
 	GetTargetPorts(resourcemodel.ResourceRef) ([]ContainerPortInfo, error)
 	HydrateCatalogCustomRows(string, []snapshot.ResourceQueryRow) ([]snapshot.CustomResourceSummary, error)
 	IsWorkloadHPAManaged(resourcemodel.ResourceRef) (bool, error)
+	ReadNodeDrainState(resourcemodel.ResourceRef) (nodes.DrainState, error)
 	MergeObjectYamlWithLatest(string, ObjectYAMLReloadMergeRequest) (*ObjectYAMLReloadMergeResponse, error)
 	QueryPermissions([]capabilities.PermissionQuery) (*capabilities.QueryPermissionsResponse, error)
 	RunObjectAction(ObjectActionRequest) (ObjectActionResponse, error)
@@ -504,6 +506,10 @@ func (s *DesktopService) HydrateCatalogCustomRows(clusterID string, rows []snaps
 
 func (s *DesktopService) IsWorkloadHPAManaged(target resourcemodel.ResourceRef) (bool, error) {
 	return s.resources.IsWorkloadHPAManaged(target)
+}
+
+func (s *DesktopService) ReadNodeDrainState(target resourcemodel.ResourceRef) (nodes.DrainState, error) {
+	return s.resources.ReadNodeDrainState(target)
 }
 
 func (s *DesktopService) MergeObjectYamlWithLatest(clusterID string, request ObjectYAMLReloadMergeRequest) (*ObjectYAMLReloadMergeResponse, error) {

@@ -37,7 +37,6 @@ const DetailOverview = ({
       status={actionState.status}
       ready={actionState.ready}
       unschedulable={actionState.unschedulable}
-      evictablePods={actionState.evictablePods}
       suspend={model.cronJobSuspended}
       desiredReplicas={model.desiredScaleReplicas}
       objectKind={objectData.kind}

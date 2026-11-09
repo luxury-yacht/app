@@ -211,6 +211,5 @@ export const nodeDescriptor: OverviewDescriptor<NodeDetails> = {
     'pods',
     'podsList',
     'unschedulable',
-    'evictablePods',
   ],
 };

@@ -25,7 +25,7 @@ func TestDesktopServiceCommandsDelegateToTheirDeclaredOwners(t *testing.T) {
 		},
 		"WorkspaceCommands":      {field: "workspace", count: 6},
 		"ClusterRuntimeCommands": {field: "clusterRuntime", count: 3},
-		"ResourceCommands":       {field: "resources", count: 17},
+		"ResourceCommands":       {field: "resources", count: 18},
 		"OperationsCommands":     {field: "operations", count: 11},
 		"UpdateCommands":         {field: "updates", count: 6},
 		"AppLogCommands":         {field: "logs", count: 5},

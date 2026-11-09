@@ -404,11 +404,7 @@ const NodesTable: React.FC<NodesTableProps> = React.memo(
 
     // Get context menu items
     const getActionObject = useCallback(
-      (row: ClusterNodeRow) => ({
-        ...nodeReference(row),
-        unschedulable: row.unschedulable,
-        evictablePods: row.evictablePods,
-      }),
+      (row: ClusterNodeRow) => ({ ...nodeReference(row), unschedulable: row.unschedulable }),
       [nodeReference]
     );
 

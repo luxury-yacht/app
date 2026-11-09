@@ -91,6 +91,7 @@ export {
   PublishDockedPanels,
   PublishPanelWindowGroup,
   QueryPermissions,
+  ReadNodeDrainState,
   RemoveApplicationUpdateSkip,
   ReorderThemes,
   RequestClusterTabTransfer,

@@ -3,8 +3,23 @@ package backend
 import (
 	"fmt"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/nodes"
 )
+
+// ReadNodeDrainState reads a node's cordon state and remaining pods from the API
+// server. Delete confirmations use it because list rows and cached details can lag
+// or cover only some namespaces.
+func (g *ResourceGateway) ReadNodeDrainState(target resourcemodel.ResourceRef) (nodes.DrainState, error) {
+	if err := requireNodeActionTarget("read drain state", target); err != nil {
+		return nodes.DrainState{}, err
+	}
+	deps, _, err := g.resolveClusterDependencies(target.ClusterID)
+	if err != nil {
+		return nodes.DrainState{}, err
+	}
+	return nodes.NewService(deps, g.nodeMaintenanceStore).ReadDrainState(g.CtxOrBackground(), target.Name)
+}
 
 func (g *ResourceGateway) cordonNodeAction(target ObjectActionTargetRef) error {
 	if err := requireNodeActionTarget(ObjectActionCordon, target); err != nil {

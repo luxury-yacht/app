@@ -154,10 +154,13 @@ virtualization, and native table accessibility. Apply the
   opt in: Browse, CRDs, Namespaces, and Helm.
 - Nodes add Drain, which takes one set of options for every selected node and
   starts one job per node, so the drains run at the same time. Deleting nodes
-  warns how many of them may still run workload pods. A node skips the warning
-  only while it is cordoned and `evictablePods` is 0: the current count of pods
-  its removal would stop, leaving out DaemonSet, static, and finished pods. The
-  backend omits the count when pods could not be read, which always warns.
+  warns how many of them may still run workload pods. While the confirmation is
+  open, `ReadNodeDrainState` asks the API server whether each node is cordoned
+  and how many pods its removal would stop, leaving out DaemonSet, static, and
+  finished pods. The warning stays up until that read clears a node, so a denied
+  or failed read warns. Single-node deletes use the same read. Table rows and
+  object details are not consulted: they can lag and may cover only the
+  configured namespaces.
 
 ## DOM And Identity Rules
 

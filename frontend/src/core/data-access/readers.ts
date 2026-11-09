@@ -23,6 +23,7 @@ import {
   HydrateCatalogCustomRows,
   IsWorkloadHPAManaged,
   QueryPermissions,
+  ReadNodeDrainState,
   SaveCsvFile,
   SaveLogFile,
 } from '@/core/backend-api';
@@ -139,6 +140,9 @@ export const readRevisionHistoryForRef = (target: ObjectReadTarget) =>
 
 export const readWorkloadHPAManagedForRef = (target: ObjectReadTarget) =>
   IsWorkloadHPAManaged(resourceRefForTarget(target));
+
+export const readNodeDrainState = (target: ObjectReadTarget) =>
+  ReadNodeDrainState(resourceRefForTarget(target));
 
 export const readQueryPermissions = async <T>(
   queries: capabilities.PermissionQuery[]

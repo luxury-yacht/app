@@ -6,6 +6,19 @@
 import * as types$0 from "../types/models.js";
 
 /**
+ * DrainState is what removing a node would disrupt, read from the API server at
+ * the moment it is asked for.
+ */
+export interface DrainState {
+    "cordoned": boolean;
+
+    /**
+     * EvictablePods counts the pods removing the node would stop.
+     */
+    "evictablePods": number;
+}
+
+/**
  * NodeCondition represents a node condition.
  */
 export interface NodeCondition {
@@ -43,12 +56,6 @@ export interface NodeDetails {
     "podsAllocatable": string;
     "storageCapacity"?: string;
     "podsCount": number;
-
-    /**
-     * EvictablePods counts the pods removing this node would stop. Nil means its
-     * pods could not be read, which is not the same as none.
-     */
-    "evictablePods"?: number | null;
     "restarts": number;
     "cpuRequests": string;
     "cpuLimits": string;

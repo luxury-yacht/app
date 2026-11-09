@@ -46,6 +46,7 @@ import {
   nodeActionPermissionInputs,
   resolveNodeActionPermissionStatuses,
 } from '@shared/hooks/nodeActionPermissions';
+import { isDrainableNode, useConfirmedEmptyNodes } from '@shared/hooks/useConfirmedEmptyNodes';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import {
   buildObjectActionItems,
@@ -66,6 +67,8 @@ import { errorHandler } from '@/utils/errorHandler';
 
 type ObjectActionContext = 'gridtable' | 'object-map' | 'object-panel';
 type ObjectActionReference = ObjectActionData & KubernetesObjectReference;
+
+const NOTHING_TO_DELETE: readonly ObjectActionData[] = [];
 
 export const resolveNavigateViewHandler = (
   explicitHandler: (() => void) | undefined,
@@ -132,15 +135,9 @@ const restartConfirmation = (
   onCancel,
 });
 
-// Deleting a node that drains (its drain facet) warns that its pods stop
-// abruptly unless it is cordoned and known to have none left to stop. A cordon
-// alone proves nothing, and a past drain says nothing about pods placed since.
-export const isUndrainedNode = (target: ObjectActionData): boolean =>
-  Boolean(lookupObjectActionKindCapability(target)?.drain) &&
-  !(target.unschedulable && target.evictablePods === 0);
-
 const deleteConfirmation = (
   target: ObjectActionData,
+  mayStopPods: boolean,
   onConfirm: () => void,
   onCancel: () => void
 ): ConfirmationSpec => {
@@ -148,7 +145,7 @@ const deleteConfirmation = (
     title: `Delete ${target.kind || 'Resource'}`,
     target,
     message: 'This action cannot be undone.',
-    warning: isUndrainedNode(target)
+    warning: mayStopPods
       ? 'Workload pods may still be running on this node. They will be terminated abruptly when the node is removed.'
       : undefined,
     confirmText: 'Delete',
@@ -566,6 +563,11 @@ export const useObjectActionController = ({
   const navigateFallbackAvailable = panelWindowRole === null || navigateToViewAvailable;
   const [restartTarget, setRestartTarget] = useState<ObjectActionData | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ObjectActionData | null>(null);
+  const deletingObjects = useMemo(
+    () => (deleteTarget ? [deleteTarget] : NOTHING_TO_DELETE),
+    [deleteTarget]
+  );
+  const confirmedEmptyNodes = useConfirmedEmptyNodes(deletingObjects);
   const [triggerTarget, setTriggerTarget] = useState<ObjectActionData | null>(null);
   const [rollbackTarget, setRollbackTarget] = useState<ObjectActionData | null>(null);
   const [portForwardTarget, setPortForwardTarget] = useState<PortForwardTarget | null>(null);
@@ -778,7 +780,10 @@ export const useObjectActionController = ({
       return restartConfirmation(restartTarget, confirmRestart, () => setRestartTarget(null));
     }
     if (deleteTarget) {
-      return deleteConfirmation(deleteTarget, confirmDelete, () => setDeleteTarget(null));
+      const mayStopPods = isDrainableNode(deleteTarget) && !confirmedEmptyNodes.has(deleteTarget);
+      return deleteConfirmation(deleteTarget, mayStopPods, confirmDelete, () =>
+        setDeleteTarget(null)
+      );
     }
     if (triggerTarget) {
       return triggerConfirmation(triggerTarget, confirmTrigger, () => setTriggerTarget(null));
@@ -795,6 +800,7 @@ export const useObjectActionController = ({
     confirmRestart,
     confirmScaleToZero,
     confirmTrigger,
+    confirmedEmptyNodes,
     deleteTarget,
     finalizerRemovalTarget,
     restartTarget,

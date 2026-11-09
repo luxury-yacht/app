@@ -525,17 +525,32 @@ describe('useBatchObjectActions', () => {
       `drain option ${name}`
     );
 
-  it('counts only the cordoned nodes known to be empty as safe to delete', async () => {
+  /** What the API server says about each node; a node not listed cannot be read. */
+  const answerDrainStates = (
+    states: Record<string, { cordoned: boolean; evictablePods: number }>
+  ) =>
+    app.backend.answer('ReadNodeDrainState', (target) => {
+      const state = states[(target as { name: string }).name];
+      if (!state) {
+        throw new Error('pods is forbidden');
+      }
+      return state;
+    });
+
+  it('counts only the nodes the API server confirms are cordoned and empty', async () => {
     const { clusterId } = devCluster();
+    answerDrainStates({
+      schedulable: { cordoned: false, evictablePods: 0 },
+      'pods-left': { cordoned: true, evictablePods: 2 },
+      empty: { cordoned: true, evictablePods: 0 },
+    });
     await mount(
       <BatchTable
         allowedActions={['delete']}
-        rows={[
-          nodeRow(clusterId, 'schedulable'),
-          nodeRow(clusterId, 'pods-unknown', { unschedulable: true }),
-          nodeRow(clusterId, 'pods-left', { unschedulable: true, evictablePods: 2 }),
-          nodeRow(clusterId, 'empty', { unschedulable: true, evictablePods: 0 }),
-        ]}
+        // Every row looks cordoned; only the live read decides.
+        rows={['schedulable', 'pods-left', 'unreadable', 'empty'].map((name) =>
+          nodeRow(clusterId, name, { unschedulable: true })
+        )}
       />
     );
     await selectAllRows();
@@ -546,15 +561,16 @@ describe('useBatchObjectActions', () => {
     expect(modalWarning()?.textContent).toContain('3 of 4 nodes');
   });
 
-  it('does not warn when every selected node is cordoned and empty', async () => {
+  it('does not warn once every selected node is confirmed cordoned and empty', async () => {
     const { clusterId } = devCluster();
+    answerDrainStates({
+      a: { cordoned: true, evictablePods: 0 },
+      b: { cordoned: true, evictablePods: 0 },
+    });
     await mount(
       <BatchTable
         allowedActions={['delete']}
-        rows={[
-          nodeRow(clusterId, 'a', { unschedulable: true, evictablePods: 0 }),
-          nodeRow(clusterId, 'b', { unschedulable: true, evictablePods: 0 }),
-        ]}
+        rows={[nodeRow(clusterId, 'a'), nodeRow(clusterId, 'b')]}
       />
     );
     await selectAllRows();
@@ -564,19 +580,39 @@ describe('useBatchObjectActions', () => {
     expect(modalWarning()).toBeNull();
   });
 
-  it('warns about an empty node that can still be scheduled onto', async () => {
+  it('keeps the warning up until the live read answers', async () => {
     const { clusterId } = devCluster();
-    await mount(
-      <BatchTable
-        allowedActions={['delete']}
-        rows={[nodeRow(clusterId, 'a', { unschedulable: false, evictablePods: 0 })]}
-      />
-    );
+    answerDrainStates({ a: { cordoned: true, evictablePods: 0 } });
+    const release = app.backend.hold('ReadNodeDrainState');
+    await mount(<BatchTable allowedActions={['delete']} rows={[nodeRow(clusterId, 'a')]} />);
     await selectAllRows();
 
     await click(batchAction('Delete 1'));
-
     expect(modalWarning()?.textContent).toContain('1 of 1 node');
+
+    await act(async () => {
+      release();
+    });
+    await app.settle();
+    expect(modalWarning()).toBeNull();
+  });
+
+  it('does not bring the warning back while the delete runs', async () => {
+    const { clusterId } = devCluster();
+    answerDrainStates({ a: { cordoned: true, evictablePods: 0 } });
+    app.backend.answer('RunObjectAction', () => ({}));
+    const release = app.backend.hold('RunObjectAction');
+    await mount(<BatchTable allowedActions={['delete']} rows={[nodeRow(clusterId, 'a')]} />);
+    await selectAllRows();
+    await click(batchAction('Delete 1'));
+
+    await click(modalButton('Delete 1'));
+
+    expect(modalWarning()).toBeNull();
+    await act(async () => {
+      release();
+    });
+    await app.settle();
   });
 
   it('drains every selected node with the one set of options chosen', async () => {

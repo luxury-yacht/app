@@ -60,25 +60,49 @@ func (s *Service) Node(ctx context.Context, name string) (*NodeDetails, error) {
 		return nil, fmt.Errorf("failed to get node: %w", err)
 	}
 
-	pods, podsRead := s.listPodsForNode(ctx, name)
+	pods := s.listPodsForNode(ctx, name)
 	nodeMetrics := s.getNodeMetrics(ctx, name)
 
-	details := s.buildNodeDetails(node, pods, nodeMetrics)
-	if podsRead {
-		details.EvictablePods = evictablePodCount(pods)
-	}
-	return details, nil
+	return s.buildNodeDetails(node, pods, nodeMetrics), nil
 }
 
-// evictablePodCount counts the pods that removing their node would stop.
-func evictablePodCount(pods []corev1.Pod) *int {
-	count := 0
+// ReadDrainState asks the API server whether the node is cordoned and how many
+// pods removing it would stop. A pod list the caller may not make is an error,
+// so a partial view can never read as an empty node.
+func (s *Service) ReadDrainState(ctx context.Context, nodeName string) (DrainState, error) {
+	if err := s.ensureClient("Nodes"); err != nil {
+		return DrainState{}, err
+	}
+	node, err := s.deps.KubernetesClient.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	if err != nil {
+		return DrainState{}, fmt.Errorf("failed to get node: %w", err)
+	}
+	pods, err := s.fetchPodsForNode(ctx, nodeName)
+	if err != nil {
+		return DrainState{}, fmt.Errorf("failed to list pods on node: %w", err)
+	}
+	state := DrainState{Cordoned: node.Spec.Unschedulable}
 	for i := range pods {
-		if !podres.ExemptFromDrain(&pods[i]) {
-			count++
+		if !exemptFromDrain(&pods[i]) {
+			state.EvictablePods++
 		}
 	}
-	return &count
+	return state, nil
+}
+
+// exemptFromDrain reports whether removing the pod's node would not disrupt it.
+// It follows what kubectl drain leaves alone: DaemonSet and static pods belong
+// to the node, and a finished pod has nothing left to stop. A terminating pod
+// still counts until it is gone.
+func exemptFromDrain(pod *corev1.Pod) bool {
+	if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
+		return true
+	}
+	if _, static := pod.Annotations[corev1.MirrorPodAnnotationKey]; static {
+		return true
+	}
+	controller := metav1.GetControllerOf(pod)
+	return controller != nil && controller.Kind == "DaemonSet"
 }
 
 // Cordon marks a node as unschedulable.
@@ -565,25 +589,30 @@ func projectNodeTaints(taints []corev1.Taint) []NodeTaint {
 	return projected
 }
 
-// listPodsForNode returns the node's pods and whether they could be read. A
-// failed read shows the node without pod data, which is not the same as no pods.
-func (s *Service) listPodsForNode(ctx context.Context, name string) ([]corev1.Pod, bool) {
-	client := s.deps.KubernetesClient
-	if client == nil {
-		return nil, false
+func (s *Service) listPodsForNode(ctx context.Context, name string) []corev1.Pod {
+	if s.deps.KubernetesClient == nil {
+		return nil
 	}
 
+	pods, err := s.fetchPodsForNode(ctx, name)
+	if err != nil {
+		s.logInfo(fmt.Sprintf("Failed to list pods for node %s: %v", name, err))
+		return nil
+	}
+	return pods
+}
+
+func (s *Service) fetchPodsForNode(ctx context.Context, name string) ([]corev1.Pod, error) {
 	ctx, cancel := context.WithTimeout(ctx, config.NamespaceOperationTimeout)
 	defer cancel()
 
-	podList, err := client.CoreV1().Pods("").List(ctx, metav1.ListOptions{
+	podList, err := s.deps.KubernetesClient.CoreV1().Pods("").List(ctx, metav1.ListOptions{
 		FieldSelector: nodePodFieldSelector(name),
 	})
 	if err != nil {
-		s.logInfo(fmt.Sprintf("Failed to list pods for node %s: %v", name, err))
-		return nil, false
+		return nil, err
 	}
-	return podList.Items, true
+	return podList.Items, nil
 }
 
 func (s *Service) getNodeMetrics(ctx context.Context, name string) corev1.ResourceList {

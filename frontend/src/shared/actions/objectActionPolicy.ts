@@ -37,9 +37,6 @@ export interface ObjectActionData {
   hpaManaged?: boolean | null;
   // Node-only: when true the cordon action toggles to "Uncordon".
   unschedulable?: boolean;
-  // Node-only: how many pods removing the node would stop right now. Unset when
-  // its pods could not be read or the surface has no count.
-  evictablePods?: number;
   // For Event-specific actions - the involved object reference (e.g., "Pod/my-pod")
   involvedObject?: string;
   involvedObjectRef?: ResourceLink;
