@@ -49,75 +49,20 @@ func TestServiceNodeReturnsDetails(t *testing.T) {
 	require.Equal(t, int32(1), detail.Restarts)
 }
 
-func TestServiceReadDrainStateCountsThePodsRemovingTheNodeWouldStop(t *testing.T) {
+func TestServiceRequireUIDAcceptsTheNodeItNames(t *testing.T) {
 	service, client, node := newNodeService(t)
-	ctx := context.Background()
-	node.Spec.Unschedulable = true
-	_, err := client.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
+	node.UID = "uid-a"
+	_, err := client.CoreV1().Nodes().Update(context.Background(), node, metav1.UpdateOptions{})
 	require.NoError(t, err)
 
-	controller := true
-	terminating := metav1.Now()
-	addPod := func(name string, mutate func(*corev1.Pod)) {
-		pod := testsupport.PodFixture("kube-system", name)
-		pod.Spec.NodeName = node.Name
-		mutate(pod)
-		_, err := client.CoreV1().Pods(pod.Namespace).Create(ctx, pod, metav1.CreateOptions{})
-		require.NoError(t, err)
-	}
-	// Still running, so removing the node would stop it (with the fixture's two).
-	addPod("terminating", func(pod *corev1.Pod) { pod.DeletionTimestamp = &terminating })
-	// Belongs to the node.
-	addPod("agent", func(pod *corev1.Pod) {
-		pod.OwnerReferences = []metav1.OwnerReference{{
-			APIVersion: "apps/v1", Kind: "DaemonSet", Name: "agent", Controller: &controller,
-		}}
-	})
-	addPod("static", func(pod *corev1.Pod) {
-		pod.Annotations = map[string]string{corev1.MirrorPodAnnotationKey: "hash"}
-	})
-	// A custom controller that shares the name is an ordinary workload.
-	addPod("lookalike", func(pod *corev1.Pod) {
-		pod.OwnerReferences = []metav1.OwnerReference{{
-			APIVersion: "example.com/v1", Kind: "DaemonSet", Name: "agent", Controller: &controller,
-		}}
-	})
-	// Nothing left to stop.
-	addPod("finished", func(pod *corev1.Pod) { pod.Status.Phase = corev1.PodSucceeded })
-	addPod("crashed", func(pod *corev1.Pod) { pod.Status.Phase = corev1.PodFailed })
-	client.ClearActions()
-
-	state, err := service.ReadDrainState(ctx, node.Name)
-
-	require.NoError(t, err)
-	require.Equal(t, nodes.DrainState{Cordoned: true, EvictablePods: 4}, state)
-	assertListedPodsClusterWide(t, client, node.Name)
+	require.NoError(t, service.RequireUID(context.Background(), node.Name, "uid-a"))
+	require.NoError(t, service.RequireUID(context.Background(), node.Name, ""), "no UID means by name")
 }
 
-// The count must cover every namespace, whatever namespaces the app itself watches.
-func assertListedPodsClusterWide(t *testing.T, client *fake.Clientset, nodeName string) {
-	t.Helper()
-	for _, action := range client.Actions() {
-		list, ok := action.(cgotesting.ListAction)
-		if !ok || action.GetResource().Resource != "pods" {
-			continue
-		}
-		require.Empty(t, action.GetNamespace())
-		require.Equal(t, "spec.nodeName="+nodeName, list.GetListRestrictions().Fields.String())
-		return
-	}
-	require.Fail(t, "expected a pod list request")
-}
+func TestServiceRequireUIDFailsForAMissingNode(t *testing.T) {
+	service, _, _ := newNodeService(t)
 
-func TestServiceReadDrainStateReportsUnreadablePodsAsAnError(t *testing.T) {
-	service, client, node := newNodeService(t)
-	client.PrependReactor("list", "pods", func(cgotesting.Action) (bool, runtime.Object, error) {
-		return true, nil, errors.New("pods is forbidden")
-	})
-
-	_, err := service.ReadDrainState(context.Background(), node.Name)
-
-	require.ErrorContains(t, err, "pods is forbidden")
+	require.Error(t, service.RequireUID(context.Background(), "gone", "uid-a"))
 }
 
 func TestServiceNodeStillReturnsDetailsWhenPodsCannotBeRead(t *testing.T) {
@@ -131,14 +76,6 @@ func TestServiceNodeStillReturnsDetailsWhenPodsCannotBeRead(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, node.Name, detail.Name)
 	require.Zero(t, detail.PodsCount)
-}
-
-func TestServiceReadDrainStateReportsAMissingNodeAsAnError(t *testing.T) {
-	service, _, _ := newNodeService(t)
-
-	_, err := service.ReadDrainState(context.Background(), "gone")
-
-	require.Error(t, err)
 }
 
 func TestServiceNodeStatusUsesSharedResourceModel(t *testing.T) {
@@ -208,13 +145,13 @@ func TestServiceCordonAndUncordon(t *testing.T) {
 	service, client, node := newNodeService(t)
 	addNodePatchReactor(t, client)
 
-	require.NoError(t, service.Cordon(context.Background(), node.Name))
+	require.NoError(t, service.Cordon(context.Background(), node.Name, ""))
 
 	updated, err := client.CoreV1().Nodes().Get(context.Background(), node.Name, metav1.GetOptions{})
 	require.NoError(t, err)
 	require.True(t, updated.Spec.Unschedulable)
 
-	require.NoError(t, service.Uncordon(context.Background(), node.Name))
+	require.NoError(t, service.Uncordon(context.Background(), node.Name, ""))
 	updated, err = client.CoreV1().Nodes().Get(context.Background(), node.Name, metav1.GetOptions{})
 	require.NoError(t, err)
 	require.False(t, updated.Spec.Unschedulable)

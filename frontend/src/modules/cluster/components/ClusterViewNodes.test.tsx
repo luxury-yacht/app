@@ -509,17 +509,6 @@ describe('ClusterViewNodes', () => {
     return document.body.querySelector('.confirmation-modal-warning');
   };
 
-  type DrainState = { cordoned: boolean; evictablePods: number };
-
-  /** The API server's answer about the node; null means the read is refused. */
-  const answerDrainState = (state: DrainState | null) =>
-    app.backend.answer('ReadNodeDrainState', () => {
-      if (!state) {
-        throw new Error('pods is forbidden');
-      }
-      return state;
-    });
-
   /** The Delete warning when the action comes from the node's row menu. */
   const rowMenuDeleteWarning = async () => {
     await act(async () => {
@@ -545,27 +534,18 @@ describe('ClusterViewNodes', () => {
     return document.body.querySelector('.confirmation-modal-warning');
   };
 
-  // The row says cordoned in every case: only the live read may clear the warning.
+  // A cordon or an earlier drain cannot prove a node is empty, so nothing clears it.
   describe.each([
     ['in batch-select mode', deleteWarning],
     ['from its row menu', rowMenuDeleteWarning],
   ])('deleting a node %s', (_surface, openDelete) => {
-    it.each<[string, DrainState | null]>([
-      ['can still be scheduled onto', { cordoned: false, evictablePods: 0 }],
-      ['still has workload pods', { cordoned: true, evictablePods: 2 }],
-      ['cannot be read', null],
-    ])('warns when the node %s', async (_case, state) => {
-      answerDrainState(state);
-      await start(() => [node('node-1', { unschedulable: true })]);
+    it.each([
+      ['schedulable', false],
+      ['cordoned', true],
+    ])('warns about its pods when it is %s', async (_state, unschedulable) => {
+      await start(() => [node('node-1', { unschedulable })]);
 
-      expect((await openDelete())?.textContent).toMatch(/workload pods/i);
-    });
-
-    it('does not warn when the API server confirms it is cordoned and empty', async () => {
-      answerDrainState({ cordoned: true, evictablePods: 0 });
-      await start(() => [node('node-1', { unschedulable: true })]);
-
-      expect(await openDelete()).toBeNull();
+      expect(await openDelete()).not.toBeNull();
     });
   });
 

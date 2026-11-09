@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/kind/kindspec"
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -62,7 +63,21 @@ func validateAppsV1WorkloadAction(action, group, version, kind string, supported
 	return normalizedKind, nil
 }
 
-func (g *ResourceGateway) restartWorkloadAction(target ObjectActionTargetRef) error {
+// restartStamp is the value written to the restart annotation. A caller that may
+// retry supplies one: the same value leaves the pod template unchanged, so retrying
+// after a lost response cannot start a second rollout.
+func restartStamp(restartedAt string) (string, error) {
+	stamp := strings.TrimSpace(restartedAt)
+	if stamp == "" {
+		return time.Now().UTC().Format(time.RFC3339), nil
+	}
+	if _, err := time.Parse(time.RFC3339, stamp); err != nil {
+		return "", errorstatus.BadRequest(fmt.Errorf("restartedAt must be an RFC 3339 time: %w", err))
+	}
+	return stamp, nil
+}
+
+func (g *ResourceGateway) restartWorkloadAction(target ObjectActionTargetRef, restartedAt string) error {
 	if err := requireNamespacedObject(target.Namespace, target.Name); err != nil {
 		return err
 	}
@@ -79,7 +94,10 @@ func (g *ResourceGateway) restartWorkloadAction(target ObjectActionTargetRef) er
 		return fmt.Errorf("kubernetes client is not initialized")
 	}
 
-	annotationValue := time.Now().UTC().Format(time.RFC3339)
+	annotationValue, err := restartStamp(restartedAt)
+	if err != nil {
+		return err
+	}
 	patch := map[string]any{
 		"spec": map[string]any{
 			"template": map[string]any{
@@ -92,7 +110,7 @@ func (g *ResourceGateway) restartWorkloadAction(target ObjectActionTargetRef) er
 		},
 	}
 
-	patchBytes, err := json.Marshal(patch)
+	patchBytes, err := json.Marshal(common.BindPatchToUID(patch, target.UID))
 	if err != nil {
 		return fmt.Errorf("failed to marshal restart patch: %w", err)
 	}
@@ -168,7 +186,7 @@ func (g *ResourceGateway) scaleWorkloadAction(target ObjectActionTargetRef, repl
 	}); err != nil {
 		return err
 	}
-	if err := ops.Scale(ctx, deps.KubernetesClient, target.Namespace, target.Name, int32(replicas)); err != nil {
+	if err := ops.Scale(ctx, deps.KubernetesClient, target.Namespace, target.Name, target.UID, int32(replicas)); err != nil {
 		return fmt.Errorf("failed to scale %s %s/%s: %w", strings.ToLower(workloadKind), target.Namespace, target.Name, err)
 	}
 
@@ -281,7 +299,7 @@ func (g *ResourceGateway) suspendCronJobAction(target ObjectActionTargetRef, sus
 		return err
 	}
 
-	if err := cronjob.SetSuspend(ctx, deps.KubernetesClient, target.Namespace, target.Name, suspend); err != nil {
+	if err := cronjob.SetSuspend(ctx, deps.KubernetesClient, target.Namespace, target.Name, target.UID, suspend); err != nil {
 		return err
 	}
 

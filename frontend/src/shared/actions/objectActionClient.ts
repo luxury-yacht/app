@@ -40,6 +40,7 @@ export interface ObjectActionRequest {
     targetContainer?: string;
   };
   revision?: number;
+  restartedAt?: string;
   finalizer?: string;
   finalizerPath?: FinalizerPath;
 }
@@ -134,7 +135,12 @@ const resolveActionGVK = (source: ObjectActionIdentitySource, action: string): A
 
   const builtin = resolveBuiltinActionGVK(kind);
   if (supplied.version) {
-    return resolveVersionedActionGVK(supplied, builtin, kind, action);
+    // The backend dispatches a delete on the full identity, so a custom kind that
+    // shares a built-in kind's name is deleted as itself. Other actions need the
+    // real built-in kind.
+    const sharesNameOnly = Boolean(builtin && supplied.group && supplied.group !== builtin.group);
+    const expected = sharesNameOnly && action === OBJECT_ACTIONS.delete ? null : builtin;
+    return resolveVersionedActionGVK(supplied, expected, kind, action);
   }
   if (builtin) {
     return builtin;
@@ -169,8 +175,12 @@ const runObjectAction = async (request: ObjectActionRequest): Promise<ObjectActi
 export const runObjectDelete = (target: ObjectActionTargetRef): Promise<ObjectActionResponse> =>
   runObjectAction({ action: OBJECT_ACTIONS.delete, target });
 
-export const runObjectRestart = (target: ObjectActionTargetRef): Promise<ObjectActionResponse> =>
-  runObjectAction({ action: OBJECT_ACTIONS.restart, target });
+/** `restartedAt` makes a retry the same restart; without it the backend uses the current time. */
+export const runObjectRestart = (
+  target: ObjectActionTargetRef,
+  restartedAt?: string
+): Promise<ObjectActionResponse> =>
+  runObjectAction({ action: OBJECT_ACTIONS.restart, target, restartedAt });
 
 export const runObjectScale = (
   target: ObjectActionTargetRef,

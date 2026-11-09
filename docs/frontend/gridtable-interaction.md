@@ -145,23 +145,22 @@ virtualization, and native table accessibility. Apply the
   checkboxes read selection from context because cells are cached by row.
 - Each selected object runs through `RunObjectAction` with its complete
   identity, a few at a time. A partial failure keeps the failed rows selected.
-- Delete also sends the row's UID, which the backend turns into a delete
-  precondition, so retrying after a lost response cannot remove a replacement
-  created under the same name. A row with no UID is not offered Delete.
+- Every batch write also sends the row's UID, and the API server refuses it for
+  any other object: a delete precondition, `metadata.uid` in a patch, or the UID
+  on a scale update. A drain is many writes, so it checks the UID before it
+  starts. A replacement created under the same name is left alone, and a row
+  with no UID is not offered any action.
+- A batch restart is stamped once, so retrying after a lost response writes the
+  same value and does not start a second rollout.
 - Confirmations and failure lists group by group, version, and kind. They add an
   API Version column when one kind name spans several API versions.
 - A view that lists kinds too consequential to remove several at a time does not
   opt in: Browse, CRDs, Namespaces, and Helm.
 - Nodes add Drain, which takes one set of options for every selected node and
-  starts one job per node, so the drains run at the same time. Deleting nodes
-  warns how many of them may still run workload pods. While the confirmation is
-  open, `ReadNodeDrainState` asks the API server whether each node is cordoned
-  and how many pods its removal would stop, leaving out DaemonSet, static, and
-  finished pods. The warning stays up until that read clears a node, so a denied
-  or failed read warns. Retrying a failed node delete returns to this
-  confirmation for a fresh read. Single-node deletes use the same read. Table rows and
-  object details are not consulted: they can lag and may cover only the
-  configured namespaces.
+  starts one job per node, so the drains run at the same time. Every node delete
+  warns about workload pods, however drained the node looks: nothing the app can
+  read proves it stays empty until the delete lands. Retrying a failed node delete
+  returns to the confirmation so the warning is seen again.
 
 ## DOM And Identity Rules
 

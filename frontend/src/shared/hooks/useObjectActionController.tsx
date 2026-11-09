@@ -46,7 +46,6 @@ import {
   nodeActionPermissionInputs,
   resolveNodeActionPermissionStatuses,
 } from '@shared/hooks/nodeActionPermissions';
-import { isDrainableNode, useConfirmedEmptyNodes } from '@shared/hooks/useConfirmedEmptyNodes';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import {
   buildObjectActionItems,
@@ -67,8 +66,6 @@ import { errorHandler } from '@/utils/errorHandler';
 
 type ObjectActionContext = 'gridtable' | 'object-map' | 'object-panel';
 type ObjectActionReference = ObjectActionData & KubernetesObjectReference;
-
-const NOTHING_TO_DELETE: readonly ObjectActionData[] = [];
 
 export const resolveNavigateViewHandler = (
   explicitHandler: (() => void) | undefined,
@@ -135,9 +132,22 @@ const restartConfirmation = (
   onCancel,
 });
 
+export const isDrainableNode = (object: ObjectActionData): boolean =>
+  Boolean(lookupObjectActionKindCapability(object)?.drain);
+
+// Shown on every node delete. Nothing the app can read proves a node stays empty
+// until the delete lands, so the warning states what will happen to any pods left.
+export const nodeRemovalWarning = (nodes: number): string | undefined => {
+  if (nodes === 0) {
+    return undefined;
+  }
+  return nodes === 1
+    ? 'Workload pods still on this node will be terminated abruptly when it is removed.'
+    : 'Workload pods still on these nodes will be terminated abruptly when they are removed.';
+};
+
 const deleteConfirmation = (
   target: ObjectActionData,
-  mayStopPods: boolean,
   onConfirm: () => void,
   onCancel: () => void
 ): ConfirmationSpec => {
@@ -145,9 +155,7 @@ const deleteConfirmation = (
     title: `Delete ${target.kind || 'Resource'}`,
     target,
     message: 'This action cannot be undone.',
-    warning: mayStopPods
-      ? 'Workload pods may still be running on this node. They will be terminated abruptly when the node is removed.'
-      : undefined,
+    warning: nodeRemovalWarning(isDrainableNode(target) ? 1 : 0),
     confirmText: 'Delete',
     confirmButtonClass: 'danger',
     onConfirm,
@@ -563,11 +571,6 @@ export const useObjectActionController = ({
   const navigateFallbackAvailable = panelWindowRole === null || navigateToViewAvailable;
   const [restartTarget, setRestartTarget] = useState<ObjectActionData | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ObjectActionData | null>(null);
-  const deletingObjects = useMemo(
-    () => (deleteTarget ? [deleteTarget] : NOTHING_TO_DELETE),
-    [deleteTarget]
-  );
-  const confirmedEmptyNodes = useConfirmedEmptyNodes(deletingObjects);
   const [triggerTarget, setTriggerTarget] = useState<ObjectActionData | null>(null);
   const [rollbackTarget, setRollbackTarget] = useState<ObjectActionData | null>(null);
   const [portForwardTarget, setPortForwardTarget] = useState<PortForwardTarget | null>(null);
@@ -780,10 +783,7 @@ export const useObjectActionController = ({
       return restartConfirmation(restartTarget, confirmRestart, () => setRestartTarget(null));
     }
     if (deleteTarget) {
-      const mayStopPods = isDrainableNode(deleteTarget) && !confirmedEmptyNodes.has(deleteTarget);
-      return deleteConfirmation(deleteTarget, mayStopPods, confirmDelete, () =>
-        setDeleteTarget(null)
-      );
+      return deleteConfirmation(deleteTarget, confirmDelete, () => setDeleteTarget(null));
     }
     if (triggerTarget) {
       return triggerConfirmation(triggerTarget, confirmTrigger, () => setTriggerTarget(null));
@@ -800,7 +800,6 @@ export const useObjectActionController = ({
     confirmRestart,
     confirmScaleToZero,
     confirmTrigger,
-    confirmedEmptyNodes,
     deleteTarget,
     finalizerRemovalTarget,
     restartTarget,

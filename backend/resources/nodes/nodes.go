@@ -9,6 +9,7 @@ package nodes
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -22,12 +23,12 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/common"
 	podres "github.com/luxury-yacht/app/backend/resources/pods"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	kubectldrain "k8s.io/kubectl/pkg/drain"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
@@ -67,81 +68,50 @@ func (s *Service) Node(ctx context.Context, name string) (*NodeDetails, error) {
 	return s.buildNodeDetails(node, pods, nodeMetrics), nil
 }
 
-// ReadDrainState asks the API server whether the node is cordoned and how many
-// pods removing it would stop. A pod list the caller may not make is an error,
-// so a partial view can never read as an empty node.
-func (s *Service) ReadDrainState(ctx context.Context, nodeName string) (DrainState, error) {
-	if err := s.ensureClient("Nodes"); err != nil {
-		return DrainState{}, err
-	}
-	node, err := s.deps.KubernetesClient.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
-	if err != nil {
-		return DrainState{}, fmt.Errorf("failed to get node: %w", err)
-	}
-	pods, err := s.fetchPodsForNode(ctx, nodeName)
-	if err != nil {
-		return DrainState{}, fmt.Errorf("failed to list pods on node: %w", err)
-	}
-	state := DrainState{Cordoned: node.Spec.Unschedulable}
-	for i := range pods {
-		if !exemptFromDrain(&pods[i]) {
-			state.EvictablePods++
-		}
-	}
-	return state, nil
+// Cordon marks a node as unschedulable. A non-empty uid limits it to that node.
+func (s *Service) Cordon(ctx context.Context, nodeName, uid string) error {
+	return s.setUnschedulable(ctx, nodeName, uid, true)
 }
 
-// exemptFromDrain reports whether removing the pod's node would not disrupt it.
-// It follows what kubectl drain leaves alone: DaemonSet and static pods belong
-// to the node, and a finished pod has nothing left to stop. A terminating pod
-// still counts until it is gone.
-func exemptFromDrain(pod *corev1.Pod) bool {
-	if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
-		return true
-	}
-	if _, static := pod.Annotations[corev1.MirrorPodAnnotationKey]; static {
-		return true
-	}
-	controller := metav1.GetControllerOf(pod)
-	return controller != nil && isDaemonSetRef(controller)
+// Uncordon marks a node as schedulable. A non-empty uid limits it to that node.
+func (s *Service) Uncordon(ctx context.Context, nodeName, uid string) error {
+	return s.setUnschedulable(ctx, nodeName, uid, false)
 }
 
-// isDaemonSetRef matches the built-in DaemonSet only, as kubectl drain does: a
-// custom controller can share the kind name.
-func isDaemonSetRef(ref *metav1.OwnerReference) bool {
-	apiVersion, kind := appsv1.SchemeGroupVersion.WithKind("DaemonSet").ToAPIVersionAndKind()
-	return ref.Kind == kind && ref.APIVersion == apiVersion
-}
-
-// Cordon marks a node as unschedulable.
-func (s *Service) Cordon(ctx context.Context, nodeName string) error {
-	return s.setUnschedulable(ctx, nodeName, true)
-}
-
-// Uncordon marks a node as schedulable.
-func (s *Service) Uncordon(ctx context.Context, nodeName string) error {
-	return s.setUnschedulable(ctx, nodeName, false)
-}
-
-func (s *Service) setUnschedulable(ctx context.Context, nodeName string, unschedulable bool) error {
+func (s *Service) setUnschedulable(ctx context.Context, nodeName, uid string, unschedulable bool) error {
 	if err := s.ensureClient("Nodes"); err != nil {
 		return err
 	}
 
+	patch, err := json.Marshal(common.BindPatchToUID(map[string]any{
+		"spec": map[string]any{"unschedulable": unschedulable},
+	}, uid))
+	if err != nil {
+		return fmt.Errorf("failed to marshal node patch: %w", err)
+	}
+	if _, err := s.deps.KubernetesClient.CoreV1().Nodes().Patch(
+		ctx, nodeName, types.StrategicMergePatchType, patch, metav1.PatchOptions{},
+	); err != nil {
+		return fmt.Errorf("failed to patch node %s: %w", nodeName, err)
+	}
+	return nil
+}
+
+// RequireUID refuses when the node now under this name is not the one with this
+// UID. A drain is many writes, so it has no single request to bind to the UID.
+func (s *Service) RequireUID(ctx context.Context, nodeName, uid string) error {
+	if uid == "" {
+		return nil
+	}
+	if err := s.ensureClient("Nodes"); err != nil {
+		return err
+	}
 	node, err := s.deps.KubernetesClient.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to get node %s: %w", nodeName, err)
 	}
-
-	drainer := &kubectldrain.Helper{
-		Ctx:    ctx,
-		Client: s.deps.KubernetesClient,
-		Out:    io.Discard,
-		ErrOut: io.Discard,
-	}
-	err = kubectldrain.RunCordonOrUncordon(drainer, node, unschedulable)
-	if err != nil {
-		return fmt.Errorf("failed to patch node %s: %w", nodeName, err)
+	if string(node.UID) != uid {
+		return apierrors.NewConflict(corev1.Resource("nodes"), nodeName, errors.New("the node was replaced after it was selected"))
 	}
 	return nil
 }
@@ -234,7 +204,7 @@ func (s *Service) finalizeDrain(job *nodemaintenance.DrainJob, cordoned bool, er
 // cordonForDrain marks the node unschedulable and records drain events.
 func (s *Service) cordonForDrain(ctx context.Context, job *nodemaintenance.DrainJob, nodeName string) error {
 	job.AddInfo(nodemaintenance.DrainPhaseCordon, "Cordoning node")
-	if cordonErr := s.Cordon(ctx, nodeName); cordonErr != nil {
+	if cordonErr := s.Cordon(ctx, nodeName, ""); cordonErr != nil {
 		job.AddInfo(nodemaintenance.DrainPhaseError, fmt.Sprintf("Failed to cordon node: %v", cordonErr))
 		return fmt.Errorf("failed to cordon node before draining: %w", cordonErr)
 	}
@@ -598,15 +568,6 @@ func projectNodeTaints(taints []corev1.Taint) []NodeTaint {
 }
 
 func (s *Service) listPodsForNode(ctx context.Context, name string) []corev1.Pod {
-	pods, err := s.fetchPodsForNode(ctx, name)
-	if err != nil {
-		s.logInfo(fmt.Sprintf("Failed to list pods for node %s: %v", name, err))
-		return nil
-	}
-	return pods
-}
-
-func (s *Service) fetchPodsForNode(ctx context.Context, name string) ([]corev1.Pod, error) {
 	ctx, cancel := context.WithTimeout(ctx, config.NamespaceOperationTimeout)
 	defer cancel()
 
@@ -614,9 +575,10 @@ func (s *Service) fetchPodsForNode(ctx context.Context, name string) ([]corev1.P
 		FieldSelector: nodePodFieldSelector(name),
 	})
 	if err != nil {
-		return nil, err
+		s.logInfo(fmt.Sprintf("Failed to list pods for node %s: %v", name, err))
+		return nil
 	}
-	return podList.Items, nil
+	return podList.Items
 }
 
 func (s *Service) getNodeMetrics(ctx context.Context, name string) corev1.ResourceList {

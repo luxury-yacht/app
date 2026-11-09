@@ -31,9 +31,6 @@ import * as snapshot$0 from "./refresh/snapshot/models.js";
 import * as resourcemodel$0 from "./resourcemodel/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import * as nodes$0 from "./resources/nodes/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as panelwindow$0 from "../internal/panelwindow/models.js";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -401,10 +398,6 @@ export function PublishPanelWindowGroup(windowName: string, group: panelwindow$0
 
 export function QueryPermissions(queries: capabilities$0.PermissionQuery[] | null): $CancellablePromise<capabilities$0.QueryPermissionsResponse | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.QueryPermissions", queries);
-}
-
-export function ReadNodeDrainState(target: resourcemodel$0.ResourceRef): $CancellablePromise<nodes$0.DrainState> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.ReadNodeDrainState", target);
 }
 
 export function RemoveApplicationUpdateSkip(): $CancellablePromise<$models.UpdateInfo | null> {

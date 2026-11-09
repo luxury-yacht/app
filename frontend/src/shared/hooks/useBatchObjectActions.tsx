@@ -49,13 +49,13 @@ import {
   nodeActionPermissionInputs,
   resolveNodeDrainOperationPermissions,
 } from '@shared/hooks/nodeActionPermissions';
-import { isDrainableNode, useConfirmedEmptyNodes } from '@shared/hooks/useConfirmedEmptyNodes';
 import {
   actionTargetFor,
+  isDrainableNode,
   missingPermissionChecks,
+  nodeRemovalWarning,
   resolveObjectActionPermissions,
 } from '@shared/hooks/useObjectActionController';
-import { forEachWithLimit } from '@shared/utils/forEachWithLimit';
 import type React from 'react';
 import { useCallback, useMemo, useState } from 'react';
 import { queryPermissionChecks, useUserPermissions } from '@/core/capabilities';
@@ -74,7 +74,6 @@ export type BatchObjectActionId =
 // A few requests at a time keeps a large selection from flooding the API server.
 const BATCH_CONCURRENCY = 5;
 const NO_ROWS_SELECTED: ReadonlySet<string> = new Set();
-const NOTHING_TO_DELETE: readonly ObjectActionData[] = [];
 
 // Every action is offered here; the policy still decides per object.
 const ALL_HANDLERS: ObjectActionHandlerAvailability = {
@@ -93,12 +92,8 @@ interface BatchActionDefinition {
   icon: React.ReactNode;
   danger: boolean;
   message: (replicas: number) => string;
-  covers: (policy: ObjectActionPolicy, object: ObjectActionData) => boolean;
-  run: (
-    target: ObjectActionTargetRef,
-    batch: BatchRun,
-    object: ObjectActionData
-  ) => Promise<unknown>;
+  covers: (policy: ObjectActionPolicy) => boolean;
+  run: (target: ObjectActionTargetRef, batch: BatchRun) => Promise<unknown>;
   /** A dialog that gathers input first; other actions go straight to confirmation. */
   prompt?: 'scale' | 'drain';
 }
@@ -112,7 +107,7 @@ const BATCH_ACTIONS: readonly BatchActionDefinition[] = [
     danger: true,
     message: () => 'This will perform a rolling restart of all pods.',
     covers: (policy) => policy.restartEnabled,
-    run: (target) => runObjectRestart(target),
+    run: (target, { restartedAt }) => runObjectRestart(target, restartedAt),
   },
   {
     id: 'scale',
@@ -183,10 +178,8 @@ const BATCH_ACTIONS: readonly BatchActionDefinition[] = [
     icon: <DeleteIcon width={16} height={16} />,
     danger: true,
     message: () => 'This action cannot be undone.',
-    // Tied to the UID of the row the user saw: a retry after a lost response
-    // must fail rather than remove a replacement created under the same name.
-    covers: (policy, object) => policy.deleteEnabled && Boolean(object.uid),
-    run: (target, _batch, object) => runObjectDelete({ ...target, uid: object.uid }),
+    covers: (policy) => policy.deleteEnabled,
+    run: (target) => runObjectDelete(target),
   },
 ];
 
@@ -201,6 +194,8 @@ interface BatchRun {
   skipped: number;
   replicas: number;
   drainOptions?: types.DrainNodeOptions;
+  /** Set once when the batch starts and kept across retries. */
+  restartedAt?: string;
 }
 
 interface BatchFailure {
@@ -273,20 +268,6 @@ const targetDetailsTable = (
   };
 };
 
-const undrainedWarning = (
-  objects: readonly ObjectActionData[],
-  confirmedEmptyNodes: ReadonlySet<ObjectActionData>
-): string | undefined => {
-  const undrained = objects.filter(
-    (object) => isDrainableNode(object) && !confirmedEmptyNodes.has(object)
-  ).length;
-  if (undrained === 0) {
-    return undefined;
-  }
-  const total = `${undrained} of ${objects.length} ${objects.length === 1 ? 'node' : 'nodes'}`;
-  return `${total} may still be running workload pods. They will be terminated abruptly when ${undrained === 1 ? 'the node is' : 'the nodes are'} removed.`;
-};
-
 const actionTitle = (label: string, eligible: number, total: number): string =>
   eligible === total ? `${label} ${eligible}` : `${label} ${eligible} of ${total}`;
 
@@ -297,22 +278,30 @@ const executeBatch = async (
   run: BatchRun,
   onProgress: (done: number) => void
 ): Promise<BatchFailure[]> => {
+  const queue = [...run.entries];
   const failed: BatchFailure[] = [];
   let done = 0;
-  await forEachWithLimit(run.entries, BATCH_CONCURRENCY, async (entry) => {
-    try {
-      const label = objectActionLabel(run.definition.actionId);
-      await run.definition.run(
-        actionTargetFor(entry.object, label.toLowerCase()),
-        run,
-        entry.object
-      );
-    } catch (error) {
-      failed.push({ entry, reason: errorReason(error) });
+  const worker = async () => {
+    for (let entry = queue.shift(); entry; entry = queue.shift()) {
+      try {
+        const label = objectActionLabel(run.definition.actionId);
+        // Bound to the object the user selected: if something else now holds its
+        // name, the API server refuses the write.
+        const target = {
+          ...actionTargetFor(entry.object, label.toLowerCase()),
+          uid: entry.object.uid,
+        };
+        await run.definition.run(target, run);
+      } catch (error) {
+        failed.push({ entry, reason: errorReason(error) });
+      }
+      done += 1;
+      onProgress(done);
     }
-    done += 1;
-    onProgress(done);
-  });
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(BATCH_CONCURRENCY, queue.length) }, () => worker())
+  );
   return failed;
 };
 
@@ -334,8 +323,7 @@ const scopeMessage = (
 
 const confirmationProps = (
   run: BatchRun,
-  resolveClusterName: (clusterId: string) => string | undefined,
-  confirmedEmptyNodes: ReadonlySet<ObjectActionData>
+  resolveClusterName: (clusterId: string) => string | undefined
 ) => {
   const { definition, entries, skipped, replicas } = run;
   const objects = entries.map((entry) => entry.object);
@@ -366,7 +354,9 @@ const confirmationProps = (
       ? `${skipped} selected ${skipped === 1 ? 'object is' : 'objects are'} skipped: not supported or not permitted.`
       : undefined,
     warning:
-      definition.id === 'delete' ? undrainedWarning(objects, confirmedEmptyNodes) : undefined,
+      definition.id === 'delete'
+        ? nodeRemovalWarning(objects.filter(isDrainableNode).length)
+        : undefined,
     confirmText: `${label} ${objects.length}`,
     confirmButtonClass: definition.danger ? 'danger' : 'generic',
   };
@@ -418,15 +408,6 @@ export function useBatchObjectActions<T>({
     }
   }
 
-  const deletingObjects = useMemo(
-    () =>
-      dialog?.stage === 'confirm' && dialog.run.definition.id === 'delete'
-        ? dialog.run.entries.map((entry) => entry.object)
-        : NOTHING_TO_DELETE,
-    [dialog]
-  );
-  const confirmedEmptyNodes = useConfirmedEmptyNodes(deletingObjects);
-
   const update = useCallback(
     (change: Partial<Omit<BatchState, 'scopeKey'>>) => {
       // A batch that finishes after the table moved on must not touch the new scope.
@@ -438,7 +419,10 @@ export function useBatchObjectActions<T>({
   );
 
   const startRun = useCallback(
-    async (run: BatchRun) => {
+    async (batch: BatchRun) => {
+      // Stamped once: a retry after a lost response is then the same restart, not
+      // another rollout.
+      const run = { ...batch, restartedAt: batch.restartedAt ?? new Date().toISOString() };
       setDialog({ stage: 'running', run, done: 0 });
       const failed = await executeBatch(run, (done) => setDialog({ stage: 'running', run, done }));
       onRunComplete?.(run.definition.id);
@@ -480,7 +464,10 @@ export function useBatchObjectActions<T>({
       return BATCH_ACTIONS.filter(
         (definition) => !allowedActions || allowedActions.includes(definition.id)
       ).flatMap((definition) => {
-        const entries = rows.filter(({ policy, object }) => definition.covers(policy, object));
+        // A row with no UID could not be tied to the object the user selected.
+        const entries = rows.filter(
+          ({ policy, object }) => Boolean(object.uid) && definition.covers(policy)
+        );
         if (entries.length === 0) {
           return [];
         }
@@ -552,7 +539,7 @@ export function useBatchObjectActions<T>({
     );
   };
 
-  // Retrying a node delete asks again: the node may have picked up pods since.
+  // Retrying a node delete asks again, so its pod warning is seen before the retry.
   const retry = (run: BatchRun) => {
     const needsConfirmation =
       run.definition.id === 'delete' && run.entries.some(({ object }) => isDrainableNode(object));
@@ -589,13 +576,12 @@ export function useBatchObjectActions<T>({
   /** `done` counts finished objects once the run is under way; null before it starts. */
   const renderConfirmation = (run: BatchRun, done: number | null) => {
     const running = done !== null;
-    const props = confirmationProps(run, resolveClusterName, confirmedEmptyNodes);
+    const props = confirmationProps(run, resolveClusterName);
     return (
       <ConfirmationModal
         isOpen
         {...props}
         message={running ? `${done} of ${run.entries.length} done.` : props.message}
-        warning={running ? undefined : props.warning}
         busy={running}
         onConfirm={() => void startRun(run)}
         onCancel={running ? () => undefined : closeDialog}

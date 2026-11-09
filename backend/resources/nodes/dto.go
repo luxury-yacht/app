@@ -52,14 +52,6 @@ type NodeDetails struct {
 	PodsList          []restypes.PodSimpleInfo `json:"podsList,omitempty"`
 }
 
-// DrainState is what removing a node would disrupt, read from the API server at
-// the moment it is asked for.
-type DrainState struct {
-	Cordoned bool `json:"cordoned"`
-	// EvictablePods counts the pods removing the node would stop.
-	EvictablePods int `json:"evictablePods"`
-}
-
 // NodeCondition represents a node condition.
 type NodeCondition struct {
 	Kind    string `json:"kind"`

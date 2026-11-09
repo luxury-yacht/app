@@ -24,8 +24,8 @@ func workloadRestart(ctx context.Context, client kubernetes.Interface, namespace
 	return err
 }
 
-func workloadScale(ctx context.Context, client kubernetes.Interface, namespace, name string, replicas int32) error {
-	_, err := client.AppsV1().Deployments(namespace).UpdateScale(ctx, name, kindspec.ScaleObject(namespace, name, replicas), metav1.UpdateOptions{})
+func workloadScale(ctx context.Context, client kubernetes.Interface, namespace, name, uid string, replicas int32) error {
+	_, err := client.AppsV1().Deployments(namespace).UpdateScale(ctx, name, kindspec.ScaleObject(namespace, name, uid, replicas), metav1.UpdateOptions{})
 	return err
 }
 

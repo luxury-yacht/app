@@ -220,7 +220,51 @@ describe('useBatchObjectActions', () => {
     expect(toolbarButton('Batch select')).not.toBeNull();
   });
 
-  it('leaves a row with no UID out of Delete, since a retry could not be tied to that object', async () => {
+  it('stamps a restart once, so retrying a lost response is not a second rollout', async () => {
+    const { clusterId } = devCluster();
+    let failing = true;
+    app.backend.answer('RunObjectAction', () => {
+      if (failing) {
+        throw new Error('connection reset');
+      }
+      return {};
+    });
+    await mount(
+      <BatchTable
+        allowedActions={['restart']}
+        rows={[makeRow(clusterId, 'Deployment', 'apps', 'a', { hpaManaged: false })]}
+      />
+    );
+    await selectAllRows();
+    await click(batchAction('Restart 1'));
+    await click(modalButton('Restart 1'));
+
+    failing = false;
+    await click(modalButton('Retry 1'));
+
+    const [first, retry] = actionCalls();
+    expect(first.target).toEqual(expect.objectContaining({ name: 'a', uid: 'uid-a' }));
+    expect(first.restartedAt).toEqual(expect.any(String));
+    expect(retry.restartedAt).toBe(first.restartedAt);
+  });
+
+  it('deletes a custom kind that shares a built-in name as itself', async () => {
+    const { clusterId } = devCluster();
+    app.backend.answer('RunObjectAction', () => ({}));
+    await mount(<BatchTable rows={[makeRow(clusterId, 'Pod', 'custom.example.com', 'a')]} />);
+    await selectAllRows();
+
+    await click(batchAction('Delete 1'));
+    await click(modalButton('Delete 1'));
+
+    expect(actionCalls()).toEqual([
+      expect.objectContaining({
+        target: expect.objectContaining({ group: 'custom.example.com', kind: 'Pod', name: 'a' }),
+      }),
+    ]);
+  });
+
+  it('leaves a row with no UID out of its actions, since a write could not be tied to that object', async () => {
     const { clusterId } = devCluster();
     await mount(
       <BatchTable
@@ -307,7 +351,12 @@ describe('useBatchObjectActions', () => {
         expect.objectContaining({
           action: OBJECT_ACTIONS.scale,
           replicas: 3,
-          target: expect.objectContaining({ name, kind: 'Deployment', group: 'apps' }),
+          target: expect.objectContaining({
+            name,
+            kind: 'Deployment',
+            group: 'apps',
+            uid: `uid-${name}`,
+          }),
         })
       )
     );
@@ -525,101 +574,38 @@ describe('useBatchObjectActions', () => {
       `drain option ${name}`
     );
 
-  /** What the API server says about each node; a node not listed cannot be read. */
-  const answerDrainStates = (
-    states: Record<string, { cordoned: boolean; evictablePods: number }>
-  ) =>
-    app.backend.answer('ReadNodeDrainState', (target) => {
-      const state = states[(target as { name: string }).name];
-      if (!state) {
-        throw new Error('pods is forbidden');
-      }
-      return state;
-    });
-
-  it('counts only the nodes the API server confirms are cordoned and empty', async () => {
+  it('warns about workload pods on every node delete, however drained the nodes look', async () => {
     const { clusterId } = devCluster();
-    answerDrainStates({
-      schedulable: { cordoned: false, evictablePods: 0 },
-      'pods-left': { cordoned: true, evictablePods: 2 },
-      empty: { cordoned: true, evictablePods: 0 },
-    });
     await mount(
       <BatchTable
         allowedActions={['delete']}
-        // Every row looks cordoned; only the live read decides.
-        rows={['schedulable', 'pods-left', 'unreadable', 'empty'].map((name) =>
-          nodeRow(clusterId, name, { unschedulable: true })
-        )}
-      />
-    );
-    await selectAllRows();
-
-    await click(batchAction('Delete 4'));
-
-    expect(modalTitle()).toBe('Delete 4 Nodes');
-    expect(modalWarning()?.textContent).toContain('3 of 4 nodes');
-  });
-
-  it('does not warn once every selected node is confirmed cordoned and empty', async () => {
-    const { clusterId } = devCluster();
-    answerDrainStates({
-      a: { cordoned: true, evictablePods: 0 },
-      b: { cordoned: true, evictablePods: 0 },
-    });
-    await mount(
-      <BatchTable
-        allowedActions={['delete']}
-        rows={[nodeRow(clusterId, 'a'), nodeRow(clusterId, 'b')]}
+        rows={[
+          nodeRow(clusterId, 'schedulable'),
+          nodeRow(clusterId, 'cordoned', { unschedulable: true }),
+        ]}
       />
     );
     await selectAllRows();
 
     await click(batchAction('Delete 2'));
 
-    expect(modalWarning()).toBeNull();
+    expect(modalTitle()).toBe('Delete 2 Nodes');
+    expect(modalWarning()).not.toBeNull();
   });
 
-  it('keeps the warning up until the live read answers', async () => {
+  it('shows no node warning when deleting something else', async () => {
     const { clusterId } = devCluster();
-    answerDrainStates({ a: { cordoned: true, evictablePods: 0 } });
-    const release = app.backend.hold('ReadNodeDrainState');
-    await mount(<BatchTable allowedActions={['delete']} rows={[nodeRow(clusterId, 'a')]} />);
+    await mount(<BatchTable rows={[makeRow(clusterId, 'Pod', '', 'a')]} />);
     await selectAllRows();
 
     await click(batchAction('Delete 1'));
-    expect(modalWarning()?.textContent).toContain('1 of 1 node');
 
-    await act(async () => {
-      release();
-    });
-    await app.settle();
     expect(modalWarning()).toBeNull();
   });
 
-  it('does not bring the warning back while the delete runs', async () => {
+  it('asks again, with the warning, before retrying a failed node delete', async () => {
     const { clusterId } = devCluster();
-    answerDrainStates({ a: { cordoned: true, evictablePods: 0 } });
-    app.backend.answer('RunObjectAction', () => ({}));
-    const release = app.backend.hold('RunObjectAction');
-    await mount(<BatchTable allowedActions={['delete']} rows={[nodeRow(clusterId, 'a')]} />);
-    await selectAllRows();
-    await click(batchAction('Delete 1'));
-
-    await click(modalButton('Delete 1'));
-
-    expect(modalWarning()).toBeNull();
-    await act(async () => {
-      release();
-    });
-    await app.settle();
-  });
-
-  it('asks again, with a fresh check, before retrying a failed node delete', async () => {
-    const { clusterId } = devCluster();
-    let evictablePods = 0;
     let failing = true;
-    app.backend.answer('ReadNodeDrainState', () => ({ cordoned: true, evictablePods }));
     app.backend.answer('RunObjectAction', () => {
       if (failing) {
         throw new Error('etcd timeout');
@@ -629,19 +615,16 @@ describe('useBatchObjectActions', () => {
     await mount(<BatchTable allowedActions={['delete']} rows={[nodeRow(clusterId, 'a')]} />);
     await selectAllRows();
     await click(batchAction('Delete 1'));
-    expect(modalWarning()).toBeNull();
     await click(modalButton('Delete 1'));
     expect(modalTitle()).toBe('Deleted 0 of 1 Node');
 
-    // Workloads land on the node while the failure is on screen.
-    evictablePods = 2;
     failing = false;
     const callsBeforeRetry = actionCalls().length;
     await click(modalButton('Retry 1'));
 
     expect(actionCalls()).toHaveLength(callsBeforeRetry);
     expect(modalTitle()).toBe('Delete 1 Node');
-    expect(modalWarning()?.textContent).toContain('1 of 1 node');
+    expect(modalWarning()).not.toBeNull();
 
     await click(modalButton('Delete 1'));
     expect(actionCalls().slice(callsBeforeRetry)).toEqual([
@@ -670,7 +653,15 @@ describe('useBatchObjectActions', () => {
     expect(actionCalls()).toEqual(
       ['a', 'b'].map((name) => ({
         action: OBJECT_ACTIONS.startDrain,
-        target: { clusterId, group: '', version: 'v1', kind: 'Node', namespace: '', name },
+        target: {
+          clusterId,
+          group: '',
+          version: 'v1',
+          kind: 'Node',
+          namespace: '',
+          name,
+          uid: `uid-${name}`,
+        },
         drainOptions: expect.objectContaining({
           force: true,
           ignoreDaemonSets: true,

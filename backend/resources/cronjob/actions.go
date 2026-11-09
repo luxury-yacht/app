@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/resources/common"
 	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -54,9 +55,10 @@ func TriggerManualJob(ctx context.Context, client kubernetes.Interface, namespac
 	return createdJob.Name, nil
 }
 
-// SetSuspend patches the named CronJob's spec.suspend.
-func SetSuspend(ctx context.Context, client kubernetes.Interface, namespace, name string, suspend bool) error {
-	patchBytes, err := json.Marshal(map[string]any{"spec": map[string]any{"suspend": suspend}})
+// SetSuspend patches the named CronJob's spec.suspend. A non-empty uid limits it to
+// that object.
+func SetSuspend(ctx context.Context, client kubernetes.Interface, namespace, name, uid string, suspend bool) error {
+	patchBytes, err := json.Marshal(common.BindPatchToUID(map[string]any{"spec": map[string]any{"suspend": suspend}}, uid))
 	if err != nil {
 		return fmt.Errorf("failed to marshal suspend patch: %w", err)
 	}
