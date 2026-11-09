@@ -71,13 +71,23 @@ no layer decides behavior from message text.
   `RefreshUnavailable`; a gated user action (`RunObjectAction`, YAML apply and
   ownership check, shell start) marks its outcome `userAction` and names its
   target on a `Forbidden`, so the UI shows a denial no view presents. The
-  denial stays expected: the cluster answered, no app code failed.
+  denial stays expected: the cluster answered, no app code failed. A bounded
+  object action ([permissions.md](permissions.md#object-actions) lists them)
+  returns an error that carries `context.DeadlineExceeded` as
+  `DeadlineExceeded` through `errorstatus.NoAnswerInTime` (expected, not
+  retryable): the cluster went silent, and the write may have landed. An
+  action the app refuses because of current state, such as a drain already
+  running on the node or a manual scale of an HPA-managed workload, returns
+  `Conflict` through `errorstatus.Conflict` (expected).
 - `ref` names the object whose lookup failed, with full identity. Only the
-  producer that looked that exact object up sets it. Object details confirm a
-  Kubernetes NotFound with an uncached read first. A Helm release missing
+  producer that looked that exact object up sets it. Object details and object
+  deletes confirm a Kubernetes NotFound with an uncached read first, and accept
+  only the API naming that exact object as missing
+  (`errorstatus.ConfirmsObjectAbsent`): a proxy's 404, an unserved API
+  version's, and a write's own 404 confirm nothing. A Helm release missing
   from Helm storage is a NotFound, and its details name the release's
   synthetic `helm.sh/v3` `HelmRelease` identity. Kubernetes `details` are never
-  used for identity.
+  used for identity; the confirming check only compares them with the request.
 - YAML editor conflicts are response data (`yamlConflict`), not errors; live
   object YAML never enters the error path.
 
@@ -91,8 +101,9 @@ no layer decides behavior from message text.
   `expected` `PERMISSION` status that is not a `userAction` (the view's
   permission state shows read denials). `VALIDATION` shows the status's own
   message. A 409 (`Conflict`, `AlreadyExists`) is `CONFLICT`, not
-  `VALIDATION`: another writer won a race, so "check your input" would
-  mislead. It is shown, not reported.
+  `VALIDATION`: another writer won a race, or the object's current state
+  rules the action out, so "check your input" would mislead. It is shown, not
+  reported.
 - One reporting decision: `core/telemetry/expectedErrors.ts` returns the
   status's `expected` verdict when there is a status, otherwise only browser
   conditions (clipboard denial, browser/Wails cancellation) are expected.
@@ -351,7 +362,9 @@ expected and never reported.
   remain; deadlines remain reportable.
 - The metrics poller treats demand-shutdown cancellation as expected.
 - A standalone client-side `context.DeadlineExceeded` is reportable; a deadline
-  carried by a URL or network operation is a connectivity outcome.
+  carried by a URL or network operation is a connectivity outcome. A bounded
+  object action is the exception: `boundedObjectAction` marks an error that
+  carries `context.DeadlineExceeded` as `NoAnswerInTime`, which is expected.
 - The known-only credential classifier keeps expected auth and connectivity
   outcomes in the local log: wrapped auth-state errors, raw 401s or helper
   failures, API-server unavailable/timeouts, recognized DNS/TCP/TLS failures,

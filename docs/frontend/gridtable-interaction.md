@@ -142,41 +142,47 @@ virtualization, and native table accessibility. Apply the
   batch still running reports its result but cannot change the new scope.
 - The checkbox column joins after the column order and visibility controllers,
   which keeps it out of the Columns menu, saved table state, and downloads. Its
-  checkboxes read selection from context because cells are cached by row.
+  header menu offers no actions. Its checkboxes read selection from context
+  because cells are cached by row.
 - Each selected object runs through `RunObjectAction` with its complete
   identity, a few at a time. A partial failure keeps the failed rows selected.
-- Every batch write also sends the row's UID, and the API server refuses it for
-  any other object: a delete precondition, `metadata.uid` in a patch, or the UID
-  on a scale update. A drain binds its cordon the same way and checks the UID
-  again after listing pods, so it only removes pods from the selected node. A
-  replacement created under the same name is left alone, and a row with no UID
-  is not offered any action.
-- A drain removes only the pods it listed: each eviction or delete carries the
-  listed pod's UID, and a pod recreated under that name counts as already removed.
-- A delete counts as done on a 404 only when a read of that exact object also finds
-  nothing. An admission webhook can answer a delete with any status, and an API
-  version no longer served answers 404 to everything; both stay failures.
+- Every batch write also sends the row's UID, which holds the action to the
+  object the user checked: a replacement created under the same name is left
+  alone. A row with no UID is not offered any action. The backend side is in
+  [object actions](../architecture/permissions.md#object-actions), and a
+  drain's node and pod binding in
+  [drain target binding](../workflows/operation-lifecycle.md#drain-target-binding).
+- A delete counts as done on a 404 only when the error's `ref` is the identity
+  of the object the delete was sent for, which the backend sets only after
+  confirming that exact object is gone. Any other 404 stays a failure.
 - Retry is offered only when every failure is a definite refusal. After any other
   error the write may still have landed, so those rows show as Unknown, stay
   selected, and running again is a new, confirmed action against current data.
 - Each object holds its slot until its backend call returns, so results and Retry
-  wait for every call under way. The backend ends a call within 70 seconds, longer
-  than the API server's own limit, and reports that the cluster did not answer. A
-  silent cluster can also fail sooner as an unreachable connection. Either stops
-  the batch starting more objects, which are listed as not started. Failures also go to the app error pipeline, which keeps expected cluster
-  outcomes out of Sentry.
+  wait for every call under way. The backend ends the call at its own deadline
+  and reports that the cluster did not answer; never add a frontend timer, which
+  would free a slot while its call still runs. A silent cluster can also fail
+  sooner as an unreachable connection. Either stops the batch starting more
+  objects, which are listed as not started.
+- Failures also go to the app error pipeline, which keeps expected cluster
+  outcomes out of Sentry. The running dialog cannot be dismissed, so nothing may
+  keep the results from replacing it: a view's `onRunComplete` that throws is
+  reported and ignored, and an object whose failure could not be reported is
+  listed as Unknown.
 - While a batch runs, its dialog blocks app shortcuts so the view that will report
   it stays open. If the view goes anyway, such as the cluster closing from the
   native menu, objects still queued do not start.
 - Confirmations and failure lists group by group, version, and kind. They add an
-  API Version column when one kind name spans several API versions.
+  API Version column when one kind name spans several API versions. Long names
+  truncate, with the full name on hover.
 - A view that lists kinds too consequential to remove several at a time does not
   opt in: Browse, CRDs, Namespaces, and Helm.
 - Nodes add Drain, which takes one set of options for every selected node and
   starts one job per node, so the drains run at the same time. Every node delete
   warns about workload pods, however drained the node looks: nothing the app can
   read proves it stays empty until the delete lands. Retrying a failed node delete
-  returns to the confirmation so the warning is seen again.
+  returns to the confirmation, with focus back on Cancel, so the warning is seen
+  again.
 
 ## DOM And Identity Rules
 

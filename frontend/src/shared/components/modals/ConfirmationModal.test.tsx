@@ -149,6 +149,49 @@ describe('ConfirmationModal', () => {
     expect(document.activeElement).toBe(cancelButton);
   });
 
+  // While the work runs the footer is disabled, and a result that only reports has
+  // no confirm button. Focus has to come back into the dialog, or Enter and Space
+  // do nothing until the user finds Tab.
+  it('returns focus to the dialog when the work ends and the button holding it is gone', async () => {
+    await renderModal({});
+    const confirmButton = document.querySelector<HTMLButtonElement>(
+      '.confirmation-modal-footer .button.danger'
+    );
+    act(() => {
+      confirmButton?.focus();
+    });
+    expect(document.activeElement).toBe(confirmButton);
+
+    await renderModal({ busy: true });
+    await renderModal({ busy: false, onConfirm: undefined });
+
+    const cancelButton = document.querySelector<HTMLButtonElement>(
+      '.confirmation-modal-footer .button.cancel'
+    );
+    expect(cancelButton).not.toBeNull();
+    expect(document.activeElement).toBe(cancelButton);
+  });
+
+  // A dialog that stays open can change what it asks: a result's Retry button
+  // becomes the confirm button of a new, destructive question. Focus must not
+  // stay on it, or a second Enter confirms the new question unread.
+  it('puts focus back on the non-destructive action when it asks something new', async () => {
+    await renderModal({ promptId: 'results', confirmText: 'Retry' });
+    const confirmButton = document.querySelector<HTMLButtonElement>(
+      '.confirmation-modal-footer .button.danger'
+    );
+    act(() => {
+      confirmButton?.focus();
+    });
+    expect(document.activeElement).toBe(confirmButton);
+
+    await renderModal({ promptId: 'confirm', confirmText: 'Delete' });
+
+    expect(document.activeElement).toBe(
+      document.querySelector('.confirmation-modal-footer .button.cancel')
+    );
+  });
+
   it('supports escape key and ignores backdrop clicks', async () => {
     const onCancel = vi.fn();
     await renderModal({ onCancel });

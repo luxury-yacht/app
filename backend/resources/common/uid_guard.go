@@ -31,10 +31,12 @@ func UserDeleteOptions(uid string) metav1.DeleteOptions {
 	return options
 }
 
-// BindPatchToUID limits a patch to the object with this UID: a patch cannot change
-// an object's UID, so the API server refuses it for any other object. An empty UID
-// patches by name.
-func BindPatchToUID(patch map[string]any, uid string) map[string]any {
+// SpecPatchForUID is a patch of an object's spec, limited to the object with this
+// UID: a patch cannot change an object's UID, so the API server refuses it for any
+// other object. An empty UID patches by name. It takes only the spec, so a caller
+// has no metadata of its own for the UID to displace.
+func SpecPatchForUID(spec map[string]any, uid string) map[string]any {
+	patch := map[string]any{"spec": spec}
 	if uid != "" {
 		patch["metadata"] = map[string]any{"uid": uid}
 	}

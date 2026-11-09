@@ -684,8 +684,7 @@ export function useGridTableController<T>({
 
   const { renderSortIndicator, handleHeaderClick, handleHeaderContextMenu, headerContextMenuNode } =
     useGridTableHeaderActions<T>({
-      columns: orderedColumns,
-      lockedColumns,
+      columns: batch.layoutColumns,
       sortConfig,
       onSort,
       applyVisibilityChanges,

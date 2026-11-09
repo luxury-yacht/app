@@ -10,10 +10,11 @@
 package backend
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
@@ -113,7 +114,7 @@ func TestRunObjectActionWritesOnlyTheObjectTheUserSelected(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		t.Run(tc.name+" is refused for a replacement", func(t *testing.T) {
+		t.Run(tc.name+" sends the UID the user selected", func(t *testing.T) {
 			app, client := uidGuardFixture(t, tc.object)
 			request := tc.request
 			request.Target.UID = "uid-the-user-saw"
@@ -135,12 +136,66 @@ func TestRunObjectActionWritesOnlyTheObjectTheUserSelected(t *testing.T) {
 	}
 }
 
-func TestStartDrainRefusesANodeReplacedSinceItWasSelected(t *testing.T) {
-	app, _ := uidGuardFixture(t, &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node", UID: "uid-now"}})
-	target := objectActionTarget(uidGuardCluster, "", "v1", "Node", "", "node")
-	target.UID = "uid-the-user-saw"
+// A drain is many writes, so both ways of starting one compare the node's UID
+// themselves before touching it.
+func TestDrainRefusesANodeReplacedSinceItWasSelected(t *testing.T) {
+	for _, action := range []string{ObjectActionDrain, ObjectActionStartDrain} {
+		t.Run(action, func(t *testing.T) {
+			app, client := uidGuardFixture(t, &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node", UID: "uid-now"}})
+			target := objectActionTarget(uidGuardCluster, "", "v1", "Node", "", "node")
+			target.UID = "uid-the-user-saw"
 
-	_, err := app.gateway.startDrainNodeAction(context.Background(), target, DrainNodeOptions{DisableEviction: true})
+			_, err := app.gateway.RunObjectAction(ObjectActionRequest{
+				Action: action, Target: target, DrainOptions: &DrainNodeOptions{DisableEviction: true},
+			})
 
-	require.True(t, apierrors.IsConflict(err), "got %v", err)
+			require.True(t, apierrors.IsConflict(err), "got %v", err)
+			require.Empty(t, patchBodies(t, client.Actions()), "the replacement must not be cordoned")
+		})
+	}
+}
+
+// A UID is the caller's promise that only that object changes. An action that
+// cannot hold the cluster to it must refuse before sending anything, not act on
+// whatever now holds the name.
+func TestRunObjectActionRefusesAUIDItCannotEnforce(t *testing.T) {
+	cronJob := &batchv1.CronJob{ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default"}}
+	deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"}}
+	helmRelease := resourcemodel.HelmReleaseGVK
+
+	cases := []struct {
+		name    string
+		request ObjectActionRequest
+		object  runtime.Object
+	}{
+		{"trigger", ObjectActionRequest{
+			Action: ObjectActionTrigger,
+			Target: objectActionTarget(uidGuardCluster, "batch", "v1", "CronJob", "default", "nightly"),
+		}, cronJob},
+		{"remove finalizer", ObjectActionRequest{
+			Action:        ObjectActionRemoveFinalizer,
+			Target:        objectActionTarget(uidGuardCluster, "apps", "v1", "Deployment", "default", "demo"),
+			Finalizer:     "example.com/hold",
+			FinalizerPath: objectFinalizerPathMetadata,
+		}, deployment},
+		// Delete binds a UID for cluster objects, but a Helm release is not one.
+		{"delete of a Helm release", ObjectActionRequest{
+			Action: ObjectActionDelete,
+			Target: objectActionTarget(uidGuardCluster, helmRelease.Group, helmRelease.Version, helmRelease.Kind, "default", "release"),
+		}, deployment},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			app, client := uidGuardFixture(t, tc.object)
+			request := tc.request
+			request.Target.UID = "uid-the-user-saw"
+
+			_, err := app.gateway.RunObjectAction(request)
+
+			require.Error(t, err)
+			require.Equal(t, errorstatus.ReasonBadRequest, errorstatus.Classify(err).Reason, "got %v", err)
+			require.Empty(t, client.Actions(), "nothing may reach the cluster")
+		})
+	}
 }

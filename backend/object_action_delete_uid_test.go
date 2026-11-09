@@ -136,6 +136,25 @@ func TestRunObjectActionDeleteHonorsTheTargetUID(t *testing.T) {
 	}
 }
 
+// Force delete is the same delete with no grace period, so it stays bound to the
+// UID as well.
+func TestRunObjectActionForceDeleteHonorsTheTargetUID(t *testing.T) {
+	fixture := typedDeleteUIDFixture(t, objectActionTarget("config:ctx", "", "v1", "Node", "", "node"),
+		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node"}})
+	target := fixture.target
+	target.UID = "uid-the-user-saw"
+
+	_, err := fixture.app.gateway.RunObjectAction(ObjectActionRequest{Action: ObjectActionForceDelete, Target: target})
+	require.NoError(t, err)
+
+	options := deleteOptionsSent(t, fixture.actions())
+	require.NotNil(t, options.Preconditions, "the API server has nothing to compare the object against")
+	require.NotNil(t, options.Preconditions.UID)
+	require.Equal(t, types.UID("uid-the-user-saw"), *options.Preconditions.UID)
+	require.NotNil(t, options.GracePeriodSeconds)
+	require.Zero(t, *options.GracePeriodSeconds)
+}
+
 // A delete's 404 can come from an admission webhook, or from an API version the
 // cluster stopped serving, while the object still exists. The batch counts a
 // confirmed delete as done, so only a read of that exact object may confirm it.
@@ -158,6 +177,21 @@ func TestRunObjectActionDeleteConfirmsAbsenceOnlyByReadingTheObject(t *testing.T
 			answerDelete: func(t *testing.T, answer error) (*resourceGatewayFixture, *dynamicfake.FakeDynamicClient) {
 				app, client := uidGuardFixture(t, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "target", Namespace: "default"}})
 				client.PrependReactor("delete", "pods", func(clienttesting.Action) (bool, runtime.Object, error) {
+					return true, nil, answer
+				})
+				dynamicClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+				app.clusters[clusterID].dynamicClient = dynamicClient
+				return app, dynamicClient
+			},
+		},
+		// Cluster-scoped: the target, and the ref that confirms it, carry no namespace.
+		{
+			name:     "Node",
+			target:   objectActionTarget(clusterID, "", "v1", "Node", "", "target"),
+			resource: corev1.Resource("nodes"),
+			answerDelete: func(t *testing.T, answer error) (*resourceGatewayFixture, *dynamicfake.FakeDynamicClient) {
+				app, client := uidGuardFixture(t, &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "target"}})
+				client.PrependReactor("delete", "nodes", func(clienttesting.Action) (bool, runtime.Object, error) {
 					return true, nil, answer
 				})
 				dynamicClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())

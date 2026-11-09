@@ -10,7 +10,7 @@ import { kindDisplayName } from '@shared/kinds/kindDisplay';
 import { getKindBadgeClassName } from '@shared/utils/kindBadgeColors';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type React from 'react';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useClusterNameResolver } from '@/core/cluster-workspace/useClusterWorkspace';
 import { usePreference } from '@/core/settings/usePreference';
 import ModalHeader from './ModalHeader';
@@ -71,6 +71,12 @@ interface ConfirmationModalProps {
   onCancel: () => void;
   /** Disables the footer while the confirmed work runs. */
   busy?: boolean;
+  /**
+   * Names what the dialog asks, for a dialog that stays open while that changes
+   * (confirm, then results, then confirm again). Each new question starts with
+   * focus on the non-destructive action, as opening does.
+   */
+  promptId?: string;
 }
 
 const ConfirmationTarget: React.FC<{
@@ -119,14 +125,20 @@ const ConfirmationDetailsTable: React.FC<{ table: ConfirmationModalDetailsTable 
       <tbody>
         {withStableListKeys(table.rows, (row) => row.join('|')).map(({ key, value: row }) => (
           <tr key={key}>
-            {row.map((cell, columnIndex) => (
-              <td
-                key={table.columns[columnIndex]?.header ?? columnIndex}
-                className={table.columns[columnIndex]?.monospace ? 'monospace' : undefined}
-              >
-                {cell}
-              </td>
-            ))}
+            {row.map((cell, columnIndex) => {
+              const column = table.columns[columnIndex];
+              // A long list truncates its fixed-width values; the full text stays on hover.
+              const fullText = table.longList && column?.monospace ? cell : undefined;
+              return (
+                <td
+                  key={column?.header ?? columnIndex}
+                  className={column?.monospace ? 'monospace' : undefined}
+                  title={fullText}
+                >
+                  {cell}
+                </td>
+              );
+            })}
           </tr>
         ))}
       </tbody>
@@ -151,10 +163,11 @@ const ConfirmationModalContent: React.FC<Omit<ConfirmationModalProps, 'isOpen'>>
   onConfirm,
   onCancel,
   busy = false,
+  promptId = '',
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
 
-  useModalFocusTrap({
+  const { focusDefaultControl } = useModalFocusTrap({
     ref: modalRef,
     suppressShortcuts: busy,
     onEscape: () => {
@@ -162,6 +175,18 @@ const ConfirmationModalContent: React.FC<Omit<ConfirmationModalProps, 'isOpen'>>
       return true;
     },
   });
+
+  // What the dialog asks now; nothing while its work runs. When it settles on a new
+  // question, the control that held focus may be disabled, gone, or now mean
+  // something destructive, so focus starts again on the non-destructive action.
+  const prompt = busy ? null : promptId;
+  const lastPrompt = useRef(prompt);
+  useEffect(() => {
+    if (prompt !== null && prompt !== lastPrompt.current) {
+      focusDefaultControl();
+    }
+    lastPrompt.current = prompt;
+  }, [prompt, focusDefaultControl]);
 
   return (
     <ModalSurface

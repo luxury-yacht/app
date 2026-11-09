@@ -79,12 +79,46 @@ var objectActionHandlers = map[string]objectActionHandler{
 	ObjectActionRollback:             runRollbackObjectAction,
 }
 
+// objectActionsBoundToUID are the actions that tie their writes to target.UID, so
+// the API server refuses them for any other object.
+var objectActionsBoundToUID = map[string]struct{}{
+	ObjectActionDelete:      {},
+	ObjectActionForceDelete: {},
+	ObjectActionRestart:     {},
+	ObjectActionScale:       {},
+	ObjectActionSuspend:     {},
+	ObjectActionCordon:      {},
+	ObjectActionUncordon:    {},
+	ObjectActionDrain:       {},
+	ObjectActionStartDrain:  {},
+}
+
+// requireEnforceableUID refuses a UID the action cannot hold the cluster to. A UID
+// is the caller's promise that only that object changes, so an action that would
+// ignore it must not run against whatever now holds the name. A listed action must
+// bind the UID for every target it accepts. A Helm release is the one target none
+// can bind: Helm stores it, not the cluster.
+func requireEnforceableUID(action string, target ObjectActionTargetRef) error {
+	if target.UID == "" {
+		return nil
+	}
+	_, bound := objectActionsBoundToUID[action]
+	if bound && !resourcemodel.IsHelmReleaseGVK(objectActionTargetGVK(target)) {
+		return nil
+	}
+	return errorstatus.BadRequest(fmt.Errorf("%s of %s %s cannot be limited to one object by UID", action, target.Kind, target.Name))
+}
+
 const objectActionNoAnswerMessage = "The cluster did not answer in time."
 
 // boundedObjectAction limits how long an action waits on the cluster. The deadline
 // cancels the action's own requests, so none is still running once the caller has
 // its answer. The caller can tell this case apart: it means the cluster stopped
-// responding, not that it refused.
+// responding, not that it refused. Two things run outside it. A drain that
+// start-drain begins runs on under the app's context after the call returns. A
+// Helm release delete ignores the deadline: its permission check keeps its own
+// shorter timeout and Helm's uninstall takes no context, so the call lasts as long
+// as Helm does.
 func boundedObjectAction(
 	handler func(context.Context, objectActionInvocation) (ObjectActionResponse, error),
 ) objectActionHandler {
@@ -248,6 +282,9 @@ func (g *ResourceGateway) RunObjectAction(req ObjectActionRequest) (ObjectAction
 	}
 	target, err := validateObjectActionTarget(req.Target)
 	if err != nil {
+		return ObjectActionResponse{}, err
+	}
+	if err := requireEnforceableUID(action, target); err != nil {
 		return ObjectActionResponse{}, err
 	}
 	handler, ok := objectActionHandlers[action]

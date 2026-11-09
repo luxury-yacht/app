@@ -130,6 +130,7 @@ func TestRunObjectActionNeverWaitsOnTheClusterWithoutADeadline(t *testing.T) {
 	}{
 		{"delete pod", ObjectActionRequest{Action: ObjectActionDelete, Target: objectActionTarget(uidGuardCluster, "", "v1", "Pod", "default", "pod")}},
 		{"delete node", ObjectActionRequest{Action: ObjectActionDelete, Target: node}},
+		{"force delete node", ObjectActionRequest{Action: ObjectActionForceDelete, Target: node}},
 		{"delete other kinds", ObjectActionRequest{Action: ObjectActionDelete, Target: objectActionTarget(uidGuardCluster, "", "v1", "ConfigMap", "default", "settings")}},
 		{"restart", ObjectActionRequest{Action: ObjectActionRestart, Target: deployment}},
 		{"scale", ObjectActionRequest{Action: ObjectActionScale, Target: deployment, Replicas: &replicas}},

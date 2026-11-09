@@ -17,6 +17,7 @@ import type { ErrorStatus, ErrorStatusReason } from '@/core/refresh/types';
 import { installAppStateHarness, type MountedApp } from '@/test-utils/appState/harness';
 import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { requireValue } from '@/test-utils/requireValue';
+import { errorHandler } from '@/utils/errorHandler';
 import { type BatchObjectActionId, useBatchObjectActions } from './useBatchObjectActions';
 
 /** A rejection as the backend's typed error contract delivers it. */
@@ -36,13 +37,20 @@ function BatchTable({
   scopeKey = 'scope-a',
   allowedActions,
   rowKey = keyOf,
+  onRunComplete,
 }: Readonly<{
   rows: ObjectActionData[];
   scopeKey?: string;
   allowedActions?: readonly BatchObjectActionId[];
   rowKey?: (row: ObjectActionData) => string;
+  onRunComplete?: (actionId: BatchObjectActionId) => void;
 }>) {
-  const batch = useBatchObjectActions<ObjectActionData>({ getObject, scopeKey, allowedActions });
+  const batch = useBatchObjectActions<ObjectActionData>({
+    getObject,
+    scopeKey,
+    allowedActions,
+    onRunComplete,
+  });
   return (
     <>
       <GridTable<ObjectActionData>
@@ -408,6 +416,31 @@ describe('useBatchObjectActions', () => {
     expect(modal()).toBeNull();
   });
 
+  // The dialog cannot be dismissed while a batch runs, so a failure in what the
+  // view does afterwards must not leave it running.
+  it('finishes the batch when the view’s completion callback throws', async () => {
+    const { clusterId } = devCluster();
+    app.backend.answer('RunObjectAction', () => ({}));
+    await mount(
+      <BatchTable
+        rows={[makeRow(clusterId, 'Pod', '', 'a')]}
+        onRunComplete={() => {
+          throw new Error('refresh failed');
+        }}
+      />
+    );
+    await selectAllRows();
+
+    await click(batchAction('Delete 1'));
+    await click(modalButton('Delete 1'));
+
+    expect(modal()).toBeNull();
+    expect(toolbarButton('Batch select')).not.toBeNull();
+    expect(
+      app.errors.take((record) => record.context?.source === 'batch-run-complete')
+    ).toHaveLength(1);
+  });
+
   it('names the cluster and namespace count when a selection mixes kinds', async () => {
     const { clusterId, clusterName } = devCluster();
     await mount(
@@ -636,11 +669,17 @@ describe('useBatchObjectActions', () => {
 
     failing = false;
     const callsBeforeRetry = actionCalls().length;
-    await click(modalButton('Retry 1'));
+    // As a keyboard user would: Retry holds focus when it is pressed.
+    const retry = modalButton('Retry 1');
+    retry.focus();
+    await click(retry);
 
     expect(actionCalls()).toHaveLength(callsBeforeRetry);
     expect(modalTitle()).toBe('Delete 1 Node');
     expect(modalWarning()).not.toBeNull();
+    // The same button now deletes. Focus must not stay on it, or a second Enter
+    // confirms before the warning is read.
+    expect(document.activeElement).toBe(modalButton('Cancel'));
 
     await click(modalButton('Delete 1'));
     expect(actionCalls().slice(callsBeforeRetry)).toEqual([
@@ -696,6 +735,43 @@ describe('useBatchObjectActions', () => {
       await click(modalButton('Delete 1'));
 
       expect(modalTitle()).toBe('Deleted 0 of 1 Pod');
+    });
+
+    it('still fails a delete whose 404 names some other object', async () => {
+      const { clusterId } = devCluster();
+      app.backend.answer('RunObjectAction', () => {
+        throw clusterRefusal('NotFound', 'pods "b" not found', {
+          ref: { clusterId, group: '', version: 'v1', kind: 'Pod', namespace: 'team-a', name: 'b' },
+        });
+      });
+      await mount(<BatchTable rows={[makeRow(clusterId, 'Pod', '', 'a')]} />);
+      await selectAllRows();
+
+      await click(batchAction('Delete 1'));
+      await click(modalButton('Delete 1'));
+
+      expect(modalTitle()).toBe('Deleted 0 of 1 Pod');
+    });
+
+    // The dialog cannot be dismissed while a batch runs. If reporting a failure
+    // itself fails, the object's outcome is unknown, and the batch still ends.
+    it('lists an object as Unknown when reporting its failure throws', async () => {
+      const { clusterId } = devCluster();
+      app.backend.answer('RunObjectAction', () => {
+        throw clusterRefusal('Forbidden', 'denied');
+      });
+      vi.spyOn(errorHandler, 'handleInline').mockImplementationOnce(() => {
+        throw new Error('reporter unavailable');
+      });
+      await mount(<BatchTable rows={[makeRow(clusterId, 'Pod', '', 'a')]} />);
+      await selectAllRows();
+
+      await click(batchAction('Delete 1'));
+      await click(modalButton('Delete 1'));
+
+      expect(modalTitle()).toBe('Deleted 0 of 1 Pod');
+      expect(detailRows()).toEqual([['a', 'Unknown']]);
+      expect(footerButtons()).toEqual(['Close']);
     });
 
     it('still fails a delete refused because a replacement holds the name', async () => {

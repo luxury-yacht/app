@@ -553,8 +553,9 @@ body.dock-right-open.dock-bottom-open .content-body .gridtable-wrapper {
   color: var(--color-error);
 }
 
-/* The last rows must be able to scroll out from under the bar. */
-.gridtable-container:has(.gridtable-batch-bar) .gridtable-wrapper::after {
+/* The last rows must be able to scroll out from under the bar. Only the body the
+   bar sits under gets the space, not a table nested in one of its row details. */
+.gridtable-wrapper:has(+ .gridtable-batch-bar-anchor)::after {
   content: "";
   flex: 0 0 3.5rem;
 }

@@ -135,3 +135,39 @@ failure behavior, and diagnostics.
   scale variants), and exposes denied/pending reasons.
 - `RunObjectAction` is the execution chokepoint. The generated manifest
   coordinates presentation and request shape; it replaces no evaluator.
+- A target may carry the object's `uid`. The action is then held to that object.
+  For a delete, patch, or scale the API server does the refusing: the delete
+  sends the UID as a precondition (`common.UserDeleteOptions`), the patch sets
+  `metadata.uid` (`common.SpecPatchForUID`), and the scale update carries it on
+  the Scale (`kindspec.ScaleObject`). A drain compares the node's UID itself;
+  its node and pod binding is owned by
+  [operation-lifecycle.md](../workflows/operation-lifecycle.md#drain-target-binding).
+  Delete, force-delete, restart, scale, suspend, cordon, uncordon, drain, and
+  start-drain bind it (`objectActionsBoundToUID` in
+  `backend/object_actions.go`), and a listed action must bind it for every
+  target it accepts. Any other action, and any action on a Helm release,
+  refuses a UID with `BadRequest` rather than act on whatever now holds the
+  name. Without a UID an action goes by name, as single-object actions do.
+  Batch select sends one with every write.
+- A delete removes what the object owns (background propagation, as
+  `kubectl delete` does), so a Job or ReplicationController takes its Pods with
+  it.
+- A delete's 404 names the object in the error's `ref` only after a read of that
+  exact object also finds nothing (`errorstatus.ConfirmsObjectAbsent`). The
+  delete's own 404 proves nothing: an admission webhook can answer with any
+  status, and an API version no longer served answers 404 to everything. A
+  caller that counts "already gone" as done requires `NotFound` with a `ref`.
+- Delete, force-delete, restart, scale, suspend, cordon, uncordon, and
+  start-drain run under one deadline, `config.ObjectActionRequestTimeout`
+  (70 seconds, `boundedObjectAction`). It is longer than the API server's
+  default 60-second request limit, so a write the server gives up on normally
+  gets the server's answer first. The deadline covers the whole action: the
+  permission check and any reads before the write share it instead of failing
+  the action sooner, and take from the time left for the write. An error that
+  carries `context.DeadlineExceeded` returns as `DeadlineExceeded`
+  (`errorstatus.NoAnswerInTime`): the cluster stopped answering, and the write
+  may still have landed. Start-drain bounds only its checks; the drain it
+  starts runs under the app's context. A Helm release delete is outside the
+  deadline: its permission check keeps the shorter permission-check timeout,
+  and Helm's uninstall takes no context. Callers wait for the call and never
+  add their own timer, which would free the caller while the call still runs.

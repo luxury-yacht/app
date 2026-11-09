@@ -84,9 +84,7 @@ func (s *Service) setUnschedulable(ctx context.Context, nodeName, uid string, un
 		return err
 	}
 
-	patch, err := json.Marshal(common.BindPatchToUID(map[string]any{
-		"spec": map[string]any{"unschedulable": unschedulable},
-	}, uid))
+	patch, err := json.Marshal(common.SpecPatchForUID(map[string]any{"unschedulable": unschedulable}, uid))
 	if err != nil {
 		return fmt.Errorf("failed to marshal node patch: %w", err)
 	}
@@ -277,8 +275,8 @@ func (s *Service) runKubectlDrain(ctx context.Context, nodeName, uid string, opt
 		job.AddInfo(nodemaintenance.DrainPhaseError, err.Error())
 		return err
 	}
-	// Checked after the list: the same UID at the cordon and here means the listed
-	// pods were on the selected node, and only those pods are removed.
+	// Checked after the list: the same UID at the cordon and here means the selected
+	// node held the name while the pods were listed, and only those pods are removed.
 	if err := s.RequireUID(ctx, nodeName, uid); err != nil {
 		job.AddInfo(nodemaintenance.DrainPhaseError, err.Error())
 		return asSelectedNodeGone(err, nodeName)

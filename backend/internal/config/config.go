@@ -457,8 +457,9 @@ const (
 
 	// ObjectActionRequestTimeout bounds one object action's requests to the
 	// cluster, so a call the cluster never answers fails instead of holding its
-	// caller. It outlasts the API server's own 60-second request limit, so a slow
-	// admission webhook gets its full time and the server's answer arrives first.
+	// caller. It is longer than the API server's default 60-second request limit,
+	// so a write the server gives up on normally gets the server's answer first.
+	// The requests before the write (permission check, reads) share it.
 	ObjectActionRequestTimeout = 70 * time.Second
 
 	// KindOnlyDiscoveryTimeout bounds kind-only discovery walks.

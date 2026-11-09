@@ -75,7 +75,9 @@ const BatchDrainModal = ({
         )}
         <ul className="batch-drain-nodes">
           {nodeNames.map((name) => (
-            <li key={name}>{name}</li>
+            <li key={name} title={name}>
+              {name}
+            </li>
           ))}
         </ul>
         {count > 1 && (

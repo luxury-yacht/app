@@ -1,6 +1,6 @@
 ### Added
 
-- Batch operations are now available in most views. Enable batch operations by clicking the icon in the toolbar. This will show a new row of checkboxes to the left of the objects. Select one or more objects, and a context-aware floating taskbar will appear with a selection of supported operations.
+- Batch operations are now available in most views. Enable batch operations by clicking the icon in the toolbar. This will show a new column of checkboxes to the left of the objects. Select one or more objects, and a context-aware floating taskbar will appear with a selection of supported operations.
 - Added +/- numeric stepper buttons to Scale modals for deployments and statefulsets.
 
 ### Fixed

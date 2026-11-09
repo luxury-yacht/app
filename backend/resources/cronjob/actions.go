@@ -58,7 +58,7 @@ func TriggerManualJob(ctx context.Context, client kubernetes.Interface, namespac
 // SetSuspend patches the named CronJob's spec.suspend. A non-empty uid limits it to
 // that object.
 func SetSuspend(ctx context.Context, client kubernetes.Interface, namespace, name, uid string, suspend bool) error {
-	patchBytes, err := json.Marshal(common.BindPatchToUID(map[string]any{"spec": map[string]any{"suspend": suspend}}, uid))
+	patchBytes, err := json.Marshal(common.SpecPatchForUID(map[string]any{"suspend": suspend}, uid))
 	if err != nil {
 		return fmt.Errorf("failed to marshal suspend patch: %w", err)
 	}

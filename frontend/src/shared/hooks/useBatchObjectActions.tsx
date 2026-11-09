@@ -346,22 +346,40 @@ const failureOutcome = (status: ErrorStatus | null): BatchFailure['outcome'] => 
 const UNKNOWN_OUTCOME_NOTE =
   'Objects marked Unknown may have changed despite the error, so check them before running this again.';
 
+/**
+ * True when status is the backend confirming that the delete's own target is gone.
+ * The backend names the object in `ref` only after reading that exact object and
+ * finding nothing, so the ref has to be this target's identity, not just present.
+ */
+const confirmsTargetGone = (status: ErrorStatus | null, target: ObjectActionTargetRef): boolean => {
+  const ref = status?.reason === 'NotFound' ? status.ref : undefined;
+  return (
+    ref !== undefined &&
+    ref.clusterId === target.clusterId &&
+    ref.group === target.group &&
+    ref.version === target.version &&
+    ref.kind === target.kind &&
+    (ref.namespace ?? '') === (target.namespace ?? '') &&
+    ref.name === target.name
+  );
+};
+
 /** Runs one object; returns its failure, or null when the batch can count it done. */
 const runEntry = async (run: BatchRun, entry: BatchEntry): Promise<BatchFailure | null> => {
   const { definition } = run;
   const { object } = entry;
+  let target: ObjectActionTargetRef | undefined;
   try {
     const action = objectActionLabel(definition.actionId).toLowerCase();
     // Bound to the object the user selected: if something else now holds its
     // name, the API server refuses the write.
-    const target = { ...actionTargetFor(object, action), uid: object.uid };
+    target = { ...actionTargetFor(object, action), uid: object.uid };
     await definition.run(target, run);
     return null;
   } catch (error) {
     const status = errorStatusOf(error);
-    // Already gone is what a delete asked for. The backend names the object only
-    // when it confirmed that exact object is missing; a replacement answers Conflict.
-    if (definition.id === 'delete' && status?.reason === 'NotFound' && status.ref) {
+    // Already gone is what a delete asked for. A replacement answers Conflict.
+    if (definition.id === 'delete' && target && confirmsTargetGone(status, target)) {
       return null;
     }
     errorHandler.handleInline(error, {
@@ -374,6 +392,17 @@ const runEntry = async (run: BatchRun, entry: BatchEntry): Promise<BatchFailure 
   }
 };
 
+// Reporting a failure can itself fail. That object's outcome is then unknown, and
+// the batch must still end, because its dialog cannot be dismissed while it runs.
+const runEntryToOutcome = (run: BatchRun, entry: BatchEntry): Promise<BatchFailure | null> =>
+  runEntry(run, entry).catch(
+    (): BatchFailure => ({
+      entry,
+      reason: 'The result for an object could not be recorded.',
+      outcome: 'unknown',
+    })
+  );
+
 const executeBatch = async (
   run: BatchRun,
   onProgress: (done: number) => void,
@@ -384,7 +413,7 @@ const executeBatch = async (
   let done = 0;
   const worker = async () => {
     for (let entry = queue.shift(); entry && !isAbandoned(); entry = queue.shift()) {
-      const failure = await runEntry(run, entry);
+      const failure = await runEntryToOutcome(run, entry);
       if (failure) {
         failed.push(failure);
       }
@@ -534,14 +563,23 @@ export function useBatchObjectActions<T>({
         (done) => setDialog({ stage: 'running', run, done }),
         () => abandoned.current
       );
-      onRunComplete?.(run.definition.id);
       if (failed.length === 0) {
         update({ active: false, selectedKeys: NO_ROWS_SELECTED });
         setDialog(null);
-        return;
+      } else {
+        update({ selectedKeys: new Set(failed.map((failure) => failure.entry.key)) });
+        setDialog({ stage: 'results', run, failed });
       }
-      update({ selectedKeys: new Set(failed.map((failure) => failure.entry.key)) });
-      setDialog({ stage: 'results', run, failed });
+      // Last, once the running dialog has been replaced: it cannot be dismissed, so
+      // nothing the view does here, or reporting its failure, may hold it open.
+      try {
+        onRunComplete?.(run.definition.id);
+      } catch (error) {
+        errorHandler.handleOperational(error, {
+          source: 'batch-run-complete',
+          action: run.definition.id,
+        });
+      }
     },
     [onRunComplete, update]
   );
@@ -673,14 +711,17 @@ export function useBatchObjectActions<T>({
           run.entries.map((entry) => entry.object),
           resolveClusterName
         );
+    // One reason per line: reasons that name their object are all different.
+    const reasons = unique(failed.map((failure) => failure.reason)).join('\n');
     return (
       <ConfirmationModal
         isOpen
+        promptId="results"
         title={`${run.definition.past} ${total - failed.length} of ${total} ${noun}`}
         target={target}
         message={[scope, resultSummary(failed), unknownNote].filter(Boolean).join(' ')}
         detailsTable={failureDetailsTable(run, failed)}
-        warning={unique(failed.map((failure) => failure.reason)).join(' ')}
+        warning={reasons}
         cancelText="Close"
         confirmText={`Retry ${failed.length}`}
         confirmButtonClass="generic"
@@ -701,6 +742,7 @@ export function useBatchObjectActions<T>({
     return (
       <ConfirmationModal
         isOpen
+        promptId="confirm"
         {...props}
         message={running ? `${done} of ${run.entries.length} finished.` : props.message}
         busy={running}

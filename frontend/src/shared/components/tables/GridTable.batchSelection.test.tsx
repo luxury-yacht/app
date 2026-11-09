@@ -319,6 +319,27 @@ describe('GridTable batch-select mode', () => {
     expect(checkedRows()).toEqual([]);
   });
 
+  // The header renders the checkbox column, so the header menu has to know it too.
+  // A column that can be neither sorted nor hidden says so; it never opens an
+  // empty menu or offers to hide the checkboxes.
+  it('offers no actions from the checkbox column’s header menu', async () => {
+    await view.show(<BatchTable />);
+    await enterBatchMode();
+
+    await act(async () => {
+      requireValue(
+        container.querySelector('thead [data-column="__batch-select"]'),
+        'checkbox column header'
+      ).dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    });
+
+    const items = Array.from(
+      document.body.querySelectorAll<HTMLButtonElement>('.context-menu .context-menu-item')
+    );
+    expect(items).toHaveLength(1);
+    expect(items[0].disabled).toBe(true);
+  });
+
   it('keeps the checkbox column out of downloads, the Columns menu, and saved widths', async () => {
     const onColumnWidthsChange = vi.fn();
     await view.show(

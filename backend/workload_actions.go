@@ -81,19 +81,17 @@ func (g *ResourceGateway) restartWorkloadAction(ctx context.Context, target Obje
 	}
 
 	annotationValue := time.Now().UTC().Format(time.RFC3339)
-	patch := map[string]any{
-		"spec": map[string]any{
-			"template": map[string]any{
-				"metadata": map[string]any{
-					"annotations": map[string]any{
-						rolloutAnnotation: annotationValue,
-					},
+	spec := map[string]any{
+		"template": map[string]any{
+			"metadata": map[string]any{
+				"annotations": map[string]any{
+					rolloutAnnotation: annotationValue,
 				},
 			},
 		},
 	}
 
-	patchBytes, err := json.Marshal(common.BindPatchToUID(patch, target.UID))
+	patchBytes, err := json.Marshal(common.SpecPatchForUID(spec, target.UID))
 	if err != nil {
 		return fmt.Errorf("failed to marshal restart patch: %w", err)
 	}
