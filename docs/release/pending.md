@@ -1,6 +1,8 @@
 ### Added
 
-- Batch operations are now available in most views. Enable batch operations by clicking the icon in the toolbar. This will show a new column of checkboxes to the left of the objects. Select one or more objects, and a context-aware floating taskbar will appear with a selection of supported operations.
+- Support for batch operations.
+  - Batch select on tables. A toolbar button turns on a checkbox column; a floating bar offers the actions that apply to the selected rows. Wired on Pods, Workloads, Nodes, the cluster and namespace resource views, and custom resources. Deliberately not on Browse, CRDs, Namespaces or Helm.
+  - Batch actions. Delete, Restart, Scale, Suspend/Resume, Cordon/Uncordon, and Drain for nodes, with a confirmation that lists the objects, a progress state, and a results dialog with Retry.
 - Added +/- numeric stepper buttons to Scale modals for deployments and statefulsets.
 
 ### Fixed
