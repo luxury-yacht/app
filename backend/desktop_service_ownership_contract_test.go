@@ -60,8 +60,8 @@ func TestDesktopServiceCommandsDelegateToTheirDeclaredOwners(t *testing.T) {
 			require.Equal(t, owner.field+"."+method, delegations[method], method)
 		}
 	}
-	require.Len(t, seen, 119)
-	require.Len(t, delegations, 119)
+	require.Len(t, seen, 120)
+	require.Len(t, delegations, 120)
 }
 
 func desktopCommandInterfaces(

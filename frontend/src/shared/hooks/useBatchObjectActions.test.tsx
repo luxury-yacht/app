@@ -615,6 +615,40 @@ describe('useBatchObjectActions', () => {
     await app.settle();
   });
 
+  it('asks again, with a fresh check, before retrying a failed node delete', async () => {
+    const { clusterId } = devCluster();
+    let evictablePods = 0;
+    let failing = true;
+    app.backend.answer('ReadNodeDrainState', () => ({ cordoned: true, evictablePods }));
+    app.backend.answer('RunObjectAction', () => {
+      if (failing) {
+        throw new Error('etcd timeout');
+      }
+      return {};
+    });
+    await mount(<BatchTable allowedActions={['delete']} rows={[nodeRow(clusterId, 'a')]} />);
+    await selectAllRows();
+    await click(batchAction('Delete 1'));
+    expect(modalWarning()).toBeNull();
+    await click(modalButton('Delete 1'));
+    expect(modalTitle()).toBe('Deleted 0 of 1 Node');
+
+    // Workloads land on the node while the failure is on screen.
+    evictablePods = 2;
+    failing = false;
+    const callsBeforeRetry = actionCalls().length;
+    await click(modalButton('Retry 1'));
+
+    expect(actionCalls()).toHaveLength(callsBeforeRetry);
+    expect(modalTitle()).toBe('Delete 1 Node');
+    expect(modalWarning()?.textContent).toContain('1 of 1 node');
+
+    await click(modalButton('Delete 1'));
+    expect(actionCalls().slice(callsBeforeRetry)).toEqual([
+      expect.objectContaining({ target: expect.objectContaining({ name: 'a', uid: 'uid-a' }) }),
+    ]);
+  });
+
   it('drains every selected node with the one set of options chosen', async () => {
     const { clusterId } = devCluster();
     app.backend.answer('RunObjectAction', () => ({}));

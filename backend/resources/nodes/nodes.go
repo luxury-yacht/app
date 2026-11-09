@@ -22,6 +22,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/common"
 	podres "github.com/luxury-yacht/app/backend/resources/pods"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -102,7 +103,14 @@ func exemptFromDrain(pod *corev1.Pod) bool {
 		return true
 	}
 	controller := metav1.GetControllerOf(pod)
-	return controller != nil && controller.Kind == "DaemonSet"
+	return controller != nil && isDaemonSetRef(controller)
+}
+
+// isDaemonSetRef matches the built-in DaemonSet only, as kubectl drain does: a
+// custom controller can share the kind name.
+func isDaemonSetRef(ref *metav1.OwnerReference) bool {
+	apiVersion, kind := appsv1.SchemeGroupVersion.WithKind("DaemonSet").ToAPIVersionAndKind()
+	return ref.Kind == kind && ref.APIVersion == apiVersion
 }
 
 // Cordon marks a node as unschedulable.
@@ -590,10 +598,6 @@ func projectNodeTaints(taints []corev1.Taint) []NodeTaint {
 }
 
 func (s *Service) listPodsForNode(ctx context.Context, name string) []corev1.Pod {
-	if s.deps.KubernetesClient == nil {
-		return nil
-	}
-
 	pods, err := s.fetchPodsForNode(ctx, name)
 	if err != nil {
 		s.logInfo(fmt.Sprintf("Failed to list pods for node %s: %v", name, err))

@@ -76,6 +76,12 @@ func TestServiceReadDrainStateCountsThePodsRemovingTheNodeWouldStop(t *testing.T
 	addPod("static", func(pod *corev1.Pod) {
 		pod.Annotations = map[string]string{corev1.MirrorPodAnnotationKey: "hash"}
 	})
+	// A custom controller that shares the name is an ordinary workload.
+	addPod("lookalike", func(pod *corev1.Pod) {
+		pod.OwnerReferences = []metav1.OwnerReference{{
+			APIVersion: "example.com/v1", Kind: "DaemonSet", Name: "agent", Controller: &controller,
+		}}
+	})
 	// Nothing left to stop.
 	addPod("finished", func(pod *corev1.Pod) { pod.Status.Phase = corev1.PodSucceeded })
 	addPod("crashed", func(pod *corev1.Pod) { pod.Status.Phase = corev1.PodFailed })
@@ -84,7 +90,7 @@ func TestServiceReadDrainStateCountsThePodsRemovingTheNodeWouldStop(t *testing.T
 	state, err := service.ReadDrainState(ctx, node.Name)
 
 	require.NoError(t, err)
-	require.Equal(t, nodes.DrainState{Cordoned: true, EvictablePods: 3}, state)
+	require.Equal(t, nodes.DrainState{Cordoned: true, EvictablePods: 4}, state)
 	assertListedPodsClusterWide(t, client, node.Name)
 }
 
@@ -112,6 +118,19 @@ func TestServiceReadDrainStateReportsUnreadablePodsAsAnError(t *testing.T) {
 	_, err := service.ReadDrainState(context.Background(), node.Name)
 
 	require.ErrorContains(t, err, "pods is forbidden")
+}
+
+func TestServiceNodeStillReturnsDetailsWhenPodsCannotBeRead(t *testing.T) {
+	service, client, node := newNodeService(t)
+	client.PrependReactor("list", "pods", func(cgotesting.Action) (bool, runtime.Object, error) {
+		return true, nil, errors.New("pods is forbidden")
+	})
+
+	detail, err := service.Node(context.Background(), node.Name)
+
+	require.NoError(t, err)
+	require.Equal(t, node.Name, detail.Name)
+	require.Zero(t, detail.PodsCount)
 }
 
 func TestServiceReadDrainStateReportsAMissingNodeAsAnError(t *testing.T) {

@@ -158,7 +158,8 @@ virtualization, and native table accessibility. Apply the
   open, `ReadNodeDrainState` asks the API server whether each node is cordoned
   and how many pods its removal would stop, leaving out DaemonSet, static, and
   finished pods. The warning stays up until that read clears a node, so a denied
-  or failed read warns. Single-node deletes use the same read. Table rows and
+  or failed read warns. Retrying a failed node delete returns to this
+  confirmation for a fresh read. Single-node deletes use the same read. Table rows and
   object details are not consulted: they can lag and may cover only the
   configured namespaces.
 

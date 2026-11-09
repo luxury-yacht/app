@@ -1,7 +1,4 @@
 ### Added
 
-- Batch select on resource tables. Turn it on from the table toolbar to select rows, then restart, scale, suspend, resume, cordon, uncordon, drain, or delete them together.
-
-### Changed
-
-- The Scale dialog has + and - buttons, and only accepts replica counts from 0 to 9999.
+- Batch operations are now available in most views. Enable batch operations by clicking the icon in the toolbar. This will show a new row of checkboxes to the left of the objects. Select one or more objects, and a context-aware floating taskbar will appear with a selection of supported operations.
+- Added +/- numeric stepper buttons to Scale modals for deployments and statefulsets.

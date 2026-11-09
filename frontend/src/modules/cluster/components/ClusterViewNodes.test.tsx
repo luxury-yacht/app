@@ -535,7 +535,9 @@ describe('ClusterViewNodes', () => {
       requireValue(
         Array.from(
           document.body.querySelectorAll<HTMLElement>('[role="menu"] .context-menu-item')
-        ).find((item) => item.querySelector('.context-menu-label')?.textContent?.trim() === 'Delete'),
+        ).find(
+          (item) => item.querySelector('.context-menu-label')?.textContent?.trim() === 'Delete'
+        ),
         'expected the Delete item'
       )
     );

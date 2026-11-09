@@ -365,7 +365,8 @@ const confirmationProps = (
     notice: skipped
       ? `${skipped} selected ${skipped === 1 ? 'object is' : 'objects are'} skipped: not supported or not permitted.`
       : undefined,
-    warning: definition.id === 'delete' ? undrainedWarning(objects, confirmedEmptyNodes) : undefined,
+    warning:
+      definition.id === 'delete' ? undrainedWarning(objects, confirmedEmptyNodes) : undefined,
     confirmText: `${label} ${objects.length}`,
     confirmButtonClass: definition.danger ? 'danger' : 'generic',
   };
@@ -551,6 +552,17 @@ export function useBatchObjectActions<T>({
     );
   };
 
+  // Retrying a node delete asks again: the node may have picked up pods since.
+  const retry = (run: BatchRun) => {
+    const needsConfirmation =
+      run.definition.id === 'delete' && run.entries.some(({ object }) => isDrainableNode(object));
+    if (needsConfirmation) {
+      setDialog({ stage: 'confirm', run });
+    } else {
+      void startRun(run);
+    }
+  };
+
   const renderResults = (run: BatchRun, failed: BatchFailure[]) => {
     const total = run.entries.length;
     const noun = countNoun(run.entries.map((entry) => entry.object));
@@ -568,40 +580,44 @@ export function useBatchObjectActions<T>({
         cancelText="Close"
         confirmText={`Retry ${failed.length}`}
         confirmButtonClass="generic"
-        onConfirm={() =>
-          void startRun({ ...run, entries: failed.map(({ entry }) => entry), skipped: 0 })
-        }
+        onConfirm={() => retry({ ...run, entries: failed.map(({ entry }) => entry), skipped: 0 })}
         onCancel={closeDialog}
       />
     );
   };
 
-  const renderDialog = (): React.ReactNode => {
-    if (!dialog) {
-      return null;
-    }
-    if (dialog.stage === 'scale') {
-      return renderScale(dialog.run);
-    }
-    if (dialog.stage === 'drain') {
-      return renderDrain(dialog.run);
-    }
-    if (dialog.stage === 'results') {
-      return renderResults(dialog.run, dialog.failed);
-    }
-    const running = dialog.stage === 'running';
-    const props = confirmationProps(dialog.run, resolveClusterName, confirmedEmptyNodes);
+  /** `done` counts finished objects once the run is under way; null before it starts. */
+  const renderConfirmation = (run: BatchRun, done: number | null) => {
+    const running = done !== null;
+    const props = confirmationProps(run, resolveClusterName, confirmedEmptyNodes);
     return (
       <ConfirmationModal
         isOpen
         {...props}
-        message={running ? `${dialog.done} of ${dialog.run.entries.length} done.` : props.message}
+        message={running ? `${done} of ${run.entries.length} done.` : props.message}
         warning={running ? undefined : props.warning}
         busy={running}
-        onConfirm={() => void startRun(dialog.run)}
+        onConfirm={() => void startRun(run)}
         onCancel={running ? () => undefined : closeDialog}
       />
     );
+  };
+
+  const renderDialog = (): React.ReactNode => {
+    switch (dialog?.stage) {
+      case 'scale':
+        return renderScale(dialog.run);
+      case 'drain':
+        return renderDrain(dialog.run);
+      case 'results':
+        return renderResults(dialog.run, dialog.failed);
+      case 'running':
+        return renderConfirmation(dialog.run, dialog.done);
+      case 'confirm':
+        return renderConfirmation(dialog.run, null);
+      default:
+        return null;
+    }
   };
 
   return { batchSelection, modals: renderDialog() };
