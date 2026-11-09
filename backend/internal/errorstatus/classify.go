@@ -75,6 +75,11 @@ func transportReason(err error) Reason {
 	case credentialerrors.ClassAuth:
 		return ReasonCredentialsRejected
 	case credentialerrors.ClassConnectivity:
+		// Connectivity covers both a lost connection and one request's lost stream.
+		// Only the first says the cluster cannot be reached.
+		if credentialerrors.IsRequestStreamReset(err) {
+			return ReasonRequestInterrupted
+		}
 		return ReasonClusterUnreachable
 	}
 	return ReasonUnknown

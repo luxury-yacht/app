@@ -149,6 +149,7 @@ export const ERROR_STATUS_REASONS = [
   'ServiceUnavailable',
   'CredentialsRejected',
   'ClusterUnreachable',
+  'RequestInterrupted',
   'ClusterNotReady',
   'RefreshUnavailable',
   'DeadlineExceeded',

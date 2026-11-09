@@ -195,8 +195,19 @@ func isConnectivity(err error, msg string) bool {
 		strings.Contains(msg, "http2: client connection lost") ||
 		strings.Contains(msg, "http2: client connection force closed") ||
 		strings.Contains(msg, "http2: server sent goaway") ||
-		// The server or a proxy reset the request's HTTP/2 stream.
-		strings.Contains(msg, "stream error: stream id")
+		isStreamReset(msg)
+}
+
+// isStreamReset reports net/http's text for one HTTP/2 stream the server or a proxy
+// reset. The connection carrying it, and its other requests, are unaffected.
+func isStreamReset(msg string) bool {
+	return strings.Contains(msg, "stream error: stream id")
+}
+
+// IsRequestStreamReset reports whether err is one request's HTTP/2 stream being
+// reset, as opposed to the connection or the cluster being lost.
+func IsRequestStreamReset(err error) bool {
+	return err != nil && isStreamReset(strings.ToLower(err.Error()))
 }
 
 // isTransportEOF reports a request whose connection closed before or while the

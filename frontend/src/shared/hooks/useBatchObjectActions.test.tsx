@@ -753,9 +753,9 @@ describe('useBatchObjectActions', () => {
       expect(modalTitle()).toBe('Deleted 0 of 1 Pod');
     });
 
-    // The dialog cannot be dismissed while a batch runs. If reporting a failure
-    // itself fails, the object's outcome is unknown, and the batch still ends.
-    it('lists an object as Unknown when reporting its failure throws', async () => {
+    // Reporting a failure can itself fail. The batch still ends, and what the
+    // backend said about the object stands: it decides Retry and whether to stop.
+    it('keeps a refusal a refusal when reporting it throws', async () => {
       const { clusterId } = devCluster();
       app.backend.answer('RunObjectAction', () => {
         throw clusterRefusal('Forbidden', 'denied');
@@ -770,8 +770,33 @@ describe('useBatchObjectActions', () => {
       await click(modalButton('Delete 1'));
 
       expect(modalTitle()).toBe('Deleted 0 of 1 Pod');
-      expect(detailRows()).toEqual([['a', 'Unknown']]);
-      expect(footerButtons()).toEqual(['Close']);
+      expect(footerButtons()).toEqual(['Close', 'Retry 1']);
+    });
+
+    it('still stops after a deadline when reporting it throws', async () => {
+      const { clusterId } = devCluster();
+      app.backend.answer('RunObjectAction', (request) => {
+        if ((request as { target: { name: string } }).target.name === 'a') {
+          throw clusterRefusal('DeadlineExceeded', 'The cluster did not answer in time.');
+        }
+        return {};
+      });
+      vi.spyOn(errorHandler, 'handleInline').mockImplementationOnce(() => {
+        throw new Error('reporter unavailable');
+      });
+      const names = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+      await mount(<BatchTable rows={names.map((name) => makeRow(clusterId, 'Pod', '', name))} />);
+      await selectAllRows();
+
+      await click(batchAction('Delete 7'));
+      await click(modalButton('Delete 7'));
+
+      expect(actionCalls()).toHaveLength(5);
+      expect(detailRows()).toEqual([
+        ['a', 'Unknown'],
+        ['f', 'Not started'],
+        ['g', 'Not started'],
+      ]);
     });
 
     it('still fails a delete refused because a replacement holds the name', async () => {
@@ -868,6 +893,28 @@ describe('useBatchObjectActions', () => {
 
       expect(modalTitle()).toBe('Deleted 0 of 1 Pod');
       expect(modal()?.querySelector('.confirmation-modal-target')?.textContent).toContain('alpha');
+    });
+
+    // One request losing its HTTP/2 stream says nothing about the cluster or the
+    // connection: that object is Unknown, and the rest of the batch still runs.
+    it('keeps going after one request is interrupted', async () => {
+      const { clusterId } = devCluster();
+      app.backend.answer('RunObjectAction', (request) => {
+        if ((request as { target: { name: string } }).target.name === 'a') {
+          throw clusterRefusal('RequestInterrupted', 'stream error: stream ID 7; INTERNAL_ERROR');
+        }
+        return {};
+      });
+      const names = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+      await mount(<BatchTable rows={names.map((name) => makeRow(clusterId, 'Pod', '', name))} />);
+      await selectAllRows();
+      await click(batchAction('Delete 7'));
+      await click(modalButton('Delete 7'));
+
+      expect(actionCalls()).toHaveLength(7);
+      expect(modalTitle()).toBe('Deleted 6 of 7 Pods');
+      expect(detailRows()).toEqual([['a', 'Unknown']]);
+      expect(footerButtons()).toEqual(['Close']);
     });
 
     // A silent cluster reaches us either way: our own deadline, or client-go giving up

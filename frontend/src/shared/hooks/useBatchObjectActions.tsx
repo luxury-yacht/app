@@ -336,7 +336,8 @@ const REFUSAL_REASONS: ReadonlySet<ErrorStatusReason> = new Set<ErrorStatusReaso
 
 const failureOutcome = (status: ErrorStatus | null): BatchFailure['outcome'] => {
   // A silent cluster shows up as either: our own deadline, or client-go giving up on
-  // the connection first.
+  // the connection first. One request losing its stream (RequestInterrupted) is
+  // neither: that object is unknown and the rest still run.
   if (status?.reason === 'DeadlineExceeded' || status?.reason === 'ClusterUnreachable') {
     return 'no-answer';
   }
@@ -384,26 +385,26 @@ const runEntry = async (run: BatchRun, entry: BatchEntry): Promise<BatchFailure 
     if (definition.id === 'delete' && target && confirmsTargetGone(status, target)) {
       return null;
     }
-    errorHandler.handleInline(error, {
-      source: 'useBatchObjectActions',
-      action: definition.id,
-      kind: object.kind,
-      name: object.name,
-    });
-    return { entry, reason: errorReason(error), outcome: failureOutcome(status) };
+    // Decided before reporting: the outcome drives Retry and whether the batch
+    // stops, so a reporter that throws must not change it or strand the dialog.
+    const failure: BatchFailure = {
+      entry,
+      reason: errorReason(error),
+      outcome: failureOutcome(status),
+    };
+    try {
+      errorHandler.handleInline(error, {
+        source: 'useBatchObjectActions',
+        action: definition.id,
+        kind: object.kind,
+        name: object.name,
+      });
+    } catch {
+      // The failure is still listed in the results.
+    }
+    return failure;
   }
 };
-
-// Reporting a failure can itself fail. That object's outcome is then unknown, and
-// the batch must still end, because its dialog cannot be dismissed while it runs.
-const runEntryToOutcome = (run: BatchRun, entry: BatchEntry): Promise<BatchFailure | null> =>
-  runEntry(run, entry).catch(
-    (): BatchFailure => ({
-      entry,
-      reason: 'The result for an object could not be recorded.',
-      outcome: 'unknown',
-    })
-  );
 
 const executeBatch = async (
   run: BatchRun,
@@ -419,7 +420,7 @@ const executeBatch = async (
     if (!entry || isAbandoned()) {
       return;
     }
-    const failure = await runEntryToOutcome(run, entry);
+    const failure = await runEntry(run, entry);
     if (failure) {
       failed.push(failure);
     }

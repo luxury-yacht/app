@@ -23,11 +23,15 @@ const (
 	ReasonServiceUnavailable  Reason = "ServiceUnavailable"
 	ReasonCredentialsRejected Reason = "CredentialsRejected"
 	ReasonClusterUnreachable  Reason = "ClusterUnreachable"
-	ReasonClusterNotReady     Reason = "ClusterNotReady"
-	ReasonRefreshUnavailable  Reason = "RefreshUnavailable"
-	ReasonDeadlineExceeded    Reason = "DeadlineExceeded"
-	ReasonCanceled            Reason = "Canceled"
-	ReasonUnknown             Reason = "Unknown"
+	// ReasonRequestInterrupted is one request cut off while the connection and the
+	// cluster stayed up, such as a reset HTTP/2 stream. It says nothing about any
+	// other request.
+	ReasonRequestInterrupted Reason = "RequestInterrupted"
+	ReasonClusterNotReady    Reason = "ClusterNotReady"
+	ReasonRefreshUnavailable Reason = "RefreshUnavailable"
+	ReasonDeadlineExceeded   Reason = "DeadlineExceeded"
+	ReasonCanceled           Reason = "Canceled"
+	ReasonUnknown            Reason = "Unknown"
 )
 
 // Category is the coarse grouping the frontend presents.
@@ -106,6 +110,7 @@ var reasonCategories = map[Reason]Category{
 	ReasonClusterNotReady:     CategoryServerError,
 	ReasonRefreshUnavailable:  CategoryServerError,
 	ReasonClusterUnreachable:  CategoryNetwork,
+	ReasonRequestInterrupted:  CategoryNetwork,
 	ReasonCanceled:            CategoryUnknown,
 	ReasonUnknown:             CategoryUnknown,
 }
@@ -125,6 +130,7 @@ var reasonCodes = map[Reason]int{
 	ReasonTooManyRequests:     429,
 	ReasonCanceled:            499,
 	ReasonInternalError:       500,
+	ReasonRequestInterrupted:  502,
 	ReasonServerTimeout:       500,
 	ReasonUnknown:             500,
 	ReasonServiceUnavailable:  503,

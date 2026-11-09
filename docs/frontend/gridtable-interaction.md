@@ -163,12 +163,14 @@ virtualization, and native table accessibility. Apply the
   and reports that the cluster did not answer; never add a frontend timer, which
   would free a slot while its call still runs. A silent cluster can also fail
   sooner as an unreachable connection. Either stops the batch starting more
-  objects, which are listed as not started.
+  objects, which are listed as not started. One request cut off on a live
+  connection (`RequestInterrupted`, such as a reset HTTP/2 stream) does not:
+  that object is Unknown and the rest still run.
 - Failures also go to the app error pipeline, which keeps expected cluster
   outcomes out of Sentry. The running dialog cannot be dismissed, so nothing may
   keep the results from replacing it: a view's `onRunComplete` that throws is
-  reported and ignored, and an object whose failure could not be reported is
-  listed as Unknown.
+  reported and ignored, and an object keeps the outcome the backend gave it
+  even when reporting that failure throws.
 - While a batch runs, its dialog blocks app shortcuts so the view that will report
   it stays open. If the view goes anyway, such as the cluster closing from the
   native menu, objects still queued do not start.

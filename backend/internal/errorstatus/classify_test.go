@@ -145,6 +145,9 @@ func TestClassifyAssignsReasonCategoryAndCode(t *testing.T) {
 		{"exec helper failure", errors.New("getting credentials: exec: executable aws failed with exit code 255"), ReasonCredentialsRejected, CategoryAuthentication, 401},
 		{"connectivity", &url.Error{Op: "Get", URL: "https://x", Err: &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}}, ReasonClusterUnreachable, CategoryNetwork, 503},
 		{"connection closed mid-reply", &url.Error{Op: "Post", URL: "https://x", Err: io.ErrUnexpectedEOF}, ReasonClusterUnreachable, CategoryNetwork, 503},
+		// One request's stream was reset; the connection and the cluster are still there.
+		{"HTTP/2 stream reset", &url.Error{Op: "Post", URL: "https://x", Err: errors.New("stream error: stream ID 31135; INTERNAL_ERROR; received from peer")}, ReasonRequestInterrupted, CategoryNetwork, 502},
+		{"HTTP/2 connection lost", &url.Error{Op: "Post", URL: "https://x", Err: errors.New("http2: client connection lost")}, ReasonClusterUnreachable, CategoryNetwork, 503},
 		{"bare client deadline", fmt.Errorf("fetch: %w", context.DeadlineExceeded), ReasonDeadlineExceeded, CategoryTimeout, 504},
 		{"canceled", context.Canceled, ReasonCanceled, CategoryUnknown, 499},
 		{"json decode", &json.SyntaxError{}, ReasonBadRequest, CategoryValidation, 400},

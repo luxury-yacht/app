@@ -52,6 +52,9 @@ no layer decides behavior from message text.
   a Kubernetes `APIStatus`, `authstate.AuthInvalidError`, then known transport
   conditions (cancellation, bare client deadline, decode errors, the
   known-only credential classifier); everything else is `Unknown`.
+  A lost connection or unreachable cluster is `ClusterUnreachable`; one request
+  cut off while the connection stayed up (a reset HTTP/2 stream) is
+  `RequestInterrupted`, which says nothing about other requests.
   `retryable` and `expected` come from the retry and reporting rules, not from
   the reason, so a case that differs from its reason's usual value keeps its
   verdict.
