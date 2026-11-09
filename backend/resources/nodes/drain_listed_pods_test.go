@@ -469,26 +469,38 @@ func TestServiceDrainSubmitsNoEvictionAfterItsTimeout(t *testing.T) {
 	require.Zero(t, evictions.Load(), "the eviction went out after the timeout")
 }
 
-// A plain 404 on the read is an unserved endpoint or a proxy, not a missing pod, so
-// the removal still goes out, bound to the listed UID.
-func TestServiceDrainDoesNotCountAPlain404ReadAsThePodBeingGone(t *testing.T) {
+// A 404 that is not the API reporting this pod missing proves nothing: not before
+// the removal, where the request must still go out, and not while waiting for the
+// pod to end, where kubectl would otherwise report a pod still running as drained.
+func TestServiceDrainDoesNotCountAnUnconfirmed404AsThePodBeingGone(t *testing.T) {
+	answers := map[string]error{
+		"plain 404 from a proxy":           apierrors.NewGenericServerResponse(404, "GET", corev1.Resource("pods"), "app-0", "404 page not found", 0, true),
+		"API server route with no handler": apierrors.NewGenericServerResponse(404, "", schema.GroupResource{}, "", "the route was not found", 0, false),
+	}
 	for _, mode := range podRemovalModes() {
-		t.Run(mode.name, func(t *testing.T) {
-			service, client, node := newNodeService(t)
-			addNodePatchReactor(t, client)
-			applyRemovalMode(t, client, mode)
-			answerEvictions(client, acceptAll)
-			client.Fake.PrependReactor("get", "pods", func(cgotesting.Action) (bool, runtime.Object, error) {
-				return true, nil, apierrors.NewGenericServerResponse(404, "GET", corev1.Resource("pods"), "app-0", "404 page not found", 0, true)
+		for answerName, answer := range answers {
+			t.Run(mode.name+": "+answerName, func(t *testing.T) {
+				service, client, node := newNodeService(t)
+				addNodePatchReactor(t, client)
+				applyRemovalMode(t, client, mode)
+				answerEvictions(client, acceptAll)
+				client.Fake.PrependReactor("get", "pods", func(cgotesting.Action) (bool, runtime.Object, error) {
+					return true, nil, answer
+				})
+
+				err := service.Drain(context.Background(), node.Name, "", mode.options)
+
+				require.ElementsMatch(t, []podRemoval{
+					{name: "app-0", uid: "uid-app-0"},
+					{name: "app-1", uid: "uid-app-1"},
+				}, podRemovals(client))
+				if mode.options.SkipWaitForPodsToTerminate {
+					require.NoError(t, err)
+				} else {
+					require.Error(t, err, "nothing showed these pods have ended")
+				}
 			})
-
-			require.NoError(t, service.Drain(context.Background(), node.Name, "", mode.options))
-
-			require.ElementsMatch(t, []podRemoval{
-				{name: "app-0", uid: "uid-app-0"},
-				{name: "app-1", uid: "uid-app-1"},
-			}, podRemovals(client))
-		})
+		}
 	}
 }
 

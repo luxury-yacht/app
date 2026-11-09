@@ -514,8 +514,8 @@ func (idx *objectMapIndex) enrichActionFacts(hpaSource partitionReadinessReporte
 	idx.applyHPAManagedActionFacts(idx.hpaManagedActionTargets(), known)
 }
 
-// hpaManagedActionTargets resolves every HPA's scale target through the HPA's
-// projected "scales" edge.
+// hpaManagedActionTargets reads every HPA's scale target from the HPA's projected
+// "scales" edge.
 func (idx *objectMapIndex) hpaManagedActionTargets() map[string]struct{} {
 	managedTargets := make(map[string]struct{})
 	for _, record := range idx.records {
@@ -523,12 +523,11 @@ func (idx *objectMapIndex) hpaManagedActionTargets() map[string]struct{} {
 			continue
 		}
 		for _, edge := range idx.recordEdges(record) {
-			if edge.Type != objectmapspec.EdgeScales {
+			if edge.Type != objectmapspec.EdgeScales || edge.Link.Ref == nil {
 				continue
 			}
-			if target := idx.recordForResourceLink(edge.Link); target != nil {
-				managedTargets[objectMapActionTargetKey(target.ref)] = struct{}{}
-			}
+			target := edge.Link.Ref
+			managedTargets[hpapkg.TargetKey(target.Namespace, target.Group, target.Kind, target.Name)] = struct{}{}
 		}
 	}
 	return managedTargets
@@ -539,7 +538,7 @@ func (idx *objectMapIndex) applyHPAManagedActionFacts(managedTargets map[string]
 		if record == nil || !isObjectMapScalableWorkload(record.ref) || !known(record.ref.Namespace) {
 			continue
 		}
-		_, managed := managedTargets[objectMapActionTargetKey(record.ref)]
+		_, managed := managedTargets[hpapkg.TargetKey(record.ref.Namespace, record.ref.Group, record.ref.Kind, record.ref.Name)]
 		// Intake facts may be shared by concurrent graph builds. The HPA join
 		// belongs to this snapshot, including when no catalog record was merged.
 		facts := cloneObjectMapActionFacts(record.actionFacts)
@@ -565,16 +564,6 @@ func isObjectMapScalableWorkload(ref ObjectMapReference) bool {
 	// The apps/v1 guard preserves the historical scope (a same-named CRD is not a
 	// scalable workload); the registry supplies the per-kind classification.
 	return ref.Group == "apps" && ref.Version == "v1" && objectMapGraphByKind[ref.Kind].ScalableWorkload
-}
-
-func objectMapActionTargetKey(ref ObjectMapReference) string {
-	return strings.Join([]string{
-		strings.TrimSpace(ref.Namespace),
-		strings.TrimSpace(ref.Group),
-		strings.TrimSpace(ref.Version),
-		strings.TrimSpace(ref.Kind),
-		strings.TrimSpace(ref.Name),
-	}, "\x00")
 }
 
 func objectMapNodeFromRecord(id string, depth int, record *objectMapRecord) ObjectMapNode {
@@ -1007,6 +996,29 @@ func (idx *objectMapIndex) resolveCoreObjectRef(defaultNamespace string, ref *co
 	return idx.recordByIdentity(namespace, group, version, ref.Kind, ref.Name)
 }
 
+// objectMapKindVersions is each registered kind's current API version.
+var objectMapKindVersions = func() map[schema.GroupKind]string {
+	m := make(map[schema.GroupKind]string, len(kindregistry.All))
+	for _, d := range kindregistry.All {
+		m[schema.GroupKind{Group: d.Identity.Group, Kind: d.Identity.Kind}] = d.Identity.Version
+	}
+	return m
+}()
+
+// recordForScaleTarget finds an HPA's target. The HPA controller ignores the version
+// in its reference, so one written against an older version still means this object.
+func (idx *objectMapIndex) recordForScaleTarget(link resourcemodel.ResourceLink) *objectMapRecord {
+	if record := idx.recordForResourceLink(link); record != nil || link.Ref == nil {
+		return record
+	}
+	ref := link.Ref
+	version, known := objectMapKindVersions[schema.GroupKind{Group: ref.Group, Kind: ref.Kind}]
+	if !known {
+		return nil
+	}
+	return idx.recordByIdentity(ref.Namespace, ref.Group, version, ref.Kind, ref.Name)
+}
+
 func (idx *objectMapIndex) recordForResourceLink(link resourcemodel.ResourceLink) *objectMapRecord {
 	if link.Ref != nil {
 		return idx.recordByIdentity(link.Ref.Namespace, link.Ref.Group, link.Ref.Version, link.Ref.Kind, link.Ref.Name)
@@ -1102,6 +1114,8 @@ func (idx *objectMapIndex) resolveEdgeTargets(source *objectMapRecord, e objectm
 		return []*objectMapRecord{idx.resolveCoreObjectRef(source.ref.Namespace, e.CoreObjectRef)}
 	case e.ClusterRoleSelector != nil:
 		return idx.clusterRolesMatchingSelector(*e.ClusterRoleSelector)
+	case e.Type == objectmapspec.EdgeScales:
+		return []*objectMapRecord{idx.recordForScaleTarget(e.Link)}
 	default:
 		return []*objectMapRecord{idx.recordForResourceLink(e.Link)}
 	}

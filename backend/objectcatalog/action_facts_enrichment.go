@@ -1,9 +1,8 @@
 package objectcatalog
 
 import (
-	"strings"
-
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
+	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -28,7 +27,7 @@ func catalogManagedTargets(items map[string]Summary, coverageKnown bool) map[str
 			continue
 		}
 		target := item.ActionFacts.ScaleTarget
-		managedTargets[actionTargetKey(target.Namespace, target.Group, target.Version, target.Kind, target.Name)] = struct{}{}
+		managedTargets[hpapkg.TargetKey(target.Namespace, target.Group, target.Kind, target.Name)] = struct{}{}
 	}
 	return managedTargets
 }
@@ -44,7 +43,7 @@ func enrichScalableWorkloadActionFacts(item Summary, coverageKnown bool, managed
 		item.ActionFacts.HPAManaged = nil
 		return item, true
 	}
-	_, managed := managedTargets[actionTargetKey(item.Ref.Namespace, item.Ref.Group, item.Ref.Version, item.Ref.Kind, item.Ref.Name)]
+	_, managed := managedTargets[hpapkg.TargetKey(item.Ref.Namespace, item.Ref.Group, item.Ref.Kind, item.Ref.Name)]
 	if item.ActionFacts == nil {
 		item.ActionFacts = &ActionFacts{}
 	}
@@ -79,14 +78,4 @@ var catalogScalableWorkloadKinds = func() map[schema.GroupKind]bool {
 
 func isCatalogScalableWorkload(item Summary) bool {
 	return item.Ref.Version == "v1" && catalogScalableWorkloadKinds[schema.GroupKind{Group: item.Ref.Group, Kind: item.Ref.Kind}]
-}
-
-func actionTargetKey(namespace, group, version, kind, name string) string {
-	return strings.Join([]string{
-		strings.TrimSpace(namespace),
-		strings.TrimSpace(group),
-		strings.TrimSpace(version),
-		strings.TrimSpace(kind),
-		strings.TrimSpace(name),
-	}, "\x00")
 }

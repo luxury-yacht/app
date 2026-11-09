@@ -143,18 +143,18 @@ func TestRunObjectActionDeleteConfirmsAbsenceOnlyByReadingTheObject(t *testing.T
 	const clusterID = uidGuardCluster
 	objectStillThere := &unstructured.Unstructured{Object: map[string]any{"metadata": map[string]any{"name": "still-here"}}}
 	unservedVersion := apierrors.NewGenericServerResponse(404, "DELETE", schema.GroupResource{}, "", "404 page not found", 0, true)
-	webhookAboutAConfigMap := apierrors.NewNotFound(corev1.Resource("configmaps"), "target")
-	webhookAboutTheObject := apierrors.NewNotFound(corev1.Resource("pods"), "target")
-	gone := apierrors.NewNotFound(corev1.Resource("pods"), "target")
+	routeWithNoHandler := apierrors.NewGenericServerResponse(404, "", schema.GroupResource{}, "", "the route was not found", 0, false)
 
 	setups := []struct {
 		name         string
 		target       ObjectActionTargetRef
+		resource     schema.GroupResource
 		answerDelete func(t *testing.T, answer error) (*resourceGatewayFixture, *dynamicfake.FakeDynamicClient)
 	}{
 		{
-			name:   "Pod",
-			target: objectActionTarget(clusterID, "", "v1", "Pod", "default", "target"),
+			name:     "Pod",
+			target:   objectActionTarget(clusterID, "", "v1", "Pod", "default", "target"),
+			resource: corev1.Resource("pods"),
 			answerDelete: func(t *testing.T, answer error) (*resourceGatewayFixture, *dynamicfake.FakeDynamicClient) {
 				app, client := uidGuardFixture(t, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "target", Namespace: "default"}})
 				client.PrependReactor("delete", "pods", func(clienttesting.Action) (bool, runtime.Object, error) {
@@ -166,8 +166,9 @@ func TestRunObjectActionDeleteConfirmsAbsenceOnlyByReadingTheObject(t *testing.T
 			},
 		},
 		{
-			name:   "custom resource",
-			target: objectActionTarget(clusterID, "kinda.rocks", "v1beta1", "DbInstance", "default", "my-db"),
+			name:     "custom resource",
+			target:   objectActionTarget(clusterID, "kinda.rocks", "v1beta1", "DbInstance", "default", "my-db"),
+			resource: schema.GroupResource{Group: "kinda.rocks", Resource: "dbinstances"},
 			answerDelete: func(t *testing.T, answer error) (*resourceGatewayFixture, *dynamicfake.FakeDynamicClient) {
 				app := newCollidingDBInstanceCluster(t, clusterID)
 				dynamicClient := app.clusters[clusterID].dynamicClient.(*dynamicfake.FakeDynamicClient)
@@ -179,20 +180,21 @@ func TestRunObjectActionDeleteConfirmsAbsenceOnlyByReadingTheObject(t *testing.T
 		},
 	}
 
-	answers := []struct {
-		name         string
-		deleteAnswer error
-		readObject   *unstructured.Unstructured
-		readError    error
-		confirmed    bool
-	}{
-		{name: "the object is really gone", deleteAnswer: gone, readError: gone, confirmed: true},
-		{name: "a webhook's 404 about something else", deleteAnswer: webhookAboutAConfigMap, readObject: objectStillThere},
-		{name: "a webhook's 404 naming this object", deleteAnswer: webhookAboutTheObject, readObject: objectStillThere},
-		{name: "an API version no longer served", deleteAnswer: unservedVersion, readError: unservedVersion},
-	}
-
 	for _, setup := range setups {
+		gone := apierrors.NewNotFound(setup.resource, setup.target.Name)
+		answers := []struct {
+			name         string
+			deleteAnswer error
+			readObject   *unstructured.Unstructured
+			readError    error
+			confirmed    bool
+		}{
+			{name: "the object is really gone", deleteAnswer: gone, readError: gone, confirmed: true},
+			{name: "a webhook's 404 about something else", deleteAnswer: apierrors.NewNotFound(corev1.Resource("configmaps"), setup.target.Name), readObject: objectStillThere},
+			{name: "a webhook's 404 naming this object", deleteAnswer: gone, readObject: objectStillThere},
+			{name: "an API version no longer served", deleteAnswer: unservedVersion, readError: unservedVersion},
+			{name: "a route the API server has no handler for", deleteAnswer: routeWithNoHandler, readError: routeWithNoHandler},
+		}
 		for _, tc := range answers {
 			t.Run(setup.name+": "+tc.name, func(t *testing.T) {
 				app, dynamicClient := setup.answerDelete(t, tc.deleteAnswer)

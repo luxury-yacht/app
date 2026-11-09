@@ -27,6 +27,7 @@ import (
 	typedpolicyv1beta1 "k8s.io/client-go/kubernetes/typed/policy/v1beta1"
 	kubectldrain "k8s.io/kubectl/pkg/drain"
 
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/resources/common"
 )
 
@@ -121,12 +122,12 @@ func (c listedPodsClient) remove(ctx context.Context, namespace, name string, se
 }
 
 // listedPodGone reports whether the name is confirmed to no longer hold the listed
-// pod. A failed read proves nothing, including a plain 404 from something other than
-// the API server, so the request still goes out bound to the UID.
+// pod. Any other failed read proves nothing, so the request still goes out bound to
+// the UID.
 func (c listedPodsClient) listedPodGone(ctx context.Context, namespace, name string, uid types.UID) bool {
 	pod, err := c.Interface.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		return apierrors.IsNotFound(err) && !apierrors.IsUnexpectedServerError(err)
+		return errorstatus.ConfirmsObjectAbsent(err, corev1.Resource("pods"), name)
 	}
 	return pod.UID != uid
 }
@@ -156,6 +157,16 @@ type listedPodsPods struct {
 	typedcorev1.PodInterface
 	namespace string
 	client    listedPodsClient
+}
+
+// Get guards the poll kubectl uses to wait for a pod to end, which counts any 404 as
+// the pod being gone.
+func (p listedPodsPods) Get(ctx context.Context, name string, options metav1.GetOptions) (*corev1.Pod, error) {
+	pod, err := p.PodInterface.Get(ctx, name, options)
+	if apierrors.IsNotFound(err) && !errorstatus.ConfirmsObjectAbsent(err, corev1.Resource("pods"), name) {
+		return pod, fmt.Errorf("could not confirm pod %s/%s has ended: %s", p.namespace, name, err.Error())
+	}
+	return pod, err
 }
 
 func (p listedPodsPods) Delete(ctx context.Context, name string, options metav1.DeleteOptions) error {

@@ -18,6 +18,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -200,8 +201,8 @@ type selectedNodeGoneError struct{ error }
 
 func (e selectedNodeGoneError) Unwrap() error { return e.error }
 
-func asSelectedNodeGone(err error) error {
-	if apierrors.IsConflict(err) || apierrors.IsNotFound(err) {
+func asSelectedNodeGone(err error, nodeName string) error {
+	if apierrors.IsConflict(err) || errorstatus.ConfirmsObjectAbsent(err, corev1.Resource("nodes"), nodeName) {
 		return selectedNodeGoneError{err}
 	}
 	return err
@@ -280,7 +281,7 @@ func (s *Service) runKubectlDrain(ctx context.Context, nodeName, uid string, opt
 	// pods were on the selected node, and only those pods are removed.
 	if err := s.RequireUID(ctx, nodeName, uid); err != nil {
 		job.AddInfo(nodemaintenance.DrainPhaseError, err.Error())
-		return asSelectedNodeGone(err)
+		return asSelectedNodeGone(err, nodeName)
 	}
 	if warnings := list.Warnings(); warnings != "" {
 		job.AddInfo(nodemaintenance.DrainPhaseWarning, warnings)

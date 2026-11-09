@@ -194,13 +194,14 @@ func confirmMissingObject(
 	if !apierrors.IsNotFound(err) {
 		return err
 	}
-	if _, probeErr := fetchObjectByGVK(ctx, resolved.deps, gvk, namespace, name); !apierrors.IsNotFound(probeErr) {
-		return err
-	}
 	// Requests may spell the kind in any case (the object panel lowercases it);
 	// the reference names the canonical identity the panel compares against.
 	canonical, ok, resolveErr := resolved.deps.ResourceResolver.ResolveResourceForGVK(ctx, gvk)
 	if resolveErr != nil || !ok {
+		return err
+	}
+	_, probeErr := fetchObjectByGVK(ctx, resolved.deps, gvk, namespace, name)
+	if !errorstatus.ConfirmsObjectAbsent(probeErr, canonical.GVR().GroupResource(), name) {
 		return err
 	}
 	return errorstatus.ObjectNotFound(errorstatus.ObjectRef{

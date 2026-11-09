@@ -626,8 +626,17 @@ func TestEnrichCatalogActionFactsMarksHPAManagedWorkloads(t *testing.T) {
 			Name:      "web",
 		}},
 		},
-		"managed":   {Ref: resourcemodel.ResourceRef{Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "default", Name: "web"}, ActionFacts: &ActionFacts{HPAManaged: &falseValue}},
-		"unmanaged": {Ref: resourcemodel.ResourceRef{Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "default", Name: "api"}},
+		"hpa-older-version": {Ref: resourcemodel.ResourceRef{Group: "autoscaling", Version: "v2", Kind: "HorizontalPodAutoscaler", Resource: "horizontalpodautoscalers", Namespace: "default", Name: "legacy"}, ActionFacts: &ActionFacts{ScaleTarget: &ActionScaleTarget{
+			Group:     "apps",
+			Version:   "v1beta2",
+			Kind:      "Deployment",
+			Namespace: "default",
+			Name:      "legacy",
+		}},
+		},
+		"managed-older-version": {Ref: resourcemodel.ResourceRef{Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "default", Name: "legacy"}},
+		"managed":               {Ref: resourcemodel.ResourceRef{Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "default", Name: "web"}, ActionFacts: &ActionFacts{HPAManaged: &falseValue}},
+		"unmanaged":             {Ref: resourcemodel.ResourceRef{Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "default", Name: "api"}},
 	}
 	allowed := map[string]Descriptor{
 		"autoscaling/v2/horizontalpodautoscalers": {
@@ -641,6 +650,9 @@ func TestEnrichCatalogActionFactsMarksHPAManagedWorkloads(t *testing.T) {
 
 	if items["managed"].ActionFacts == nil || items["managed"].ActionFacts.HPAManaged == nil || !*items["managed"].ActionFacts.HPAManaged {
 		t.Fatalf("expected managed deployment to be marked HPA-managed, got %#v", items["managed"].ActionFacts)
+	}
+	if facts := items["managed-older-version"].ActionFacts; facts == nil || facts.HPAManaged == nil || !*facts.HPAManaged {
+		t.Fatalf("an HPA written against an older API version still manages the workload: %#v", facts)
 	}
 	if items["unmanaged"].ActionFacts == nil || items["unmanaged"].ActionFacts.HPAManaged == nil || *items["unmanaged"].ActionFacts.HPAManaged {
 		t.Fatalf("expected unmanaged deployment to be marked not HPA-managed, got %#v", items["unmanaged"].ActionFacts)

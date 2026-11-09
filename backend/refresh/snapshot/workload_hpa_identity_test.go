@@ -15,7 +15,8 @@ func TestWorkloadHPAOwnershipUsesRetainedRowGVK(t *testing.T) {
 	}{
 		{"apps", "v1", "apps/v1", true},
 		{"example.com", "v1", "apps/v1", false},
-		{"apps", "v1beta1", "apps/v1", false},
+		{"apps", "v1beta1", "apps/v1", true},
+		{"apps", "v1", "apps/v1beta2", true},
 		{"example.com", "v1", "example.com/v1", true},
 	} {
 		t.Run(test.group+"/"+test.version+"-"+test.target, func(t *testing.T) {

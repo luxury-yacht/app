@@ -211,8 +211,6 @@ func (g *ResourceGateway) dispatchObjectDelete(ctx context.Context, target Objec
 // confirmDeletedObjectAbsence names the target on a delete's 404 only once a read of
 // that exact object also finds nothing. The delete's own 404 proves nothing: an
 // admission webhook can answer with any status, while reads never pass through one.
-// An API version the cluster stopped serving answers 404 to reads too; client-go
-// marks those as unexpected responses.
 func (g *ResourceGateway) confirmDeletedObjectAbsence(ctx context.Context, target ObjectActionTargetRef, err error) error {
 	if !apierrors.IsNotFound(err) {
 		return err
@@ -221,8 +219,13 @@ func (g *ResourceGateway) confirmDeletedObjectAbsence(ctx context.Context, targe
 	if resolveErr != nil {
 		return err
 	}
-	_, readErr := fetchObjectByGVK(ctx, deps, objectActionTargetGVK(target), target.Namespace, target.Name)
-	if !apierrors.IsNotFound(readErr) || apierrors.IsUnexpectedServerError(readErr) {
+	gvk := objectActionTargetGVK(target)
+	gvr, _, resolveErr := resolveObjectYAMLGVR(ctx, deps, gvk, objectYAMLResolverStrict)
+	if resolveErr != nil {
+		return err
+	}
+	_, readErr := fetchObjectByGVK(ctx, deps, gvk, target.Namespace, target.Name)
+	if !errorstatus.ConfirmsObjectAbsent(readErr, gvr.GroupResource(), target.Name) {
 		return err
 	}
 	return errorstatus.ObjectNotFound(objectActionStatusRef(target), err)
