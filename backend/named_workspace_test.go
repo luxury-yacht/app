@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/luxury-yacht/app/internal/panelwindow"
 	"github.com/stretchr/testify/require"
@@ -14,7 +15,8 @@ import (
 type namedWorkspaceTestWindows struct {
 	state      NamedWorkspace
 	captureErr error
-	reply      NamedWorkspaceAppWindow
+	reply      panelwindow.NamedWorkspaceAppView
+	failure    string
 	opened     NamedWorkspace
 	restored   string
 }
@@ -23,8 +25,8 @@ func (w *namedWorkspaceTestWindows) CaptureNamedWorkspace(context.Context, strin
 	return w.state, w.captureErr
 }
 
-func (w *namedWorkspaceTestWindows) SubmitNamedWorkspaceCapture(_, _ string, state NamedWorkspaceAppWindow) error {
-	w.reply = state
+func (w *namedWorkspaceTestWindows) SubmitNamedWorkspaceCapture(_, _ string, view panelwindow.NamedWorkspaceAppView, failure string) error {
+	w.reply, w.failure = view, failure
 	return nil
 }
 
@@ -49,10 +51,11 @@ func TestDesktopNamedWorkspaceSaveKeepsPreviousSnapshotOnCaptureFailure(t *testi
 	require.NoError(t, err)
 	require.Equal(t, &windows.state, saved)
 
-	require.Error(t, service.SubmitNamedWorkspaceCapture(ctx, "another-window", "request", "{}"))
-	require.Error(t, service.SubmitNamedWorkspaceCapture(ctx, "workspace-1", "request", "invalid"))
-	require.NoError(t, service.SubmitNamedWorkspaceCapture(ctx, "workspace-1", "request", `{"selectedClusterId":"config:prod"}`))
+	view := panelwindow.NamedWorkspaceAppView{SelectedClusterID: "config:prod"}
+	require.Error(t, service.SubmitNamedWorkspaceCapture(ctx, "another-window", "request", view, ""))
+	require.NoError(t, service.SubmitNamedWorkspaceCapture(ctx, "workspace-1", "request", view, "tables unavailable"))
 	require.Equal(t, "config:prod", windows.reply.SelectedClusterID)
+	require.Equal(t, "tables unavailable", windows.failure)
 
 	require.Error(t, service.OpenNamedWorkspace(ctx, "another-window", "Triage"))
 	require.Error(t, service.OpenNamedWorkspace(ctx, "workspace-1", "Missing"))
@@ -72,18 +75,22 @@ func TestNamedWorkspaceKeepsEachWindowsLayoutAcrossRestart(t *testing.T) {
 		SchemaVersion: 1,
 		AppWindows: []NamedWorkspaceAppWindow{
 			{
-				Geometry:          panelwindow.NamedWorkspaceGeometry{WindowBounds: panelwindow.WindowBounds{X: -1300, Y: 20, Width: 1200, Height: 800}, Maximized: true},
-				SelectedClusterID: clusterID,
-				ClusterTabs: []NamedWorkspaceClusterTab{
-					{ClusterID: stageID, ViewState: json.RawMessage(`{"clusterId":"/config/ops:stage"}`)},
-					{ClusterID: clusterID, ViewState: json.RawMessage(`{"clusterId":"/config/ops:prod","namespace":"payments","tables":{"workloads":{"filters":{"search":"checkout"}}}}`)},
+				Geometry: panelwindow.NamedWorkspaceGeometry{WindowBounds: panelwindow.WindowBounds{X: -1300, Y: 20, Width: 1200, Height: 800}, Maximized: true},
+				NamedWorkspaceAppView: panelwindow.NamedWorkspaceAppView{
+					SelectedClusterID: clusterID,
+					ClusterTabs: []NamedWorkspaceClusterTab{
+						{ClusterID: stageID, ViewState: json.RawMessage(`{"clusterId":"/config/ops:stage"}`)},
+						{ClusterID: clusterID, ViewState: json.RawMessage(`{"clusterId":"/config/ops:prod","namespace":"payments","tables":{"workloads":{"filters":{"search":"checkout"}}}}`)},
+					},
 				},
 			},
 			{
-				Geometry:          panelwindow.NamedWorkspaceGeometry{WindowBounds: panelwindow.WindowBounds{X: 80, Y: 60, Width: 900, Height: 700}},
-				SelectedClusterID: clusterID,
-				ClusterTabs: []NamedWorkspaceClusterTab{
-					{ClusterID: clusterID, ViewState: json.RawMessage(`{"clusterId":"/config/ops:prod","namespace":"platform","tables":{"workloads":{"filters":{"search":"gateway"}}}}`)},
+				Geometry: panelwindow.NamedWorkspaceGeometry{WindowBounds: panelwindow.WindowBounds{X: 80, Y: 60, Width: 900, Height: 700}},
+				NamedWorkspaceAppView: panelwindow.NamedWorkspaceAppView{
+					SelectedClusterID: clusterID,
+					ClusterTabs: []NamedWorkspaceClusterTab{
+						{ClusterID: clusterID, ViewState: json.RawMessage(`{"clusterId":"/config/ops:prod","namespace":"platform","tables":{"workloads":{"filters":{"search":"gateway"}}}}`)},
+					},
 				},
 			},
 		},
@@ -117,26 +124,28 @@ func TestNamedWorkspaceKeepsGlobalAndDockedViews(t *testing.T) {
 	const clusterID = "/config/ops:prod"
 	const stageID = "/config/ops:stage"
 	window := NamedWorkspaceAppWindow{
-		Geometry:          panelwindow.NamedWorkspaceGeometry{WindowBounds: panelwindow.WindowBounds{Width: 1200, Height: 800}},
-		SelectedClusterID: clusterID,
-		ClusterTabs: []NamedWorkspaceClusterTab{
-			{ClusterID: clusterID, ViewState: json.RawMessage(`{"clusterId":"/config/ops:prod"}`)},
-			{ClusterID: stageID, ViewState: json.RawMessage(`{"clusterId":"/config/ops:stage"}`)},
-		},
-		GlobalView: &NamedWorkspaceGlobalView{
-			View:   "global-namespaces",
-			Tables: map[string]json.RawMessage{"global-namespaces": json.RawMessage(`{"sort":{"key":"name","direction":"asc"}}`)},
-		},
-		DockedGroups: []NamedWorkspaceDockedGroup{{
-			Width: 460, Height: 800,
-			Group: panelwindow.WorkspaceGroup{
-				ClusterID: clusterID, GroupID: "right", ActivePanelID: "deployment",
-				Tabs: []panelwindow.TabSnapshot{{
-					Kind: panelwindow.TabKindObject, PanelID: "deployment", ActiveView: "yaml",
-					ObjectRef: panelwindow.ObjectReference{ClusterID: clusterID, Group: "apps", Version: "v1", Kind: "Deployment", Namespace: "payments", Name: "checkout"},
-				}},
+		Geometry: panelwindow.NamedWorkspaceGeometry{WindowBounds: panelwindow.WindowBounds{Width: 1200, Height: 800}},
+		NamedWorkspaceAppView: panelwindow.NamedWorkspaceAppView{
+			SelectedClusterID: clusterID,
+			ClusterTabs: []NamedWorkspaceClusterTab{
+				{ClusterID: clusterID, ViewState: json.RawMessage(`{"clusterId":"/config/ops:prod"}`)},
+				{ClusterID: stageID, ViewState: json.RawMessage(`{"clusterId":"/config/ops:stage"}`)},
 			},
-		}},
+			GlobalView: &NamedWorkspaceGlobalView{
+				View:   "global-namespaces",
+				Tables: map[string]json.RawMessage{"global-namespaces": json.RawMessage(`{"sort":{"key":"name","direction":"asc"}}`)},
+			},
+			DockedGroups: []NamedWorkspaceDockedGroup{{
+				Width: 460, Height: 800,
+				Group: panelwindow.WorkspaceGroup{
+					ClusterID: clusterID, GroupID: "right", ActivePanelID: "deployment",
+					Tabs: []panelwindow.TabSnapshot{{
+						Kind: panelwindow.TabKindObject, PanelID: "deployment", ActiveView: "yaml",
+						ObjectRef: panelwindow.ObjectReference{ClusterID: clusterID, Group: "apps", Version: "v1", Kind: "Deployment", Namespace: "payments", Name: "checkout"},
+					}},
+				},
+			}},
+		},
 	}
 	workspace := NamedWorkspace{SchemaVersion: 1, AppWindows: []NamedWorkspaceAppWindow{window}}
 	require.NoError(t, NewUIStateStore().SaveNamedWorkspace("Fleet", workspace, true))
@@ -176,11 +185,13 @@ func TestNamedWorkspaceRejectsIncompleteOrMismatchedCapture(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			workspace := NamedWorkspace{SchemaVersion: 1, AppWindows: []NamedWorkspaceAppWindow{{
-				Geometry:          panelwindow.NamedWorkspaceGeometry{WindowBounds: panelwindow.WindowBounds{Width: 1200, Height: 800}},
-				SelectedClusterID: clusterID,
-				ClusterTabs: []NamedWorkspaceClusterTab{{
-					ClusterID: clusterID, ViewState: json.RawMessage(`{"clusterId":"/config/ops:prod"}`),
-				}},
+				Geometry: panelwindow.NamedWorkspaceGeometry{WindowBounds: panelwindow.WindowBounds{Width: 1200, Height: 800}},
+				NamedWorkspaceAppView: panelwindow.NamedWorkspaceAppView{
+					SelectedClusterID: clusterID,
+					ClusterTabs: []NamedWorkspaceClusterTab{{
+						ClusterID: clusterID, ViewState: json.RawMessage(`{"clusterId":"/config/ops:prod"}`),
+					}},
+				},
 			}}}
 			// An invalid first capture must never publish a workspace that can be opened.
 			test.change(&workspace)
@@ -240,4 +251,85 @@ func TestNamedWorkspaceSeedsOnlyTheDiscoveredSelectionsForItsWindow(t *testing.T
 	require.Equal(t, []string{"config:stage"}, app.Workspace.WindowClusterIDs("new"))
 	require.Equal(t, []string{"config:prod", "config:stage"}, app.Workspace.WindowClusterIDs("current"))
 	require.Equal(t, selections, app.Workspace.GetSelectedKubeconfigs())
+}
+
+// The membership snapshot can precede its process-selection commit. A restored
+// window must not claim a cluster whose last owner is already gone, or it would
+// show a tab for a runtime that the pending commit then removes.
+func TestNamedWorkspaceSeedCannotOvertakeLastOwnerRemoval(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
+	w := app.Workspace
+	selection, clusterID := "/tmp/config:closing", "config:closing"
+	w.selectedKubeconfigs = []string{selection}
+	app.ClusterRuntime.availableKubeconfigs = []KubeconfigInfo{{Name: "config", Path: "/tmp/config", Context: "closing"}}
+	w.GetClusterWorkspaceStateForWindow("workspace-1")
+	removed, resume := make(chan struct{}), make(chan struct{})
+	closing := make(chan error, 1)
+	go func() {
+		closing <- w.runOrderedSelectionMutation("close-cluster-view", func(mutation *selectionMutation) error {
+			intent, err := w.removeClusterView(mutation, "workspace-1", clusterID)
+			if err != nil {
+				return err
+			}
+			close(removed)
+			<-resume
+			if intent != nil {
+				w.commitKubeconfigSelection(mutation, intent)
+			}
+			return nil
+		})
+	}()
+	released := false
+	defer func() {
+		if !released {
+			close(resume)
+		}
+		w.cancelActiveSelectionGeneration()
+		require.True(t, w.waitForSelectionMutationIdle(time.Second))
+	}()
+	select {
+	case <-removed:
+	case <-time.After(time.Second):
+		t.Fatal("close did not remove the last owner")
+	}
+	require.Equal(t, []string{selection}, w.GetSelectedKubeconfigs(), "the runtime selection has not committed yet")
+	seeded := make(chan error, 1)
+	go func() { seeded <- w.SeedNamedWorkspaceWindow("restored", []string{selection}, clusterID) }()
+	require.Eventually(t, func() bool {
+		diagnostics, err := w.GetSelectionDiagnostics()
+		return err == nil && diagnostics.ActiveQueueDepth == 2
+	}, time.Second, time.Millisecond, "seeding a closing cluster must wait for ordered retirement")
+	require.Empty(t, w.WindowClusterIDs("restored"))
+	close(resume)
+	released = true
+	require.NoError(t, <-closing)
+	require.NoError(t, <-seeded)
+	require.Equal(t, []string{selection}, w.GetSelectedKubeconfigs(), "the seed reopens the cluster it owns")
+	require.Equal(t, []string{clusterID}, w.WindowClusterIDs("restored"))
+}
+
+// Deleting removes one saved workspace from disk and leaves the others openable.
+func TestNamedWorkspaceDeleteRemovesOnlyTheNamedSnapshot(t *testing.T) {
+	setTestConfigEnv(t)
+	store := NewUIStateStore()
+	workspace := NamedWorkspace{SchemaVersion: 1, AppWindows: []NamedWorkspaceAppWindow{{
+		Geometry: panelwindow.NamedWorkspaceGeometry{WindowBounds: panelwindow.WindowBounds{Width: 1200, Height: 800}},
+	}}}
+	require.NoError(t, store.SaveNamedWorkspace("Triage", workspace, false))
+	require.NoError(t, store.SaveNamedWorkspace("Release", workspace, false))
+	service := NewDesktopService(DesktopServiceDependencies{NamedWorkspaces: NewNamedWorkspaceService(&namedWorkspaceTestWindows{}, store)})
+	ctx := context.WithValue(context.Background(), application.WindowKey, panelCommandCaller("workspace-1"))
+
+	require.Error(t, service.DeleteNamedWorkspace(ctx, "another-window", "Triage"))
+	require.Error(t, service.DeleteNamedWorkspace(ctx, "workspace-1", "Missing"))
+	require.NoError(t, service.DeleteNamedWorkspace(ctx, "workspace-1", "Triage"))
+
+	names, err := NewUIStateStore().ListNamedWorkspaces()
+	require.NoError(t, err)
+	require.Equal(t, []string{"Release"}, names)
+	_, err = store.GetNamedWorkspace("Triage")
+	require.Error(t, err)
+	_, err = store.GetNamedWorkspace("Release")
+	require.NoError(t, err)
 }

@@ -17,8 +17,8 @@ type NamedWorkspaceMissingClustersEvent struct {
 }
 
 type NamedWorkspaceRestoreRequest struct {
-	WindowName string `json:"windowName"`
-	State      string `json:"state"`
+	WindowName string                  `json:"windowName"`
+	Window     NamedWorkspaceAppWindow `json:"window"`
 }
 
 // StageNamedWorkspaceGroup installs a validated group in the isolated restore directory.
@@ -111,7 +111,13 @@ type NamedWorkspace struct {
 }
 
 type NamedWorkspaceAppWindow struct {
-	Geometry          NamedWorkspaceGeometry      `json:"geometry"`
+	Geometry NamedWorkspaceGeometry `json:"geometry"`
+	NamedWorkspaceAppView
+}
+
+// NamedWorkspaceAppView is the part of an app window that its renderer owns and
+// reports during capture. The registry adds the native geometry.
+type NamedWorkspaceAppView struct {
 	SelectedClusterID string                      `json:"selectedClusterId,omitempty"`
 	ClusterTabs       []NamedWorkspaceClusterTab  `json:"clusterTabs"`
 	GlobalView        *NamedWorkspaceGlobalView   `json:"globalView,omitempty"`

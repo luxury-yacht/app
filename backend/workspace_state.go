@@ -368,12 +368,14 @@ func appendWorkspaceSelection(union *[]string, wanted, seen map[string]struct{},
 }
 
 // SeedNamedWorkspaceWindow admits the saved cluster tabs before renderer hydration.
+// Sharing selections that other views still own does not change the process
+// union. A selection without an owner may be mid-retirement, so it is admitted
+// through the ordered mutation instead (see retainOwnedPanelCluster).
 func (a *WorkspaceCoordinator) SeedNamedWorkspaceWindow(window string, selections []string, visible string) error {
 	command := ClusterWorkspaceCommand{WindowID: window, SelectedKubeconfigs: selections, UpdateSelectedKubeconfigs: true, VisibleClusterID: visible}
 	a.workspaceSelectionsMu.Lock()
-	current := a.GetSelectedKubeconfigs()
 	alreadySelected := !slices.ContainsFunc(selections, func(selection string) bool {
-		return !slices.Contains(current, selection)
+		return !a.selectionHasOwnerLocked(selection, "")
 	})
 	if alreadySelected {
 		a.setWorkspaceSelectionsLocked(window, selections)

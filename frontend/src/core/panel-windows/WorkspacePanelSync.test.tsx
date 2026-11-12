@@ -110,16 +110,36 @@ it('captures the addressed app window and its docked panel through the native re
   await app.settle();
   const calls = app.backend.calls('SubmitNamedWorkspaceCapture');
   expect(calls).toHaveLength(1);
-  const [window, id, payload] = calls[0];
+  const [window, id, captured, failure] = calls[0];
   expect(window).toBe(app.windowName);
   expect(id).toBe('current');
-  expect(JSON.parse(payload)).toMatchObject({
+  expect(captured).toMatchObject({
     selectedClusterId: production.clusterId,
     clusterTabs: [
       { clusterId: production.clusterId, viewState: { clusterId: production.clusterId } },
     ],
     dockedGroups: [{ group: { clusterId: production.clusterId, tabs: [tabOf('api')] } }],
   });
+  expect(failure).toBe('');
+});
+
+it('answers a capture it cannot complete with the reason, so the save fails at once', async () => {
+  app.backend.answer('PublishDockedPanels', () => {
+    throw new Error('publication failed');
+  });
+  await start();
+  app.backend.answer('SubmitNamedWorkspaceCapture', () => undefined);
+  await act(async () => {
+    app.events.emit('named-workspace:capture', { id: 'current', windowName: app.windowName });
+  });
+  await app.settle();
+  const calls = app.backend.calls('SubmitNamedWorkspaceCapture');
+  expect(calls).toHaveLength(1);
+  const [window, id, , failure] = calls[0];
+  expect([window, id]).toEqual([app.windowName, 'current']);
+  expect(failure).toContain('publication failed');
+  // The publications this test fails are reported by their own owner.
+  app.errors.take((record) => (record.error as Error).message === 'publication failed');
 });
 
 it('acknowledges workspace restoration only after projecting the saved dock', async () => {
@@ -143,6 +163,7 @@ it('acknowledges workspace restoration only after projecting the saved dock', as
   });
   const request = {
     window: {
+      geometry: { x: 0, y: 0, width: 1200, height: 800, maximized: false },
       selectedClusterId: production.clusterId,
       clusterTabs: [
         {
@@ -173,7 +194,7 @@ it('acknowledges workspace restoration only after projecting the saved dock', as
   await act(async () => {
     app.events.emit('named-workspace:restore', {
       windowName: app.windowName,
-      state: JSON.stringify(request),
+      window: request.window,
     });
   });
   await app.settle();

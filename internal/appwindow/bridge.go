@@ -12,7 +12,7 @@ type nativeWindowRegistry interface {
 	OpenNamedWorkspace(context.Context, string, panelwindow.NamedWorkspace) error
 	AcknowledgeNamedWorkspaceRestore(string, string) error
 	CaptureNamedWorkspace(context.Context, string) (panelwindow.NamedWorkspace, error)
-	SubmitNamedWorkspaceCapture(string, string, panelwindow.NamedWorkspaceAppWindow) error
+	SubmitNamedWorkspaceCapture(string, string, panelwindow.NamedWorkspaceAppView, string) error
 	panelwindow.SharedWorkspaceCommands
 	PrepareApplicationQuit() bool
 	FocusMostRecent()
@@ -42,12 +42,12 @@ func (bridge *Bridge) CaptureNamedWorkspace(ctx context.Context, window string) 
 	return registry.CaptureNamedWorkspace(ctx, window)
 }
 
-func (bridge *Bridge) SubmitNamedWorkspaceCapture(window, id string, state panelwindow.NamedWorkspaceAppWindow) error {
+func (bridge *Bridge) SubmitNamedWorkspaceCapture(window, id string, view panelwindow.NamedWorkspaceAppView, failure string) error {
 	registry, err := bridge.registryOrError()
 	if err != nil {
 		return err
 	}
-	return registry.SubmitNamedWorkspaceCapture(window, id, state)
+	return registry.SubmitNamedWorkspaceCapture(window, id, view, failure)
 }
 
 // Bridge breaks the startup cycle between backend composition

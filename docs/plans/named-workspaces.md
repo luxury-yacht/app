@@ -74,3 +74,12 @@ sessions, drain jobs, and unsaved editor content stay with their live owners.
   display disconnect and Windows and Linux placement were not exercised.
 - **Unavailable context.** The final isolated build reopened the available
   clusters and named the missing saved context in a visible warning.
+- **Review fixes (automated only).** Registry tests cover a window's capture
+  failure reply, refusing an unrestorable workspace before the close guards,
+  dropping app windows whose saved clusters are all missing, an approval that
+  outlives its collection timeout, and a floating panel window's remembered
+  normal bounds. `TestNamedWorkspaceSeedCannotOvertakeLastOwnerRemoval` covers a
+  seed that arrives while a cluster's last owner is being removed.
+  `TestNamedWorkspaceDeleteRemovesOnlyTheNamedSnapshot` and the Command Palette
+  test cover deleting a saved workspace. None of these were re-run in the native
+  window.

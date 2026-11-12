@@ -559,3 +559,37 @@ it('opens the selected workspace from the command palette', async () => {
   await act(async () => open.click());
   expect(app.backend.calls('OpenNamedWorkspace')).toEqual([[app.windowName, 'Release']]);
 });
+
+it('deletes the selected saved workspace only after confirmation', async () => {
+  app.backend.answer('ListNamedWorkspaces', () => ['Incident', 'Release']);
+  app.backend.answer('DeleteNamedWorkspace', () => undefined);
+  view = await app.mountApp();
+  await menu('open-command-palette');
+  vi.useFakeTimers();
+  await type('open workspace');
+  await choose('Open Workspace…');
+  const button = (label: string) =>
+    requireValue(
+      [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
+        (candidate) => candidate.textContent === label
+      ),
+      `expected the ${label} button`
+    );
+  await act(async () => button('Delete').click());
+  expect(app.backend.calls('DeleteNamedWorkspace')).toEqual([]);
+  // The confirmation is the topmost dialog; its Delete button confirms.
+  const confirm = requireValue(
+    [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')]
+      .filter((candidate) => candidate.textContent === 'Delete')
+      .pop(),
+    'expected the confirming Delete button'
+  );
+  await act(async () => confirm.click());
+  expect(app.backend.calls('DeleteNamedWorkspace')).toEqual([[app.windowName, 'Incident']]);
+  const select = requireValue(
+    document.querySelector<HTMLSelectElement>('[role="dialog"] select'),
+    'expected the saved-workspace picker'
+  );
+  expect([...select.options].map((option) => option.value)).toEqual(['Release']);
+  expect(select.value).toBe('Release');
+});

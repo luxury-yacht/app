@@ -12,7 +12,7 @@ import (
 func (*recordingNativeWindowRegistry) CaptureNamedWorkspace(context.Context, string) (panelwindow.NamedWorkspace, error) {
 	return panelwindow.NamedWorkspace{}, nil
 }
-func (*recordingNativeWindowRegistry) SubmitNamedWorkspaceCapture(string, string, panelwindow.NamedWorkspaceAppWindow) error {
+func (*recordingNativeWindowRegistry) SubmitNamedWorkspaceCapture(string, string, panelwindow.NamedWorkspaceAppView, string) error {
 	return nil
 }
 

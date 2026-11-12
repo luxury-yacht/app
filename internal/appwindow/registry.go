@@ -83,14 +83,16 @@ type applicationQuitPreflight struct {
 }
 
 type geometry struct {
-	AbsoluteX int
-	AbsoluteY int
-	X         int
-	Y         int
-	Width     int
-	Height    int
-	Maximised bool
-	Screen    *application.Screen
+	AbsoluteX  int
+	AbsoluteY  int
+	X          int
+	Y          int
+	Width      int
+	Height     int
+	Maximised  bool
+	Fullscreen bool
+	Minimised  bool
+	Screen     *application.Screen
 }
 
 const cascadeOffset = 24
@@ -150,9 +152,11 @@ func applicationWindowGeometry(app *application.App, name string) (geometry, boo
 		return geometry{}, false
 	}
 	result := geometry{
-		Width:     width,
-		Height:    height,
-		Maximised: window.IsMaximised(),
+		Width:      width,
+		Height:     height,
+		Maximised:  window.IsMaximised(),
+		Fullscreen: window.IsFullscreen(),
+		Minimised:  window.IsMinimised(),
 	}
 	result.AbsoluteX, result.AbsoluteY = window.Position()
 	if screen, err := window.GetScreen(); err == nil && screen != nil {
@@ -396,7 +400,7 @@ func (r *Registry) registerLifecycleHooks(
 			r.backend.WindowRuntimeReady(name, restoreGeometry)
 		}
 		r.markWorkspaceReady(name)
-		r.rememberNamedWorkspaceBounds(window, name)
+		r.rememberNamedWorkspaceBounds(name)
 	})
 	window.OnWindowEvent(events.Common.WindowFocus, func(*application.WindowEvent) {
 		r.lifecycle.Focus(name)
@@ -410,6 +414,10 @@ func (r *Registry) registerPanelLifecycleHooks(
 	window *application.WebviewWindow,
 	name string,
 ) {
+	r.trackNamedWorkspaceBounds(window, name)
+	window.OnWindowEvent(events.Common.WindowRuntimeReady, func(*application.WindowEvent) {
+		r.rememberNamedWorkspaceBounds(name)
+	})
 	window.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {
 		r.handlePanelClosingEvent(event, name)
 	})
@@ -849,6 +857,13 @@ func (r *Registry) AcknowledgeApplicationQuitPreflight(
 		pending.timeout.Stop()
 	}
 	if pending.replacement != nil {
+		// As for quit below: a collection timeout already waiting on quitMu must
+		// not release the frozen renderers while the switch stages.
+		r.pendingQuit = &applicationQuitPreflight{
+			transactionID: pending.transactionID,
+			participants:  pending.participants,
+			replacement:   pending.replacement,
+		}
 		r.quitMu.Unlock()
 		pending.replacement <- true
 		return nil

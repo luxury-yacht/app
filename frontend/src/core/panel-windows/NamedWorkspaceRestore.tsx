@@ -17,26 +17,11 @@ import { parseGlobalViewType } from '@/types/navigation/views';
 import { useDockablePanelContext } from '@/ui/dockable';
 import { reportOperationalError } from '@/utils/errorHandler';
 import { decodeClusterViewState } from './clusterViewState';
+import { workspaceFailureReason } from './useNamedWorkspaceCapture';
 import { useNamedWorkspaceNotice } from './useNamedWorkspaceNotice';
 import { useRestoreWorkspacePanels } from './useRestoreWorkspacePanels';
 
-interface SavedDock {
-  group: panelwindow.WorkspaceGroup;
-  width: number;
-  height: number;
-  maximized: boolean;
-}
-
-interface SavedWindow {
-  selectedClusterId?: string;
-  clusterTabs: { clusterId: string; viewState: unknown }[] | null;
-  dockedGroups?: SavedDock[];
-  globalView?: { view: string; tables?: Record<string, unknown> };
-}
-
-interface RestoreRequest {
-  window: SavedWindow;
-}
+type SavedWindow = panelwindow.NamedWorkspaceAppWindow;
 
 async function restoreTables(saved: SavedWindow) {
   const states = (saved.clusterTabs ?? []).map((tab) =>
@@ -64,10 +49,10 @@ export function NamedWorkspaceRestore() {
   const { updateClusterGroupLayout } = useDockablePanelContext();
   const { panelIdsForCluster } = useObjectPanelState();
   const restorePanels = useRestoreWorkspacePanels();
-  const [mounted, setMounted] = useState<RestoreRequest | null>(null);
+  const [mounted, setMounted] = useState<SavedWindow | null>(null);
   const started = useRef(false);
   const restoreDock = useCallback(
-    (dock: SavedDock) => {
+    (dock: panelwindow.NamedWorkspaceDockedGroup) => {
       const { group, width, height } = dock;
       const edge = group.groupId === 'bottom' ? 'bottom' : 'right';
       restorePanels(group, edge);
@@ -82,8 +67,7 @@ export function NamedWorkspaceRestore() {
     [restorePanels, updateClusterGroupLayout]
   );
   const apply = useCallback(
-    async (request: RestoreRequest) => {
-      const saved = request.window;
+    async (saved: SavedWindow) => {
       const states = await restoreTables(saved);
       const selectionById = new Map(
         selectedKubeconfigs.map((selection) => [getClusterMeta(selection).id, selection])
@@ -112,7 +96,7 @@ export function NamedWorkspaceRestore() {
         navigateToGlobal(globalView);
       }
       (saved.dockedGroups ?? []).forEach(restoreDock);
-      setMounted(request);
+      setMounted(saved);
     },
     [
       getClusterMeta,
@@ -133,14 +117,8 @@ export function NamedWorkspaceRestore() {
           return;
         }
         started.current = true;
-        const restore = async () => apply(JSON.parse(event.state) as RestoreRequest);
-        void restore()
-          .catch((error) =>
-            AcknowledgeNamedWorkspaceRestore(
-              name,
-              error instanceof Error ? error.message : String(error)
-            )
-          )
+        void apply(event.window)
+          .catch((error) => AcknowledgeNamedWorkspaceRestore(name, workspaceFailureReason(error)))
           .catch((error) =>
             reportOperationalError(error, { source: 'NamedWorkspace', action: 'restore' })
           );
@@ -152,7 +130,7 @@ export function NamedWorkspaceRestore() {
     if (!mounted) {
       return;
     }
-    const panelsReady = (mounted.window.dockedGroups ?? []).every(({ group }) => {
+    const panelsReady = (mounted.dockedGroups ?? []).every(({ group }) => {
       const ids = panelIdsForCluster(group.clusterId);
       return (group.tabs ?? []).every(({ panelId }) => ids.includes(panelId));
     });

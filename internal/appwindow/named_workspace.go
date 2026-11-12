@@ -2,6 +2,7 @@ package appwindow
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -20,7 +21,8 @@ type namedWorkspaceCapture struct {
 
 type namedWorkspaceCaptureReply struct {
 	window string
-	state  panelwindow.NamedWorkspaceAppWindow
+	view   panelwindow.NamedWorkspaceAppView
+	err    error
 }
 
 func (r *Registry) CaptureNamedWorkspace(ctx context.Context, source string) (panelwindow.NamedWorkspace, error) {
@@ -46,11 +48,11 @@ func (r *Registry) CaptureNamedWorkspace(ctx context.Context, source string) (pa
 	defer r.endNamedWorkspaceCapture()
 	deadline, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	states, err := r.requestNamedWorkspaceCapture(deadline, capture, participants)
+	views, err := r.requestNamedWorkspaceCapture(deadline, capture, participants)
 	if err != nil {
 		return panelwindow.NamedWorkspace{}, err
 	}
-	return r.assembleNamedWorkspace(apps, panels, states)
+	return r.assembleNamedWorkspace(apps, panels, views)
 }
 
 func (r *Registry) beginNamedWorkspaceCapture(windows []string) (*namedWorkspaceCapture, error) {
@@ -73,26 +75,31 @@ func (r *Registry) endNamedWorkspaceCapture() {
 	r.workspaceCapture = nil
 }
 
-func (r *Registry) requestNamedWorkspaceCapture(ctx context.Context, capture *namedWorkspaceCapture, windows []string) (map[string]panelwindow.NamedWorkspaceAppWindow, error) {
+func (r *Registry) requestNamedWorkspaceCapture(ctx context.Context, capture *namedWorkspaceCapture, windows []string) (map[string]panelwindow.NamedWorkspaceAppView, error) {
 	for _, window := range windows {
 		request := panelwindow.NamedWorkspaceCaptureRequest{ID: capture.id, WindowName: window}
 		if !r.emitWindowEvent(window, panelwindow.NamedWorkspaceCaptureRequested, request) {
 			return nil, fmt.Errorf("could not capture window %q", window)
 		}
 	}
-	states := make(map[string]panelwindow.NamedWorkspaceAppWindow, len(windows))
+	views := make(map[string]panelwindow.NamedWorkspaceAppView, len(windows))
 	for range windows {
 		select {
 		case reply := <-capture.replies:
-			states[reply.window] = reply.state
+			if reply.err != nil {
+				return nil, fmt.Errorf("capture window %q: %w", reply.window, reply.err)
+			}
+			views[reply.window] = reply.view
 		case <-ctx.Done():
 			return nil, fmt.Errorf("waiting for windows to capture workspace: %w", ctx.Err())
 		}
 	}
-	return states, nil
+	return views, nil
 }
 
-func (r *Registry) SubmitNamedWorkspaceCapture(window, id string, state panelwindow.NamedWorkspaceAppWindow) error {
+// SubmitNamedWorkspaceCapture is a window's one reply to a capture request: its
+// view, or the reason it could not report one.
+func (r *Registry) SubmitNamedWorkspaceCapture(window, id string, view panelwindow.NamedWorkspaceAppView, failure string) error {
 	r.workspaceCaptureMu.Lock()
 	defer r.workspaceCaptureMu.Unlock()
 	capture := r.workspaceCapture
@@ -100,16 +107,20 @@ func (r *Registry) SubmitNamedWorkspaceCapture(window, id string, state panelwin
 		return fmt.Errorf("window %q has no matching capture request", window)
 	}
 	delete(capture.waiting, window)
-	capture.replies <- namedWorkspaceCaptureReply{window: window, state: state}
+	reply := namedWorkspaceCaptureReply{window: window, view: view}
+	if failure != "" {
+		reply.err = errors.New(failure)
+	}
+	capture.replies <- reply
 	return nil
 }
 
-func (r *Registry) assembleNamedWorkspace(apps, panels []string, states map[string]panelwindow.NamedWorkspaceAppWindow) (panelwindow.NamedWorkspace, error) {
+func (r *Registry) assembleNamedWorkspace(apps, panels []string, views map[string]panelwindow.NamedWorkspaceAppView) (panelwindow.NamedWorkspace, error) {
 	revision, err := r.workspace.WorkspaceCaptureRevision()
 	if err != nil {
 		return panelwindow.NamedWorkspace{}, err
 	}
-	workspace, err := r.readNamedWorkspaceWindows(apps, panels, states)
+	workspace, err := r.readNamedWorkspaceWindows(apps, panels, views)
 	if err != nil {
 		return panelwindow.NamedWorkspace{}, err
 	}
@@ -126,19 +137,17 @@ func (r *Registry) assembleNamedWorkspace(apps, panels []string, states map[stri
 	return workspace, nil
 }
 
-func (r *Registry) readNamedWorkspaceWindows(apps, panels []string, states map[string]panelwindow.NamedWorkspaceAppWindow) (panelwindow.NamedWorkspace, error) {
+func (r *Registry) readNamedWorkspaceWindows(apps, panels []string, views map[string]panelwindow.NamedWorkspaceAppView) (panelwindow.NamedWorkspace, error) {
 	workspace := panelwindow.NamedWorkspace{SchemaVersion: panelwindow.NamedWorkspaceSchemaVersion}
 	for _, name := range apps {
-		state := states[name]
 		geometry, err := r.namedWorkspaceGeometry(name)
 		if err != nil {
 			return panelwindow.NamedWorkspace{}, err
 		}
-		state.Geometry = geometry
-		if err := r.checkNamedWorkspaceAppWindow(name, state); err != nil {
+		if err := r.checkNamedWorkspaceAppView(name, views[name]); err != nil {
 			return panelwindow.NamedWorkspace{}, err
 		}
-		workspace.AppWindows = append(workspace.AppWindows, state)
+		workspace.AppWindows = append(workspace.AppWindows, panelwindow.NamedWorkspaceAppWindow{Geometry: geometry, NamedWorkspaceAppView: views[name]})
 	}
 	for _, name := range panels {
 		window, err := r.captureNamedPanelWindow(name)
@@ -150,7 +159,7 @@ func (r *Registry) readNamedWorkspaceWindows(apps, panels []string, states map[s
 	return workspace, nil
 }
 
-func (r *Registry) checkNamedWorkspaceAppWindow(name string, state panelwindow.NamedWorkspaceAppWindow) error {
+func (r *Registry) checkNamedWorkspaceAppView(name string, state panelwindow.NamedWorkspaceAppView) error {
 	clusters := r.backend.WindowClusterIDs(name)
 	saved := make([]string, 0, len(state.ClusterTabs))
 	for _, tab := range state.ClusterTabs {
@@ -212,20 +221,19 @@ func (r *Registry) namedWorkspaceGeometry(name string) (panelwindow.NamedWorkspa
 	}, nil
 }
 
+// trackNamedWorkspaceBounds follows an app or panel window's moves and resizes.
 func (r *Registry) trackNamedWorkspaceBounds(window *application.WebviewWindow, name string) {
-	record := func(*application.WindowEvent) { r.rememberNamedWorkspaceBounds(window, name) }
+	record := func(*application.WindowEvent) { r.rememberNamedWorkspaceBounds(name) }
 	window.OnWindowEvent(events.Common.WindowDidMove, record)
 	window.OnWindowEvent(events.Common.WindowDidResize, record)
 }
 
-func (r *Registry) rememberNamedWorkspaceBounds(window application.Window, name string) {
-	if window.IsMaximised() || window.IsFullscreen() || window.IsMinimised() {
+// rememberNamedWorkspaceBounds records where a window sits while it is in its
+// normal state, read from the same geometry a capture saves.
+func (r *Registry) rememberNamedWorkspaceBounds(name string) {
+	bounds, ok := r.windowGeometry(name)
+	if !ok || bounds.Maximised || bounds.Fullscreen || bounds.Minimised {
 		return
 	}
-	width, height := window.Size()
-	if width <= 0 || height <= 0 {
-		return
-	}
-	x, y := window.Position()
-	r.normalWorkspaceBounds.Store(name, panelwindow.WindowBounds{X: x, Y: y, Width: width, Height: height})
+	r.normalWorkspaceBounds.Store(name, panelwindow.WindowBounds{X: bounds.AbsoluteX, Y: bounds.AbsoluteY, Width: bounds.Width, Height: bounds.Height})
 }

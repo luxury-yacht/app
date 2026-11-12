@@ -1,6 +1,6 @@
 import { panelTargetFromSnapshot } from '@modules/object-panel/panelTarget';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { backend } from '@/core/backend-api/models';
+import type { backend, panelwindow } from '@/core/backend-api/models';
 import { useZoom } from '@/core/contexts/ZoomContext';
 import { focusWindow, minimiseWindow, onEvent, openDevTools } from '@/core/desktop-runtime';
 import type { PanelWindowDescriptor } from '@/core/panel-windows';
@@ -53,9 +53,11 @@ import {
   type PanelApplicationMenuActions,
 } from './panelApplicationMenuCommands';
 
-async function capturePanelWindow() {
+// A panel window has no app view of its own; its reply confirms that its
+// arrangement reached the panel directory before the capture reads it.
+async function capturePanelWindow(): Promise<panelwindow.NamedWorkspaceAppView> {
   await nativePanelPublication.flush();
-  return {};
+  return { clusterTabs: null };
 }
 
 export function PanelWindowShortcuts({

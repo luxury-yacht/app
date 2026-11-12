@@ -2,7 +2,6 @@ package appwindow
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -39,13 +38,22 @@ func (r *Registry) OpenNamedWorkspace(ctx context.Context, source string, snapsh
 		return fmt.Errorf("another workspace operation is in progress")
 	}
 	defer r.namedWorkspaceOperation.Unlock()
+	// Decide what can be restored before any open window runs its close guards.
+	available, err := r.backend.NamedWorkspaceAvailableClusters()
+	if err != nil {
+		return err
+	}
+	snapshot, missing := availableWorkspaceLayout(snapshot, available)
+	if len(snapshot.AppWindows) == 0 && len(snapshot.PanelWindows) == 0 {
+		return fmt.Errorf("no workspace windows can be restored; missing clusters: %v", missing)
+	}
 	apps, panels := r.lifecycle.Names(), r.panels.Names("")
 	participants := append(slices.Clone(apps), panels...)
 	guard, err := r.beginWorkspaceReplacement(source, participants)
 	if err != nil {
 		return err
 	}
-	defer r.cancelApplicationQuitPreflight(guard)
+	defer r.endWorkspaceReplacement(guard.transactionID)
 	if err := r.waitForWorkspaceReplacement(ctx, guard); err != nil {
 		return err
 	}
@@ -53,17 +61,12 @@ func (r *Registry) OpenNamedWorkspace(ctx context.Context, source string, snapsh
 	if err != nil {
 		return err
 	}
-	available, err := r.backend.NamedWorkspaceAvailableClusters()
-	if err != nil {
-		return err
-	}
-	snapshot, missing := availableWorkspaceLayout(snapshot, available)
 	restore := &namedWorkspaceRestore{directory: panelwindow.NewWorkspaceDirectory(), seed: "workspace-restore-" + uuid.NewString()}
 	committed := false
 	defer func() { r.finishNamedWorkspaceRestore(restore, committed) }()
 	stageCtx, cancel := context.WithTimeout(ctx, 35*time.Second)
 	defer cancel()
-	if err := r.stageNamedWorkspace(stageCtx, restore, snapshot, missing); err != nil {
+	if err := r.stageNamedWorkspace(stageCtx, restore, snapshot); err != nil {
 		return err
 	}
 	if err := r.commitNamedWorkspace(restore, revision, apps, panels); err != nil {
@@ -104,6 +107,17 @@ func (r *Registry) waitForWorkspaceReplacement(ctx context.Context, guard *appli
 	}
 }
 
+// Approval replaces the collected preflight, so the switch releases its windows
+// by transaction rather than by the object it began with.
+func (r *Registry) endWorkspaceReplacement(transactionID string) {
+	r.quitMu.Lock()
+	pending := r.pendingQuit
+	r.quitMu.Unlock()
+	if pending != nil && pending.transactionID == transactionID {
+		r.cancelApplicationQuitPreflight(pending)
+	}
+}
+
 func availableWorkspaceLayout(snapshot panelwindow.NamedWorkspace, available []string) (panelwindow.NamedWorkspace, []string) {
 	next := snapshot
 	next.AppWindows = make([]panelwindow.NamedWorkspaceAppWindow, 0, len(snapshot.AppWindows))
@@ -116,18 +130,9 @@ func availableWorkspaceLayout(snapshot panelwindow.NamedWorkspace, available []s
 		return false
 	}
 	for _, window := range snapshot.AppWindows {
-		window.ClusterTabs = slices.DeleteFunc(slices.Clone(window.ClusterTabs), func(tab panelwindow.NamedWorkspaceClusterTab) bool { return !keep(tab.ClusterID) })
-		window.DockedGroups = slices.DeleteFunc(slices.Clone(window.DockedGroups), func(dock panelwindow.NamedWorkspaceDockedGroup) bool { return !keep(dock.Group.ClusterID) })
-		if !slices.Contains(workspaceClusterIDs(window), window.SelectedClusterID) {
-			window.SelectedClusterID = ""
-			if len(window.ClusterTabs) > 0 {
-				window.SelectedClusterID = window.ClusterTabs[0].ClusterID
-			}
+		if window, restorable := availableAppWindow(window, keep); restorable {
+			next.AppWindows = append(next.AppWindows, window)
 		}
-		if len(window.ClusterTabs) < 2 {
-			window.GlobalView = nil
-		}
-		next.AppWindows = append(next.AppWindows, window)
 	}
 	next.PanelWindows = slices.DeleteFunc(slices.Clone(snapshot.PanelWindows), func(panel panelwindow.NamedWorkspacePanelWindow) bool { return !keep(panel.Group.ClusterID) })
 	unavailable := make([]string, 0, len(missing))
@@ -138,6 +143,28 @@ func availableWorkspaceLayout(snapshot panelwindow.NamedWorkspace, available []s
 	return next, unavailable
 }
 
+// availableAppWindow keeps the views of one saved app window whose clusters
+// keep accepts. A window that showed only missing clusters has nothing left to
+// show and is not restored; a window saved without clusters is.
+func availableAppWindow(window panelwindow.NamedWorkspaceAppWindow, keep func(string) bool) (panelwindow.NamedWorkspaceAppWindow, bool) {
+	saved := len(window.ClusterTabs)
+	window.ClusterTabs = slices.DeleteFunc(slices.Clone(window.ClusterTabs), func(tab panelwindow.NamedWorkspaceClusterTab) bool { return !keep(tab.ClusterID) })
+	if saved > 0 && len(window.ClusterTabs) == 0 {
+		return window, false
+	}
+	window.DockedGroups = slices.DeleteFunc(slices.Clone(window.DockedGroups), func(dock panelwindow.NamedWorkspaceDockedGroup) bool { return !keep(dock.Group.ClusterID) })
+	if !slices.Contains(workspaceClusterIDs(window), window.SelectedClusterID) {
+		window.SelectedClusterID = ""
+		if len(window.ClusterTabs) > 0 {
+			window.SelectedClusterID = window.ClusterTabs[0].ClusterID
+		}
+	}
+	if len(window.ClusterTabs) < 2 {
+		window.GlobalView = nil
+	}
+	return window, true
+}
+
 func workspaceClusterIDs(window panelwindow.NamedWorkspaceAppWindow) []string {
 	ids := make([]string, 0, len(window.ClusterTabs))
 	for _, tab := range window.ClusterTabs {
@@ -146,10 +173,7 @@ func workspaceClusterIDs(window panelwindow.NamedWorkspaceAppWindow) []string {
 	return ids
 }
 
-func (r *Registry) stageNamedWorkspace(ctx context.Context, restore *namedWorkspaceRestore, snapshot panelwindow.NamedWorkspace, missing []string) error {
-	if len(snapshot.AppWindows) == 0 && len(snapshot.PanelWindows) == 0 {
-		return fmt.Errorf("no workspace windows can be restored; missing clusters: %v", missing)
-	}
+func (r *Registry) stageNamedWorkspace(ctx context.Context, restore *namedWorkspaceRestore, snapshot panelwindow.NamedWorkspace) error {
 	clusters := namedWorkspaceSelections(snapshot)
 	if len(clusters) != 0 {
 		restore.seeded = true
@@ -213,13 +237,7 @@ func (r *Registry) stageNamedAppWindow(restore *namedWorkspaceRestore, state pan
 			return err
 		}
 	}
-	payload, err := json.Marshal(struct {
-		Window panelwindow.NamedWorkspaceAppWindow `json:"window"`
-	}{state})
-	if err != nil {
-		return err
-	}
-	if !r.queueWorkspaceEvent(name, panelwindow.NamedWorkspaceRestoreRequested, panelwindow.NamedWorkspaceRestoreRequest{WindowName: name, State: string(payload)}) {
+	if !r.queueWorkspaceEvent(name, panelwindow.NamedWorkspaceRestoreRequested, panelwindow.NamedWorkspaceRestoreRequest{WindowName: name, Window: state}) {
 		return fmt.Errorf("could not queue the restored app window")
 	}
 	window := r.newWindow(r.namedWorkspaceWindowOptions(windowOptions(name), state.Geometry))
@@ -371,7 +389,7 @@ func (r *Registry) applyNamedWorkspaceBounds(target namedWorkspaceTarget) {
 	if positioned {
 		window.SetPosition(bounds.X, bounds.Y)
 	}
-	r.rememberNamedWorkspaceBounds(window, target.name)
+	r.rememberNamedWorkspaceBounds(target.name)
 	if target.geometry.Maximized {
 		window.Maximise()
 	}

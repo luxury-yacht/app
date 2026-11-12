@@ -169,6 +169,10 @@ export function DeleteGridTablePersistenceEntries(keys: string[] | null): $Cance
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.DeleteGridTablePersistenceEntries", keys);
 }
 
+export function DeleteNamedWorkspace(window: string, name: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.DeleteNamedWorkspace", window, name);
+}
+
 export function DeleteTheme(id: string): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.DeleteTheme", id);
 }
@@ -532,8 +536,12 @@ export function StopPortForward(sessionID: string): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.StopPortForward", sessionID);
 }
 
-export function SubmitNamedWorkspaceCapture(window: string, id: string, payload: string): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.SubmitNamedWorkspaceCapture", window, id, payload);
+/**
+ * SubmitNamedWorkspaceCapture is a window's reply to a capture request: its view,
+ * or the reason it could not report one.
+ */
+export function SubmitNamedWorkspaceCapture(window: string, id: string, view: panelwindow$0.NamedWorkspaceAppView, failure: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.SubmitNamedWorkspaceCapture", window, id, view, failure);
 }
 
 export function UpdateAppPreferences(request: $models.UpdateAppPreferencesRequest): $CancellablePromise<$models.UpdateAppPreferencesResponse | null> {

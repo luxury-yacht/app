@@ -2,8 +2,6 @@ package backend
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 
 	"github.com/luxury-yacht/app/internal/panelwindow"
 )
@@ -15,19 +13,24 @@ func (s *DesktopService) SaveNamedWorkspace(ctx context.Context, window, name st
 	return s.namedWorkspaces.SaveNamedWorkspace(ctx, window, name, replace)
 }
 
-func (s *DesktopService) SubmitNamedWorkspaceCapture(ctx context.Context, window, id, payload string) error {
+// SubmitNamedWorkspaceCapture is a window's reply to a capture request: its view,
+// or the reason it could not report one.
+func (s *DesktopService) SubmitNamedWorkspaceCapture(ctx context.Context, window, id string, view panelwindow.NamedWorkspaceAppView, failure string) error {
 	if err := validatePanelCommandCaller(ctx, window); err != nil {
 		return err
 	}
-	var state panelwindow.NamedWorkspaceAppWindow
-	if err := json.Unmarshal([]byte(payload), &state); err != nil {
-		return fmt.Errorf("invalid workspace capture: %w", err)
-	}
-	return s.namedWorkspaces.SubmitNamedWorkspaceCapture(window, id, state)
+	return s.namedWorkspaces.SubmitNamedWorkspaceCapture(window, id, view, failure)
 }
 
 func (s *DesktopService) ListNamedWorkspaces() ([]string, error) {
 	return s.namedWorkspaces.ListNamedWorkspaces()
+}
+
+func (s *DesktopService) DeleteNamedWorkspace(ctx context.Context, window, name string) error {
+	if err := validatePanelCommandCaller(ctx, window); err != nil {
+		return err
+	}
+	return s.namedWorkspaces.DeleteNamedWorkspace(name)
 }
 
 func (s *DesktopService) OpenNamedWorkspace(ctx context.Context, window, name string) error {

@@ -1,8 +1,9 @@
 import { useId, useRef, useState } from 'react';
-import { ListNamedWorkspaces, OpenNamedWorkspace } from '@/core/backend-api';
+import { DeleteNamedWorkspace, ListNamedWorkspaces, OpenNamedWorkspace } from '@/core/backend-api';
 import { getWindowIdentity } from '@/core/desktop-runtime';
 import { eventBus, useEventBus } from '@/core/events';
 import { ErrorSurface } from '@/shared/components/errors/ErrorSurface';
+import ConfirmationModal from '@/shared/components/modals/ConfirmationModal';
 import ModalHeader from '@/shared/components/modals/ModalHeader';
 import ModalSurface from '@/shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@/shared/components/modals/useModalFocusTrap';
@@ -14,8 +15,10 @@ export function NamedWorkspaceOpenDialog() {
   const [shown, setShown] = useState(false);
   const [names, setNames] = useState<string[] | null>(null);
   const [selected, setSelected] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [work, setWork] = useState<'open' | 'delete' | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [failure, setFailure] = useState<{ error: unknown; action: string } | null>(null);
+  const busy = work !== null;
   const close = () => {
     if (!busy) {
       setShown(false);
@@ -30,6 +33,7 @@ export function NamedWorkspaceOpenDialog() {
     setNames(null);
     setSelected('');
     setFailure(null);
+    setConfirmingDelete(false);
     void ListNamedWorkspaces()
       .then((saved) => {
         setNames(saved ?? []);
@@ -39,7 +43,7 @@ export function NamedWorkspaceOpenDialog() {
   });
   useModalFocusTrap({
     ref,
-    disabled: !shown,
+    disabled: !shown || confirmingDelete,
     onEscape: () => {
       close();
       return true;
@@ -50,7 +54,7 @@ export function NamedWorkspaceOpenDialog() {
     if (busy || !selected) {
       return;
     }
-    setBusy(true);
+    setWork('open');
     setFailure(null);
     try {
       await OpenNamedWorkspace(getWindowIdentity(), selected);
@@ -58,7 +62,24 @@ export function NamedWorkspaceOpenDialog() {
     } catch (error) {
       setFailure({ error, action: 'open' });
     } finally {
-      setBusy(false);
+      setWork(null);
+    }
+  };
+
+  // Deleting removes the saved layout only; the open windows are untouched.
+  const remove = async () => {
+    setConfirmingDelete(false);
+    setWork('delete');
+    setFailure(null);
+    try {
+      await DeleteNamedWorkspace(getWindowIdentity(), selected);
+      const remaining = (names ?? []).filter((name) => name !== selected);
+      setNames(remaining);
+      setSelected(remaining[0] ?? '');
+    } catch (error) {
+      setFailure({ error, action: 'delete' });
+    } finally {
+      setWork(null);
     }
   };
 
@@ -66,72 +87,117 @@ export function NamedWorkspaceOpenDialog() {
     return null;
   }
   return (
-    <ModalSurface
-      modalRef={ref}
-      labelledBy={title}
-      onClose={close}
-      containerClassName="named-workspace-save-modal"
-    >
-      <ModalHeader title="Open Workspace" titleId={title} onClose={close} closeDisabled={busy} />
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          void open();
-        }}
+    <>
+      <ModalSurface
+        modalRef={ref}
+        labelledBy={title}
+        onClose={close}
+        containerClassName="named-workspace-save-modal"
       >
-        <div className="modal-content">
-          {names?.length ? (
-            <>
-              <p>Opening a workspace replaces the current windows.</p>
-              <label className="modal-form-field">
-                Workspace
-                <select
-                  className="modal-input"
-                  value={selected}
-                  onChange={(event) => setSelected(event.target.value)}
-                  disabled={busy}
-                >
-                  {names.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </>
-          ) : names ? (
-            <p>No saved workspaces.</p>
-          ) : null}
-          {!!failure && (
-            <div role="alert">
-              <ErrorSurface
-                kind="operational"
-                error={failure.error}
-                context={{ source: 'NamedWorkspace', action: failure.action }}
-              />
-            </div>
-          )}
-        </div>
-        <div className="modal-footer">
-          <button type="button" className="button cancel" disabled={busy} onClick={close}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="button generic"
-            disabled={busy}
-            onClick={() => {
-              close();
-              eventBus.emit('named-workspace:save-dialog');
-            }}
-          >
-            Save Current As…
-          </button>
-          <button type="submit" className="button save" disabled={busy || !selected}>
-            {busy ? 'Opening…' : 'Open'}
-          </button>
-        </div>
-      </form>
-    </ModalSurface>
+        <ModalHeader title="Open Workspace" titleId={title} onClose={close} closeDisabled={busy} />
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void open();
+          }}
+        >
+          <div className="modal-content">
+            <SavedWorkspacePicker
+              names={names}
+              selected={selected}
+              disabled={busy}
+              onSelect={setSelected}
+            />
+            {!!failure && (
+              <div role="alert">
+                <ErrorSurface
+                  kind="operational"
+                  error={failure.error}
+                  context={{ source: 'NamedWorkspace', action: failure.action }}
+                />
+              </div>
+            )}
+          </div>
+          <div className="modal-footer">
+            {!!selected && (
+              <button
+                type="button"
+                className="button danger named-workspace-delete"
+                disabled={busy}
+                onClick={() => setConfirmingDelete(true)}
+              >
+                Delete
+              </button>
+            )}
+            <button type="button" className="button cancel" disabled={busy} onClick={close}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="button generic"
+              disabled={busy}
+              onClick={() => {
+                close();
+                eventBus.emit('named-workspace:save-dialog');
+              }}
+            >
+              Save Current As…
+            </button>
+            <button type="submit" className="button save" disabled={busy || !selected}>
+              {work === 'open' ? 'Opening…' : 'Open'}
+            </button>
+          </div>
+        </form>
+      </ModalSurface>
+      <ConfirmationModal
+        isOpen={confirmingDelete}
+        title="Delete Workspace"
+        message={`Delete "${selected}"? This cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmButtonClass="danger"
+        onConfirm={() => void remove()}
+        onCancel={() => setConfirmingDelete(false)}
+      />
+    </>
+  );
+}
+
+function SavedWorkspacePicker({
+  names,
+  selected,
+  disabled,
+  onSelect,
+}: Readonly<{
+  names: string[] | null;
+  selected: string;
+  disabled: boolean;
+  onSelect: (name: string) => void;
+}>) {
+  if (!names) {
+    return null;
+  }
+  if (names.length === 0) {
+    return <p>No saved workspaces.</p>;
+  }
+  return (
+    <>
+      <p>Opening a workspace replaces the current windows.</p>
+      <label className="modal-form-field">
+        Workspace
+        <select
+          className="modal-input"
+          value={selected}
+          onChange={(event) => onSelect(event.target.value)}
+          disabled={disabled}
+        >
+          {names.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
+      </label>
+    </>
   );
 }

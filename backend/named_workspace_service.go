@@ -12,13 +12,14 @@ type NamedWorkspaceCaptureCommands interface {
 	OpenNamedWorkspace(context.Context, string, panelwindow.NamedWorkspace) error
 	AcknowledgeNamedWorkspaceRestore(string, string) error
 	CaptureNamedWorkspace(context.Context, string) (panelwindow.NamedWorkspace, error)
-	SubmitNamedWorkspaceCapture(string, string, panelwindow.NamedWorkspaceAppWindow) error
+	SubmitNamedWorkspaceCapture(string, string, panelwindow.NamedWorkspaceAppView, string) error
 }
 
 type NamedWorkspaceStore interface {
 	GetNamedWorkspace(string) (*NamedWorkspace, error)
 	SaveNamedWorkspace(string, NamedWorkspace, bool) error
 	ListNamedWorkspaces() ([]string, error)
+	DeleteNamedWorkspace(string) error
 }
 
 type NamedWorkspaceService struct {
@@ -45,8 +46,12 @@ func (s *NamedWorkspaceService) ListNamedWorkspaces() ([]string, error) {
 	return s.store.ListNamedWorkspaces()
 }
 
-func (s *NamedWorkspaceService) SubmitNamedWorkspaceCapture(window, id string, state panelwindow.NamedWorkspaceAppWindow) error {
-	return s.windows.SubmitNamedWorkspaceCapture(window, id, state)
+func (s *NamedWorkspaceService) DeleteNamedWorkspace(name string) error {
+	return s.store.DeleteNamedWorkspace(name)
+}
+
+func (s *NamedWorkspaceService) SubmitNamedWorkspaceCapture(window, id string, view panelwindow.NamedWorkspaceAppView, failure string) error {
+	return s.windows.SubmitNamedWorkspaceCapture(window, id, view, failure)
 }
 
 func (s *NamedWorkspaceService) OpenNamedWorkspace(ctx context.Context, window, name string) error {

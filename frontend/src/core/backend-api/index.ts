@@ -34,6 +34,7 @@ export {
   DeleteFavorite,
   DeleteGridTablePersistence,
   DeleteGridTablePersistenceEntries,
+  DeleteNamedWorkspace,
   DeleteTheme,
   DiscoverNodeLogs,
   DownloadApplicationUpdate,

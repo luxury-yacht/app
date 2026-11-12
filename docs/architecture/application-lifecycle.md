@@ -219,13 +219,21 @@ Lock ordering:
 ## Close, quit, and shutdown
 
 Named workspace switches reuse the close preflight across the current app and
-panel renderers. The registry stages destination windows with a separate panel
+panel renderers. What can be restored is decided first: saved clusters that are
+no longer available are dropped, and a workspace with nothing left is refused
+before any window runs its guards. Once every window approves, the registry
+replaces the collected preflight, so a late collection timeout cannot release
+the frozen windows while the switch stages. The registry stages destination windows with a separate panel
 directory and admits their saved cluster selections before hydration. Each
 destination acknowledges reconstruction before the registry replaces the live
 directory at its expected revision and closes the old windows. A denied guard,
 failed mount, or changed window inventory releases staging and leaves the
 current arrangement available. Saved geometry uses the same logical work-area
 rules as startup, including the last normal bounds of maximized windows.
+
+Saving a workspace asks every ready app and panel window for one reply: its
+view, or the reason it has none. A failure reply ends the capture at once with
+that reason, and nothing is written.
 
 | Close | Wails surface | Backend contract |
 | --- | --- | --- |

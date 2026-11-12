@@ -51,6 +51,21 @@ func (s *UIStateStore) ListNamedWorkspaces() ([]string, error) {
 	return slices.Sorted(maps.Keys(state.Workspaces)), nil
 }
 
+func (s *UIStateStore) DeleteNamedWorkspace(name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state, err := s.loadPersistenceFile()
+	if err != nil {
+		return err
+	}
+	key := strings.TrimSpace(name)
+	if _, ok := state.Workspaces[key]; !ok {
+		return fmt.Errorf("workspace %q was not found", key)
+	}
+	delete(state.Workspaces, key)
+	return s.savePersistenceFile(state)
+}
+
 func (s *UIStateStore) GetNamedWorkspace(name string) (*NamedWorkspace, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

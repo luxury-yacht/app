@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import type { panelwindow } from '@/core/backend-api/models';
 import { useViewState } from '@/core/contexts/ViewStateContext';
 import { getWindowIdentity } from '@/core/desktop-runtime';
 import { getClusterTabOrder, mergeClusterTabOrder } from '@/core/persistence/clusterTabOrder';
@@ -23,7 +24,7 @@ export function NamedWorkspaceCapture() {
   const { getClusterGroupLayout } = useDockablePanelContext();
   const captureCluster = useCaptureClusterViewState();
   const sync = usePanelWorkspaceSync();
-  const capture = useCallback(async () => {
+  const capture = useCallback(async (): Promise<panelwindow.NamedWorkspaceAppView> => {
     await sync.flush();
     const ordered = mergeClusterTabOrder(selectedKubeconfigs, getClusterTabOrder());
     const clusterIds = ordered.map((selection) => getClusterMeta(selection).id);
