@@ -259,7 +259,7 @@ function RenameWorkspaceForm({
     >
       <div className="modal-content">
         <label className="modal-form-field">
-          New name
+          <span>New name</span>
           <input
             className="modal-input"
             name="workspace-new-name"
@@ -312,7 +312,7 @@ function SavedWorkspacePicker({
     <>
       <p>Opening a workspace replaces the current windows.</p>
       <label className="modal-form-field">
-        Workspace
+        <span>Workspace</span>
         <select
           className="modal-input"
           value={selected}

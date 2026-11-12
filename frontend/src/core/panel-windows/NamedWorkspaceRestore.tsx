@@ -27,9 +27,8 @@ async function restoreTables(saved: SavedWindow) {
   const states = (saved.clusterTabs ?? []).map((tab) =>
     decodeClusterViewState(JSON.stringify(tab.viewState), tab.clusterId)
   );
-  for (const state of states) {
-    await restoreClusterTableState(state.clusterId, state.tables);
-  }
+  // Each cluster's tables are restored independently of the others.
+  await Promise.all(states.map((state) => restoreClusterTableState(state.clusterId, state.tables)));
   if (saved.globalView) {
     await restoreWorkspaceTableState(
       Object.values(GLOBAL_TABLE_OWNERS).map(({ identity }) => identity),
@@ -95,7 +94,9 @@ export function NamedWorkspaceRestore() {
       if (globalView) {
         navigateToGlobal(globalView);
       }
-      (saved.dockedGroups ?? []).forEach(restoreDock);
+      for (const dock of saved.dockedGroups ?? []) {
+        restoreDock(dock);
+      }
       setMounted(saved);
     },
     [

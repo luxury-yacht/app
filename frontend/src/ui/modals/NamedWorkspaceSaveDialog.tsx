@@ -17,6 +17,8 @@ export function NamedWorkspaceSaveDialog() {
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<{ error: unknown; action: string } | null>(null);
   const replacing = names.includes(name.trim());
+  const idleLabel = replacing ? 'Replace Workspace' : 'Save';
+  const submitLabel = saving ? 'Saving…' : idleLabel;
   const close = () => {
     if (!saving) {
       setOpen(false);
@@ -78,7 +80,7 @@ export function NamedWorkspaceSaveDialog() {
       >
         <div className="modal-content">
           <label className="modal-form-field">
-            Workspace name
+            <span>Workspace name</span>
             <input
               className="modal-input"
               name="workspace-name"
@@ -103,7 +105,7 @@ export function NamedWorkspaceSaveDialog() {
             Cancel
           </button>
           <button type="submit" className="button save" disabled={saving || !name.trim()}>
-            {saving ? 'Saving…' : replacing ? 'Replace Workspace' : 'Save'}
+            {submitLabel}
           </button>
         </div>
       </form>
