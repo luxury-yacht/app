@@ -3,6 +3,8 @@ import { backend } from '@/core/backend-api/models';
 export interface WorkspaceApplicationMenuActions {
   close: () => void;
   openCluster: () => void;
+  saveWorkspace: () => void;
+  openWorkspace: () => void;
   toggleSettings: () => void;
   openCommandPalette: () => void;
   zoomIn: () => void;
@@ -28,6 +30,8 @@ const localActionByCommand: Partial<
 > = {
   [command.ApplicationMenuCommandClose]: 'close',
   [command.ApplicationMenuCommandOpenCluster]: 'openCluster',
+  [command.ApplicationMenuCommandSaveWorkspace]: 'saveWorkspace',
+  [command.ApplicationMenuCommandOpenWorkspace]: 'openWorkspace',
   [command.ApplicationMenuCommandSettings]: 'toggleSettings',
   [command.ApplicationMenuCommandCommandPalette]: 'openCommandPalette',
   [command.ApplicationMenuCommandZoomIn]: 'zoomIn',

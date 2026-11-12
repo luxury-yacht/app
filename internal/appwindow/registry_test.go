@@ -12,6 +12,7 @@ import (
 )
 
 type recordingLifecycleBackend struct {
+	availableWorkspaceClusters []string
 	commitClusterTransferError error
 	releasedPanelReferences    []string
 	directory                  *panelwindow.WorkspaceDirectory
@@ -1366,4 +1367,14 @@ func (b *recordingLifecycleBackend) CloseClusterView(windowID, clusterID string)
 		b.windowClusters[windowID] = slices.DeleteFunc(slices.Clone(b.windowClusters[windowID]), func(value string) bool { return value == clusterID })
 	}
 	return nil
+}
+
+func (b *recordingLifecycleBackend) NamedWorkspaceAvailableClusters() ([]string, error) {
+	return b.availableWorkspaceClusters, nil
+}
+func (*recordingLifecycleBackend) SeedNamedWorkspaceWindow(string, []string, string) error {
+	return nil
+}
+func (*recordingLifecycleBackend) ResolveNamedWorkspaceGeometry(geometry panelwindow.NamedWorkspaceGeometry) (panelwindow.WindowBounds, bool) {
+	return geometry.WindowBounds, true
 }

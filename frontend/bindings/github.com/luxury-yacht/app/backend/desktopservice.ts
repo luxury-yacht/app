@@ -57,6 +57,10 @@ export function AcknowledgeClusterTabTransfer(windowName: string, transferID: st
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.AcknowledgeClusterTabTransfer", windowName, transferID);
 }
 
+export function AcknowledgeNamedWorkspaceRestore(window: string, failure: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.AcknowledgeNamedWorkspaceRestore", window, failure);
+}
+
 /**
  * AcknowledgePanelTransfer settles a directory move this renderer was asked to
  * reconstruct: mounted commits it, otherwise the source keeps the panels.
@@ -345,6 +349,10 @@ export function IsWorkloadHPAManaged(target: resourcemodel$0.ResourceRef): $Canc
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.IsWorkloadHPAManaged", target);
 }
 
+export function ListNamedWorkspaces(): $CancellablePromise<string[] | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.ListNamedWorkspaces");
+}
+
 export function ListPortForwards(): $CancellablePromise<$models.PortForwardSession[] | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.ListPortForwards");
 }
@@ -379,6 +387,10 @@ export function OpenClusterWindow(windowName: string, clusterID: string): $Cance
 
 export function OpenKubeconfigSearchPathDialog(): $CancellablePromise<string> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.OpenKubeconfigSearchPathDialog");
+}
+
+export function OpenNamedWorkspace(window: string, name: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.OpenNamedWorkspace", window, name);
 }
 
 export function OpenPanelWorkspaceObject(windowName: string, tab: panelwindow$0.TabSnapshot): $CancellablePromise<panelwindow$0.PanelOpenResult> {
@@ -456,6 +468,10 @@ export function SaveLogFile(defaultFilename: string, content: string): $Cancella
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.SaveLogFile", defaultFilename, content);
 }
 
+export function SaveNamedWorkspace(window: string, name: string, replace: boolean): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.SaveNamedWorkspace", window, name, replace);
+}
+
 export function SaveTheme(theme: $models.Theme): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.SaveTheme", theme);
 }
@@ -514,6 +530,10 @@ export function StartShellSession(request: $models.ShellSessionRequest): $Cancel
 
 export function StopPortForward(sessionID: string): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.StopPortForward", sessionID);
+}
+
+export function SubmitNamedWorkspaceCapture(window: string, id: string, payload: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.SubmitNamedWorkspaceCapture", window, id, payload);
 }
 
 export function UpdateAppPreferences(request: $models.UpdateAppPreferencesRequest): $CancellablePromise<$models.UpdateAppPreferencesResponse | null> {

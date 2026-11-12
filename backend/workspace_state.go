@@ -2,6 +2,7 @@ package backend
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -364,4 +365,27 @@ func appendWorkspaceSelection(union *[]string, wanted, seen map[string]struct{},
 	}
 	seen[selection] = struct{}{}
 	*union = append(*union, selection)
+}
+
+// SeedNamedWorkspaceWindow admits the saved cluster tabs before renderer hydration.
+func (a *WorkspaceCoordinator) SeedNamedWorkspaceWindow(window string, selections []string, visible string) error {
+	command := ClusterWorkspaceCommand{WindowID: window, SelectedKubeconfigs: selections, UpdateSelectedKubeconfigs: true, VisibleClusterID: visible}
+	a.workspaceSelectionsMu.Lock()
+	current := a.GetSelectedKubeconfigs()
+	alreadySelected := !slices.ContainsFunc(selections, func(selection string) bool {
+		return !slices.Contains(current, selection)
+	})
+	if alreadySelected {
+		a.setWorkspaceSelectionsLocked(window, selections)
+	}
+	a.workspaceSelectionsMu.Unlock()
+	if alreadySelected {
+		a.updateClusterWorkspaceVisibility(window, command)
+		return nil
+	}
+	result := a.acceptWorkspaceSelection(window, command)
+	if result.Error != nil {
+		return fmt.Errorf("seed workspace selection: %v", result.Error)
+	}
+	return nil
 }

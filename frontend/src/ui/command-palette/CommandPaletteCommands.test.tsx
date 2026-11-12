@@ -505,3 +505,57 @@ describe('in the full app', () => {
     expect(viewState().viewType).toBe('namespace');
   });
 });
+
+it('saves a named workspace from the full app command palette', async () => {
+  app.backend.answer('ListNamedWorkspaces', () => ['Existing workspace']);
+  app.backend.answer('SaveNamedWorkspace', () => undefined);
+  view = await app.mountApp();
+  await menu('open-command-palette');
+  vi.useFakeTimers();
+  await type('save workspace');
+  await choose('Save Workspace…');
+  const input = requireValue(
+    document.querySelector<HTMLInputElement>('[role="dialog"] input[name="workspace-name"]'),
+    'expected the workspace name input'
+  );
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+      input,
+      'Existing workspace'
+    );
+    input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+  });
+  const save = requireValue(
+    document.querySelector<HTMLButtonElement>('[role="dialog"] button[type="submit"]'),
+    'expected the replacement button'
+  );
+  await act(async () => save.click());
+  expect(app.backend.calls('SaveNamedWorkspace')).toEqual([
+    [app.windowName, 'Existing workspace', true],
+  ]);
+  expect(document.body.contains(input)).toBe(false);
+});
+
+it('opens the selected workspace from the command palette', async () => {
+  app.backend.answer('ListNamedWorkspaces', () => ['Incident', 'Release']);
+  app.backend.answer('OpenNamedWorkspace', () => undefined);
+  view = await app.mountApp();
+  await menu('open-command-palette');
+  vi.useFakeTimers();
+  await type('open workspace');
+  await choose('Open Workspace…');
+  const select = requireValue(
+    document.querySelector<HTMLSelectElement>('[role="dialog"] select'),
+    'expected the saved-workspace picker'
+  );
+  await act(async () => {
+    select.value = 'Release';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  const open = requireValue(
+    document.querySelector<HTMLButtonElement>('[role="dialog"] button[type="submit"]'),
+    'expected the Open button'
+  );
+  await act(async () => open.click());
+  expect(app.backend.calls('OpenNamedWorkspace')).toEqual([[app.windowName, 'Release']]);
+});

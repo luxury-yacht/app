@@ -45,6 +45,9 @@ declare module "@wailsio/runtime" {
             "menu:cut": void;
             "menu:paste": string;
             "menu:selectAll": void;
+            "named-workspace:capture": panelwindow$0.NamedWorkspaceCaptureRequest;
+            "named-workspace:missing-clusters": panelwindow$0.NamedWorkspaceMissingClustersEvent;
+            "named-workspace:restore": panelwindow$0.NamedWorkspaceRestoreRequest;
             "object-shell:list": backend$0.ShellSessionInfo[] | null;
             "object-shell:output": backend$0.ShellOutputEvent;
             "object-shell:status": backend$0.ShellStatusEvent;
@@ -52,6 +55,7 @@ declare module "@wailsio/runtime" {
             "open-cluster": void;
             "open-command-palette": void;
             "open-settings": void;
+            "open-workspace": void;
             "panel-window:application-quit-preflight-requested": panelwindow$0.ApplicationQuitPreflightRequestedEvent;
             "panel-window:application-quit-preflight-settled": panelwindow$0.ApplicationQuitPreflightRequestedEvent;
             "panel-window:close-requested": panelwindow$0.WindowCloseRequestedEvent;
@@ -69,6 +73,7 @@ declare module "@wailsio/runtime" {
             "portforward:list": backend$0.PortForwardSession[] | null;
             "portforward:status": backend$0.PortForwardStatusEvent;
             "runtime-operations:list": backend$0.RuntimeOperation[] | null;
+            "save-workspace": void;
             "settings:appearance-mode-changed": backend$0.AppearanceModeChangedEvent;
             "settings:preferences-changed": void;
             "toggle-app-logs-panel": void;

@@ -65,6 +65,8 @@ func addFileMenu(appMenu *application.Menu, app menuController) {
 	addMenuText(fileMenu, "New Window", "CmdOrCtrl+n", applicationMenuCallback(app, ApplicationMenuCommandNewWindow))
 	fileMenu.AddSeparator()
 	addMenuText(fileMenu, "Open Cluster", "CmdOrCtrl+o", applicationMenuCallback(app, ApplicationMenuCommandOpenCluster))
+	addMenuText(fileMenu, "Open Workspace…", "", applicationMenuCallback(app, ApplicationMenuCommandOpenWorkspace))
+	addMenuText(fileMenu, "Save Workspace…", "", applicationMenuCallback(app, ApplicationMenuCommandSaveWorkspace))
 	addMenuText(fileMenu, "Close", "CmdOrCtrl+w", applicationMenuCallback(app, ApplicationMenuCommandClose))
 	if runtime.GOOS != "darwin" {
 		addDesktopFileMenuItems(fileMenu, app)

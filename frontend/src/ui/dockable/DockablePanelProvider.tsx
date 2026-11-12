@@ -27,7 +27,7 @@ import {
 } from './DockablePanelContext';
 import { DockablePanelDropTargets } from './DockablePanelDropTargets';
 import { DockablePanelGroup } from './DockablePanelGroup';
-import type { PanelLayoutStore } from './panelLayoutStore';
+import type { GroupLayoutState, PanelLayoutStore } from './panelLayoutStore';
 import { createPanelLayoutStore } from './panelLayoutStore';
 import { PanelLayoutStoreContext } from './panelLayoutStoreContext';
 import type { AdjacentTabActivationPreference } from './tabGroupState';
@@ -299,6 +299,16 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
   // the new store automatically.
   const getClusterTabGroups = useCallback(
     (clusterId: string) => getOrCreateStoreForCluster(clusterId).getTabGroups(),
+    [getOrCreateStoreForCluster]
+  );
+  const updateClusterGroupLayout = useCallback(
+    (clusterId: string, groupKey: GroupKey, layout: Partial<GroupLayoutState>) =>
+      getOrCreateStoreForCluster(clusterId).updateGroupLayout(groupKey, layout),
+    [getOrCreateStoreForCluster]
+  );
+  const getClusterGroupLayout = useCallback(
+    (clusterId: string, groupKey: GroupKey) =>
+      getOrCreateStoreForCluster(clusterId).getGroupLayout(groupKey),
     [getOrCreateStoreForCluster]
   );
   const tabGroups = useSyncExternalStore(activeStore.subscribeTabGroups, activeStore.getTabGroups);
@@ -871,6 +881,8 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       detachPanelGroup,
       discardPanelLayouts,
       getClusterTabGroups,
+      getClusterGroupLayout,
+      updateClusterGroupLayout,
       requestGroupMove,
       requestTabMove,
       canFloatPanel,
@@ -903,6 +915,8 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
       detachPanelGroup,
       discardPanelLayouts,
       getClusterTabGroups,
+      getClusterGroupLayout,
+      updateClusterGroupLayout,
       requestGroupMove,
       requestTabMove,
       canFloatPanel,

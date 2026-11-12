@@ -100,6 +100,7 @@ type lifecycleWorkspace interface {
 	panelwindow.ClusterViewTransferLifecycle
 	ReleaseWorkspaceWindow(string)
 	WindowClusterIDs(string) []string
+	SeedNamedWorkspaceWindow(string, []string, string) error
 	PanelWorkspaceDirectory() *panelwindow.WorkspaceDirectory
 	RetainPanelCluster(string, string) error
 	ReleasePanelCluster(string) error
@@ -433,4 +434,46 @@ func (a *ApplicationLifecycle) CancelClusterViewTransfer(target, clusterID strin
 
 func (a *ApplicationLifecycle) CloseClusterView(windowID, clusterID string) error {
 	return a.workspace.CloseClusterView(windowID, clusterID)
+}
+
+func (a *ApplicationLifecycle) NamedWorkspaceAvailableClusters() ([]string, error) {
+	discovered, err := a.clusterRuntime.GetKubeconfigs()
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(discovered.Kubeconfigs))
+	for _, config := range discovered.Kubeconfigs {
+		if !config.Invalid {
+			ids = append(ids, clusterMetaForKubeconfig(config).ID)
+		}
+	}
+	return ids, nil
+}
+
+func (a *ApplicationLifecycle) SeedNamedWorkspaceWindow(window string, clusters []string, visible string) error {
+	discovered, err := a.clusterRuntime.GetKubeconfigs()
+	if err != nil {
+		return err
+	}
+	selectionByID := make(map[string]string, len(discovered.Kubeconfigs))
+	for _, config := range discovered.Kubeconfigs {
+		if !config.Invalid {
+			selectionByID[clusterMetaForKubeconfig(config).ID] = (kubeconfigSelection{Path: config.Path, Context: config.Context}).String()
+		}
+	}
+	selections := make([]string, 0, len(clusters))
+	for _, id := range clusters {
+		selection, exists := selectionByID[id]
+		if !exists {
+			return fmt.Errorf("saved cluster %q is no longer available", id)
+		}
+		selections = append(selections, selection)
+	}
+	return a.workspace.SeedNamedWorkspaceWindow(window, selections, visible)
+}
+
+func (a *ApplicationLifecycle) ResolveNamedWorkspaceGeometry(geometry panelwindow.NamedWorkspaceGeometry) (panelwindow.WindowBounds, bool) {
+	saved := WindowSettings{X: geometry.X, Y: geometry.Y, Width: geometry.Width, Height: geometry.Height, Maximized: geometry.Maximized}
+	bounds, positioned := resolveWindowRestore(saved, a.desktopShell.WindowWorkAreas())
+	return panelwindow.WindowBounds{X: bounds.X, Y: bounds.Y, Width: bounds.Width, Height: bounds.Height}, positioned
 }

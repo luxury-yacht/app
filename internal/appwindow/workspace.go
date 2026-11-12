@@ -108,7 +108,7 @@ func (r *Registry) GetPanelWorkspace(windowName, clusterID string) (panelwindow.
 	if !r.windowHasCluster(windowName, clusterID) {
 		return panelwindow.WorkspaceSnapshot{}, fmt.Errorf("window %q does not display cluster %q", windowName, clusterID)
 	}
-	return r.workspace.Snapshot(clusterID), nil
+	return r.workspaceDirectoryFor(windowName).Snapshot(clusterID), nil
 }
 
 func (r *Registry) OpenPanelWorkspaceObject(windowName string, tab panelwindow.TabSnapshot) (panelwindow.PanelOpenResult, error) {
@@ -189,6 +189,12 @@ func (r *Registry) emitWorkspaceChanged(clusterID string) {
 }
 
 func (r *Registry) PublishDockedPanels(windowName string, groups []panelwindow.WorkspaceGroup) error {
+	if slot, staged := r.workspaceRestoreSlots.Load(windowName); staged {
+		if _, err := r.validateDockedPublication(windowName, groups); err != nil {
+			return err
+		}
+		return slot.(*namedWorkspaceRestoreSlot).directory.PublishWindow(windowName, panelwindow.PanelLocationDocked, groups)
+	}
 	clusterIDs, err := r.validateDockedPublication(windowName, groups)
 	if err != nil {
 		return err

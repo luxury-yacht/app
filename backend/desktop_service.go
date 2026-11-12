@@ -38,6 +38,15 @@ type UIStateCommands interface {
 	SetGridTablePersistence(string, json.RawMessage) error
 }
 
+// NamedWorkspaceCommands owns the desktop snapshot workflow.
+type NamedWorkspaceCommands interface {
+	OpenNamedWorkspace(context.Context, string, string) error
+	AcknowledgeNamedWorkspaceRestore(string, string) error
+	SaveNamedWorkspace(context.Context, string, string, bool) error
+	SubmitNamedWorkspaceCapture(string, string, panelwindow.NamedWorkspaceAppWindow) error
+	ListNamedWorkspaces() ([]string, error)
+}
+
 // PreferencesCommands is the frontend command surface owned by PreferencesService.
 type PreferencesCommands interface {
 	ApplyTheme(string) error
@@ -191,22 +200,23 @@ type DesktopServiceLifecycle interface {
 // by their focused owners; process startup and shutdown belong to
 // ApplicationLifecycle.
 type DesktopServiceDependencies struct {
-	Favorites      FavoritesCommands
-	UIState        UIStateCommands
-	Preferences    PreferencesCommands
-	DataManagement DataManagementCommands
-	Attention      ClusterAttentionCommands
-	Workspace      WorkspaceCommands
-	ClusterRuntime ClusterRuntimeCommands
-	Resources      ResourceCommands
-	Operations     OperationsCommands
-	Updates        UpdateCommands
-	Logs           AppLogCommands
-	DesktopShell   DesktopShellCommands
-	PanelWindows   PanelWindowCommands
-	PanelMetrics   PanelMetricsCommands
-	Lifecycle      DesktopServiceLifecycle
-	HTTP           http.Handler
+	NamedWorkspaces NamedWorkspaceCommands
+	Favorites       FavoritesCommands
+	UIState         UIStateCommands
+	Preferences     PreferencesCommands
+	DataManagement  DataManagementCommands
+	Attention       ClusterAttentionCommands
+	Workspace       WorkspaceCommands
+	ClusterRuntime  ClusterRuntimeCommands
+	Resources       ResourceCommands
+	Operations      OperationsCommands
+	Updates         UpdateCommands
+	Logs            AppLogCommands
+	DesktopShell    DesktopShellCommands
+	PanelWindows    PanelWindowCommands
+	PanelMetrics    PanelMetricsCommands
+	Lifecycle       DesktopServiceLifecycle
+	HTTP            http.Handler
 }
 
 // DesktopService is the sole Wails-bound backend service. It owns transport
@@ -214,43 +224,45 @@ type DesktopServiceDependencies struct {
 //
 //wails:inject t*:void BindingModelAnchor;
 type DesktopService struct {
-	favorites      FavoritesCommands
-	uiState        UIStateCommands
-	preferences    PreferencesCommands
-	dataManagement DataManagementCommands
-	attention      ClusterAttentionCommands
-	workspace      WorkspaceCommands
-	clusterRuntime ClusterRuntimeCommands
-	resources      ResourceCommands
-	operations     OperationsCommands
-	updates        UpdateCommands
-	logs           AppLogCommands
-	desktopShell   DesktopShellCommands
-	panelWindows   PanelWindowCommands
-	panelMetrics   PanelMetricsCommands
-	lifecycle      DesktopServiceLifecycle
-	http           http.Handler
+	namedWorkspaces NamedWorkspaceCommands
+	favorites       FavoritesCommands
+	uiState         UIStateCommands
+	preferences     PreferencesCommands
+	dataManagement  DataManagementCommands
+	attention       ClusterAttentionCommands
+	workspace       WorkspaceCommands
+	clusterRuntime  ClusterRuntimeCommands
+	resources       ResourceCommands
+	operations      OperationsCommands
+	updates         UpdateCommands
+	logs            AppLogCommands
+	desktopShell    DesktopShellCommands
+	panelWindows    PanelWindowCommands
+	panelMetrics    PanelMetricsCommands
+	lifecycle       DesktopServiceLifecycle
+	http            http.Handler
 }
 
 // NewDesktopService constructs the Wails transport from owner-shaped collaborators.
 func NewDesktopService(dependencies DesktopServiceDependencies) *DesktopService {
 	return &DesktopService{
-		favorites:      dependencies.Favorites,
-		uiState:        dependencies.UIState,
-		preferences:    dependencies.Preferences,
-		dataManagement: dependencies.DataManagement,
-		attention:      dependencies.Attention,
-		workspace:      dependencies.Workspace,
-		clusterRuntime: dependencies.ClusterRuntime,
-		resources:      dependencies.Resources,
-		operations:     dependencies.Operations,
-		updates:        dependencies.Updates,
-		logs:           dependencies.Logs,
-		desktopShell:   dependencies.DesktopShell,
-		panelWindows:   dependencies.PanelWindows,
-		panelMetrics:   dependencies.PanelMetrics,
-		lifecycle:      dependencies.Lifecycle,
-		http:           dependencies.HTTP,
+		namedWorkspaces: dependencies.NamedWorkspaces,
+		favorites:       dependencies.Favorites,
+		uiState:         dependencies.UIState,
+		preferences:     dependencies.Preferences,
+		dataManagement:  dependencies.DataManagement,
+		attention:       dependencies.Attention,
+		workspace:       dependencies.Workspace,
+		clusterRuntime:  dependencies.ClusterRuntime,
+		resources:       dependencies.Resources,
+		operations:      dependencies.Operations,
+		updates:         dependencies.Updates,
+		logs:            dependencies.Logs,
+		desktopShell:    dependencies.DesktopShell,
+		panelWindows:    dependencies.PanelWindows,
+		panelMetrics:    dependencies.PanelMetrics,
+		lifecycle:       dependencies.Lifecycle,
+		http:            dependencies.HTTP,
 	}
 }
 

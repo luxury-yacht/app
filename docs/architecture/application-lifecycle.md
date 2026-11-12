@@ -218,6 +218,15 @@ Lock ordering:
 
 ## Close, quit, and shutdown
 
+Named workspace switches reuse the close preflight across the current app and
+panel renderers. The registry stages destination windows with a separate panel
+directory and admits their saved cluster selections before hydration. Each
+destination acknowledges reconstruction before the registry replaces the live
+directory at its expected revision and closes the old windows. A denied guard,
+failed mount, or changed window inventory releases staging and leaves the
+current arrangement available. Saved geometry uses the same logical work-area
+rules as startup, including the last normal bounds of maximized windows.
+
 | Close | Wails surface | Backend contract |
 | --- | --- | --- |
 | App window | Cancellable `events.Common.WindowClosing` starts a renderer preflight | Denial keeps it open. Releases only that view's cluster tabs and foreground demand; docked panel identities stay in the directory; floating panels stay live. Cancels the transfers it takes part in and declines every directory move addressed to it. |

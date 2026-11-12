@@ -515,6 +515,25 @@ export function useCommandPaletteCommands() {
         keywords: ['short', 'names', 'abbreviations', 'types', 'resources', 'toggle'],
       },
 
+      {
+        id: 'open-workspace',
+        label: 'Open Workspace…',
+        description: 'Replace the current windows with a saved layout',
+        icon: <SettingsIcon width={16} height={16} />,
+        category: 'Application',
+        action: () => eventBus.emit('named-workspace:open-dialog'),
+        keywords: ['workspace', 'open', 'restore', 'windows', 'layout'],
+      },
+      {
+        id: 'save-workspace',
+        label: 'Save Workspace…',
+        description: 'Save the layout of all app and panel windows',
+        icon: <SettingsIcon width={16} height={16} />,
+        category: 'Application',
+        action: () => eventBus.emit('named-workspace:save-dialog'),
+        keywords: ['workspace', 'save', 'windows', 'layout'],
+      },
+
       // Navigation Commands
       {
         id: 'close-cluster-tab',

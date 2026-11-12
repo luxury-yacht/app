@@ -12,6 +12,8 @@ describe('dispatchWorkspaceApplicationMenuCommand', () => {
     const actions: WorkspaceApplicationMenuActions = {
       close: vi.fn(),
       openCluster: vi.fn(),
+      saveWorkspace: vi.fn(),
+      openWorkspace: vi.fn(),
       toggleSettings: vi.fn(),
       openCommandPalette: vi.fn(),
       zoomIn: vi.fn(),

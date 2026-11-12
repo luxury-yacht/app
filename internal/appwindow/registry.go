@@ -19,6 +19,9 @@ type lifecycleBackend interface {
 	PrepareQuitFromWindow(windowName string) bool
 	SaveWorkspaceWindowGeometry(string)
 	WindowClusterIDs(string) []string
+	NamedWorkspaceAvailableClusters() ([]string, error)
+	SeedNamedWorkspaceWindow(string, []string, string) error
+	ResolveNamedWorkspaceGeometry(panelwindow.NamedWorkspaceGeometry) (panelwindow.WindowBounds, bool)
 	panelwindow.ClusterViewTransferLifecycle
 	PanelWorkspaceDirectory() *panelwindow.WorkspaceDirectory
 	RetainPanelCluster(string, string) error
@@ -27,43 +30,48 @@ type lifecycleBackend interface {
 
 // Registry owns the application's peer workspace windows and their lifecycle.
 type Registry struct {
-	clusterCloseMu         sync.Mutex
-	nextClusterClose       uint64
-	clusterPanelCloses     map[string]*clusterPanelClose
-	clusterTransfers       transferLifecycle[clusterViewTransfer]
-	application            *application.App
-	backend                lifecycleBackend
-	lifecycle              *lifecycle
-	panels                 *panelIndex
-	workspace              *panelwindow.WorkspaceDirectory
-	workspaceMu            sync.Mutex
-	clusterTransferMu      sync.Mutex
-	newWindow              func(application.WebviewWindowOptions) *application.WebviewWindow
-	configurePanelWindow   func(*application.WebviewWindow)
-	showWindow             func(string) bool
-	closeWindow            func(string) bool
-	requestApplicationQuit func()
-	focusWindow            func(string) bool
-	emitWindowEvent        func(string, string, any) bool
-	windowGeometry         func(string) (geometry, bool)
-	screenWorkAreas        func() []application.Rect
-	closeMu                sync.Mutex
-	authorizedClose        map[string]struct{}
-	workspaceReady         map[string]struct{}
-	panelWorkspaceReady    map[string]struct{}
-	queuedWorkspaceEvents  map[string][]workspaceWindowEvent
-	panelOpenTimeout       time.Duration
-	panelDockTimeout       time.Duration
-	clusterTransferTimeout time.Duration
-	clusterCloseTimeout    time.Duration
-	quitMu                 sync.Mutex
-	nextQuit               uint64
-	pendingQuit            *applicationQuitPreflight
-	quitPreflightTimeout   time.Duration
-	panelTransferMu        sync.Mutex
-	tabTransferMu          sync.Mutex
-	tabTransfers           transferLifecycle[panelTabTransfer]
-	tabTransferTimeout     time.Duration
+	namedWorkspaceOperation sync.Mutex
+	workspaceCaptureMu      sync.Mutex
+	workspaceCapture        *namedWorkspaceCapture
+	workspaceRestoreSlots   sync.Map
+	normalWorkspaceBounds   sync.Map
+	clusterCloseMu          sync.Mutex
+	nextClusterClose        uint64
+	clusterPanelCloses      map[string]*clusterPanelClose
+	clusterTransfers        transferLifecycle[clusterViewTransfer]
+	application             *application.App
+	backend                 lifecycleBackend
+	lifecycle               *lifecycle
+	panels                  *panelIndex
+	workspace               *panelwindow.WorkspaceDirectory
+	workspaceMu             sync.Mutex
+	clusterTransferMu       sync.Mutex
+	newWindow               func(application.WebviewWindowOptions) *application.WebviewWindow
+	configurePanelWindow    func(*application.WebviewWindow)
+	showWindow              func(string) bool
+	closeWindow             func(string) bool
+	requestApplicationQuit  func()
+	focusWindow             func(string) bool
+	emitWindowEvent         func(string, string, any) bool
+	windowGeometry          func(string) (geometry, bool)
+	screenWorkAreas         func() []application.Rect
+	closeMu                 sync.Mutex
+	authorizedClose         map[string]struct{}
+	workspaceReady          map[string]struct{}
+	panelWorkspaceReady     map[string]struct{}
+	queuedWorkspaceEvents   map[string][]workspaceWindowEvent
+	panelOpenTimeout        time.Duration
+	panelDockTimeout        time.Duration
+	clusterTransferTimeout  time.Duration
+	clusterCloseTimeout     time.Duration
+	quitMu                  sync.Mutex
+	nextQuit                uint64
+	pendingQuit             *applicationQuitPreflight
+	quitPreflightTimeout    time.Duration
+	panelTransferMu         sync.Mutex
+	tabTransferMu           sync.Mutex
+	tabTransfers            transferLifecycle[panelTabTransfer]
+	tabTransferTimeout      time.Duration
 }
 
 type applicationQuitPreflight struct {
@@ -71,6 +79,7 @@ type applicationQuitPreflight struct {
 	participants  []string
 	waiting       map[string]struct{}
 	timeout       *time.Timer
+	replacement   chan bool
 }
 
 type geometry struct {
@@ -381,9 +390,13 @@ func (r *Registry) registerLifecycleHooks(
 	name string,
 	restoreGeometry bool,
 ) {
+	r.trackNamedWorkspaceBounds(window, name)
 	window.OnWindowEvent(events.Common.WindowRuntimeReady, func(*application.WindowEvent) {
-		r.backend.WindowRuntimeReady(name, restoreGeometry)
+		if _, staged := r.workspaceRestoreSlots.Load(name); !staged {
+			r.backend.WindowRuntimeReady(name, restoreGeometry)
+		}
 		r.markWorkspaceReady(name)
+		r.rememberNamedWorkspaceBounds(window, name)
 	})
 	window.OnWindowEvent(events.Common.WindowFocus, func(*application.WindowEvent) {
 		r.lifecycle.Focus(name)
@@ -416,6 +429,7 @@ func (r *Registry) authorizeClose(name string) {
 func (r *Registry) closeAuthorizedWindow(name string) bool {
 	r.authorizeClose(name)
 	if r.closeWindow(name) {
+		r.normalWorkspaceBounds.Delete(name)
 		return true
 	}
 	r.consumeAuthorizedClose(name)
@@ -513,6 +527,13 @@ func (r *Registry) WindowDescriptor(name string) (NativeWindowDescriptor, error)
 // AcknowledgePanelWindowReady reveals the hidden native target, then commits the
 // directory move. A stale acknowledgement leaves the source transfer pending.
 func (r *Registry) AcknowledgePanelWindowReady(name, transferID string) (PanelWindowDescriptor, error) {
+	if _, staged := r.workspaceRestoreSlots.Load(name); staged {
+		descriptor, err := r.panels.AcknowledgeOpen(name, transferID)
+		if err != nil {
+			return PanelWindowDescriptor{}, err
+		}
+		return r.withPanelGroup(descriptor), r.AcknowledgeNamedWorkspaceRestore(name, "")
+	}
 	r.panelTransferMu.Lock()
 	defer r.panelTransferMu.Unlock()
 	descriptor, err := r.panels.Pending(name, transferID, PanelWindowStateOpening)
@@ -542,7 +563,7 @@ func (r *Registry) withPanelGroup(descriptor PanelWindowDescriptor) PanelWindowD
 	if descriptor.State == PanelWindowStateOpening {
 		opening = descriptor.TransferID
 	}
-	descriptor.Group = r.workspace.WindowGroup(descriptor.ClusterID, descriptor.WindowName, descriptor.GroupID, opening)
+	descriptor.Group = r.workspaceDirectoryFor(descriptor.WindowName).WindowGroup(descriptor.ClusterID, descriptor.WindowName, descriptor.GroupID, opening)
 	return descriptor
 }
 
@@ -735,10 +756,12 @@ func (r *Registry) PublishPanelWindowGroup(windowName string, group panelwindow.
 	if err := r.panels.ValidatePublication(windowName, group); err != nil {
 		return err
 	}
-	if err := r.workspace.PublishWindow(windowName, panelwindow.PanelLocationWindow, []panelwindow.WorkspaceGroup{group}); err != nil {
+	if err := r.workspaceDirectoryFor(windowName).PublishWindow(windowName, panelwindow.PanelLocationWindow, []panelwindow.WorkspaceGroup{group}); err != nil {
 		return err
 	}
-	r.emitWorkspaceChanged(group.ClusterID)
+	if _, staged := r.workspaceRestoreSlots.Load(windowName); !staged {
+		r.emitWorkspaceChanged(group.ClusterID)
+	}
 	return nil
 }
 
@@ -812,12 +835,9 @@ func (r *Registry) AcknowledgeApplicationQuitPreflight(
 		return fmt.Errorf("workspace %q is not awaiting application quit preflight", callerWindowName)
 	}
 	if !allowed {
-		if pending.timeout != nil {
-			pending.timeout.Stop()
-		}
 		r.pendingQuit = nil
 		r.quitMu.Unlock()
-		r.settleApplicationQuitPreflight(pending)
+		r.finishDeniedApplicationPreflight(pending)
 		return nil
 	}
 	delete(pending.waiting, callerWindowName)
@@ -827,6 +847,11 @@ func (r *Registry) AcknowledgeApplicationQuitPreflight(
 	}
 	if pending.timeout != nil {
 		pending.timeout.Stop()
+	}
+	if pending.replacement != nil {
+		r.quitMu.Unlock()
+		pending.replacement <- true
+		return nil
 	}
 	// Replace the collection phase so an already-running collection timeout
 	// cannot cancel an approved handoff. Keep renderers frozen until shutdown.
@@ -960,6 +985,16 @@ func (r *Registry) readyWorkspaceNames() []string {
 	return ready
 }
 
+func (r *Registry) finishDeniedApplicationPreflight(pending *applicationQuitPreflight) {
+	if pending.timeout != nil {
+		pending.timeout.Stop()
+	}
+	r.settleApplicationQuitPreflight(pending)
+	if pending.replacement != nil {
+		pending.replacement <- false
+	}
+}
+
 func (r *Registry) expireApplicationQuitPreflight(pending *applicationQuitPreflight) {
 	r.cancelApplicationQuitPreflight(pending)
 }
@@ -976,6 +1011,12 @@ func (r *Registry) cancelApplicationQuitPreflight(pending *applicationQuitPrefli
 	r.pendingQuit = nil
 	r.quitMu.Unlock()
 	r.settleApplicationQuitPreflight(pending)
+	if pending.replacement != nil {
+		select {
+		case pending.replacement <- false:
+		default:
+		}
+	}
 }
 
 func (r *Registry) settleApplicationQuitPreflight(pending *applicationQuitPreflight) {
@@ -1015,8 +1056,8 @@ func (r *Registry) emitApplicationQuitPreflight(
 ) {
 	for _, workspaceName := range readyWorkspaces {
 		if !r.emitWindowEvent(workspaceName, panelwindow.ApplicationQuitPreflightRequestedEventName, panelwindow.ApplicationQuitPreflightRequestedEvent{
-			TransactionID: pending.transactionID,
-			WindowName:    workspaceName,
+			TransactionID: pending.transactionID, SwitchingWorkspace: pending.replacement != nil,
+			WindowName: workspaceName,
 		}) {
 			r.cancelApplicationQuitPreflight(pending)
 			return
@@ -1050,7 +1091,7 @@ func (r *Registry) PrepareApplicationQuit() bool {
 		return true
 	}
 	r.quitMu.Lock()
-	if r.pendingQuit != nil && len(r.pendingQuit.waiting) == 0 {
+	if r.pendingQuit != nil && r.pendingQuit.replacement == nil && len(r.pendingQuit.waiting) == 0 {
 		return r.finishApprovedApplicationQuitLocked()
 	}
 	if r.pendingQuit != nil {

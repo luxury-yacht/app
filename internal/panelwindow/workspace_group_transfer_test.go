@@ -155,6 +155,44 @@ func TestGroupTransferRejectsStaleSourceAndOverlappingTransferAtomically(t *test
 	require.Error(t, directory.BeginGroupTransfer(floatTransfer("float-3", "app-b", second)), "transfer IDs are unique")
 }
 
+func TestWorkspaceCaptureWaitsForThePanelMoveToSettle(t *testing.T) {
+	directory := NewWorkspaceDirectory()
+	tab := workspaceTab("production", "api")
+	openDocked(t, directory, "app-a", tab)
+	require.NoError(t, directory.BeginGroupTransfer(floatTransfer("float", "app-a", tab)))
+	_, err := directory.WorkspaceCaptureRevision()
+	require.Error(t, err)
+	directory.CancelGroupTransfer("float")
+	_, err = directory.WorkspaceCaptureRevision()
+	require.NoError(t, err)
+	groups := directory.DockedGroups("production", "app-a")
+	require.Len(t, groups, 1)
+	require.Equal(t, []TabSnapshot{tab}, groups[0].Tabs)
+	require.Empty(t, directory.DockedGroups("staging", "app-a"))
+}
+
+func TestNamedWorkspaceCommitKeepsOldPanelsUntilValidatedPlacementsAreReady(t *testing.T) {
+	current, staged := NewWorkspaceDirectory(), NewWorkspaceDirectory()
+	kept, dropped := workspaceTab("production", "api"), workspaceTab("production", "worker")
+	openDocked(t, current, "app-a", kept, dropped)
+	var removed []PanelKey
+	current.SetPanelRemovalHandler(func(keys []PanelKey) { removed = append(removed, keys...) })
+	revision, err := current.WorkspaceCaptureRevision()
+	require.NoError(t, err)
+	group := WorkspaceGroup{ClusterID: "production", GroupID: "floating", Tabs: []TabSnapshot{kept}, ActivePanelID: kept.PanelID}
+	require.NoError(t, staged.StageNamedWorkspaceGroup("panel-2", PanelLocationWindow, group))
+	require.Error(t, staged.StageNamedWorkspaceGroup("panel-3", PanelLocationWindow, group))
+	require.Equal(t, []string{"production"}, staged.RestoredWorkspaceClusters())
+	require.Error(t, current.CommitNamedWorkspace(staged, revision-1))
+	require.Len(t, current.Snapshot("production").Panels, 2)
+	require.Empty(t, removed)
+	require.NoError(t, current.CommitNamedWorkspace(staged, revision))
+	panels := current.Snapshot("production").Panels
+	require.Len(t, panels, 1)
+	require.Equal(t, "panel-2", panels[0].Location.WindowName)
+	require.Equal(t, []PanelKey{{ClusterID: "production", PanelID: dropped.PanelID}}, removed)
+}
+
 func TestDockedGroupCommitAppendsAfterExistingTabsAndMovesActivation(t *testing.T) {
 	directory := NewWorkspaceDirectory()
 	source, existing := workspaceTab("production", "source"), workspaceTab("production", "existing")

@@ -1,12 +1,20 @@
 package appwindow
 
 import (
+	"context"
 	"testing"
 
 	"github.com/luxury-yacht/app/internal/panelwindow"
 	"github.com/stretchr/testify/require"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
+
+func (*recordingNativeWindowRegistry) CaptureNamedWorkspace(context.Context, string) (panelwindow.NamedWorkspace, error) {
+	return panelwindow.NamedWorkspace{}, nil
+}
+func (*recordingNativeWindowRegistry) SubmitNamedWorkspaceCapture(string, string, panelwindow.NamedWorkspaceAppWindow) error {
+	return nil
+}
 
 type recordingNativeWindowRegistry struct {
 	panelwindow.SharedWorkspaceCommands
@@ -217,4 +225,11 @@ func TestWindowRegistryBridgeForwardsEveryRuntimeOperationAfterBinding(t *testin
 		"fail-tab-transfer",
 		"acknowledge-quit",
 	}, registry.calls)
+}
+
+func (*recordingNativeWindowRegistry) OpenNamedWorkspace(context.Context, string, panelwindow.NamedWorkspace) error {
+	return nil
+}
+func (*recordingNativeWindowRegistry) AcknowledgeNamedWorkspaceRestore(string, string) error {
+	return nil
 }

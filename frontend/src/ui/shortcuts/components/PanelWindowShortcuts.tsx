@@ -36,6 +36,8 @@ import {
 } from '@/core/panel-windows/tabTransfer';
 import { useApplicationQuitPreflight } from '@/core/panel-windows/useApplicationQuitPreflight';
 import { useClosedPanelIntents } from '@/core/panel-windows/useClosedPanelIntents';
+import { useNamedWorkspaceCapture } from '@/core/panel-windows/useNamedWorkspaceCapture';
+import { useNamedWorkspaceNotice } from '@/core/panel-windows/useNamedWorkspaceNotice';
 import type { ViewType } from '@/modules/object-panel/components/ObjectPanel/types';
 import {
   useObjectPanelActiveTabs,
@@ -50,6 +52,11 @@ import {
   dispatchPanelApplicationMenuCommand,
   type PanelApplicationMenuActions,
 } from './panelApplicationMenuCommands';
+
+async function capturePanelWindow() {
+  await nativePanelPublication.flush();
+  return {};
+}
 
 export function PanelWindowShortcuts({
   descriptor,
@@ -102,6 +109,8 @@ export function PanelWindowShortcuts({
     [guards, openPanels, ready, focusLifecycleBlocker]
   );
   useApplicationQuitPreflight(descriptor.windowName, prepareClose);
+  useNamedWorkspaceCapture(descriptor.windowName, capturePanelWindow);
+  useNamedWorkspaceNotice(descriptor.windowName);
 
   useEffect(() => {
     const stopRequest = onClusterPanelCloseRequested((event) => {

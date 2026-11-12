@@ -14,6 +14,8 @@ type ApplicationMenuCommand string
 
 const (
 	ApplicationMenuCommandNewWindow         ApplicationMenuCommand = "new-window"
+	ApplicationMenuCommandOpenWorkspace     ApplicationMenuCommand = "open-workspace"
+	ApplicationMenuCommandSaveWorkspace     ApplicationMenuCommand = "save-workspace"
 	ApplicationMenuCommandOpenCluster       ApplicationMenuCommand = "open-cluster"
 	ApplicationMenuCommandClose             ApplicationMenuCommand = "close"
 	ApplicationMenuCommandSettings          ApplicationMenuCommand = "settings"
@@ -250,6 +252,10 @@ func (s *DesktopShell) ExecuteApplicationMenuCommand(
 	}
 
 	switch command {
+	case ApplicationMenuCommandOpenWorkspace:
+		return s.emitOwnerApplicationMenuEvent(caller, panelwindow.WorkspaceCommandOpenWorkspace)
+	case ApplicationMenuCommandSaveWorkspace:
+		return s.emitOwnerApplicationMenuEvent(caller, panelwindow.WorkspaceCommandSaveWorkspace)
 	case ApplicationMenuCommandOpenCluster:
 		return s.emitOwnerApplicationMenuEvent(caller, panelwindow.WorkspaceCommandOpenCluster)
 	case ApplicationMenuCommandClose:

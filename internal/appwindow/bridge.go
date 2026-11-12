@@ -1,6 +1,7 @@
 package appwindow
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/internal/panelwindow"
@@ -8,6 +9,10 @@ import (
 )
 
 type nativeWindowRegistry interface {
+	OpenNamedWorkspace(context.Context, string, panelwindow.NamedWorkspace) error
+	AcknowledgeNamedWorkspaceRestore(string, string) error
+	CaptureNamedWorkspace(context.Context, string) (panelwindow.NamedWorkspace, error)
+	SubmitNamedWorkspaceCapture(string, string, panelwindow.NamedWorkspaceAppWindow) error
 	panelwindow.SharedWorkspaceCommands
 	PrepareApplicationQuit() bool
 	FocusMostRecent()
@@ -27,6 +32,22 @@ type nativeWindowRegistry interface {
 	AcceptPanelTabTransfer(string, string) error
 	FailPanelTabTransfer(string, string) error
 	AcknowledgeApplicationQuitPreflight(string, string, bool) error
+}
+
+func (bridge *Bridge) CaptureNamedWorkspace(ctx context.Context, window string) (panelwindow.NamedWorkspace, error) {
+	registry, err := bridge.registryOrError()
+	if err != nil {
+		return panelwindow.NamedWorkspace{}, err
+	}
+	return registry.CaptureNamedWorkspace(ctx, window)
+}
+
+func (bridge *Bridge) SubmitNamedWorkspaceCapture(window, id string, state panelwindow.NamedWorkspaceAppWindow) error {
+	registry, err := bridge.registryOrError()
+	if err != nil {
+		return err
+	}
+	return registry.SubmitNamedWorkspaceCapture(window, id, state)
 }
 
 // Bridge breaks the startup cycle between backend composition
@@ -218,4 +239,20 @@ func (bridge *Bridge) AcknowledgeApplicationQuit(
 		return err
 	}
 	return registry.AcknowledgeApplicationQuitPreflight(callerWindowName, transactionID, allowed)
+}
+
+func (bridge *Bridge) OpenNamedWorkspace(ctx context.Context, window string, snapshot panelwindow.NamedWorkspace) error {
+	registry, err := bridge.registryOrError()
+	if err != nil {
+		return err
+	}
+	return registry.OpenNamedWorkspace(ctx, window, snapshot)
+}
+
+func (bridge *Bridge) AcknowledgeNamedWorkspaceRestore(window, failure string) error {
+	registry, err := bridge.registryOrError()
+	if err != nil {
+		return err
+	}
+	return registry.AcknowledgeNamedWorkspaceRestore(window, failure)
 }

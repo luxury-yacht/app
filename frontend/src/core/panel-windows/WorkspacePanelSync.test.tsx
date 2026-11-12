@@ -100,6 +100,90 @@ const start = async ({ open = ['api'] }: { open?: string[] } = {}) => {
   }
 };
 
+it('captures the addressed app window and its docked panel through the native request', async () => {
+  await start();
+  app.backend.answer('SubmitNamedWorkspaceCapture', () => undefined);
+  await act(async () => {
+    app.events.emit('named-workspace:capture', { id: 'other', windowName: 'another-window' });
+    app.events.emit('named-workspace:capture', { id: 'current', windowName: app.windowName });
+  });
+  await app.settle();
+  const calls = app.backend.calls('SubmitNamedWorkspaceCapture');
+  expect(calls).toHaveLength(1);
+  const [window, id, payload] = calls[0];
+  expect(window).toBe(app.windowName);
+  expect(id).toBe('current');
+  expect(JSON.parse(payload)).toMatchObject({
+    selectedClusterId: production.clusterId,
+    clusterTabs: [
+      { clusterId: production.clusterId, viewState: { clusterId: production.clusterId } },
+    ],
+    dockedGroups: [{ group: { clusterId: production.clusterId, tabs: [tabOf('api')] } }],
+  });
+});
+
+it('acknowledges workspace restoration only after projecting the saved dock', async () => {
+  await start({ open: [] });
+  const tab = tabOf('api');
+  await directorySays(2, [
+    {
+      tab,
+      location: {
+        kind: panelwindow.PanelLocationKind.PanelLocationDocked,
+        windowName: app.windowName,
+        groupId: 'right',
+        index: 0,
+        active: true,
+      },
+    },
+  ]);
+  const observed: string[][] = [];
+  app.backend.answer('AcknowledgeNamedWorkspaceRestore', (window, failure) => {
+    observed.push([window, failure, ...dockedIn('right')]);
+  });
+  const request = {
+    window: {
+      selectedClusterId: production.clusterId,
+      clusterTabs: [
+        {
+          clusterId: production.clusterId,
+          viewState: {
+            clusterId: production.clusterId,
+            navigation: view.owners().viewState?.getClusterNavigationState(production.clusterId),
+            sidebar: null,
+            tables: {},
+          },
+        },
+      ],
+      dockedGroups: [
+        {
+          width: 430,
+          height: 400,
+          maximized: false,
+          group: {
+            clusterId: production.clusterId,
+            groupId: 'right',
+            activePanelId: tab.panelId,
+            tabs: [tab],
+          },
+        },
+      ],
+    },
+  };
+  await act(async () => {
+    app.events.emit('named-workspace:restore', {
+      windowName: app.windowName,
+      state: JSON.stringify(request),
+    });
+  });
+  await app.settle();
+  expect(observed).toEqual([[app.windowName, '', tab.panelId]]);
+  expect(isOpenHere('api')).toBe(true);
+  expect(
+    requireValue(dock, 'dock').getClusterGroupLayout(production.clusterId, 'right').rightSize.width
+  ).toBe(430);
+});
+
 /** The directory now answers `panels` for production; it rings its change. */
 const directorySays = async (revision: number, panels: panelwindow.WorkspacePanel[]) => {
   app.backend.answer('GetPanelWorkspace', () => ({ revision, panels }));
