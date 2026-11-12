@@ -33,6 +33,13 @@ func (s *DesktopService) DeleteNamedWorkspace(ctx context.Context, window, name 
 	return s.namedWorkspaces.DeleteNamedWorkspace(name)
 }
 
+func (s *DesktopService) RenameNamedWorkspace(ctx context.Context, window, name, newName string) error {
+	if err := validatePanelCommandCaller(ctx, window); err != nil {
+		return err
+	}
+	return s.namedWorkspaces.RenameNamedWorkspace(name, newName)
+}
+
 func (s *DesktopService) OpenNamedWorkspace(ctx context.Context, window, name string) error {
 	if err := validatePanelCommandCaller(ctx, window); err != nil {
 		return err

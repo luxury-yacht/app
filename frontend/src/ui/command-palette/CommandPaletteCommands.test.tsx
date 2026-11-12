@@ -560,6 +560,58 @@ it('opens the selected workspace from the command palette', async () => {
   expect(app.backend.calls('OpenNamedWorkspace')).toEqual([[app.windowName, 'Release']]);
 });
 
+it('renames the selected saved workspace, but never onto another workspace', async () => {
+  let saved = ['Incident', 'Release'];
+  app.backend.answer('ListNamedWorkspaces', () => saved);
+  app.backend.answer('RenameNamedWorkspace', () => {
+    saved = ['Outage', 'Release'];
+  });
+  view = await app.mountApp();
+  await menu('open-command-palette');
+  vi.useFakeTimers();
+  await type('open workspace');
+  await choose('Open Workspace…');
+  const button = (label: string) =>
+    requireValue(
+      [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
+        (candidate) => candidate.textContent === label
+      ),
+      `expected the ${label} button`
+    );
+  await act(async () => button('Rename').click());
+  const input = requireValue(
+    document.querySelector<HTMLInputElement>('[role="dialog"] input[name="workspace-new-name"]'),
+    'expected the new name input'
+  );
+  const enter = (value: string) =>
+    act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value);
+      input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    });
+  const submit = () =>
+    requireValue(
+      document.querySelector<HTMLButtonElement>('[role="dialog"] button[type="submit"]'),
+      'expected the Rename submit button'
+    );
+  expect(input.value).toBe('Incident');
+  expect(document.activeElement).toBe(input);
+  expect(submit().disabled).toBe(true);
+  // Another workspace's name would discard that workspace's layout.
+  await enter('Release');
+  expect(submit().disabled).toBe(true);
+  await enter(' Outage ');
+  await act(async () => submit().click());
+  expect(app.backend.calls('RenameNamedWorkspace')).toEqual([
+    [app.windowName, 'Incident', 'Outage'],
+  ]);
+  const select = requireValue(
+    document.querySelector<HTMLSelectElement>('[role="dialog"] select'),
+    'expected the saved-workspace picker'
+  );
+  expect([...select.options].map((option) => option.value)).toEqual(['Outage', 'Release']);
+  expect(select.value).toBe('Outage');
+});
+
 it('deletes the selected saved workspace only after confirmation', async () => {
   app.backend.answer('ListNamedWorkspaces', () => ['Incident', 'Release']);
   app.backend.answer('DeleteNamedWorkspace', () => undefined);

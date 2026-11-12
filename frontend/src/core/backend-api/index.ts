@@ -96,6 +96,7 @@ export {
   PublishPanelWindowGroup,
   QueryPermissions,
   RemoveApplicationUpdateSkip,
+  RenameNamedWorkspace,
   ReorderThemes,
   RequestClusterTabTransfer,
   RequestPanelTabClose,

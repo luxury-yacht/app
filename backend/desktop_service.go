@@ -46,6 +46,7 @@ type NamedWorkspaceCommands interface {
 	SubmitNamedWorkspaceCapture(string, string, panelwindow.NamedWorkspaceAppView, string) error
 	ListNamedWorkspaces() ([]string, error)
 	DeleteNamedWorkspace(string) error
+	RenameNamedWorkspace(string, string) error
 }
 
 // PreferencesCommands is the frontend command surface owned by PreferencesService.

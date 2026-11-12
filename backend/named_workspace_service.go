@@ -20,6 +20,7 @@ type NamedWorkspaceStore interface {
 	SaveNamedWorkspace(string, NamedWorkspace, bool) error
 	ListNamedWorkspaces() ([]string, error)
 	DeleteNamedWorkspace(string) error
+	RenameNamedWorkspace(string, string) error
 }
 
 type NamedWorkspaceService struct {
@@ -48,6 +49,10 @@ func (s *NamedWorkspaceService) ListNamedWorkspaces() ([]string, error) {
 
 func (s *NamedWorkspaceService) DeleteNamedWorkspace(name string) error {
 	return s.store.DeleteNamedWorkspace(name)
+}
+
+func (s *NamedWorkspaceService) RenameNamedWorkspace(name, newName string) error {
+	return s.store.RenameNamedWorkspace(name, newName)
 }
 
 func (s *NamedWorkspaceService) SubmitNamedWorkspaceCapture(window, id string, view panelwindow.NamedWorkspaceAppView, failure string) error {

@@ -81,5 +81,7 @@ sessions, drain jobs, and unsaved editor content stay with their live owners.
   normal bounds. `TestNamedWorkspaceSeedCannotOvertakeLastOwnerRemoval` covers a
   seed that arrives while a cluster's last owner is being removed.
   `TestNamedWorkspaceDeleteRemovesOnlyTheNamedSnapshot` and the Command Palette
-  test cover deleting a saved workspace. None of these were re-run in the native
-  window.
+  test cover deleting a saved workspace.
+  `TestNamedWorkspaceRenameMovesTheSnapshotWithoutOverwritingAnother` and the
+  Command Palette test cover renaming one, including the refusal to take another
+  workspace's name. None of these were re-run in the native window.

@@ -420,6 +420,10 @@ export function RemoveApplicationUpdateSkip(): $CancellablePromise<$models.Updat
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.RemoveApplicationUpdateSkip");
 }
 
+export function RenameNamedWorkspace(window: string, name: string, newName: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.RenameNamedWorkspace", window, name, newName);
+}
+
 export function ReorderThemes(ids: string[] | null): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.ReorderThemes", ids);
 }

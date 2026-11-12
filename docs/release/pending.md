@@ -8,7 +8,7 @@
   - File → Save Workspace… and Open Workspace…, or the same commands in the command palette.
   - A workspace keeps each window's position, cluster tabs, views, table filters, and docked and floating panels.
   - Opening a workspace replaces the current windows. Unsaved edits stop the switch, and saved clusters that are no longer available are listed.
-  - Saved workspaces can be replaced or deleted.
+  - Saved workspaces can be replaced, renamed, or deleted.
 
 ### Fixed
 

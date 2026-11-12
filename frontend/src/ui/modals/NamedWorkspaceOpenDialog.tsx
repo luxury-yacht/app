@@ -1,5 +1,10 @@
-import { useId, useRef, useState } from 'react';
-import { DeleteNamedWorkspace, ListNamedWorkspaces, OpenNamedWorkspace } from '@/core/backend-api';
+import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
+import {
+  DeleteNamedWorkspace,
+  ListNamedWorkspaces,
+  OpenNamedWorkspace,
+  RenameNamedWorkspace,
+} from '@/core/backend-api';
 import { getWindowIdentity } from '@/core/desktop-runtime';
 import { eventBus, useEventBus } from '@/core/events';
 import { ErrorSurface } from '@/shared/components/errors/ErrorSurface';
@@ -15,8 +20,9 @@ export function NamedWorkspaceOpenDialog() {
   const [shown, setShown] = useState(false);
   const [names, setNames] = useState<string[] | null>(null);
   const [selected, setSelected] = useState('');
-  const [work, setWork] = useState<'open' | 'delete' | null>(null);
+  const [work, setWork] = useState<'open' | 'delete' | 'rename' | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [renaming, setRenaming] = useState(false);
   const [failure, setFailure] = useState<{ error: unknown; action: string } | null>(null);
   const busy = work !== null;
   const close = () => {
@@ -24,6 +30,16 @@ export function NamedWorkspaceOpenDialog() {
       setShown(false);
     }
   };
+
+  // The backend owns the order of the list, so every change to it is read back.
+  const load = (preferred?: string) =>
+    ListNamedWorkspaces()
+      .then((saved) => {
+        const list = saved ?? [];
+        setNames(list);
+        setSelected(preferred && list.includes(preferred) ? preferred : (list[0] ?? ''));
+      })
+      .catch((error) => setFailure({ error, action: 'list' }));
 
   useEventBus('named-workspace:open-dialog', () => {
     if (shown) {
@@ -34,14 +50,10 @@ export function NamedWorkspaceOpenDialog() {
     setSelected('');
     setFailure(null);
     setConfirmingDelete(false);
-    void ListNamedWorkspaces()
-      .then((saved) => {
-        setNames(saved ?? []);
-        setSelected(saved?.[0] ?? '');
-      })
-      .catch((error) => setFailure({ error, action: 'list' }));
+    setRenaming(false);
+    void load();
   });
-  useModalFocusTrap({
+  const { focusDefaultControl } = useModalFocusTrap({
     ref,
     disabled: !shown || confirmingDelete,
     onEscape: () => {
@@ -49,6 +61,14 @@ export function NamedWorkspaceOpenDialog() {
       return true;
     },
   });
+  // Switching between picking and renaming replaces the focused control.
+  const lastRenaming = useRef(renaming);
+  useEffect(() => {
+    if (renaming !== lastRenaming.current) {
+      focusDefaultControl();
+    }
+    lastRenaming.current = renaming;
+  }, [renaming, focusDefaultControl]);
 
   const open = async () => {
     if (busy || !selected) {
@@ -83,9 +103,32 @@ export function NamedWorkspaceOpenDialog() {
     }
   };
 
+  const rename = async (newName: string) => {
+    setWork('rename');
+    setFailure(null);
+    try {
+      await RenameNamedWorkspace(getWindowIdentity(), selected, newName);
+      await load(newName);
+      setRenaming(false);
+    } catch (error) {
+      setFailure({ error, action: 'rename' });
+    } finally {
+      setWork(null);
+    }
+  };
+
   if (!shown) {
     return null;
   }
+  const alert = !!failure && (
+    <div role="alert">
+      <ErrorSurface
+        kind="operational"
+        error={failure.error}
+        context={{ source: 'NamedWorkspace', action: failure.action }}
+      />
+    </div>
+  );
   return (
     <>
       <ModalSurface
@@ -94,60 +137,85 @@ export function NamedWorkspaceOpenDialog() {
         onClose={close}
         containerClassName="named-workspace-save-modal"
       >
-        <ModalHeader title="Open Workspace" titleId={title} onClose={close} closeDisabled={busy} />
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            void open();
-          }}
-        >
-          <div className="modal-content">
-            <SavedWorkspacePicker
-              names={names}
-              selected={selected}
-              disabled={busy}
-              onSelect={setSelected}
-            />
-            {!!failure && (
-              <div role="alert">
-                <ErrorSurface
-                  kind="operational"
-                  error={failure.error}
-                  context={{ source: 'NamedWorkspace', action: failure.action }}
-                />
-              </div>
-            )}
-          </div>
-          <div className="modal-footer">
-            {!!selected && (
+        <ModalHeader
+          title={renaming ? 'Rename Workspace' : 'Open Workspace'}
+          titleId={title}
+          onClose={close}
+          closeDisabled={busy}
+        />
+        {renaming ? (
+          <RenameWorkspaceForm
+            current={selected}
+            names={names ?? []}
+            busy={busy}
+            onCancel={() => {
+              setFailure(null);
+              setRenaming(false);
+            }}
+            onRename={(newName) => void rename(newName)}
+          >
+            {alert}
+          </RenameWorkspaceForm>
+        ) : (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void open();
+            }}
+          >
+            <div className="modal-content">
+              <SavedWorkspacePicker
+                names={names}
+                selected={selected}
+                disabled={busy}
+                onSelect={setSelected}
+              />
+              {alert}
+            </div>
+            <div className="modal-footer">
+              {!!selected && (
+                <>
+                  <button
+                    type="button"
+                    className="button generic"
+                    disabled={busy}
+                    onClick={() => {
+                      setFailure(null);
+                      setRenaming(true);
+                    }}
+                  >
+                    Rename
+                  </button>
+                  <button
+                    type="button"
+                    className="button danger named-workspace-delete"
+                    disabled={busy}
+                    onClick={() => setConfirmingDelete(true)}
+                  >
+                    Delete
+                  </button>
+                </>
+              )}
+              <button type="button" className="button cancel" disabled={busy} onClick={close}>
+                Cancel
+              </button>
               <button
                 type="button"
-                className="button danger named-workspace-delete"
+                className="button generic"
                 disabled={busy}
-                onClick={() => setConfirmingDelete(true)}
+                onClick={() => {
+                  close();
+                  eventBus.emit('named-workspace:save-dialog');
+                }}
               >
-                Delete
+                Save Current As…
               </button>
-            )}
-            <button type="button" className="button cancel" disabled={busy} onClick={close}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="button generic"
-              disabled={busy}
-              onClick={() => {
-                close();
-                eventBus.emit('named-workspace:save-dialog');
-              }}
-            >
-              Save Current As…
-            </button>
-            <button type="submit" className="button save" disabled={busy || !selected}>
-              {work === 'open' ? 'Opening…' : 'Open'}
-            </button>
-          </div>
-        </form>
+              <button type="submit" className="button save" disabled={busy || !selected}>
+                {work === 'open' ? 'Opening…' : 'Open'}
+              </button>
+            </div>
+          </form>
+        )}
       </ModalSurface>
       <ConfirmationModal
         isOpen={confirmingDelete}
@@ -160,6 +228,66 @@ export function NamedWorkspaceOpenDialog() {
         onCancel={() => setConfirmingDelete(false)}
       />
     </>
+  );
+}
+
+// Renaming never takes another workspace's name: that would discard its layout.
+function RenameWorkspaceForm({
+  current,
+  names,
+  busy,
+  onCancel,
+  onRename,
+  children,
+}: Readonly<{
+  current: string;
+  names: string[];
+  busy: boolean;
+  onCancel: () => void;
+  onRename: (newName: string) => void;
+  children: ReactNode;
+}>) {
+  const [draft, setDraft] = useState(current);
+  const newName = draft.trim();
+  const taken = newName !== current && names.includes(newName);
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        onRename(newName);
+      }}
+    >
+      <div className="modal-content">
+        <label className="modal-form-field">
+          New name
+          <input
+            className="modal-input"
+            name="workspace-new-name"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            disabled={busy}
+            required
+            data-modal-initial-focus
+          />
+        </label>
+        {taken ? (
+          <p className="modal-field-error">A workspace with this name already exists.</p>
+        ) : null}
+        {children}
+      </div>
+      <div className="modal-footer">
+        <button type="button" className="button cancel" disabled={busy} onClick={onCancel}>
+          Cancel
+        </button>
+        <button
+          type="submit"
+          className="button save"
+          disabled={busy || !newName || newName === current || taken}
+        >
+          {busy ? 'Renaming…' : 'Rename'}
+        </button>
+      </div>
+    </form>
   );
 }
 

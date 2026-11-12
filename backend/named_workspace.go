@@ -66,6 +66,34 @@ func (s *UIStateStore) DeleteNamedWorkspace(name string) error {
 	return s.savePersistenceFile(state)
 }
 
+// RenameNamedWorkspace moves a saved workspace to a new name. It never replaces
+// another workspace: that would discard a layout the user did not name.
+func (s *UIStateStore) RenameNamedWorkspace(name, newName string) error {
+	from, to := strings.TrimSpace(name), strings.TrimSpace(newName)
+	if to == "" {
+		return fmt.Errorf("workspace name is required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state, err := s.loadPersistenceFile()
+	if err != nil {
+		return err
+	}
+	workspace, ok := state.Workspaces[from]
+	if !ok {
+		return fmt.Errorf("workspace %q was not found", from)
+	}
+	if from == to {
+		return nil
+	}
+	if _, taken := state.Workspaces[to]; taken {
+		return fmt.Errorf("workspace %q already exists", to)
+	}
+	delete(state.Workspaces, from)
+	state.Workspaces[to] = workspace
+	return s.savePersistenceFile(state)
+}
+
 func (s *UIStateStore) GetNamedWorkspace(name string) (*NamedWorkspace, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

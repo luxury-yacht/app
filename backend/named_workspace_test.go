@@ -309,6 +309,39 @@ func TestNamedWorkspaceSeedCannotOvertakeLastOwnerRemoval(t *testing.T) {
 	require.Equal(t, []string{clusterID}, w.WindowClusterIDs("restored"))
 }
 
+// Renaming moves one saved layout to its new name and never overwrites another.
+func TestNamedWorkspaceRenameMovesTheSnapshotWithoutOverwritingAnother(t *testing.T) {
+	setTestConfigEnv(t)
+	store := NewUIStateStore()
+	sized := func(width int) NamedWorkspace {
+		return NamedWorkspace{SchemaVersion: 1, AppWindows: []NamedWorkspaceAppWindow{{
+			Geometry: panelwindow.NamedWorkspaceGeometry{WindowBounds: panelwindow.WindowBounds{Width: width, Height: 800}},
+		}}}
+	}
+	require.NoError(t, store.SaveNamedWorkspace("Triage", sized(1200), false))
+	require.NoError(t, store.SaveNamedWorkspace("Release", sized(900), false))
+	service := NewDesktopService(DesktopServiceDependencies{NamedWorkspaces: NewNamedWorkspaceService(&namedWorkspaceTestWindows{}, store)})
+	ctx := context.WithValue(context.Background(), application.WindowKey, panelCommandCaller("workspace-1"))
+
+	require.Error(t, service.RenameNamedWorkspace(ctx, "another-window", "Triage", "Incident"))
+	require.Error(t, service.RenameNamedWorkspace(ctx, "workspace-1", "Missing", "Incident"))
+	require.Error(t, service.RenameNamedWorkspace(ctx, "workspace-1", "Triage", "Release"))
+	require.Error(t, service.RenameNamedWorkspace(ctx, "workspace-1", "Triage", "  "))
+	require.NoError(t, service.RenameNamedWorkspace(ctx, "workspace-1", "Triage", "Triage"))
+	require.NoError(t, service.RenameNamedWorkspace(ctx, "workspace-1", "Triage", " Incident "))
+
+	restarted := NewUIStateStore()
+	names, err := restarted.ListNamedWorkspaces()
+	require.NoError(t, err)
+	require.Equal(t, []string{"Incident", "Release"}, names)
+	renamed, err := restarted.GetNamedWorkspace("Incident")
+	require.NoError(t, err)
+	require.Equal(t, 1200, renamed.AppWindows[0].Geometry.Width)
+	untouched, err := restarted.GetNamedWorkspace("Release")
+	require.NoError(t, err)
+	require.Equal(t, 900, untouched.AppWindows[0].Geometry.Width)
+}
+
 // Deleting removes one saved workspace from disk and leaves the others openable.
 func TestNamedWorkspaceDeleteRemovesOnlyTheNamedSnapshot(t *testing.T) {
 	setTestConfigEnv(t)
