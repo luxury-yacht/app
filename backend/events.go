@@ -132,7 +132,7 @@ func init() {
 	application.RegisterEvent[panelwindow.ApplicationQuitPreflightRequestedEvent](panelwindow.ApplicationQuitPreflightRequestedEventName)
 	application.RegisterEvent[panelwindow.NamedWorkspaceCaptureRequest](panelwindow.NamedWorkspaceCaptureRequested)
 	application.RegisterEvent[panelwindow.NamedWorkspaceRestoreRequest](panelwindow.NamedWorkspaceRestoreRequested)
-	application.RegisterEvent[panelwindow.NamedWorkspaceMissingClustersEvent](panelwindow.NamedWorkspaceMissingClusters)
+	application.RegisterEvent[panelwindow.NamedWorkspaceWarningsEvent](panelwindow.NamedWorkspaceWarnings)
 	application.RegisterEvent[panelwindow.ApplicationQuitPreflightRequestedEvent](panelwindow.ApplicationQuitPreflightSettledEventName)
 
 	application.RegisterEvent[[]ShellSessionInfo](shellListEventName)

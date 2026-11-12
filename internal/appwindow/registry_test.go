@@ -1372,7 +1372,12 @@ func (b *recordingLifecycleBackend) CloseClusterView(windowID, clusterID string)
 func (b *recordingLifecycleBackend) NamedWorkspaceAvailableClusters() ([]string, error) {
 	return b.availableWorkspaceClusters, nil
 }
-func (*recordingLifecycleBackend) SeedNamedWorkspaceWindow(string, []string, string) error {
+
+// A seeded window holds its clusters, as the workspace coordinator records them.
+func (b *recordingLifecycleBackend) SeedNamedWorkspaceWindow(window string, clusters []string, _ string) error {
+	if b.windowClusters != nil {
+		b.windowClusters[window] = clusters
+	}
 	return nil
 }
 func (*recordingLifecycleBackend) ResolveNamedWorkspaceGeometry(geometry panelwindow.NamedWorkspaceGeometry) (panelwindow.WindowBounds, bool) {

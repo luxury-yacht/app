@@ -9,11 +9,19 @@ const NamedWorkspaceSchemaVersion = 1
 
 const NamedWorkspaceCaptureRequested = "named-workspace:capture"
 const NamedWorkspaceRestoreRequested = "named-workspace:restore"
-const NamedWorkspaceMissingClusters = "named-workspace:missing-clusters"
+const NamedWorkspaceWarnings = "named-workspace:warnings"
 
-type NamedWorkspaceMissingClustersEvent struct {
-	WindowName string   `json:"windowName"`
-	Clusters   []string `json:"clusters"`
+// NamedWorkspaceWarningsEvent tells one window of a newly opened workspace what
+// the switch could not do. The window that asked for the switch is usually one
+// of those it closed, so it cannot be the one to show this.
+type NamedWorkspaceWarningsEvent struct {
+	WindowName string `json:"windowName"`
+	// MissingClusters are saved clusters that are no longer available.
+	MissingClusters []string `json:"missingClusters"`
+	// UnclosedWindows counts previous windows that did not close.
+	UnclosedWindows int `json:"unclosedWindows"`
+	// NotFullscreen counts restored windows that did not return to fullscreen.
+	NotFullscreen int `json:"notFullscreen"`
 }
 
 type NamedWorkspaceRestoreRequest struct {

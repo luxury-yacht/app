@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,6 +14,10 @@ import (
 )
 
 var errNamedWorkspaceOpenCancelled = errors.New("workspace switch cancelled by an open window")
+
+// errReplacedWindowStaysOpen marks a previous window that is still on screen
+// after the switch, as opposed to one that turned out to be gone already.
+var errReplacedWindowStaysOpen = errors.New("the window stays open")
 
 type namedWorkspaceRestoreSlot struct {
 	directory *panelwindow.WorkspaceDirectory
@@ -24,6 +29,8 @@ type namedWorkspaceTarget struct {
 	panel    bool
 	geometry panelwindow.NamedWorkspaceGeometry
 	slot     *namedWorkspaceRestoreSlot
+	// clusters are the cluster tabs an app window was seeded with.
+	clusters []string
 }
 
 type namedWorkspaceRestore struct {
@@ -31,6 +38,53 @@ type namedWorkspaceRestore struct {
 	targets   []namedWorkspaceTarget
 	seed      string
 	seeded    bool
+	// notFullscreen names the restored windows that did not return to fullscreen.
+	notFullscreen []string
+
+	// mu orders the commit decision against everything else that can take a
+	// destination or a cluster away. It is held across the decision and the
+	// directory swap, so a close either aborts the switch or happens to a window
+	// of the committed workspace, never in between.
+	mu      sync.Mutex
+	failure error
+	decided bool
+}
+
+func (restore *namedWorkspaceRestore) hasTarget(name string) bool {
+	restore.mu.Lock()
+	defer restore.mu.Unlock()
+	return restore.hasTargetLocked(name)
+}
+
+func (restore *namedWorkspaceRestore) hasTargetLocked(name string) bool {
+	return slices.ContainsFunc(restore.targets, func(target namedWorkspaceTarget) bool { return target.name == name })
+}
+
+// stages reports whether name is a destination the switch has not yet committed.
+func (restore *namedWorkspaceRestore) stages(name string) bool {
+	restore.mu.Lock()
+	defer restore.mu.Unlock()
+	return !restore.decided && restore.hasTargetLocked(name)
+}
+
+// fail records why the switch must abort. It reports false once the switch has
+// committed: from then on its windows are ordinary windows.
+func (restore *namedWorkspaceRestore) fail(err error) bool {
+	restore.mu.Lock()
+	defer restore.mu.Unlock()
+	if restore.decided {
+		return false
+	}
+	if restore.failure == nil {
+		restore.failure = err
+	}
+	return true
+}
+
+func (restore *namedWorkspaceRestore) failed() error {
+	restore.mu.Lock()
+	defer restore.mu.Unlock()
+	return restore.failure
 }
 
 func (r *Registry) OpenNamedWorkspace(ctx context.Context, source string, snapshot panelwindow.NamedWorkspace) error {
@@ -62,6 +116,9 @@ func (r *Registry) OpenNamedWorkspace(ctx context.Context, source string, snapsh
 		return err
 	}
 	restore := &namedWorkspaceRestore{directory: panelwindow.NewWorkspaceDirectory(), seed: "workspace-restore-" + uuid.NewString()}
+	// Cleared last, after the staged or previous windows are closed.
+	r.activeRestore.Store(restore)
+	defer r.activeRestore.Store(nil)
 	committed := false
 	defer func() { r.finishNamedWorkspaceRestore(restore, committed) }()
 	stageCtx, cancel := context.WithTimeout(ctx, 35*time.Second)
@@ -76,12 +133,86 @@ func (r *Registry) OpenNamedWorkspace(ctx context.Context, source string, snapsh
 	// The new windows own the panel directory from here. A failure past this
 	// point is reported, but must never undo them.
 	committed = true
-	retired := r.retireReplacedWindows(apps, panels, replacedClusters)
-	if len(missing) != 0 {
-		name := restore.targets[0].name
-		r.emitWindowEvent(name, panelwindow.NamedWorkspaceMissingClusters, panelwindow.NamedWorkspaceMissingClustersEvent{WindowName: name, Clusters: missing})
+	unclosed := r.retireReplacedWindows(apps, panels, replacedClusters)
+	r.endWorkspaceReplacement(guard.transactionID)
+	r.quitWithoutWindows()
+	return r.reportCommittedWorkspace(restore, missing, unclosed)
+}
+
+// quitWithoutWindows finishes what closing the last window means. The windows
+// of the new workspace are ordinary windows once the switch commits, so the
+// user can close them all while the previous ones are still being retired. The
+// quit that follows the last close is refused while the switch holds its
+// preflight, which would leave the app running with no window.
+func (r *Registry) quitWithoutWindows() {
+	if r.lifecycle.Count() == 0 && len(r.panels.Names("")) == 0 && r.requestApplicationQuit != nil {
+		r.requestApplicationQuit()
 	}
-	return retired
+}
+
+// reportCommittedWorkspace tells the user what a committed switch could not do.
+// The window that asked for the switch is usually one of those it closed, so
+// the warning goes to a window of the new workspace. Every problem is logged;
+// the caller gets an error only for previous windows that failed to close.
+func (r *Registry) reportCommittedWorkspace(restore *namedWorkspaceRestore, missing []string, unclosed []error) error {
+	stillOpen := 0
+	for _, err := range unclosed {
+		if errors.Is(err, errReplacedWindowStaysOpen) {
+			stillOpen++
+		}
+	}
+	warnings := panelwindow.NamedWorkspaceWarningsEvent{
+		MissingClusters: missing, UnclosedWindows: stillOpen, NotFullscreen: len(restore.notFullscreen),
+	}
+	if len(missing) != 0 || stillOpen != 0 || len(restore.notFullscreen) != 0 {
+		r.deliverWorkspaceWarnings(restore, warnings)
+	}
+	if len(restore.notFullscreen) != 0 {
+		r.reportPanelLifecycleError(fmt.Errorf("windows did not return to fullscreen: %v", restore.notFullscreen), "open workspace")
+	}
+	if err := errors.Join(unclosed...); err != nil {
+		r.reportPanelLifecycleError(err, "close replaced windows")
+		return fmt.Errorf("the workspace opened, but closing the previous windows failed: %w", err)
+	}
+	return nil
+}
+
+func (r *Registry) deliverWorkspaceWarnings(restore *namedWorkspaceRestore, warnings panelwindow.NamedWorkspaceWarningsEvent) {
+	for _, name := range r.warningWindows(restore) {
+		warnings.WindowName = name
+		if r.emitWindowEvent(name, panelwindow.NamedWorkspaceWarnings, warnings) {
+			return
+		}
+	}
+	r.reportPanelLifecycleError(fmt.Errorf("no window of the new workspace could show %+v", warnings), "deliver workspace warnings")
+}
+
+// warningWindows lists the open windows of the new workspace, the one the user
+// is most likely looking at first: the window that entered fullscreen last has
+// the display, and a window reopened minimized is not on screen at all.
+func (r *Registry) warningWindows(restore *namedWorkspaceRestore) []string {
+	var fullscreen, visible, minimized []string
+	for _, target := range restore.targets {
+		switch {
+		case !r.restoredWindowOpen(target):
+		case target.geometry.Minimized:
+			minimized = append(minimized, target.name)
+		case target.geometry.Fullscreen && !slices.Contains(restore.notFullscreen, target.name):
+			fullscreen = append(fullscreen, target.name)
+		default:
+			visible = append(visible, target.name)
+		}
+	}
+	slices.Reverse(fullscreen)
+	return slices.Concat(fullscreen, visible, minimized)
+}
+
+func (r *Registry) restoredWindowOpen(target namedWorkspaceTarget) bool {
+	if target.panel {
+		_, err := r.panels.Descriptor(target.name)
+		return err == nil
+	}
+	return r.lifecycle.Contains(target.name)
 }
 
 func (r *Registry) beginWorkspaceReplacement(source string, participants []string) (*applicationQuitPreflight, error) {
@@ -221,15 +352,17 @@ func namedWorkspaceSelections(snapshot panelwindow.NamedWorkspace) []string {
 	return slices.Compact(ids)
 }
 
-func (r *Registry) addNamedWorkspaceTarget(restore *namedWorkspaceRestore, name string, panel bool, geometry panelwindow.NamedWorkspaceGeometry) {
+func (r *Registry) addNamedWorkspaceTarget(restore *namedWorkspaceRestore, name string, panel bool, geometry panelwindow.NamedWorkspaceGeometry, clusters []string) {
 	slot := &namedWorkspaceRestoreSlot{directory: restore.directory, ready: make(chan error, 1)}
 	r.workspaceRestoreSlots.Store(name, slot)
-	restore.targets = append(restore.targets, namedWorkspaceTarget{name: name, panel: panel, geometry: geometry, slot: slot})
+	restore.mu.Lock()
+	restore.targets = append(restore.targets, namedWorkspaceTarget{name: name, panel: panel, geometry: geometry, slot: slot, clusters: clusters})
+	restore.mu.Unlock()
 }
 
 func (r *Registry) stageNamedAppWindow(restore *namedWorkspaceRestore, state panelwindow.NamedWorkspaceAppWindow) error {
 	name := r.lifecycle.Add()
-	r.addNamedWorkspaceTarget(restore, name, false, state.Geometry)
+	r.addNamedWorkspaceTarget(restore, name, false, state.Geometry, workspaceClusterIDs(state))
 	if err := r.backend.SeedNamedWorkspaceWindow(name, workspaceClusterIDs(state), state.SelectedClusterID); err != nil {
 		return err
 	}
@@ -261,7 +394,7 @@ func (r *Registry) stageNamedPanelWindow(restore *namedWorkspaceRestore, state p
 		return err
 	}
 	name := descriptor.WindowName
-	r.addNamedWorkspaceTarget(restore, name, true, state.Geometry)
+	r.addNamedWorkspaceTarget(restore, name, true, state.Geometry, nil)
 	if err := r.backend.RetainPanelCluster(name, group.ClusterID); err != nil {
 		return err
 	}
@@ -352,8 +485,8 @@ func (r *Registry) prepareRestoredWindows(restore *namedWorkspaceRestore) error 
 	// maximized during it is left part-way. Fullscreen is entered once every
 	// other window has its state.
 	for _, target := range restore.targets {
-		if target.geometry.Fullscreen {
-			r.restoreWindowState(target.name, target.geometry)
+		if target.geometry.Fullscreen && !r.restoreWindowState(target.name, target.geometry) {
+			restore.notFullscreen = append(restore.notFullscreen, target.name)
 		}
 	}
 	return nil
@@ -362,10 +495,22 @@ func (r *Registry) prepareRestoredWindows(restore *namedWorkspaceRestore) error 
 // commitNamedWorkspace hands the panel directory to the restored windows. It
 // returns the clusters the replaced windows held, for release once they close.
 func (r *Registry) commitNamedWorkspace(restore *namedWorkspaceRestore, revision uint64, apps, panels []string) ([]string, error) {
-	if err := r.verifyRestoredWindowInventory(restore.targets, apps, panels); err != nil {
+	if err := r.restoredWindowsIntact(restore, apps, panels); err != nil {
 		return nil, err
 	}
 	if err := r.prepareRestoredWindows(restore); err != nil {
+		return nil, err
+	}
+	// Showing and placing the windows takes time, and a fullscreen transition
+	// takes seconds. Whatever took a destination or a cluster away meanwhile
+	// aborts the switch while the previous windows are still open. The decision
+	// and the swap share one hold of the lock, so nothing can do so in between.
+	restore.mu.Lock()
+	defer restore.mu.Unlock()
+	if restore.failure != nil {
+		return nil, restore.failure
+	}
+	if err := r.verifyRestoredWindows(restore.targets, apps, panels); err != nil {
 		return nil, err
 	}
 	replacedClusters := r.workspace.RestoredWorkspaceClusters()
@@ -375,19 +520,51 @@ func (r *Registry) commitNamedWorkspace(restore *namedWorkspaceRestore, revision
 	for _, target := range restore.targets {
 		r.workspaceRestoreSlots.Delete(target.name)
 	}
+	restore.decided = true
 	return replacedClusters, nil
 }
 
+func (r *Registry) restoredWindowsIntact(restore *namedWorkspaceRestore, apps, panels []string) error {
+	if err := restore.failed(); err != nil {
+		return err
+	}
+	return r.verifyRestoredWindows(restore.targets, apps, panels)
+}
+
+// verifyRestoredWindows checks the destinations are all still there and still
+// hold the clusters they were seeded with. The backend's record of a window's
+// clusters is the authority: a cluster that went away meanwhile is no longer in
+// it, however and whenever its removal is announced.
+func (r *Registry) verifyRestoredWindows(targets []namedWorkspaceTarget, apps, panels []string) error {
+	if err := r.verifyRestoredWindowInventory(targets, apps, panels); err != nil {
+		return err
+	}
+	for _, target := range targets {
+		if target.panel {
+			continue
+		}
+		held := r.backend.WindowClusterIDs(target.name)
+		if !slices.Equal(slices.Sorted(slices.Values(held)), slices.Sorted(slices.Values(target.clusters))) {
+			return fmt.Errorf("clusters changed in window %q while the workspace was opening", target.name)
+		}
+	}
+	return nil
+}
+
 // retireReplacedWindows closes the windows the committed workspace replaced.
-// The switch can no longer be undone, so every window is attempted and the
-// ones that did not close are reported together.
-func (r *Registry) retireReplacedWindows(apps, panels, replacedClusters []string) error {
+// The switch can no longer be undone, so every window is attempted. It returns
+// one error for each window that did not close.
+func (r *Registry) retireReplacedWindows(apps, panels, replacedClusters []string) []error {
 	var failures []error
 	for _, panel := range panels {
-		failures = append(failures, r.closePanelWindow(panel, true))
+		if err := r.closePanelWindow(panel, true); err != nil {
+			failures = append(failures, err)
+		}
 	}
 	for _, app := range apps {
-		failures = append(failures, r.closeReplacedAppWindow(app))
+		if err := r.closeReplacedAppWindow(app); err != nil {
+			failures = append(failures, err)
+		}
 	}
 	for _, cluster := range replacedClusters {
 		r.releaseUnusedPanelWorkspace(cluster)
@@ -395,11 +572,7 @@ func (r *Registry) retireReplacedWindows(apps, panels, replacedClusters []string
 	for _, clusterID := range r.workspace.RestoredWorkspaceClusters() {
 		r.emitWorkspaceChanged(clusterID)
 	}
-	if err := errors.Join(failures...); err != nil {
-		r.reportPanelLifecycleError(err, "close replaced windows")
-		return fmt.Errorf("the workspace opened, but closing the previous windows failed: %w", err)
-	}
-	return nil
+	return failures
 }
 
 // closeReplacedAppWindow ends an app view the committed workspace replaced.
@@ -410,7 +583,7 @@ func (r *Registry) closeReplacedAppWindow(name string) error {
 	r.authorizeClose(name)
 	r.handleClosing(nil, name)
 	if r.lifecycle.Contains(name) {
-		return fmt.Errorf("app window %q could not be closed and stays open", name)
+		return fmt.Errorf("app window %q could not be closed: %w", name, errReplacedWindowStaysOpen)
 	}
 	if !r.closeAuthorizedWindow(name) {
 		return fmt.Errorf("app window %q had no native window to close", name)

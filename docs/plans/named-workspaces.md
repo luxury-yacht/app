@@ -95,6 +95,20 @@ sessions, drain jobs, and unsaved editor content stay with their live owners.
   `TestPanelWindowOutOfItsNormalStateIsSavedWithTheBoundsItReturnsTo` covers
   saving a maximized, fullscreen, or minimized window, and the replace test
   checks each restored window is given its saved state.
+- **Third review (automated only).**
+  `TestStagedWindowRefusesCloseUntilTheSwitchCommits` covers a destination the
+  user tries to close. The `TestNamedWorkspaceAborts…` tests cover a destination
+  the registry closes, one that disappears, one that loses a saved cluster, a
+  panel whose cluster is torn down, and a panel that fails to load; without the
+  abort the last one waits out the 35-second staging deadline.
+  `TestClosingEveryNewWindowDuringRetirementQuitsTheApp` covers closing the new
+  windows while the previous ones are retired.
+  `TestCommittedSwitchWarnsOnlyAboutPreviousWindowsStillOpen` and
+  `TestSwitchWarningGoesToAWindowTheUserCanSee` cover what the warning counts
+  and which window shows it. `TestEnterFullscreenReportsWhetherTheWindowGotThere`
+  covers a dropped fullscreen request on each platform, against a stand-in
+  window. The frontend harness checks one warning per problem. None of this was
+  run in the native window.
 - **Window state on macOS (native).** In an isolated development build with no
   cluster, three app windows were saved fullscreen, minimized, and maximized.
   The minimized window and the one in its own fullscreen space both answered

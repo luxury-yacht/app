@@ -12,7 +12,10 @@ func (r *Registry) clusterRemoved(clusterID string) {
 			if _, err := r.panels.Descriptor(name); err != nil {
 				continue
 			}
-			r.reportPanelLifecycleError(r.AcknowledgePanelWindowClose(name), "close panel for removed cluster")
+			// Not the renderer's acknowledgement, which a workspace switch refuses
+			// for its destinations: a cluster that goes away closes its panel windows
+			// whatever state they are in, and closing a destination aborts the switch.
+			r.reportPanelLifecycleError(r.closePanelWindow(name, false), "close panel for removed cluster")
 		}
 	}()
 }

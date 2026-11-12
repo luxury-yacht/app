@@ -125,14 +125,33 @@ export interface NamedWorkspaceGlobalView {
     "tables"?: { [_ in string]?: json$0.RawMessage } | null;
 }
 
-export interface NamedWorkspaceMissingClustersEvent {
-    "windowName": string;
-    "clusters": string[] | null;
-}
-
 export interface NamedWorkspaceRestoreRequest {
     "windowName": string;
     "window": NamedWorkspaceAppWindow;
+}
+
+/**
+ * NamedWorkspaceWarningsEvent tells one window of a newly opened workspace what
+ * the switch could not do. The window that asked for the switch is usually one
+ * of those it closed, so it cannot be the one to show this.
+ */
+export interface NamedWorkspaceWarningsEvent {
+    "windowName": string;
+
+    /**
+     * MissingClusters are saved clusters that are no longer available.
+     */
+    "missingClusters": string[] | null;
+
+    /**
+     * UnclosedWindows counts previous windows that did not close.
+     */
+    "unclosedWindows": number;
+
+    /**
+     * NotFullscreen counts restored windows that did not return to fullscreen.
+     */
+    "notFullscreen": number;
 }
 
 export interface NativeDescriptor {

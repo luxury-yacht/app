@@ -232,19 +232,56 @@ reconstruction before the registry replaces the live directory at its expected
 revision. A denied guard, failed mount, or changed window inventory releases
 staging and leaves the current arrangement available.
 
+The registry keeps one record of the switch in progress, and that record is
+where a switch learns that it can no longer complete:
+
+- The user cannot close a destination until the switch commits. The registry
+  cancels a native close it did not ask for and refuses the renderer's close
+  acknowledgement. From the commit on it is an ordinary window.
+- Every close the registry starts goes through `closeAuthorizedWindow`. Closing
+  a destination before the commit fails the switch and releases that
+  destination's readiness wait, so a panel that fails to load ends the switch at
+  once instead of at the staging deadline.
+- A cluster that goes away meanwhile is found at the commit: each destination
+  app window must still hold the clusters it was seeded with, read from the
+  workspace coordinator. The removal notification is not used for this. It also
+  fires when a cluster's clients are torn down, and it can arrive after the
+  commit. A torn-down cluster does close its panel windows, destinations
+  included, and that aborts the switch like any other close.
+- The commit takes the record's lock for the failure check, a second inventory
+  and cluster check, the directory swap, and the end of staging. A close
+  therefore either aborts the switch while the previous windows are still open,
+  or happens to a window of the committed workspace.
+
 Replacing the directory commits the switch. The registry then retires every
-previous window and reports the ones that did not close as one error; the new
-windows stay. A native close only queues the close hook, so the registry runs
-an app view's close itself first and treats a view it still tracks as one that
-stays open. A panel window with no native window to close is still removed from
-the registry, because a kept entry would block every later save and switch.
+previous window; the new windows stay. A native close only queues the close
+hook, so the registry runs an app view's close itself first and treats a view
+it still tracks as one that stays open. A panel window with no native window to
+close is still removed from the registry, because a kept entry would block
+every later save and switch.
+
+What the switch could not do goes to one window of the new workspace in a
+single `named-workspace:warnings` event, because the window that asked for the
+switch is usually one of those it closed: saved clusters that are unavailable,
+previous windows still on screen, and windows that did not return to
+fullscreen. The registry picks the window the user is most likely looking at
+(the last to enter fullscreen, otherwise one not reopened minimized) and moves
+to the next if that one cannot take the event. The command returns an error
+only when closing a previous window failed.
+
+The user can close every window of the new workspace while the previous ones
+are still being retired. The switch then releases its preflight and requests
+the quit that closing a last window means, because a quit asked for while the
+preflight is held is refused and would leave the app running with no window.
 
 Saved geometry uses the same logical work-area rules as startup. A window is
 saved with the bounds it returns to and with its maximized, fullscreen, and
 minimized state, and both are applied when it reopens. Fullscreen is entered
 after every other window has its state, one window at a time: on macOS a window
 maximized during another's fullscreen transition is left part-way, and a
-fullscreen request made during a transition is dropped.
+fullscreen request made during a transition is dropped. A window that neither
+announces the end of its transition nor reports fullscreen afterwards is
+counted as not restored.
 
 Saving a workspace asks every ready app and panel window for one reply: its
 view, or the reason it has none. A failure reply ends the capture at once with

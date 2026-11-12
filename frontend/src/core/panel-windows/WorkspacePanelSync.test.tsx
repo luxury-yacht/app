@@ -142,6 +142,32 @@ it('answers a capture it cannot complete with the reason, so the save fails at o
   app.errors.take((record) => (record.error as Error).message === 'publication failed');
 });
 
+it('warns in the restored window about each thing the switch could not do', async () => {
+  await start();
+  const warningsAfter = async (windowName: string, problems: object) => {
+    await act(async () => {
+      app.events.emit('named-workspace:warnings', {
+        windowName,
+        missingClusters: null,
+        unclosedWindows: 0,
+        notFullscreen: 0,
+        ...problems,
+      });
+    });
+    return app.errors.take((record) => record.kinds.includes('warning')).length;
+  };
+  // The window that asked for the switch is usually closed by it, so the
+  // backend addresses one window of the new workspace.
+  const everything = { missingClusters: ['stage'], unclosedWindows: 2, notFullscreen: 1 };
+  expect(await warningsAfter('another-window', everything)).toBe(0);
+  expect(await warningsAfter(app.windowName, everything)).toBe(3);
+  // Each problem is its own warning, and a switch with none raises nothing.
+  expect(await warningsAfter(app.windowName, { missingClusters: ['stage'] })).toBe(1);
+  expect(await warningsAfter(app.windowName, { unclosedWindows: 1 })).toBe(1);
+  expect(await warningsAfter(app.windowName, { notFullscreen: 1 })).toBe(1);
+  expect(await warningsAfter(app.windowName, {})).toBe(0);
+});
+
 it('acknowledges workspace restoration only after projecting the saved dock', async () => {
   await start({ open: [] });
   const tab = tabOf('api');

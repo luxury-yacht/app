@@ -164,14 +164,14 @@ export const MenuSelectAll = "menu:selectAll";
 export const NamedWorkspaceCapture = "named-workspace:capture";
 
 /**
- * Name of the custom event "named-workspace:missing-clusters".
- */
-export const NamedWorkspaceMissingClusters = "named-workspace:missing-clusters";
-
-/**
  * Name of the custom event "named-workspace:restore".
  */
 export const NamedWorkspaceRestore = "named-workspace:restore";
+
+/**
+ * Name of the custom event "named-workspace:warnings".
+ */
+export const NamedWorkspaceWarnings = "named-workspace:warnings";
 
 /**
  * Name of the custom event "object-shell:list".

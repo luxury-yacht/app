@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/luxury-yacht/app/internal/panelwindow"
@@ -54,25 +55,28 @@ type Registry struct {
 	focusWindow             func(string) bool
 	emitWindowEvent         func(string, string, any) bool
 	windowGeometry          func(string) (geometry, bool)
-	restoreWindowState      func(string, panelwindow.NamedWorkspaceGeometry)
-	screenWorkAreas         func() []application.Rect
-	closeMu                 sync.Mutex
-	authorizedClose         map[string]struct{}
-	workspaceReady          map[string]struct{}
-	panelWorkspaceReady     map[string]struct{}
-	queuedWorkspaceEvents   map[string][]workspaceWindowEvent
-	panelOpenTimeout        time.Duration
-	panelDockTimeout        time.Duration
-	clusterTransferTimeout  time.Duration
-	clusterCloseTimeout     time.Duration
-	quitMu                  sync.Mutex
-	nextQuit                uint64
-	pendingQuit             *applicationQuitPreflight
-	quitPreflightTimeout    time.Duration
-	panelTransferMu         sync.Mutex
-	tabTransferMu           sync.Mutex
-	tabTransfers            transferLifecycle[panelTabTransfer]
-	tabTransferTimeout      time.Duration
+	restoreWindowState      func(string, panelwindow.NamedWorkspaceGeometry) bool
+	// activeRestore is the workspace switch in progress, from staging until its
+	// previous windows are retired.
+	activeRestore          atomic.Pointer[namedWorkspaceRestore]
+	screenWorkAreas        func() []application.Rect
+	closeMu                sync.Mutex
+	authorizedClose        map[string]struct{}
+	workspaceReady         map[string]struct{}
+	panelWorkspaceReady    map[string]struct{}
+	queuedWorkspaceEvents  map[string][]workspaceWindowEvent
+	panelOpenTimeout       time.Duration
+	panelDockTimeout       time.Duration
+	clusterTransferTimeout time.Duration
+	clusterCloseTimeout    time.Duration
+	quitMu                 sync.Mutex
+	nextQuit               uint64
+	pendingQuit            *applicationQuitPreflight
+	quitPreflightTimeout   time.Duration
+	panelTransferMu        sync.Mutex
+	tabTransferMu          sync.Mutex
+	tabTransfers           transferLifecycle[panelTabTransfer]
+	tabTransferTimeout     time.Duration
 }
 
 type applicationQuitPreflight struct {
@@ -208,24 +212,38 @@ func bindApplicationWindowOperations(registry *Registry, app *application.App) {
 	registry.windowGeometry = func(name string) (geometry, bool) {
 		return applicationWindowGeometry(app, name)
 	}
-	registry.restoreWindowState = func(name string, state panelwindow.NamedWorkspaceGeometry) {
-		restoreApplicationWindowState(app, name, state)
+	registry.restoreWindowState = func(name string, state panelwindow.NamedWorkspaceGeometry) bool {
+		return restoreApplicationWindowState(app, name, state)
 	}
 }
 
 // How long a window gets to finish entering fullscreen before the next one starts.
 const fullscreenTransitionTimeout = 3 * time.Second
 
-// enterFullscreen puts a window into fullscreen and, on macOS, waits for the
-// transition to finish. macOS runs one fullscreen transition at a time and
-// drops a request made while another is running, so windows enter in turn.
-func enterFullscreen(window application.Window) {
-	if runtime.GOOS != "darwin" {
+// fullscreenAnnouncement is the event a platform sends once a window has
+// entered fullscreen. Windows enters synchronously and needs no wait.
+func fullscreenAnnouncement(goos string) (events.WindowEventType, bool) {
+	switch goos {
+	case "darwin":
+		return events.Mac.WindowDidEnterFullScreen, true
+	case "linux":
+		return events.Common.WindowFullscreen, true
+	}
+	return 0, false
+}
+
+// enterFullscreenOn puts a window into fullscreen and reports whether it got
+// there. Where the platform enters asynchronously it waits for the transition
+// to finish: macOS runs one fullscreen transition at a time and drops a request
+// made while another is running, so windows must enter in turn.
+func enterFullscreenOn(goos string, window application.Window, timeout time.Duration) bool {
+	announcement, waits := fullscreenAnnouncement(goos)
+	if !waits {
 		window.Fullscreen()
-		return
+		return window.IsFullscreen()
 	}
 	entered := make(chan struct{}, 1)
-	stop := window.OnWindowEvent(events.Mac.WindowDidEnterFullScreen, func(*application.WindowEvent) {
+	stop := window.OnWindowEvent(announcement, func(*application.WindowEvent) {
 		select {
 		case entered <- struct{}{}:
 		default:
@@ -235,23 +253,27 @@ func enterFullscreen(window application.Window) {
 	window.Fullscreen()
 	select {
 	case <-entered:
-	case <-time.After(fullscreenTransitionTimeout):
+		return true
+	case <-time.After(timeout):
+		// The announcement can be missed; the window's own state decides.
+		return window.IsFullscreen()
 	}
 }
 
 // restoreApplicationWindowState puts a window back into the state it was saved
 // in. Minimise comes last so a maximized window that was minimized returns to
 // its maximized size when it is brought back.
-func restoreApplicationWindowState(app *application.App, name string, state panelwindow.NamedWorkspaceGeometry) {
+func restoreApplicationWindowState(app *application.App, name string, state panelwindow.NamedWorkspaceGeometry) bool {
 	window, ok := app.Window.GetByName(name)
 	if !ok {
-		return
+		return false
 	}
+	restored := true
 	if state.Maximized {
 		window.Maximise()
 	}
 	if state.Fullscreen {
-		enterFullscreen(window)
+		restored = enterFullscreenOn(runtime.GOOS, window, fullscreenTransitionTimeout)
 	}
 	if state.Maximized || state.Fullscreen {
 		// Wails drops the minimum size to enter either state and puts it back only
@@ -262,6 +284,7 @@ func restoreApplicationWindowState(app *application.App, name string, state pane
 	if state.Minimized {
 		window.Minimise()
 	}
+	return restored
 }
 
 // NewRegistry creates the peer-window registry for a Wails application.
@@ -505,6 +528,7 @@ func (r *Registry) authorizeClose(name string) {
 // The native close hook can consume authorization synchronously. If no window
 // accepts the close, discard the unused authorization before returning.
 func (r *Registry) closeAuthorizedWindow(name string) bool {
+	r.failRestoreOfClosedWindow(name)
 	r.authorizeClose(name)
 	// No native window answers only when there is none, so its bounds go either way.
 	r.normalWorkspaceBounds.Delete(name)
@@ -551,6 +575,10 @@ func (r *Registry) forgetWorkspaceReady(name string) {
 
 func (r *Registry) handlePanelClosingEvent(event *application.WindowEvent, name string) {
 	if r.consumeAuthorizedClose(name) {
+		return
+	}
+	if r.restoringWorkspaceWindow(name) {
+		cancelWindowEvent(event)
 		return
 	}
 	_, err := r.panels.Descriptor(name)
@@ -865,6 +893,9 @@ func (r *Registry) RequestPanelTabClose(windowName, panelID string) error {
 // removal. Native destruction precedes removal of the panel directory entries
 // and release of its runtime references.
 func (r *Registry) AcknowledgePanelWindowClose(windowName string) error {
+	if r.restoringWorkspaceWindow(windowName) {
+		return fmt.Errorf("panel window %q is still being restored", windowName)
+	}
 	return r.closePanelWindow(windowName, false)
 }
 
@@ -902,6 +933,9 @@ func (r *Registry) closePanelWindow(windowName string, abandon bool) error {
 }
 
 func (r *Registry) AcknowledgeWorkspaceWindowClose(windowName string) error {
+	if r.restoringWorkspaceWindow(windowName) {
+		return fmt.Errorf("app window %q is still being restored", windowName)
+	}
 	if !r.lifecycle.Contains(windowName) {
 		return fmt.Errorf("app window %q is not live", windowName)
 	}
@@ -978,12 +1012,60 @@ func (r *Registry) AcknowledgeApplicationQuitPreflight(
 	return nil
 }
 
-func (r *Registry) handleClosing(event *application.WindowEvent, name string) {
-	if !r.consumeAuthorizedClose(name) && r.isWorkspaceReady(name) {
-		if event != nil {
-			event.Cancel()
+// restoringWorkspaceWindow reports whether name is a destination of a workspace
+// switch that has not committed. Until then the user cannot close it: closed
+// early, it would leave the switch to retire the previous windows with nothing
+// in their place. From the commit on it is an ordinary window.
+func (r *Registry) restoringWorkspaceWindow(name string) bool {
+	restore := r.activeRestore.Load()
+	return restore != nil && restore.stages(name)
+}
+
+// failRestoreOfClosedWindow aborts the switch in progress when the registry
+// closes one of its destinations before the commit. Every close the registry
+// starts passes through closeAuthorizedWindow, so no route has to remember to.
+// A destination still loading is released from its wait at once.
+func (r *Registry) failRestoreOfClosedWindow(name string) {
+	restore := r.activeRestore.Load()
+	if restore == nil || !restore.hasTarget(name) {
+		return
+	}
+	failure := fmt.Errorf("window %q closed before the workspace opened", name)
+	if !restore.fail(failure) {
+		return
+	}
+	if slot, staged := r.workspaceRestoreSlots.Load(name); staged {
+		select {
+		case slot.(*namedWorkspaceRestoreSlot).ready <- failure:
+		default:
 		}
-		r.emitWindowEvent(name, panelwindow.WorkspaceCloseRequestedEventName, panelwindow.WorkspaceCloseRequestedEvent{WindowName: name})
+	}
+}
+
+func cancelWindowEvent(event *application.WindowEvent) {
+	if event != nil {
+		event.Cancel()
+	}
+}
+
+// refuseUnauthorizedAppClose keeps an app window open when the registry did not
+// ask for the close: a staged window stays, and a ready window is asked to run
+// its close guards first. It reports whether the close was refused.
+func (r *Registry) refuseUnauthorizedAppClose(event *application.WindowEvent, name string) bool {
+	if r.restoringWorkspaceWindow(name) {
+		cancelWindowEvent(event)
+		return true
+	}
+	if !r.isWorkspaceReady(name) {
+		return false
+	}
+	cancelWindowEvent(event)
+	r.emitWindowEvent(name, panelwindow.WorkspaceCloseRequestedEventName, panelwindow.WorkspaceCloseRequestedEvent{WindowName: name})
+	return true
+}
+
+func (r *Registry) handleClosing(event *application.WindowEvent, name string) {
+	if !r.consumeAuthorizedClose(name) && r.refuseUnauthorizedAppClose(event, name) {
 		return
 	}
 	if err := r.failClusterTransfersForWindow(name); err != nil {

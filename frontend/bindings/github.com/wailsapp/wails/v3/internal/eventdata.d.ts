@@ -46,8 +46,8 @@ declare module "@wailsio/runtime" {
             "menu:paste": string;
             "menu:selectAll": void;
             "named-workspace:capture": panelwindow$0.NamedWorkspaceCaptureRequest;
-            "named-workspace:missing-clusters": panelwindow$0.NamedWorkspaceMissingClustersEvent;
             "named-workspace:restore": panelwindow$0.NamedWorkspaceRestoreRequest;
+            "named-workspace:warnings": panelwindow$0.NamedWorkspaceWarningsEvent;
             "object-shell:list": backend$0.ShellSessionInfo[] | null;
             "object-shell:output": backend$0.ShellOutputEvent;
             "object-shell:status": backend$0.ShellStatusEvent;
