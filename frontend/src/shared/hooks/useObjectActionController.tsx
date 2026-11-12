@@ -35,9 +35,13 @@ import type {
   PermissionStatus,
 } from '@shared/actions/objectActionPolicy';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import ConfirmationModal, {
+  type ConfirmationModalTarget,
+  type ConfirmationModalTargetDetail,
+} from '@shared/components/modals/ConfirmationModal';
 import RollbackModal from '@shared/components/modals/RollbackModal';
 import ScaleModal from '@shared/components/modals/ScaleModal';
+import { clampReplicas } from '@shared/components/modals/scaleModalModel';
 import {
   nodeActionPermissionInputs,
   resolveNodeActionPermissionStatuses,
@@ -103,7 +107,9 @@ interface ScaleState {
 
 interface ConfirmationSpec {
   title: string;
-  message: string;
+  target: ConfirmationModalTarget;
+  targetDetail?: ConfirmationModalTargetDetail;
+  message?: string;
   notice?: string;
   warning?: string;
   confirmText: string;
@@ -118,28 +124,38 @@ const restartConfirmation = (
   onCancel: () => void
 ): ConfirmationSpec => ({
   title: `Restart ${target.kind || 'Workload'}`,
-  message: `Are you sure you want to restart ${target.kind.toLowerCase()} "${target.name}"?\n\nThis will perform a rolling restart of all pods.`,
+  target,
+  message: 'This will perform a rolling restart of all pods.',
   confirmText: 'Restart',
   confirmButtonClass: 'danger',
   onConfirm,
   onCancel,
 });
 
-// Deleting a node that drains (its drain facet) and is still schedulable warns
-// that its pods stop abruptly.
+export const isDrainableNode = (object: ObjectActionData): boolean =>
+  Boolean(lookupObjectActionKindCapability(object)?.drain);
+
+// Shown on every node delete. Nothing the app can read proves a node stays empty
+// until the delete lands, so the warning states what will happen to any pods left.
+export const nodeRemovalWarning = (nodes: number): string | undefined => {
+  if (nodes === 0) {
+    return undefined;
+  }
+  return nodes === 1
+    ? 'Workload pods still on this node will be terminated abruptly when it is removed.'
+    : 'Workload pods still on these nodes will be terminated abruptly when they are removed.';
+};
+
 const deleteConfirmation = (
   target: ObjectActionData,
   onConfirm: () => void,
   onCancel: () => void
 ): ConfirmationSpec => {
-  const isUndrainedNode =
-    Boolean(lookupObjectActionKindCapability(target)?.drain) && !target.unschedulable;
   return {
     title: `Delete ${target.kind || 'Resource'}`,
-    message: `Are you sure you want to delete ${target.kind.toLowerCase()} "${target.name}"?\n\nThis action cannot be undone.`,
-    warning: isUndrainedNode
-      ? 'This node has not been drained. Pods running on it will be terminated abruptly when the node is removed.'
-      : undefined,
+    target,
+    message: 'This action cannot be undone.',
+    warning: nodeRemovalWarning(isDrainableNode(target) ? 1 : 0),
     confirmText: 'Delete',
     confirmButtonClass: 'danger',
     onConfirm,
@@ -153,7 +169,8 @@ const triggerConfirmation = (
   onCancel: () => void
 ): ConfirmationSpec => ({
   title: 'Trigger CronJob',
-  message: `Create a new Job from CronJob "${target.name}" immediately?`,
+  target,
+  message: 'This will create a new Job immediately.',
   confirmText: 'Trigger',
   confirmButtonClass: undefined,
   onConfirm,
@@ -166,7 +183,7 @@ const scaleToZeroConfirmation = (
   onCancel: () => void
 ): ConfirmationSpec => ({
   title: 'Scale to 0',
-  message: `Scale ${object.kind.toLowerCase()} "${object.name}" to 0 replicas?`,
+  target: object,
   warning: 'This will stop currently running pods for this workload.',
   confirmText: 'Scale to 0',
   confirmButtonClass: 'danger',
@@ -204,7 +221,8 @@ const finalizerRemovalConfirmation = (
   onCancel: () => void
 ): ConfirmationSpec => ({
   title: 'Remove Finalizer',
-  message: `Remove finalizer "${finalizer}" from ${object.kind.toLowerCase()} "${object.name}"?`,
+  target: object,
+  targetDetail: { label: 'Finalizer', value: finalizer },
   notice: deletionIsWithinFinalizerCleanupGrace(deletionTimestamp)
     ? RECENT_FINALIZER_REMOVAL_NOTICE
     : undefined,
@@ -215,8 +233,6 @@ const finalizerRemovalConfirmation = (
   onConfirm,
   onCancel,
 });
-
-const clampReplicas = (value: number): number => Math.max(0, Math.min(9999, value));
 
 const extractDesiredReplicas = (object: ObjectActionData): number => {
   if (typeof object.desiredReplicas === 'number' && Number.isFinite(object.desiredReplicas)) {
@@ -242,7 +258,7 @@ const portForwardTargetFor = (object: ObjectActionData): PortForwardTarget => ({
   ports: [],
 });
 
-const actionTargetFor = (object: ObjectActionData, action: string) => {
+export const actionTargetFor = (object: ObjectActionData, action: string) => {
   if (object.requiresExplicitVersion && !object.explicitVersionProvided) {
     throw new Error(
       `Cannot ${action} ${object.kind}/${object.name}: version missing on custom resource row`
@@ -288,7 +304,7 @@ const actionIdentitySources = (object: ObjectActionData) => {
   return { capability, source, targetSource: { ...source, kind: object.kind } };
 };
 
-const resolveObjectActionPermissions = (
+export const resolveObjectActionPermissions = (
   object: ObjectActionData,
   permissionMap: PermissionMap
 ): ObjectActionPermissionStatuses => {
@@ -335,7 +351,7 @@ const actionPermissionDescriptors = (object: ObjectActionData) => {
 };
 
 // The checks the permission map has no answer for yet.
-const missingPermissionChecks = (
+export const missingPermissionChecks = (
   object: ObjectActionData,
   permissionMap: PermissionMap
 ): PermissionCheck[] =>
@@ -797,7 +813,9 @@ export const useObjectActionController = ({
         <ConfirmationModal
           isOpen={Boolean(confirmation)}
           title={confirmation?.title ?? ''}
-          message={confirmation?.message ?? ''}
+          target={confirmation?.target}
+          targetDetail={confirmation?.targetDetail}
+          message={confirmation?.message}
           notice={confirmation?.notice}
           warning={confirmation?.warning}
           confirmText={confirmation?.confirmText ?? 'Confirm'}

@@ -16,7 +16,11 @@ import type {
   GridColumnDefinition,
   GridTableFilterState,
 } from '@shared/components/tables/GridTable.types';
-import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
+import {
+  DEFAULT_GRID_TABLE_FILTER_STATE,
+  normalizeGridTableFilterState,
+} from '@shared/components/tables/gridTableFilterState';
+import { takeGridTableFilterRequest } from '@shared/components/tables/hooks/gridTableFilterRequest';
 import {
   buildGridTableStorageKey,
   buildPersistedStateForSave,
@@ -36,6 +40,7 @@ import { subscribeGridTableResetAll } from '@shared/components/tables/persistenc
 import { useStableSelectedValue } from '@shared/hooks/useStableSelectedValue';
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { eventBus } from '@/core/events';
 import { usePreference } from '@/core/settings/usePreference';
 
 export interface UseGridTablePersistenceParams<T> {
@@ -57,6 +62,14 @@ export interface UseGridTablePersistenceParams<T> {
    * that sets this, instead of in this table's own entry.
    */
   shareNamespaceFilter?: boolean;
+  /**
+   * Apply filter requests (requestGridTableFilters) addressed to this view in
+   * this cluster. One pending when the table hydrates becomes its hydrated
+   * filters, so the table never reads with the filters it replaces; a later one
+   * replaces the filters. Persisted tables only: a transient table has no
+   * hydration step to take a pending request.
+   */
+  filterRequestClusterId?: string;
 }
 
 export interface UseGridTablePersistenceResult {
@@ -112,6 +125,7 @@ type GridTablePersistenceAction =
       type: 'hydrated';
       persisted: ReturnType<typeof prunePersistedState>;
       sharedNamespaceFilter: SharedNamespaceFilter | null;
+      requestedFilters: GridTableFilterState | null;
     }
   | { type: 'reset' }
   | { type: 'update'; update: GridTablePersistenceUpdate };
@@ -157,8 +171,12 @@ const gridTablePersistenceReducer = (
     case 'scopeChanged':
       // In-memory state has nothing to load, so it is ready immediately.
       return { ...createPendingPersistenceState(), hydrated: action.transient };
-    case 'hydrated':
-      return hydratePersistenceState(action.persisted, action.sharedNamespaceFilter);
+    case 'hydrated': {
+      const hydratedState = hydratePersistenceState(action.persisted, action.sharedNamespaceFilter);
+      return action.requestedFilters
+        ? { ...hydratedState, filters: action.requestedFilters }
+        : hydratedState;
+    }
     case 'reset':
       return {
         ...createPendingPersistenceState(),
@@ -173,6 +191,16 @@ const gridTablePersistenceReducer = (
   }
 };
 
+// Takes the filters a pending request asks this table to show, if it accepts
+// requests and one is addressed to it.
+const takeRequestedFilters = (
+  clusterId: string | undefined,
+  viewId: string
+): GridTableFilterState | null => {
+  const request = clusterId ? takeGridTableFilterRequest(clusterId, viewId) : null;
+  return request ? normalizeGridTableFilterState(request.filters) : null;
+};
+
 export function useGridTablePersistence<T>({
   viewId,
   clusterIdentity,
@@ -184,6 +212,7 @@ export function useGridTablePersistence<T>({
   enabled = true,
   transient = false,
   shareNamespaceFilter = false,
+  filterRequestClusterId,
 }: UseGridTablePersistenceParams<T>): UseGridTablePersistenceResult {
   const filterOptions = useStableSelectedValue(requestedFilterOptions);
   const [clusterHash, setClusterHash] = useState<string>('');
@@ -305,6 +334,7 @@ export function useGridTablePersistence<T>({
         sharedNamespaceFilter: sharedNamespaceKey
           ? { key: sharedNamespaceKey, namespaces: loadSharedNamespaceFilter(sharedNamespaceKey) }
           : null,
+        requestedFilters: takeRequestedFilters(filterRequestClusterId, viewId),
       });
     };
 
@@ -320,7 +350,28 @@ export function useGridTablePersistence<T>({
     filterOptions,
     isNamespaceScoped,
     pageSizeOptions,
+    filterRequestClusterId,
+    viewId,
   ]);
+
+  // Once hydrated, each request addressed to the table replaces its filters;
+  // before that, requests stay pending for hydration to take. A request can
+  // arrive after hydration took one but before this listener subscribes, so
+  // take any still pending first. Both happen in this one effect run, leaving
+  // no gap between them.
+  useEffect(() => {
+    if (!filterRequestClusterId || !hydrated) {
+      return;
+    }
+    const applyPendingRequest = () => {
+      const requested = takeRequestedFilters(filterRequestClusterId, viewId);
+      if (requested) {
+        persistenceSetters.setFilters(requested);
+      }
+    };
+    applyPendingRequest();
+    return eventBus.on('gridtable:filter-request', applyPendingRequest);
+  }, [filterRequestClusterId, hydrated, persistenceSetters, viewId]);
 
   const resetLocalState = useCallback(() => {
     if (storageKey) {

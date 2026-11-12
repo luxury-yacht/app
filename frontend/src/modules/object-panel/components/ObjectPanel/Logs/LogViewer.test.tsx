@@ -42,76 +42,87 @@ import { isMacPlatform } from '@/utils/platform';
 import LogViewer from './LogViewer';
 import type { ParsedLogEntry } from './logOptionsReducer';
 
-vi.mock('@shared/components/dropdowns/Dropdown', () => ({
-  Dropdown: ({
-    value = '',
-    onChange,
-    options = [],
-    multiple = false,
-    renderValue,
-    ariaLabel,
-  }: {
-    value?: string | string[];
-    onChange?: (v: string | string[]) => void;
-    options?: Array<{ label?: string; value: string; disabled?: boolean }>;
-    multiple?: boolean;
-    ariaLabel?: string;
-    renderValue?: (
-      value: string | string[],
-      options: Array<{ label: string; value: string }>
-    ) => React.ReactNode;
-  }) => {
-    const testId =
-      multiple && ariaLabel
-        ? `logs-${ariaLabel.toLowerCase()}-dropdown`
-        : multiple ||
-            options?.some((opt) => opt?.label === 'All') ||
-            options?.some(
-              (opt) => typeof opt?.label === 'string' && opt.label.startsWith('All ')
-            ) ||
-            options?.some(
-              (opt) =>
-                typeof opt?.label === 'string' &&
-                opt.label.startsWith('Containers and Init Containers')
-            )
-          ? 'pod-container-dropdown'
-          : options?.some((opt) => opt?.label === 'Auto-scroll')
-            ? 'pod-options-dropdown'
-            : 'pod-filter-dropdown';
-    return (
-      <>
-        <span data-testid={`${testId}-value`}>
-          {renderValue?.(
-            value,
-            options.map((opt) => ({ value: opt.value, label: opt.label ?? opt.value }))
-          )}
-        </span>
-        <select
-          data-testid={testId}
-          multiple={multiple}
-          value={value}
-          onChange={(event) => {
-            const target = event.target as HTMLSelectElement;
-            onChange?.(
-              multiple
-                ? Array.from(target.selectedOptions).map((option) => option.value)
-                : target.value
-            );
-          }}
-        >
-          {withStableListKeys(
-            options ?? [],
-            (opt) => `${opt?.value ?? ''}:${opt?.label ?? ''}`
-          ).map(({ key, value: opt }) => (
-            <option key={key} value={opt?.value} disabled={Boolean(opt?.disabled)}>
-              {opt?.label ?? opt?.value}
-            </option>
-          ))}
-        </select>
-      </>
-    );
-  },
-}));
+vi.mock('@shared/components/dropdowns/Dropdown', () => {
+  type MenuActions =
+    | React.ReactNode
+    | ((context: { closeDropdown: () => void }) => React.ReactNode);
+  // The menu's extra actions (Log Levels: the Markers toggle), shown beside the options.
+  const MenuActions = ({ actions }: { actions?: MenuActions }) =>
+    typeof actions === 'function' ? actions({ closeDropdown: () => undefined }) : (actions ?? null);
+  return {
+    Dropdown: ({
+      value = '',
+      onChange,
+      options = [],
+      multiple = false,
+      renderValue,
+      ariaLabel,
+      additionalBulkActions,
+    }: {
+      value?: string | string[];
+      onChange?: (v: string | string[]) => void;
+      options?: Array<{ label?: string; value: string; disabled?: boolean }>;
+      multiple?: boolean;
+      ariaLabel?: string;
+      renderValue?: (
+        value: string | string[],
+        options: Array<{ label: string; value: string }>
+      ) => React.ReactNode;
+      additionalBulkActions?: MenuActions;
+    }) => {
+      const testId =
+        multiple && ariaLabel
+          ? `logs-${ariaLabel.toLowerCase()}-dropdown`
+          : multiple ||
+              options?.some((opt) => opt?.label === 'All') ||
+              options?.some(
+                (opt) => typeof opt?.label === 'string' && opt.label.startsWith('All ')
+              ) ||
+              options?.some(
+                (opt) =>
+                  typeof opt?.label === 'string' &&
+                  opt.label.startsWith('Containers and Init Containers')
+              )
+            ? 'pod-container-dropdown'
+            : options?.some((opt) => opt?.label === 'Auto-scroll')
+              ? 'pod-options-dropdown'
+              : 'pod-filter-dropdown';
+      return (
+        <>
+          <span data-testid={`${testId}-value`}>
+            {renderValue?.(
+              value,
+              options.map((opt) => ({ value: opt.value, label: opt.label ?? opt.value }))
+            )}
+          </span>
+          <select
+            data-testid={testId}
+            multiple={multiple}
+            value={value}
+            onChange={(event) => {
+              const target = event.target as HTMLSelectElement;
+              onChange?.(
+                multiple
+                  ? Array.from(target.selectedOptions).map((option) => option.value)
+                  : target.value
+              );
+            }}
+          >
+            {withStableListKeys(
+              options ?? [],
+              (opt) => `${opt?.value ?? ''}:${opt?.label ?? ''}`
+            ).map(({ key, value: opt }) => (
+              <option key={key} value={opt?.value} disabled={Boolean(opt?.disabled)}>
+                {opt?.label ?? opt?.value}
+              </option>
+            ))}
+          </select>
+          <MenuActions actions={additionalBulkActions} />
+        </>
+      );
+    },
+  };
+});
 
 const tableMockState = vi.hoisted(() => ({ renderRows: false }));
 
@@ -502,12 +513,12 @@ describe('LogViewer active pod synchronisation', () => {
     await app.settle();
   };
 
-  const dropdown = (name: 'pods' | 'containers') =>
+  const dropdown = (name: 'pods' | 'containers' | 'log levels') =>
     requireValue(
       container().querySelector<HTMLSelectElement>(`[data-testid="logs-${name}-dropdown"]`),
       `expected the ${name} dropdown`
     );
-  const dropdownLabel = (name: 'pods' | 'containers') =>
+  const dropdownLabel = (name: 'pods' | 'containers' | 'log levels') =>
     container().querySelector(`[data-testid="logs-${name}-dropdown-value"]`)?.textContent;
 
   const shownLines = () =>
@@ -1461,6 +1472,35 @@ describe('LogViewer active pod synchronisation', () => {
     expect(count()).toBe('1/3 logs');
   });
 
+  it('colors the Level column in the Table view by the detected level', async () => {
+    tableMockState.renderRows = true;
+    await openLogs([
+      logLine('web-1', '{"level":"debug","msg":"a"}', at(0)),
+      logLine('web-1', '{"level":"INFO","msg":"b"}', at(1)),
+      logLine('web-1', '{"level":"warning","msg":"c"}', at(2)),
+      logLine('web-1', '{"level":"error","msg":"d"}', at(3)),
+      logLine('web-1', '{"level":"fatal","msg":"e"}', at(4)),
+      logLine('web-1', '{"level":"custom","msg":"f"}', at(5)),
+    ]);
+
+    await showLogFormat('Table');
+
+    // The cell keeps the text as written; fatal takes the error color, and a
+    // value that is not a level stays plain.
+    const levelCells = Array.from(container().querySelectorAll('.log-level')).map((cell) => [
+      cell.textContent,
+      cell.className,
+    ]);
+    expect(levelCells).toEqual([
+      ['debug', 'log-level DEBUG'],
+      ['INFO', 'log-level INFO'],
+      ['warning', 'log-level WARN'],
+      ['error', 'log-level ERROR'],
+      ['fatal', 'log-level ERROR'],
+    ]);
+    expect(container().textContent).toContain('custom');
+  });
+
   const searchShortcut = () => press('f', isMacPlatform() ? { metaKey: true } : { ctrlKey: true });
 
   it('disables search, timestamps and wrap, and their shortcuts, until a log line arrives', async () => {
@@ -1867,6 +1907,128 @@ describe('LogViewer active pod synchronisation', () => {
     );
     expect(dropdownLabel('pods')).toBe('Pods (0)');
     expect(dropdownLabel('containers')).toBe('Containers (1)');
+  });
+
+  it('filters by log level, keeping a stack trace with its error line', async () => {
+    await openLogs(
+      [
+        logLine('web-1', 'booting', at(0)),
+        logLine('web-1', '{"level":"error","msg":"crash"}', at(1)),
+        logLine('web-1', '    at Server.listen (server.js:10)', at(2)),
+        logLine('web-1', 'level=info msg=ready', at(3)),
+        logLine('web-1', 'W1106 12:00:00.000001       1 sync.go:7] "Slow sync"', at(4)),
+      ],
+      { activePodNames: ['web-1'] }
+    );
+    const optionLabels = Array.from(dropdown('log levels').options).map((option) => option.text);
+    expect(optionLabels).toEqual(['Info', 'Warning', 'Error', 'No level']);
+    expect(dropdownLabel('log levels')).toBe('Log Levels');
+
+    await setMultiSelectValues(dropdown('log levels'), ['error']);
+
+    expect(dropdownLabel('log levels')).toBe('Log Levels (1)');
+    expect(shownLines()).toEqual([
+      expect.stringContaining('crash'),
+      expect.stringContaining('Server.listen'),
+    ]);
+    expect(chipStrip()?.textContent).toContain('Level: Error');
+    // The level filter is frontend-only: the stream keeps reading every line.
+    expect(last(streamRequests())).toEqual(expect.objectContaining({ selectedFilters: [] }));
+
+    // The choice survives a remount, as switching clusters does.
+    await remountViewer({ activePodNames: ['web-1'] });
+    expect(dropdownLabel('log levels')).toBe('Log Levels (1)');
+    expect(shownLines()).toHaveLength(2);
+
+    await click(requireControl('Remove filter Level: Error'));
+    expect(shownLines()).toHaveLength(5);
+
+    await setMultiSelectValues(dropdown('log levels'), []);
+    expect(shownLines()).toEqual([expect.stringContaining('No logs match the current filters')]);
+
+    await click(requireControl('Clear all filters'));
+    expect(shownLines()).toHaveLength(5);
+    expect(dropdownLabel('log levels')).toBe('Log Levels');
+  });
+
+  it('keeps a stack trace under Error after the buffer drops its error line', async () => {
+    // A small buffer, so the next line evicts the oldest.
+    const bufferSize = SPECS.objPanelLogsBufferMaxSize.min;
+    app.preferences({ objPanelLogsBufferMaxSize: bufferSize });
+    const frame = (index: number) => logLine('web-1', `    at frame ${index}`, at(index));
+    const logCount = () => chipStrip()?.querySelector('.logs-viewer-count')?.textContent;
+    const pods = { activePodNames: ['web-1', 'web-2'] };
+    // The error line, its stack frames, and one unleveled line from another pod.
+    const shownUnderError = `${bufferSize - 1}/${bufferSize} logs`;
+    try {
+      await openLogs(
+        [
+          logLine('web-1', '{"level":"error","msg":"crash"}', at(0)),
+          ...Array.from({ length: bufferSize - 2 }, (_, index) => frame(index + 1)),
+          logLine('web-2', 'plain output', at(bufferSize - 1)),
+        ],
+        pods
+      );
+      await setMultiSelectValues(dropdown('log levels'), ['error']);
+      expect(logCount()).toBe(shownUnderError);
+
+      // The next frame pushes the error line out of the buffer.
+      await sendLines([frame(bufferSize)]);
+
+      expect(logCount()).toBe(shownUnderError);
+      expect(Array.from(dropdown('log levels').options).map((option) => option.text)).toEqual([
+        'Error',
+        'No level',
+      ]);
+
+      // Switching clusters remounts the viewer over the same buffer.
+      await remountViewer(pods);
+      expect(logCount()).toBe(shownUnderError);
+    } finally {
+      // The stream manager keeps the buffer size across tests.
+      setObjPanelLogsBufferMaxSize(SPECS.objPanelLogsBufferMaxSize.defaultValue);
+      await app.settle();
+    }
+  });
+
+  it('marks debug, warning, and error lines, stack traces included, until markers are turned off', async () => {
+    await openLogs(
+      [
+        logLine('web-1', 'booting', at(0)),
+        logLine('web-1', 'level=info msg=ready', at(1)),
+        logLine('web-1', 'level=debug msg="cache miss"', at(2)),
+        logLine('web-1', '{"level":"error","msg":"crash"}', at(3)),
+        logLine('web-1', '    at Server.listen (server.js:10)', at(4)),
+        logLine('web-1', 'W1106 12:00:00.000001       1 sync.go:7] "Slow sync"', at(5)),
+        logLine('web-1', '{"level":"fatal","msg":"giving up"}', at(6)),
+      ],
+      { activePodNames: ['web-1'] }
+    );
+    const markers = () =>
+      Array.from(container().querySelectorAll('.log-viewer-line')).map(
+        (line) => line.getAttribute('data-level-marker') ?? 'none'
+      );
+    const unmarked = Array.from({ length: 7 }, () => 'none');
+    const markersToggle = () => requireControl('Show level markers');
+
+    // Info and unleveled lines stay plain; fatal shows as an error.
+    expect(markers()).toEqual(['none', 'none', 'debug', 'error', 'error', 'warn', 'error']);
+    expect(markersToggle().getAttribute('aria-pressed')).toBe('true');
+
+    await click(markersToggle());
+
+    expect(markers()).toEqual(unmarked);
+    expect(markersToggle().getAttribute('aria-pressed')).toBe('false');
+
+    // The choice is saved with the tab's options.
+    await remountViewer({ activePodNames: ['web-1'] });
+    expect(markers()).toEqual(unmarked);
+  });
+
+  it('offers no level filter when no line has a level', async () => {
+    await openLogs();
+
+    expect(container().querySelector('[data-testid="logs-log levels-dropdown"]')).toBeNull();
   });
 
   // Without a pod list, the Pods dropdown offers the pods with lines. Choosing

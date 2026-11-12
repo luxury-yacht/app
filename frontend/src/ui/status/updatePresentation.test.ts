@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { getUpdatePresentation } from './updatePresentation';
 
 const update = (overrides: Partial<backend.UpdateInfo>): backend.UpdateInfo => ({
+  revision: 1,
   status: appupdates.Status.StatusIdle,
   currentVersion: '1.9.0',
   availableVersion: '2.0.0',

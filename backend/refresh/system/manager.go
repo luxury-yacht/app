@@ -95,9 +95,9 @@ type Subsystem struct {
 	ContainerLogs    *containerlogsstream.Handler
 	ClusterMeta      snapshot.ClusterMeta // Metadata about the cluster.
 	// Every doorbell producer rings ResourceStream and schedules its timers
-	// through it, so ResourceStream.Stop is the generation's one shutdown
-	// barrier. NamespaceNotifier gates cooling on workload readiness, Refresh's
-	// response-cache eviction handlers record into ObjectDetailsNotifier, and
+	// through it, so ResourceStream.StopProducers is the generation's one
+	// shutdown barrier. NamespaceNotifier gates cooling on workload readiness,
+	// Refresh's response-cache eviction handlers record into ObjectDetailsNotifier, and
 	// the attention service targets AttentionIndex.
 	NamespaceNotifier     *snapshot.NamespaceChangeNotifier
 	ObjectDetailsNotifier *snapshot.ObjectDetailsChangeNotifier

@@ -9,6 +9,7 @@
 package backend
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -53,19 +54,19 @@ func TestResourceActionsRequireClient(t *testing.T) {
 			return app.gateway.deleteHelmReleaseAction(objectActionTarget(clusterID, "helm.sh", "v3", "HelmRelease", "ns", "rel"))
 		}},
 		{"Cordon", func() error {
-			return app.gateway.cordonNodeAction(objectActionTarget(clusterID, "", "v1", "Node", "", "node"))
+			return app.gateway.cordonNodeAction(context.Background(), objectActionTarget(clusterID, "", "v1", "Node", "", "node"))
 		}},
 		{"Uncordon", func() error {
-			return app.gateway.uncordonNodeAction(objectActionTarget(clusterID, "", "v1", "Node", "", "node"))
+			return app.gateway.uncordonNodeAction(context.Background(), objectActionTarget(clusterID, "", "v1", "Node", "", "node"))
 		}},
 		{"Drain", func() error {
 			return app.gateway.drainNodeAction(objectActionTarget(clusterID, "", "v1", "Node", "", "node"), DrainNodeOptions{})
 		}},
 		{"deleteNode", func() error {
-			return app.gateway.deleteNodeAction(objectActionTarget(clusterID, "", "v1", "Node", "", "node"), false)
+			return app.gateway.deleteNodeAction(context.Background(), objectActionTarget(clusterID, "", "v1", "Node", "", "node"), false)
 		}},
 		{"forceDeleteNode", func() error {
-			return app.gateway.deleteNodeAction(objectActionTarget(clusterID, "", "v1", "Node", "", "node"), true)
+			return app.gateway.deleteNodeAction(context.Background(), objectActionTarget(clusterID, "", "v1", "Node", "", "node"), true)
 		}},
 	}
 
@@ -155,7 +156,7 @@ func TestDeletePodEvictsDetailCache(t *testing.T) {
 	app.gateway.seedResponseCache(clusterID, detailKey, "stale")
 	app.gateway.seedResponseCache(clusterID, headerKey, "stale")
 
-	if err := app.gateway.deletePodAction(objectActionTarget(clusterID, "", "v1", "Pod", "ns", "pod")); err != nil {
+	if err := app.gateway.deletePodAction(context.Background(), objectActionTarget(clusterID, "", "v1", "Pod", "ns", "pod")); err != nil {
 		t.Fatalf("deletePod returned error: %v", err)
 	}
 	for _, key := range []string{detailKey, headerKey} {
@@ -200,7 +201,7 @@ func TestPodAndHelmOperationsRequireClient(t *testing.T) {
 		call func() error
 	}{
 		{"deletePod", func() error {
-			return app.gateway.deletePodAction(objectActionTarget(clusterID, "", "v1", "Pod", "ns", "pod"))
+			return app.gateway.deletePodAction(context.Background(), objectActionTarget(clusterID, "", "v1", "Pod", "ns", "pod"))
 		}},
 		{"PodContainers", func() error {
 			_, err := app.gateway.GetPodContainers(resourcemodel.ResourceRef{ClusterID: clusterID, Version: "v1", Kind: "Pod", Namespace: "ns", Name: "pod"})
@@ -231,10 +232,10 @@ func TestActionWrappersRequireTargetIdentity(t *testing.T) {
 		wantErr string
 	}{
 		{"deletePod namespace", func() error {
-			return app.gateway.deletePodAction(objectActionTarget("cluster-a", "", "v1", "Pod", "", "pod"))
+			return app.gateway.deletePodAction(context.Background(), objectActionTarget("cluster-a", "", "v1", "Pod", "", "pod"))
 		}, "namespace is required"},
 		{"deletePod name", func() error {
-			return app.gateway.deletePodAction(objectActionTarget("cluster-a", "", "v1", "Pod", "ns", ""))
+			return app.gateway.deletePodAction(context.Background(), objectActionTarget("cluster-a", "", "v1", "Pod", "ns", ""))
 		}, "pod name is required"},
 		{"PodContainers namespace", func() error {
 			_, err := app.gateway.GetPodContainers(resourcemodel.ResourceRef{ClusterID: "cluster-a", Version: "v1", Kind: "Pod", Namespace: "", Name: "pod"})
@@ -272,19 +273,19 @@ func TestActionWrappersRequireTargetIdentity(t *testing.T) {
 			return app.gateway.deleteHelmReleaseAction(objectActionTarget("cluster-a", "apps", "v1", "Deployment", "ns", "release"))
 		}, "delete requires helm.sh/v3 HelmRelease target, got apps/v1 Deployment"},
 		{"Cordon name", func() error {
-			return app.gateway.cordonNodeAction(objectActionTarget("cluster-a", "", "v1", "Node", "", ""))
+			return app.gateway.cordonNodeAction(context.Background(), objectActionTarget("cluster-a", "", "v1", "Node", "", ""))
 		}, "name is required"},
 		{"Uncordon name", func() error {
-			return app.gateway.uncordonNodeAction(objectActionTarget("cluster-a", "", "v1", "Node", "", ""))
+			return app.gateway.uncordonNodeAction(context.Background(), objectActionTarget("cluster-a", "", "v1", "Node", "", ""))
 		}, "name is required"},
 		{"Drain name", func() error {
 			return app.gateway.drainNodeAction(objectActionTarget("cluster-a", "", "v1", "Node", "", ""), DrainNodeOptions{})
 		}, "name is required"},
 		{"deleteNode name", func() error {
-			return app.gateway.deleteNodeAction(objectActionTarget("cluster-a", "", "v1", "Node", "", ""), false)
+			return app.gateway.deleteNodeAction(context.Background(), objectActionTarget("cluster-a", "", "v1", "Node", "", ""), false)
 		}, "name is required"},
 		{"forceDeleteNode name", func() error {
-			return app.gateway.deleteNodeAction(objectActionTarget("cluster-a", "", "v1", "Node", "", ""), true)
+			return app.gateway.deleteNodeAction(context.Background(), objectActionTarget("cluster-a", "", "v1", "Node", "", ""), true)
 		}, "name is required"},
 	}
 

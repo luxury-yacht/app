@@ -627,6 +627,32 @@ func TestStoppedManagerCompletesSubscribersAndRejectsNewOnes(t *testing.T) {
 	manager.Stop()
 }
 
+type warningRecorder struct {
+	applog.Logger
+	warnings []string
+}
+
+func (r *warningRecorder) Warn(message string, _ ...string) {
+	r.warnings = append(r.warnings, message)
+}
+
+// Clients retry a rejected scope, so each rejection reason is worth one
+// Application Logs line per generation, not one per retry (issue #408).
+func TestRejectedSubscribeIsLoggedOncePerReason(t *testing.T) {
+	logger := &warningRecorder{Logger: applog.Noop}
+	manager := NewManager(logger, nil, snapshot.ClusterMeta{ClusterID: "cluster-a"}, nil)
+	manager.Stop()
+
+	for range 3 {
+		_, err := subscribeForTest(t, manager, "namespaces", "")
+		require.Error(t, err)
+		_, err = subscribeForTest(t, manager, "pods", "namespace:default")
+		require.Error(t, err)
+	}
+
+	require.Equal(t, []string{"resource stream stopped"}, logger.warnings)
+}
+
 func TestSubscriptionCloseSerializesWithDelivery(t *testing.T) {
 	manager := NewManager(nil, nil, snapshot.ClusterMeta{ClusterID: "cluster-a"}, nil)
 	for range 100 {

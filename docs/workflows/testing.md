@@ -168,12 +168,42 @@ Each test in a harness suite takes at most 1.0 s. Native behavior (dragging,
 window placement, focus across windows) still needs the native app; see the
 [completion gate](completion.md).
 
+## Test speed
+
+Go runs packages in parallel but most tests in a package serially, so one slow
+test sets the backend wall time. Spend a test's time on its own work:
+
+- Assert that something happened by waiting for it, not by sleeping through a
+  fixed window. Only "must not happen" checks need a window; run independent
+  cases that wait on one with `t.Parallel()`.
+- A test client built from a `rest.Config` sets `QPS: -1`. Client-go's default
+  5 QPS limiter otherwise throttles startup's dozens of access reviews.
+- Exhaustive oracle products sample with `testsupport.SampleCaseUnderRace`
+  ([race_sample.go](../../backend/testsupport/race_sample.go)): race builds run
+  every unfiltered case plus a covering subset of the filtered ones, and plain
+  builds the whole product. Put each filter's match-all value at index 0, because
+  a narrow filter can leave rows that tie on the sort key. Never skip them under
+  race; `qc:prerelease` runs only `test:race`.
+
+Find slow tests from per-test `Elapsed` in `go test -json -count=1 ./...` and per
+file in Vitest's JSON reporter, and compare before and after a change.
+
 ## Test environment
+
+The harness's `settle()` drains microtasks, lazy imports, and fake timers only.
+[vitest.setup.ts](../../frontend/vitest.setup.ts) settles WebCrypto digests,
+which Node runs on its threadpool, within microtasks and with the same bytes.
+Shim any new boundary that settles outside those queues the same way; tests
+that depend on it otherwise fail only under load.
 
 Isolate the backend test process's config and cache directories before fixtures
 run, as in [TestMain](../../backend/main_test.go). Per-test overrides must restore
 to those disposable roots so late background work cannot write real app settings.
-Validate isolation through the real state resolver in a child process.
+Validate isolation through the real state resolver in a child process. Pin Go's
+build cache, `GOPATH`, and `GOENV` to their real locations first, because Go
+derives them from `HOME` and a `go` subprocess would otherwise rebuild from an
+empty cache. Resolve them without running `go`, which writes telemetry under the
+inherited `HOME`.
 
 Finish binding generation before source-inventory tests enumerate frontend files;
 generation can create and remove temporary trees. If generated coverage HTML enters

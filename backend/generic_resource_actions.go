@@ -8,10 +8,12 @@
 package backend
 
 import (
+	"context"
+
 	"github.com/luxury-yacht/app/backend/resources/generic"
 )
 
-func (g *ResourceGateway) deleteGenericResourceAction(target ObjectActionTargetRef) error {
+func (g *ResourceGateway) deleteGenericResourceAction(ctx context.Context, target ObjectActionTargetRef) error {
 	if err := requireObjectName(target.Name); err != nil {
 		return err
 	}
@@ -19,7 +21,6 @@ func (g *ResourceGateway) deleteGenericResourceAction(target ObjectActionTargetR
 	if err != nil {
 		return err
 	}
-	ctx := g.CtxOrBackground()
 	if err := requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Group:     target.Group,
 		Version:   target.Version,
@@ -31,7 +32,7 @@ func (g *ResourceGateway) deleteGenericResourceAction(target ObjectActionTargetR
 		return err
 	}
 	service := generic.NewService(deps)
-	if err := service.DeleteByGVK(ctx, objectActionTargetGVK(target), target.Namespace, target.Name); err != nil {
+	if err := service.DeleteByGVK(ctx, objectActionTargetGVK(target), target.Namespace, target.Name, target.UID); err != nil {
 		return err
 	}
 	g.invalidateResponseCacheForGVK(selectionKey, objectActionTargetGVK(target), target.Namespace, target.Name)

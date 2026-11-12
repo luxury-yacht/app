@@ -8,8 +8,17 @@
 import ActiveFilterChips, { type ActiveFilterChip } from '@shared/components/ActiveFilterChips';
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Dropdown';
+import {
+  DropdownFilterOption,
+  dropdownFilterOptionState,
+} from '@shared/components/dropdowns/Dropdown/DropdownFilterOption';
 import { normalizeDropdownValue } from '@shared/components/dropdowns/dropdownValue';
-import type { MultiSelectFilterSelection } from '@shared/components/dropdowns/multiSelectFilterSelection';
+import {
+  filterSelectionFromDropdownValues,
+  filterSelectionToDropdownValues,
+  type MultiSelectFilterSelection,
+  multiSelectFilterTriggerLabel,
+} from '@shared/components/dropdowns/multiSelectFilterSelection';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import LogResumeScrollingButton from '@shared/components/logs/LogResumeScrollingButton';
@@ -155,11 +164,73 @@ const LogSourceDropdown = ({
   />
 );
 
+type LogLevelDropdownProps = {
+  options: DropdownOption[];
+  levelFilter: MultiSelectFilterSelection;
+  showLevelMarkers: boolean;
+  dispatch: React.Dispatch<LogViewerAction>;
+};
+
+// Turns the level markers on warning and error lines on or off; it sits with the
+// menu's All and None actions and keeps the menu open.
+const LevelMarkersToggle = ({
+  showLevelMarkers,
+  dispatch,
+}: Pick<LogLevelDropdownProps, 'showLevelMarkers' | 'dispatch'>) => (
+  <button
+    type="button"
+    className="dropdown-bulk-action dropdown-bulk-action--labeled icon-bar-button"
+    aria-pressed={showLevelMarkers}
+    aria-label="Show level markers"
+    title="Mark warning and error lines at their left edge"
+    onClick={(event) => {
+      event.stopPropagation();
+      dispatch({ type: 'TOGGLE_LEVEL_MARKERS' });
+    }}
+  >
+    {/* The label takes the All/None label size; the box is the menu's own checkbox. */}
+    <DropdownFilterOption
+      label={<span className="dropdown-bulk-action-label">Markers</span>}
+      state={dropdownFilterOptionState(showLevelMarkers)}
+    />
+  </button>
+);
+
+// The levels the shown logs hold; a frontend filter like the text filter. Same
+// control as the Application Logs level filter.
+const LogLevelDropdown = ({
+  options,
+  levelFilter,
+  showLevelMarkers,
+  dispatch,
+}: LogLevelDropdownProps) => (
+  <Dropdown
+    options={options}
+    value={filterSelectionToDropdownValues(levelFilter, options)}
+    onChange={(value) =>
+      dispatch({
+        type: 'SET_LEVEL_FILTER',
+        payload: filterSelectionFromDropdownValues(normalizeDropdownValue(value), options),
+      })
+    }
+    multiple
+    showBulkActions
+    additionalBulkActions={
+      <LevelMarkersToggle showLevelMarkers={showLevelMarkers} dispatch={dispatch} />
+    }
+    ariaLabel="Log Levels"
+    renderValue={(value) =>
+      multiSelectFilterTriggerLabel('Log Levels', levelFilter, normalizeDropdownValue(value))
+    }
+  />
+);
+
 type LogViewerControlsProps = {
   activeFilterChips: ActiveFilterChip[];
   podOptions: DropdownOption[];
   containerOptions: DropdownOption[];
   selectedFilters: MultiSelectFilterSelection;
+  levelOptions: DropdownOption[];
   filterInputRef: React.RefObject<HTMLInputElement | null>;
   searchRowId: string;
   searchOptions: LogOptionsState;
@@ -173,6 +244,7 @@ export const LogViewerControls = ({
   podOptions,
   containerOptions,
   selectedFilters,
+  levelOptions,
   filterInputRef,
   searchRowId,
   searchOptions,
@@ -187,7 +259,7 @@ export const LogViewerControls = ({
     >
       <div className="logs-viewer-controls-left">
         <LogBufferFullIndicator shown={bufferFullShown} />
-        {(podOptions.length > 0 || containerOptions.length > 0) && (
+        {(podOptions.length > 0 || containerOptions.length > 0 || levelOptions.length > 0) && (
           <div className="logs-viewer-control-group">
             {podOptions.length > 0 && (
               <LogSourceDropdown
@@ -206,6 +278,14 @@ export const LogViewerControls = ({
                 options={containerOptions}
                 allOptions={allOptions}
                 selectedFilters={selectedFilters}
+                dispatch={dispatch}
+              />
+            )}
+            {levelOptions.length > 0 && (
+              <LogLevelDropdown
+                options={levelOptions}
+                levelFilter={searchOptions.levelFilter}
+                showLevelMarkers={searchOptions.showLevelMarkers}
                 dispatch={dispatch}
               />
             )}
@@ -237,6 +317,8 @@ type LogViewerReadyViewProps = {
   logsContentRef: React.RefObject<HTMLElement | null>;
   renderedLogContent: React.ReactNode;
   isParsedView: boolean;
+  /** Raw rows may show level markers, so every row leaves room at its left edge. */
+  showLevelMarkers: boolean;
   isTailFollowing: boolean;
   resumeScrolling: () => void;
 };
@@ -251,6 +333,7 @@ export const LogViewerReadyView = ({
   logsContentRef,
   renderedLogContent,
   isParsedView,
+  showLevelMarkers,
   isTailFollowing,
   resumeScrolling,
 }: LogViewerReadyViewProps) => (
@@ -267,7 +350,7 @@ export const LogViewerReadyView = ({
       <LogWarningBar warnings={visibleLogWarnings} />
       <div className="logs-viewer-content-frame">
         <ScrollableRegion
-          className="logs-viewer-content selectable"
+          className={`logs-viewer-content selectable${showLevelMarkers ? ' logs-viewer-content--level-markers' : ''}`}
           ref={logsContentRef}
           aria-label="Log output"
           tabIndex={isParsedView ? -1 : 0}

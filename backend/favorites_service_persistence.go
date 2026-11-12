@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -57,6 +58,9 @@ type favoritesFile struct {
 	SchemaVersion int        `json:"schemaVersion"`
 	UpdatedAt     time.Time  `json:"updatedAt"`
 	Favorites     []Favorite `json:"favorites"`
+	// Clusters holds favorite clusters as kubeconfig selections
+	// (`<kubeconfig path>:<context>`), in the order they were favorited.
+	Clusters []string `json:"clusters,omitempty"`
 }
 
 const favoritesSchemaVersion = 4
@@ -383,6 +387,7 @@ func (s *FavoritesService) loadFavoritesFile() (*favoritesFile, error) {
 	for index := range state.Favorites {
 		normalizeFavoriteFilters(&state.Favorites[index].Filters)
 	}
+	state.Clusters = normalizeKubeconfigSelections(state.Clusters)
 	state.SchemaVersion = favoritesSchemaVersion
 	return state, nil
 }
@@ -501,6 +506,49 @@ func (s *FavoritesService) DeleteFavorite(id string) error {
 		state.Favorites[i].Order = i
 	}
 	return s.saveFavoritesFile(state)
+}
+
+// GetFavoriteClusters returns the favorite clusters' kubeconfig selections.
+func (s *FavoritesService) GetFavoriteClusters() ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state, err := s.loadFavoritesFile()
+	if err != nil {
+		return nil, err
+	}
+	return slices.Clone(state.Clusters), nil
+}
+
+// SetClusterFavorite adds or removes one kubeconfig selection from the
+// favorite clusters and returns the saved list. Adding a favorite again or
+// removing one that is not a favorite leaves the list unchanged.
+func (s *FavoritesService) SetClusterFavorite(selection string, favorite bool) ([]string, error) {
+	selection = strings.TrimSpace(selection)
+	if selection == "" {
+		return nil, errorstatus.BadRequest(fmt.Errorf("favorite cluster selection must not be empty"))
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state, err := s.loadFavoritesFile()
+	if err != nil {
+		return nil, err
+	}
+	if slices.Contains(state.Clusters, selection) == favorite {
+		return slices.Clone(state.Clusters), nil
+	}
+	if favorite {
+		state.Clusters = append(state.Clusters, selection)
+	} else {
+		state.Clusters = slices.DeleteFunc(state.Clusters, func(existing string) bool {
+			return existing == selection
+		})
+	}
+	if err := s.saveFavoritesFile(state); err != nil {
+		return nil, err
+	}
+	return slices.Clone(state.Clusters), nil
 }
 
 // SetFavoriteOrder reorders favorites according to the given ID list.

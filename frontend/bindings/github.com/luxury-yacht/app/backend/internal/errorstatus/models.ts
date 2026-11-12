@@ -75,6 +75,13 @@ export enum Reason {
     ReasonServiceUnavailable = "ServiceUnavailable",
     ReasonCredentialsRejected = "CredentialsRejected",
     ReasonClusterUnreachable = "ClusterUnreachable",
+
+    /**
+     * ReasonRequestInterrupted is one request cut off while the connection and the
+     * cluster stayed up, such as a reset HTTP/2 stream. It says nothing about any
+     * other request.
+     */
+    ReasonRequestInterrupted = "RequestInterrupted",
     ReasonClusterNotReady = "ClusterNotReady",
     ReasonRefreshUnavailable = "RefreshUnavailable",
     ReasonDeadlineExceeded = "DeadlineExceeded",
@@ -94,6 +101,12 @@ export interface Status {
     "message": string;
     "retryable": boolean;
     "expected": boolean;
+
+    /**
+     * UserAction marks the outcome of an action the user asked for, which no
+     * view presents, so the UI shows even an expected denial of it.
+     */
+    "userAction"?: boolean;
     "ref"?: ObjectRef | null;
     "details"?: Details | null;
 }

@@ -64,6 +64,12 @@ export interface FetchTypedResourceRowsOptions {
 export interface UseTypedResourceQueryResult<TRow, TPayload = unknown> {
   rows: TRow[];
   /**
+   * The rows are not the current query's page: the query is not running yet, a
+   * new query's page is out or failed, or typed search is waiting for the pause
+   * in typing. A live refetch of the page on screen does not set it.
+   */
+  pageStale: boolean;
+  /**
    * The last successfully applied page payload. Rows are extracted via
    * selectRows; payload-level metadata (e.g. the pods metrics meta, scoped to
    * the QUERIED cluster) rides here for consumers that need it.
@@ -401,8 +407,11 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
   // (cursors only) stays in an effect because it deliberately KEEPS the visible
   // rows for quiet filtering and so never flashes.
   const [appliedHardResetIdentity, setAppliedHardResetIdentity] = useState(queryHardResetIdentity);
+  // The query scope the rows on screen came from.
+  const [appliedScope, setAppliedScope] = useState<string | null>(null);
   if (appliedHardResetIdentity !== queryHardResetIdentity) {
     setAppliedHardResetIdentity(queryHardResetIdentity);
+    setAppliedScope(null);
     setRows([]);
     setPayload(null);
     setLoaded(false);
@@ -477,6 +486,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
         domain
       );
       sharedPageRef.current = { identity: pageIdentity, rows: nextRows };
+      setAppliedScope(pageIdentity);
       setRows(nextRows);
       setPayload(incomingPayload);
       const hasTotal = typeof incomingPayload.total === 'number';
@@ -734,6 +744,8 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
 
   return {
     rows,
+    pageStale:
+      scope === null || scope !== appliedScope || (filters.search ?? '') !== debouncedSearch,
     payload,
     loading,
     loaded,

@@ -757,8 +757,8 @@ func (b *NamespaceWorkloadsBuilder) hpaVersion(known bool) uint64 {
 	return ingestStoreVersion(b.hpaSource, HPAGVR)
 }
 
-// buildHPATargetSet returns a set of full GVK + namespace/name keys for
-// workloads targeted by a HorizontalPodAutoscaler.
+// buildHPATargetSet returns the keys of the workloads targeted by a
+// HorizontalPodAutoscaler.
 func buildHPATargetSet(targets []hpapkg.ScaleTarget) map[string]struct{} {
 	set := make(map[string]struct{}, len(targets))
 	for _, target := range targets {
@@ -766,18 +766,14 @@ func buildHPATargetSet(targets []hpapkg.ScaleTarget) map[string]struct{} {
 		if gvk.Empty() || strings.TrimSpace(target.Name) == "" {
 			continue
 		}
-		set[hpaTargetKey(gvk.Group, gvk.Version, gvk.Kind, target.Namespace, target.Name)] = struct{}{}
+		set[hpapkg.TargetKey(target.Namespace, gvk.Group, gvk.Kind, target.Name)] = struct{}{}
 	}
 	return set
 }
 
 func workloadHPATargetKey(summary WorkloadSummary) string {
 	ref := summary.Ref
-	return hpaTargetKey(ref.Group, ref.Version, ref.Kind, ref.Namespace, ref.Name)
-}
-
-func hpaTargetKey(group, version, kind, namespace, name string) string {
-	return fmt.Sprintf("%s/%s/%s/%s/%s", group, version, kind, namespace, name)
+	return hpapkg.TargetKey(ref.Namespace, ref.Group, ref.Kind, ref.Name)
 }
 
 func cloneInt32Ptr(value *int32) *int32 {

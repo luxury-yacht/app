@@ -75,6 +75,11 @@ func transportReason(err error) Reason {
 	case credentialerrors.ClassAuth:
 		return ReasonCredentialsRejected
 	case credentialerrors.ClassConnectivity:
+		// Connectivity covers both a lost connection and one request's lost stream.
+		// Only the first says the cluster cannot be reached.
+		if credentialerrors.IsRequestStreamReset(err) {
+			return ReasonRequestInterrupted
+		}
 		return ReasonClusterUnreachable
 	}
 	return ReasonUnknown
@@ -210,22 +215,49 @@ func Denied(ref *ObjectRef, details Details, err error) error {
 }
 
 // UserAction marks err as the outcome of a permission-gated user action on
-// ref. The UI offers an action only after its permission gate allows it, so a
-// Forbidden here means the gate and the server disagree: it is reported, and
-// names the target when the error does not already.
+// ref, so the UI shows a denial of it, which no view's permission state
+// presents. A denial is still the cluster's answer, never reported; it names
+// the target when the error does not already.
 func UserAction(ref ObjectRef, err error) error {
 	if err == nil {
 		return nil
 	}
 	return &statusError{err: err, override: func(status *Status) {
-		if status.Reason != ReasonForbidden {
-			return
-		}
-		status.Expected = false
-		if status.Ref == nil {
+		status.UserAction = true
+		if status.Reason == ReasonForbidden && status.Ref == nil {
 			target := ref
 			status.Ref = &target
 		}
+	}}
+}
+
+// ClusterOutcome marks err as the cluster's own outcome of work the app asked
+// for, such as a pod its node never started or a chart hook that failed: shown
+// to the user, never reported, because no application code failed. Its reason
+// stays as classified, so the user sees the same message. A rejection of how
+// the app built a request stays reportable.
+func ClusterOutcome(err error) error {
+	if err == nil {
+		return nil
+	}
+	if isRequestShapeRejection(err) {
+		return err
+	}
+	return &statusError{err: err, override: func(status *Status) {
+		status.Expected = true
+	}}
+}
+
+// ApplicationFailure marks err as holding an application failure, for a
+// producer that knows an aggregate includes one beside cluster outcomes or
+// Kubernetes answers that would otherwise make it expected. It is reported;
+// its reason stays as classified.
+func ApplicationFailure(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &statusError{err: err, override: func(status *Status) {
+		status.Expected = false
 	}}
 }
 
@@ -257,6 +289,20 @@ func withExplicitReason(err error, reason Reason, retryable, expected bool) erro
 		status.Retryable = retryable
 		status.Expected = expected
 	}}
+}
+
+// NoAnswerInTime marks err as a request the app stopped waiting on at its own
+// deadline. It is the cluster's silence, not an application failure. The cluster
+// may still have carried the request out, so repeating it is not known to be safe.
+func NoAnswerInTime(err error) error {
+	return withExplicitReason(err, ReasonDeadlineExceeded, false, true)
+}
+
+// Conflict marks err as an action the app refused because of the current state of
+// what it acts on, such as a drain already running on the node. That is routine,
+// not an application failure.
+func Conflict(err error) error {
+	return withExplicitReason(err, ReasonConflict, false, true)
 }
 
 // BadRequest marks err as a rejected request: the caller sent arguments the

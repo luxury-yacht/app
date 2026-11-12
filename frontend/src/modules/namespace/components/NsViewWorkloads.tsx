@@ -30,6 +30,7 @@ import type {
   GridTableRowDetail,
 } from '@shared/components/tables/GridTable.types';
 import type { RowDetailToggleOptions } from '@shared/components/tables/rowDetailToggle';
+import { useBatchObjectActions } from '@shared/hooks/useBatchObjectActions';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { getKindColorClass } from '@shared/utils/kindBadgeColors';
@@ -227,14 +228,20 @@ const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
       onClear: onWorkloadPodsClose,
     });
 
-    const getContextMenuItems = useCallback(
-      (row: WorkloadData): ContextMenuItem[] => {
-        return objectActions.getMenuItems(
-          buildWorkloadActionReference(row, queryClusterId, selectedClusterName)
-        );
-      },
-      [objectActions, queryClusterId, selectedClusterName]
+    const getActionObject = useCallback(
+      (row: WorkloadData) => buildWorkloadActionReference(row, queryClusterId, selectedClusterName),
+      [queryClusterId, selectedClusterName]
     );
+
+    const getContextMenuItems = useCallback(
+      (row: WorkloadData): ContextMenuItem[] => objectActions.getMenuItems(getActionObject(row)),
+      [getActionObject, objectActions]
+    );
+
+    const batchActions = useBatchObjectActions<WorkloadData>({
+      getObject: getActionObject,
+      scopeKey: `${queryClusterId ?? ''}|${namespace}`,
+    });
 
     const getRowClassName = useCallback((row: WorkloadData) => {
       const classes: string[] = [];
@@ -283,9 +290,11 @@ const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
           getCustomContextMenuItems={getContextMenuItems}
           emptyMessage={emptyMessage}
           enableColumnVisibilityMenu
+          batchSelection={batchActions.batchSelection}
         />
 
         {objectActions.modals}
+        {batchActions.modals}
       </>
     );
   }

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/testsupport"
 	"k8s.io/utils/ptr"
 )
 
@@ -99,9 +100,14 @@ func TestWorkloadsQueryViaStoreEquivalent(t *testing.T) {
 		{ns: []string{"default"}, predicates: []ResourceQueryPredicate{{Field: "health", Value: "restarts"}}},
 	}
 
-	for _, sf := range sorts {
-		for _, d := range dirs {
-			for _, f := range filts {
+	for sortIndex, sf := range sorts {
+		for dirIndex, d := range dirs {
+			for filterIndex, f := range filts {
+				// Race builds run every sort and direction unfiltered and sample
+				// the filtered cases, still covering every filter.
+				if !testsupport.SampleCaseUnderRace(4, []int{filterIndex}, []int{sortIndex, dirIndex}) {
+					continue
+				}
 				base := typedTableQuery{
 					Enabled: true,
 					Request: ResourceQueryRequest{

@@ -23,11 +23,15 @@ const (
 	ReasonServiceUnavailable  Reason = "ServiceUnavailable"
 	ReasonCredentialsRejected Reason = "CredentialsRejected"
 	ReasonClusterUnreachable  Reason = "ClusterUnreachable"
-	ReasonClusterNotReady     Reason = "ClusterNotReady"
-	ReasonRefreshUnavailable  Reason = "RefreshUnavailable"
-	ReasonDeadlineExceeded    Reason = "DeadlineExceeded"
-	ReasonCanceled            Reason = "Canceled"
-	ReasonUnknown             Reason = "Unknown"
+	// ReasonRequestInterrupted is one request cut off while the connection and the
+	// cluster stayed up, such as a reset HTTP/2 stream. It says nothing about any
+	// other request.
+	ReasonRequestInterrupted Reason = "RequestInterrupted"
+	ReasonClusterNotReady    Reason = "ClusterNotReady"
+	ReasonRefreshUnavailable Reason = "RefreshUnavailable"
+	ReasonDeadlineExceeded   Reason = "DeadlineExceeded"
+	ReasonCanceled           Reason = "Canceled"
+	ReasonUnknown            Reason = "Unknown"
 )
 
 // Category is the coarse grouping the frontend presents.
@@ -72,14 +76,17 @@ type Details struct {
 
 // Status is the Kubernetes Status-shaped error the frontend reads.
 type Status struct {
-	Kind       string     `json:"kind"`
-	APIVersion string     `json:"apiVersion"`
-	Code       int        `json:"code"`
-	Reason     Reason     `json:"reason"`
-	Category   Category   `json:"category"`
-	Message    string     `json:"message"`
-	Retryable  bool       `json:"retryable"`
-	Expected   bool       `json:"expected"`
+	Kind       string   `json:"kind"`
+	APIVersion string   `json:"apiVersion"`
+	Code       int      `json:"code"`
+	Reason     Reason   `json:"reason"`
+	Category   Category `json:"category"`
+	Message    string   `json:"message"`
+	Retryable  bool     `json:"retryable"`
+	Expected   bool     `json:"expected"`
+	// UserAction marks the outcome of an action the user asked for, which no
+	// view presents, so the UI shows even an expected denial of it.
+	UserAction bool       `json:"userAction,omitempty"`
 	Ref        *ObjectRef `json:"ref,omitempty"`
 	Details    *Details   `json:"details,omitempty"`
 }
@@ -103,6 +110,7 @@ var reasonCategories = map[Reason]Category{
 	ReasonClusterNotReady:     CategoryServerError,
 	ReasonRefreshUnavailable:  CategoryServerError,
 	ReasonClusterUnreachable:  CategoryNetwork,
+	ReasonRequestInterrupted:  CategoryNetwork,
 	ReasonCanceled:            CategoryUnknown,
 	ReasonUnknown:             CategoryUnknown,
 }
@@ -122,6 +130,7 @@ var reasonCodes = map[Reason]int{
 	ReasonTooManyRequests:     429,
 	ReasonCanceled:            499,
 	ReasonInternalError:       500,
+	ReasonRequestInterrupted:  502,
 	ReasonServerTimeout:       500,
 	ReasonUnknown:             500,
 	ReasonServiceUnavailable:  503,

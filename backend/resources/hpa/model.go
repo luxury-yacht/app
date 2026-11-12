@@ -50,7 +50,9 @@ func scaleTargetLink(clusterID, namespace, apiVersion, kind, name string) resour
 	}
 	gv, err := schema.ParseGroupVersion(apiVersion)
 	if err != nil || gv.Version == "" {
-		return resourcemodel.NewDisplayResourceLink(clusterID, "", "", kind, "", namespace, name)
+		// Kubernetes accepts a reference like "apps/" and finds the target by group
+		// and kind, so the group stays even without a version to link to.
+		return resourcemodel.NewDisplayResourceLink(clusterID, gv.Group, "", kind, "", namespace, name)
 	}
 	return resourcemodel.NewNamespacedResourceLink(resourcemodel.ResourceRef{ClusterID: clusterID, Group: gv.Group, Version: gv.Version, Kind: kind, Resource: "", Namespace: namespace, Name: name, UID: ""})
 }

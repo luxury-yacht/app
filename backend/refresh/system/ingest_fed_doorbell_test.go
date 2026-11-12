@@ -335,6 +335,9 @@ func ingestFedCases() []ingestFedCase {
 func TestIngestFedTableDoorbellFollowsItsStore(t *testing.T) {
 	for _, tc := range ingestFedCases() {
 		t.Run(tc.name, func(t *testing.T) {
+			// Each case owns its subsystem and spends its time in fixed
+			// no-ring/ring windows, so the cases wait concurrently.
+			t.Parallel()
 			h := newIngestHarness(t)
 			store := h.store(t, tc.gvr)
 			sub := h.subscribe(t, tc.domain, tc.scope)

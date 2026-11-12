@@ -3,6 +3,7 @@
  *
  * Container Logs raw-view rows, built from the entries: each entry's first row
  * carries its timestamp, pod and container, and the copy text reads the same.
+ * A row may show a level marker (warning or error) at its left edge.
  */
 
 import type React from 'react';
@@ -16,6 +17,7 @@ import {
   logContainerKind,
 } from './containerLogFilters';
 import { LogMetadataButton } from './LogMetadataButton';
+import type { LogLevelMarker } from './logLevels';
 import { formatRawOrPrettyJsonLine } from './parsedLogUtils';
 import type { RenderedLogRow } from './RawLogViewer';
 
@@ -56,6 +58,8 @@ type ContainerLogRowMetadata = { timestamp: string; source: ContainerLogSource |
  */
 export interface ContainerLogRow extends RenderedLogRow {
   metadata?: ContainerLogRowMetadata;
+  /** The entry the row shows; every row of a pretty-printed entry has it. */
+  entry?: ContainerLogsEntry;
 }
 
 type ContainerLogDisplay = {
@@ -137,6 +141,7 @@ const buildEntryDisplay = (
     key: `${entryKey}:${segmentIndex}`,
     line: segment,
     metadata: segmentIndex === 0 ? metadata : undefined,
+    entry,
   }));
   return { rows, copyLine: formatContainerLogCopyLine(metadata, message) };
 };
@@ -266,19 +271,21 @@ export const renderContainerLogRow = ({
   selectPod,
   selectContainer,
   renderMessage,
+  levelMarker,
 }: {
   row: ContainerLogRow;
   podColors: Record<string, string>;
   selectPod: (pod: string) => void;
   selectContainer: SelectContainerFilter;
   renderMessage: RenderLogMessage;
+  levelMarker?: LogLevelMarker | null;
 }): React.ReactNode => {
   const message = renderMessage(row.line, `line-${row.key}`);
   const { timestamp = '', source = null } = row.metadata ?? {};
   const pod = source?.pod ?? null;
   const podColor = pod === null ? undefined : podColors[pod] || podColors.__fallback__;
   return (
-    <div className="log-viewer-line">
+    <div className="log-viewer-line" data-level-marker={levelMarker ?? undefined}>
       {!!timestamp && (
         <>
           <span

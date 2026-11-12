@@ -1,7 +1,9 @@
 # This file contains the configuration for this project.
-# When you update `info` or `fileAssociations`, run
-# `wails3 task common:update:build-assets` to refresh Wails-owned templates.
-# Platform manifests retain placeholders; build tasks render values from here.
+# Platform manifests retain placeholders; build tasks render values from here,
+# so changing `info` needs no other edit. Do not run
+# `wails3 task common:update:build-assets` to apply it: the updater overwrites
+# repository-owned manifests. To review template changes after a Wails upgrade,
+# compare against a fresh `wails3 init`.
 version: "3"
 
 # This information is used to generate the build assets.
@@ -12,7 +14,7 @@ info:
   description: "Luxury Yacht is a desktop app for managing Kubernetes clusters. Sail the seas of Kubernetes in style!"
   copyright: "Copyright © 2025-2026 Luxury Yacht"
   comments: "Luxury Yacht desktop application"
-  version: "v2.8.0"
+  version: "v2.9.0"
   cfBundleIconName: "appicon"
 
 # Repository-owned release metadata that is not part of Wails' platform metadata.

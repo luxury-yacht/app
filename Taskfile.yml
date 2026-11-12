@@ -129,13 +129,13 @@ tasks:
     desc: Checks for frontend package updates
     dir: frontend
     cmds:
-      - npx npm-check-updates
+      - npx npm-check-updates --cooldown 7
 
   qc:npm-update:
     desc: Updates frontend package requirements
     dir: frontend
     cmds:
-      - npx npm-check-updates -u
+      - npx npm-check-updates --cooldown 7 -u
 
   qc:benchmark:
     desc: Runs shared resource model and object map performance benchmarks

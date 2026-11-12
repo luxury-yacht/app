@@ -9,6 +9,7 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ContainerLogsEntry } from '@/core/refresh/types';
+import { NO_LOG_LEVEL } from '../logLevels';
 import {
   initialLogOptionsState,
   type LogOptionsState,
@@ -187,6 +188,98 @@ describe('useLogPresentation', () => {
     });
     expect(invalid.hasInvalidRegex).toBe(true);
     expect(invalid.filteredEntries).toEqual([]);
+  });
+
+  it('reads logfmt and klog lines into the table like JSON', async () => {
+    const lines = [
+      'level=info msg="cache warmed" keys=12',
+      'I1106 12:00:00.000001       1 sync.go:7] "Synced" kind="Pod"',
+      'plain text',
+    ];
+    const result = await present({
+      entries: lines,
+      options: options({ displayMode: 'parsed' }),
+      searchTexts: (line) => [line],
+      lineOf: (line) => line,
+    });
+
+    expect(result.canParseLogs).toBe(true);
+    expect(result.parsedRows.map((row) => row.data)).toEqual([
+      { level: 'info', msg: 'cache warmed', keys: '12' },
+      {
+        level: 'info',
+        time: '1106 12:00:00.000001',
+        thread: '1',
+        caller: 'sync.go:7',
+        msg: 'Synced',
+        kind: 'Pod',
+      },
+    ]);
+  });
+
+  describe('level filter', () => {
+    const entry = (seq: number, containerName: string, line: string): ContainerLogsEntry => ({
+      _seq: seq,
+      pod: 'web-1',
+      container: containerName,
+      line,
+      timestamp: `t${seq}`,
+      isInit: false,
+    });
+    // Two containers interleave; each line's level comes from its own container.
+    const entries = [
+      entry(1, 'app', 'starting'),
+      entry(2, 'app', '{"level":"error","msg":"crash"}'),
+      entry(3, 'sidecar', 'plain sidecar output'),
+      entry(4, 'app', '    at Server.listen (server.js:10)'),
+      entry(5, 'sidecar', 'level=info msg=ready'),
+      entry(6, 'app', 'level=debug msg="retrying"'),
+    ];
+    const presentLevels = (overrides: Partial<LogOptionsState>) =>
+      present({
+        entries,
+        options: options(overrides),
+        searchTexts: (e) => [e.line],
+        lineOf: (e) => e.line,
+        sourceKeyOf: (e) => `${e.pod}/${e.container}`,
+      });
+    const seqs = (shown: ContainerLogsEntry[]) => shown.map((e) => e._seq);
+
+    it('lists the levels found, and shows every line until levels are chosen', async () => {
+      const result = await presentLevels({});
+
+      expect(result.logLevels).toEqual({ levels: ['debug', 'info', 'error'], hasUnleveled: true });
+      expect(seqs(result.filteredEntries)).toEqual([1, 2, 3, 4, 5, 6]);
+      expect(result.levelFilterHidesLines).toBe(false);
+    });
+
+    it('keeps a stack trace with its error line', async () => {
+      const result = await presentLevels({ levelFilter: { mode: 'some', values: ['error'] } });
+
+      expect(seqs(result.filteredEntries)).toEqual([2, 4]);
+      expect(result.levelFilterHidesLines).toBe(true);
+    });
+
+    it('chooses lines with nothing to inherit as No level', async () => {
+      const result = await presentLevels({ levelFilter: { mode: 'some', values: [NO_LOG_LEVEL] } });
+
+      expect(seqs(result.filteredEntries)).toEqual([1, 3]);
+    });
+
+    it('resolves levels before the text filter hides the line they come from', async () => {
+      const result = await presentLevels({
+        levelFilter: { mode: 'some', values: ['error'] },
+        textFilter: 'Server.listen',
+      });
+
+      expect(seqs(result.filteredEntries)).toEqual([4]);
+    });
+
+    it('shows nothing when no level is chosen', async () => {
+      const result = await presentLevels({ levelFilter: { mode: 'none' } });
+
+      expect(result.filteredEntries).toEqual([]);
+    });
   });
 
   it('splits multi-line display lines into rows with stable keys', () => {

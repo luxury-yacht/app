@@ -37,6 +37,7 @@ tasks:
       - sh: '{{if eq .OBFUSCATED "true"}}command -v garble >/dev/null 2>&1{{else}}true{{end}}'
         msg: "garble is required for obfuscated builds. Install it with: go install mvdan.cc/garble@v0.16.0 (requires Go 1.24+). See https://github.com/burrowers/garble/releases for version/toolchain compatibility."
     cmds:
+      - wails3 tool prepare-macos-output --dir "{{.BIN_DIR}}"
       - '{{if eq .OBFUSCATED "true"}}garble {{.GARBLE_ARGS}} build{{else}}go build{{end}} {{.BUILD_FLAGS}} -o "{{.OUTPUT}}"'
     vars:
       # Wails' native Inspector opener requires this opt-in on macOS.
@@ -148,6 +149,9 @@ tasks:
     deps:
       - task: common:prepare:build-manifests
     cmds:
+      # A reused bundle can acquire Finder metadata in synced folders. Build a
+      # fresh bundle so codesign never has to replace a contaminated signature.
+      - test -n "{{.BIN_DIR}}" && test -n "{{.APP_PRODUCT_NAME}}" && rm -rf -- "{{.BIN_DIR}}/{{.APP_PRODUCT_NAME}}.app"
       - mkdir -p "{{.BIN_DIR}}/{{.APP_PRODUCT_NAME}}.app/Contents/MacOS"
       - mkdir -p "{{.BIN_DIR}}/{{.APP_PRODUCT_NAME}}.app/Contents/Resources"
       - cp build/darwin/icons.icns "{{.BIN_DIR}}/{{.APP_PRODUCT_NAME}}.app/Contents/Resources"
@@ -163,7 +167,9 @@ tasks:
     summary: Ad-hoc signs the app bundle (macOS only)
     internal: true
     cmds:
+      - xattr -cr "{{.BIN_DIR}}/{{.APP_PRODUCT_NAME}}.app"
       - codesign --force --deep --sign - "{{.BIN_DIR}}/{{.APP_PRODUCT_NAME}}.app"
+      - codesign --verify --deep --strict "{{.BIN_DIR}}/{{.APP_PRODUCT_NAME}}.app"
 
   codesign:skip:
     summary: Skips codesigning when cross-compiling
@@ -175,6 +181,8 @@ tasks:
     deps:
       - task: common:prepare:build-manifests
     cmds:
+      - wails3 tool prepare-macos-output --dir "{{.BIN_DIR}}"
+      - test -n "{{.BIN_DIR}}" && test -n "{{.APP_PRODUCT_NAME}}" && rm -rf -- "{{.BIN_DIR}}/{{.APP_PRODUCT_NAME}}.dev.app"
       - mkdir -p "{{.BIN_DIR}}/{{.APP_PRODUCT_NAME}}.dev.app/Contents/MacOS"
       - mkdir -p "{{.BIN_DIR}}/{{.APP_PRODUCT_NAME}}.dev.app/Contents/Resources"
       - cp build/darwin/icons.icns "{{.BIN_DIR}}/{{.APP_PRODUCT_NAME}}.dev.app/Contents/Resources"
@@ -184,7 +192,9 @@ tasks:
         fi
       - cp "{{.BIN_DIR}}/{{.APP_NAME}}" "{{.BIN_DIR}}/{{.APP_PRODUCT_NAME}}.dev.app/Contents/MacOS"
       - cp "{{.ROOT_DIR}}/bin/build-manifests/darwin/Info.dev.plist" "{{.BIN_DIR}}/{{.APP_PRODUCT_NAME}}.dev.app/Contents/Info.plist"
+      - xattr -cr "{{.BIN_DIR}}/{{.APP_PRODUCT_NAME}}.dev.app"
       - codesign --force --deep --sign - "{{.BIN_DIR}}/{{.APP_PRODUCT_NAME}}.dev.app"
+      - codesign --verify --deep --strict "{{.BIN_DIR}}/{{.APP_PRODUCT_NAME}}.dev.app"
       - '"{{.BIN_DIR}}/{{.APP_PRODUCT_NAME}}.dev.app/Contents/MacOS/{{.APP_NAME}}"'
 
   sign:

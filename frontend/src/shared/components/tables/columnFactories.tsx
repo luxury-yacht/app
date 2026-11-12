@@ -7,11 +7,14 @@
 
 import { formatLiveAgeText, LiveAgeText } from '@shared/components/LiveAgeText';
 import ResourceBar from '@shared/components/ResourceBar';
+import { createStatusChipMeasurementElement, StatusChip } from '@shared/components/StatusChip';
 import type {
   ColumnWidthInput,
   GridColumnAlignmentOptions,
   GridColumnDefinition,
 } from '@shared/components/tables/GridTable';
+import { TABLE_NO_VALUE_TEXT } from '@shared/components/tables/tableNoValue';
+import { backendStatusChipVariant } from '@shared/utils/backendStatusPresentation';
 import { getKindBadgeClassName } from '@shared/utils/kindBadgeColors';
 import {
   formatResourceExportValue,
@@ -312,6 +315,37 @@ export function createTextColumn<T>(
     },
   };
 }
+
+/**
+ * Creates a status column that shows a row's status as a chip colored by the
+ * backend's presentation token. A row without a status shows the empty
+ * placeholder rather than a chip claiming a state it does not have.
+ */
+export const createStatusChipColumn = <T,>(
+  key: string,
+  header: string,
+  getStatus: (item: T) => { value?: string; presentation?: string | null },
+  options?: { sortable?: boolean }
+): GridColumnDefinition<T> => ({
+  key,
+  header,
+  className: 'gridtable-badge-column',
+  sortable: options?.sortable ?? true,
+  sortValue: (item) => getStatus(item).value,
+  measurementElement: (item) => {
+    const { value, presentation } = getStatus(item);
+    return value
+      ? createStatusChipMeasurementElement(backendStatusChipVariant(presentation), value)
+      : { tagName: 'span', textContent: TABLE_NO_VALUE_TEXT };
+  },
+  render: (item) => {
+    const { value, presentation } = getStatus(item);
+    if (!value) {
+      return TABLE_NO_VALUE_TEXT;
+    }
+    return <StatusChip variant={backendStatusChipVariant(presentation)}>{value}</StatusChip>;
+  },
+});
 
 type CreateResourceNameColumnOptions<T> = Omit<CreateTextColumnOptions<T>, 'hideable'>;
 

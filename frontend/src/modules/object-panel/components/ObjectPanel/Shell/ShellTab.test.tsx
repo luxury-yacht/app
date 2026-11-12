@@ -11,6 +11,7 @@
  */
 
 import { types } from '@core/backend-api/models';
+import { isExpectedOperationalError } from '@core/telemetry/expectedErrors';
 import { Clipboard } from '@wailsio/runtime';
 import type React from 'react';
 import { act } from 'react';
@@ -21,6 +22,7 @@ import {
   type TestCluster,
 } from '@/test-utils/appState/harness';
 import type { BackendResult } from '@/test-utils/appState/transport';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { requireValue } from '@/test-utils/requireValue';
 import ShellTab from './ShellTab';
 
@@ -927,6 +929,28 @@ describe('ShellTab', () => {
         context: { action: 'runShellSession', source: 'ShellTab', clusterId: alpha.clusterId },
       },
     ]);
+  });
+
+  // backend/shell_sessions_lifecycle.go failStream: a shell whose stream ends
+  // with a failure, such as a killed container, is the remote shell's outcome.
+  it('shows a shell that ended with its own failure without reporting it', async () => {
+    await renderShellTab();
+    await clickConnectButton();
+
+    const reason = 'command terminated with exit code 137';
+    await emitEvent('object-shell:status', {
+      sessionId: 'sess-1',
+      status: 'error',
+      reason,
+      errorDetails: makeErrorStatus('Unknown', reason, { expected: true }),
+    });
+
+    expect(container().textContent).toContain('Connection failed');
+    expect(container().textContent).toContain(reason);
+    const shown = app.errors.take((record) => record.kinds.includes('inline'));
+    expect(shown).toHaveLength(1);
+    expect((shown[0].error as Error).message).toBe(reason);
+    expect(isExpectedOperationalError(shown[0].error)).toBe(true);
   });
 
   it('shows a connection error when session closes immediately without an explicit reason', async () => {

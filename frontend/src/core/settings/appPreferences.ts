@@ -489,10 +489,8 @@ const enqueuePreferenceMutation = (mutation: PreferenceMutation): Promise<void> 
   return completion;
 };
 
-const broadcastPreferenceMutation = async (mutation: PreferenceMutation): Promise<void> => {
-  if (!desktopRuntimeAvailable()) {
-    return;
-  }
+// Every app window reloads the saved preferences when it receives this.
+const broadcastPreferencesChanged = async (): Promise<void> => {
   try {
     await emitBroadcastEvent('settings:preferences-changed', undefined);
   } catch (error) {
@@ -501,6 +499,13 @@ const broadcastPreferenceMutation = async (mutation: PreferenceMutation): Promis
       action: 'broadcast-preference-change',
     });
   }
+};
+
+const broadcastPreferenceMutation = async (mutation: PreferenceMutation): Promise<void> => {
+  if (!desktopRuntimeAvailable()) {
+    return;
+  }
+  await broadcastPreferencesChanged();
   const mode = mutation.options?.persistAppearanceMode;
   if (!mode) {
     return;
@@ -658,6 +663,21 @@ export const hydrateAppPreferences = async (options?: {
     hydrationPromise = null;
   });
   return hydrationPromise;
+};
+
+/**
+ * Reloads the saved preferences after an import replaced them, and tells every
+ * app window to reload them too. The broadcast goes out even when this
+ * window's read-back fails, because the saved file did change.
+ */
+export const reloadImportedAppPreferences = async (): Promise<HydratedAppPreferences> => {
+  try {
+    return await hydrateAppPreferences({ force: true });
+  } finally {
+    if (desktopRuntimeAvailable()) {
+      await broadcastPreferencesChanged();
+    }
+  }
 };
 
 export const applyBroadcastAppearanceModePreference = (mode: string): void => {

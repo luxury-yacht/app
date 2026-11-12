@@ -77,7 +77,9 @@ describe('UpdateStatus', () => {
   });
 
   it('keeps a live update event when the app-info read answers after it', async () => {
-    reportUpdate(update({ status: appupdates.Status.StatusAvailable, availableVersion: '2.0.0' }));
+    reportUpdate(
+      update({ revision: 1, status: appupdates.Status.StatusAvailable, availableVersion: '2.0.0' })
+    );
     const release = app.backend.hold('GetAppInfo');
     await start();
     expect(chip()).toBeNull();
@@ -85,10 +87,35 @@ describe('UpdateStatus', () => {
     await act(async () => {
       app.events.emit(
         'app-update',
-        update({ status: appupdates.Status.StatusReady, availableVersion: '2.0.0' })
+        update({ revision: 2, status: appupdates.Status.StatusReady, availableVersion: '2.0.0' })
       );
     });
     await act(async () => release());
+    await app.settle();
+
+    expect(chip()?.textContent).toBe('Restart to update');
+  });
+
+  it('keeps a ready update when an older preparing state arrives after it', async () => {
+    reportUpdate(
+      update({ revision: 1, status: appupdates.Status.StatusAvailable, availableVersion: '2.0.0' })
+    );
+    await start();
+
+    await act(async () => {
+      app.events.emit(
+        'app-update',
+        update({ revision: 3, status: appupdates.Status.StatusReady, availableVersion: '2.0.0' })
+      );
+      app.events.emit(
+        'app-update',
+        update({
+          revision: 2,
+          status: appupdates.Status.StatusPreparing,
+          availableVersion: '2.0.0',
+        })
+      );
+    });
     await app.settle();
 
     expect(chip()?.textContent).toBe('Restart to update');

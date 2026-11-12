@@ -263,11 +263,21 @@ func (a *RefreshCoordinator) stopRefreshGeneration(clusterID string, subsystem *
 		return
 	}
 	a.stopRefreshGenerationProducers(clusterID, subsystem)
-	subsystem.RetireSnapshotServing()
+	retireRefreshGenerationReads(subsystem)
 	a.closeCooledClosers(clusterID, subsystem)
 }
 
-// stopRefreshGenerationProducers is also used by cooling, which keeps reads live.
+// retireRefreshGenerationReads ends what cooling keeps live after producers
+// stop: the stream hub's subscriptions, then snapshot serving.
+func retireRefreshGenerationReads(subsystem *system.Subsystem) {
+	if subsystem.ResourceStream != nil {
+		subsystem.ResourceStream.Stop()
+	}
+	subsystem.RetireSnapshotServing()
+}
+
+// stopRefreshGenerationProducers is also used by cooling, which keeps reads
+// live: snapshot serving and stream subscriptions.
 func (a *RefreshCoordinator) stopRefreshGenerationProducers(clusterID string, subsystem *system.Subsystem) {
 	if a == nil || subsystem == nil {
 		return
@@ -280,10 +290,11 @@ func (a *RefreshCoordinator) stopRefreshGenerationProducers(clusterID string, su
 	if runtime.permissionCancel != nil {
 		runtime.permissionCancel()
 	}
-	// The resource stream is the generation's doorbell: Stop waits for running
-	// producer callbacks, so nothing rings or invalidates after it returns.
+	// The resource stream is the generation's doorbell: StopProducers waits for
+	// running producer callbacks, so nothing rings or invalidates after it
+	// returns.
 	if subsystem.ResourceStream != nil {
-		subsystem.ResourceStream.Stop()
+		subsystem.ResourceStream.StopProducers()
 	}
 	if subsystem.ContainerLogs != nil {
 		subsystem.ContainerLogs.Stop()

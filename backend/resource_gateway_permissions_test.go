@@ -343,3 +343,46 @@ func TestQueryPermissions_CachesCRDResolutionWithinBatch(t *testing.T) {
 		}
 	}
 }
+
+// A Helm release is not an API object: the app's Helm storage driver keeps its
+// revisions as Secrets in the release namespace, so release actions are gated
+// by Secret access there. Results keep the query's release identity, which
+// the frontend's permission keys are built from.
+func TestQueryPermissions_HelmReleaseChecksItsSecretStorage(t *testing.T) {
+	const clusterID = "cluster-helm"
+	client := cgofake.NewClientset()
+	client.Fake.PrependReactor("create", "selfsubjectrulesreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		review := action.(cgotesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectRulesReview)
+		review.Status = authorizationv1.SubjectRulesReviewStatus{
+			ResourceRules: []authorizationv1.ResourceRule{
+				{Verbs: []string{"update"}, APIGroups: []string{""}, Resources: []string{"secrets"}},
+			},
+		}
+		return true, review, nil
+	})
+	gateway := newPermissionResourceFixture(clusterID, "Helm", client, apiextensionsfake.NewSimpleClientset()).gateway
+	release := capabilities.PermissionQuery{ClusterId: clusterID, Group: "helm.sh", Version: "v3", ResourceKind: "HelmRelease", Namespace: "shop", Name: "web"}
+	update, remove := release, release
+	update.ID, update.Verb = "rollback", "update"
+	remove.ID, remove.Verb = "delete", "delete"
+
+	resp, err := gateway.QueryPermissions([]capabilities.PermissionQuery{update, remove})
+	if err != nil {
+		t.Fatalf("QueryPermissions returned error: %v", err)
+	}
+
+	byID := map[string]capabilities.PermissionResult{}
+	for _, result := range resp.Results {
+		byID[result.ID] = result
+	}
+	allowed := byID["rollback"]
+	if !allowed.Allowed || allowed.Source != "ssrr" {
+		t.Fatalf("expected Secret update rule to allow the release update, got %+v", allowed)
+	}
+	if allowed.Group != "helm.sh" || allowed.Version != "v3" || allowed.ResourceKind != "HelmRelease" || allowed.Name != "web" {
+		t.Fatalf("expected the result to keep the release identity, got %+v", allowed)
+	}
+	if denied := byID["delete"]; denied.Allowed || denied.Source != "denied" {
+		t.Fatalf("expected no Secret delete rule to deny the release delete, got %+v", denied)
+	}
+}

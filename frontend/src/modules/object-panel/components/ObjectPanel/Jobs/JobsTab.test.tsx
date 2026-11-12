@@ -265,11 +265,11 @@ describe('JobsTab', () => {
     startCluster();
     await openJobsTab([makeJob({ statusPresentation: 'error' })]);
 
-    const cell = requireReactElement<{ className?: string }>(
+    const cell = requireReactElement<{ variant?: string }>(
       column('status').render(firstRow()),
       'expected a status cell'
     );
-    expect(cell.props.className).toBe('status-text error');
+    expect(cell.props.variant).toBe('unhealthy');
   });
 
   it('sorts locally by every displayed job fact', async () => {

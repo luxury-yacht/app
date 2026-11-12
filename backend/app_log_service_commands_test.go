@@ -58,6 +58,12 @@ func TestGetAppLogsSinceHandlesTrimmedBuffer(t *testing.T) {
 	require.Equal(t, "second", logs[0].Message)
 	require.Equal(t, uint64(3), logs[1].Sequence)
 	require.Equal(t, "third", logs[1].Message)
+
+	// The panel's incremental read after the buffer wrapped.
+	logs = logsService.GetAppLogsSince(2)
+	require.Len(t, logs, 1)
+	require.Equal(t, "third", logs[0].Message)
+	require.Empty(t, logsService.GetAppLogsSince(3))
 }
 
 // Like container log lines, writes reach the panel in batches: a burst sends one

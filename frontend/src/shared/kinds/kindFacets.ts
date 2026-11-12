@@ -41,7 +41,7 @@ const SYNTHETIC_KIND_FACETS = [
     display: { shortName: 'helm', label: HELM_RELEASE_GVK.kind, searchAliases: [] },
     actions: {
       restart: false,
-      rollback: false,
+      rollback: true,
       scale: false,
       portForward: false,
       reconnect: false,

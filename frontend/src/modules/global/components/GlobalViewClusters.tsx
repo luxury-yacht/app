@@ -254,18 +254,11 @@ const GlobalViewClusters: React.FC = () => {
         onClick: (row) => navigateToOverview(row),
         getClassName: () => 'object-panel-link',
       }),
-      {
-        key: 'connection',
-        header: 'Status',
-        sortable: true,
-        sortValue: (row) => row.connection,
-        render: (row) =>
-          row.connection === 'Ready' ? (
-            row.connection
-          ) : (
-            <span className="status-text warning">{row.connection}</span>
-          ),
-      },
+      // Connection state has no backend presentation: any state but Ready needs attention.
+      cf.createStatusChipColumn<GlobalClusterRow>('connection', 'Status', (row) => ({
+        value: row.connection,
+        presentation: row.connection === 'Ready' ? 'ready' : 'warning',
+      })),
       cf.createTextColumn('metrics', 'Metrics', (row) => row.metrics),
       cf.createTextColumn('clusterType', 'Type', (row) => row.clusterType),
       cf.createTextColumn('clusterVersion', 'Version', (row) => row.clusterVersion),

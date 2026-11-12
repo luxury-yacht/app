@@ -32,6 +32,7 @@ import {
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
+import { useBatchObjectActions } from '@shared/hooks/useBatchObjectActions';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { kindDisplayName } from '@shared/kinds/kindDisplay';
@@ -122,6 +123,8 @@ export interface AggregatedResourceGridViewSpec<D extends AggregatedRowBase> {
   diagnosticsMode?: 'live';
   /** Builds the full column list (lead kind/name, middle, age). */
   buildColumns: (helpers: AggregatedColumnHelpers<D>) => GridColumnDefinition<D>[];
+  /** Leaves out batch select, for kinds too consequential to delete several at a time. */
+  disableBatchSelect?: boolean;
 }
 
 const getAggregatedRowRef = <D extends AggregatedRowBase>(row: D): CanonicalResourceRef => row.ref;
@@ -132,7 +135,8 @@ const getAggregatedRowRef = <D extends AggregatedRowBase>(row: D): CanonicalReso
  * actions, and the context menu.
  */
 function useAggregatedGridCore<D extends AggregatedRowBase>(
-  spec: AggregatedResourceGridViewSpec<D>
+  spec: AggregatedResourceGridViewSpec<D>,
+  namespace = ''
 ) {
   const { openWithObject } = useObjectPanel();
   const { navigateToView } = useNavigateToView();
@@ -206,6 +210,10 @@ function useAggregatedGridCore<D extends AggregatedRowBase>(
     (row: D): ContextMenuItem[] => objectActions.getMenuItems(rowRef(row)),
     [objectActions, rowRef]
   );
+  const batchActions = useBatchObjectActions<D>({
+    getObject: rowRef,
+    scopeKey: `${selectedClusterId ?? ''}|${spec.viewId}|${namespace}`,
+  });
 
   return {
     selectedClusterId,
@@ -214,6 +222,8 @@ function useAggregatedGridCore<D extends AggregatedRowBase>(
     columns,
     objectActions,
     getContextMenuItems,
+    batchSelection: spec.disableBatchSelect ? undefined : batchActions.batchSelection,
+    batchModals: batchActions.modals,
   };
 }
 
@@ -270,9 +280,11 @@ export function ClusterAggregatedResourceGridView<
         getCustomContextMenuItems={core.getContextMenuItems}
         useShortNames={core.useShortResourceNames}
         emptyMessage={emptyMessage}
+        batchSelection={core.batchSelection}
       />
 
       {core.objectActions.modals}
+      {core.batchModals}
     </>
   );
 }
@@ -289,7 +301,7 @@ export function NamespaceAggregatedResourceGridView<
   namespace: string;
   showNamespaceColumn?: boolean;
 }>) {
-  const core = useAggregatedGridCore(spec);
+  const core = useAggregatedGridCore(spec, namespace);
   const namespaceColumnLink = useNamespaceColumnLink<D>(spec.namespaceLinkTab ?? 'config');
 
   const allNamespaces = namespace === ALL_NAMESPACES_SCOPE;
@@ -354,9 +366,11 @@ export function NamespaceAggregatedResourceGridView<
         getCustomContextMenuItems={core.getContextMenuItems}
         useShortNames={core.useShortResourceNames}
         emptyMessage={emptyMessage}
+        batchSelection={core.batchSelection}
       />
 
       {core.objectActions.modals}
+      {core.batchModals}
     </>
   );
 }

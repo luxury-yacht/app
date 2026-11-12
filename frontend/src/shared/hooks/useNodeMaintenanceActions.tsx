@@ -43,6 +43,8 @@ export interface NodeActionTarget {
   unschedulable?: boolean;
 }
 
+const NODE_IDENTITY = { group: '', version: 'v1', kind: 'Node' };
+
 type NodeMaintenanceSnapshotState = DomainSnapshotState<NodeMaintenanceSnapshotPayload>;
 
 const normalizeWatchClusterIds = (clusterIds: string[] | undefined): string[] => {
@@ -158,6 +160,19 @@ export const useNodeMaintenanceActions = ({
     [aggregateDrains]
   );
 
+  // Shows drains started outside the drain modal without waiting for the next poll.
+  const refreshDrains = useCallback(() => {
+    for (const scope of watchedAggregateScopes) {
+      requestRefreshDomain({ domain: 'object-maintenance', scope, reason: 'user' }).catch(
+        (error: unknown) => {
+          errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
+            source: 'node-maintenance-refresh',
+          });
+        }
+      );
+    }
+  }, [watchedAggregateScopes]);
+
   const openCordonFor = useCallback((target: NodeActionTarget) => {
     setCordonTarget(target);
   }, []);
@@ -184,10 +199,7 @@ export const useNodeMaintenanceActions = ({
     const action: 'cordon' | 'uncordon' = target.unschedulable ? 'uncordon' : 'cordon';
     try {
       await executeMutation(() => {
-        const ref = buildObjectActionTarget(
-          { ...target, group: '', version: 'v1', kind: 'Node' },
-          action
-        );
+        const ref = buildObjectActionTarget({ ...target, ...NODE_IDENTITY }, action);
         return action === 'cordon' ? runNodeCordon(ref) : runNodeUncordon(ref);
       });
       onAfterAction?.(action, target);
@@ -207,16 +219,19 @@ export const useNodeMaintenanceActions = ({
     if (!cordonTarget) {
       return null;
     }
+    const target = { ...cordonTarget, ...NODE_IDENTITY };
     if (cordonTarget.unschedulable) {
       return {
         title: 'Uncordon Node',
-        message: `Uncordon node "${cordonTarget.name}"?\n\nNew workloads will be allowed to schedule.`,
+        target,
+        message: 'New workloads will be allowed to schedule.',
         confirmText: 'Uncordon',
       };
     }
     return {
       title: 'Cordon Node',
-      message: `Cordon node "${cordonTarget.name}"?\n\nThis prevents new workloads from being scheduled until it is uncordoned.`,
+      target,
+      message: 'This prevents new workloads from being scheduled until it is uncordoned.',
       confirmText: 'Cordon',
     };
   }, [cordonTarget]);
@@ -234,7 +249,8 @@ export const useNodeMaintenanceActions = ({
       <ConfirmationModal
         isOpen={Boolean(cordonTarget)}
         title={cordonConfirmation?.title ?? ''}
-        message={cordonConfirmation?.message ?? ''}
+        target={cordonConfirmation?.target}
+        message={cordonConfirmation?.message}
         confirmText={cordonConfirmation?.confirmText}
         confirmButtonClass="warning"
         onConfirm={confirmCordon}
@@ -260,5 +276,6 @@ export const useNodeMaintenanceActions = ({
     openCordonFor,
     openDrainFor,
     activeDrainFor,
+    refreshDrains,
   };
 };

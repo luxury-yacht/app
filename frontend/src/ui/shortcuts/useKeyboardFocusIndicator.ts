@@ -1,14 +1,47 @@
 import { useEffect } from 'react';
 import { createRegionFocusIndicator } from './regionFocusIndicator';
+import { isInputElement } from './utils';
 
 const FOCUS_CLASS = 'keyboard-programmatic-focus';
 
-// Observe before document-level traps: local surfaces and native Tab moves
-// must show focus even after pointer use suppresses :focus-visible in WebKit.
+// Keys that move focus through lists, tab strips, and other composite
+// controls. In a typing field they edit text instead, so they don't count.
+const NAVIGATION_KEYS = new Set([
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+  'Home',
+  'End',
+  'PageUp',
+  'PageDown',
+]);
+
+const isTabNavigation = (event: KeyboardEvent) =>
+  event.key === 'Tab' && !event.altKey && !event.metaKey;
+
+const isListNavigation = (event: KeyboardEvent) =>
+  NAVIGATION_KEYS.has(event.key) &&
+  !event.altKey &&
+  !event.ctrlKey &&
+  !event.metaKey &&
+  !isInputElement(event.target);
+
+// The focus highlight follows keyboard navigation only: Tab or a navigation
+// key starts it and pointer use ends it. Shared styles key on this marker, not
+// WebKit's :focus-visible, which also matches after shortcuts and programmatic
+// focus moves such as returning focus when the command palette closes.
+// Listeners run in the capture phase, before document-level focus traps.
 export function useKeyboardFocusIndicator() {
   useEffect(() => {
     const regionIndicator = createRegionFocusIndicator();
     let keyboardNavigation = false;
+    // Only Tab navigation outlines regions; arrows stay within one.
+    let tabNavigation = false;
+    // A navigation key counts only if focus moves before the next task. The
+    // owning list moves it from its key handler or the update that follows.
+    let listKeyPending = false;
+    let listKeyTimer: number | undefined;
     let indicated: HTMLElement | null = null;
     const clearIndicator = () => {
       indicated?.classList.remove(FOCUS_CLASS);
@@ -20,17 +53,36 @@ export function useKeyboardFocusIndicator() {
       if (keyboardNavigation && active instanceof HTMLElement) {
         indicated = active;
         active.classList.add(FOCUS_CLASS);
-        regionIndicator.update();
+        if (tabNavigation) {
+          regionIndicator.update();
+        }
       }
     };
+    const endListKey = () => {
+      window.clearTimeout(listKeyTimer);
+      listKeyPending = false;
+    };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Tab' && !event.altKey && !event.metaKey) {
+      if (isTabNavigation(event)) {
         keyboardNavigation = true;
+        tabNavigation = true;
         indicateFocus();
+      } else if (isListNavigation(event)) {
+        endListKey();
+        listKeyPending = true;
+        listKeyTimer = window.setTimeout(endListKey, 0);
       }
+    };
+    const handleFocusIn = () => {
+      if (listKeyPending) {
+        keyboardNavigation = true;
+      }
+      indicateFocus();
     };
     const handlePointerDown = () => {
       keyboardNavigation = false;
+      tabNavigation = false;
+      endListKey();
       clearIndicator();
       regionIndicator.clear();
     };
@@ -58,13 +110,14 @@ export function useKeyboardFocusIndicator() {
     window.addEventListener('pointerdown', handlePointerDown, true);
     window.addEventListener('beforeinput', handleBeforeInput, true);
     window.addEventListener('click', handleClick, true);
-    window.addEventListener('focusin', indicateFocus, true);
+    window.addEventListener('focusin', handleFocusIn, true);
     return () => {
       window.removeEventListener('keydown', handleKeyDown, true);
       window.removeEventListener('pointerdown', handlePointerDown, true);
       window.removeEventListener('beforeinput', handleBeforeInput, true);
       window.removeEventListener('click', handleClick, true);
-      window.removeEventListener('focusin', indicateFocus, true);
+      window.removeEventListener('focusin', handleFocusIn, true);
+      endListKey();
       clearIndicator();
       regionIndicator.clear();
     };

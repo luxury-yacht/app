@@ -49,7 +49,7 @@ interface DrainOptionsSectionProps {
   updateDrainOption: UpdateDrainOption;
 }
 
-const DrainOptionsSection = ({
+export const DrainOptionsSection = ({
   activeDrainJob,
   drainPending,
   options,

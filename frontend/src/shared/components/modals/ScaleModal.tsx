@@ -2,14 +2,17 @@
  * frontend/src/shared/components/modals/ScaleModal.tsx
  *
  * Shared modal component for scaling Kubernetes workloads.
- * Used by both the workloads table context menu and the object panel actions menu.
+ * Used by the workloads table context menu, the object panel actions menu, and
+ * batch scaling.
  */
 
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
-import { ScaleIcon } from '@shared/components/icons/SharedIcons';
+import { MinusIcon, PlusIcon, ScaleIcon } from '@shared/components/icons/SharedIcons';
+import type React from 'react';
 import { useEffect, useId, useRef, useState } from 'react';
 import ModalHeader from './ModalHeader';
 import ModalSurface from './ModalSurface';
+import { clampReplicas, MAX_REPLICAS } from './scaleModalModel';
 import { useModalFocusTrap } from './useModalFocusTrap';
 import './ScaleModal.css';
 
@@ -25,7 +28,124 @@ interface ScaleModalProps {
   onApply: () => void;
   onScaleToZero?: () => void;
   onValueChange: (value: number) => void;
+  /** Applying the starting value is meaningful, as when scaling many workloads to one count. */
+  allowUnchanged?: boolean;
 }
+
+// Tracks the replica count from when the modal first opens, so the Scale button
+// can stay disabled until the value changes.
+const useValueUnchangedSinceOpen = (isOpen: boolean, value: number): boolean => {
+  const initialValueRef = useRef<number | null>(null);
+  if (isOpen && initialValueRef.current === null) {
+    initialValueRef.current = value;
+  }
+  if (!isOpen) {
+    initialValueRef.current = null;
+  }
+  return value === initialValueRef.current;
+};
+
+// The field can be briefly empty while typing; anything else it shows is a count
+// the app can apply.
+const useReplicaText = (value: number, onValueChange: (value: number) => void) => {
+  const [text, setText] = useState(String(value));
+
+  useEffect(() => {
+    setText(String(value));
+  }, [value]);
+
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const digits = event.target.value.replace(/\D/g, '');
+    if (digits === '') {
+      setText('');
+      return;
+    }
+    const count = clampReplicas(Number.parseInt(digits, 10));
+    setText(String(count));
+    onValueChange(count);
+  };
+
+  // An emptied field goes back to the last valid count rather than meaning 0.
+  const handleBlur = () => {
+    if (text === '') {
+      setText(String(value));
+    }
+  };
+
+  return { text, isEmpty: text === '', handleChange, handleBlur };
+};
+
+const ReplicaStepButton = ({
+  label,
+  disabled,
+  onClick,
+  children,
+}: Readonly<{
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}>) => (
+  <button
+    type="button"
+    className="scale-step-button"
+    aria-label={label}
+    disabled={disabled}
+    onClick={onClick}
+  >
+    {children}
+  </button>
+);
+
+const ReplicaField = ({
+  inputId,
+  value,
+  replicaText,
+  loading,
+  cannotApply,
+  onApply,
+  onValueChange,
+}: Readonly<{
+  inputId: string;
+  value: number;
+  replicaText: ReturnType<typeof useReplicaText>;
+  loading: boolean;
+  cannotApply: boolean;
+  onApply: () => void;
+  onValueChange: (value: number) => void;
+}>) => (
+  <div className="scale-input-group">
+    <ReplicaStepButton
+      label="Decrease replicas"
+      disabled={loading || value <= 0}
+      onClick={() => onValueChange(clampReplicas(value - 1))}
+    >
+      <MinusIcon width={12} height={12} />
+    </ReplicaStepButton>
+    <input
+      id={inputId}
+      type="text"
+      inputMode="numeric"
+      value={replicaText.text}
+      onChange={replicaText.handleChange}
+      onBlur={replicaText.handleBlur}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && !cannotApply) {
+          onApply();
+        }
+      }}
+      className="scale-input"
+      disabled={loading}
+    />
+    <ReplicaStepButton
+      label="Increase replicas"
+      disabled={loading || value >= MAX_REPLICAS}
+      onClick={() => onValueChange(clampReplicas(value + 1))}
+    >
+      <PlusIcon width={12} height={12} />
+    </ReplicaStepButton>
+  </div>
+);
 
 const ScaleModal = ({
   isOpen,
@@ -39,26 +159,12 @@ const ScaleModal = ({
   onApply,
   onScaleToZero,
   onValueChange,
+  allowUnchanged = false,
 }: ScaleModalProps) => {
   const elementIdPrefix = useId();
-  // Local string state so the user can clear the field while typing.
-  const [inputText, setInputText] = useState(String(value));
-
-  // Sync from parent when the external value changes.
-  useEffect(() => {
-    setInputText(String(value));
-  }, [value]);
-
-  // Track the replica count when the modal first opens so we can disable
-  // the Scale button when the value hasn't changed.
-  const initialValueRef = useRef<number | null>(null);
-  if (isOpen && initialValueRef.current === null) {
-    initialValueRef.current = value;
-  }
-  if (!isOpen) {
-    initialValueRef.current = null;
-  }
-  const unchanged = value === initialValueRef.current;
+  const replicaText = useReplicaText(value, onValueChange);
+  const unchanged = useValueUnchangedSinceOpen(isOpen, value) && !allowUnchanged;
+  const cannotApply = unchanged || replicaText.isEmpty;
 
   const modalRef = useRef<HTMLDivElement>(null);
 
@@ -74,25 +180,6 @@ const ScaleModal = ({
   if (!isOpen) {
     return null;
   }
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Strip non-digit characters so letters are silently ignored.
-    const raw = e.target.value.replace(/[^0-9]/g, '');
-    setInputText(raw);
-    const parsed = Number.parseInt(raw, 10);
-    if (!Number.isNaN(parsed)) {
-      onValueChange(parsed);
-    }
-  };
-
-  // Commit a valid number on blur; if empty, reset to 0.
-  const handleBlur = () => {
-    const parsed = Number.parseInt(inputText, 10);
-    if (Number.isNaN(parsed) || inputText.trim() === '') {
-      onValueChange(0);
-      setInputText('0');
-    }
-  };
 
   return (
     <ModalSurface
@@ -126,23 +213,15 @@ const ScaleModal = ({
           <label className="scale-modal-label" htmlFor={`${elementIdPrefix}-scale-replicas`}>
             Replicas:
           </label>
-          <div className="scale-input-group">
-            <input
-              id={`${elementIdPrefix}-scale-replicas`}
-              type="text"
-              inputMode="numeric"
-              value={inputText}
-              onChange={handleInputChange}
-              onBlur={handleBlur}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !unchanged) {
-                  onApply();
-                }
-              }}
-              className="scale-input"
-              disabled={loading}
-            />
-          </div>
+          <ReplicaField
+            inputId={`${elementIdPrefix}-scale-replicas`}
+            value={value}
+            replicaText={replicaText}
+            loading={loading}
+            cannotApply={cannotApply}
+            onApply={onApply}
+            onValueChange={onValueChange}
+          />
         </div>
       </div>
       {!!error && (
@@ -168,7 +247,7 @@ const ScaleModal = ({
           type="button"
           className="button warning"
           onClick={onApply}
-          disabled={loading || unchanged}
+          disabled={loading || cannotApply}
         >
           {loading ? 'Scaling…' : 'Scale'}
         </button>

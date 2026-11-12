@@ -37,6 +37,8 @@ export interface ObjectActionData {
   hpaManaged?: boolean | null;
   // Node-only: when true the cordon action toggles to "Uncordon".
   unschedulable?: boolean;
+  // Node-only: a drain job is running, so another one would be refused.
+  drainRunning?: boolean;
   // For Event-specific actions - the involved object reference (e.g., "Pod/my-pod")
   involvedObject?: string;
   involvedObjectRef?: ResourceLink;

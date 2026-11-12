@@ -75,6 +75,10 @@ effects. App-state reads use `appStateAccess`
 - Mounted controls subscribe to the owner and read its value; no second
   component-local rollback after a persistence failure. A typed field keeps
   only a draft while the user types (`PreferenceNumberRow`).
+- After a saved change or a settings import, the saving window broadcasts
+  `settings:preferences-changed` and every window force-hydrates
+  (`windowBootstrap.ts`). An import broadcasts even when its own read-back
+  fails, because the saved file changed.
 - Appearance's palette, accent, and link controls are the deliberate exception:
   they keep live-preview drafts, and page styling re-reads those preferences only
   on a light/dark change or when a theme is applied, so a rollback or another

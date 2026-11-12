@@ -3,23 +3,26 @@ import type { ErrorStatus, ErrorStatusReason } from '@/core/refresh/types';
 type ReasonDefaults = Pick<ErrorStatus, 'code' | 'category' | 'retryable' | 'expected'>;
 
 // The usual status for each reason, as backend/internal/errorstatus classifies it.
+// A Kubernetes API answer is never an app failure (expected); BadRequest models
+// the app boundary's own input rejection, which is reportable.
 const reasonDefaults: Record<ErrorStatusReason, ReasonDefaults> = {
   Unauthorized: { code: 401, category: 'AUTHENTICATION', retryable: false, expected: true },
   CredentialsRejected: { code: 401, category: 'AUTHENTICATION', retryable: false, expected: true },
   Forbidden: { code: 403, category: 'PERMISSION', retryable: false, expected: true },
   NotFound: { code: 404, category: 'NOT_FOUND', retryable: false, expected: true },
-  AlreadyExists: { code: 409, category: 'CONFLICT', retryable: false, expected: false },
-  Conflict: { code: 409, category: 'CONFLICT', retryable: false, expected: false },
-  Gone: { code: 410, category: 'VALIDATION', retryable: false, expected: false },
-  Invalid: { code: 422, category: 'VALIDATION', retryable: false, expected: false },
+  AlreadyExists: { code: 409, category: 'CONFLICT', retryable: false, expected: true },
+  Conflict: { code: 409, category: 'CONFLICT', retryable: false, expected: true },
+  Gone: { code: 410, category: 'VALIDATION', retryable: false, expected: true },
+  Invalid: { code: 422, category: 'VALIDATION', retryable: false, expected: true },
   BadRequest: { code: 400, category: 'VALIDATION', retryable: false, expected: false },
   Timeout: { code: 504, category: 'TIMEOUT', retryable: true, expected: true },
   ServerTimeout: { code: 500, category: 'TIMEOUT', retryable: true, expected: true },
   DeadlineExceeded: { code: 504, category: 'TIMEOUT', retryable: true, expected: false },
-  TooManyRequests: { code: 429, category: 'RATE_LIMIT', retryable: true, expected: false },
-  InternalError: { code: 500, category: 'SERVER_ERROR', retryable: true, expected: false },
+  TooManyRequests: { code: 429, category: 'RATE_LIMIT', retryable: true, expected: true },
+  InternalError: { code: 500, category: 'SERVER_ERROR', retryable: true, expected: true },
   ServiceUnavailable: { code: 503, category: 'SERVER_ERROR', retryable: true, expected: true },
   ClusterUnreachable: { code: 503, category: 'NETWORK', retryable: true, expected: true },
+  RequestInterrupted: { code: 502, category: 'NETWORK', retryable: true, expected: true },
   ClusterNotReady: { code: 503, category: 'SERVER_ERROR', retryable: true, expected: true },
   RefreshUnavailable: { code: 503, category: 'SERVER_ERROR', retryable: true, expected: true },
   Canceled: { code: 499, category: 'UNKNOWN', retryable: false, expected: true },

@@ -48,27 +48,39 @@ func normalizeAppsV1WorkloadKind(group, version, kind string, supported map[stri
 	return canonical, nil
 }
 
-// RevisionEntry describes a single historical revision of a workload rollout.
+// RevisionEntry describes a single historical revision of a workload rollout
+// or a Helm release.
 type RevisionEntry struct {
 	// Revision is the monotonically increasing revision number.
 	Revision int64 `json:"revision"`
-	// CreatedAt is the ISO-8601 creation timestamp of the underlying ReplicaSet or ControllerRevision.
+	// CreatedAt is the ISO-8601 time the revision was made: the ReplicaSet or
+	// ControllerRevision creation, or the Helm revision's deployment.
 	CreatedAt string `json:"createdAt"`
-	// ChangeCause is the value of the kubernetes.io/change-cause annotation, if present.
+	// ChangeCause is the value of the kubernetes.io/change-cause annotation, if
+	// present, or the Helm revision's description.
 	ChangeCause string `json:"changeCause"`
-	// Current indicates that this revision matches the workload's active revision.
+	// Current indicates the revision a rollback replaces: the workload's active
+	// revision, or the release's latest revision.
 	Current bool `json:"current"`
-	// PodTemplate is the YAML-serialised pod template spec for this revision.
-	PodTemplate string `json:"podTemplate"`
+	// Content is the YAML a rollback to this revision reinstates: the workload's
+	// pod template spec, or the release's rendered manifest.
+	Content string `json:"content"`
 }
 
-// GetRevisionHistory returns the rollout revision history for a named workload.
-// Supports Deployment, StatefulSet, and DaemonSet. Other kinds return an error.
-// Results are sorted descending by revision number (newest first).
+// GetRevisionHistory returns the revision history a rollback chooses from,
+// sorted descending by revision number (newest first). Supports Deployment,
+// StatefulSet, DaemonSet, and Helm releases. Other kinds return an error.
 //
 // Multi-cluster safety: all Kubernetes requests are scoped to the target's
 // cluster, preventing cross-cluster data leakage.
 func (g *ResourceGateway) GetRevisionHistory(target resourcemodel.ResourceRef) ([]RevisionEntry, error) {
+	if resourcemodel.IsHelmReleaseGVK(objectActionTargetGVK(target)) {
+		return g.helmRevisionHistory(target)
+	}
+	return g.workloadRevisionHistory(target)
+}
+
+func (g *ResourceGateway) workloadRevisionHistory(target resourcemodel.ResourceRef) ([]RevisionEntry, error) {
 	workloadKind, err := normalizeAppsV1WorkloadKind(target.Group, target.Version, target.Kind, revisionHistoryWorkloadKinds)
 	if err != nil {
 		return nil, fmt.Errorf("revision history not supported: %w", err)
@@ -100,7 +112,7 @@ func (g *ResourceGateway) GetRevisionHistory(target resourcemodel.ResourceRef) (
 			CreatedAt:   r.CreatedAt,
 			ChangeCause: r.ChangeCause,
 			Current:     r.Current,
-			PodTemplate: r.PodTemplate,
+			Content:     r.PodTemplate,
 		})
 	}
 	return entries, nil
@@ -126,7 +138,7 @@ func (g *ResourceGateway) rollbackWorkloadAction(target ObjectActionTargetRef, t
 	ctx := g.CtxOrBackground()
 
 	// Fetch the full revision history to locate the target revision's pod template.
-	entries, err := g.GetRevisionHistory(target)
+	entries, err := g.workloadRevisionHistory(target)
 	if err != nil {
 		return fmt.Errorf("failed to get revision history for %s %s/%s: %w", workloadKind, target.Namespace, target.Name, err)
 	}
@@ -151,7 +163,7 @@ func (g *ResourceGateway) rollbackWorkloadAction(target ObjectActionTargetRef, t
 
 	// Unmarshal the stored YAML pod template back into a typed PodTemplateSpec.
 	var podTemplate corev1.PodTemplateSpec
-	if err := sigsyaml.Unmarshal([]byte(entries[revisionIndex].PodTemplate), &podTemplate); err != nil {
+	if err := sigsyaml.Unmarshal([]byte(entries[revisionIndex].Content), &podTemplate); err != nil {
 		return fmt.Errorf("failed to unmarshal pod template for revision %d: %w", toRevision, err)
 	}
 

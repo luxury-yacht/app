@@ -69,6 +69,7 @@ export interface AppEvents {
 
   // Favorites events
   'favorites:changed': unknown[];
+  'favorites:clusters-changed': string[];
 
   // Refresh events
   /** A cluster's refresh runtime was torn down (cluster closed/deselected). */

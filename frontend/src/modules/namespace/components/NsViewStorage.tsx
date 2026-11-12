@@ -11,7 +11,6 @@ import {
   NamespaceAggregatedResourceGridView,
 } from '@modules/resource-grid/AggregatedResourceGridView';
 import * as cf from '@shared/components/tables/columnFactories';
-import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import React from 'react';
 import type {
   NamespaceStorageSnapshotPayload,
@@ -57,14 +56,10 @@ const storageSpec: AggregatedResourceGridViewSpec<StorageData> = {
 
     return [
       ...createAggregatedIdentityColumns<StorageData>({ identity, useShortResourceNames }),
-      cf.createTextColumn<StorageData>(
-        'status',
-        'Status',
-        (resource) => resource.status || 'Unknown',
-        {
-          getClassName: (resource) => backendStatusTextClass(resource.statusPresentation),
-        }
-      ),
+      cf.createStatusChipColumn<StorageData>('status', 'Status', (resource) => ({
+        value: resource.status || 'Unknown',
+        presentation: resource.statusPresentation,
+      })),
       cf.createTextColumn<StorageData>(
         'capacity',
         'Capacity',

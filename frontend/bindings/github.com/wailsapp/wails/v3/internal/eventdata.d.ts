@@ -38,6 +38,7 @@ declare module "@wailsio/runtime" {
             "debug:toggle-icon-overlay": void;
             "debug:toggle-map-overlay": void;
             "debug:toggle-panel-overlay": void;
+            "favorites:library-changed": void;
             "kubeconfig:available-changed": void;
             "menu:close": void;
             "menu:copy": void;

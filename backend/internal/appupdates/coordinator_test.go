@@ -651,14 +651,21 @@ func TestManualCheckReoffersSkippedVersionWhileAutomaticCheckKeepsItHidden(t *te
 func TestNoUpdateEventProjectsTheDurableSkippedVersion(t *testing.T) {
 	t.Parallel()
 
+	client := &fakeUpdater{}
+	scheduler := &fakeScheduler{}
 	coordinator := appupdates.New(appupdates.Dependencies{
-		Client: &fakeUpdater{}, Provider: fakeProvider{}, Eligibility: enabledBuild(),
+		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
 		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
-		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{}, UpdateState: &fakeUpdateState{},
+		TempRoot: "/owned/temp/root", Scheduler: scheduler, UpdateState: &fakeUpdateState{},
 		SkippedVersion: "2.0.0-beta.4",
 	})
+	coordinator.RuntimeReady()
+	var snapshot appupdates.Snapshot
 
-	snapshot := coordinator.HandleWailsEvent(updater.EventNoUpdate, nil)
+	// An automatic check honors the skip, so Wails reports no update.
+	duringCheck(t, client, func() { scheduler.run(context.Background()) }, func() {
+		snapshot = coordinator.HandleWailsEvent(updater.EventNoUpdate, nil)
+	})
 
 	require.Equal(t, appupdates.StatusSkipped, snapshot.Status)
 	require.Equal(t, "2.0.0-beta.4", snapshot.AvailableVersion)

@@ -12,10 +12,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/hashicorp/go-multierror"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
@@ -26,11 +28,13 @@ import (
 	"helm.sh/helm/v3/pkg/storage/driver"
 	helmTime "helm.sh/helm/v3/pkg/time"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/luxury-yacht/app/backend/internal/errorcapture"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	sentryreporting "github.com/luxury-yacht/app/internal/sentry"
 )
@@ -546,4 +550,349 @@ func TestReleaseManifestReturnsContent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "kind: ConfigMap", out)
 	require.Equal(t, 6, revision)
+}
+
+// hookWaitRecorder records how long Helm may wait for a hook to finish.
+type hookWaitRecorder struct {
+	fakeKubeClient
+	hookTimeouts []time.Duration
+}
+
+func (r *hookWaitRecorder) WatchUntilReady(_ kube.ResourceList, timeout time.Duration) error {
+	r.hookTimeouts = append(r.hookTimeouts, timeout)
+	return nil
+}
+
+// failingHookKubeClient stands in for a cluster where building a manifest
+// fails with buildErr, creating a chart hook's objects with createErr, every
+// hook job with hookErr, and deleting objects with deleteErr.
+type failingHookKubeClient struct {
+	fakeKubeClient
+	buildErr  error
+	createErr error
+	hookErr   error
+	deleteErr error
+}
+
+func (c failingHookKubeClient) Build(reader io.Reader, validate bool) (kube.ResourceList, error) {
+	if c.buildErr != nil {
+		return nil, c.buildErr
+	}
+	return c.fakeKubeClient.Build(reader, validate)
+}
+
+func (c failingHookKubeClient) Create(resources kube.ResourceList) (*kube.Result, error) {
+	if c.createErr != nil {
+		return nil, c.createErr
+	}
+	return c.fakeKubeClient.Create(resources)
+}
+
+func (c failingHookKubeClient) WatchUntilReady(kube.ResourceList, time.Duration) error {
+	return c.hookErr
+}
+
+func (c failingHookKubeClient) Delete(kube.ResourceList) (*kube.Result, []error) {
+	if c.deleteErr != nil {
+		return &kube.Result{}, []error{c.deleteErr}
+	}
+	return &kube.Result{}, nil
+}
+
+func hookedRelease(rel *release.Release, events ...release.HookEvent) {
+	rel.Hooks = []*release.Hook{{
+		Name: "demo-hook", Kind: "Job", Path: "demo/templates/hook.yaml",
+		Manifest: "kind: Job\nmetadata:\n  name: demo-hook\n", Events: events,
+	}}
+}
+
+// A chart hook that fails in the cluster, before or after the release's objects
+// are deleted, fails the delete and the user sees why; it is the chart's
+// outcome, never reported as an app error.
+func TestReleaseDeleteFailedByChartHookIsNotAnAppError(t *testing.T) {
+	jobFailed := errors.New("job demo-hook failed: BackoffLimitExceeded")
+	for _, event := range []release.HookEvent{release.HookPreDelete, release.HookPostDelete} {
+		t.Run(string(event), func(t *testing.T) {
+			store := storage.Init(driver.NewMemory())
+			rel := buildTestRelease("demo", "default", 1, time.Now().Add(-2*time.Hour), time.Now().Add(-time.Hour))
+			hookedRelease(rel, event)
+			require.NoError(t, store.Create(rel))
+			logger := &recordingHelmLogger{}
+			service := helmServiceOver(store, failingHookKubeClient{hookErr: jobFailed})
+			service.deps.Common.Logger = logger
+
+			err := service.DeleteRelease("default", "demo")
+
+			require.ErrorIs(t, err, jobFailed)
+			require.True(t, errorstatus.Classify(err).Expected, "chart hook failure reported as an app error")
+			require.True(t, errorstatus.Classify(logger.cause).Expected, "chart hook failure logged as an app error")
+		})
+	}
+}
+
+// A hook whose objects the cluster refuses to create fails the delete, before
+// or after the release's objects go. The refusal is the cluster's answer, but
+// a request only the app could have built wrong stays reportable, even after
+// Helm flattens a post-delete failure into text.
+func TestReleaseDeleteHookCreateFailureKeepsItsVerdict(t *testing.T) {
+	jobs := schema.GroupResource{Group: "batch", Resource: "jobs"}
+	for _, event := range []release.HookEvent{release.HookPreDelete, release.HookPostDelete} {
+		for name, tt := range map[string]struct {
+			createErr error
+			expected  bool
+		}{
+			"denied by the cluster":            {apierrors.NewForbidden(jobs, "demo-hook", errors.New("quota exceeded")), true},
+			"request the server cannot accept": {apierrors.NewGenericServerResponse(415, "create", jobs, "demo-hook", "", 0, false), false},
+			// Helm's kube client aggregates one failure per resource with go-multierror.
+			"one of two resources the server cannot accept": {multierror.Append(nil,
+				apierrors.NewForbidden(jobs, "demo-hook", errors.New("quota exceeded")),
+				apierrors.NewGenericServerResponse(415, "create", jobs, "demo-hook-config", "", 0, false)), false},
+		} {
+			t.Run(string(event)+"/"+name, func(t *testing.T) {
+				store := storage.Init(driver.NewMemory())
+				rel := buildTestRelease("demo", "default", 1, time.Now().Add(-2*time.Hour), time.Now().Add(-time.Hour))
+				hookedRelease(rel, event)
+				require.NoError(t, store.Create(rel))
+				logger := &recordingHelmLogger{}
+				service := helmServiceOver(store, failingHookKubeClient{createErr: tt.createErr})
+				service.deps.Common.Logger = logger
+
+				err := service.DeleteRelease("default", "demo")
+
+				require.ErrorIs(t, err, tt.createErr)
+				require.Equal(t, tt.expected, errorstatus.Classify(err).Expected)
+				require.Equal(t, tt.expected, errorstatus.Classify(logger.cause).Expected)
+			})
+		}
+	}
+}
+
+// failingDeleteDriver is release storage whose deletes fail with err.
+type failingDeleteDriver struct {
+	driver.Driver
+	err error
+}
+
+func (d failingDeleteDriver) Delete(string) (*release.Release, error) { return nil, d.err }
+
+// After a post-delete hook fails, Helm still purges the release's records and
+// reports both failures as one. The hook's failure is the chart's, but a purge
+// that failed for the app's own reason stays reportable.
+func TestReleaseDeleteHookFailureKeepsPurgeFailureVerdict(t *testing.T) {
+	secrets := schema.GroupResource{Resource: "secrets"}
+	jobFailed := failingHookKubeClient{hookErr: errors.New("job demo-hook failed: BackoffLimitExceeded")}
+	// A hook the cluster refused is a Kubernetes answer, which alone would make
+	// the whole failure look expected.
+	hookDenied := failingHookKubeClient{createErr: apierrors.NewForbidden(schema.GroupResource{Group: "batch", Resource: "jobs"}, "demo-hook", errors.New("quota exceeded"))}
+	for name, tt := range map[string]struct {
+		hooks    failingHookKubeClient
+		purgeErr error
+		expected bool
+	}{
+		"purge denied by the cluster":                    {jobFailed, apierrors.NewForbidden(secrets, "sh.helm.release.v1.demo.v1", errors.New("denied")), true},
+		"purge request the server cannot accept":         {jobFailed, apierrors.NewGenericServerResponse(415, "delete", secrets, "sh.helm.release.v1.demo.v1", "", 0, false), false},
+		"purge application failure":                      {jobFailed, errors.New("invariant violated"), false},
+		"purge application failure beside a denied hook": {hookDenied, errors.New("invariant violated"), false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			memory := driver.NewMemory()
+			rel := buildTestRelease("demo", "default", 1, time.Now().Add(-2*time.Hour), time.Now().Add(-time.Hour))
+			hookedRelease(rel, release.HookPostDelete)
+			require.NoError(t, storage.Init(memory).Create(rel))
+			store := storage.Init(failingDeleteDriver{Driver: memory, err: tt.purgeErr})
+			logger := &recordingHelmLogger{}
+			service := helmServiceOver(store, tt.hooks)
+			service.deps.Common.Logger = logger
+
+			err := service.DeleteRelease("default", "demo")
+
+			require.Error(t, err)
+			require.Equal(t, tt.expected, errorstatus.Classify(err).Expected)
+			require.Equal(t, tt.expected, errorstatus.Classify(logger.cause).Expected)
+		})
+	}
+}
+
+// A hook keeps the failed phase of an earlier run, such as a failed install,
+// until Helm runs it again. A delete that fails before its hook runs (while
+// cleaning up the hook's old objects or building its manifest) fails for its
+// own reason, which stays reportable.
+func TestReleaseDeleteFailureBeforeItsHookRunsStaysReportable(t *testing.T) {
+	for name, kubeClient := range map[string]failingHookKubeClient{
+		"hook cleanup fails": {deleteErr: errors.New("invariant violated")},
+		"hook build fails":   {buildErr: errors.New("invariant violated")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := storage.Init(driver.NewMemory())
+			rel := buildTestRelease("demo", "default", 1, time.Now().Add(-2*time.Hour), time.Now().Add(-time.Hour))
+			hookedRelease(rel, release.HookPostInstall, release.HookPreDelete)
+			rel.Hooks[0].LastRun = release.HookExecution{Phase: release.HookPhaseFailed}
+			require.NoError(t, store.Create(rel))
+
+			err := helmServiceOver(store, kubeClient).DeleteRelease("default", "demo")
+
+			require.Error(t, err)
+			require.False(t, errorstatus.Classify(err).Expected)
+		})
+	}
+}
+
+func helmServiceOver(store *storage.Storage, kubeClient kube.Interface) *Service {
+	return NewService(Dependencies{
+		Common: common.Dependencies{
+			EnsureClient: func(string) error { return nil },
+		},
+		ActionConfigFactory: func(*cli.EnvSettings, string) (*action.Configuration, error) {
+			return &action.Configuration{
+				Releases:   store,
+				KubeClient: kubeClient,
+				Log:        func(string, ...interface{}) {},
+			}, nil
+		},
+	})
+}
+
+// buildRevisionChain stores revisions 1..n of release demo in default, each
+// with its own manifest and values; the last one is deployed.
+func buildRevisionChain(t *testing.T, store *storage.Storage, n int) []*release.Release {
+	t.Helper()
+	start := time.Now().Add(-time.Duration(n+1) * time.Hour)
+	revisions := make([]*release.Release, 0, n)
+	for version := 1; version <= n; version++ {
+		deployed := start.Add(time.Duration(version) * time.Hour)
+		rel := buildTestRelease("demo", "default", version, start, deployed)
+		rel.Manifest = fmt.Sprintf("kind: ConfigMap\nmetadata:\n  name: demo\ndata:\n  revision: %q\n", fmt.Sprint(version))
+		rel.Config = map[string]interface{}{"revision": version}
+		rel.Info.Status = release.StatusSuperseded
+		if version == n {
+			rel.Info.Status = release.StatusDeployed
+		}
+		require.NoError(t, store.Create(rel))
+		revisions = append(revisions, rel)
+	}
+	return revisions
+}
+
+// The rollback dialog diffs each revision's rendered manifest against the
+// current one. Helm's rollback replaces the latest revision whatever its
+// status, so the latest is current even when its upgrade failed.
+func TestReleaseHistoryReturnsEachRevisionManifestNewestFirst(t *testing.T) {
+	store := storage.Init(driver.NewMemory())
+	revisions := buildRevisionChain(t, store, 3)
+	revisions[1].Info.Status = release.StatusDeployed
+	revisions[1].Info.Description = "Upgrade complete"
+	revisions[2].Info.Status = release.StatusFailed
+	revisions[2].Info.Description = "Upgrade failed"
+	require.NoError(t, store.Update(revisions[1]))
+	require.NoError(t, store.Update(revisions[2]))
+
+	history, err := helmServiceOver(store, &fakeKubeClient{}).ReleaseHistory("default", "demo")
+	require.NoError(t, err)
+
+	require.Len(t, history, 3)
+	for index, entry := range history {
+		source := revisions[len(revisions)-1-index]
+		require.Equal(t, source.Version, entry.Revision)
+		require.Equal(t, source.Manifest, entry.Manifest)
+		require.True(t, source.Info.LastDeployed.Time.Equal(entry.Deployed), "revision %d deploy time", entry.Revision)
+		require.Equal(t, source.Info.Description, entry.Description)
+		require.Equal(t, index == 0, entry.Current, "revision %d current", entry.Revision)
+	}
+}
+
+func TestReleaseHistoryReportsMissingReleaseAsNotFound(t *testing.T) {
+	_, err := helmServiceOver(storage.Init(driver.NewMemory()), &fakeKubeClient{}).ReleaseHistory("default", "gone")
+
+	require.Equal(t, errorstatus.ReasonNotFound, errorstatus.Classify(err).Reason)
+}
+
+// Rolling back must reinstate the chosen revision's chart values and manifest
+// as a new deployed revision and supersede the one it replaces, as `helm
+// rollback` does. Hook waits keep the CLI's bound: Helm treats a zero timeout
+// as no deadline, so a stuck hook would hang the rollback forever.
+func TestRollbackReleaseReinstatesTheChosenRevision(t *testing.T) {
+	store := storage.Init(driver.NewMemory())
+	revisions := buildRevisionChain(t, store, 2)
+	revisions[0].Hooks = []*release.Hook{{
+		Name: "migrate", Kind: "Job", Path: "templates/migrate.yaml",
+		Manifest: "kind: Job\nmetadata:\n  name: migrate\n",
+		Events:   []release.HookEvent{release.HookPreRollback},
+	}}
+	require.NoError(t, store.Update(revisions[0]))
+	kubeClient := &hookWaitRecorder{}
+
+	require.NoError(t, helmServiceOver(store, kubeClient).RollbackRelease("default", "demo", 1))
+
+	latest, err := store.Last("demo")
+	require.NoError(t, err)
+	require.Equal(t, 3, latest.Version)
+	require.Equal(t, release.StatusDeployed, latest.Info.Status)
+	require.Equal(t, revisions[0].Manifest, latest.Manifest)
+	require.Equal(t, revisions[0].Config, latest.Config)
+	replaced, err := store.Get("demo", 2)
+	require.NoError(t, err)
+	require.Equal(t, release.StatusSuperseded, replaced.Info.Status)
+	require.Equal(t, []time.Duration{5 * time.Minute}, kubeClient.hookTimeouts)
+}
+
+// Helm reads revision 0 as "the previous revision"; the dialog always names
+// the revision it showed, so 0 and absent revisions must fail without
+// writing a new revision.
+func TestRollbackReleaseRejectsRevisionsNotInHistory(t *testing.T) {
+	for _, revision := range []int{0, 7} {
+		t.Run(fmt.Sprint(revision), func(t *testing.T) {
+			store := storage.Init(driver.NewMemory())
+			buildRevisionChain(t, store, 2)
+
+			err := helmServiceOver(store, &fakeKubeClient{}).RollbackRelease("default", "demo", revision)
+
+			require.Error(t, err)
+			latest, lastErr := store.Last("demo")
+			require.NoError(t, lastErr)
+			require.Equal(t, 2, latest.Version)
+		})
+	}
+}
+
+// Helm builds manifest objects that name no namespace into its settings'
+// namespace, as `helm -n` does. Left unset it is the kubeconfig context's
+// namespace, so a rollback or uninstall would change same-named objects in
+// another namespace instead of the release's.
+func TestReleaseChangesTargetTheReleaseNamespace(t *testing.T) {
+	kubeconfig := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, os.WriteFile(kubeconfig, []byte(`apiVersion: v1
+kind: Config
+clusters: [{name: c, cluster: {server: "https://127.0.0.1:1"}}]
+users: [{name: u, user: {}}]
+contexts: [{name: ctx, context: {cluster: c, user: u, namespace: elsewhere}}]
+current-context: ctx
+`), 0o600))
+	changes := map[string]func(*Service) error{
+		"rollback": func(s *Service) error { return s.RollbackRelease("shop-ns", "demo", 1) },
+		"delete":   func(s *Service) error { return s.DeleteRelease("shop-ns", "demo") },
+	}
+	for name, change := range changes {
+		t.Run(name, func(t *testing.T) {
+			store := storage.Init(driver.NewMemory())
+			for version := 1; version <= 2; version++ {
+				rel := buildTestRelease("demo", "shop-ns", version, time.Now().Add(-time.Hour), time.Now())
+				require.NoError(t, store.Create(rel))
+			}
+			var objectNamespace string
+			service := NewService(Dependencies{
+				Common: common.Dependencies{
+					EnsureClient:       func(string) error { return nil },
+					SelectedKubeconfig: kubeconfig,
+					SelectedContext:    "ctx",
+				},
+				ActionConfigFactory: func(settings *cli.EnvSettings, _ string) (*action.Configuration, error) {
+					objectNamespace = settings.Namespace()
+					return &action.Configuration{Releases: store, KubeClient: &fakeKubeClient{}, Log: func(string, ...interface{}) {}}, nil
+				},
+			})
+
+			require.NoError(t, change(service))
+			require.Equal(t, "shop-ns", objectNamespace)
+		})
+	}
 }

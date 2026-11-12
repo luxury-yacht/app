@@ -14,6 +14,8 @@ interface GridTableLayoutProps {
   filters?: React.ReactNode;
   header?: React.ReactNode;
   body: React.ReactNode;
+  /** Floats over the bottom of the body, above the footer. */
+  batchBar?: React.ReactNode;
   footer?: React.ReactNode;
   loadingOverlay?: React.ReactNode;
   contextMenu?: React.ReactNode;
@@ -26,6 +28,7 @@ const GridTableLayout: React.FC<GridTableLayoutProps> = ({
   filters,
   header,
   body,
+  batchBar,
   footer,
   loadingOverlay,
   contextMenu,
@@ -47,6 +50,7 @@ const GridTableLayout: React.FC<GridTableLayoutProps> = ({
         {filters}
         {header}
         {body}
+        {batchBar}
         {footer}
       </div>
       {contextMenu}

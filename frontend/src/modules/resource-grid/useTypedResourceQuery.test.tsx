@@ -54,6 +54,7 @@ interface ProbeProps {
   sortConfig?: SortConfig | null;
   pageLimit?: number;
   liveDataVersion?: string;
+  enabled?: boolean;
 }
 
 function QueryProbe({
@@ -63,10 +64,11 @@ function QueryProbe({
   sortConfig = NAME_ASC,
   pageLimit,
   liveDataVersion,
+  enabled = true,
 }: Readonly<ProbeProps>) {
   const cluster = clusterId ?? dev.clusterId;
   const result = useTypedResourceQuery<Payload, Row>({
-    enabled: true,
+    enabled,
     clusterId: cluster,
     domain,
     label: 'All Namespaces Pods',
@@ -493,6 +495,89 @@ describe('useTypedResourceQuery', () => {
       'BackOff',
       'FailedScheduling',
     ]);
+  });
+
+  describe('pageStale: whether the rows on screen are the current query’s page', () => {
+    const withReason = (reason: string): GridTableFilterState => ({
+      ...DEFAULT_GRID_TABLE_FILTER_STATE,
+      queryFacets: { reasons: { mode: 'some', values: [reason] } },
+    });
+
+    it('holds while the query is not running yet, since no page can be its own', async () => {
+      await start();
+
+      await view.show(<QueryProbe enabled={false} />);
+
+      expect(current().pageStale).toBe(true);
+    });
+
+    it('holds from a filter change until that query’s page lands', async () => {
+      await start();
+      answerPage = () => page(['pod-a']);
+      await view.show(<QueryProbe liveDataVersion="v1" />);
+      expect(current().pageStale).toBe(false);
+
+      const release = holdReads();
+      await view.show(<QueryProbe liveDataVersion="v1" filters={withReason('BackOff')} />);
+      expect(rowNames()).toEqual(['pod-a']);
+      expect(current().pageStale).toBe(true);
+
+      await release();
+      expect(current().pageStale).toBe(false);
+    });
+
+    it('stays set when the new query fails, because the rows are still the old query’s', async () => {
+      await start();
+      answerPage = () => page(['pod-a']);
+      await view.show(<QueryProbe liveDataVersion="v1" />);
+
+      failReads((params) => params.has('facet.reasons'));
+      await view.show(<QueryProbe liveDataVersion="v1" filters={withReason('BackOff')} />);
+      await app.settle();
+
+      expect(takeReadFailures().length).toBeGreaterThan(0);
+      expect(rowNames()).toEqual(['pod-a']);
+      expect(current().pageStale).toBe(true);
+    });
+
+    it('stays clear through a live refetch of the page already on screen', async () => {
+      await start();
+      answerPage = () => page(['pod-a']);
+      await view.show(<QueryProbe liveDataVersion="v1" />);
+
+      const release = holdReads();
+      await view.show(<QueryProbe liveDataVersion="v2" />);
+      expect(current().pageStale).toBe(false);
+
+      await release();
+      expect(current().pageStale).toBe(false);
+    });
+
+    it('holds while a typed search waits for the pause in typing', async () => {
+      await start();
+      answerPage = () => page(['pod-a']);
+      await view.show(<QueryProbe />);
+      vi.useFakeTimers();
+
+      await view.show(<QueryProbe filters={{ ...DEFAULT_GRID_TABLE_FILTER_STATE, search: 'a' }} />);
+
+      expect(current().pageStale).toBe(true);
+    });
+
+    it('clears when a failed page navigation rolls back to the page on screen', async () => {
+      await start();
+      answerPage = ({ params }) =>
+        params.get('continue') === 'cursor-2'
+          ? page(['c'], { total: 3 })
+          : page(['a', 'b'], { total: 3, continue: 'cursor-2' });
+      await view.show(<QueryProbe pageLimit={2} />);
+
+      failReads((params) => params.get('continue') === 'cursor-2');
+      await run(() => current().loadMore());
+
+      expect(takeReadFailures()).toHaveLength(1);
+      expect(current().pageStale).toBe(false);
+    });
   });
 
   it('waits for typing to pause before reading a new search', async () => {

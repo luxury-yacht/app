@@ -6,6 +6,9 @@
 import * as containerlogs$0 from "../../internal/containerlogs/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as errorstatus$0 from "../../internal/errorstatus/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as resourcemodel$0 from "../../resourcemodel/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -841,6 +844,11 @@ export interface ShellStatusEvent {
     "clusterId": string;
     "status": ShellSessionStatus;
     "reason"?: string;
+
+    /**
+     * ErrorDetails is the failure's status, set only with the error status.
+     */
+    "errorDetails"?: errorstatus$0.Status | null;
 }
 
 export interface Subject {

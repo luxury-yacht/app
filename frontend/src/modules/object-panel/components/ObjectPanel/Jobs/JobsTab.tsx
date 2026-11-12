@@ -14,6 +14,7 @@ import {
   createAgeColumn,
   createKindColumn,
   createResourceNameColumn,
+  createStatusChipColumn,
   createTextColumn,
   withColumnSizing,
   withNamespaceColumn,
@@ -27,7 +28,6 @@ import { ObjectPanelResourceGridTableSurface } from '@modules/resource-grid/Obje
 import { useResourceGridObjectIdentity } from '@modules/resource-grid/useResourceGridObjectIdentity';
 import { useObjectPanelResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
-import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 
 // Rows carry the backend job summary plus the panel's cluster context.
 type JobRow = types.JobSimpleInfo & {
@@ -121,9 +121,10 @@ export const JobsTab: React.FC<JobsTabProps> = ({
         getClassName: () => 'object-panel-link',
         getTitle: (job) => job.name,
       }),
-      createTextColumn<JobRow>('status', 'Status', (job) => job.status || '\u2014', {
-        getClassName: (job) => backendStatusTextClass(job.statusPresentation),
-      }),
+      createStatusChipColumn<JobRow>('status', 'Status', (job) => ({
+        value: job.status,
+        presentation: job.statusPresentation,
+      })),
       createTextColumn<JobRow>('completions', 'Completions', (job) => job.completions || '\u2014', {
         alignData: 'right',
       }),

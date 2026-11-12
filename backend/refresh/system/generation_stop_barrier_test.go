@@ -183,6 +183,9 @@ func TestGenerationStopWaitsForRunningProducerCallbacks(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			// Each case owns its harness and spends its time in fixed
+			// must-not-happen windows, so the cases wait concurrently.
+			t.Parallel()
 			h := newBarrierHarness(t, tc.domain)
 			h.invalidation.armed.Store(true)
 			tc.trigger(t, h, 0)

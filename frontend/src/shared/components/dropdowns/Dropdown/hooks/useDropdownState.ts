@@ -91,6 +91,7 @@ export function useDropdownState(
         document.removeEventListener('mousedown', handleClickOutside, true);
       };
     }
+    return undefined;
   }, [isOpen, closeDropdown]);
 
   return {

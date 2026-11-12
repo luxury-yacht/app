@@ -1,32 +1,53 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Logs/hooks/useLogPresentation.ts
  *
- * The presentation pipeline shared by Container Logs and Node Logs: a deferred
- * text filter, JSON detection, the parsed JSON table (rows, columns, CSV),
- * display rows and the text the copy action writes. Each viewer supplies its
- * kind of line through accessors and keeps its own source filters and line
- * formatting; Container Logs adds metadata columns to the table.
+ * The presentation pipeline shared by Container Logs and Node Logs: structured
+ * line detection (JSON, klog, logfmt) and log levels, the level filter, a
+ * deferred text filter, the parsed table (rows, columns, CSV), display rows and
+ * the text the copy action writes. Each viewer supplies its kind of line
+ * through accessors and keeps its own source filters and line formatting;
+ * Container Logs adds metadata columns to the table.
  */
 
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { type Dispatch, useCallback, useDeferredValue, useEffect, useMemo, useRef } from 'react';
 import { stripAnsi } from '../ansi';
+import {
+  detectLogLevel,
+  type InheritedLevelMemory,
+  type LogLevel,
+  type LogLevelSummary,
+  logLevelMatcher,
+  resolveLogLevels,
+} from '../logLevels';
+import { type LogLineFields, parseStructuredLogLine } from '../logLineFormats';
 import type { LogOptionsAction, LogOptionsState, ParsedLogEntry } from '../logOptionsReducer';
 import { buildLogSearchRegex } from '../logSearch';
 import { buildParsedLogCsv, buildParsedLogDataColumns } from '../parsedLogColumns';
-import { deriveParsedLogFieldKeys, formatParsedValue, tryParseJSONObject } from '../parsedLogUtils';
+import { deriveParsedLogFieldKeys, formatParsedValue } from '../parsedLogUtils';
 import type { RenderedLogRow } from '../RawLogViewer';
 
 export type LogPresentationSource<T> = {
   entries: T[];
   options: Pick<
     LogOptionsState,
-    'textFilter' | 'filterMode' | 'caseSensitiveMatches' | 'regexMatches' | 'displayMode'
+    | 'textFilter'
+    | 'filterMode'
+    | 'caseSensitiveMatches'
+    | 'regexMatches'
+    | 'displayMode'
+    | 'levelFilter'
   >;
   /** The texts the filter matches for an entry; any match keeps it. */
   searchTexts: (entry: T) => string[];
-  /** The log line the entry carries, used for JSON detection. */
+  /** The log line the entry carries, used for structured and level detection. */
   lineOf: (entry: T) => string;
+  /**
+   * Which source wrote the entry (Container Logs: pod and container). An
+   * unleveled line inherits the last level from its own source; without this
+   * every entry shares one source.
+   */
+  sourceKeyOf?: (entry: T) => string;
   /** Metadata copied onto an entry's parsed-table row. */
   parsedMetadata?: (entry: T) => Omit<ParsedLogEntry, 'data' | 'rawLine' | 'lineNumber'>;
   /** Table columns shown before the JSON fields (Container Logs: pod, container, time). */
@@ -41,11 +62,21 @@ export type LogPresentation<T> = {
   filteredEntries: T[];
   /** At least one shown line has text. */
   hasVisibleLines: boolean;
-  /** At least one shown line is a JSON object, so the JSON views are available. */
+  /** At least one shown line is structured (JSON, klog, logfmt), so Pretty and Table are available. */
   canParseLogs: boolean;
   hasInvalidRegex: boolean;
   /** Whether the text filter hides lines: it is set, and the mode is not All. */
   textFilterHidesLines: boolean;
+  /** The levels the entries hold, before the level and text filters. */
+  logLevels: LogLevelSummary;
+  /** Whether the level filter narrows the lines: not every level is chosen. */
+  levelFilterHidesLines: boolean;
+  /**
+   * An entry's level, its own or inherited; null when it has none. Plain string
+   * lines have no identity to remember an inherited level by, so they report
+   * their own level only.
+   */
+  levelOf: (entry: T) => LogLevel | null;
   /** Matches to highlight in the shown lines; none in Invert, which shows the others. */
   highlightRegex: RegExp | null;
   /** The parsed JSON table, only in the table view: rows and columns. */
@@ -53,8 +84,11 @@ export type LogPresentation<T> = {
   tableColumns: GridColumnDefinition<ParsedLogEntry>[];
   /** The table as CSV, built when asked for (the copy action). */
   getParsedCsv: () => string;
-  /** An entry's line parsed as a JSON object, or null; cached per line. */
-  jsonOf: (entry: T) => Record<string, unknown> | null;
+  /**
+   * An entry's line read as fields (a JSON object, klog, or logfmt), or null;
+   * cached per line. Pretty shows the fields as JSON.
+   */
+  jsonOf: (entry: T) => LogLineFields | null;
 };
 
 const NO_PARSED_ROWS: ParsedLogEntry[] = [];
@@ -77,8 +111,6 @@ const buildTableColumns = (
     buildParsedLogDataColumns(fieldKeys, new Set(metadataColumns.map((column) => column.key)))
   );
 };
-
-type JsonObject = Record<string, unknown> | null;
 
 // Filters on the deferred text so typing stays responsive on large buffers. In
 // All mode the text only finds matches (the viewer highlights them); no line is hidden.
@@ -128,70 +160,158 @@ const useTextFilter = <T>({
   }, [caseSensitiveMatches, entries, filterMode, regexMatches, searchTexts, textFilter]);
 };
 
-const detectObjectLine = (
-  cache: WeakMap<object, JsonObject>,
-  entry: object,
-  line: () => string
-): JsonObject => {
-  if (!cache.has(entry)) {
-    cache.set(entry, tryParseJSONObject(line()));
+// A line's fields when it is structured, its own level (before inheritance),
+// and the source that wrote it. All three are fixed per entry, so they are
+// worked out once and reused by every batch.
+type LineAnalysis = { fields: LogLineFields | null; level: LogLevel | null; source: string };
+
+const analyzeLine = (line: string, source: string): LineAnalysis => {
+  const fields = parseStructuredLogLine(line);
+  return { fields, level: detectLogLevel(line, fields), source };
+};
+
+type LineAccessors<T> = {
+  lineOf: (entry: T) => string;
+  sourceKeyOf: (entry: T) => string;
+};
+
+const analyzeObjectEntry = <T>(
+  cache: WeakMap<object, LineAnalysis>,
+  entry: T & object,
+  { lineOf, sourceKeyOf }: LineAccessors<T>
+): LineAnalysis => {
+  let analysis = cache.get(entry);
+  if (!analysis) {
+    analysis = analyzeLine(lineOf(entry), sourceKeyOf(entry));
+    cache.set(entry, analysis);
   }
-  return cache.get(entry) ?? null;
+  return analysis;
 };
 
-const detectStringLine = (
-  previous: Map<string, JsonObject>,
-  next: Map<string, JsonObject>,
-  line: string
-): JsonObject => {
-  const detected = previous.has(line) ? (previous.get(line) ?? null) : tryParseJSONObject(line);
-  next.set(line, detected);
-  return detected;
+const analyzeStringLine = <T>(
+  previous: Map<string, LineAnalysis>,
+  next: Map<string, LineAnalysis>,
+  entry: T,
+  { lineOf, sourceKeyOf }: LineAccessors<T>
+): LineAnalysis => {
+  const line = lineOf(entry);
+  const analysis = previous.get(line) ?? analyzeLine(line, sourceKeyOf(entry));
+  next.set(line, analysis);
+  return analysis;
 };
 
-// JSON detection is cached per line: entry objects by identity, plain string
-// lines by value (keeping only the lines currently shown). jsonOf reads the
-// same cache, so a JSON view formats each line without parsing it again.
-const useJsonDetection = <T>(lineOf: (entry: T) => string) => {
-  const objectCache = useRef(new WeakMap<object, JsonObject>());
-  const stringCache = useRef(new Map<string, JsonObject>());
-  const detectAll = useCallback(
-    (entries: T[]): JsonObject[] => {
-      const nextStrings = new Map<string, JsonObject>();
-      const detected = entries.map((entry) =>
+const ONE_SOURCE = (): string => '';
+
+// Line analysis is cached per line: entry objects by identity, plain string
+// lines by value (keeping only the latest entries' lines). jsonOf reads the
+// same cache, so the structured views format each line without parsing it again.
+const useLineAnalysis = <T>(lineOf: (entry: T) => string, sourceKeyOf: (entry: T) => string) => {
+  const objectCache = useRef(new WeakMap<object, LineAnalysis>());
+  const stringCache = useRef(new Map<string, LineAnalysis>());
+  const accessors = useMemo(() => ({ lineOf, sourceKeyOf }), [lineOf, sourceKeyOf]);
+  const analyzeAll = useCallback(
+    (entries: T[]): LineAnalysis[] => {
+      const nextStrings = new Map<string, LineAnalysis>();
+      const analyses = entries.map((entry) =>
         typeof entry === 'object' && entry !== null
-          ? detectObjectLine(objectCache.current, entry, () => lineOf(entry))
-          : detectStringLine(stringCache.current, nextStrings, lineOf(entry))
+          ? analyzeObjectEntry(objectCache.current, entry, accessors)
+          : analyzeStringLine(stringCache.current, nextStrings, entry, accessors)
       );
       stringCache.current = nextStrings;
-      return detected;
+      return analyses;
     },
-    [lineOf]
+    [accessors]
   );
-  const jsonOf = useCallback(
-    (entry: T): JsonObject => {
+  const analysisOf = useCallback(
+    (entry: T): LineAnalysis => {
       if (typeof entry === 'object' && entry !== null) {
-        return detectObjectLine(objectCache.current, entry, () => lineOf(entry));
+        return analyzeObjectEntry(objectCache.current, entry, accessors);
       }
-      const line = lineOf(entry);
-      return stringCache.current.has(line)
-        ? (stringCache.current.get(line) ?? null)
-        : tryParseJSONObject(line);
+      const line = accessors.lineOf(entry);
+      return stringCache.current.get(line) ?? analyzeLine(line, accessors.sourceKeyOf(entry));
     },
-    [lineOf]
+    [accessors]
   );
-  return { detectAll, jsonOf };
+  const jsonOf = useCallback((entry: T) => analysisOf(entry).fields, [analysisOf]);
+  return { analyzeAll, analysisOf, jsonOf };
+};
+
+const hasFields = (analysis: LineAnalysis) => analysis.fields !== null;
+
+const isObjectEntry = (entry: unknown): entry is object =>
+  typeof entry === 'object' && entry !== null;
+
+// The level each entry inherited, by entry object, so a stack trace keeps its
+// error line's level after the buffer evicts that line, across batches and
+// remounts. Eviction keeps the entries it retains; a new snapshot or source
+// brings new objects, so nothing carries over to another source. Plain string
+// lines have no identity and get no memory.
+const inheritedLevels = new WeakMap<object, LogLevel>();
+const ENTRY_LEVEL_MEMORY: InheritedLevelMemory<unknown> = {
+  recall: (entry) => (isObjectEntry(entry) ? inheritedLevels.get(entry) : undefined),
+  remember: (entry, level) => {
+    if (isObjectEntry(entry)) {
+      inheritedLevels.set(entry, level);
+    }
+  },
+};
+
+// Levels resolve over every entry before any filter, so a line keeps the level
+// it inherits even when the line it inherits from is filtered out.
+const useLevelFilter = <T>(
+  entries: T[],
+  analyses: LineAnalysis[],
+  analysisOf: (entry: T) => LineAnalysis,
+  levelFilter: LogOptionsState['levelFilter']
+) => {
+  const { levels, summary } = useMemo(
+    () =>
+      resolveLogLevels(
+        entries,
+        (_, index) => analyses[index]?.level ?? null,
+        (_, index) => analyses[index]?.source ?? '',
+        ENTRY_LEVEL_MEMORY
+      ),
+    [analyses, entries]
+  );
+  const matcher = useMemo(() => logLevelMatcher(levelFilter), [levelFilter]);
+  const levelEntries = useMemo(
+    () => (matcher ? entries.filter((_, index) => matcher(levels[index] ?? null)) : entries),
+    [entries, levels, matcher]
+  );
+  // The cached own level, else the level the pass above remembered the entry
+  // inheriting; a lookup per rendered row, no table rebuilt each batch.
+  const levelOf = useCallback(
+    (entry: T): LogLevel | null =>
+      analysisOf(entry).level ?? ENTRY_LEVEL_MEMORY.recall(entry) ?? null,
+    [analysisOf]
+  );
+  return { levelEntries, logLevels: summary, levelFilterHidesLines: matcher !== null, levelOf };
 };
 
 export function useLogPresentation<T>(source: LogPresentationSource<T>): LogPresentation<T> {
-  const { filterText, filteredEntries, hasInvalidRegex } = useTextFilter(source);
   const {
+    entries,
     lineOf,
+    sourceKeyOf = ONE_SOURCE,
     parsedMetadata,
     metadataColumns = NO_COLUMNS,
     exportValue = jsonFieldValue,
   } = source;
-  const { displayMode, filterMode, regexMatches, caseSensitiveMatches } = source.options;
+  const { displayMode, filterMode, regexMatches, caseSensitiveMatches, levelFilter } =
+    source.options;
+  const { analyzeAll, analysisOf, jsonOf } = useLineAnalysis(lineOf, sourceKeyOf);
+  const analyses = useMemo(() => analyzeAll(entries), [analyzeAll, entries]);
+  const { levelEntries, logLevels, levelFilterHidesLines, levelOf } = useLevelFilter(
+    entries,
+    analyses,
+    analysisOf,
+    levelFilter
+  );
+  const { filterText, filteredEntries, hasInvalidRegex } = useTextFilter({
+    ...source,
+    entries: levelEntries,
+  });
   const isParsedView = displayMode === 'parsed';
   // Highlighting follows the filter as applied, so it never runs ahead of it.
   const highlightRegex = useMemo(
@@ -205,15 +325,13 @@ export function useLogPresentation<T>(source: LogPresentationSource<T>): LogPres
           }),
     [caseSensitiveMatches, filterMode, filterText, regexMatches]
   );
-  const { detectAll, jsonOf } = useJsonDetection(lineOf);
-  const detected = useMemo(() => detectAll(filteredEntries), [detectAll, filteredEntries]);
   // Table rows are built only for the table view.
   const parsedRows = useMemo<ParsedLogEntry[]>(() => {
     if (!isParsedView) {
       return NO_PARSED_ROWS;
     }
     return filteredEntries.flatMap((entry, index) => {
-      const data = detected[index];
+      const data = jsonOf(entry);
       if (!data) {
         return [];
       }
@@ -226,7 +344,15 @@ export function useLogPresentation<T>(source: LogPresentationSource<T>): LogPres
         },
       ];
     });
-  }, [detected, filteredEntries, isParsedView, lineOf, parsedMetadata]);
+  }, [filteredEntries, isParsedView, jsonOf, lineOf, parsedMetadata]);
+  // Unfiltered, the analyses already line up with the shown entries.
+  const canParseLogs = useMemo(
+    () =>
+      filteredEntries === entries
+        ? analyses.some(hasFields)
+        : filteredEntries.some((entry) => jsonOf(entry) !== null),
+    [analyses, entries, filteredEntries, jsonOf]
+  );
   const tableColumns = useMemo(
     () => (isParsedView ? buildTableColumns(parsedRows, metadataColumns) : NO_COLUMNS),
     [isParsedView, metadataColumns, parsedRows]
@@ -244,9 +370,12 @@ export function useLogPresentation<T>(source: LogPresentationSource<T>): LogPres
     filterText,
     filteredEntries,
     hasVisibleLines,
-    canParseLogs: detected.some((json) => json !== null),
+    canParseLogs,
     hasInvalidRegex,
     textFilterHidesLines: filterMode !== 'all' && filterText.trim().length > 0,
+    logLevels,
+    levelFilterHidesLines,
+    levelOf,
     highlightRegex,
     parsedRows,
     tableColumns,

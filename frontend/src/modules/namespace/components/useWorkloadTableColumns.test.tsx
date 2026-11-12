@@ -157,12 +157,16 @@ describe('useWorkloadTableColumns', () => {
     const { dev, view } = await start();
 
     await show(view, workloadIn(dev, { statusPresentation: 'warning' }), ['status']);
-    expect(cell(view, 'status').querySelector('span')?.className).toBe('status-text warning');
+    expect(cell(view, 'status').querySelector('.status-chip')?.className).toBe(
+      'status-chip status-chip--warning'
+    );
 
     await show(view, workloadIn(dev, { statusState: 'true', statusPresentation: undefined }), [
       'status',
     ]);
-    expect(cell(view, 'status').querySelector('span')?.className).toBe('status-text unknown');
+    expect(cell(view, 'status').querySelector('.status-chip')?.className).toBe(
+      'status-chip status-chip--info'
+    );
   });
 
   // The backend sorts restarts by count; the table shows zero as no value.

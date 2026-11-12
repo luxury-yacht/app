@@ -4,7 +4,7 @@
 		"product_version": "__WINDOWS_VERSION__"
 	},
 	"info": {
-		"0000": {
+		"0409": {
 			"ProductVersion": "__APP_VERSION__",
 			"FileVersion": "__APP_VERSION__",
 			"CompanyName": "__APP_COMPANY__",

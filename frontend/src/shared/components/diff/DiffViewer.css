@@ -33,7 +33,7 @@
   white-space: nowrap;
 }
 
-.object-diff-keyboard-control:focus-visible {
+.object-diff-keyboard-control.keyboard-programmatic-focus:focus {
   width: auto;
   height: auto;
   overflow: visible;

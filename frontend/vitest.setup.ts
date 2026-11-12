@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { afterEach, vi } from 'vitest';
 
 import { resetResourceInventoryRowCache } from './src/modules/resource-grid/useResourceInventoryTable';
@@ -63,6 +64,40 @@ const ensureStorage = (key: 'localStorage' | 'sessionStorage') => {
 
 ensureStorage('localStorage');
 ensureStorage('sessionStorage');
+
+// Node settles WebCrypto digests on its threadpool, in a later event-loop turn
+// than a test's microtask drain (the app-state harness's settle()). Table
+// persistence hashes the cluster before it hydrates, so under load a table
+// could hydrate after the test moved on. Compute the same digest at once.
+const NODE_DIGEST_ALGORITHMS: Record<string, string> = {
+  'SHA-1': 'sha1',
+  'SHA-256': 'sha256',
+  'SHA-384': 'sha384',
+  'SHA-512': 'sha512',
+};
+
+const digestBytes = (data: BufferSource): Uint8Array =>
+  ArrayBuffer.isView(data)
+    ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+    : new Uint8Array(data);
+
+const nodeDigest = (algorithm: AlgorithmIdentifier, data: BufferSource): ArrayBuffer => {
+  const name = typeof algorithm === 'string' ? algorithm : algorithm.name;
+  const nodeAlgorithm = NODE_DIGEST_ALGORITHMS[name.toUpperCase()];
+  if (!nodeAlgorithm) {
+    throw new DOMException(`Unrecognized digest algorithm: ${name}`, 'NotSupportedError');
+  }
+  const digest = createHash(nodeAlgorithm).update(digestBytes(data)).digest();
+  return digest.buffer.slice(digest.byteOffset, digest.byteOffset + digest.byteLength);
+};
+
+Object.defineProperty(globalThis.crypto.subtle, 'digest', {
+  configurable: true,
+  writable: true,
+  // Hashing inside then() turns a throw into a rejection, as WebCrypto rejects.
+  value: (algorithm: AlgorithmIdentifier, data: BufferSource): Promise<ArrayBuffer> =>
+    Promise.resolve().then(() => nodeDigest(algorithm, data)),
+});
 
 vi.mock('@wailsio/runtime', () => {
   const identity = (value: unknown) => value;

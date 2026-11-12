@@ -21,6 +21,8 @@ type FavoritesCommands interface {
 	AddFavorite(Favorite) (Favorite, error)
 	DeleteFavorite(string) error
 	GetFavorites() ([]Favorite, error)
+	GetFavoriteClusters() ([]string, error)
+	SetClusterFavorite(string, bool) ([]string, error)
 	SetFavoriteOrder([]string) error
 	UpdateFavorite(Favorite) error
 }
@@ -274,6 +276,14 @@ func (s *DesktopService) DeleteFavorite(id string) error {
 
 func (s *DesktopService) GetFavorites() ([]Favorite, error) {
 	return s.favorites.GetFavorites()
+}
+
+func (s *DesktopService) GetFavoriteClusters() ([]string, error) {
+	return s.favorites.GetFavoriteClusters()
+}
+
+func (s *DesktopService) SetClusterFavorite(selection string, favorite bool) ([]string, error) {
+	return s.favorites.SetClusterFavorite(selection, favorite)
 }
 
 func (s *DesktopService) SetFavoriteOrder(ids []string) error {

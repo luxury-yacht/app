@@ -21,6 +21,7 @@ function LocalControls({ native = false } = {}) {
   });
   return (
     <div ref={ref}>
+      <input data-testid="field" aria-label="Field" />
       <button data-testid="first" type="button">
         First
       </button>
@@ -112,6 +113,47 @@ describe('keyboard focus indication through local owners', () => {
     second.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
     second.focus();
     expect(second.classList.contains(marker)).toBe(false);
+  });
+
+  it.each(['ArrowDown', 'Home', 'PageDown'])(
+    'indicates focus moved with %s outside a typing field after pointer use',
+    async (key) => {
+      await render(true);
+      element('first').dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+      act(() => element('first').focus());
+      pressKey(key);
+      // Roving lists move focus from their own key handlers.
+      act(() => element('second').focus());
+      expect(element('second').classList.contains(marker)).toBe(true);
+    }
+  );
+
+  it('leaves a clicked control unmarked when a navigation key does not move focus', async () => {
+    await render(true);
+    element('first').dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    act(() => element('first').focus());
+    // An arrow that only scrolls the view is not navigation between controls.
+    pressKey('ArrowDown');
+    expect(element('first').classList.contains(marker)).toBe(false);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    // A later focus move, such as a closing palette restoring focus, stays unmarked.
+    act(() => element('second').focus());
+    expect(element('second').classList.contains(marker)).toBe(false);
+  });
+
+  it.each([
+    { name: 'an arrow typed in a field', from: 'field', key: 'ArrowDown', init: {} },
+    { name: 'a modified arrow', from: 'first', key: 'ArrowLeft', init: { metaKey: true } },
+    { name: 'a shortcut', from: 'first', key: 'P', init: { metaKey: true, shiftKey: true } },
+  ])('does not indicate focus after $name', async ({ from, key, init }) => {
+    await render(true);
+    element(from).dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    act(() => element(from).focus());
+    pressKey(key, init);
+    act(() => element('second').focus());
+    expect(element('second').classList.contains(marker)).toBe(false);
   });
 
   it.each([{ altKey: true }, { metaKey: true }])(

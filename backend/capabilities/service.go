@@ -123,9 +123,18 @@ func (s *Service) Evaluate(ctx context.Context, checks []ReviewAttributes) ([]Ch
 		return results, err
 	}
 	if int(batch.failureCount.Load()) == len(checks) {
-		return results, fmt.Errorf("all capability checks failed")
+		return results, batch.allChecksFailedError()
 	}
 	return results, nil
+}
+
+// allChecksFailedError keeps the cause when a request failed, so callers can tell a
+// cluster outage from an application failure. Every worker has finished by now.
+func (b *capabilityEvaluationBatch) allChecksFailedError() error {
+	if b.firstReviewErr != nil {
+		return fmt.Errorf("all capability checks failed: %w", b.firstReviewErr)
+	}
+	return errors.New("all capability checks failed")
 }
 
 func newCapabilityEvaluationBatch(

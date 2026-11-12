@@ -16,7 +16,6 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/nodes"
 	"github.com/luxury-yacht/app/backend/resources/pods"
-	kubectldrain "k8s.io/kubectl/pkg/drain"
 )
 
 func requireNodeActionTarget(action string, target ObjectActionTargetRef) error {
@@ -51,7 +50,7 @@ func (g *ResourceGateway) requireDrainPodPermission(ctx context.Context, deps co
 	if options.DisableEviction {
 		podCheck = resourcePermissionCheck{Version: "v1", Kind: pods.Identity.Kind, Verb: "delete"}
 	} else {
-		evictionGroupVersion, err := kubectldrain.CheckEvictionSupport(deps.KubernetesClient)
+		evictionGroupVersion, err := nodes.CheckEvictionSupport(ctx, deps.KubernetesClient)
 		if err != nil {
 			return fmt.Errorf("failed to check eviction support: %w", err)
 		}

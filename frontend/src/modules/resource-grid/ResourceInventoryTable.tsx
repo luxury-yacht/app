@@ -18,8 +18,10 @@
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import GridTable, { type GridTableProps } from '@shared/components/tables/GridTable';
 import type React from 'react';
+import { useMemo } from 'react';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import {
+  type ResourceInventoryRenderState,
   type ResourceInventorySourceState,
   useResourceInventoryTable,
 } from './useResourceInventoryTable';
@@ -47,6 +49,25 @@ interface ResourceInventoryTableProps<T>
   suppressEmptyWarning?: boolean;
 }
 
+// A genuinely errored empty table must not read as the generic "No data
+// available"; the error detail itself is reported through the refresh error
+// toasts, never an in-table banner. Permission-classified errors are the
+// exception: they are a designed, settled state (a typed 403 from a domain
+// the identity cannot read — e.g. under a namespace scope), so they render
+// the shared "Insufficient permissions" message in place.
+function emptyMessageFor<T>(
+  render: ResourceInventoryRenderState<T>,
+  emptyMessage: string | undefined
+): string | undefined {
+  if (render.isEmpty) {
+    return emptyMessage;
+  }
+  if (render.isPartial && render.rows.length === 0) {
+    return render.partialLabel ?? 'Data is temporarily unavailable';
+  }
+  return render.error ? resolveEmptyStateMessage(render.error, 'Unable to load data') : undefined;
+}
+
 export default function ResourceInventoryTable<T>({
   source,
   gridTableProps,
@@ -56,15 +77,23 @@ export default function ResourceInventoryTable<T>({
   favModal,
   allowPartial,
   suppressEmptyWarning,
+  batchSelection,
   ...tableProps
 }: Readonly<ResourceInventoryTableProps<T>>) {
   const render = useResourceInventoryTable(source);
+  // The controller substitutes cached rows for a transient empty refresh.
+  const replaying = render.rows !== source.rows;
+  // Quiet filtering and replay both keep rows on screen that are not the current
+  // query's page; batch actions wait until the rows they would act on are.
+  const actionsPending = replaying || Boolean(source.pageStale);
+  const gatedBatchSelection = useMemo(
+    () => batchSelection && { ...batchSelection, actionsPending },
+    [actionsPending, batchSelection]
+  );
   // The binding owns local table ordering. Use its rows while the controller is
-  // rendering the live source; when the controller substitutes cached rows for
-  // a transient empty refresh, keep those replay rows because the binding was
-  // built from the empty live source and has no rows to order.
-  const tableRows =
-    render.rows === source.rows && gridTableProps.data ? gridTableProps.data : render.rows;
+  // rendering the live source; replayed rows stay as they are, because the
+  // binding was built from the empty live source and has no rows to order.
+  const tableRows = !replaying && gridTableProps.data ? gridTableProps.data : render.rows;
 
   // The partial/degraded note rides on the filter options GridTable already
   // reads; only merge it when the source carries filters to merge into.
@@ -79,24 +108,6 @@ export default function ResourceInventoryTable<T>({
         }
       : gridTableProps.filters;
 
-  // A genuinely errored empty table must not read as the generic "No data
-  // available"; the error detail itself is reported through the refresh error
-  // toasts, never an in-table banner. Permission-classified errors are the
-  // exception: they are a designed, settled state (a typed 403 from a domain
-  // the identity cannot read — e.g. under a namespace scope), so they render
-  // the shared "Insufficient permissions" message in place.
-  let emptyMessageForState: string | undefined;
-
-  if (render.isEmpty) {
-    emptyMessageForState = emptyMessage;
-  } else if (render.isPartial && render.rows.length === 0) {
-    emptyMessageForState = render.partialLabel ?? 'Data is temporarily unavailable';
-  } else if (render.error) {
-    emptyMessageForState = resolveEmptyStateMessage(render.error, 'Unable to load data');
-  } else {
-    emptyMessageForState = undefined;
-  }
-
   return (
     <>
       <ResourceLoadingBoundary
@@ -110,6 +121,7 @@ export default function ResourceInventoryTable<T>({
         <GridTable<T>
           {...gridTableProps}
           {...tableProps}
+          batchSelection={gatedBatchSelection}
           data={tableRows}
           filters={filters}
           loading={updatingMessage ? false : render.showRefreshOverlay}
@@ -118,7 +130,7 @@ export default function ResourceInventoryTable<T>({
               ? { show: render.showRefreshOverlay, message: updatingMessage }
               : undefined
           }
-          emptyMessage={emptyMessageForState}
+          emptyMessage={emptyMessageFor(render, emptyMessage)}
         />
       </ResourceLoadingBoundary>
       {favModal}

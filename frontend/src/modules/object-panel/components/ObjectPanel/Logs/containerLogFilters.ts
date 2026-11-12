@@ -3,16 +3,20 @@
  *
  * Container Logs source filters: container kinds and labels, the pod and container
  * filter values, the source selector's options, and the active filter chips
- * (the search chips come from logSearchChips.ts).
+ * (the search and level chips come from logSearchChips.ts).
  */
 
 import type { types } from '@core/backend-api/models';
 import type { ActiveFilterChip } from '@shared/components/ActiveFilterChips';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
-import { ALL_MULTISELECT_FILTER } from '@shared/components/dropdowns/multiSelectFilterSelection';
+import {
+  ALL_MULTISELECT_FILTER,
+  type MultiSelectFilterSelection,
+} from '@shared/components/dropdowns/multiSelectFilterSelection';
 import type React from 'react';
 import { logFilterSelectionLabel } from './logFilterSelection';
 import {
+  buildLevelFilterChips,
   buildSearchOptionChips,
   buildTextFilterChip,
   type LogSearchChipOptions,
@@ -136,6 +140,7 @@ export const buildActiveLogFilterChips = ({
   showPreviousContainerLogs,
   selectedFilterValues,
   selectorOptionLabelsByValue,
+  levelFilter,
   dispatch,
   stopPreviousLogs,
   ...search
@@ -143,6 +148,7 @@ export const buildActiveLogFilterChips = ({
   showPreviousContainerLogs: boolean;
   selectedFilterValues: string[];
   selectorOptionLabelsByValue: Map<string, string>;
+  levelFilter: MultiSelectFilterSelection;
   dispatch: React.Dispatch<LogViewerAction>;
   stopPreviousLogs: () => void;
 }): ActiveFilterChip[] => {
@@ -156,6 +162,7 @@ export const buildActiveLogFilterChips = ({
       onRemove: stopPreviousLogs,
     }),
     ...buildSelectedFilterChips(selectedFilterValues, selectorOptionLabelsByValue, dispatch),
+    ...buildLevelFilterChips(levelFilter, dispatch),
     ...buildSearchOptionChips(searchOptions),
   ];
   return chips.filter((chip): chip is ActiveFilterChip => chip !== null);

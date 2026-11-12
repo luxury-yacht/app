@@ -29,7 +29,9 @@ func TestStartupClusterConnectionUsesExistingClusterClients(t *testing.T) {
 		fmt.Fprint(w, `{"apiVersion":"v1","kind":"Status","status":"Failure","reason":"ServiceUnavailable","code":503}`)
 	}))
 	defer server.Close()
-	client, err := kubernetes.NewForConfig(&rest.Config{Host: server.URL})
+	// QPS -1 disables client-go's default 5 QPS limiter. Startup primes dozens of
+	// access reviews through this client, which the default throttled for ~30 s.
+	client, err := kubernetes.NewForConfig(&rest.Config{Host: server.URL, QPS: -1})
 	require.NoError(t, err)
 	app := NewApplicationRuntime(nil)
 	t.Cleanup(app.Refresh.teardownRefreshSubsystem)

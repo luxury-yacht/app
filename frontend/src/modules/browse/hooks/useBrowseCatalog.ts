@@ -248,6 +248,12 @@ export interface UseBrowseCatalogResult {
   queryDescriptor: BrowseCatalogQueryDescriptor;
   /** True while persisted search text is ahead of the active backend query. */
   queryPending: boolean;
+  /**
+   * The items are not the current query's page: a new query or page is out, the
+   * new query failed, or typed search is waiting for the pause in typing. A
+   * doorbell re-read of the page on screen does not set it.
+   */
+  pageStale: boolean;
 }
 
 export interface BrowseCatalogQueryDescriptor {
@@ -295,6 +301,7 @@ export function useBrowseCatalog({
   // structural scope it was read for.
   const [activePage, setActivePage] = useState<{
     scopeIdentity: string;
+    query: string;
     payload: CatalogSnapshotPayload;
   } | null>(null);
   // Last derived filter options, held across transient no-payload gaps so the
@@ -459,7 +466,8 @@ export function useBrowseCatalog({
       const next = applyCatalogBaseline(itemsRef.current, payload);
       itemsRef.current = next.items;
       setQueryError(null);
-      setActivePage({ scopeIdentity, payload });
+      // A page only lands while its query is current (requestPage isCurrent).
+      setActivePage({ scopeIdentity, query: catalogScopeRef.current, payload });
       setItems(next.items);
       setTotalCount(next.totalCount);
       setUnfilteredTotal(next.unfilteredTotal);
@@ -920,5 +928,6 @@ export function useBrowseCatalog({
     refresh: refreshCurrentQuery,
     queryDescriptor,
     queryPending,
+    pageStale: queryPending || isRequestingMore || activePage?.query !== catalogScope,
   };
 }

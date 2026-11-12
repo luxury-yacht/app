@@ -127,6 +127,8 @@ export interface ResourceInventorySourceState<T> {
    * next mount, so a revisit renders data immediately instead of a spinner.
    */
   cacheKey?: string;
+  /** The rows are retained from an earlier query while the current one is unanswered. */
+  pageStale?: boolean;
 }
 
 /** The display decisions the wrapper and GridTable consume. */

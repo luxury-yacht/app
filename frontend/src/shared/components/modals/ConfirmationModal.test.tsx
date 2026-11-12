@@ -5,7 +5,7 @@
  * Covers key behaviors and edge cases for ConfirmationModal.
  */
 
-import { KeyboardProvider } from '@ui/shortcuts';
+import { KeyboardProvider, useShortcut } from '@ui/shortcuts';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -60,6 +60,43 @@ describe('ConfirmationModal', () => {
     });
   };
 
+  // Running work behind a busy dialog reports to the view that opened it, so app
+  // shortcuts must not navigate away while it runs.
+  it.each([
+    { busy: false, fires: 1 },
+    { busy: true, fires: 0 },
+  ])('app shortcuts with busy=$busy fire $fires time(s)', async ({ busy, fires }) => {
+    const shortcut = vi.fn(() => true);
+    const AppShortcut = () => {
+      useShortcut({ key: 'k', modifiers: { meta: true }, handler: shortcut, description: 'App' });
+      return null;
+    };
+    await act(async () => {
+      root.render(
+        <KeyboardProvider>
+          <AppShortcut />
+          <ConfirmationModal
+            isOpen={true}
+            title="Delete resource"
+            message="Are you sure?"
+            busy={busy}
+            onConfirm={vi.fn()}
+            onCancel={vi.fn()}
+          />
+        </KeyboardProvider>
+      );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      document.body.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true, cancelable: true })
+      );
+    });
+
+    expect(shortcut).toHaveBeenCalledTimes(fires);
+  });
+
   it('does not render when closed', async () => {
     await act(async () => {
       root.render(
@@ -110,6 +147,49 @@ describe('ConfirmationModal', () => {
       '.confirmation-modal-footer .button.cancel'
     );
     expect(document.activeElement).toBe(cancelButton);
+  });
+
+  // While the work runs the footer is disabled, and a result that only reports has
+  // no confirm button. Focus has to come back into the dialog, or Enter and Space
+  // do nothing until the user finds Tab.
+  it('returns focus to the dialog when the work ends and the button holding it is gone', async () => {
+    await renderModal({});
+    const confirmButton = document.querySelector<HTMLButtonElement>(
+      '.confirmation-modal-footer .button.danger'
+    );
+    act(() => {
+      confirmButton?.focus();
+    });
+    expect(document.activeElement).toBe(confirmButton);
+
+    await renderModal({ busy: true });
+    await renderModal({ busy: false, onConfirm: undefined });
+
+    const cancelButton = document.querySelector<HTMLButtonElement>(
+      '.confirmation-modal-footer .button.cancel'
+    );
+    expect(cancelButton).not.toBeNull();
+    expect(document.activeElement).toBe(cancelButton);
+  });
+
+  // A dialog that stays open can change what it asks: a result's Retry button
+  // becomes the confirm button of a new, destructive question. Focus must not
+  // stay on it, or a second Enter confirms the new question unread.
+  it('puts focus back on the non-destructive action when it asks something new', async () => {
+    await renderModal({ promptId: 'results', confirmText: 'Retry' });
+    const confirmButton = document.querySelector<HTMLButtonElement>(
+      '.confirmation-modal-footer .button.danger'
+    );
+    act(() => {
+      confirmButton?.focus();
+    });
+    expect(document.activeElement).toBe(confirmButton);
+
+    await renderModal({ promptId: 'confirm', confirmText: 'Delete' });
+
+    expect(document.activeElement).toBe(
+      document.querySelector('.confirmation-modal-footer .button.cancel')
+    );
   });
 
   it('supports escape key and ignores backdrop clicks', async () => {

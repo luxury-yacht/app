@@ -75,7 +75,7 @@ func TestDeletePodSucceeds(t *testing.T) {
 		KubernetesClient: client,
 	}
 
-	if err := DeletePod(context.Background(), deps, "team-a", "delete-me"); err != nil {
+	if err := DeletePod(context.Background(), deps, "team-a", "delete-me", ""); err != nil {
 		t.Fatalf("DeletePod returned error: %v", err)
 	}
 
@@ -97,10 +97,10 @@ func TestDeletePodRequiresTargetIdentity(t *testing.T) {
 		KubernetesClient: fake.NewClientset(),
 	})
 
-	err := service.DeletePod(context.Background(), "", "delete-me")
+	err := service.DeletePod(context.Background(), "", "delete-me", "")
 	require.EqualError(t, err, "namespace is required")
 
-	err = service.DeletePod(context.Background(), "team-a", "")
+	err = service.DeletePod(context.Background(), "team-a", "", "")
 	require.EqualError(t, err, "pod name is required")
 }
 
@@ -117,7 +117,7 @@ func TestDeletePodReturnsErrorWhenAPIFails(t *testing.T) {
 		KubernetesClient: client,
 	}
 
-	if err := DeletePod(context.Background(), deps, "team-a", "delete-me"); err == nil {
+	if err := DeletePod(context.Background(), deps, "team-a", "delete-me", ""); err == nil {
 		t.Fatalf("expected DeletePod to surface API error")
 	}
 }
@@ -127,7 +127,7 @@ func TestDeletePodReturnsErrorWhenClientMissing(t *testing.T) {
 		Logger: applog.Noop,
 	}
 
-	err := DeletePod(context.Background(), deps, "team-a", "delete-me")
+	err := DeletePod(context.Background(), deps, "team-a", "delete-me", "")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "kubernetes client not initialized")
 }

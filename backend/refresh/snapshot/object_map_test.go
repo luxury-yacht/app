@@ -202,6 +202,44 @@ type denyPermissions struct{ denied map[string]bool }
 
 func (d denyPermissions) CanListWatch(_ string, resource string) bool { return !d.denied[resource] }
 
+// The HPA controller finds its target by group and kind, so the workload is managed
+// however the HPA spelled the version, including leaving it out.
+func TestObjectMapCountsAnHPAWhateverVersionItNames(t *testing.T) {
+	for _, apiVersion := range []string{"apps/v1beta2", "apps/"} {
+		t.Run(apiVersion, func(t *testing.T) {
+			objects := objectMapFixtureObjects()
+			for _, object := range objects {
+				if hpa, ok := object.(*autoscalingv2.HorizontalPodAutoscaler); ok {
+					hpa.Spec.ScaleTargetRef.APIVersion = apiVersion
+				}
+			}
+			builder := newObjectMapTestBuilder(t, fake.NewSimpleClientset(objects...))
+			seedCatalog := builder.catalogService
+			builder.catalogService = func() *objectcatalog.Service {
+				catalog := seedCatalog()
+				seedCatalogDescriptors(t, catalog, objectcatalog.Descriptor{
+					Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments",
+					Namespaced: true, Scope: objectcatalog.ScopeNamespace,
+				})
+				return catalog
+			}
+			ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
+
+			snap, err := builder.Build(ctx, "cluster-a|default:/v1:Pod:web-pod?maxNodes=100")
+			if err != nil {
+				t.Fatalf("Build returned error: %v", err)
+			}
+
+			payload := snap.Payload.(ObjectMapSnapshotPayload)
+			facts := nodeByKindName(t, payload, "Deployment", "web").ActionFacts
+			if facts == nil || facts.HPAManaged == nil || !*facts.HPAManaged {
+				t.Fatalf("the HPA still manages this deployment: %#v", facts)
+			}
+			assertEdge(t, payload, "HorizontalPodAutoscaler", "web", "Deployment", "web", "scales")
+		})
+	}
+}
+
 func TestObjectMapBuildsRecursiveCoreRelationships(t *testing.T) {
 	client := fake.NewSimpleClientset(objectMapFixtureObjects()...)
 	builder := newObjectMapTestBuilder(t, client)

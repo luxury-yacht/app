@@ -11,8 +11,8 @@ import (
 // workloadScale and workloadCurrentReplicas are this kind's mutating workload
 // actions — ReplicaSets are scalable but not rollout-restartable — registered on
 // its Descriptor.Workload.
-func workloadScale(ctx context.Context, client kubernetes.Interface, namespace, name string, replicas int32) error {
-	_, err := client.AppsV1().ReplicaSets(namespace).UpdateScale(ctx, name, kindspec.ScaleObject(namespace, name, replicas), metav1.UpdateOptions{})
+func workloadScale(ctx context.Context, client kubernetes.Interface, namespace, name, uid string, replicas int32) error {
+	_, err := client.AppsV1().ReplicaSets(namespace).UpdateScale(ctx, name, kindspec.ScaleObject(namespace, name, uid, replicas), metav1.UpdateOptions{})
 	return err
 }
 

@@ -265,7 +265,7 @@
 }
 
 .recent-events__row--clickable:hover,
-.recent-events__row--clickable:focus-visible {
+.recent-events__row--clickable.keyboard-programmatic-focus:focus {
   background: var(--color-bg-tertiary);
   border-color: var(--color-border);
   outline: none;
@@ -388,7 +388,7 @@
 }
 
 .pod-status-card--clickable:hover,
-.pod-status-card--clickable:focus-visible {
+.pod-status-card--clickable.keyboard-programmatic-focus:focus {
   border-color: var(--pod-status-card-color);
   box-shadow: 0 0 0 1px var(--pod-status-card-color);
   outline: none;

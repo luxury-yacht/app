@@ -131,7 +131,9 @@ export function createViteConfig(
       server: { deps: { inline: ['@wailsio/runtime'] } },
       // The jsdom suite is memory-heavy; unconstrained CPU-count parallelism
       // can starve fork startup and cascade into unrelated test timeouts.
-      maxWorkers: 4,
+      // Eight workers ran about a quarter faster than four on a 12-core
+      // machine without timeouts; more added little.
+      maxWorkers: 8,
       coverage: {
         provider: 'v8',
         reporter: ['text', 'html', 'json-summary'],

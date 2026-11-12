@@ -28,6 +28,7 @@ interface UseGridTableInteractionWiringOptions<T> {
   getRowClassName?: (item: T, index: number) => string | undefined | null;
   onRowClick?: (item: T) => void;
   onRowPointerClick?: (item: T) => void;
+  onBatchRowPointerClick?: (item: T, event: React.MouseEvent) => void;
   onRowSelectionClear?: () => void;
   enableContextMenu: boolean;
   getCustomContextMenuItems?: (item: T, columnKey: string) => ContextMenuItem[];
@@ -81,6 +82,7 @@ export function useGridTableInteractionWiring<T>({
   getRowClassName,
   onRowClick,
   onRowPointerClick,
+  onBatchRowPointerClick,
   onRowSelectionClear,
   enableContextMenu,
   getCustomContextMenuItems,
@@ -156,6 +158,7 @@ export function useGridTableInteractionWiring<T>({
     keyExtractor,
     onRowClick,
     onRowPointerClick,
+    onBatchRowPointerClick,
     isShortcutOptOutTarget,
     wrapperRef,
     focusRef: gridRef,

@@ -15,7 +15,6 @@ import (
 
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type Service struct {
@@ -60,12 +59,13 @@ func (s *Service) GetPod(ctx context.Context, namespace string, name string, det
 	return details, nil
 }
 
-// DeletePod removes the named pod from the cluster.
-func DeletePod(ctx context.Context, deps common.Dependencies, namespace, name string) error {
-	return NewService(deps).DeletePod(ctx, namespace, name)
+// DeletePod removes the named pod from the cluster. A non-empty uid limits the
+// delete to that pod.
+func DeletePod(ctx context.Context, deps common.Dependencies, namespace, name, uid string) error {
+	return NewService(deps).DeletePod(ctx, namespace, name, uid)
 }
 
-func (s *Service) DeletePod(ctx context.Context, namespace, name string) error {
+func (s *Service) DeletePod(ctx context.Context, namespace, name, uid string) error {
 	if s.deps.KubernetesClient == nil || ctx == nil {
 		return fmt.Errorf("kubernetes client not initialized")
 	}
@@ -76,7 +76,7 @@ func (s *Service) DeletePod(ctx context.Context, namespace, name string) error {
 		return fmt.Errorf("pod name is required")
 	}
 
-	if err := s.deps.KubernetesClient.CoreV1().Pods(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
+	if err := s.deps.KubernetesClient.CoreV1().Pods(namespace).Delete(ctx, name, common.UserDeleteOptions(uid)); err != nil {
 		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to delete pod %s/%s", namespace, name), "delete", Identity, "Pod")
 		return fmt.Errorf("failed to delete pod: %w", err)
 	}

@@ -26,10 +26,10 @@ import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTabl
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition, GridTableProps } from '@shared/components/tables/GridTable';
+import { useBatchObjectActions } from '@shared/hooks/useBatchObjectActions';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { kindDisplayName } from '@shared/kinds/kindDisplay';
-import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import type React from 'react';
 import { useCallback, useMemo } from 'react';
 import type { RefreshFailure } from '@/core/refresh/refreshFailure';
@@ -49,14 +49,14 @@ type CatalogRowsResult = ReturnType<typeof useCatalogBackedCustomResourceRows>;
  */
 // Status is whatever the backend projected for the object. Kinds whose API defines no status
 // arrive without one and fall through to the factory's placeholder rather than a made-up label.
-export const customResourceStatusColumn = cf.createTextColumn<CustomResourceGridRow>(
+export const customResourceStatusColumn = cf.createStatusChipColumn<CustomResourceGridRow>(
   'status',
   'Status',
-  (resource) => resource.status || undefined,
-  {
-    sortable: false,
-    getClassName: (resource) => backendStatusTextClass(resource.statusPresentation),
-  }
+  (resource) => ({
+    value: resource.status || undefined,
+    presentation: resource.statusPresentation,
+  }),
+  { sortable: false }
 );
 
 export function useCustomResourceGridParts({ kindFallback }: { kindFallback?: string } = {}) {
@@ -221,6 +221,21 @@ export function useCustomResourceGridParts({ kindFallback }: { kindFallback?: st
     [objectActions, selectedClusterId, selectedClusterName]
   );
 
+  // A row without complete identity is simply left out of a batch.
+  const getActionObject = useCallback(
+    (resource: CustomResourceGridRow) => {
+      try {
+        return customCatalogObjectReference(resource, selectedClusterId, {
+          requiresExplicitVersion: true,
+          fallbackClusterName: selectedClusterName,
+        });
+      } catch {
+        return null;
+      }
+    },
+    [selectedClusterId, selectedClusterName]
+  );
+
   return {
     selectedClusterId,
     selectedClusterName,
@@ -232,6 +247,7 @@ export function useCustomResourceGridParts({ kindFallback }: { kindFallback?: st
     baseColumns,
     objectActions,
     getContextMenuItems,
+    getActionObject,
   };
 }
 
@@ -280,7 +296,13 @@ export function CustomResourceGridFrame({
     error: catalogError,
     fetchAllRows,
     pagination,
+    pageStale,
   } = catalog;
+
+  const batchActions = useBatchObjectActions<CustomResourceGridRow>({
+    getObject: parts.getActionObject,
+    scopeKey: `${idPrefix}|${parts.selectedClusterId ?? ''}|${cacheKeySuffix}`,
+  });
 
   const emptyMessage = useMemo(
     () => resolveEmptyStateMessage(emptyError, emptyText),
@@ -309,6 +331,7 @@ export function CustomResourceGridFrame({
     error: catalogError ?? emptyError ?? null,
     // Per-view identity so a revisit replays the last page instead of a spinner.
     cacheKey: `${idPrefix}|${parts.selectedClusterId ?? ''}|${cacheKeySuffix}`,
+    pageStale,
   });
 
   return (
@@ -332,9 +355,11 @@ export function CustomResourceGridFrame({
         emptyMessage={emptyMessage}
         paginationControls={paginationControls}
         {...catalogPaginationPageKeyProps(pagination)}
+        batchSelection={batchActions.batchSelection}
       />
 
       {parts.objectActions.modals}
+      {batchActions.modals}
     </>
   );
 }

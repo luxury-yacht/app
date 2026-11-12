@@ -2,7 +2,7 @@
  * frontend/src/shared/components/modals/RollbackModal.css
  *
  * Styles for the RollbackModal component.
- * Split-panel layout: revision list on the left, diff viewer on the right.
+ * The two revisions being compared sit above their sides of a full-width diff.
  */
 
 /* Modal sizing — fixed so toggling "diff only" doesn't resize the modal. */
@@ -11,152 +11,111 @@
   height: min(calc(var(--modal-viewport-height) * 0.8), 800px);
 }
 
-/* Split body: revision list on the left, diff on the right. */
 .rollback-body {
   display: flex;
   flex: 1;
+  flex-direction: column;
   overflow: hidden;
   min-height: 0;
 }
 
 /* ==========================================================================
-   Revision List (left panel)
+   Comparison header
    ========================================================================== */
 
-.rollback-revision-list {
-  width: 280px;
-  min-width: 280px;
-  border-right: 1px solid var(--color-border);
-  overflow-y: auto;
-  padding: 0.5rem 0;
+.rollback-comparison {
+  display: grid;
+  flex-shrink: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-lg);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
 }
 
-/* Matches gridtable-row highlight behavior: same variables, borders, and transitions. */
-.rollback-revision-item {
+.rollback-comparison-side {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 0.5rem 1rem;
-  width: 100%;
-  border: none;
-  border-left: 3px solid transparent;
-  border-bottom: 1px solid var(--grid-border-color, var(--color-table-border));
-  background-color: var(--grid-bg-primary, var(--color-bg));
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  outline: none;
-  transition:
-    background-color var(--duration-fast, 150ms) var(--ease-out, ease),
-    border-left-color var(--duration-fast, 150ms) var(--ease-out, ease);
+  gap: var(--spacing-xs);
+  min-width: 0;
 }
 
-.rollback-revision-item:last-child {
-  border-bottom: none;
-}
-
-.rollback-revision-item:hover:not(:disabled) {
-  background-color: var(--grid-bg-hover, var(--color-bg-tertiary));
-  border-left-color: var(--color-accent);
-}
-
-.rollback-revision-item:focus-visible {
-  background-color: var(--grid-bg-hover, var(--color-bg-tertiary));
-  border-left-color: var(--color-accent);
-}
-
-.rollback-revision-item--selected {
-  background-color: var(--color-bg-tertiary);
-  border-left-color: var(--color-accent);
-}
-
-.rollback-revision-item--selected:hover {
-  background-color: var(--color-bg-tertiary);
-}
-
-.rollback-revision-item:disabled {
-  cursor: default;
-  opacity: 0.5;
-  pointer-events: none;
-}
-
-.rollback-revision-item-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.rollback-revision-number {
-  font-weight: 600;
-  font-size: var(--font-size-normal);
-  color: var(--color-text);
-}
-
-.rollback-revision-badge {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+.rollback-role {
+  align-self: flex-start;
   padding: 1px 6px;
   border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.rollback-role--current {
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+}
+
+.rollback-role--target {
+  border: 1px solid var(--color-accent);
   background: var(--color-accent);
   color: #fff;
 }
 
-.rollback-revision-age {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
+/* Matches the picker's height so the two sides' lines stay level. */
+.rollback-comparison-revision {
+  display: flex;
+  align-items: center;
+  min-height: 26px;
+  color: var(--color-text);
+  font-size: var(--font-size-normal);
+  font-weight: 600;
 }
 
-.rollback-revision-cause {
-  font-size: var(--font-size-sm);
+.rollback-comparison-age {
+  margin-left: 0.5rem;
   color: var(--color-text-secondary);
-  white-space: nowrap;
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+}
+
+/* Keeps its line when empty so the header doesn't change height between revisions. */
+.rollback-comparison-cause {
   overflow: hidden;
+  min-height: 1.4em;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* ==========================================================================
-   Diff Panel (right panel)
-   ========================================================================== */
-
-.rollback-diff-panel {
-  flex: 1;
+.rollback-revision-option {
   display: flex;
   flex-direction: column;
   min-width: 0;
+}
+
+/* The menu sizes to its content, so a long cause needs its own cap. */
+.rollback-revision-option-cause {
   overflow: hidden;
-}
-
-.rollback-diff-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.5rem 1rem;
-  border-bottom: 1px solid var(--color-border);
-  flex-shrink: 0;
-}
-
-.rollback-diff-label {
-  font-size: var(--font-size-sm);
+  max-width: 32rem;
   color: var(--color-text-secondary);
-  font-weight: 500;
-}
-
-.rollback-diff-only-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
   font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  user-select: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.rollback-diff-only-toggle input[type="checkbox"] {
-  cursor: pointer;
+/* The diff stacks its two sides at this width; the header follows it. */
+@media (max-width: 900px) {
+  .rollback-comparison {
+    grid-template-columns: 1fr;
+  }
 }
+
+/* ==========================================================================
+   Diff
+   ========================================================================== */
 
 .rollback-diff-content {
   flex: 1;
@@ -213,6 +172,21 @@
   justify-content: flex-end;
   align-items: center;
   gap: 0.75rem;
+}
+
+.rollback-diff-only-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-right: auto;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.rollback-diff-only-toggle input[type="checkbox"] {
+  cursor: pointer;
 }
 
 .rollback-modal-footer-error {

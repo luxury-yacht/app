@@ -57,23 +57,6 @@ The signed macOS build additionally reads:
 | `APPLE_APP_PASSWORD` | App-specific Apple password |
 | `APPLE_TEAM_ID` | Apple developer team identifier |
 
-The signed Windows build additionally reads:
-
-| Secret | Purpose |
-| --- | --- |
-| `SIGNPATH_API_TOKEN` | API token of the SignPath user that submits signing requests |
-| `SIGNPATH_ORGANIZATION_ID` | SignPath organization identifier |
-
-The [SignPath GitHub App](https://github.com/apps/signpath) must be installed
-on the `luxury-yacht` organization with access to this repository; the signing
-step fails with "Failed to retrieve GitHub App token" without it.
-The SignPath project `app` must have the `windows-exe` and
-`windows-installers` artifact configurations and the `test-signing` and
-`release-signing` policies. Dry runs use `test-signing`; tag pushes and checked
-release dispatches use `release-signing`, which needs approval in SignPath for
-each executable and installer signing request. See
-[CODE_SIGNING.md](CODE_SIGNING.md).
-
 `RELEASES_REPO_TOKEN` authorizes publishing the generated artifacts to the GitHub release.
 
 ## Testing Release Workflow Changes
@@ -107,11 +90,8 @@ If the release includes backend changes, run the benchmarks and compare the resu
 wails3 task qc:benchmark
 ```
 
-1. Update `info.version` in [build/config.yml](build/config.yml), then run
-   `wails3 task common:update:build-assets` to refresh platform metadata. The
-   upstream updater overwrites generated build assets, so review the resulting
-   diff and retain the repository's interface-binding, desktop-only, GTK4-only,
-   metadata, and packaging choices before committing.
+1. Update `info.version` in [build/config.yml](build/config.yml). Build tasks
+   render the platform manifests from it, so no other file needs to change.
 2. Commit and push the version change.
 3. Create and push the matching tag. The `release` workflow builds and
    publishes the release:

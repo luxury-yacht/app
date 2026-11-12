@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -103,6 +104,13 @@ func debuggerStatus(state corev1.ContainerState) corev1.PodStatus {
 	}
 }
 
+// requireNodeOutcome checks that a start the node did not complete is shown to
+// the user but never reported: no application code failed.
+func requireNodeOutcome(t *testing.T, err error) {
+	t.Helper()
+	require.True(t, errorstatus.Classify(err).Expected, "node outcome reported as an app error: %v", err)
+}
+
 // The shell may attach only once the debugger container runs.
 func TestWaitForDebugPodReturnsWhenDebuggerRuns(t *testing.T) {
 	fastDebugPodPolling(t, time.Second)
@@ -126,6 +134,7 @@ func TestWaitForDebugPodReportsDebuggerExit(t *testing.T) {
 	err := service.WaitForDebugPod(context.Background(), DebugPodNamespace, "node-debugger-worker-1-abcde")
 	require.ErrorContains(t, err, "StartError")
 	require.ErrorContains(t, err, `exec: "/bin/bash"`)
+	requireNodeOutcome(t, err)
 }
 
 // Image pull failures (wrong tag, missing registry credentials) do not fix
@@ -139,6 +148,7 @@ func TestWaitForDebugPodReportsImagePullFailure(t *testing.T) {
 	err := service.WaitForDebugPod(context.Background(), DebugPodNamespace, "node-debugger-worker-1-abcde")
 	require.ErrorContains(t, err, "ErrImagePull")
 	require.ErrorContains(t, err, `busybox:nope`)
+	requireNodeOutcome(t, err)
 }
 
 // A pod pinned to a node bypasses the scheduler; kubelet rejects one it cannot
@@ -153,6 +163,7 @@ func TestWaitForDebugPodReportsKubeletRejection(t *testing.T) {
 	err := service.WaitForDebugPod(context.Background(), DebugPodNamespace, "node-debugger-worker-1-abcde")
 	require.ErrorContains(t, err, "OutOfpods")
 	require.ErrorContains(t, err, "Node didn't have enough resource")
+	requireNodeOutcome(t, err)
 }
 
 // A start that never reaches Running reports the last state kubelet reported,
@@ -164,6 +175,7 @@ func TestWaitForDebugPodTimeoutReportsLastState(t *testing.T) {
 	err := service.WaitForDebugPod(context.Background(), DebugPodNamespace, "node-debugger-worker-1-abcde")
 	require.ErrorContains(t, err, "timed out")
 	require.ErrorContains(t, err, "ContainerCreating")
+	requireNodeOutcome(t, err)
 }
 
 // Session cleanup deletes the debug pod; a pod that is already gone (the shell

@@ -8,6 +8,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/internal/logclassify"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/refresh/ringbuffer"
 	"github.com/luxury-yacht/app/internal/sentry"
 )
 
@@ -64,9 +65,10 @@ type LogEntry struct {
 
 // Logger manages application logs in memory
 type Logger struct {
-	mu            sync.RWMutex
-	entries       []LogEntry
-	maxSize       int
+	mu sync.RWMutex
+	// entries evicts its oldest entry in place once full, so a write never
+	// copies the history.
+	entries       *ringbuffer.Buffer[LogEntry]
 	nextSequence  uint64
 	eventEmitter  func(string, ...interface{}) // Function to emit log events
 	addedEvents   addedEventBatch
@@ -83,8 +85,7 @@ func NewLogger(maxSize int, reporters ...sentryreporting.Reporter) *Logger {
 		reporter = reporters[0]
 	}
 	return &Logger{
-		entries:       make([]LogEntry, 0, maxSize),
-		maxSize:       maxSize,
+		entries:       ringbuffer.New(maxSize, func(entry LogEntry) uint64 { return entry.Sequence }),
 		errorReporter: reporter,
 		addedEvents:   addedEventBatch{window: appLogsAddedEventWindow},
 	}
@@ -137,25 +138,13 @@ func newLogEntry(sequence uint64, level LogLevel, message string, source []strin
 	}
 }
 
-func appendBoundedLogEntry(entries []LogEntry, maxSize int, entry LogEntry) []LogEntry {
-	entries = append(entries, entry)
-	if len(entries) <= maxSize {
-		return entries
-	}
-	// Re-slice into a fresh buffer so capacity can't grow unbounded.
-	start := len(entries) - maxSize
-	trimmed := make([]LogEntry, maxSize)
-	copy(trimmed, entries[start:])
-	return trimmed
-}
-
 func (l *Logger) recordLogEntry(level LogLevel, message string, source []string) logDispatch {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	l.nextSequence++
 	entry := newLogEntry(l.nextSequence, level, message, source)
-	l.entries = appendBoundedLogEntry(l.entries, l.maxSize, entry)
+	l.entries.Add(entry)
 	return logDispatch{
 		entry:    entry,
 		reporter: l.errorReporter,
@@ -362,9 +351,7 @@ func (l *Logger) GetEntries() []LogEntry {
 	defer l.mu.RUnlock()
 
 	// Return a copy to prevent external modification
-	entries := make([]LogEntry, len(l.entries))
-	copy(entries, l.entries)
-	return entries
+	return l.entries.Items()
 }
 
 // GetEntriesSince returns a copy of entries with a sequence greater than sequence.
@@ -376,17 +363,12 @@ func (l *Logger) GetEntriesSince(sequence uint64) []LogEntry {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	start := len(l.entries)
-	for i, entry := range l.entries {
-		if entry.Sequence > sequence {
-			start = i
-			break
-		}
+	if entries, ok := l.entries.Since(sequence); ok {
+		return entries
 	}
-
-	entries := make([]LogEntry, len(l.entries)-start)
-	copy(entries, l.entries[start:])
-	return entries
+	// The buffer is empty, or sequence predates its oldest entry: every
+	// retained entry is newer.
+	return l.entries.Items()
 }
 
 // Clear removes all log entries
@@ -398,18 +380,7 @@ func (l *Logger) Clear() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	l.entries = l.entries[:0] // Clear slice but keep capacity
-}
-
-// Count returns the number of log entries
-func (l *Logger) Count() int {
-	if l == nil {
-		return 0 // Return 0 for nil logger
-	}
-
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-	return len(l.entries)
+	l.entries.Clear()
 }
 
 // SetEventEmitter sets the function to call when new logs are added

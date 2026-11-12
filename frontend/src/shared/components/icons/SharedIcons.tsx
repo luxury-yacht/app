@@ -954,6 +954,23 @@ export const PlusIcon: React.FC<FixedColorIconProps> = ({ width = 24, height = 2
   </svg>
 );
 
+export const MinusIcon: React.FC<FixedColorIconProps> = ({
+  width = 24,
+  height = 24,
+  className,
+}) => (
+  <svg
+    viewBox="0 0 16 16"
+    width={width}
+    height={height}
+    className={className}
+    aria-hidden="true"
+    focusable="false"
+  >
+    <path d="M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+  </svg>
+);
+
 /** Arrow down onto a line (download). */
 export const DownloadIcon: React.FC<FixedColorIconProps> = ({
   width = 24,
@@ -976,6 +993,34 @@ export const DownloadIcon: React.FC<FixedColorIconProps> = ({
     <path d="M12 4v11" />
     <path d="m7 10 5 5 5-5" />
     <path d="M5 20h14" />
+  </svg>
+);
+
+/** Three list rows, each with an empty box (batch select). */
+export const BatchSelectIcon: React.FC<FixedColorIconProps> = ({
+  width = 24,
+  height = 24,
+  className,
+}) => (
+  <svg
+    viewBox="0 0 24 24"
+    width={width}
+    height={height}
+    className={className}
+    aria-hidden="true"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={1.75}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    focusable="false"
+  >
+    <rect x="3" y="2.125" width="4.25" height="4.25" rx="0.75" />
+    <path d="M11.25 4.25H21" />
+    <rect x="3" y="9.875" width="4.25" height="4.25" rx="0.75" />
+    <path d="M11.25 12H21" />
+    <rect x="3" y="17.625" width="4.25" height="4.25" rx="0.75" />
+    <path d="M11.25 19.75H21" />
   </svg>
 );
 

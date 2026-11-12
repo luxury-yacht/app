@@ -410,6 +410,7 @@ function WorkspaceObjectRouteCoordinator({
                 tornOffTabSnapshot(request, initialWindowBounds([request.tab.panelId]))
               );
             }
+            return undefined;
           })
           .catch((error) => {
             void failPanelTabTransfer(windowName, request.transferId);

@@ -42,7 +42,7 @@ func TestRestartWorkloadRequiresPatchPermission(t *testing.T) {
 
 	gateway := newResourcePermissionFixture("cluster-a", client, nil).gateway
 
-	err := gateway.restartWorkloadAction(ObjectActionTargetRef{ClusterID: "cluster-a", Namespace: "default", Group: "apps", Version: "v1", Kind: "Deployment", Name: "demo"})
+	err := gateway.restartWorkloadAction(context.Background(), ObjectActionTargetRef{ClusterID: "cluster-a", Namespace: "default", Group: "apps", Version: "v1", Kind: "Deployment", Name: "demo"})
 	if err == nil || !strings.Contains(err.Error(), "permission denied") {
 		t.Fatalf("expected permission denial, got %v", err)
 	}
@@ -112,7 +112,7 @@ func TestSuspendCronJobRequiresPatchPermission(t *testing.T) {
 
 	gateway := newResourcePermissionFixture("cluster-a", client, nil).gateway
 
-	err := gateway.suspendCronJobAction(ObjectActionTargetRef{ClusterID: "cluster-a", Namespace: "default", Group: "batch", Version: "v1", Kind: "CronJob", Name: "backup"}, true)
+	err := gateway.suspendCronJobAction(context.Background(), ObjectActionTargetRef{ClusterID: "cluster-a", Namespace: "default", Group: "batch", Version: "v1", Kind: "CronJob", Name: "backup"}, true)
 	if err == nil || !strings.Contains(err.Error(), "permission denied") {
 		t.Fatalf("expected permission denial, got %v", err)
 	}

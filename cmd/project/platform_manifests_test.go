@@ -66,10 +66,8 @@ func TestRenderNFPMManifestUsesConfiguredMaintainer(t *testing.T) {
 	require.NotContains(t, manifest, "GIT_COMMITTER")
 }
 
-// SignPath reads an empty product name from an executable whose string table
-// lacks FileVersion, and Windows shows a 0.0.0.0 file version unless the fixed
-// version is numeric.
-func TestRenderedWindowsVersionInfoIsCompleteForSigning(t *testing.T) {
+// Windows shows a 0.0.0.0 file version unless the fixed version is numeric.
+func TestRenderedWindowsVersionInfoIsComplete(t *testing.T) {
 	configPath := repositoryPath("build", "config.yml")
 	metadata, err := readProjectMetadata(configPath)
 	require.NoError(t, err)
@@ -88,7 +86,9 @@ func TestRenderedWindowsVersionInfoIsCompleteForSigning(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, windowsVersion, info.Fixed["file_version"])
 	require.Equal(t, windowsVersion, info.Fixed["product_version"])
-	require.NotEmpty(t, info.Info)
+	// Explorer shows version details from the en-US table (wailsapp/wails#6210).
+	require.Len(t, info.Info, 1)
+	require.Contains(t, info.Info, "0409")
 	for language, table := range info.Info {
 		require.Equal(t, metadata.Info.ProductName, table["ProductName"], language)
 		require.Equal(t, metadata.Info.Version, table["ProductVersion"], language)

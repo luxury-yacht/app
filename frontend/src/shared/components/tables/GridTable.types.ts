@@ -44,6 +44,8 @@ export interface GridColumnMeasurementElement {
 export interface GridColumnDefinition<T> extends GridColumnAlignmentOptions {
   key: string;
   header: string;
+  /** Replaces the header's label, for a control such as a select-all checkbox. */
+  renderHeader?: () => React.ReactNode;
   /** Header written by Download when the downloaded values need a unit the screen omits. */
   exportHeader?: string;
   render: (item: T) => React.ReactNode;
@@ -212,6 +214,42 @@ export interface GridTableRowDetail<T> {
   getGroupClassName?: (item: T) => string;
 }
 
+/** One action in the bar shown over the rows selected in batch-select mode. */
+export interface GridTableBatchAction {
+  id: string;
+  icon: React.ReactNode;
+  /** The button's text, stating how many rows it affects. */
+  label: string;
+  danger?: boolean;
+  onRun: () => void;
+}
+
+/** A row selected in batch-select mode, with the key that selection is stored under. */
+export interface GridTableBatchSelectedRow<T> {
+  row: T;
+  key: string;
+}
+
+/**
+ * Batch-select mode, off until the toolbar button turns it on. The view owns
+ * the state. Only rows on screen reach getActions.
+ */
+export interface GridTableBatchSelection<T> {
+  active: boolean;
+  onActiveChange: (active: boolean) => void;
+  selectedKeys: ReadonlySet<string>;
+  onSelectedKeysChange: (keys: ReadonlySet<string>) => void;
+  getActions: (selected: GridTableBatchSelectedRow<T>[]) => GridTableBatchAction[];
+  /** The rows on screen are about to be replaced; actions show but cannot run yet. */
+  actionsPending?: boolean;
+  /**
+   * Tells apart things that share a row key over time, such as an object deleted
+   * and recreated under its name. A selection belongs to the instance the user
+   * checked, so a replacement shows up unselected.
+   */
+  getRowInstance?: (row: T) => string | undefined;
+}
+
 export interface GridTableProps<T> {
   data: T[];
   columns: GridColumnDefinition<T>[];
@@ -275,6 +313,8 @@ export interface GridTableProps<T> {
   canPageNext?: boolean;
   virtualization?: GridTableVirtualizationOptions;
   rowDetail?: GridTableRowDetail<T>;
+  /** Adds the toolbar button that turns on batch-select mode. Needs filters enabled. */
+  batchSelection?: GridTableBatchSelection<T>;
   loadingOverlay?: {
     show: boolean;
     message?: string;

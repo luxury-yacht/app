@@ -9,6 +9,7 @@ package types
 
 import (
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -272,6 +273,8 @@ type ShellStatusEvent struct {
 	ClusterID string             `json:"clusterId"`
 	Status    ShellSessionStatus `json:"status"`
 	Reason    string             `json:"reason,omitempty"`
+	// ErrorDetails is the failure's status, set only with the error status.
+	ErrorDetails *errorstatus.Status `json:"errorDetails,omitempty"`
 }
 
 // ShellSessionStatus is the lifecycle status a shell session reports. It is a

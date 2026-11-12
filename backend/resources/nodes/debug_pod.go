@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -159,7 +160,7 @@ func debugPodWaitStopped(ctx context.Context, namespace, name, lastState string)
 	if errors.Is(ctx.Err(), context.Canceled) {
 		return fmt.Errorf("stopped waiting for debug pod %s/%s: %w", namespace, name, ctx.Err())
 	}
-	return fmt.Errorf("timed out waiting for debug pod %s/%s to start: %s", namespace, name, lastState)
+	return errorstatus.ClusterOutcome(fmt.Errorf("timed out waiting for debug pod %s/%s to start: %s", namespace, name, lastState))
 }
 
 // pollDebugPod reads the debug pod once. done reports a final outcome: the
@@ -179,6 +180,7 @@ func (s *Service) pollDebugPod(ctx context.Context, namespace, name string) (str
 
 // debugPodStartState reports the debugger container's progress: whether it
 // runs, a terminal start failure, or else a description of what it waits on.
+// A start failure is the node's outcome, not an application failure.
 func debugPodStartState(pod *corev1.Pod) (string, bool, error) {
 	status := debuggerContainerStatus(pod)
 	switch {
@@ -186,16 +188,16 @@ func debugPodStartState(pod *corev1.Pod) (string, bool, error) {
 		return "", true, nil
 	case status != nil && status.State.Terminated != nil:
 		terminated := status.State.Terminated
-		return "", false, fmt.Errorf("debugger container exited (code %d): %s",
-			terminated.ExitCode, describeDebugPodState(terminated.Reason, terminated.Message))
+		return "", false, errorstatus.ClusterOutcome(fmt.Errorf("debugger container exited (code %d): %s",
+			terminated.ExitCode, describeDebugPodState(terminated.Reason, terminated.Message)))
 	case pod.Status.Phase == corev1.PodFailed || pod.Status.Phase == corev1.PodSucceeded:
-		return "", false, fmt.Errorf("debug pod %s: %s",
-			strings.ToLower(string(pod.Status.Phase)), describeDebugPodState(pod.Status.Reason, pod.Status.Message))
+		return "", false, errorstatus.ClusterOutcome(fmt.Errorf("debug pod %s: %s",
+			strings.ToLower(string(pod.Status.Phase)), describeDebugPodState(pod.Status.Reason, pod.Status.Message)))
 	case status != nil && status.State.Waiting != nil:
 		waiting := status.State.Waiting
 		state := describeDebugPodState(waiting.Reason, waiting.Message)
 		if debugPodStartFailures[waiting.Reason] {
-			return "", false, fmt.Errorf("debugger container cannot start: %s", state)
+			return "", false, errorstatus.ClusterOutcome(fmt.Errorf("debugger container cannot start: %s", state))
 		}
 		return state, false, nil
 	}

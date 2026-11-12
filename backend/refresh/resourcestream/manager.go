@@ -143,8 +143,11 @@ type Manager struct {
 
 	// Stop is terminal for this generation and rejects new subscriptions.
 	stopped atomic.Bool
-	// generation joins every ring and producer callback; Stop waits for the
-	// running ones before subscriptions close.
+	// loggedRejections holds the subscribe rejection reasons already logged.
+	// Clients retry rejected scopes, so each reason is logged once.
+	loggedRejections sync.Map
+	// generation joins every ring and producer callback; StopProducers waits
+	// for the running ones.
 	generation doorbell.Generation
 	// snapshotDomainInvalidator evicts query snapshots before a change signal is
 	// delivered. A healthy stream suppresses polling, so serving the pre-change
@@ -200,10 +203,12 @@ func (m *Manager) RegisterSources(permissionChecker permissions.ListWatchChecker
 	m.registerOwnerHeals(ingestManager)
 }
 
-// Stop ends the generation: it rejects new rings and producer callbacks, waits
-// for the running ones, then closes subscriptions and owned delivery workers.
-// It is terminal and must not be called from a ring or producer callback.
-func (m *Manager) Stop() {
+// StopProducers ends the generation's doorbell: it rejects new rings and
+// producer callbacks, waits for the running ones, and stops owned delivery
+// workers. Subscriptions stay open and new ones are still confirmed, because a
+// cooled generation keeps serving its frozen snapshots, which no ring can
+// change. It must not be called from a ring or producer callback.
+func (m *Manager) StopProducers() {
 	if m == nil {
 		return
 	}
@@ -213,6 +218,16 @@ func (m *Manager) Stop() {
 			sink.Stop()
 		}
 	}
+}
+
+// Stop retires the generation: it stops producers, then closes subscriptions
+// and rejects new ones. It is terminal and must not be called from a ring or
+// producer callback.
+func (m *Manager) Stop() {
+	if m == nil {
+		return
+	}
+	m.StopProducers()
 	m.stopped.Store(true)
 	m.mu.Lock()
 	for domain, scopes := range m.subscribers {

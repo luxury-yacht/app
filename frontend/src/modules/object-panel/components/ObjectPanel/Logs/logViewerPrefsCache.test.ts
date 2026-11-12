@@ -23,6 +23,8 @@ const samplePrefs = (overrides: Partial<LogViewerPrefs> = {}): LogViewerPrefs =>
   filterMode: 'filtered',
   caseSensitiveMatches: false,
   regexMatches: false,
+  levelFilter: { mode: 'all' },
+  showLevelMarkers: true,
   displayMode: 'raw',
   expandedRows: [],
   showPreviousContainerLogs: false,

@@ -37,6 +37,24 @@ const resolveFocusColors = (source: string) =>
       .replace(/var\(--color-text\)/g, 'rgb(20, 20, 20)')
   );
 
+// Gives every theme variable its own stand-in color, innermost first so nested
+// fallbacks resolve, because jsdom does not resolve custom properties.
+const resolveAllThemeVars = (source: string) => {
+  const standIns = new Map<string, string>();
+  let resolved = source;
+  let previous = '';
+  while (resolved !== previous) {
+    previous = resolved;
+    resolved = resolved.replace(/var\((--[\w-]+)(?:,[^()]*)?\)/g, (_match, name: string) => {
+      if (!standIns.has(name)) {
+        standIns.set(name, `#${(standIns.size + 1).toString(16).padStart(6, '0')}`);
+      }
+      return requireValue(standIns.get(name), 'stand-in color');
+    });
+  }
+  return expandBackgroundShorthands(resolved);
+};
+
 const installStyles = (...sources: string[]) => {
   const style = document.createElement('style');
   style.textContent = sources.join('\n');
@@ -130,6 +148,71 @@ describe('strict CSS cascade contracts', () => {
       control.blur();
       control.classList.remove('keyboard-programmatic-focus');
       expect(getComputedStyle(control).backgroundColor, control.outerHTML).toBe(idleFill);
+    }
+  });
+
+  it('leaves controls unhighlighted when WebKit marks focus visible outside keyboard navigation', () => {
+    // WebKit marks a control :focus-visible when focus returns from a text
+    // field, as when the command palette closes after the title bar was
+    // clicked. Only the keyboard-navigation marker may highlight a control.
+    const style = installStyles(
+      ...[
+        'styles/utilities/focus.css',
+        'styles/components/tabs.css',
+        'styles/components/gridtables.css',
+        'src/ui/layout/AppHeader.css',
+        'src/ui/dockable/DockablePanel.css',
+        'src/ui/status/SessionsStatus.css',
+        'src/shared/components/tables/TablePaginationControls.css',
+        'src/shared/components/diff/DiffViewer.css',
+        'src/modules/cluster/components/ClusterOverview.css',
+      ].map((path) => resolveAllThemeVars(readProjectFile(path)))
+    );
+    style.dataset.cssContract = 'native-focus-visible';
+    document.body.innerHTML = `
+      <input class="origin" aria-label="Origin" />
+      <header class="app-header"><button class="app-header-drag-control" tabindex="-1">Title</button></header>
+      <button class="table-pagination-button">Next</button>
+      <div class="recent-events__row--clickable" tabindex="0">Event</div>
+      <div class="pod-status-card--clickable" tabindex="0">Pods</div>
+      <div class="sessions-status-message">
+        <button class="as-compact-icon-action">Stop</button>
+        <button class="as-shell-session-jump"><span class="as-shell-open-affordance">Open</span></button>
+      </div>
+      <button class="gridtable-column-edit-action">Edit</button>
+      <button class="gridtable-column-delete-action">Delete</button>
+      <button class="gridtable-column-drag-handle">Drag</button>
+      <div class="tab-item-shell">
+        <button role="tab" class="tab-item">YAML</button>
+        <button class="tab-item__close">Close tab</button>
+      </div>
+      <button class="object-diff-keyboard-control">Next change</button>
+    `;
+    const origin = requireValue(document.querySelector<HTMLElement>('.origin'), 'origin field');
+    const appearance = (element: Element) => {
+      const computed = getComputedStyle(element);
+      return [
+        'background-color',
+        'color',
+        'border-top-color',
+        'border-left-color',
+        'opacity',
+        'width',
+        'filter',
+      ].map((name) => `${name}: ${computed.getPropertyValue(name)}`);
+    };
+    for (const control of document.querySelectorAll<HTMLElement>('button, [tabindex="0"]')) {
+      // Revealed affordances belong to the control; check them, not the control.
+      const watched =
+        control.querySelector('.as-shell-open-affordance') ??
+        (control.matches('.tab-item') ? control.nextElementSibling : null) ??
+        control;
+      const idle = appearance(watched);
+      origin.focus();
+      control.focus();
+      expect(control.matches(':focus-visible'), control.outerHTML).toBe(true);
+      expect(appearance(watched), control.outerHTML).toEqual(idle);
+      control.blur();
     }
   });
 

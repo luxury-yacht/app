@@ -25,7 +25,7 @@ import {
   makePodSnapshotPayload,
 } from '@/core/refresh/refreshContractTestBuilders';
 import { buildClusterRefreshScope, parseRefreshScope } from '@/core/refresh/scopeSelector';
-import type { ClusterNodeSnapshotEntry } from '@/core/refresh/types';
+import type { ClusterNodeSnapshotEntry, NodeMaintenanceDrainJob } from '@/core/refresh/types';
 import {
   installAppStateHarness,
   type MountedApp,
@@ -49,7 +49,10 @@ const nodeIdentity = (name: string): ObjectIdentity => ({
 
 /** A node row as backend/refresh/snapshot/nodes.go projects it, in the visible cluster. */
 const node = (name: string, overrides: Partial<ClusterNodeSnapshotEntry> = {}) =>
-  makeClusterNodeSnapshotEntry({ ...overrides, ref: { clusterId: dev.clusterId, name } });
+  makeClusterNodeSnapshotEntry({
+    ...overrides,
+    ref: { clusterId: dev.clusterId, name, uid: `uid-${name}` },
+  });
 
 const clusterFields = () => ({ clusterId: dev.clusterId, clusterName: dev.clusterName });
 
@@ -78,15 +81,15 @@ const serveNodePods = () => {
   });
 };
 
-const startCluster = () => {
+const startCluster = (drains: () => NodeMaintenanceDrainJob[] = () => []) => {
   dev = app.cluster({ name: 'dev', context: 'alpha' });
   app.namespaces(dev, ['team-a']);
   app.startScreen(dev);
-  // The view follows the cluster's drain jobs (backend/node_maintenance.go); none here.
+  // The view follows the cluster's drain jobs (backend/node_maintenance.go).
   app.snapshots.serve(
     'object-maintenance',
     buildClusterRefreshScope('object-maintenance', dev.clusterId),
-    { ...clusterFields(), drains: [] }
+    { ...clusterFields(), drains: drains() }
   );
 };
 
@@ -450,5 +453,231 @@ describe('ClusterViewNodes', () => {
     });
     await app.settle();
     expect(nodeNames()).toEqual(['node-1']);
+  });
+
+  // The backend refuses a second drain on a node that has one running.
+  it('does not offer Drain on a node that is already draining', async () => {
+    startCluster(() => [
+      {
+        clusterId: dev.clusterId,
+        id: 'job-1',
+        nodeName: 'node-1',
+        status: 'running',
+        startedAt: 100,
+        options: {
+          ignoreDaemonSets: true,
+          deleteEmptyDirData: true,
+          force: false,
+          disableEviction: false,
+          skipWaitForPodsToTerminate: false,
+        },
+      },
+    ]);
+    app.serveTable(dev, 'nodes', { rows: [node('node-1'), node('node-2')] });
+    serveNodePods();
+    await openView();
+
+    await click(
+      requireValue(
+        view.container.querySelector<HTMLElement>('.icon-bar-button[aria-label="Batch select"]'),
+        'Batch select'
+      )
+    );
+    await click(
+      requireValue(
+        view.container.querySelector<HTMLElement>('thead input[type="checkbox"]'),
+        'header checkbox'
+      )
+    );
+    await app.settle();
+
+    expect(
+      Array.from(view.container.querySelectorAll('.gridtable-batch-action-label')).map(
+        (label) => label.textContent
+      )
+    ).toContain('Drain 1 of 2');
+  });
+
+  it('offers cordon, uncordon, drain and delete in batch-select mode', async () => {
+    await start(() => [node('node-1'), node('node-2', { unschedulable: true })]);
+
+    await click(
+      requireValue(
+        view.container.querySelector<HTMLElement>('.icon-bar-button[aria-label="Batch select"]'),
+        'Batch select'
+      )
+    );
+    await click(
+      requireValue(
+        view.container.querySelector<HTMLElement>('thead input[type="checkbox"]'),
+        'header checkbox'
+      )
+    );
+    await app.settle();
+
+    expect(
+      Array.from(view.container.querySelectorAll('.gridtable-batch-action-label')).map(
+        (label) => label.textContent
+      )
+    ).toEqual(['Cordon 1 of 2', 'Uncordon 1 of 2', 'Drain 2', 'Delete 2']);
+  });
+
+  const selectEveryNode = async () => {
+    await click(
+      requireValue(
+        view.container.querySelector<HTMLElement>('.icon-bar-button[aria-label="Batch select"]'),
+        'Batch select'
+      )
+    );
+    await click(
+      requireValue(
+        view.container.querySelector<HTMLElement>('thead input[type="checkbox"]'),
+        'header checkbox'
+      )
+    );
+    await app.settle();
+  };
+  const batchButton = (label: string) =>
+    requireValue(
+      Array.from(
+        view.container.querySelectorAll<HTMLButtonElement>('.gridtable-batch-action')
+      ).find(
+        (button) => button.querySelector('.gridtable-batch-action-label')?.textContent === label
+      ),
+      label
+    );
+  const deleteWarning = async () => {
+    await selectEveryNode();
+    await click(batchButton('Delete 1'));
+    return document.body.querySelector('.confirmation-modal-warning');
+  };
+
+  /** The Delete warning when the action comes from the node's row menu. */
+  const rowMenuDeleteWarning = async () => {
+    await act(async () => {
+      requireValue(
+        rowOf('node-1').querySelector<HTMLElement>('[data-column="status"]'),
+        'expected a cell'
+      ).dispatchEvent(
+        new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 })
+      );
+    });
+    await app.settle();
+    await click(
+      requireValue(
+        Array.from(
+          document.body.querySelectorAll<HTMLElement>('[role="menu"] .context-menu-item')
+        ).find(
+          (item) => item.querySelector('.context-menu-label')?.textContent?.trim() === 'Delete'
+        ),
+        'expected the Delete item'
+      )
+    );
+    await app.settle();
+    return document.body.querySelector('.confirmation-modal-warning');
+  };
+
+  // A cordon or an earlier drain cannot prove a node is empty, so nothing clears it.
+  describe.each([
+    ['in batch-select mode', deleteWarning],
+    ['from its row menu', rowMenuDeleteWarning],
+  ])('deleting a node %s', (_surface, openDelete) => {
+    it.each([
+      ['schedulable', false],
+      ['cordoned', true],
+    ])('warns about its pods when it is %s', async (_state, unschedulable) => {
+      await start(() => [node('node-1', { unschedulable })]);
+
+      expect(await openDelete()).not.toBeNull();
+    });
+  });
+
+  it('holds batch actions while a re-sort is out, keeping the rows on screen', async () => {
+    await start(() => [node('node-1'), node('node-2')]);
+    await selectEveryNode();
+    expect(batchButton('Delete 2').disabled).toBe(false);
+
+    // The re-sorted page is in flight until the backend answers it.
+    const parked: Array<() => void> = [];
+    app.snapshots.respond(({ domain, scope }) =>
+      domain === 'nodes'
+        ? new Promise<Response>((resolve) => {
+            parked.push(() =>
+              resolve(
+                snapshotResponse({
+                  domain,
+                  scope,
+                  version: 2,
+                  payload: makeClusterNodeSnapshotPayload({
+                    ...clusterFields(),
+                    rows: [node('node-1'), node('node-2')],
+                    total: 2,
+                  }),
+                })
+              )
+            );
+          })
+        : undefined
+    );
+    await click(
+      requireValue(
+        view.container.querySelector<HTMLElement>('th[data-column="name"] .gridtable-sort-button'),
+        'Name sort'
+      )
+    );
+
+    expect(nodeNames()).toEqual(['node-1', 'node-2']);
+    expect(batchButton('Delete 2').disabled).toBe(true);
+
+    app.snapshots.respond(null);
+    await act(async () => {
+      parked.splice(0).forEach((answer) => {
+        answer();
+      });
+    });
+    await app.settle();
+
+    expect(batchButton('Delete 2').disabled).toBe(false);
+  });
+
+  it('re-reads the cluster’s drain jobs after a batch drain starts', async () => {
+    app.backend.answer('RunObjectAction', () => ({}));
+    await start(() => [node('node-1'), node('node-2')]);
+    const scope = buildClusterRefreshScope('object-maintenance', dev.clusterId);
+    const reads = () =>
+      app.snapshots.reads('object-maintenance').filter((read) => read.scope === scope).length;
+    await click(
+      requireValue(
+        view.container.querySelector<HTMLElement>('.icon-bar-button[aria-label="Batch select"]'),
+        'Batch select'
+      )
+    );
+    await click(
+      requireValue(
+        view.container.querySelector<HTMLElement>('thead input[type="checkbox"]'),
+        'header checkbox'
+      )
+    );
+    await app.settle();
+    await click(
+      requireValue(
+        Array.from(view.container.querySelectorAll<HTMLElement>('.gridtable-batch-action')).find(
+          (button) => button.textContent === 'Drain 2'
+        ),
+        'Drain 2'
+      )
+    );
+    const readsBefore = reads();
+
+    await click(
+      requireValue(
+        document.body.querySelector<HTMLElement>('[data-test="batch-drain-start"]'),
+        'batch drain start'
+      )
+    );
+    await app.settle();
+
+    expect(app.backend.calls('RunObjectAction')).toHaveLength(2);
+    expect(reads()).toBeGreaterThan(readsBefore);
   });
 });

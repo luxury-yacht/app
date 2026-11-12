@@ -14,7 +14,6 @@ import {
 } from '@shared/components/StatusChip';
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
-import { useGridTableExternalFilters } from '@shared/components/tables/hooks/useGridTableExternalFilters';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { kindDisplayName } from '@shared/kinds/kindDisplay';
 import {
@@ -234,29 +233,26 @@ export default function ClusterViewAttention() {
     []
   );
 
-  const { gridTableProps, favModal, source, queryPayload, persistence } =
-    useQueryBackedClusterResourceGridTable<ClusterAttentionSnapshot, ClusterAttentionFinding>({
-      queryTableMode: 'Query Backed Static',
-      supportsCustomMetadataColumns: true,
-      clusterId: selectedClusterId,
-      domain: 'cluster-attention',
-      label: 'Cluster Attention',
-      selectRows: selectPayloadRows,
-      viewId: 'cluster-attention',
-      columns,
-      keyExtractor,
-      showKindDropdown: true,
-      showNamespaceFilters: true,
-      defaultSortKey: 'severity',
-      defaultSortDirection: 'asc',
-      diagnosticsLabel: 'Cluster Attention',
-      viewActions,
-    });
-
-  useGridTableExternalFilters({
+  const { gridTableProps, favModal, source, queryPayload } = useQueryBackedClusterResourceGridTable<
+    ClusterAttentionSnapshot,
+    ClusterAttentionFinding
+  >({
+    queryTableMode: 'Query Backed Static',
+    supportsCustomMetadataColumns: true,
     clusterId: selectedClusterId,
-    destinationViewId: 'cluster-attention',
-    persistence,
+    domain: 'cluster-attention',
+    label: 'Cluster Attention',
+    selectRows: selectPayloadRows,
+    viewId: 'cluster-attention',
+    columns,
+    keyExtractor,
+    showKindDropdown: true,
+    showNamespaceFilters: true,
+    defaultSortKey: 'severity',
+    defaultSortDirection: 'asc',
+    diagnosticsLabel: 'Cluster Attention',
+    viewActions,
+    acceptsFilterRequests: true,
   });
 
   const ignoreRules = queryPayload?.ignoreRules ?? {

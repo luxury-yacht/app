@@ -658,9 +658,6 @@ describe('Sentry error reporting', () => {
     new Error('pods "example" is forbidden: access denied'),
     new Error('The authentication token has expired'),
     bindingRejection(makeErrorStatus('DeadlineExceeded', 'context deadline exceeded')),
-    bindingRejection(
-      makeErrorStatus('Forbidden', 'deployments.apps "web" is forbidden', { expected: false })
-    ),
     Object.assign(new Error('Backend request failed'), {
       cause: { code: '403', reason: 'Forbidden' },
     }),

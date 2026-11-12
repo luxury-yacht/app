@@ -220,7 +220,10 @@ paths (see [Boundaries](#boundaries-deliberately-not-this-path)).
   re-warm (across restarts, format-version-guarded), and reconcile after sync.
   A Cold cluster serves from read-only mmap-aliased stores (column data
   off-heap, indexes resident) instead of tearing down. Cold clusters run no
-  object-catalog discovery, capability checks, or sync loops.
+  object-catalog discovery, capability checks, or sync loops. Cooling stops
+  the stream hub's producers but keeps its subscriptions: frozen stores cannot
+  change, so a Cold cluster confirms subscribes and stays silent until re-warm
+  or teardown retires the generation.
 - **Cold entry gate.** A desired Cold tier stays unapplied until the live
   subsystem has built ready `namespaces` and `cluster-overview` snapshots for
   that exact cluster scope. The namespace build runs through the aggregate

@@ -24,12 +24,16 @@ type BuildProbe struct {
 	Now              time.Time
 	PayloadAvailable bool
 	Installation     InstallationEligibility
+	TargetPath       string
 }
 
 type BuildEligibility struct {
-	Status        BuildStatus
-	Release       ReleaseVersion
-	Installation  InstallationEligibility
+	Status       BuildStatus
+	Release      ReleaseVersion
+	Installation InstallationEligibility
+	// TargetPath is the probed bundle or executable an in-place update
+	// replaces; empty when no installation was probed.
+	TargetPath    string
 	Recovery      RecoveryTarget
 	CanInitialize bool
 	CanCheck      bool
@@ -37,7 +41,7 @@ type BuildEligibility struct {
 }
 
 func ResolveBuild(probe BuildProbe) BuildEligibility {
-	result := BuildEligibility{Installation: probe.Installation}
+	result := BuildEligibility{Installation: probe.Installation, TargetPath: probe.TargetPath}
 	if probe.Server {
 		result.Status = BuildDisabledServer
 		return result

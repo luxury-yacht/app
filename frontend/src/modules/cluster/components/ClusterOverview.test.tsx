@@ -343,23 +343,31 @@ describe('ClusterOverview', () => {
     app.serveTable(dev, 'cluster-attention');
     view = await app.mountApp();
 
-    const attentionFilters = () => {
-      const scope = requireValue(
-        app.snapshots.reads('cluster-attention').slice(-1)[0],
-        'query'
-      ).scope;
-      const params = new URLSearchParams(scope.slice(scope.indexOf('?') + 1));
-      return { kinds: params.getAll('kinds'), findings: params.getAll('facet.findings') };
-    };
+    // Every findings query since the click, as filters. The sidebar's attention
+    // badges read the same domain unfiltered, without a query.
+    const attentionFilters = () =>
+      app.snapshots
+        .reads('cluster-attention')
+        .filter((read) => read.scope.includes('|?'))
+        .map(({ scope }) => {
+          const params = new URLSearchParams(scope.slice(scope.indexOf('?') + 1));
+          return { kinds: params.getAll('kinds'), findings: params.getAll('facet.findings') };
+        });
+    const failing = { kinds: ['Pod'], findings: ['error-presentation'] };
+    const notReady = { kinds: ['Pod'], findings: ['pod-not-ready'] };
 
+    app.snapshots.clearReads();
     await click(byTestId('cluster-pod-status-failing'), 'the failing card');
     expect(view.owners().viewState?.activeClusterTab).toBe('attention');
-    expect(attentionFilters()).toEqual({ kinds: ['Pod'], findings: ['error-presentation'] });
+    expect(attentionFilters()).not.toHaveLength(0);
+    expect(attentionFilters()).toEqual(attentionFilters().map(() => failing));
 
     await view.goTo({ clusterView: 'overview' });
+    app.snapshots.clearReads();
     await click(byTestId('cluster-pod-status-not-ready'), 'the not-ready card');
     expect(view.owners().viewState?.activeClusterTab).toBe('attention');
-    expect(attentionFilters()).toEqual({ kinds: ['Pod'], findings: ['pod-not-ready'] });
+    expect(attentionFilters()).not.toHaveLength(0);
+    expect(attentionFilters()).toEqual(attentionFilters().map(() => notReady));
   });
 
   it('opens every namespace’s Pods, unfiltered, from the ready pod card', async () => {

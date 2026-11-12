@@ -108,6 +108,120 @@ func TestResolveStagingDirectoryAcceptsOnlyPayloadInsideDirectUpdaterChild(t *te
 	require.ErrorContains(t, err, "symlink")
 }
 
+func installTarget(t *testing.T) string {
+	t.Helper()
+	target := filepath.Join(t.TempDir(), "Applications", "Luxury Yacht.app")
+	require.NoError(t, os.MkdirAll(target, 0o755))
+	return target
+}
+
+func installableTarget(target string) func(*updatestate.Config) {
+	return func(config *updatestate.Config) {
+		config.TargetPath = target
+		config.TargetInstallable = true
+	}
+}
+
+// Wails (since v3.0.0-beta.34) stages each download beside the install target
+// rather than in the app's temp root.
+func TestStagingBesideInstallTargetIsOwnedFromDownloadThroughCleanup(t *testing.T) {
+	target := installTarget(t)
+	store, _, _ := newStore(t, installableTarget(target))
+	staging, payload := createStagedPayload(t, filepath.Dir(target), "wails-update-42")
+
+	resolved, err := store.ResolveStagingDirectory(payload)
+	require.NoError(t, err)
+	require.Equal(t, staging, resolved)
+	require.NoError(t, store.RecordPrepared(preparedRecord(staging)))
+	require.NoError(t, store.CleanupPrepared())
+	require.NoDirExists(t, staging)
+	require.DirExists(t, target)
+
+	for name, path := range map[string]string{
+		"install target itself": target,
+		"non updater sibling":   filepath.Join(filepath.Dir(target), "Other.app", "Contents"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := store.ResolveStagingDirectory(path)
+			require.Error(t, err)
+		})
+	}
+
+	withoutTarget, _, _ := newStore(t)
+	_, payload = createStagedPayload(t, filepath.Dir(target), "wails-update-43")
+	_, err = withoutTarget.ResolveStagingDirectory(payload)
+	require.Error(t, err, "an installation with no probed target owns no staging beside one")
+}
+
+// Losing install permission after staging must not orphan the update already
+// staged beside the target: its record still reconciles and is cleaned up. No
+// new download stages there, and leftovers there are no longer swept.
+func TestATargetThatCanNoLongerInstallKeepsItsRecordsButStagesAndSweepsNothing(t *testing.T) {
+	target := installTarget(t)
+	applications := filepath.Dir(target)
+	installable, root, statePath := newStore(t, installableTarget(target))
+	staging, _ := createStagedPayload(t, applications, "wails-update-recorded")
+	require.NoError(t, installable.RecordPrepared(preparedRecord(staging)))
+	_, err := installable.BeginAttempt(attemptMetadata())
+	require.NoError(t, err)
+	leftover, _ := createStagedPayload(t, applications, "wails-update-leftover")
+
+	locked, err := updatestate.New(updatestate.Config{
+		StatePath: statePath, TempRoot: root, TargetPath: target, PID: func() int { return 4242 },
+	})
+	require.NoError(t, err)
+	_, payload := createStagedPayload(t, applications, "wails-update-new")
+	_, err = locked.ResolveStagingDirectory(payload)
+	require.Error(t, err)
+	require.NoError(t, locked.SweepOrphans())
+	require.DirExists(t, leftover)
+
+	result, err := locked.Reconcile("1.9.0")
+	require.NoError(t, err)
+	require.Equal(t, updatestate.OutcomeFailed, result.Outcome)
+	require.NoDirExists(t, staging)
+}
+
+// The install target's directory can be shared (macOS /Applications), so only
+// staging that holds nothing but this app's payload counts as a leftover there.
+func TestSweepOrphansRemovesOnlyThisAppsLeftoversBesideInstallTarget(t *testing.T) {
+	target := installTarget(t)
+	store, root, _ := newStore(t, installableTarget(target))
+	applications := filepath.Dir(target)
+	bundleLeftover, _ := createStagedPayload(t, applications, "wails-update-bundle")
+	rawLeftover := filepath.Join(applications, "wails-update-raw")
+	require.NoError(t, os.Mkdir(rawLeftover, 0o700))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(rawLeftover, "luxury-yacht-v2.8.1-windows-amd64.exe"), []byte("binary"), 0o700,
+	))
+	otherApp := filepath.Join(applications, "wails-update-other")
+	require.NoError(t, os.MkdirAll(filepath.Join(otherApp, "Other.app"), 0o700))
+	partial := filepath.Join(applications, "wails-update-partial")
+	require.NoError(t, os.Mkdir(partial, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(partial, ".artifact"), []byte("half"), 0o600))
+	prepared, _ := createStagedPayload(t, applications, "wails-update-prepared")
+	require.NoError(t, store.RecordPrepared(preparedRecord(prepared)))
+	external, externalPayload := createStagedPayload(t, t.TempDir(), "wails-update-external")
+	link := filepath.Join(applications, "wails-update-link")
+	require.NoError(t, os.Symlink(external, link))
+	tempOrphan, _ := createStagedPayload(t, root, "wails-update-temp-orphan")
+
+	require.NoError(t, store.SweepOrphans())
+
+	for _, removed := range []string{bundleLeftover, rawLeftover, tempOrphan} {
+		require.NoDirExists(t, removed)
+	}
+	for _, kept := range []string{target, otherApp, partial, prepared, externalPayload} {
+		require.DirExists(t, kept)
+	}
+	_, err := os.Lstat(link)
+	require.NoError(t, err, "a symlinked staging directory is never followed or removed")
+
+	require.NoError(t, store.Reset())
+	require.NoDirExists(t, prepared, "reset removes recorded staging beside the target")
+	require.DirExists(t, otherApp)
+}
+
 func TestRecordPreparedPersistsCanonicalExactOwnership(t *testing.T) {
 	store, root, _ := newStore(t)
 	staging, _ := createStagedPayload(t, root, "wails-update-prepared")

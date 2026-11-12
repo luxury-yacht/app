@@ -6,7 +6,9 @@
  * them through the same path the case-based tests use, and then — for a matrix of
  * sort × direction × namespace filter × gvk filter × search term × page size —
  * compares the engine's full, page-walked result against an independent brute-force
- * oracle computed in plain Go.
+ * oracle computed in plain Go. Plain builds walk the whole matrix; race builds walk
+ * every unfiltered case plus a pairwise-covering tenth of the rest
+ * (testsupport.SampleCaseUnderRace).
  *
  * The oracle replicates the engine's EXACT total order: the per-field encoded sort
  * value (query_engine.go newCatalogQueryStoreSchema) with the engine's direction
@@ -31,6 +33,7 @@ package objectcatalog
 import (
 	"fmt"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/testsupport"
 	"math/rand"
 	"sort"
 	"testing"
@@ -294,16 +297,23 @@ func TestCatalogQueryMatchesBruteForceOracle(t *testing.T) {
 
 	pageSizes := []int{3, 7}
 
-	for _, seed := range seeds {
+	for seedIndex, seed := range seeds {
 		rng := rand.New(rand.NewSource(seed))
 		universe := generateOracleObjects(rng, 200)
 		svc := newEquivalenceService(t, universe)
 
-		for _, s := range sorts {
-			for _, nsFilter := range namespaceFilters {
-				for _, kindFilter := range kindFilters {
-					for _, search := range searches {
-						for _, limit := range pageSizes {
+		for sortIndex, s := range sorts {
+			for nsIndex, nsFilter := range namespaceFilters {
+				for kindIndex, kindFilter := range kindFilters {
+					for searchIndex, search := range searches {
+						for limitIndex, limit := range pageSizes {
+							// Race builds run every seed, sort, and page size unfiltered and
+							// sample the filtered cases, still covering every pair of values.
+							if !testsupport.SampleCaseUnderRace(10,
+								[]int{nsIndex, kindIndex, searchIndex},
+								[]int{seedIndex, sortIndex, limitIndex}) {
+								continue
+							}
 							opts := QueryOptions{
 								SortField:     s.field,
 								SortDirection: s.dir,

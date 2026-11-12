@@ -482,7 +482,7 @@ func (o *OperationsCoordinator) startShellSessionStream(
 		})
 
 		if streamErr != nil {
-			lifecycle.finishStream(sess.id, types.ShellSessionStatusError, streamErr.Error())
+			lifecycle.failStream(sess.id, streamErr)
 		} else {
 			lifecycle.finishStream(sess.id, types.ShellSessionStatusClosed, "")
 		}

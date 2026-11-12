@@ -45,6 +45,8 @@ const DISABLED_FAVORITES_CONTEXT = {
   updateFavorite: () => Promise.resolve(),
   deleteFavorite: () => Promise.resolve(),
   reorderFavorites: () => Promise.resolve(),
+  favoriteClusters: [],
+  setClusterFavorite: () => Promise.resolve(),
   pendingFavorite: null,
   favoriteToRestore: null,
   setPendingFavorite: () => undefined,

@@ -21,6 +21,8 @@ type FocusNavigationOptions<T> = {
   keyExtractor: (item: T, index: number) => string;
   onRowClick?: (item: T) => void;
   onRowPointerClick?: (item: T) => void;
+  /** Takes over pointer clicks while batch-select mode is on. */
+  onBatchRowPointerClick?: (item: T, event: React.MouseEvent) => void;
   isShortcutOptOutTarget: (target: EventTarget | null) => boolean;
   wrapperRef: RefObject<HTMLDivElement | null>;
   focusRef: RefObject<HTMLTableElement | null>;
@@ -48,7 +50,12 @@ type FocusNavigationResult<T> = {
   lastNavigationMethodRef: RefObject<'pointer' | 'keyboard'>;
   handleWrapperFocus: (event: React.FocusEvent<HTMLElement>) => void;
   handleWrapperBlur: (event: React.FocusEvent<HTMLElement>) => void;
-  handleRowActivation: (item: T, index: number, source: 'pointer' | 'keyboard') => void;
+  handleRowActivation: (
+    item: T,
+    index: number,
+    source: 'pointer' | 'keyboard',
+    event?: React.MouseEvent
+  ) => void;
   handleRowClick: (item: T, index: number, event: React.MouseEvent) => void;
   getRowClassNameWithFocus: (item: T, index: number) => string;
 };
@@ -61,6 +68,7 @@ export function useGridTableFocusNavigation<T>({
   keyExtractor,
   onRowClick,
   onRowPointerClick,
+  onBatchRowPointerClick,
   isShortcutOptOutTarget,
   wrapperRef,
   focusRef,
@@ -145,7 +153,7 @@ export function useGridTableFocusNavigation<T>({
   }, []);
 
   const handleRowActivation = useCallback(
-    (item: T, index: number, source: 'pointer' | 'keyboard') => {
+    (item: T, index: number, source: 'pointer' | 'keyboard', event?: React.MouseEvent) => {
       focusRef.current?.focus();
       lastNavigationMethodRef.current = source;
       setIsFocusedRowHighlightSuppressed(false);
@@ -154,11 +162,13 @@ export function useGridTableFocusNavigation<T>({
 
       if (source === 'keyboard') {
         onRowClick?.(item);
+      } else if (onBatchRowPointerClick && event) {
+        onBatchRowPointerClick(item, event);
       } else {
         onRowPointerClick?.(item);
       }
     },
-    [focusRef, keyExtractor, onRowClick, onRowPointerClick]
+    [focusRef, keyExtractor, onBatchRowPointerClick, onRowClick, onRowPointerClick]
   );
 
   const suppressFocusedRowHighlight = useCallback(() => {
@@ -172,7 +182,7 @@ export function useGridTableFocusNavigation<T>({
       }
       const isKeyboardActivation =
         event.detail === 0 && lastNavigationMethodRef.current === 'keyboard';
-      handleRowActivation(item, index, isKeyboardActivation ? 'keyboard' : 'pointer');
+      handleRowActivation(item, index, isKeyboardActivation ? 'keyboard' : 'pointer', event);
     },
     [handleRowActivation, shouldIgnoreRowClick]
   );

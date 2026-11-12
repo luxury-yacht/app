@@ -19,8 +19,8 @@ type OnSort = (key: string, targetDirection?: SortDirection) => void;
 type ApplyVisibilityChanges = (mutator: (next: Record<string, boolean>) => boolean) => void;
 
 type UseGridTableHeaderActionsOptions<T> = {
+  /** Every column the header renders, including one the table adds itself. */
   columns: GridColumnDefinition<T>[];
-  lockedColumns: Set<string>;
   sortConfig?: SortConfig | null;
   onSort?: OnSort;
   applyVisibilityChanges: ApplyVisibilityChanges;
@@ -30,20 +30,17 @@ type UseGridTableHeaderActionsOptions<T> = {
 function buildHeaderContextMenuItems<T>(
   column: GridColumnDefinition<T>,
   {
-    lockedColumns,
     onSort,
     sortConfig,
     applyVisibilityChanges,
-  }: Pick<
-    UseGridTableHeaderActionsOptions<T>,
-    'lockedColumns' | 'onSort' | 'sortConfig' | 'applyVisibilityChanges'
-  >
+  }: Pick<UseGridTableHeaderActionsOptions<T>, 'onSort' | 'sortConfig' | 'applyVisibilityChanges'>
 ): ContextMenuItem[] {
   const items: ContextMenuItem[] = isSortableColumn(column)
     ? buildGridTableSortItems(column.key, onSort, sortConfig)
     : [];
 
-  if (lockedColumns.has(column.key)) {
+  // A column that cannot be hidden offers only its sort actions, if it has any.
+  if (column.hideable === false) {
     return items.length ? items : [{ label: 'No Actions', disabled: true }];
   }
   if (items.length) {
@@ -63,7 +60,6 @@ function buildHeaderContextMenuItems<T>(
 
 export function useGridTableHeaderActions<T>({
   columns,
-  lockedColumns,
   sortConfig,
   onSort,
   applyVisibilityChanges,
@@ -119,20 +115,8 @@ export function useGridTableHeaderActions<T>({
       return [];
     }
 
-    return buildHeaderContextMenuItems(column, {
-      lockedColumns,
-      onSort,
-      sortConfig,
-      applyVisibilityChanges,
-    });
-  }, [
-    applyVisibilityChanges,
-    columns,
-    headerContextMenuColumnKey,
-    lockedColumns,
-    onSort,
-    sortConfig,
-  ]);
+    return buildHeaderContextMenuItems(column, { onSort, sortConfig, applyVisibilityChanges });
+  }, [applyVisibilityChanges, columns, headerContextMenuColumnKey, onSort, sortConfig]);
 
   const headerContextMenuNode = useMemo(() => {
     if (!headerContextMenu || !headerContextMenuColumnKey) {

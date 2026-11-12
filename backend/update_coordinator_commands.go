@@ -10,6 +10,7 @@ import (
 )
 
 type UpdateInfo struct {
+	Revision          uint64                           `json:"revision"`
 	Status            appupdates.Status                `json:"status"`
 	CurrentVersion    string                           `json:"currentVersion,omitempty"`
 	AvailableVersion  string                           `json:"availableVersion,omitempty"`

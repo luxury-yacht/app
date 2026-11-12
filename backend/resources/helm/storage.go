@@ -14,6 +14,7 @@ import (
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/release"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
@@ -21,6 +22,11 @@ import (
 // releaseSecretType marks the Secrets Helm's storage driver writes, one per
 // release revision.
 const releaseSecretType corev1.SecretType = "helm.sh/release.v1"
+
+// StorageGVK is the API kind the app's Helm storage driver ("secret", see
+// initActionConfig) keeps each release revision as. A release is not an API
+// object, so access to it is access to these objects in its namespace.
+var StorageGVK = schema.GroupVersionKind{Version: "v1", Kind: "Secret"}
 
 // StorageRecord marks a Secret or ConfigMap that Helm's storage driver wrote
 // for a release revision. It is the Aggregate half of that object's ingest

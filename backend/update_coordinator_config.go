@@ -13,7 +13,6 @@ import (
 	"github.com/luxury-yacht/app/internal/appstate"
 	"github.com/luxury-yacht/app/internal/updateidentity"
 	"github.com/luxury-yacht/app/internal/updatestate"
-	"github.com/luxury-yacht/app/internal/updatetemp"
 	"github.com/wailsapp/wails/v3/pkg/updater"
 )
 
@@ -44,8 +43,9 @@ func (u *UpdateCoordinator) initializeApplicationUpdates(options ApplicationUpda
 	if u == nil {
 		return
 	}
-	u.resetState, u.resetStateErr = newApplicationUpdateStateStore(options)
-	configuration := u.prepareApplicationUpdateConfiguration(options)
+	eligibility := u.resolveApplicationUpdateEligibility(options)
+	u.resetState, u.resetStateErr = newApplicationUpdateStateStore(options, eligibility)
+	configuration := u.prepareApplicationUpdateConfiguration(options, eligibility)
 	var updateState appupdates.UpdateState
 	if configuration.updateState != nil {
 		updateState = configuration.updateState
@@ -78,8 +78,8 @@ type applicationUpdateConfiguration struct {
 
 func (u *UpdateCoordinator) prepareApplicationUpdateConfiguration(
 	options ApplicationUpdateOptions,
+	eligibility updateidentity.BuildEligibility,
 ) applicationUpdateConfiguration {
-	eligibility := u.resolveApplicationUpdateEligibility(options)
 	setup, eligibility := u.resolveApplicationUpdateState(options, eligibility)
 	client := u.applicationUpdateClient()
 	provider, eligibility := u.resolveApplicationUpdateProvider(options, client, eligibility)
@@ -122,7 +122,11 @@ func (u *UpdateCoordinator) resolveApplicationUpdateState(
 		u.logger.Warn(fmt.Sprintf("Automatic update recovery state unavailable: %v", err), logsources.UpdateCheck)
 		eligibility.CanInstall = false
 		eligibility.Installation.CanInstall = false
-		return nil, eligibility
+		// The failed setup offers no store for new updates, but an attempt it
+		// reconciled is still reported.
+		if setup.Reconciled.Outcome == updatestate.OutcomeNone {
+			return nil, eligibility
+		}
 	}
 	u.logApplicationUpdateReconciliation(setup.Reconciled)
 	if setup.MetadataReconcileError != nil {
@@ -176,37 +180,54 @@ func prepareApplicationUpdateState(
 	options ApplicationUpdateOptions,
 	eligibility updateidentity.BuildEligibility,
 ) (applicationUpdateStateSetup, error) {
-	store, err := newApplicationUpdateStateStore(options)
+	store, err := newApplicationUpdateStateStore(options, eligibility)
 	if err != nil {
 		return applicationUpdateStateSetup{}, err
 	}
-	reconciled, err := store.Reconcile(eligibility.Release.Version)
-	if err != nil {
-		return applicationUpdateStateSetup{}, fmt.Errorf("reconcile application update state: %w", err)
+	// Reconcile consumes the attempt record, so its outcome is acted on and
+	// returned even when cleanup or a later step fails. Only a fully prepared
+	// setup carries the store.
+	reconciled, reconcileErr := store.Reconcile(eligibility.Release.Version)
+	setup := applicationUpdateStateSetup{
+		Reconciled:             reconciled,
+		MetadataReconcileError: reconcileApplicationUpdateMetadata(options, reconciled),
 	}
-	var metadataReconcileError error
-	if reconciled.Outcome == updatestate.OutcomeSucceeded &&
-		reconciled.Distribution == updateidentity.DistributionWindowsNSIS {
-		reconcileDisplayVersion := options.ReconcileWindowsDisplayVersion
-		if reconcileDisplayVersion == nil {
-			reconcileDisplayVersion = reconcileWindowsDisplayVersion
-		}
-		metadataReconcileError = reconcileDisplayVersion(reconciled.TargetVersion)
+	if reconcileErr != nil {
+		return setup, fmt.Errorf("reconcile application update state: %w", reconcileErr)
 	}
 	document, err := store.Load()
 	if err != nil {
-		return applicationUpdateStateSetup{}, fmt.Errorf("load reconciled application update state: %w", err)
+		return setup, fmt.Errorf("load reconciled application update state: %w", err)
 	}
-	if _, err := updatetemp.SweepOrphans(options.TempRoot, document.ProtectedPaths()); err != nil {
-		return applicationUpdateStateSetup{}, fmt.Errorf("sweep orphaned application update staging: %w", err)
+	if err := store.SweepOrphans(); err != nil {
+		return setup, fmt.Errorf("sweep orphaned application update staging: %w", err)
 	}
-	return applicationUpdateStateSetup{
-		Store: store, Reconciled: reconciled, SkippedVersion: document.SkippedVersion,
-		MetadataReconcileError: metadataReconcileError,
-	}, nil
+	setup.Store = store
+	setup.SkippedVersion = document.SkippedVersion
+	return setup, nil
 }
 
-func newApplicationUpdateStateStore(options ApplicationUpdateOptions) (*updatestate.Store, error) {
+// reconcileApplicationUpdateMetadata brings Windows Installed Apps metadata up
+// to the version a successful swap installed.
+func reconcileApplicationUpdateMetadata(
+	options ApplicationUpdateOptions,
+	reconciled updatestate.ReconcileResult,
+) error {
+	if reconciled.Outcome != updatestate.OutcomeSucceeded ||
+		reconciled.Distribution != updateidentity.DistributionWindowsNSIS {
+		return nil
+	}
+	reconcileDisplayVersion := options.ReconcileWindowsDisplayVersion
+	if reconcileDisplayVersion == nil {
+		reconcileDisplayVersion = reconcileWindowsDisplayVersion
+	}
+	return reconcileDisplayVersion(reconciled.TargetVersion)
+}
+
+func newApplicationUpdateStateStore(
+	options ApplicationUpdateOptions,
+	eligibility updateidentity.BuildEligibility,
+) (*updatestate.Store, error) {
 	if options.TempSetupError != nil {
 		// No temp root was accepted as app-owned, so reset must leave that path
 		// untouched instead of replaying the startup diagnostic as a reset failure.
@@ -223,9 +244,14 @@ func newApplicationUpdateStateStore(options ApplicationUpdateOptions) (*updatest
 		}
 		statePath = manifest.UpdateStatePath()
 	}
+	// Records staged beside the target stay recoverable whatever the install
+	// permission; only an installation that can replace itself stages or sweeps
+	// there, so other targets (such as package-managed binaries) are never swept.
 	return updatestate.New(updatestate.Config{
-		StatePath: statePath,
-		TempRoot:  options.TempRoot,
+		StatePath:         statePath,
+		TempRoot:          options.TempRoot,
+		TargetPath:        eligibility.TargetPath,
+		TargetInstallable: eligibility.Installation.CanInstall,
 	})
 }
 
@@ -302,7 +328,7 @@ func resolveApplicationUpdateEligibility(runtimeInfo applicationUpdateRuntime) (
 	installation := updateidentity.ResolveInstallation(probe)
 	return updateidentity.ResolveBuild(updateidentity.BuildProbe{
 		Version: runtimeInfo.Version, Server: runtimeInfo.Server, BetaExpiry: betaExpiry,
-		Now: runtimeInfo.Now, Installation: installation,
+		Now: runtimeInfo.Now, Installation: installation, TargetPath: probe.TargetPath,
 		PayloadAvailable: updateidentity.HasUpdaterTarget(
 			runtimeInfo.UpdaterTargets, probe.Platform, probe.Architecture,
 		),

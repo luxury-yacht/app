@@ -107,6 +107,85 @@ virtualization, and native table accessibility. Apply the
   table's rows, cells, or controls. The parent already takes the dock offsets,
   so a nested table inside the detail does not.
 
+## Batch select
+
+- A table opts in with `batchSelection`, which adds one toolbar button and
+  nothing else to the toolbar. The checkbox column exists only while the mode is
+  on, and a bar of labelled actions, each stating its count, floats over the
+  bottom of the table only while the selected rows have an action, so a table at
+  rest gives up no space to either.
+  `useBatchObjectActions` owns the state and takes eligibility from
+  `resolveObjectActionPolicy` and the object's permission checks, the same
+  answers a row's context menu uses.
+- The bar sits in a zero-height anchor between the body and footer, follows the
+  dock offsets, and stays on one line, scrolling sideways in a table too narrow
+  for it. While it shows, the body gains bottom space so the last rows can
+  scroll out from under it.
+- While the mode is on, a row click selects instead of running
+  `onRowPointerClick`, and Shift extends the range. Links in a row still open
+  their object. The keyboard reaches a row's checkbox as a row control, and
+  `Space` keeps its meaning on the table.
+- Only rows on screen count. Rows hidden by a filter or on another page are
+  neither counted nor acted on, and the header checkbox covers the rows shown.
+  Query-wide selection stays out, per the
+  [large-data contract](../architecture/large-data.md#contract).
+- Query-backed tables keep the last page on screen while a new one loads, so the
+  source reports `pageStale` until the rows are the current query's page. The
+  bar's actions stay visible but disabled until then, and also while cached rows
+  stand in on a revisit. A live refetch of the same page does not set it, and a
+  new query that fails keeps it set.
+- A selection belongs to the object that was checked. Selection keys include the
+  object's UID through `getRowInstance`, so an object deleted and recreated under
+  its name shows up unselected.
+- Batch state belongs to `scopeKey`. It resets on any scope change, so a mounted
+  view that returns to an earlier scope does not bring its selection back. A
+  batch still running reports its result but cannot change the new scope.
+- The checkbox column joins after the column order and visibility controllers,
+  which keeps it out of the Columns menu, saved table state, and downloads. Its
+  header menu offers no actions. Its checkboxes read selection from context
+  because cells are cached by row.
+- Each selected object runs through `RunObjectAction` with its complete
+  identity, a few at a time. A partial failure keeps the failed rows selected.
+- Every batch write also sends the row's UID, which holds the action to the
+  object the user checked: a replacement created under the same name is left
+  alone. A row with no UID is not offered any action. The backend side is in
+  [object actions](../architecture/permissions.md#object-actions), and a
+  drain's node and pod binding in
+  [drain target binding](../workflows/operation-lifecycle.md#drain-target-binding).
+- A delete counts as done on a 404 only when the error's `ref` is the identity
+  of the object the delete was sent for, which the backend sets only after
+  confirming that exact object is gone. Any other 404 stays a failure.
+- Retry is offered only when every failure is a definite refusal. After any other
+  error the write may still have landed, so those rows show as Unknown, stay
+  selected, and running again is a new, confirmed action against current data.
+- Each object holds its slot until its backend call returns, so results and Retry
+  wait for every call under way. The backend ends the call at its own deadline
+  and reports that the cluster did not answer; never add a frontend timer, which
+  would free a slot while its call still runs. A silent cluster can also fail
+  sooner as an unreachable connection. Either stops the batch starting more
+  objects, which are listed as not started. One request cut off on a live
+  connection (`RequestInterrupted`, such as a reset HTTP/2 stream) does not:
+  that object is Unknown and the rest still run.
+- Failures also go to the app error pipeline, which keeps expected cluster
+  outcomes out of Sentry. The running dialog cannot be dismissed, so nothing may
+  keep the results from replacing it: a view's `onRunComplete` that throws is
+  reported and ignored, and an object keeps the outcome the backend gave it
+  even when reporting that failure throws.
+- While a batch runs, its dialog blocks app shortcuts so the view that will report
+  it stays open. If the view goes anyway, such as the cluster closing from the
+  native menu, objects still queued do not start.
+- Confirmations and failure lists group by group, version, and kind. They add an
+  API Version column when one kind name spans several API versions. Long names
+  truncate, with the full name on hover.
+- A view that lists kinds too consequential to remove several at a time does not
+  opt in: Browse, CRDs, Namespaces, and Helm.
+- Nodes add Drain, which takes one set of options for every selected node and
+  starts one job per node, so the drains run at the same time. Every node delete
+  warns about workload pods, however drained the node looks: nothing the app can
+  read proves it stays empty until the delete lands. Retrying a failed node delete
+  returns to the confirmation, with focus back on Cancel, so the warning is seen
+  again.
+
 ## DOM And Identity Rules
 
 - Rows render `data-row-key` and cells `data-column`; treat them as data. Look

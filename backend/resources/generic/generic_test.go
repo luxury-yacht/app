@@ -10,16 +10,19 @@ package generic
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/testsupport"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
@@ -51,7 +54,7 @@ func TestServiceDeleteByGVKCoreResource(t *testing.T) {
 	service := NewService(deps)
 
 	gvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
-	if err := service.DeleteByGVK(context.Background(), gvk, "default", "web-0"); err != nil {
+	if err := service.DeleteByGVK(context.Background(), gvk, "default", "web-0", ""); err != nil {
 		t.Fatalf("DeleteByGVK returned error: %v", err)
 	}
 
@@ -68,7 +71,7 @@ func TestServiceDeleteByGVKRequiresName(t *testing.T) {
 
 	for _, name := range []string{"", "  "} {
 		t.Run("name="+name, func(t *testing.T) {
-			err := service.DeleteByGVK(context.Background(), gvk, "default", name)
+			err := service.DeleteByGVK(context.Background(), gvk, "default", name, "")
 			if err == nil {
 				t.Fatal("expected error when name is empty")
 			}
@@ -111,7 +114,7 @@ func TestServiceDeleteByGVKCustomResource(t *testing.T) {
 	service := NewService(deps)
 
 	gvk := schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Widget"}
-	if err := service.DeleteByGVK(context.Background(), gvk, "default", "sample"); err != nil {
+	if err := service.DeleteByGVK(context.Background(), gvk, "default", "sample", ""); err != nil {
 		t.Fatalf("DeleteByGVK returned error: %v", err)
 	}
 
@@ -119,6 +122,114 @@ func TestServiceDeleteByGVKCustomResource(t *testing.T) {
 	_, err := dynamicClient.Resource(gvr).Namespace("default").Get(context.Background(), "sample", metav1.GetOptions{})
 	if !apierrors.IsNotFound(err) {
 		t.Fatalf("expected widget to be deleted, got err=%v", err)
+	}
+}
+
+type stubResourceResolver struct {
+	resolved common.ResolvedResource
+	found    bool
+	err      error
+}
+
+func (r stubResourceResolver) ResolveResourceForGVK(context.Context, schema.GroupVersionKind) (common.ResolvedResource, bool, error) {
+	return r.resolved, r.found, r.err
+}
+
+func widgetFixture(namespace string) *unstructured.Unstructured {
+	obj := &unstructured.Unstructured{Object: map[string]any{}}
+	obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Widget"})
+	obj.SetNamespace(namespace)
+	obj.SetName("sample")
+	return obj
+}
+
+func widgetResource(namespaced bool) common.ResolvedResource {
+	return common.ResolvedResource{Group: "example.com", Version: "v1", Resource: "widgets", Namespaced: namespaced}
+}
+
+var widgetGVK = schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Widget"}
+
+func TestServiceDeleteByGVKDeletesNothingItCannotPlace(t *testing.T) {
+	cases := []struct {
+		name      string
+		resolver  common.ResourceResolver
+		namespace string
+		wantErr   string
+	}{
+		{name: "no resolver", namespace: "default", wantErr: "resource resolver not initialized"},
+		{
+			name:      "lookup fails",
+			resolver:  stubResourceResolver{err: errors.New("catalog unavailable")},
+			namespace: "default",
+			wantErr:   "failed to resolve",
+		},
+		{name: "unknown kind", resolver: stubResourceResolver{}, namespace: "default", wantErr: "failed to resolve"},
+		{
+			name:     "namespaced kind without a namespace",
+			resolver: stubResourceResolver{resolved: widgetResource(true), found: true},
+			wantErr:  "requires a namespace",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dynamicClient := testsupport.NewDynamicClient(t, nil, widgetFixture("default"))
+			deps := testsupport.NewResourceDependencies(testsupport.WithDepsDynamicClient(dynamicClient))
+			deps.ResourceResolver = tc.resolver
+
+			err := NewService(deps).DeleteByGVK(context.Background(), widgetGVK, tc.namespace, "sample", "")
+
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("expected error containing %q, got %v", tc.wantErr, err)
+			}
+			for _, action := range dynamicClient.Actions() {
+				if action.GetVerb() == "delete" {
+					t.Fatalf("nothing should be deleted, got %v", action)
+				}
+			}
+		})
+	}
+}
+
+func TestServiceDeleteByGVKBindsAClusterScopedDeleteToTheUID(t *testing.T) {
+	dynamicClient := testsupport.NewDynamicClient(t, nil, widgetFixture(""))
+	deps := testsupport.NewResourceDependencies(testsupport.WithDepsDynamicClient(dynamicClient))
+	deps.ResourceResolver = stubResourceResolver{resolved: widgetResource(false), found: true}
+
+	if err := NewService(deps).DeleteByGVK(context.Background(), widgetGVK, "", "sample", "uid-a"); err != nil {
+		t.Fatalf("DeleteByGVK returned error: %v", err)
+	}
+
+	for _, action := range dynamicClient.Actions() {
+		deletion, ok := action.(cgotesting.DeleteAction)
+		if !ok || action.GetVerb() != "delete" {
+			continue
+		}
+		preconditions := deletion.GetDeleteOptions().Preconditions
+		if preconditions == nil || preconditions.UID == nil || *preconditions.UID != types.UID("uid-a") {
+			t.Fatalf("expected the delete to require uid-a, got %+v", preconditions)
+		}
+		return
+	}
+	t.Fatal("expected a delete request")
+}
+
+// The API server answers 409 when the object under the name has a different
+// UID; a batch reports that to the user as a failed row.
+func TestServiceDeleteByGVKReportsARefusedDeleteAsAConflict(t *testing.T) {
+	dynamicClient := testsupport.NewDynamicClient(t, nil, widgetFixture("default"))
+	dynamicClient.PrependReactor("delete", "widgets", func(cgotesting.Action) (bool, runtime.Object, error) {
+		return true, nil, apierrors.NewConflict(
+			schema.GroupResource{Group: "example.com", Resource: "widgets"}, "sample", errors.New("uid precondition failed"),
+		)
+	})
+	deps := testsupport.NewResourceDependencies(testsupport.WithDepsDynamicClient(dynamicClient))
+	deps.ResourceResolver = stubResourceResolver{resolved: widgetResource(true), found: true}
+
+	err := NewService(deps).DeleteByGVK(context.Background(), widgetGVK, "default", "sample", "uid-a")
+
+	if !apierrors.IsConflict(err) {
+		t.Fatalf("expected a conflict, got %v", err)
 	}
 }
 

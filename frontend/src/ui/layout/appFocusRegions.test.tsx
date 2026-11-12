@@ -192,6 +192,24 @@ describe('app region navigation', () => {
     expect(outline()).not.toBeNull();
   });
 
+  it('shows arrow-key focus without outlining the region until Tab', async () => {
+    prepareOutline();
+    await render();
+    focus('header-first');
+    await act(async () => {
+      element('header-first').dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true })
+      );
+    });
+    focus('header-last');
+    flushOutline();
+    expect(element('header-last').classList.contains('keyboard-programmatic-focus')).toBe(true);
+    expect(outline()).toBeNull();
+    await tab();
+    flushOutline();
+    expect(outline()).not.toBeNull();
+  });
+
   it('outlines only the destination when changing regions, including rapid reverse navigation', async () => {
     prepareOutline();
     await render();

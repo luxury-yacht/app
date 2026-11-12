@@ -129,3 +129,19 @@ export function parseApiVersion(
     version: trimmed.slice(slash + 1),
   };
 }
+
+/**
+ * The apiVersion to link an HPA's scale target by. The HPA controller finds its
+ * target by group and kind, so a built-in named at a retired version still means
+ * the object at its current one. Anything else keeps the version written.
+ */
+export function scaleTargetApiVersion<T extends string | null | undefined>(
+  kind: string,
+  apiVersion: T
+): T | string {
+  const builtin = resolveBuiltinGroupVersion(kind);
+  if (builtin.version === undefined || parseApiVersion(apiVersion).group !== builtin.group) {
+    return apiVersion;
+  }
+  return builtin.group ? `${builtin.group}/${builtin.version}` : builtin.version;
+}

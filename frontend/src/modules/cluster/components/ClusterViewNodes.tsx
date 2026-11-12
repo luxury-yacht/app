@@ -27,11 +27,14 @@ import {
   type RowDetailToggleOptions,
   withRowDetailToggle,
 } from '@shared/components/tables/rowDetailToggle';
+import {
+  type BatchObjectActionId,
+  useBatchObjectActions,
+} from '@shared/hooks/useBatchObjectActions';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useNodeMaintenanceActions } from '@shared/hooks/useNodeMaintenanceActions';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { kindDisplayName } from '@shared/kinds/kindDisplay';
-import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import {
   buildRequiredCanonicalObjectRowKey,
@@ -71,6 +74,12 @@ interface NodesTableProps extends NodesViewProps {
 
 const NO_ROW_KEYS: readonly string[] = [];
 const NODES_VIEW_ID = 'cluster-nodes';
+const NODE_BATCH_ACTIONS: readonly BatchObjectActionId[] = [
+  'cordon',
+  'uncordon',
+  'drain',
+  'delete',
+];
 
 /*
  * GridTable component for cluster nodes
@@ -139,13 +148,11 @@ const NodesTable: React.FC<NodesTableProps> = React.memo(
     );
 
     const tableColumns = useMemo<GridColumnDefinition<ClusterNodeRow>[]>(() => {
-      const resolveNodeStatus = (node: ClusterNodeRow) => {
-        const text = node.status ?? 'Unknown';
-        return {
-          text,
-          className: backendStatusTextClass(node.statusPresentation),
-        };
-      };
+      const statusChipColumn = cf.createStatusChipColumn<ClusterNodeRow>(
+        'status',
+        'Status',
+        (node) => ({ value: node.status ?? 'Unknown', presentation: node.statusPresentation })
+      );
 
       const resolveNodeRestarts = (node: ClusterNodeRow) => {
         const restartCount = node.restarts ?? 0;
@@ -183,15 +190,13 @@ const NodesTable: React.FC<NodesTableProps> = React.memo(
           isInteractive: () => true,
         }),
         {
-          key: 'status',
-          header: 'Status',
-          sortable: true,
+          ...statusChipColumn,
+          // A node being drained shows a button beside its status that opens the drain.
           render: (row: ClusterNodeRow) => {
-            const status = resolveNodeStatus(row);
             const activeDrain = nodeMaintenance.activeDrainFor(row.ref.clusterId, row.ref.name);
             return (
               <span className="cluster-nodes-status-cell">
-                <span className={status.className}>{status.text}</span>
+                {statusChipColumn.render(row)}
                 {activeDrain && (
                   <button
                     type="button"
@@ -398,13 +403,41 @@ const NodesTable: React.FC<NodesTableProps> = React.memo(
     });
 
     // Get context menu items
-    const getRowContextMenuItems = useCallback(
-      (row: ClusterNodeRow, _columnKey: string): ContextMenuItem[] => {
+    const { activeDrainFor } = nodeMaintenance;
+    const getActionObject = useCallback(
+      (row: ClusterNodeRow) => {
         const reference = nodeReference(row);
-        return objectActions.getMenuItems({ ...reference, unschedulable: row.unschedulable });
+        return {
+          ...reference,
+          unschedulable: row.unschedulable,
+          drainRunning: Boolean(activeDrainFor(reference.clusterId, reference.name)),
+        };
       },
-      [nodeReference, objectActions]
+      [activeDrainFor, nodeReference]
     );
+
+    const getRowContextMenuItems = useCallback(
+      (row: ClusterNodeRow, _columnKey: string): ContextMenuItem[] =>
+        objectActions.getMenuItems(getActionObject(row)),
+      [getActionObject, objectActions]
+    );
+
+    const { refreshDrains } = nodeMaintenance;
+    const handleBatchRunComplete = useCallback(
+      (actionId: BatchObjectActionId) => {
+        if (actionId === 'drain') {
+          refreshDrains();
+        }
+      },
+      [refreshDrains]
+    );
+
+    const batchActions = useBatchObjectActions<ClusterNodeRow>({
+      getObject: getActionObject,
+      scopeKey: selectedClusterId ?? '',
+      allowedActions: NODE_BATCH_ACTIONS,
+      onRunComplete: handleBatchRunComplete,
+    });
 
     return (
       <>
@@ -426,8 +459,10 @@ const NodesTable: React.FC<NodesTableProps> = React.memo(
           enableContextMenu={true}
           getCustomContextMenuItems={getRowContextMenuItems}
           emptyMessage={emptyMessage}
+          batchSelection={batchActions.batchSelection}
         />
         {objectActions.modals}
+        {batchActions.modals}
         {nodeMaintenance.modals}
       </>
     );

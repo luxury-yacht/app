@@ -548,9 +548,13 @@ const receiveMessage = (
       [{ type: 'permission-denied', reason: message.reason }]
     );
   }
-  return transition(withActivity, [
-    { type: 'request-resync', reason: message.reason, force: true, errorReason: message.reason },
-  ]);
+  // The server holds no subscription for this scope now. The retry honors the
+  // resync cooldown: a scope the server keeps rejecting must not re-subscribe
+  // at the speed of the round trip.
+  return transition(
+    { ...withActivity, phase: { status: 'connecting', errorReason: message.reason } },
+    [{ type: 'request-resync', reason: message.reason, force: false, errorReason: message.reason }]
+  );
 };
 
 const subscribeSent = (
@@ -691,6 +695,9 @@ const requestResync = (
   const preservedHealth = preservesConfirmedHealth(event.reason)
     ? confirmedHealth(state.phase)
     : undefined;
+  // An unacknowledged error stays until an ACK, including across the trailing
+  // resync that retries a rejected scope.
+  const errorReason = event.errorReason ?? phaseError(state.phase);
   // This resync covers every change so far, so an owed trailing one is not needed.
   return transition(
     {
@@ -698,7 +705,7 @@ const requestResync = (
       phase: {
         status: 'resyncing',
         reason: event.reason,
-        ...(event.errorReason ? { errorReason: event.errorReason } : {}),
+        ...(errorReason ? { errorReason } : {}),
         ...(preservedHealth ? { preservedHealth } : {}),
       },
       resume: { ...state.resume, lastSequence: undefined },
