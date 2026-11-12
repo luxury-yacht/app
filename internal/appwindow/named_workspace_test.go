@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -106,14 +107,27 @@ func TestNamedWorkspaceReplacesWindowsAfterDestinationAcknowledges(t *testing.T)
 	var shown []string
 	r.showWindow = func(window string) bool { shown = append(shown, window); return true }
 	r.closeWindow = func(window string) bool { r.handleClosing(nil, window); return true }
-	geometry := panelwindow.NamedWorkspaceGeometry{WindowBounds: panelwindow.WindowBounds{Width: 1100, Height: 800}}
+	restored := map[string]panelwindow.NamedWorkspaceGeometry{}
+	var restoreOrder []string
+	r.restoreWindowState = func(window string, state panelwindow.NamedWorkspaceGeometry) {
+		restored[window] = state
+		restoreOrder = append(restoreOrder, window)
+	}
+	bounds := panelwindow.WindowBounds{Width: 1100, Height: 800}
+	fullscreen := panelwindow.NamedWorkspaceGeometry{WindowBounds: bounds, Fullscreen: true}
+	minimized := panelwindow.NamedWorkspaceGeometry{WindowBounds: bounds, Minimized: true}
 	require.NoError(t, r.OpenNamedWorkspace(context.Background(), source, panelwindow.NamedWorkspace{
-		AppWindows: []panelwindow.NamedWorkspaceAppWindow{{Geometry: geometry}},
-		PanelWindows: []panelwindow.NamedWorkspacePanelWindow{{Geometry: geometry, Group: panelwindow.WorkspaceGroup{
+		AppWindows: []panelwindow.NamedWorkspaceAppWindow{{Geometry: fullscreen}},
+		PanelWindows: []panelwindow.NamedWorkspacePanelWindow{{Geometry: minimized, Group: panelwindow.WorkspaceGroup{
 			ClusterID: panel.ClusterID, GroupID: panel.GroupID, Tabs: panel.Tabs, ActivePanelID: panel.ActivePanelID,
 		}}},
 	}))
 	require.Equal(t, []string{"workspace-2", "panel-1"}, shown)
+	// Each window returns to the state it was saved in, not only to its bounds.
+	require.Equal(t, map[string]panelwindow.NamedWorkspaceGeometry{"workspace-2": fullscreen, "panel-1": minimized}, restored)
+	// A fullscreen transition takes over the display while it runs: a window
+	// maximized during it is left part-way. Fullscreen is entered last.
+	require.Equal(t, []string{"panel-1", "workspace-2"}, restoreOrder)
 	require.Equal(t, []string{"workspace-2"}, r.lifecycle.Names())
 	require.Same(t, r.workspace, r.workspaceDirectoryFor("workspace-2"))
 	require.Equal(t, "panel-1", r.workspace.Snapshot(panel.ClusterID).Panels[0].Location.WindowName)
@@ -147,7 +161,7 @@ func TestCaptureNamedWorkspaceWaitsForEveryAppWindow(t *testing.T) {
 	first, second := registry.lifecycle.Add(), registry.lifecycle.Add()
 	registry.markWorkspaceReady(first)
 	registry.windowGeometry = func(name string) (geometry, bool) {
-		return geometry{Width: 900, Height: 700}, true
+		return geometry{Width: 1300, Height: 700}, true
 	}
 	var requested []string
 	registry.emitWindowEvent = func(name, _ string, payload any) bool {
@@ -165,7 +179,7 @@ func TestCaptureNamedWorkspaceWaitsForEveryAppWindow(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{first, second}, requested)
 	require.Len(t, workspace.AppWindows, 2)
-	require.Equal(t, 900, workspace.AppWindows[1].Geometry.Width)
+	require.Equal(t, 1300, workspace.AppWindows[1].Geometry.Width)
 }
 
 func TestCaptureNamedWorkspaceRejectsAWindowClosingDuringCapture(t *testing.T) {
@@ -304,32 +318,169 @@ func TestNamedWorkspaceWithNothingRestorableLeavesWindowsUnguarded(t *testing.T)
 	require.Equal(t, []string{name}, r.lifecycle.Names())
 }
 
-// A floating panel window follows its own moves, so saving it while maximized
-// keeps the bounds it returns to.
-func TestMaximizedPanelWindowIsSavedWithTheBoundsItReturnsTo(t *testing.T) {
-	app := application.New(application.Options{})
-	registry, panel := liveNativeWindow(t, validPanelGroupSnapshot())
-	window := app.Window.NewWithOptions(application.WebviewWindowOptions{Name: panel, Hidden: true})
-	var mu sync.Mutex
-	current := geometry{AbsoluteX: 40, AbsoluteY: 60, Width: 700, Height: 440}
-	registry.windowGeometry = func(string) (geometry, bool) {
-		mu.Lock()
-		defer mu.Unlock()
-		return current, true
+// A floating panel window follows its own moves, so saving it while it is
+// maximized, fullscreen, or minimized keeps the bounds it returns to and the
+// state it was in.
+func TestPanelWindowOutOfItsNormalStateIsSavedWithTheBoundsItReturnsTo(t *testing.T) {
+	returnsTo := panelwindow.WindowBounds{X: 40, Y: 60, Width: 700, Height: 440}
+	states := map[string]struct {
+		current    geometry
+		neverMoved bool
+		saved      panelwindow.NamedWorkspaceGeometry
+	}{
+		"maximized":  {current: geometry{Width: 1728, Height: 1080, Maximised: true}, saved: panelwindow.NamedWorkspaceGeometry{WindowBounds: returnsTo, Maximized: true}},
+		"fullscreen": {current: geometry{Width: 1728, Height: 1117, Fullscreen: true}, saved: panelwindow.NamedWorkspaceGeometry{WindowBounds: returnsTo, Fullscreen: true}},
+		"minimized":  {current: geometry{AbsoluteX: -32000, AbsoluteY: -32000, Width: 160, Height: 28, Minimised: true}, saved: panelwindow.NamedWorkspaceGeometry{WindowBounds: returnsTo, Minimized: true}},
+		// macOS reports a fullscreen window as zoomed too. Reopening it maximized
+		// first would leave fullscreen onto a maximized window.
+		"fullscreen reported as maximized": {current: geometry{Width: 1728, Height: 1117, Fullscreen: true, Maximised: true}, saved: panelwindow.NamedWorkspaceGeometry{WindowBounds: returnsTo, Fullscreen: true}},
+		// Windows reports a minimized window as a sliver far off screen. With no
+		// normal bounds to fall back on, the saved size is still one the window can have.
+		"minimized before it was ever normal": {
+			current: geometry{AbsoluteX: -32000, AbsoluteY: -32000, Width: 160, Height: 28, Minimised: true}, neverMoved: true,
+			saved: panelwindow.NamedWorkspaceGeometry{WindowBounds: panelwindow.WindowBounds{X: -32000, Y: -32000, Width: panelWindowMinWidth, Height: panelWindowMinHeight}, Minimized: true},
+		},
 	}
-	registry.registerPanelLifecycleHooks(window, panel)
-	window.HandleWindowEvent(uint(events.Common.WindowDidMove))
-	require.Eventually(t, func() bool {
-		_, tracked := registry.normalWorkspaceBounds.Load(panel)
-		return tracked
-	}, time.Second, time.Millisecond, "a panel window move is remembered")
-	mu.Lock()
-	current = geometry{Width: 1728, Height: 1080, Maximised: true}
-	mu.Unlock()
-	saved, err := registry.captureNamedPanelWindow(panel)
+	for name, state := range states {
+		t.Run(name, func(t *testing.T) {
+			app := application.New(application.Options{})
+			registry, panel := liveNativeWindow(t, validPanelGroupSnapshot())
+			window := app.Window.NewWithOptions(application.WebviewWindowOptions{Name: panel, Hidden: true})
+			var mu sync.Mutex
+			current := geometry{AbsoluteX: 40, AbsoluteY: 60, Width: 700, Height: 440}
+			registry.windowGeometry = func(string) (geometry, bool) {
+				mu.Lock()
+				defer mu.Unlock()
+				return current, true
+			}
+			registry.registerPanelLifecycleHooks(window, panel)
+			if !state.neverMoved {
+				window.HandleWindowEvent(uint(events.Common.WindowDidMove))
+				require.Eventually(t, func() bool {
+					_, tracked := registry.normalWorkspaceBounds.Load(panel)
+					return tracked
+				}, time.Second, time.Millisecond, "a panel window move is remembered")
+			}
+			mu.Lock()
+			current = state.current
+			mu.Unlock()
+			saved, err := registry.captureNamedPanelWindow(panel)
+			require.NoError(t, err)
+			require.Equal(t, state.saved, saved.Geometry)
+		})
+	}
+}
+
+// The switch is committed once the new windows own the panel directory. A
+// previous window that then fails to close is reported, the new windows stay,
+// and nothing of the previous window is left for a later save or switch to wait on.
+func TestNamedWorkspaceReportsPreviousWindowsThatDidNotClose(t *testing.T) {
+	app := application.New(application.Options{})
+	floating := validPanelGroupSnapshot()
+	backend := &recordingLifecycleBackend{windowClusters: map[string][]string{}}
+	r := NewRegistry(app, backend)
+	source := r.Create(false).Name()
+	// The fixture creates Wails window objects without running the native event loop.
+	r.application = nil
+	r.markWorkspaceReady(source)
+	previous, err := r.panels.BeginOpen(floating)
 	require.NoError(t, err)
-	require.Equal(t, panelwindow.NamedWorkspaceGeometry{
-		WindowBounds: panelwindow.WindowBounds{X: 40, Y: 60, Width: 700, Height: 440},
-		Maximized:    true,
-	}, saved.Geometry)
+	_, err = r.panels.AcknowledgeOpen(previous.WindowName, floating.TransferID)
+	require.NoError(t, err)
+	seedNativeGroup(t, r.workspace, previous.WindowName, floating)
+	newWindow := r.newWindow
+	r.newWindow = func(options application.WebviewWindowOptions) *application.WebviewWindow {
+		window := newWindow(options)
+		require.NoError(t, r.AcknowledgePanelWorkspaceReady(options.Name))
+		return window
+	}
+	r.emitWindowEvent = func(window, event string, data any) bool {
+		switch event {
+		case panelwindow.ApplicationQuitPreflightRequestedEventName:
+			request := data.(panelwindow.ApplicationQuitPreflightRequestedEvent)
+			require.NoError(t, r.AcknowledgeApplicationQuitPreflight(window, request.TransactionID, true))
+		case panelwindow.NamedWorkspaceRestoreRequested:
+			require.NoError(t, r.AcknowledgeNamedWorkspaceRestore(window, ""))
+		}
+		return true
+	}
+	r.showWindow = func(string) bool { return true }
+	r.restoreWindowState = func(string, panelwindow.NamedWorkspaceGeometry) {}
+	var closes []string
+	r.closeWindow = func(window string) bool { closes = append(closes, window); return false }
+
+	err = r.OpenNamedWorkspace(context.Background(), source, panelwindow.NamedWorkspace{
+		AppWindows: []panelwindow.NamedWorkspaceAppWindow{{Geometry: panelwindow.NamedWorkspaceGeometry{
+			WindowBounds: panelwindow.WindowBounds{Width: 1100, Height: 800},
+		}}},
+	})
+
+	require.ErrorContains(t, err, source)
+	require.ErrorContains(t, err, previous.WindowName)
+	require.Equal(t, []string{previous.WindowName, source}, closes, "only the previous windows are asked to close")
+	require.Equal(t, []string{"workspace-2"}, r.lifecycle.Names())
+	require.Same(t, r.workspace, r.workspaceDirectoryFor("workspace-2"))
+	require.Empty(t, r.panels.Names(""))
+	require.Contains(t, backend.releasedPanelReferences, previous.WindowName)
+	require.Nil(t, r.pendingQuit)
+}
+
+// A switch can be cancelled while its last window is approving. Whichever lands
+// first, the windows the switch froze are released and quit is not left blocked.
+func TestCancelledWorkspaceSwitchNeverLeavesItsWindowsFrozen(t *testing.T) {
+	r := NewRegistry(nil, &recordingLifecycleBackend{})
+	name := r.lifecycle.Add()
+	r.markWorkspaceReady(name)
+	var settled atomic.Int64
+	r.emitWindowEvent = func(_, event string, _ any) bool {
+		if event == panelwindow.ApplicationQuitPreflightSettledEventName {
+			settled.Add(1)
+		}
+		return true
+	}
+	for attempt := range 20000 {
+		guard, err := r.beginWorkspaceReplacement(name, []string{name})
+		require.NoError(t, err)
+		start := make(chan struct{})
+		var racing sync.WaitGroup
+		racing.Add(2)
+		go func() {
+			defer racing.Done()
+			<-start
+			// A stale-transaction rejection is the losing approval's expected answer.
+			_ = r.AcknowledgeApplicationQuitPreflight(name, guard.transactionID, true)
+		}()
+		go func() {
+			defer racing.Done()
+			<-start
+			r.endWorkspaceReplacement(guard.transactionID)
+		}()
+		close(start)
+		racing.Wait()
+		r.quitMu.Lock()
+		stuck := r.pendingQuit
+		r.quitMu.Unlock()
+		require.Nilf(t, stuck, "attempt %d left an approved switch pending with nothing to end it", attempt)
+		require.EqualValuesf(t, attempt+1, settled.Load(), "attempt %d must release its window exactly once", attempt)
+	}
+}
+
+// A previous window whose close is refused stays a live window. It is reported
+// as still open and its native window is left alone.
+func TestReplacedAppWindowThatRefusesItsCloseIsReportedAsStillOpen(t *testing.T) {
+	// With no other window or panel left, closing this one would quit, and the
+	// backend refuses the quit.
+	r := NewRegistry(nil, &recordingLifecycleBackend{allowQuit: false})
+	name := r.lifecycle.Add()
+	r.markWorkspaceReady(name)
+	r.emitWindowEvent = func(string, string, any) bool { return true }
+	r.closeWindow = func(window string) bool {
+		t.Errorf("window %q refused its close and must not be closed natively", window)
+		return true
+	}
+	err := r.retireReplacedWindows([]string{name}, nil, nil)
+	require.ErrorContains(t, err, name)
+	require.ErrorContains(t, err, "stays open")
+	require.Equal(t, []string{name}, r.lifecycle.Names())
+	require.False(t, r.consumeAuthorizedClose(name), "no close authorization is left behind")
 }

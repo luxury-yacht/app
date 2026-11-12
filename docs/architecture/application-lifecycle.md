@@ -223,13 +223,28 @@ panel renderers. What can be restored is decided first: saved clusters that are
 no longer available are dropped, and a workspace with nothing left is refused
 before any window runs its guards. Once every window approves, the registry
 replaces the collected preflight, so a late collection timeout cannot release
-the frozen windows while the switch stages. The registry stages destination windows with a separate panel
-directory and admits their saved cluster selections before hydration. Each
-destination acknowledges reconstruction before the registry replaces the live
-directory at its expected revision and closes the old windows. A denied guard,
-failed mount, or changed window inventory releases staging and leaves the
-current arrangement available. Saved geometry uses the same logical work-area
-rules as startup, including the last normal bounds of maximized windows.
+the frozen windows while the switch stages. Ending a preflight checks and
+claims it in one hold of the quit mutex, so an approval racing a cancelled
+switch cannot leave a preflight that nothing releases. The registry stages
+destination windows with a separate panel directory and admits their saved
+cluster selections before hydration. Each destination acknowledges
+reconstruction before the registry replaces the live directory at its expected
+revision. A denied guard, failed mount, or changed window inventory releases
+staging and leaves the current arrangement available.
+
+Replacing the directory commits the switch. The registry then retires every
+previous window and reports the ones that did not close as one error; the new
+windows stay. A native close only queues the close hook, so the registry runs
+an app view's close itself first and treats a view it still tracks as one that
+stays open. A panel window with no native window to close is still removed from
+the registry, because a kept entry would block every later save and switch.
+
+Saved geometry uses the same logical work-area rules as startup. A window is
+saved with the bounds it returns to and with its maximized, fullscreen, and
+minimized state, and both are applied when it reopens. Fullscreen is entered
+after every other window has its state, one window at a time: on macOS a window
+maximized during another's fullscreen transition is left part-way, and a
+fullscreen request made during a transition is dropped.
 
 Saving a workspace asks every ready app and panel window for one reply: its
 view, or the reason it has none. A failure reply ends the capture at once with

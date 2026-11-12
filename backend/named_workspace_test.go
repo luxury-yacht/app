@@ -85,7 +85,7 @@ func TestNamedWorkspaceKeepsEachWindowsLayoutAcrossRestart(t *testing.T) {
 				},
 			},
 			{
-				Geometry: panelwindow.NamedWorkspaceGeometry{WindowBounds: panelwindow.WindowBounds{X: 80, Y: 60, Width: 900, Height: 700}},
+				Geometry: panelwindow.NamedWorkspaceGeometry{WindowBounds: panelwindow.WindowBounds{X: 80, Y: 60, Width: 900, Height: 700}, Fullscreen: true},
 				NamedWorkspaceAppView: panelwindow.NamedWorkspaceAppView{
 					SelectedClusterID: clusterID,
 					ClusterTabs: []NamedWorkspaceClusterTab{
@@ -95,7 +95,7 @@ func TestNamedWorkspaceKeepsEachWindowsLayoutAcrossRestart(t *testing.T) {
 			},
 		},
 		PanelWindows: []NamedWorkspacePanelWindow{{
-			Geometry: panelwindow.NamedWorkspaceGeometry{WindowBounds: panelwindow.WindowBounds{X: -900, Y: 360, Width: 700, Height: 440}},
+			Geometry: panelwindow.NamedWorkspaceGeometry{WindowBounds: panelwindow.WindowBounds{X: -900, Y: 360, Width: 700, Height: 440}, Minimized: true},
 			Group: panelwindow.WorkspaceGroup{
 				ClusterID: clusterID, GroupID: "logs", ActivePanelID: "pod-logs",
 				Tabs: []panelwindow.TabSnapshot{{

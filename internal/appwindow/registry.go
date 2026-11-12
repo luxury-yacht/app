@@ -54,6 +54,7 @@ type Registry struct {
 	focusWindow             func(string) bool
 	emitWindowEvent         func(string, string, any) bool
 	windowGeometry          func(string) (geometry, bool)
+	restoreWindowState      func(string, panelwindow.NamedWorkspaceGeometry)
 	screenWorkAreas         func() []application.Rect
 	closeMu                 sync.Mutex
 	authorizedClose         map[string]struct{}
@@ -95,7 +96,22 @@ type geometry struct {
 	Screen     *application.Screen
 }
 
+// normal reports whether the bounds are the window's own, not those of a
+// maximized, fullscreen, or minimized state.
+func (g geometry) normal() bool {
+	return !g.Maximised && !g.Fullscreen && !g.Minimised
+}
+
 const cascadeOffset = 24
+
+// The smallest size each kind of window can have. Saved bounds are never
+// smaller, whatever a window reported when it was captured.
+const (
+	appWindowMinWidth    = 1100
+	appWindowMinHeight   = 600
+	panelWindowMinWidth  = 450
+	panelWindowMinHeight = 200
+)
 
 func showApplicationWindow(app *application.App, name string) bool {
 	window, ok := app.Window.GetByName(name)
@@ -191,6 +207,60 @@ func bindApplicationWindowOperations(registry *Registry, app *application.App) {
 	}
 	registry.windowGeometry = func(name string) (geometry, bool) {
 		return applicationWindowGeometry(app, name)
+	}
+	registry.restoreWindowState = func(name string, state panelwindow.NamedWorkspaceGeometry) {
+		restoreApplicationWindowState(app, name, state)
+	}
+}
+
+// How long a window gets to finish entering fullscreen before the next one starts.
+const fullscreenTransitionTimeout = 3 * time.Second
+
+// enterFullscreen puts a window into fullscreen and, on macOS, waits for the
+// transition to finish. macOS runs one fullscreen transition at a time and
+// drops a request made while another is running, so windows enter in turn.
+func enterFullscreen(window application.Window) {
+	if runtime.GOOS != "darwin" {
+		window.Fullscreen()
+		return
+	}
+	entered := make(chan struct{}, 1)
+	stop := window.OnWindowEvent(events.Mac.WindowDidEnterFullScreen, func(*application.WindowEvent) {
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
+	})
+	defer stop()
+	window.Fullscreen()
+	select {
+	case <-entered:
+	case <-time.After(fullscreenTransitionTimeout):
+	}
+}
+
+// restoreApplicationWindowState puts a window back into the state it was saved
+// in. Minimise comes last so a maximized window that was minimized returns to
+// its maximized size when it is brought back.
+func restoreApplicationWindowState(app *application.App, name string, state panelwindow.NamedWorkspaceGeometry) {
+	window, ok := app.Window.GetByName(name)
+	if !ok {
+		return
+	}
+	if state.Maximized {
+		window.Maximise()
+	}
+	if state.Fullscreen {
+		enterFullscreen(window)
+	}
+	if state.Maximized || state.Fullscreen {
+		// Wails drops the minimum size to enter either state and puts it back only
+		// through its own exit, which the title bar and window manager never call.
+		// These windows have no maximum size for the minimum to conflict with.
+		window.EnableSizeConstraints()
+	}
+	if state.Minimized {
+		window.Minimise()
 	}
 }
 
@@ -436,8 +506,9 @@ func (r *Registry) authorizeClose(name string) {
 // accepts the close, discard the unused authorization before returning.
 func (r *Registry) closeAuthorizedWindow(name string) bool {
 	r.authorizeClose(name)
+	// No native window answers only when there is none, so its bounds go either way.
+	r.normalWorkspaceBounds.Delete(name)
 	if r.closeWindow(name) {
-		r.normalWorkspaceBounds.Delete(name)
 		return true
 	}
 	r.consumeAuthorizedClose(name)
@@ -794,13 +865,23 @@ func (r *Registry) RequestPanelTabClose(windowName, panelID string) error {
 // removal. Native destruction precedes removal of the panel directory entries
 // and release of its runtime references.
 func (r *Registry) AcknowledgePanelWindowClose(windowName string) error {
+	return r.closePanelWindow(windowName, false)
+}
+
+// closePanelWindow closes a panel window and releases what the registry holds
+// for it. With abandon, the registry gives the window up even when no native
+// window answers the close, and still reports that none did: the workspace
+// that replaced it is already live, so a kept entry would only block later
+// saves and switches.
+func (r *Registry) closePanelWindow(windowName string, abandon bool) error {
 	r.panelTransferMu.Lock()
 	defer r.panelTransferMu.Unlock()
 	descriptor, err := r.panels.Descriptor(windowName)
 	if err != nil {
 		return err
 	}
-	if !r.closeAuthorizedWindow(windowName) {
+	closed := r.closeAuthorizedWindow(windowName)
+	if !closed && !abandon {
 		return fmt.Errorf("panel window %q is not available", windowName)
 	}
 	r.failPanelTabTransfersForWindow(windowName, "panel window closed during tab transfer")
@@ -814,6 +895,9 @@ func (r *Registry) AcknowledgePanelWindowClose(windowName string) error {
 	}
 	r.emitPanelClosed(descriptor)
 	r.emitWorkspaceChanged(descriptor.ClusterID)
+	if !closed {
+		return fmt.Errorf("panel window %q had no native window to close", windowName)
+	}
 	return nil
 }
 
@@ -864,8 +948,11 @@ func (r *Registry) AcknowledgeApplicationQuitPreflight(
 			participants:  pending.participants,
 			replacement:   pending.replacement,
 		}
-		r.quitMu.Unlock()
+		// Sent before the unlock: a cancellation can claim the approved preflight
+		// only afterwards, so its own answer can never fill the buffer first and
+		// leave this send with no reader.
 		pending.replacement <- true
+		r.quitMu.Unlock()
 		return nil
 	}
 	// Replace the collection phase so an already-running collection timeout
@@ -919,10 +1006,8 @@ func (r *Registry) handleClosing(event *application.WindowEvent, name string) {
 		r.retainClosedWorkspace(name)
 		return
 	}
-	r.quitMu.Lock()
-	pending := r.pendingQuit
-	r.quitMu.Unlock()
-	r.cancelApplicationQuitPreflight(pending)
+	// The refused quit ends whichever preflight is pending, approved or not.
+	r.cancelPendingApplicationQuitPreflight(func(*applicationQuitPreflight) bool { return true })
 	r.lifecycle.CancelClose(name)
 	if event != nil {
 		event.Cancel()
@@ -1015,8 +1100,17 @@ func (r *Registry) expireApplicationQuitPreflight(pending *applicationQuitPrefli
 }
 
 func (r *Registry) cancelApplicationQuitPreflight(pending *applicationQuitPreflight) {
+	r.cancelPendingApplicationQuitPreflight(func(current *applicationQuitPreflight) bool { return current == pending })
+}
+
+// cancelPendingApplicationQuitPreflight ends the pending preflight if owns
+// accepts it. The check and the claim share one quitMu hold: an approval that
+// arrives between them would install an object the caller never saw, and its
+// renderers would stay frozen with nothing left to release them.
+func (r *Registry) cancelPendingApplicationQuitPreflight(owns func(*applicationQuitPreflight) bool) {
 	r.quitMu.Lock()
-	if pending == nil || r.pendingQuit != pending {
+	pending := r.pendingQuit
+	if pending == nil || !owns(pending) {
 		r.quitMu.Unlock()
 		return
 	}
@@ -1154,8 +1248,8 @@ func panelWindowOptionsForPlatform(
 	}
 	options.Width = 500
 	options.Height = 400
-	options.MinWidth = 450
-	options.MinHeight = 200
+	options.MinWidth = panelWindowMinWidth
+	options.MinHeight = panelWindowMinHeight
 	options.Hidden = true
 	if initialBounds != nil {
 		options.Width = max(initialBounds.Width, options.MinWidth)
@@ -1196,8 +1290,8 @@ func windowOptionsForPlatform(name, goos string) application.WebviewWindowOption
 	options.Title = "Luxury Yacht"
 	options.Width = 1200
 	options.Height = 800
-	options.MinWidth = 1100
-	options.MinHeight = 600
+	options.MinWidth = appWindowMinWidth
+	options.MinHeight = appWindowMinHeight
 	options.Hidden = goos != "linux"
 	return options
 }

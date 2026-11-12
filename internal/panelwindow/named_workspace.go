@@ -74,9 +74,14 @@ type NamedWorkspaceCaptureRequest struct {
 	WindowName string `json:"windowName"`
 }
 
+// NamedWorkspaceGeometry is where a window sits in its normal state, and the
+// state it was saved in. Minimized combines with either of the others; a
+// fullscreen window is not also recorded as maximized.
 type NamedWorkspaceGeometry struct {
 	WindowBounds
-	Maximized bool `json:"maximized"`
+	Maximized  bool `json:"maximized"`
+	Fullscreen bool `json:"fullscreen"`
+	Minimized  bool `json:"minimized"`
 }
 
 func (d *WorkspaceDirectory) WorkspaceCaptureRevision() (uint64, error) {

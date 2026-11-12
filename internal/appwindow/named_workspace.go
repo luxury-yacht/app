@@ -140,7 +140,7 @@ func (r *Registry) assembleNamedWorkspace(apps, panels []string, views map[strin
 func (r *Registry) readNamedWorkspaceWindows(apps, panels []string, views map[string]panelwindow.NamedWorkspaceAppView) (panelwindow.NamedWorkspace, error) {
 	workspace := panelwindow.NamedWorkspace{SchemaVersion: panelwindow.NamedWorkspaceSchemaVersion}
 	for _, name := range apps {
-		geometry, err := r.namedWorkspaceGeometry(name)
+		geometry, err := r.namedWorkspaceGeometry(name, appWindowMinWidth, appWindowMinHeight)
 		if err != nil {
 			return panelwindow.NamedWorkspace{}, err
 		}
@@ -197,27 +197,40 @@ func (r *Registry) captureNamedPanelWindow(name string) (panelwindow.NamedWorksp
 	if err != nil || descriptor.State != PanelWindowStateLive {
 		return panelwindow.NamedWorkspacePanelWindow{}, fmt.Errorf("panel window %q changed during capture", name)
 	}
-	geometry, err := r.namedWorkspaceGeometry(name)
+	geometry, err := r.namedWorkspaceGeometry(name, panelWindowMinWidth, panelWindowMinHeight)
 	if err != nil {
 		return panelwindow.NamedWorkspacePanelWindow{}, err
 	}
 	return panelwindow.NamedWorkspacePanelWindow{Geometry: geometry, Group: descriptor.Group}, nil
 }
 
-func (r *Registry) namedWorkspaceGeometry(name string) (panelwindow.NamedWorkspaceGeometry, error) {
+// namedWorkspaceGeometry reads the bounds a window returns to and the state it
+// is in. minWidth and minHeight are the smallest size that kind of window can have.
+func (r *Registry) namedWorkspaceGeometry(name string, minWidth, minHeight int) (panelwindow.NamedWorkspaceGeometry, error) {
 	bounds, ok := r.windowGeometry(name)
 	if !ok {
 		return panelwindow.NamedWorkspaceGeometry{}, fmt.Errorf("window %q has no usable geometry", name)
 	}
 	normal := panelwindow.WindowBounds{X: bounds.AbsoluteX, Y: bounds.AbsoluteY, Width: bounds.Width, Height: bounds.Height}
-	if bounds.Maximised {
+	// Out of its normal state a window reports that state's bounds, so the
+	// bounds it returns to come from the last time it was normal.
+	if !bounds.normal() {
 		if previous, found := r.normalWorkspaceBounds.Load(name); found {
 			normal = previous.(panelwindow.WindowBounds)
 		}
 	}
+	// A window that was never seen in its normal state has only what it reports
+	// now, and a minimized window can report a sliver. Reopening at that size
+	// would also lower the window's own minimum.
+	normal.Width, normal.Height = max(normal.Width, minWidth), max(normal.Height, minHeight)
 	return panelwindow.NamedWorkspaceGeometry{
 		WindowBounds: normal,
-		Maximized:    bounds.Maximised,
+		// A fullscreen window is not also saved as maximized: macOS reports it as
+		// both, and reopening it maximized first would leave fullscreen onto a
+		// maximized window instead of the bounds above.
+		Maximized:  bounds.Maximised && !bounds.Fullscreen,
+		Fullscreen: bounds.Fullscreen,
+		Minimized:  bounds.Minimised,
 	}, nil
 }
 
@@ -232,7 +245,7 @@ func (r *Registry) trackNamedWorkspaceBounds(window *application.WebviewWindow, 
 // normal state, read from the same geometry a capture saves.
 func (r *Registry) rememberNamedWorkspaceBounds(name string) {
 	bounds, ok := r.windowGeometry(name)
-	if !ok || bounds.Maximised || bounds.Fullscreen || bounds.Minimised {
+	if !ok || !bounds.normal() {
 		return
 	}
 	r.normalWorkspaceBounds.Store(name, panelwindow.WindowBounds{X: bounds.AbsoluteX, Y: bounds.AbsoluteY, Width: bounds.Width, Height: bounds.Height})

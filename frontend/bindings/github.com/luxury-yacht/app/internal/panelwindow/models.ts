@@ -105,12 +105,19 @@ export interface NamedWorkspaceDockedGroup {
     "maximized": boolean;
 }
 
+/**
+ * NamedWorkspaceGeometry is where a window sits in its normal state, and the
+ * state it was saved in. Minimized combines with either of the others; a
+ * fullscreen window is not also recorded as maximized.
+ */
 export interface NamedWorkspaceGeometry {
     "x": number;
     "y": number;
     "width": number;
     "height": number;
     "maximized": boolean;
+    "fullscreen": boolean;
+    "minimized": boolean;
 }
 
 export interface NamedWorkspaceGlobalView {

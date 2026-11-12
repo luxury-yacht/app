@@ -38,7 +38,11 @@ drives the real WKWebView window. Builds without the tag do not contain it.
 
 1. Ask the user which cluster the app may reach. Launching reconnects the
    clusters saved as selected in the app's settings, and the app keeps a live
-   connection while you work.
+   connection while you work. For a check that needs no cluster, build the
+   binary to a scratch path
+   (`wails3 task darwin:build DEV=true EXTRA_TAGS=mcp OUTPUT=<path>`) and run
+   it with `HOME` set to an empty scratch directory: it then reads no saved
+   settings and finds no kubeconfigs, and `bin/` keeps its untagged build.
 2. Start the app with the tag and a fresh random bearer token (for example
    from `openssl rand -hex 24`):
 
@@ -83,6 +87,23 @@ drives the real WKWebView window. Builds without the tag do not contain it.
 
    Input is synthetic DOM events dispatched in the page (`isTrusted` is
    false), not OS input.
+
+   `call_bound_method` imports a second copy of the Wails runtime into the
+   page, and that copy takes over the page's event dispatch. The window then
+   stops reacting to backend events: menu commands, workspace capture, and the
+   quit preflight. To call a bound method in a window you still need, use
+   `js_eval` and keep the page's handlers:
+
+   ```js
+   const saved = { ...window._wails };
+   const runtime = await import('/wails/runtime.js');
+   Object.assign(window._wails, saved);
+   return await runtime.Call.ByName('<package>.DesktopService.<Method>', ...args);
+   ```
+
+   The native macOS menu cannot be driven. `emit_event` with a workspace
+   command name such as `open-workspace` opens that command's UI in every app
+   window.
 5. For pixel screenshots, use `screencapture -x -o -l <CGWindowID>`. Get the
    ID from `CGWindowListCopyWindowInfo` (owner `Luxury Yacht`). The MCP
    animated cursor is drawn in the page and shows in screenshots. Add

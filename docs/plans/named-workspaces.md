@@ -85,3 +85,26 @@ sessions, drain jobs, and unsaved editor content stay with their live owners.
   `TestNamedWorkspaceRenameMovesTheSnapshotWithoutOverwritingAnother` and the
   Command Palette test cover renaming one, including the refusal to take another
   workspace's name. None of these were re-run in the native window.
+- **Second review (automated only).**
+  `TestNamedWorkspaceReportsPreviousWindowsThatDidNotClose` covers a committed
+  switch whose previous windows have no native window to close, and
+  `TestReplacedAppWindowThatRefusesItsCloseIsReportedAsStillOpen` covers one
+  that refuses.
+  `TestCancelledWorkspaceSwitchNeverLeavesItsWindowsFrozen` races a cancelled
+  switch against its last approval.
+  `TestPanelWindowOutOfItsNormalStateIsSavedWithTheBoundsItReturnsTo` covers
+  saving a maximized, fullscreen, or minimized window, and the replace test
+  checks each restored window is given its saved state.
+- **Window state on macOS (native).** In an isolated development build with no
+  cluster, three app windows were saved fullscreen, minimized, and maximized.
+  The minimized window and the one in its own fullscreen space both answered
+  the capture. The saved file held each window's normal bounds and its state.
+  Reopening restored all three states, and leaving each state returned the
+  window to exactly its saved bounds. Saving the reopened workspace again kept
+  the same bounds. Two findings came from this run and were fixed: a window
+  maximized while another entered fullscreen was left part-way, so fullscreen
+  is now entered last, and of two windows asked to enter fullscreen together
+  only one did, so they now enter in turn. Both were re-run after the fix.
+  Rename and delete were exercised through the Open Workspace dialog. Not
+  exercised: resizing below the minimum size after leaving fullscreen, the
+  failed-close paths, Windows, and Linux.
