@@ -806,6 +806,7 @@ func TestRegistryFocusesAuthorizesAndClosesAnOwnedPanelWindow(t *testing.T) {
 	registry.showWindow = func(string) bool { return true }
 	_, err = registry.AcknowledgePanelWindowReady(descriptor.WindowName, snapshot.TransferID)
 	require.NoError(t, err)
+	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(descriptor.WindowName))
 
 	var routed []string
 	var focused []string
@@ -1382,13 +1383,7 @@ func (b *recordingLifecycleBackend) NamedWorkspaceAvailableClusters() ([]string,
 // readyAppWindow marks an app window whose native runtime is up and whose
 // renderer has acknowledged that it can answer registry requests.
 func readyAppWindow(r *Registry, name string) {
-	r.markWorkspaceReady(name)
-	r.closeMu.Lock()
-	defer r.closeMu.Unlock()
-	if r.panelWorkspaceReady == nil {
-		r.panelWorkspaceReady = make(map[string]struct{})
-	}
-	r.panelWorkspaceReady[name] = struct{}{}
+	r.markRendererReady(name)
 }
 
 func (b *recordingLifecycleBackend) PersistRestartSelection() { b.restartSelectionsPersisted++ }

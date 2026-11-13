@@ -316,6 +316,12 @@ is reloaded, recovered, or closed. The quit preflight asks the ready windows
 and leaves the others out, since a renderer that cannot answer has no close
 guard to run.
 
+Closing a window or a cluster follows the same rule. An app window or a live
+panel window whose renderer is not ready closes without being asked, so the
+close button of a window showing its crash screen works. A cluster close asks
+only the ready panel windows of that cluster and closes them all. A panel
+window that loses readiness after a cluster close asked it cancels that close.
+
 After a switch the clusters the new workspace holds become the selection the
 next launch opens (`PersistRestartSelection`), including when the workspace is
 made of floating panel windows alone. With nothing open, the previous selection
@@ -328,9 +334,9 @@ before revisions existed get one the first time they are listed.
 
 | Close | Wails surface | Backend contract |
 | --- | --- | --- |
-| App window | Cancellable `events.Common.WindowClosing` starts a renderer preflight | Denial keeps it open. Releases only that view's cluster tabs and foreground demand; docked panel identities stay in the directory; floating panels stay live. Cancels the transfers it takes part in and declines every directory move addressed to it. |
+| App window | Cancellable `events.Common.WindowClosing` starts a renderer preflight when the renderer is ready | Denial keeps it open. Releases only that view's cluster tabs and foreground demand; docked panel identities stay in the directory; floating panels stay live. Cancels the transfers it takes part in and declines every directory move addressed to it. |
 | Cluster tab | `KubeconfigContext` preflight calls the registry's cluster-panel close transaction | Requests and acknowledgements carry cluster, window, and transaction identity; denial, cancellation, unavailable windows, or changed participants abort. |
-| Panel window | Cancellable native hook sends a guard request to that renderer | Closes through the registry, removes its shared entries, releases the native and any unused shared-panel reference; failure keeps the source. |
+| Panel window | Cancellable native hook sends a guard request to that renderer when it is ready | Closes through the registry, removes its shared entries, releases the native and any unused shared-panel reference; failure keeps the source. |
 | Application quit | `application.Options.ShouldQuit` asks every ready app and panel renderer to acknowledge one preflight | Unanimous approval requests Wails Quit; its `ShouldQuit` reentry runs the once-only persistence flush before teardown. Denial, timeout, delivery failure, or rejected handoff cancels; settlement reaches the original participants without holding the quit mutex. |
 
 Renderer guard and flush sequences:

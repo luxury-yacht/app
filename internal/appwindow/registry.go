@@ -63,7 +63,6 @@ type Registry struct {
 	screenWorkAreas              func() []application.Rect
 	closeMu                      sync.Mutex
 	authorizedClose              map[string]struct{}
-	workspaceReady               map[string]struct{}
 	panelWorkspaceReady          map[string]struct{}
 	queuedWorkspaceEvents        map[string][]workspaceWindowEvent
 	panelOpenTimeout             time.Duration
@@ -301,7 +300,6 @@ func NewRegistry(
 		panels:                       newPanelIndex(),
 		workspace:                    panelwindow.NewWorkspaceDirectory(),
 		authorizedClose:              make(map[string]struct{}),
-		workspaceReady:               make(map[string]struct{}),
 		panelOpenTimeout:             15 * time.Second,
 		panelDockTimeout:             15 * time.Second,
 		clusterTransferTimeout:       15 * time.Second,
@@ -502,7 +500,6 @@ func (r *Registry) registerLifecycleHooks(
 		if !r.restoringWindow(name) {
 			r.backend.WindowRuntimeReady(name, restoreGeometry)
 		}
-		r.markWorkspaceReady(name)
 		r.rememberNamedWorkspaceBounds(name)
 	})
 	window.OnWindowEvent(events.Common.WindowFocus, func(*application.WindowEvent) {
@@ -559,26 +556,9 @@ func (r *Registry) consumeAuthorizedClose(name string) bool {
 	return true
 }
 
-func (r *Registry) markWorkspaceReady(name string) {
-	r.closeMu.Lock()
-	defer r.closeMu.Unlock()
-	if r.workspaceReady == nil {
-		r.workspaceReady = make(map[string]struct{})
-	}
-	r.workspaceReady[name] = struct{}{}
-}
-
-func (r *Registry) isWorkspaceReady(name string) bool {
-	r.closeMu.Lock()
-	defer r.closeMu.Unlock()
-	_, ready := r.workspaceReady[name]
-	return ready
-}
-
 func (r *Registry) forgetWorkspaceReady(name string) {
 	r.closeMu.Lock()
 	defer r.closeMu.Unlock()
-	delete(r.workspaceReady, name)
 	delete(r.panelWorkspaceReady, name)
 	delete(r.queuedWorkspaceEvents, name)
 }
@@ -593,6 +573,12 @@ func (r *Registry) handlePanelClosingEvent(event *application.WindowEvent, name 
 	}
 	if event != nil {
 		event.Cancel()
+	}
+	// A live window whose renderer cannot answer has no close guard to run.
+	// It is closed the way its renderer would close it after approving.
+	if r.panels.State(name) == PanelWindowStateLive && !r.rendererReady(name) {
+		r.reportPanelLifecycleError(r.AcknowledgePanelWindowClose(name), "close a panel window whose renderer cannot answer")
+		return
 	}
 	r.emitWindowEvent(name, panelwindow.WindowCloseRequestedEventName, panelwindow.WindowCloseRequestedEvent{
 		WindowName: name,
@@ -907,14 +893,23 @@ func (r *Registry) RequestPanelTabClose(windowName, panelID string) error {
 // removal. Native destruction precedes removal of the panel directory entries
 // and release of its runtime references.
 func (r *Registry) AcknowledgePanelWindowClose(windowName string) error {
+	open, err := r.closePanelWindow(windowName)
+	if err == nil && !open {
+		return fmt.Errorf("panel window %q is not live", windowName)
+	}
+	return err
+}
+
+// closePanelWindow closes a panel window and reports whether it was open.
+func (r *Registry) closePanelWindow(windowName string) (bool, error) {
 	r.panelTransferMu.Lock()
 	defer r.panelTransferMu.Unlock()
 	descriptor, err := r.panels.Descriptor(windowName)
 	if err != nil {
-		return err
+		return false, nil
 	}
 	if !r.closeAuthorizedWindow(windowName) {
-		return fmt.Errorf("panel window %q is not available", windowName)
+		return true, fmt.Errorf("panel window %q is not available", windowName)
 	}
 	r.failPanelTabTransfersForWindow(windowName, "panel window closed during tab transfer")
 	r.workspaceMu.Lock()
@@ -923,11 +918,11 @@ func (r *Registry) AcknowledgePanelWindowClose(windowName string) error {
 	r.workspaceMu.Unlock()
 	r.releaseUnusedPanelWorkspace(descriptor.ClusterID)
 	if err := r.releaseNativePanelReference(windowName); err != nil {
-		return err
+		return true, err
 	}
 	r.emitPanelClosed(descriptor)
 	r.emitWorkspaceChanged(descriptor.ClusterID)
-	return nil
+	return true, nil
 }
 
 func (r *Registry) AcknowledgeWorkspaceWindowClose(windowName string) error {
@@ -1014,10 +1009,12 @@ func cancelWindowEvent(event *application.WindowEvent) {
 }
 
 // refuseUnauthorizedAppClose keeps an app window open when the registry did not
-// ask for the close: a ready window is asked to run its close guards first. It
-// reports whether the close was refused.
+// ask for the close: a window whose renderer can answer is asked to run its
+// close guards first. One that cannot (still loading, or showing its crash
+// screen) has no guard to run and closes. It reports whether the close was
+// refused.
 func (r *Registry) refuseUnauthorizedAppClose(event *application.WindowEvent, name string) bool {
-	if !r.isWorkspaceReady(name) {
+	if !r.rendererReady(name) {
 		return false
 	}
 	cancelWindowEvent(event)
@@ -1149,7 +1146,8 @@ func (r *Registry) WithdrawRendererReady(name string) error {
 
 // rendererLost records that a window's renderer can no longer answer, and ends
 // what was waiting for its answer now instead of at a deadline: a capture
-// fails, and a quit or switch preflight is cancelled as a timeout would.
+// fails, and a quit preflight, switch preflight or cluster close is cancelled
+// as a timeout would.
 func (r *Registry) rendererLost(name string) {
 	r.forgetRendererReady(name)
 	r.failCaptureOfClosedWindow(name)
@@ -1157,6 +1155,7 @@ func (r *Registry) rendererLost(name string) {
 		_, waiting := pending.waiting[name]
 		return waiting
 	})
+	r.cancelClusterPanelClosesWaitingOn(name)
 }
 
 // forgetRendererOnPageLoad clears a window's readiness whenever its page

@@ -566,10 +566,10 @@ func oneAppWindowWorkspace(clusters ...string) panelwindow.NamedWorkspace {
 // ask nobody.
 func TestSaveAndSwitchWaitForARendererThatCanAnswer(t *testing.T) {
 	r := NewRegistry(nil, &recordingLifecycleBackend{windowClusters: map[string][]string{}})
-	ready, opening := r.lifecycle.Add(), r.lifecycle.Add()
+	ready := r.lifecycle.Add()
+	// A second native window exists, but its renderer has not subscribed yet.
+	r.lifecycle.Add()
 	readyAppWindow(r, ready)
-	// The native window exists, but its renderer has not subscribed yet.
-	r.markWorkspaceReady(opening)
 	r.windowGeometry = func(string) (geometry, bool) { return geometry{Width: 1300, Height: 700}, true }
 	r.emitWindowEvent = func(window, event string, _ any) bool {
 		t.Errorf("window %q was sent %q before every renderer could answer", window, event)

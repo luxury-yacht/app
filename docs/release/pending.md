@@ -5,3 +5,7 @@
   - A workspace keeps each window's position and maximized, minimized, or fullscreen state, along with its cluster tabs, views, table filters, and docked and floating panels.
   - Opening a workspace replaces the current windows. Unsaved edits stop the switch, and saved clusters that are no longer available are listed.
   - Saved workspaces can be replaced, renamed, or deleted.
+
+### Fixed
+
+- A window showing the "Application Error" screen can be closed, and no longer delays closing a cluster or quitting.
