@@ -7,9 +7,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Staging a workspace switch admits its clusters so the new windows can mount,
-// but the switch can still be abandoned. What the next launch opens must not
-// change until the switch has committed.
+// A workspace switch claims the saved clusters before it closes anything, and
+// can still be refused after that. What the next launch opens must not change
+// until the switch has closed the previous windows.
 func TestNamedWorkspaceSeedLeavesTheRestartSelectionUntilTheSwitchCommits(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newWorkspaceCoordinatorTestFixture(t)
@@ -31,7 +31,7 @@ func TestNamedWorkspaceSeedLeavesTheRestartSelectionUntilTheSwitchCommits(t *tes
 
 	// "stage" has no owner yet, so the seed goes through the selection mutation.
 	require.NoError(t, app.Lifecycle.SeedNamedWorkspaceWindow("restore", []string{"config:prod", "config:stage"}, ""))
-	require.ElementsMatch(t, []string{"/tmp/config:prod", "/tmp/config:stage"}, w.GetSelectedKubeconfigs(), "the staged cluster is admitted")
+	require.ElementsMatch(t, []string{"/tmp/config:prod", "/tmp/config:stage"}, w.GetSelectedKubeconfigs(), "the saved cluster is claimed")
 	require.Equal(t, current, app.Preferences.SelectedKubeconfigs(), "an abandoned switch must not change the next launch")
 
 	app.Lifecycle.PersistRestartSelection()

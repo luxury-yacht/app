@@ -75,15 +75,30 @@ sessions, drain jobs, and unsaved editor content stay with their live owners.
   a docked Node panel, a floating Node panel, and independent Nodes filters.
   A dirty CodeMirror YAML draft denied a native switch and remained in the same
   window after the denial. The draft was never submitted.
-- **Native placement on macOS.** The restored normal windows matched their
+- **Native placement on macOS (staged design).** The restored normal windows matched their
   saved bounds. The maximized window recovered its original normal bounds after
   unmaximizing. An isolated fixture with coordinates outside the available work
   areas verified the fallback placement on a real native window. A physical
   display disconnect and Windows and Linux placement were not exercised.
-- **Unavailable context.** The final isolated build reopened the available
+- **Unavailable context (staged design).** The final isolated build reopened the available
   clusters and named the missing saved context in a visible warning.
-- **Simple switch (automated only).** The earlier native runs of open and
-  switch exercised the staged design and do not cover this one.
+- **Simple switch on macOS (native, no cluster).** In an isolated development
+  build, a one-window desktop opened a saved three-window workspace. The first
+  saved window existed, hidden, while the previous window was still open; the
+  previous window then closed, and within about 0.6 seconds all three saved
+  windows were present fullscreen, minimized, and maximized. The app did not
+  quit in between. Leaving each state returned the window to exactly its saved
+  bounds. A second switch from a restored window opened a workspace with two
+  fullscreen windows and a maximized one, and a third was started from the Open
+  Workspace dialog. Workspaces saved by the earlier build were given revisions
+  on first listing and kept them. A new save, a replace, and the refusal of
+  replace, rename, delete, and open with an out-of-date revision behaved as
+  designed, and the refused open left the windows untouched. Rename and delete
+  were exercised through the dialog. File > New Window worked after a switch,
+  and the app quit cleanly. Not exercised: cluster tabs, docked or floating
+  panels, a saved window that fails to load, the warnings, Windows, and Linux.
+- **Simple switch (automated).** The earlier native runs of open and switch
+  marked "staged design" below do not cover this one.
   `TestSwitchClosesThePreviousWindowsThenShowsTheSavedOnes` covers the order:
   saved windows created hidden, previous windows closed, saved windows shown,
   previous clusters released, restart selection written.
@@ -91,6 +106,8 @@ sessions, drain jobs, and unsaved editor content stay with their live owners.
   directory and a cancelled request.
   `TestSavedWindowsThatDoNotLoadAreShownAndReported` covers a window that fails
   to load, one that never answers, and one that cannot be created.
+  `TestRestoredPanelWindowThatNeverLoadsIsClosed`,
+  `TestRestoredWindowIsShownByTheSwitchNotByItsRuntime`,
   `TestRestoredWindowOwnsItsDockedPanelsLikeAnyOtherWindow`,
   `TestNewWindowIsRefusedDuringASwitch`,
   `TestClosingEverySavedWindowDuringTheSwitchQuitsTheApp`, and the warning tests
@@ -98,6 +115,7 @@ sessions, drain jobs, and unsaved editor content stay with their live owners.
   runs against the real workspace coordinator.
 - **Save (automated only).** `TestCaptureEndsWhenAWindowClosesBeforeAnswering`,
   `TestSaveAndSwitchWaitForAClusterViewMoveToFinish`,
+  `TestCaptureRefusesAClusterViewMoveThatStartsWhileItWaits`,
   `TestSaveAndSwitchWaitForARendererThatCanAnswer`, and
   `TestCaptureNamedWorkspaceReportsAWindowsFailure` cover admission and early
   exits. `TestNamedWorkspaceChangesApplyOnlyToTheListedSnapshot` and
@@ -107,7 +125,7 @@ sessions, drain jobs, and unsaved editor content stay with their live owners.
   readiness is still counted as ready, so save, switch, and quit wait out their
   deadlines until it returns. A panel window that is live but not yet mounted
   denies a switch or quit instead of answering. Both predate this design.
-- **Window state on macOS (native).** In an isolated development build with no
+- **Window state on macOS (native, staged design).** In an isolated development build with no
   cluster, three app windows were saved fullscreen, minimized, and maximized.
   The minimized window and the one in its own fullscreen space both answered
   the capture. The saved file held each window's normal bounds and its state.

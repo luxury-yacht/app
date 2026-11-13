@@ -351,8 +351,8 @@ func (d *WorkspaceDirectory) RemoveCluster(clusterID string) {
 		}
 	}
 	// A removal changes which clusters the workspace can show even when this
-	// cluster had no panels, so anything staged against the earlier revision,
-	// such as a saved workspace being opened, must not commit.
+	// cluster had no panels, so anything decided at the earlier revision, such as
+	// a saved workspace about to take the directory, must not go ahead.
 	d.revision++
 	for id, reserved := range d.reservations {
 		if reserved == clusterID {

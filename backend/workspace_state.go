@@ -369,7 +369,8 @@ func appendWorkspaceSelection(union *[]string, wanted, seen map[string]struct{},
 
 // PersistRestartSelection writes the clusters the next launch opens. A workspace
 // switch calls it once it has committed and retired the previous windows; the
-// selection changes it made while staging were deliberately not written.
+// selection changes it made while claiming the saved clusters were deliberately
+// not written.
 func (a *WorkspaceCoordinator) PersistRestartSelection() {
 	if a == nil {
 		return

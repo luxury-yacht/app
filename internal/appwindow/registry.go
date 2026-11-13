@@ -539,9 +539,8 @@ func (r *Registry) authorizeClose(name string) {
 func (r *Registry) closeAuthorizedWindow(name string) bool {
 	r.failCaptureOfClosedWindow(name)
 	r.authorizeClose(name)
-	// No native window answers only when there is none, so its bounds go either way.
-	r.normalWorkspaceBounds.Delete(name)
 	if r.closeWindow(name) {
+		r.normalWorkspaceBounds.Delete(name)
 		return true
 	}
 	r.consumeAuthorizedClose(name)
@@ -962,7 +961,7 @@ func (r *Registry) AcknowledgeApplicationQuitPreflight(
 	}
 	if pending.replacement != nil {
 		// As for quit below: a collection timeout already waiting on quitMu must
-		// not release the frozen renderers while the switch stages.
+		// not release the frozen renderers while the switch runs.
 		r.pendingQuit = &applicationQuitPreflight{
 			transactionID: pending.transactionID,
 			participants:  pending.participants,

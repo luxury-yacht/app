@@ -230,8 +230,9 @@ func TestNamedWorkspaceRejectsIncompleteOrMismatchedCapture(t *testing.T) {
 			// An invalid first capture must never publish a workspace that can be opened.
 			test.change(&workspace)
 			require.Error(t, store.SaveNamedWorkspace(name, workspace, false, ""))
-			_, err := store.GetNamedWorkspace(name, "")
-			require.Error(t, err)
+			saved, err := store.ListNamedWorkspaces()
+			require.NoError(t, err)
+			require.Empty(t, saved)
 		})
 	}
 }

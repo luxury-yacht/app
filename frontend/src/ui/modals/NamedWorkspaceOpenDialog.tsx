@@ -41,8 +41,13 @@ export function NamedWorkspaceOpenDialog() {
       .then((saved) => {
         const list = saved ?? [];
         setEntries(list);
-        const kept = list.some((entry) => entry.name === preferred);
-        setSelected(preferred && kept ? preferred : (list[0]?.name ?? ''));
+        // After a change, keep what the user was acting on. If it is gone,
+        // select nothing: a retry must not land on a different workspace.
+        if (preferred === undefined) {
+          setSelected(list[0]?.name ?? '');
+        } else {
+          setSelected(list.some((entry) => entry.name === preferred) ? preferred : '');
+        }
         return list;
       })
       .catch((error) => {
@@ -341,6 +346,11 @@ function SavedWorkspacePicker({
           onChange={(event) => onSelect(event.target.value)}
           disabled={disabled}
         >
+          {selected === '' ? (
+            <option value="" disabled>
+              Choose a workspace
+            </option>
+          ) : null}
           {names.map((name) => (
             <option key={name} value={name}>
               {name}

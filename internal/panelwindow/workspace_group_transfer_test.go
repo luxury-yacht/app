@@ -171,26 +171,37 @@ func TestWorkspaceCaptureWaitsForThePanelMoveToSettle(t *testing.T) {
 	require.Empty(t, directory.DockedGroups("staging", "app-a"))
 }
 
-func TestNamedWorkspaceCommitKeepsOldPanelsUntilValidatedPlacementsAreReady(t *testing.T) {
-	current, staged := NewWorkspaceDirectory(), NewWorkspaceDirectory()
+// Opening a saved workspace closes every panel of the current one in a single
+// step, and only if nothing changed since the windows agreed to close. The
+// saved panels are then placed for the windows that will show them.
+func TestClearingForANamedWorkspaceClosesEveryPanelAtTheExpectedRevision(t *testing.T) {
+	directory := NewWorkspaceDirectory()
 	kept, dropped := workspaceTab("production", "api"), workspaceTab("production", "worker")
-	openDocked(t, current, "app-a", kept, dropped)
+	openDocked(t, directory, "app-a", kept, dropped)
 	var removed []PanelKey
-	current.SetPanelRemovalHandler(func(keys []PanelKey) { removed = append(removed, keys...) })
-	revision, err := current.WorkspaceCaptureRevision()
+	directory.SetPanelRemovalHandler(func(keys []PanelKey) { removed = append(removed, keys...) })
+	revision, err := directory.WorkspaceCaptureRevision()
 	require.NoError(t, err)
-	group := WorkspaceGroup{ClusterID: "production", GroupID: "floating", Tabs: []TabSnapshot{kept}, ActivePanelID: kept.PanelID}
-	require.NoError(t, staged.StageNamedWorkspaceGroup("panel-2", PanelLocationWindow, group))
-	require.Error(t, staged.StageNamedWorkspaceGroup("panel-3", PanelLocationWindow, group))
-	require.Equal(t, []string{"production"}, staged.RestoredWorkspaceClusters())
-	require.Error(t, current.CommitNamedWorkspace(staged, revision-1))
-	require.Len(t, current.Snapshot("production").Panels, 2)
+	require.Equal(t, []string{"production"}, directory.PanelClusters())
+
+	require.Error(t, directory.ClearForNamedWorkspace(revision-1))
+	require.Len(t, directory.Snapshot("production").Panels, 2)
 	require.Empty(t, removed)
-	require.NoError(t, current.CommitNamedWorkspace(staged, revision))
-	panels := current.Snapshot("production").Panels
+	// An open that has reserved its cluster is still deciding where its panel goes.
+	reservation := directory.ReserveCluster("production")
+	require.Error(t, directory.ClearForNamedWorkspace(revision))
+	reservation.Release()
+
+	require.NoError(t, directory.ClearForNamedWorkspace(revision))
+	require.Empty(t, directory.Snapshot("production").Panels)
+	require.Len(t, removed, 2, "the owner of panel state is told every panel closed")
+
+	group := WorkspaceGroup{ClusterID: "production", GroupID: "floating", Tabs: []TabSnapshot{kept}, ActivePanelID: kept.PanelID}
+	require.NoError(t, directory.PlaceNamedWorkspaceGroup("panel-2", PanelLocationWindow, group))
+	require.Error(t, directory.PlaceNamedWorkspaceGroup("panel-3", PanelLocationWindow, group), "a panel is placed in one window only")
+	panels := directory.Snapshot("production").Panels
 	require.Len(t, panels, 1)
 	require.Equal(t, "panel-2", panels[0].Location.WindowName)
-	require.Equal(t, []PanelKey{{ClusterID: "production", PanelID: dropped.PanelID}}, removed)
 }
 
 func TestDockedGroupCommitAppendsAfterExistingTabsAndMovesActivation(t *testing.T) {
@@ -372,16 +383,17 @@ func TestPublicationReportsArrangementOnly(t *testing.T) {
 	require.Empty(t, removed)
 }
 
-// A cluster that goes away while a saved workspace is staged must stop its
-// commit, whether or not the live workspace had panels for that cluster: the
-// staged windows were built for a cluster set that no longer holds.
-func TestRemovingAClusterStopsAStagedWorkspaceCommit(t *testing.T) {
-	live, staged := NewWorkspaceDirectory(), NewWorkspaceDirectory()
-	revision, err := live.WorkspaceCaptureRevision()
+// A cluster that goes away after the windows agreed to close must stop the
+// saved workspace from taking the directory, whether or not the current
+// workspace had panels for that cluster: what the saved workspace may show has
+// changed.
+func TestRemovingAClusterStopsANamedWorkspaceFromTakingTheDirectory(t *testing.T) {
+	directory := NewWorkspaceDirectory()
+	revision, err := directory.WorkspaceCaptureRevision()
 	require.NoError(t, err)
-	live.RemoveCluster("cluster-without-panels")
-	require.Error(t, live.CommitNamedWorkspace(staged, revision))
-	revision, err = live.WorkspaceCaptureRevision()
+	directory.RemoveCluster("cluster-without-panels")
+	require.Error(t, directory.ClearForNamedWorkspace(revision))
+	revision, err = directory.WorkspaceCaptureRevision()
 	require.NoError(t, err)
-	require.NoError(t, live.CommitNamedWorkspace(staged, revision))
+	require.NoError(t, directory.ClearForNamedWorkspace(revision))
 }

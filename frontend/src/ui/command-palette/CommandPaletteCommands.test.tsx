@@ -625,6 +625,49 @@ it('renames the selected saved workspace, but never onto another workspace', asy
   expect(select.value).toBe('Outage');
 });
 
+it('selects nothing after a refused open whose workspace is gone, so a retry cannot open another', async () => {
+  let saved = [
+    { name: 'Incident', revision: 'r1' },
+    { name: 'Release', revision: 'r2' },
+  ];
+  app.backend.answer('ListNamedWorkspaces', () => saved);
+  app.backend.answer('OpenNamedWorkspace', () => {
+    // Another window deleted it after this dialog listed it.
+    saved = [{ name: 'Release', revision: 'r2' }];
+    throw new Error('workspace "Incident" was not found');
+  });
+  view = await app.mountApp();
+  await menu('open-command-palette');
+  vi.useFakeTimers();
+  await type('open workspace');
+  await choose('Open Workspace…');
+  const submit = () =>
+    requireValue(
+      document.querySelector<HTMLButtonElement>('[role="dialog"] button[type="submit"]'),
+      'expected the Open button'
+    );
+  await act(async () => submit().click());
+  // The refusal reloads the list before it reports the error.
+  await act(async () => {
+    await Promise.resolve();
+  });
+  const select = requireValue(
+    document.querySelector<HTMLSelectElement>('[role="dialog"] select'),
+    'expected the saved-workspace picker'
+  );
+  expect(select.value).toBe('');
+  expect(submit().disabled).toBe(true);
+  await act(async () => submit().click());
+  expect(app.backend.calls('OpenNamedWorkspace')).toHaveLength(1);
+  // The remaining workspace can still be chosen and opened.
+  expect(
+    [...select.options].filter((option) => !option.disabled).map((option) => option.value)
+  ).toEqual(['Release']);
+  app.errors.take(
+    (record) => record.kinds.includes('inline') || record.kinds.includes('operational')
+  );
+});
+
 it('deletes the selected saved workspace only after confirmation', async () => {
   app.backend.answer('ListNamedWorkspaces', () => [
     { name: 'Incident', revision: 'rev-incident' },
@@ -702,7 +745,9 @@ const listedWorkspaces = () =>
       document.querySelector<HTMLSelectElement>('[role="dialog"] select'),
       'expected the saved-workspace picker'
     ).options,
-  ].map((option) => option.value);
+  ]
+    .filter((option) => !option.disabled)
+    .map((option) => option.value);
 
 it('reloads the saved workspaces when the one it listed was replaced under the same name', async () => {
   let saved = [

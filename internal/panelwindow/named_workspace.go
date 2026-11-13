@@ -32,8 +32,9 @@ type NamedWorkspaceRestoreRequest struct {
 	Window     NamedWorkspaceAppWindow `json:"window"`
 }
 
-// StageNamedWorkspaceGroup installs a validated group in the isolated restore directory.
-func (d *WorkspaceDirectory) StageNamedWorkspaceGroup(window string, kind PanelLocationKind, group WorkspaceGroup) error {
+// PlaceNamedWorkspaceGroup places a saved group for the window that is about
+// to show it. A panel another window already holds is refused.
+func (d *WorkspaceDirectory) PlaceNamedWorkspaceGroup(window string, kind PanelLocationKind, group WorkspaceGroup) error {
 	panels, err := panelsFromGroups(window, kind, []WorkspaceGroup{group})
 	if err != nil {
 		return err
@@ -52,16 +53,10 @@ func (d *WorkspaceDirectory) StageNamedWorkspaceGroup(window string, kind PanelL
 	return nil
 }
 
-// CommitNamedWorkspace replaces presentation atomically after all staged views
-// have mounted. Only identities that actually left lose their lifetime state.
-func (d *WorkspaceDirectory) CommitNamedWorkspace(staged *WorkspaceDirectory, revision uint64) error {
-	staged.mu.Lock()
-	panels := make(map[workspacePanelKey]WorkspacePanel, len(staged.panels))
-	for key, panel := range staged.panels {
-		panels[key] = panel
-	}
-	stagedRevision := staged.revision
-	staged.mu.Unlock()
+// ClearForNamedWorkspace closes every panel so a saved workspace can take the
+// directory. It refuses if anything changed since revision was read, or while
+// a move or an open is still in flight.
+func (d *WorkspaceDirectory) ClearForNamedWorkspace(revision uint64) error {
 	removal := &panelRemoval{}
 	defer removal.report()
 	d.mu.Lock()
@@ -69,14 +64,12 @@ func (d *WorkspaceDirectory) CommitNamedWorkspace(staged *WorkspaceDirectory, re
 	if d.revision != revision || len(d.transfers) != 0 || len(d.reservations) != 0 {
 		return fmt.Errorf("panel layout changed while opening the workspace")
 	}
-	for key, previous := range d.panels {
-		if panel, exists := panels[key]; !exists || !previous.Tab.SameIdentity(panel.Tab) {
-			removal.keys = append(removal.keys, PanelKey{ClusterID: key.clusterID, PanelID: key.panelID})
-		}
+	for key := range d.panels {
+		removal.keys = append(removal.keys, PanelKey{ClusterID: key.clusterID, PanelID: key.panelID})
 	}
 	removal.notify = d.onPanelsRemoved
-	d.panels = panels
-	d.revision = max(d.revision, stagedRevision) + 1
+	d.panels = make(map[workspacePanelKey]WorkspacePanel)
+	d.revision++
 	return nil
 }
 
@@ -100,7 +93,7 @@ func (d *WorkspaceDirectory) WorkspaceCaptureRevision() (uint64, error) {
 	defer d.mu.Unlock()
 	for _, panel := range d.panels {
 		if panel.moving() {
-			return 0, fmt.Errorf("wait for panel moves to finish before saving the workspace")
+			return 0, fmt.Errorf("wait for panel moves to finish")
 		}
 	}
 	return d.revision, nil
@@ -171,7 +164,8 @@ type NamedWorkspacePanelWindow struct {
 	Group    WorkspaceGroup         `json:"group"`
 }
 
-func (d *WorkspaceDirectory) RestoredWorkspaceClusters() []string {
+// PanelClusters lists the clusters that have a panel in any window.
+func (d *WorkspaceDirectory) PanelClusters() []string {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	clusters := map[string]bool{}

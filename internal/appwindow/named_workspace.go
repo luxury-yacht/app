@@ -52,6 +52,10 @@ func (r *Registry) CaptureNamedWorkspace(ctx context.Context, source string) (pa
 	if err != nil {
 		return panelwindow.NamedWorkspace{}, err
 	}
+	// A move that began while the windows were answering has the view in both.
+	if r.clusterViewMoving() {
+		return panelwindow.NamedWorkspace{}, fmt.Errorf("a cluster view moved while the workspace was being saved")
+	}
 	return r.assembleNamedWorkspace(apps, panels, views)
 }
 
@@ -110,8 +114,8 @@ func (r *Registry) clusterViewMoving() bool {
 }
 
 // failCaptureOfClosedWindow ends a capture that is waiting on a window the
-// registry is closing: that window can no longer answer. Every close the
-// registry starts passes through closeAuthorizedWindow, which calls this.
+// registry is closing: that window can no longer answer. closeAuthorizedWindow
+// calls this, which covers every close of a window that can be a participant.
 func (r *Registry) failCaptureOfClosedWindow(name string) {
 	r.workspaceCaptureMu.Lock()
 	defer r.workspaceCaptureMu.Unlock()

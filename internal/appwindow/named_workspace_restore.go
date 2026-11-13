@@ -1,6 +1,7 @@
 package appwindow
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -36,12 +37,23 @@ type namedWorkspaceTarget struct {
 	geometry panelwindow.NamedWorkspaceGeometry
 }
 
+// previousWindows are windows a switch has closed, or given up on, whose
+// backend holds it still has to release.
+type previousWindows struct {
+	apps, panels []string
+	// clusters are the clusters whose panel workspaces may no longer be needed.
+	clusters []string
+}
+
 // namedWorkspaceRestore is the workspace being opened: the windows the switch
 // created and what could not be done for them. Nothing here can be undone, so
 // it records problems for the user instead of deciding whether to go on.
 type namedWorkspaceRestore struct {
-	seed   string
-	seeded bool
+	seed string
+	// abandoned are saved windows that were given up: ones that could not be
+	// created, and panel windows that never loaded. Their backend holds are
+	// released with the previous windows', after the new ones are on screen.
+	abandoned previousWindows
 	// notFullscreen names the windows that did not return to fullscreen.
 	notFullscreen []string
 	// unrestored counts saved windows that could not be created or did not
@@ -74,6 +86,23 @@ func (restore *namedWorkspaceRestore) hasTarget(name string) bool {
 	return slices.ContainsFunc(restore.targets, func(target namedWorkspaceTarget) bool { return target.name == name })
 }
 
+// unanswered lists the windows that have not replied.
+func (restore *namedWorkspaceRestore) unanswered() []namedWorkspaceTarget {
+	restore.mu.Lock()
+	defer restore.mu.Unlock()
+	return slices.DeleteFunc(slices.Clone(restore.targets), func(target namedWorkspaceTarget) bool { return restore.answered[target.name] })
+}
+
+// rank orders windows for a warning: one that has replied comes first.
+func (restore *namedWorkspaceRestore) rank(name string) int {
+	restore.mu.Lock()
+	defer restore.mu.Unlock()
+	if restore.answered[name] {
+		return 0
+	}
+	return 1
+}
+
 // answer records a window's one reply. It reports false for a second one.
 func (restore *namedWorkspaceRestore) answer(window string, err error) bool {
 	restore.mu.Lock()
@@ -85,12 +114,6 @@ func (restore *namedWorkspaceRestore) answer(window string, err error) bool {
 	// Buffered for every saved window, and each answers once.
 	restore.replies <- namedWorkspaceReply{window: window, err: err}
 	return true
-}
-
-// previousWindows are the windows a switch closed and whose backend holds it
-// still has to release.
-type previousWindows struct {
-	apps, panels []string
 }
 
 // OpenNamedWorkspace closes the current windows and opens a saved arrangement
@@ -109,8 +132,8 @@ func (r *Registry) OpenNamedWorkspace(ctx context.Context, source string, snapsh
 		return err
 	}
 	snapshot, missing := availableWorkspaceLayout(snapshot, available)
-	destinations := len(snapshot.AppWindows) + len(snapshot.PanelWindows)
-	if destinations == 0 {
+	saved := len(snapshot.AppWindows) + len(snapshot.PanelWindows)
+	if saved == 0 {
 		return fmt.Errorf("no workspace windows can be restored; missing clusters: %v", missing)
 	}
 	apps, panels := r.lifecycle.Names(), r.panels.Names("")
@@ -126,7 +149,7 @@ func (r *Registry) OpenNamedWorkspace(ctx context.Context, source string, snapsh
 	}
 	restore := &namedWorkspaceRestore{
 		seed:    "workspace-restore-" + uuid.NewString(),
-		replies: make(chan namedWorkspaceReply, destinations), answered: make(map[string]bool, destinations),
+		replies: make(chan namedWorkspaceReply, saved), answered: make(map[string]bool, saved),
 	}
 	r.activeRestore.Store(restore)
 	defer r.activeRestore.Store(nil)
@@ -137,22 +160,40 @@ func (r *Registry) OpenNamedWorkspace(ctx context.Context, source string, snapsh
 	// Nothing past this point is undone.
 	r.createRestoredWindows(restore, snapshot)
 	if len(restore.targets) == 0 {
-		r.backend.ReleaseWorkspaceWindow(restore.seed)
-		return fmt.Errorf("no window of the workspace could be created; the current windows stay open without their panels")
+		return r.keepPreviousWindows(restore, panels, replacedClusters)
 	}
 	previous, unclosed := r.closePreviousWindows(apps, panels)
+	previous.clusters = replacedClusters
 	r.waitForRestoredWindows(restore)
 	r.presentRestoredWindows(restore)
 	r.endWorkspaceReplacement(guard.transactionID)
 	result := r.reportOpenedWorkspace(restore, missing, unclosed)
 	// The releases can wait behind cluster connections the new workspace
 	// started, so they come after its windows are on screen and usable.
-	r.releasePreviousWindows(previous, replacedClusters)
+	r.releasePreviousWindows(previous)
+	r.releasePreviousWindows(restore.abandoned)
 	r.backend.ReleaseWorkspaceWindow(restore.seed)
 	// Claiming the saved clusters did not touch what the next launch opens.
 	r.backend.PersistRestartSelection()
 	r.quitWithoutWindows()
 	return result
+}
+
+// keepPreviousWindows ends a switch that could not create a single saved
+// window. Closing the current windows would leave the app with none, so they
+// stay, but the panel directory is already cleared: their renderers are told,
+// and floating panel windows, which now have nothing to show, are closed.
+func (r *Registry) keepPreviousWindows(restore *namedWorkspaceRestore, panels, replacedClusters []string) error {
+	for _, panel := range panels {
+		r.reportPanelLifecycleError(r.AcknowledgePanelWindowClose(panel), "close emptied panel window")
+	}
+	for _, cluster := range replacedClusters {
+		r.emitWorkspaceChanged(cluster)
+	}
+	r.releasePreviousWindows(previousWindows{clusters: replacedClusters})
+	r.releasePreviousWindows(restore.abandoned)
+	r.backend.ReleaseWorkspaceWindow(restore.seed)
+	return fmt.Errorf("no window of the workspace could be created; the current windows stay open and their panels are closed")
 }
 
 // handOverPanelDirectory claims the saved clusters and drops every panel of the
@@ -168,21 +209,19 @@ func (r *Registry) handOverPanelDirectory(ctx context.Context, restore *namedWor
 	// One seed claims every saved cluster, so a cluster both workspaces show
 	// stays connected and each window's own seed takes the fast path.
 	if clusters := namedWorkspaceSelections(snapshot); len(clusters) != 0 {
-		if err := r.backend.SeedNamedWorkspaceWindow(restore.seed, clusters, ""); err != nil {
-			return nil, err
-		}
-		restore.seeded = true
+		err = r.backend.SeedNamedWorkspaceWindow(restore.seed, clusters, "")
 	}
 	// A cancelled request must not go on to close the current windows.
-	err = ctx.Err()
-	replacedClusters := r.workspace.RestoredWorkspaceClusters()
 	if err == nil {
-		err = r.workspace.CommitNamedWorkspace(panelwindow.NewWorkspaceDirectory(), revision)
+		err = ctx.Err()
+	}
+	replacedClusters := r.workspace.PanelClusters()
+	if err == nil {
+		err = r.workspace.ClearForNamedWorkspace(revision)
 	}
 	if err != nil {
-		if restore.seeded {
-			r.backend.ReleaseWorkspaceWindow(restore.seed)
-		}
+		// A seed that failed part-way can still have recorded its claim.
+		r.backend.ReleaseWorkspaceWindow(restore.seed)
 		return nil, err
 	}
 	return replacedClusters, nil
@@ -228,33 +267,48 @@ func (r *Registry) reportOpenedWorkspace(restore *namedWorkspaceRestore, missing
 }
 
 func (r *Registry) deliverWorkspaceWarnings(restore *namedWorkspaceRestore, warnings panelwindow.NamedWorkspaceWarningsEvent) {
-	for _, name := range r.warningWindows(restore) {
-		warnings.WindowName = name
-		if r.emitWindowEvent(name, panelwindow.NamedWorkspaceWarnings, warnings) {
+	for _, target := range r.warningWindows(restore) {
+		warnings.WindowName = target.name
+		if r.sendWorkspaceWarnings(target, warnings) {
 			return
 		}
 	}
 	r.reportPanelLifecycleError(fmt.Errorf("no window of the new workspace could show %+v", warnings), "deliver workspace warnings")
 }
 
+// sendWorkspaceWarnings delivers to one window. An app window that has not
+// mounted yet keeps the event until it has; a panel window listens once it
+// has answered.
+func (r *Registry) sendWorkspaceWarnings(target namedWorkspaceTarget, warnings panelwindow.NamedWorkspaceWarningsEvent) bool {
+	if target.panel {
+		return r.emitWindowEvent(target.name, panelwindow.NamedWorkspaceWarnings, warnings)
+	}
+	return r.queueWorkspaceEvent(target.name, panelwindow.NamedWorkspaceWarnings, warnings)
+}
+
 // warningWindows lists the open windows of the new workspace, the one the user
-// is most likely looking at first: the window that entered fullscreen last has
-// the display, and a window reopened minimized is not on screen at all.
-func (r *Registry) warningWindows(restore *namedWorkspaceRestore) []string {
-	var fullscreen, visible, minimized []string
+// is most likely to see the warning in first. A window whose renderer has
+// answered is listening; among those, the window that entered fullscreen last
+// has the display, and a window reopened minimized is not on screen at all.
+func (r *Registry) warningWindows(restore *namedWorkspaceRestore) []namedWorkspaceTarget {
+	var fullscreen, visible, minimized []namedWorkspaceTarget
 	for _, target := range restore.targets {
 		switch {
 		case !r.restoredWindowOpen(target):
 		case target.geometry.Minimized:
-			minimized = append(minimized, target.name)
+			minimized = append(minimized, target)
 		case target.geometry.Fullscreen && !slices.Contains(restore.notFullscreen, target.name):
-			fullscreen = append(fullscreen, target.name)
+			fullscreen = append(fullscreen, target)
 		default:
-			visible = append(visible, target.name)
+			visible = append(visible, target)
 		}
 	}
 	slices.Reverse(fullscreen)
-	return slices.Concat(fullscreen, visible, minimized)
+	ordered := slices.Concat(fullscreen, visible, minimized)
+	slices.SortStableFunc(ordered, func(a, b namedWorkspaceTarget) int {
+		return cmp.Compare(restore.rank(a.name), restore.rank(b.name))
+	})
+	return ordered
 }
 
 func (r *Registry) restoredWindowOpen(target namedWorkspaceTarget) bool {
@@ -389,9 +443,42 @@ func (r *Registry) waitForRestoredWindows(restore *namedWorkspaceRestore) {
 		case <-deadline:
 			restore.unrestored += waiting
 			r.reportPanelLifecycleError(fmt.Errorf("%d restored windows did not finish loading", waiting), "open workspace")
+			r.closeUnloadedPanelWindows(restore)
 			return
 		}
 	}
+}
+
+// closeUnloadedPanelWindows gives up the saved panel windows that have not
+// loaded. An app window can be shown as it is; a panel window that never
+// became ready has no working close button and would keep every later save
+// and switch waiting for it.
+func (r *Registry) closeUnloadedPanelWindows(restore *namedWorkspaceRestore) {
+	for _, target := range restore.unanswered() {
+		if !target.panel {
+			continue
+		}
+		cluster := ""
+		if descriptor, err := r.panels.Descriptor(target.name); err == nil {
+			cluster = descriptor.ClusterID
+		}
+		r.abandonRestoredPanelWindow(restore, target.name, cluster)
+	}
+}
+
+// abandonRestoredPanelWindow removes a saved panel window that could not be
+// created or never loaded. What it holds in the backend is released later.
+func (r *Registry) abandonRestoredPanelWindow(restore *namedWorkspaceRestore, name, cluster string) {
+	restore.dropTarget(name)
+	r.panelTransferMu.Lock()
+	r.closeAuthorizedWindow(name)
+	r.workspaceMu.Lock()
+	r.panels.Remove(name)
+	r.workspace.RemoveWindow(name)
+	r.workspaceMu.Unlock()
+	r.panelTransferMu.Unlock()
+	restore.abandoned.panels = append(restore.abandoned.panels, name)
+	restore.abandoned.clusters = append(restore.abandoned.clusters, cluster)
 }
 
 func namedWorkspaceSelections(snapshot panelwindow.NamedWorkspace) []string {
@@ -412,7 +499,7 @@ func (r *Registry) placeRestoredGroup(window string, kind panelwindow.PanelLocat
 	if err := r.retainPanelWorkspace(group.ClusterID); err != nil {
 		return err
 	}
-	return r.workspace.StageNamedWorkspaceGroup(window, kind, group)
+	return r.workspace.PlaceNamedWorkspaceGroup(window, kind, group)
 }
 
 func (r *Registry) createRestoredAppWindow(restore *namedWorkspaceRestore, state panelwindow.NamedWorkspaceAppWindow) error {
@@ -434,22 +521,26 @@ func (r *Registry) createRestoredAppWindow(restore *namedWorkspaceRestore, state
 		}
 	}
 	if err != nil {
-		r.discardRestoredAppWindow(restore, name)
+		r.abandonRestoredAppWindow(restore, name, state)
 		return err
 	}
 	r.registerLifecycleHooks(window, name, false)
 	return nil
 }
 
-// discardRestoredAppWindow gives up a saved app window that could not be created.
-func (r *Registry) discardRestoredAppWindow(restore *namedWorkspaceRestore, name string) {
+// abandonRestoredAppWindow gives up a saved app window that could not be
+// created. What it holds in the backend is released later.
+func (r *Registry) abandonRestoredAppWindow(restore *namedWorkspaceRestore, name string, state panelwindow.NamedWorkspaceAppWindow) {
 	restore.dropTarget(name)
 	r.lifecycle.BeginClose(name)
 	r.forgetWorkspaceReady(name)
 	r.workspaceMu.Lock()
 	r.workspace.RemoveWindow(name)
 	r.workspaceMu.Unlock()
-	r.backend.ReleaseWorkspaceWindow(name)
+	restore.abandoned.apps = append(restore.abandoned.apps, name)
+	for _, dock := range state.DockedGroups {
+		restore.abandoned.clusters = append(restore.abandoned.clusters, dock.Group.ClusterID)
+	}
 }
 
 func (r *Registry) createRestoredPanelWindow(restore *namedWorkspaceRestore, state panelwindow.NamedWorkspacePanelWindow) error {
@@ -476,12 +567,7 @@ func (r *Registry) createRestoredPanelWindow(restore *namedWorkspaceRestore, sta
 		}
 	}
 	if err != nil {
-		restore.dropTarget(name)
-		r.workspaceMu.Lock()
-		r.panels.Remove(name)
-		r.workspace.RemoveWindow(name)
-		r.workspaceMu.Unlock()
-		r.reportPanelLifecycleError(r.releaseNativePanelReference(name), "release panel window that could not be created")
+		r.abandonRestoredPanelWindow(restore, name, group.ClusterID)
 		return err
 	}
 	if r.configurePanelWindow != nil {
@@ -612,14 +698,14 @@ func (r *Registry) closePreviousAppWindow(name string) error {
 // releasePreviousWindows gives up what the closed windows held in the backend:
 // their cluster tabs, their panel cluster references, and the panel workspaces
 // of clusters the new workspace does not show.
-func (r *Registry) releasePreviousWindows(previous previousWindows, replacedClusters []string) {
+func (r *Registry) releasePreviousWindows(previous previousWindows) {
 	for _, name := range previous.panels {
-		r.reportPanelLifecycleError(r.releaseNativePanelReference(name), "release previous panel window")
+		r.reportPanelLifecycleError(r.releaseNativePanelReference(name), "release closed panel window")
 	}
 	for _, name := range previous.apps {
 		r.backend.ReleaseWorkspaceWindow(name)
 	}
-	for _, cluster := range replacedClusters {
+	for _, cluster := range previous.clusters {
 		r.releaseUnusedPanelWorkspace(cluster)
 	}
 }

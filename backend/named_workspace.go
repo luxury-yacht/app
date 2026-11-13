@@ -74,8 +74,12 @@ func (s *UIStateStore) ListNamedWorkspaces() ([]NamedWorkspaceEntry, error) {
 		return nil, err
 	}
 	if stampNamedWorkspaceRevisions(state.Workspaces) {
+		// If the stamps cannot be saved, list what is on disk: a revision that
+		// is not stored would not match on the next call.
 		if err := s.savePersistenceFile(state); err != nil {
-			return nil, err
+			if state, err = s.loadPersistenceFile(); err != nil {
+				return nil, err
+			}
 		}
 	}
 	var entries []NamedWorkspaceEntry

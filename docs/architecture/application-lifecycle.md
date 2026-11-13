@@ -64,6 +64,10 @@ close sequences: [dockable-panels.md](../frontend/dockable-panels.md).
   restores workspace geometry, or counts toward last-workspace quit.
 - `windowOptionsForPlatform`: macOS/Windows peers start hidden until runtime
   ready; Linux starts visible.
+- A window that a workspace switch is restoring is the exception to both: it
+  starts hidden on every platform, and its runtime-ready listener does not call
+  `WindowRuntimeReady`, because the switch shows it once it has loaded and been
+  placed. Hidden creation of an app window has not been run on Linux.
 
 ## Process multiplicity and focus
 
@@ -244,7 +248,9 @@ is rolled back.
    going through the window's own close, because closing the last app view
    there means quitting.
 7. The saved windows get a bounded time to load their views, then are shown and
-   placed. Fullscreen is entered last and one window at a time: on macOS a
+   placed. An app window that has not loaded is shown as it is. A panel window
+   that has not loaded is closed: it has no working close button, and it would
+   keep every later save and switch waiting for it. Fullscreen is entered last and one window at a time: on macOS a
    window maximized during another's fullscreen transition is left part-way,
    and a fullscreen request made during a transition is dropped.
 8. The preflight ends. What the closed windows held in the backend is released
@@ -257,8 +263,14 @@ a window that did not return to fullscreen, a saved cluster that is
 unavailable. The warnings go to one window of the new workspace in a single
 `named-workspace:warnings` event, since the window that asked is closed. The
 registry picks the window the user is most likely looking at (the last to enter
-fullscreen, otherwise one not reopened minimized). The command returns an error
-only when closing a previous window failed.
+fullscreen, otherwise one not reopened minimized), preferring one whose
+renderer has answered. The command returns an error only when closing a
+previous window failed.
+
+One case is not a warning. If no saved window can be created at all, closing
+the current windows would leave the app with none, so they stay and the command
+fails. The panel directory is already cleared by then: the current renderers
+are told, and floating panel windows, which have nothing left to show, close.
 
 Because the saved windows are ordinary windows from step 5, the user can close
 them all before the switch has finished. The switch then requests the quit that
@@ -273,9 +285,10 @@ minimized state, and both are applied when it reopens.
 Saving a workspace asks every ready app and panel window for one reply: its
 view, or the reason it has none. A failure reply ends the capture at once with
 that reason, and so does a window that closes before answering; nothing is
-written. Save, switch, and the quit preflight only start when every app window's
-renderer has acknowledged that it is mounted, and save and switch also wait for
-a cluster view that is moving between windows.
+written. Save and switch only start when every app window's renderer has
+acknowledged that it is mounted and no cluster view is moving between windows;
+a save checks the move again before it writes. The quit preflight asks the
+windows whose renderers have acknowledged and leaves the others out.
 
 Each saved workspace has a revision, assigned when it is saved. The dialogs
 list name and revision, and replace, rename, delete, and open are refused when
