@@ -6,11 +6,11 @@ import (
 	"github.com/luxury-yacht/app/internal/panelwindow"
 )
 
-func (s *DesktopService) SaveNamedWorkspace(ctx context.Context, window, name string, replace bool) error {
+func (s *DesktopService) SaveNamedWorkspace(ctx context.Context, window, name string, replace bool, revision string) error {
 	if err := validatePanelCommandCaller(ctx, window); err != nil {
 		return err
 	}
-	return s.namedWorkspaces.SaveNamedWorkspace(ctx, window, name, replace)
+	return s.namedWorkspaces.SaveNamedWorkspace(ctx, window, name, replace, revision)
 }
 
 // SubmitNamedWorkspaceCapture is a window's reply to a capture request: its view,
@@ -22,29 +22,29 @@ func (s *DesktopService) SubmitNamedWorkspaceCapture(ctx context.Context, window
 	return s.namedWorkspaces.SubmitNamedWorkspaceCapture(window, id, view, failure)
 }
 
-func (s *DesktopService) ListNamedWorkspaces() ([]string, error) {
+func (s *DesktopService) ListNamedWorkspaces() ([]panelwindow.NamedWorkspaceEntry, error) {
 	return s.namedWorkspaces.ListNamedWorkspaces()
 }
 
-func (s *DesktopService) DeleteNamedWorkspace(ctx context.Context, window, name string) error {
+func (s *DesktopService) DeleteNamedWorkspace(ctx context.Context, window, name, revision string) error {
 	if err := validatePanelCommandCaller(ctx, window); err != nil {
 		return err
 	}
-	return s.namedWorkspaces.DeleteNamedWorkspace(name)
+	return s.namedWorkspaces.DeleteNamedWorkspace(name, revision)
 }
 
-func (s *DesktopService) RenameNamedWorkspace(ctx context.Context, window, name, newName string) error {
+func (s *DesktopService) RenameNamedWorkspace(ctx context.Context, window, name, newName, revision string) error {
 	if err := validatePanelCommandCaller(ctx, window); err != nil {
 		return err
 	}
-	return s.namedWorkspaces.RenameNamedWorkspace(name, newName)
+	return s.namedWorkspaces.RenameNamedWorkspace(name, newName, revision)
 }
 
-func (s *DesktopService) OpenNamedWorkspace(ctx context.Context, window, name string) error {
+func (s *DesktopService) OpenNamedWorkspace(ctx context.Context, window, name, revision string) error {
 	if err := validatePanelCommandCaller(ctx, window); err != nil {
 		return err
 	}
-	return s.namedWorkspaces.OpenNamedWorkspace(ctx, window, name)
+	return s.namedWorkspaces.OpenNamedWorkspace(ctx, window, name, revision)
 }
 
 func (s *DesktopService) AcknowledgeNamedWorkspaceRestore(ctx context.Context, window, failure string) error {

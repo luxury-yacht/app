@@ -96,6 +96,7 @@ type refreshSubsystemTeardowner interface {
 }
 
 type lifecycleWorkspace interface {
+	PersistRestartSelection()
 	CloseClusterView(string, string) error
 	panelwindow.ClusterViewTransferLifecycle
 	ReleaseWorkspaceWindow(string)
@@ -448,6 +449,12 @@ func (a *ApplicationLifecycle) NamedWorkspaceAvailableClusters() ([]string, erro
 		}
 	}
 	return ids, nil
+}
+
+// PersistRestartSelection writes the clusters the next launch opens, once a
+// workspace switch has committed.
+func (a *ApplicationLifecycle) PersistRestartSelection() {
+	a.workspace.PersistRestartSelection()
 }
 
 func (a *ApplicationLifecycle) SeedNamedWorkspaceWindow(window string, clusters []string, visible string) error {

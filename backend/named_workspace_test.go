@@ -30,6 +30,43 @@ func (w *namedWorkspaceTestWindows) SubmitNamedWorkspaceCapture(_, _ string, vie
 	return nil
 }
 
+// namedWorkspaceRevision is the revision a dialog holds after listing the name.
+func namedWorkspaceRevision(t *testing.T, lister interface {
+	ListNamedWorkspaces() ([]NamedWorkspaceEntry, error)
+}, name string) string {
+	t.Helper()
+	entries, err := lister.ListNamedWorkspaces()
+	require.NoError(t, err)
+	for _, entry := range entries {
+		if entry.Name == name {
+			return entry.Revision
+		}
+	}
+	require.Failf(t, "workspace is not listed", "%q", name)
+	return ""
+}
+
+// savedNamedWorkspace reads the snapshot currently listed under the name.
+func savedNamedWorkspace(t *testing.T, store *UIStateStore, name string) *NamedWorkspace {
+	t.Helper()
+	saved, err := store.GetNamedWorkspace(name, namedWorkspaceRevision(t, store, name))
+	require.NoError(t, err)
+	return saved
+}
+
+func namedWorkspaceNames(t *testing.T, lister interface {
+	ListNamedWorkspaces() ([]NamedWorkspaceEntry, error)
+}) []string {
+	t.Helper()
+	entries, err := lister.ListNamedWorkspaces()
+	require.NoError(t, err)
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		names = append(names, entry.Name)
+	}
+	return names
+}
+
 func TestDesktopNamedWorkspaceSaveKeepsPreviousSnapshotOnCaptureFailure(t *testing.T) {
 	setTestConfigEnv(t)
 	store := NewUIStateStore()
@@ -38,18 +75,17 @@ func TestDesktopNamedWorkspaceSaveKeepsPreviousSnapshotOnCaptureFailure(t *testi
 	}}}}
 	service := NewDesktopService(DesktopServiceDependencies{NamedWorkspaces: NewNamedWorkspaceService(windows, store)})
 	ctx := context.WithValue(context.Background(), application.WindowKey, panelCommandCaller("workspace-1"))
-	require.Error(t, service.SaveNamedWorkspace(ctx, "another-window", "Triage", false))
-	require.Error(t, service.SaveNamedWorkspace(ctx, "workspace-1", " ", false))
-	require.NoError(t, service.SaveNamedWorkspace(ctx, "workspace-1", "Triage", false))
-	names, err := service.ListNamedWorkspaces()
-	require.NoError(t, err)
-	require.Equal(t, []string{"Triage"}, names)
+	require.Error(t, service.SaveNamedWorkspace(ctx, "another-window", "Triage", false, ""))
+	require.Error(t, service.SaveNamedWorkspace(ctx, "workspace-1", " ", false, ""))
+	require.NoError(t, service.SaveNamedWorkspace(ctx, "workspace-1", "Triage", false, ""))
+	require.Equal(t, []string{"Triage"}, namedWorkspaceNames(t, service))
+	revision := namedWorkspaceRevision(t, service, "Triage")
 
 	windows.captureErr = errors.New("window disappeared")
-	require.ErrorIs(t, service.SaveNamedWorkspace(ctx, "workspace-1", "Triage", true), windows.captureErr)
-	saved, err := store.GetNamedWorkspace("Triage")
+	require.ErrorIs(t, service.SaveNamedWorkspace(ctx, "workspace-1", "Triage", true, revision), windows.captureErr)
+	saved, err := store.GetNamedWorkspace("Triage", revision)
 	require.NoError(t, err)
-	require.Equal(t, &windows.state, saved)
+	require.Equal(t, windows.state.AppWindows, saved.AppWindows)
 
 	view := panelwindow.NamedWorkspaceAppView{SelectedClusterID: "config:prod"}
 	require.Error(t, service.SubmitNamedWorkspaceCapture(ctx, "another-window", "request", view, ""))
@@ -57,9 +93,9 @@ func TestDesktopNamedWorkspaceSaveKeepsPreviousSnapshotOnCaptureFailure(t *testi
 	require.Equal(t, "config:prod", windows.reply.SelectedClusterID)
 	require.Equal(t, "tables unavailable", windows.failure)
 
-	require.Error(t, service.OpenNamedWorkspace(ctx, "another-window", "Triage"))
-	require.Error(t, service.OpenNamedWorkspace(ctx, "workspace-1", "Missing"))
-	require.NoError(t, service.OpenNamedWorkspace(ctx, "workspace-1", "Triage"))
+	require.Error(t, service.OpenNamedWorkspace(ctx, "another-window", "Triage", revision))
+	require.Error(t, service.OpenNamedWorkspace(ctx, "workspace-1", "Missing", ""))
+	require.NoError(t, service.OpenNamedWorkspace(ctx, "workspace-1", "Triage", revision))
 	require.Equal(t, *saved, windows.opened)
 	require.Error(t, service.AcknowledgeNamedWorkspaceRestore(ctx, "another-window", ""))
 	require.NoError(t, service.AcknowledgeNamedWorkspaceRestore(ctx, "workspace-1", ""))
@@ -107,12 +143,13 @@ func TestNamedWorkspaceKeepsEachWindowsLayoutAcrossRestart(t *testing.T) {
 	}
 	// The workspace and the existing startup tab order share the UI state store.
 	require.NoError(t, store.SetClusterTabOrder([]string{clusterID, stageID}))
-	require.NoError(t, store.SaveNamedWorkspace("Production triage", workspace, false))
+	require.NoError(t, store.SaveNamedWorkspace("Production triage", workspace, false, ""))
 	require.NoError(t, store.SetClusterTabOrder([]string{stageID, clusterID}))
 
 	restarted := NewUIStateStore()
-	saved, err := restarted.GetNamedWorkspace("Production triage")
-	require.NoError(t, err)
+	saved := savedNamedWorkspace(t, restarted, "Production triage")
+	// The store stamps the snapshot; everything the capture reported is kept.
+	workspace.Revision = saved.Revision
 	require.Equal(t, &workspace, saved)
 	order, err := restarted.GetClusterTabOrder()
 	require.NoError(t, err)
@@ -148,9 +185,8 @@ func TestNamedWorkspaceKeepsGlobalAndDockedViews(t *testing.T) {
 		},
 	}
 	workspace := NamedWorkspace{SchemaVersion: 1, AppWindows: []NamedWorkspaceAppWindow{window}}
-	require.NoError(t, NewUIStateStore().SaveNamedWorkspace("Fleet", workspace, true))
-	saved, err := NewUIStateStore().GetNamedWorkspace("Fleet")
-	require.NoError(t, err)
+	require.NoError(t, NewUIStateStore().SaveNamedWorkspace("Fleet", workspace, false, ""))
+	saved := savedNamedWorkspace(t, NewUIStateStore(), "Fleet")
 	require.Equal(t, window, saved.AppWindows[0])
 
 	// A capture caught between docking and floating can report both placements.
@@ -158,10 +194,8 @@ func TestNamedWorkspaceKeepsGlobalAndDockedViews(t *testing.T) {
 		Geometry: panelwindow.NamedWorkspaceGeometry{WindowBounds: panelwindow.WindowBounds{Width: 700, Height: 440}},
 		Group:    window.DockedGroups[0].Group,
 	}}
-	require.Error(t, NewUIStateStore().SaveNamedWorkspace("Fleet", workspace, true))
-	reloaded, err := NewUIStateStore().GetNamedWorkspace("Fleet")
-	require.NoError(t, err)
-	require.Equal(t, saved, reloaded)
+	require.Error(t, NewUIStateStore().SaveNamedWorkspace("Fleet", workspace, true, saved.Revision))
+	require.Equal(t, saved, savedNamedWorkspace(t, NewUIStateStore(), "Fleet"))
 }
 
 func TestNamedWorkspaceRejectsIncompleteOrMismatchedCapture(t *testing.T) {
@@ -195,8 +229,8 @@ func TestNamedWorkspaceRejectsIncompleteOrMismatchedCapture(t *testing.T) {
 			}}}
 			// An invalid first capture must never publish a workspace that can be opened.
 			test.change(&workspace)
-			require.Error(t, store.SaveNamedWorkspace(name, workspace, false))
-			_, err := store.GetNamedWorkspace(name)
+			require.Error(t, store.SaveNamedWorkspace(name, workspace, false, ""))
+			_, err := store.GetNamedWorkspace(name, "")
 			require.Error(t, err)
 		})
 	}
@@ -209,16 +243,16 @@ func TestNamedWorkspaceRequiresExplicitReplacement(t *testing.T) {
 	workspace := NamedWorkspace{SchemaVersion: 1, AppWindows: []NamedWorkspaceAppWindow{{
 		Geometry: panelwindow.NamedWorkspaceGeometry{WindowBounds: panelwindow.WindowBounds{Width: 1200, Height: 800}},
 	}}}
-	require.NoError(t, store.SaveNamedWorkspace(name, workspace, false))
+	require.NoError(t, store.SaveNamedWorkspace(name, workspace, false, ""))
 	workspace.AppWindows[0].Geometry.Width = 900
-	require.Error(t, store.SaveNamedWorkspace(name, workspace, false))
-	saved, err := store.GetNamedWorkspace(name)
-	require.NoError(t, err)
+	require.Error(t, store.SaveNamedWorkspace(name, workspace, false, ""))
+	saved := savedNamedWorkspace(t, store, name)
 	require.Equal(t, 1200, saved.AppWindows[0].Geometry.Width)
-	require.NoError(t, store.SaveNamedWorkspace(name, workspace, true))
-	saved, err = store.GetNamedWorkspace(name)
-	require.NoError(t, err)
-	require.Equal(t, 900, saved.AppWindows[0].Geometry.Width)
+	require.NoError(t, store.SaveNamedWorkspace(name, workspace, true, saved.Revision))
+	require.Equal(t, 900, savedNamedWorkspace(t, store, name).AppWindows[0].Geometry.Width)
+	// Replacing is for a workspace the caller listed, never a way to create one.
+	require.Error(t, store.SaveNamedWorkspace("Unlisted", workspace, true, ""))
+	require.Equal(t, []string{name}, namedWorkspaceNames(t, store))
 }
 
 func (w *namedWorkspaceTestWindows) OpenNamedWorkspace(_ context.Context, _ string, snapshot NamedWorkspace) error {
@@ -318,28 +352,23 @@ func TestNamedWorkspaceRenameMovesTheSnapshotWithoutOverwritingAnother(t *testin
 			Geometry: panelwindow.NamedWorkspaceGeometry{WindowBounds: panelwindow.WindowBounds{Width: width, Height: 800}},
 		}}}
 	}
-	require.NoError(t, store.SaveNamedWorkspace("Triage", sized(1200), false))
-	require.NoError(t, store.SaveNamedWorkspace("Release", sized(900), false))
+	require.NoError(t, store.SaveNamedWorkspace("Triage", sized(1200), false, ""))
+	require.NoError(t, store.SaveNamedWorkspace("Release", sized(900), false, ""))
+	revision := namedWorkspaceRevision(t, store, "Triage")
 	service := NewDesktopService(DesktopServiceDependencies{NamedWorkspaces: NewNamedWorkspaceService(&namedWorkspaceTestWindows{}, store)})
 	ctx := context.WithValue(context.Background(), application.WindowKey, panelCommandCaller("workspace-1"))
 
-	require.Error(t, service.RenameNamedWorkspace(ctx, "another-window", "Triage", "Incident"))
-	require.Error(t, service.RenameNamedWorkspace(ctx, "workspace-1", "Missing", "Incident"))
-	require.Error(t, service.RenameNamedWorkspace(ctx, "workspace-1", "Triage", "Release"))
-	require.Error(t, service.RenameNamedWorkspace(ctx, "workspace-1", "Triage", "  "))
-	require.NoError(t, service.RenameNamedWorkspace(ctx, "workspace-1", "Triage", "Triage"))
-	require.NoError(t, service.RenameNamedWorkspace(ctx, "workspace-1", "Triage", " Incident "))
+	require.Error(t, service.RenameNamedWorkspace(ctx, "another-window", "Triage", "Incident", revision))
+	require.Error(t, service.RenameNamedWorkspace(ctx, "workspace-1", "Missing", "Incident", ""))
+	require.Error(t, service.RenameNamedWorkspace(ctx, "workspace-1", "Triage", "Release", revision))
+	require.Error(t, service.RenameNamedWorkspace(ctx, "workspace-1", "Triage", "  ", revision))
+	require.NoError(t, service.RenameNamedWorkspace(ctx, "workspace-1", "Triage", "Triage", revision))
+	require.NoError(t, service.RenameNamedWorkspace(ctx, "workspace-1", "Triage", " Incident ", revision))
 
 	restarted := NewUIStateStore()
-	names, err := restarted.ListNamedWorkspaces()
-	require.NoError(t, err)
-	require.Equal(t, []string{"Incident", "Release"}, names)
-	renamed, err := restarted.GetNamedWorkspace("Incident")
-	require.NoError(t, err)
-	require.Equal(t, 1200, renamed.AppWindows[0].Geometry.Width)
-	untouched, err := restarted.GetNamedWorkspace("Release")
-	require.NoError(t, err)
-	require.Equal(t, 900, untouched.AppWindows[0].Geometry.Width)
+	require.Equal(t, []string{"Incident", "Release"}, namedWorkspaceNames(t, restarted))
+	require.Equal(t, 1200, savedNamedWorkspace(t, restarted, "Incident").AppWindows[0].Geometry.Width)
+	require.Equal(t, 900, savedNamedWorkspace(t, restarted, "Release").AppWindows[0].Geometry.Width)
 }
 
 // Deleting removes one saved workspace from disk and leaves the others openable.
@@ -349,20 +378,103 @@ func TestNamedWorkspaceDeleteRemovesOnlyTheNamedSnapshot(t *testing.T) {
 	workspace := NamedWorkspace{SchemaVersion: 1, AppWindows: []NamedWorkspaceAppWindow{{
 		Geometry: panelwindow.NamedWorkspaceGeometry{WindowBounds: panelwindow.WindowBounds{Width: 1200, Height: 800}},
 	}}}
-	require.NoError(t, store.SaveNamedWorkspace("Triage", workspace, false))
-	require.NoError(t, store.SaveNamedWorkspace("Release", workspace, false))
+	require.NoError(t, store.SaveNamedWorkspace("Triage", workspace, false, ""))
+	require.NoError(t, store.SaveNamedWorkspace("Release", workspace, false, ""))
+	revision := namedWorkspaceRevision(t, store, "Triage")
 	service := NewDesktopService(DesktopServiceDependencies{NamedWorkspaces: NewNamedWorkspaceService(&namedWorkspaceTestWindows{}, store)})
 	ctx := context.WithValue(context.Background(), application.WindowKey, panelCommandCaller("workspace-1"))
 
-	require.Error(t, service.DeleteNamedWorkspace(ctx, "another-window", "Triage"))
-	require.Error(t, service.DeleteNamedWorkspace(ctx, "workspace-1", "Missing"))
-	require.NoError(t, service.DeleteNamedWorkspace(ctx, "workspace-1", "Triage"))
+	require.Error(t, service.DeleteNamedWorkspace(ctx, "another-window", "Triage", revision))
+	require.Error(t, service.DeleteNamedWorkspace(ctx, "workspace-1", "Missing", ""))
+	require.NoError(t, service.DeleteNamedWorkspace(ctx, "workspace-1", "Triage", revision))
 
-	names, err := NewUIStateStore().ListNamedWorkspaces()
-	require.NoError(t, err)
-	require.Equal(t, []string{"Release"}, names)
-	_, err = store.GetNamedWorkspace("Triage")
+	require.Equal(t, []string{"Release"}, namedWorkspaceNames(t, NewUIStateStore()))
+	_, err := store.GetNamedWorkspace("Triage", revision)
 	require.Error(t, err)
-	_, err = store.GetNamedWorkspace("Release")
+	savedNamedWorkspace(t, store, "Release")
+}
+
+// A name that is deleted and saved again names a different snapshot. A window
+// that listed the first one must not replace, rename, delete or open the second.
+func TestNamedWorkspaceChangesApplyOnlyToTheListedSnapshot(t *testing.T) {
+	setTestConfigEnv(t)
+	store := NewUIStateStore()
+	sized := func(width int) NamedWorkspace {
+		return NamedWorkspace{SchemaVersion: 1, AppWindows: []NamedWorkspaceAppWindow{{
+			Geometry: panelwindow.NamedWorkspaceGeometry{WindowBounds: panelwindow.WindowBounds{Width: width, Height: 800}},
+		}}}
+	}
+	windows := &namedWorkspaceTestWindows{state: sized(1200)}
+	service := NewDesktopService(DesktopServiceDependencies{NamedWorkspaces: NewNamedWorkspaceService(windows, store)})
+	ctx := context.WithValue(context.Background(), application.WindowKey, panelCommandCaller("workspace-1"))
+	const window = "workspace-1"
+
+	require.NoError(t, service.SaveNamedWorkspace(ctx, window, "Triage", false, ""))
+	stale := namedWorkspaceRevision(t, service, "Triage")
+	require.NoError(t, service.DeleteNamedWorkspace(ctx, window, "Triage", stale))
+	windows.state = sized(900)
+	require.NoError(t, service.SaveNamedWorkspace(ctx, window, "Triage", false, ""))
+	current := namedWorkspaceRevision(t, service, "Triage")
+
+	// The other window still holds what it listed before the name was reused.
+	windows.state = sized(700)
+	require.Error(t, service.SaveNamedWorkspace(ctx, window, "Triage", true, stale))
+	require.Error(t, service.RenameNamedWorkspace(ctx, window, "Triage", "Incident", stale))
+	require.Error(t, service.DeleteNamedWorkspace(ctx, window, "Triage", stale))
+	require.Error(t, service.OpenNamedWorkspace(ctx, window, "Triage", stale))
+	require.Empty(t, windows.opened.AppWindows, "a refused open must not reach the windows")
+	entries, err := service.ListNamedWorkspaces()
 	require.NoError(t, err)
+	require.Equal(t, []NamedWorkspaceEntry{{Name: "Triage", Revision: current}}, entries)
+	require.NoError(t, service.OpenNamedWorkspace(ctx, window, "Triage", current))
+	require.Equal(t, 900, windows.opened.AppWindows[0].Geometry.Width)
+
+	// A replacement is a new snapshot too, so what was listed before it is stale.
+	require.NoError(t, service.SaveNamedWorkspace(ctx, window, "Triage", true, current))
+	replaced := namedWorkspaceRevision(t, service, "Triage")
+	require.Error(t, service.OpenNamedWorkspace(ctx, window, "Triage", current))
+	// A rename moves the same snapshot, so its listed revision still applies.
+	require.NoError(t, service.RenameNamedWorkspace(ctx, window, "Triage", "Incident", replaced))
+	require.NoError(t, service.OpenNamedWorkspace(ctx, window, "Incident", replaced))
+	require.Equal(t, 700, windows.opened.AppWindows[0].Geometry.Width)
+	require.NoError(t, service.DeleteNamedWorkspace(ctx, window, "Incident", replaced))
+	require.Empty(t, namedWorkspaceNames(t, NewUIStateStore()))
+}
+
+// Workspaces saved before revisions existed have none. Listing gives each its
+// own, so two of them can no longer be mistaken for each other when one is
+// deleted and the other takes its name.
+func TestNamedWorkspaceSavedBeforeRevisionsIsStampedWhenListed(t *testing.T) {
+	setTestConfigEnv(t)
+	store := NewUIStateStore()
+	sized := func(width int) NamedWorkspace {
+		return NamedWorkspace{SchemaVersion: 1, AppWindows: []NamedWorkspaceAppWindow{{
+			Geometry: panelwindow.NamedWorkspaceGeometry{WindowBounds: panelwindow.WindowBounds{Width: width, Height: 800}},
+		}}}
+	}
+	state, err := store.loadPersistenceFile()
+	require.NoError(t, err)
+	state.Workspaces = map[string]NamedWorkspace{"Legacy": sized(1200), "Other": sized(900)}
+	require.NoError(t, store.savePersistenceFile(state))
+
+	entries, err := store.ListNamedWorkspaces()
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+	legacy, other := entries[0].Revision, entries[1].Revision
+	require.NotEmpty(t, legacy)
+	require.NotEqual(t, legacy, other)
+	again, err := NewUIStateStore().ListNamedWorkspaces()
+	require.NoError(t, err)
+	require.Equal(t, entries, again, "the revisions are saved, not made up on each listing")
+
+	require.NoError(t, store.DeleteNamedWorkspace("Legacy", legacy))
+	require.NoError(t, store.RenameNamedWorkspace("Other", "Legacy", other))
+	// A dialog that listed the first "Legacy" must not reach the snapshot that
+	// now has its name.
+	_, err = store.GetNamedWorkspace("Legacy", legacy)
+	require.Error(t, err)
+	require.Error(t, store.DeleteNamedWorkspace("Legacy", legacy))
+	saved, err := store.GetNamedWorkspace("Legacy", other)
+	require.NoError(t, err)
+	require.Equal(t, 900, saved.AppWindows[0].Geometry.Width)
 }

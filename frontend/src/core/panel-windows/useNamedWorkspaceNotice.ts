@@ -21,6 +21,12 @@ const warningsFor = (event: panelwindow.NamedWorkspaceWarningsEvent) => {
       message: `${windows(event.unclosedWindows)} from before the switch could not be closed.`,
     });
   }
+  if (event.unrestoredWindows > 0) {
+    warnings.push({
+      title: 'Workspace opened, but not every window was restored',
+      message: `${windows(event.unrestoredWindows)} could not be opened or could not load the saved view.`,
+    });
+  }
   if (event.notFullscreen > 0) {
     warnings.push({
       title: 'Workspace opened, but not every window is fullscreen',
@@ -31,7 +37,7 @@ const warningsFor = (event: panelwindow.NamedWorkspaceWarningsEvent) => {
 };
 
 // Shows what a workspace switch could not do, in the window of the new
-// workspace the backend chose: the window that asked is usually closed by it.
+// workspace the backend chose: the window that asked is closed by it.
 export function useNamedWorkspaceNotice(windowName: string) {
   useEffect(
     () =>

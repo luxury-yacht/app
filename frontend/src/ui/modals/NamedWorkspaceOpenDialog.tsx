@@ -5,6 +5,7 @@ import {
   OpenNamedWorkspace,
   RenameNamedWorkspace,
 } from '@/core/backend-api';
+import type { panelwindow } from '@/core/backend-api/models';
 import { getWindowIdentity } from '@/core/desktop-runtime';
 import { eventBus, useEventBus } from '@/core/events';
 import { ErrorSurface } from '@/shared/components/errors/ErrorSurface';
@@ -18,13 +19,16 @@ export function NamedWorkspaceOpenDialog() {
   const title = useId();
   const ref = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState(false);
-  const [names, setNames] = useState<string[] | null>(null);
+  const [entries, setEntries] = useState<panelwindow.NamedWorkspaceEntry[] | null>(null);
   const [selected, setSelected] = useState('');
   const [work, setWork] = useState<'open' | 'delete' | 'rename' | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [failure, setFailure] = useState<{ error: unknown; action: string } | null>(null);
   const busy = work !== null;
+  const names = entries?.map((entry) => entry.name) ?? null;
+  // Every change names the snapshot this dialog listed, not just its name.
+  const revision = entries?.find((entry) => entry.name === selected)?.revision ?? '';
   const close = () => {
     if (!busy) {
       setShown(false);
@@ -36,17 +40,31 @@ export function NamedWorkspaceOpenDialog() {
     ListNamedWorkspaces()
       .then((saved) => {
         const list = saved ?? [];
-        setNames(list);
-        setSelected(preferred && list.includes(preferred) ? preferred : (list[0] ?? ''));
+        setEntries(list);
+        const kept = list.some((entry) => entry.name === preferred);
+        setSelected(preferred && kept ? preferred : (list[0]?.name ?? ''));
+        return list;
       })
-      .catch((error) => setFailure({ error, action: 'list' }));
+      .catch((error) => {
+        setFailure({ error, action: 'list' });
+        return null;
+      });
+
+  // A refused change means the list is out of date: another window may have
+  // renamed, deleted or replaced what this dialog offered. Read it again, then
+  // say why the change did not happen.
+  const refused = async (action: string, error: unknown) => {
+    const list = await load(selected);
+    setFailure({ error, action });
+    return list;
+  };
 
   useEventBus('named-workspace:open-dialog', () => {
     if (shown) {
       return;
     }
     setShown(true);
-    setNames(null);
+    setEntries(null);
     setSelected('');
     setFailure(null);
     setConfirmingDelete(false);
@@ -77,10 +95,10 @@ export function NamedWorkspaceOpenDialog() {
     setWork('open');
     setFailure(null);
     try {
-      await OpenNamedWorkspace(getWindowIdentity(), selected);
+      await OpenNamedWorkspace(getWindowIdentity(), selected, revision);
       setShown(false);
     } catch (error) {
-      setFailure({ error, action: 'open' });
+      await refused('open', error);
     } finally {
       setWork(null);
     }
@@ -92,12 +110,12 @@ export function NamedWorkspaceOpenDialog() {
     setWork('delete');
     setFailure(null);
     try {
-      await DeleteNamedWorkspace(getWindowIdentity(), selected);
-      const remaining = (names ?? []).filter((name) => name !== selected);
-      setNames(remaining);
-      setSelected(remaining[0] ?? '');
+      await DeleteNamedWorkspace(getWindowIdentity(), selected, revision);
+      const remaining = (entries ?? []).filter((entry) => entry.name !== selected);
+      setEntries(remaining);
+      setSelected(remaining[0]?.name ?? '');
     } catch (error) {
-      setFailure({ error, action: 'delete' });
+      await refused('delete', error);
     } finally {
       setWork(null);
     }
@@ -107,11 +125,15 @@ export function NamedWorkspaceOpenDialog() {
     setWork('rename');
     setFailure(null);
     try {
-      await RenameNamedWorkspace(getWindowIdentity(), selected, newName);
+      await RenameNamedWorkspace(getWindowIdentity(), selected, newName, revision);
       await load(newName);
       setRenaming(false);
     } catch (error) {
-      setFailure({ error, action: 'rename' });
+      const list = await refused('rename', error);
+      // The form must not go on to rename whichever workspace is selected next.
+      if (list && !list.some((entry) => entry.name === selected)) {
+        setRenaming(false);
+      }
     } finally {
       setWork(null);
     }

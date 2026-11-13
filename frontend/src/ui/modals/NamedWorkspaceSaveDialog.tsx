@@ -1,5 +1,6 @@
 import { useId, useRef, useState } from 'react';
 import { ListNamedWorkspaces, SaveNamedWorkspace } from '@/core/backend-api';
+import type { panelwindow } from '@/core/backend-api/models';
 import { getWindowIdentity } from '@/core/desktop-runtime';
 import { useEventBus } from '@/core/events';
 import { ErrorSurface } from '@/shared/components/errors/ErrorSurface';
@@ -13,10 +14,12 @@ export function NamedWorkspaceSaveDialog() {
   const modalRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
-  const [names, setNames] = useState<string[]>([]);
+  const [entries, setEntries] = useState<panelwindow.NamedWorkspaceEntry[]>([]);
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<{ error: unknown; action: string } | null>(null);
-  const replacing = names.includes(name.trim());
+  // A replacement names the snapshot this dialog listed, not just its name.
+  const listed = entries.find((entry) => entry.name === name.trim());
+  const replacing = listed !== undefined;
   const idleLabel = replacing ? 'Replace Workspace' : 'Save';
   const submitLabel = saving ? 'Saving…' : idleLabel;
   const close = () => {
@@ -25,14 +28,17 @@ export function NamedWorkspaceSaveDialog() {
     }
   };
 
+  const load = () =>
+    ListNamedWorkspaces()
+      .then((saved) => setEntries(saved ?? []))
+      .catch((error) => setFailure({ error, action: 'list' }));
+
   useEventBus('named-workspace:save-dialog', () => {
     if (!open) {
       setName('');
       setFailure(null);
       setOpen(true);
-      void ListNamedWorkspaces()
-        .then((saved) => setNames(saved ?? []))
-        .catch((error) => setFailure({ error, action: 'list' }));
+      void load();
     }
   });
   useModalFocusTrap({
@@ -48,9 +54,13 @@ export function NamedWorkspaceSaveDialog() {
     setSaving(true);
     setFailure(null);
     try {
-      await SaveNamedWorkspace(getWindowIdentity(), name.trim(), replacing);
+      await SaveNamedWorkspace(getWindowIdentity(), name.trim(), replacing, listed?.revision ?? '');
       setOpen(false);
     } catch (error) {
+      // A refused save means the list is out of date: another window may have
+      // saved, renamed, deleted or replaced this name. Read it again, then say
+      // why nothing was saved.
+      await load();
       setFailure({ error, action: 'save' });
     } finally {
       setSaving(false);

@@ -218,74 +218,69 @@ Lock ordering:
 
 ## Close, quit, and shutdown
 
-Named workspace switches reuse the close preflight across the current app and
-panel renderers. What can be restored is decided first: saved clusters that are
-no longer available are dropped, and a workspace with nothing left is refused
-before any window runs its guards. Once every window approves, the registry
-replaces the collected preflight, so a late collection timeout cannot release
-the frozen windows while the switch stages. Ending a preflight checks and
-claims it in one hold of the quit mutex, so an approval racing a cancelled
-switch cannot leave a preflight that nothing releases. The registry stages
-destination windows with a separate panel directory and admits their saved
-cluster selections before hydration. Each destination acknowledges
-reconstruction before the registry replaces the live directory at its expected
-revision. A denied guard, failed mount, or changed window inventory releases
-staging and leaves the current arrangement available.
+Opening a named workspace closes the current windows and then loads the saved
+ones. It is not a transaction: once the current windows start closing, nothing
+is rolled back.
 
-The registry keeps one record of the switch in progress, and that record is
-where a switch learns that it can no longer complete:
+1. What can be restored is decided first. Saved clusters that are no longer
+   available are dropped, and a workspace with nothing left is refused.
+2. Every current app and panel renderer runs its close guards through the quit
+   preflight. A denial or a cancelled request leaves everything as it was. Once
+   every window approves, the registry replaces the collected preflight, so a
+   late collection timeout cannot release the frozen windows, and ending a
+   preflight checks and claims it in one hold of the quit mutex.
+3. One selection claims every saved cluster, so a cluster both workspaces show
+   stays connected. The claim does not change what the next launch opens.
+4. The registry clears the panel directory at the revision it read after the
+   windows approved. This is the last step that can refuse: the directory
+   rejects it if anything changed since, a removed cluster included, and the
+   claim on the saved clusters is then given up.
+5. The saved windows are created hidden, as ordinary windows: each gets its
+   cluster tabs and its panels in the live directory before it loads. They are
+   created before the current windows close because Windows and Linux end the
+   process the moment no window is left; macOS asks `ShouldQuit`, which refuses
+   while a switch holds its preflight.
+6. The current windows close. The registry detaches each one itself instead of
+   going through the window's own close, because closing the last app view
+   there means quitting.
+7. The saved windows get a bounded time to load their views, then are shown and
+   placed. Fullscreen is entered last and one window at a time: on macOS a
+   window maximized during another's fullscreen transition is left part-way,
+   and a fullscreen request made during a transition is dropped.
+8. The preflight ends. What the closed windows held in the backend is released
+   only now, because those releases can queue behind cluster connections the
+   saved workspace started. The restart selection is written once, last.
 
-- The user cannot close a destination until the switch commits. The registry
-  cancels a native close it did not ask for and refuses the renderer's close
-  acknowledgement. From the commit on it is an ordinary window.
-- Every close the registry starts goes through `closeAuthorizedWindow`. Closing
-  a destination before the commit fails the switch and releases that
-  destination's readiness wait, so a panel that fails to load ends the switch at
-  once instead of at the staging deadline.
-- A cluster that goes away meanwhile is found at the commit: each destination
-  app window must still hold the clusters it was seeded with, read from the
-  workspace coordinator. The removal notification is not used for this. It also
-  fires when a cluster's clients are torn down, and it can arrive after the
-  commit. A torn-down cluster does close its panel windows, destinations
-  included, and that aborts the switch like any other close.
-- The commit takes the record's lock for the failure check, a second inventory
-  and cluster check, the directory swap, and the end of staging. A close
-  therefore either aborts the switch while the previous windows are still open,
-  or happens to a window of the committed workspace.
-
-Replacing the directory commits the switch. The registry then retires every
-previous window; the new windows stay. A native close only queues the close
-hook, so the registry runs an app view's close itself first and treats a view
-it still tracks as one that stays open. A panel window with no native window to
-close is still removed from the registry, because a kept entry would block
-every later save and switch.
-
-What the switch could not do goes to one window of the new workspace in a
-single `named-workspace:warnings` event, because the window that asked for the
-switch is usually one of those it closed: saved clusters that are unavailable,
-previous windows still on screen, and windows that did not return to
-fullscreen. The registry picks the window the user is most likely looking at
-(the last to enter fullscreen, otherwise one not reopened minimized) and moves
-to the next if that one cannot take the event. The command returns an error
+Anything that fails after step 4 becomes a warning: a saved window that could
+not be created or did not load its view, a previous window that did not close,
+a window that did not return to fullscreen, a saved cluster that is
+unavailable. The warnings go to one window of the new workspace in a single
+`named-workspace:warnings` event, since the window that asked is closed. The
+registry picks the window the user is most likely looking at (the last to enter
+fullscreen, otherwise one not reopened minimized). The command returns an error
 only when closing a previous window failed.
 
-The user can close every window of the new workspace while the previous ones
-are still being retired. The switch then releases its preflight and requests
-the quit that closing a last window means, because a quit asked for while the
-preflight is held is refused and would leave the app running with no window.
+Because the saved windows are ordinary windows from step 5, the user can close
+them all before the switch has finished. The switch then requests the quit that
+closing a last window means, since a quit asked for while the preflight was held
+was refused. File > New Window is refused while a switch runs: a new window
+takes every selected cluster, and that selection is being replaced.
 
 Saved geometry uses the same logical work-area rules as startup. A window is
 saved with the bounds it returns to and with its maximized, fullscreen, and
-minimized state, and both are applied when it reopens. Fullscreen is entered
-after every other window has its state, one window at a time: on macOS a window
-maximized during another's fullscreen transition is left part-way, and a
-fullscreen request made during a transition is dropped. A window that neither
-announces the end of its transition nor reports fullscreen afterwards is
-counted as not restored.
+minimized state, and both are applied when it reopens.
 
 Saving a workspace asks every ready app and panel window for one reply: its
 view, or the reason it has none. A failure reply ends the capture at once with
-that reason, and nothing is written.
+that reason, and so does a window that closes before answering; nothing is
+written. Save, switch, and the quit preflight only start when every app window's
+renderer has acknowledged that it is mounted, and save and switch also wait for
+a cluster view that is moving between windows.
+
+Each saved workspace has a revision, assigned when it is saved. The dialogs
+list name and revision, and replace, rename, delete, and open are refused when
+the snapshot under that name is no longer the one listed. Snapshots saved
+before revisions existed get one the first time they are listed.
 
 | Close | Wails surface | Backend contract |
 | --- | --- | --- |

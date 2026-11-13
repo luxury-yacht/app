@@ -371,3 +371,17 @@ func TestPublicationReportsArrangementOnly(t *testing.T) {
 	require.NotContains(t, panels, unknown.PanelID, "a publication does not open panels")
 	require.Empty(t, removed)
 }
+
+// A cluster that goes away while a saved workspace is staged must stop its
+// commit, whether or not the live workspace had panels for that cluster: the
+// staged windows were built for a cluster set that no longer holds.
+func TestRemovingAClusterStopsAStagedWorkspaceCommit(t *testing.T) {
+	live, staged := NewWorkspaceDirectory(), NewWorkspaceDirectory()
+	revision, err := live.WorkspaceCaptureRevision()
+	require.NoError(t, err)
+	live.RemoveCluster("cluster-without-panels")
+	require.Error(t, live.CommitNamedWorkspace(staged, revision))
+	revision, err = live.WorkspaceCaptureRevision()
+	require.NoError(t, err)
+	require.NoError(t, live.CommitNamedWorkspace(staged, revision))
+}

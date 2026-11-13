@@ -20,6 +20,9 @@ type NamedWorkspaceWarningsEvent struct {
 	MissingClusters []string `json:"missingClusters"`
 	// UnclosedWindows counts previous windows that did not close.
 	UnclosedWindows int `json:"unclosedWindows"`
+	// UnrestoredWindows counts saved windows that could not be opened or did not
+	// load their saved view.
+	UnrestoredWindows int `json:"unrestoredWindows"`
 	// NotFullscreen counts restored windows that did not return to fullscreen.
 	NotFullscreen int `json:"notFullscreen"`
 }
@@ -121,6 +124,15 @@ type NamedWorkspace struct {
 	SchemaVersion int                         `json:"schemaVersion"`
 	AppWindows    []NamedWorkspaceAppWindow   `json:"appWindows"`
 	PanelWindows  []NamedWorkspacePanelWindow `json:"panelWindows"`
+	// Revision identifies this saved snapshot. A name can be deleted and reused,
+	// so a change to a saved workspace names the revision it was listed with.
+	Revision string `json:"revision,omitempty"`
+}
+
+// NamedWorkspaceEntry is one saved workspace as a dialog lists it.
+type NamedWorkspaceEntry struct {
+	Name     string `json:"name"`
+	Revision string `json:"revision"`
 }
 
 type NamedWorkspaceAppWindow struct {

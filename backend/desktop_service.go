@@ -40,13 +40,13 @@ type UIStateCommands interface {
 
 // NamedWorkspaceCommands owns the desktop snapshot workflow.
 type NamedWorkspaceCommands interface {
-	OpenNamedWorkspace(context.Context, string, string) error
+	OpenNamedWorkspace(context.Context, string, string, string) error
 	AcknowledgeNamedWorkspaceRestore(string, string) error
-	SaveNamedWorkspace(context.Context, string, string, bool) error
+	SaveNamedWorkspace(context.Context, string, string, bool, string) error
 	SubmitNamedWorkspaceCapture(string, string, panelwindow.NamedWorkspaceAppView, string) error
-	ListNamedWorkspaces() ([]string, error)
-	DeleteNamedWorkspace(string) error
-	RenameNamedWorkspace(string, string) error
+	ListNamedWorkspaces() ([]panelwindow.NamedWorkspaceEntry, error)
+	DeleteNamedWorkspace(string, string) error
+	RenameNamedWorkspace(string, string, string) error
 }
 
 // PreferencesCommands is the frontend command surface owned by PreferencesService.

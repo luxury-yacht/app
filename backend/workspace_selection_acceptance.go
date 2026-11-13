@@ -5,12 +5,16 @@ import "fmt"
 // A tab is admitted before its connection work. The renderer can then issue a
 // close while preflight is still running; runtime publication and teardown keep
 // the existing serialized mutation lease and shutdown drain.
-func (a *WorkspaceCoordinator) acceptWorkspaceSelection(windowID string, command ClusterWorkspaceCommand) ClusterWorkspaceResult {
+// acceptWorkspaceSelection commits a window's cluster selection through the
+// ordered mutation. keepRestartSelection leaves what the next launch opens as
+// it is: a workspace switch admits clusters it may still abandon.
+func (a *WorkspaceCoordinator) acceptWorkspaceSelection(windowID string, command ClusterWorkspaceCommand, keepRestartSelection bool) ClusterWorkspaceResult {
 	a.cancelObsoleteWorkspaceConnection(windowID, command.SelectedKubeconfigs)
 	accepted := make(chan ClusterWorkspaceResult, 1)
 	go func() {
 		committed := false
 		err := a.runOrderedSelectionMutation("apply-cluster-workspace", func(mutation *selectionMutation) error {
+			mutation.preserveRestartSelection = keepRestartSelection
 			intent, err := a.commitWorkspaceSelections(mutation, windowID, command.SelectedKubeconfigs)
 			if err != nil {
 				return err

@@ -45,6 +45,8 @@ func (w *blockingStartupWorkspace) CloseClusterView(string, string) error { retu
 
 func (*blockingStartupWorkspace) SeedNamedWorkspaceWindow(string, []string, string) error { return nil }
 
+func (*blockingStartupWorkspace) PersistRestartSelection() {}
+
 func (w *blockingStartupWorkspace) WindowClusterIDs(string) []string { return nil }
 func (w *blockingStartupWorkspace) PanelWorkspaceDirectory() *panelwindow.WorkspaceDirectory {
 	return panelwindow.NewWorkspaceDirectory()

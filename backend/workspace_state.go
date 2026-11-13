@@ -274,7 +274,7 @@ func (a *WorkspaceCoordinator) ApplyClusterWorkspace(command ClusterWorkspaceCom
 		return clusterWorkspaceResult(a.latestClusterWorkspaceState(windowID), nil)
 	}
 	if windowID != "" {
-		return a.acceptWorkspaceSelection(windowID, command)
+		return a.acceptWorkspaceSelection(windowID, command, false)
 	}
 	var state ClusterWorkspaceState
 	captured := false
@@ -367,10 +367,35 @@ func appendWorkspaceSelection(union *[]string, wanted, seen map[string]struct{},
 	*union = append(*union, selection)
 }
 
+// PersistRestartSelection writes the clusters the next launch opens. A workspace
+// switch calls it once it has committed and retired the previous windows; the
+// selection changes it made while staging were deliberately not written.
+func (a *WorkspaceCoordinator) PersistRestartSelection() {
+	if a == nil {
+		return
+	}
+	err := a.runOrderedSelectionMutation("persist-restart-selection", func(*selectionMutation) error {
+		a.workspaceSelectionsMu.RLock()
+		windows := len(a.workspaceSelections)
+		a.workspaceSelectionsMu.RUnlock()
+		// With no window left the selection is empty, and closing the last window
+		// keeps what the next launch opens (see ReleaseWorkspaceWindow).
+		if windows == 0 {
+			return nil
+		}
+		return a.preferences.SaveSelectedKubeconfigs(a.GetSelectedKubeconfigs())
+	})
+	if err != nil && a.logger != nil {
+		a.logger.Warn(fmt.Sprintf("Failed to save kubeconfig selection: %v", err), "KubeconfigManager")
+	}
+}
+
 // SeedNamedWorkspaceWindow admits the saved cluster tabs before renderer hydration.
 // Sharing selections that other views still own does not change the process
 // union. A selection without an owner may be mid-retirement, so it is admitted
-// through the ordered mutation instead (see retainOwnedPanelCluster).
+// through the ordered mutation instead (see retainOwnedPanelCluster). That
+// mutation leaves the restart selection alone: the switch may still be
+// abandoned, and PersistRestartSelection writes it once the switch commits.
 func (a *WorkspaceCoordinator) SeedNamedWorkspaceWindow(window string, selections []string, visible string) error {
 	command := ClusterWorkspaceCommand{WindowID: window, SelectedKubeconfigs: selections, UpdateSelectedKubeconfigs: true, VisibleClusterID: visible}
 	a.workspaceSelectionsMu.Lock()
@@ -385,7 +410,7 @@ func (a *WorkspaceCoordinator) SeedNamedWorkspaceWindow(window string, selection
 		a.updateClusterWorkspaceVisibility(window, command)
 		return nil
 	}
-	result := a.acceptWorkspaceSelection(window, command)
+	result := a.acceptWorkspaceSelection(window, command, true)
 	if result.Error != nil {
 		return fmt.Errorf("seed workspace selection: %v", result.Error)
 	}

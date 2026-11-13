@@ -20,6 +20,7 @@ type lifecycleBackend interface {
 	PrepareQuitFromWindow(windowName string) bool
 	SaveWorkspaceWindowGeometry(string)
 	WindowClusterIDs(string) []string
+	PersistRestartSelection()
 	NamedWorkspaceAvailableClusters() ([]string, error)
 	SeedNamedWorkspaceWindow(string, []string, string) error
 	ResolveNamedWorkspaceGeometry(panelwindow.NamedWorkspaceGeometry) (panelwindow.WindowBounds, bool)
@@ -34,7 +35,6 @@ type Registry struct {
 	namedWorkspaceOperation sync.Mutex
 	workspaceCaptureMu      sync.Mutex
 	workspaceCapture        *namedWorkspaceCapture
-	workspaceRestoreSlots   sync.Map
 	normalWorkspaceBounds   sync.Map
 	clusterCloseMu          sync.Mutex
 	nextClusterClose        uint64
@@ -56,27 +56,28 @@ type Registry struct {
 	emitWindowEvent         func(string, string, any) bool
 	windowGeometry          func(string) (geometry, bool)
 	restoreWindowState      func(string, panelwindow.NamedWorkspaceGeometry) bool
-	// activeRestore is the workspace switch in progress, from staging until its
-	// previous windows are retired.
-	activeRestore          atomic.Pointer[namedWorkspaceRestore]
-	screenWorkAreas        func() []application.Rect
-	closeMu                sync.Mutex
-	authorizedClose        map[string]struct{}
-	workspaceReady         map[string]struct{}
-	panelWorkspaceReady    map[string]struct{}
-	queuedWorkspaceEvents  map[string][]workspaceWindowEvent
-	panelOpenTimeout       time.Duration
-	panelDockTimeout       time.Duration
-	clusterTransferTimeout time.Duration
-	clusterCloseTimeout    time.Duration
-	quitMu                 sync.Mutex
-	nextQuit               uint64
-	pendingQuit            *applicationQuitPreflight
-	quitPreflightTimeout   time.Duration
-	panelTransferMu        sync.Mutex
-	tabTransferMu          sync.Mutex
-	tabTransfers           transferLifecycle[panelTabTransfer]
-	tabTransferTimeout     time.Duration
+	// activeRestore is the workspace switch in progress: the windows it created
+	// and their answers.
+	activeRestore                atomic.Pointer[namedWorkspaceRestore]
+	namedWorkspaceRestoreTimeout time.Duration
+	screenWorkAreas              func() []application.Rect
+	closeMu                      sync.Mutex
+	authorizedClose              map[string]struct{}
+	workspaceReady               map[string]struct{}
+	panelWorkspaceReady          map[string]struct{}
+	queuedWorkspaceEvents        map[string][]workspaceWindowEvent
+	panelOpenTimeout             time.Duration
+	panelDockTimeout             time.Duration
+	clusterTransferTimeout       time.Duration
+	clusterCloseTimeout          time.Duration
+	quitMu                       sync.Mutex
+	nextQuit                     uint64
+	pendingQuit                  *applicationQuitPreflight
+	quitPreflightTimeout         time.Duration
+	panelTransferMu              sync.Mutex
+	tabTransferMu                sync.Mutex
+	tabTransfers                 transferLifecycle[panelTabTransfer]
+	tabTransferTimeout           time.Duration
 }
 
 type applicationQuitPreflight struct {
@@ -294,20 +295,21 @@ func NewRegistry(
 ) *Registry {
 	configureNativeTabDragAnimation()
 	registry := &Registry{
-		application:            app,
-		backend:                backend,
-		lifecycle:              newLifecycle(),
-		panels:                 newPanelIndex(),
-		workspace:              panelwindow.NewWorkspaceDirectory(),
-		authorizedClose:        make(map[string]struct{}),
-		workspaceReady:         make(map[string]struct{}),
-		panelOpenTimeout:       15 * time.Second,
-		panelDockTimeout:       15 * time.Second,
-		clusterTransferTimeout: 15 * time.Second,
-		clusterCloseTimeout:    15 * time.Second,
-		quitPreflightTimeout:   20 * time.Second,
-		tabTransferTimeout:     15 * time.Second,
-		configurePanelWindow:   configureNativePanelWindow,
+		application:                  app,
+		backend:                      backend,
+		lifecycle:                    newLifecycle(),
+		panels:                       newPanelIndex(),
+		workspace:                    panelwindow.NewWorkspaceDirectory(),
+		authorizedClose:              make(map[string]struct{}),
+		workspaceReady:               make(map[string]struct{}),
+		panelOpenTimeout:             15 * time.Second,
+		panelDockTimeout:             15 * time.Second,
+		clusterTransferTimeout:       15 * time.Second,
+		clusterCloseTimeout:          15 * time.Second,
+		quitPreflightTimeout:         20 * time.Second,
+		namedWorkspaceRestoreTimeout: defaultNamedWorkspaceRestoreTimeout,
+		tabTransferTimeout:           15 * time.Second,
+		configurePanelWindow:         configureNativePanelWindow,
 	}
 	if backend != nil {
 		registry.workspace = backend.PanelWorkspaceDirectory()
@@ -439,6 +441,11 @@ func (r *Registry) expirePanelOpen(windowName, transferID string) {
 
 // Create adds a peer window. Only the initial peer restores persisted geometry.
 func (r *Registry) Create(restoreGeometry bool) *application.WebviewWindow {
+	// A new peer takes the process's cluster selection, which a workspace switch
+	// is in the middle of replacing.
+	if r.activeRestore.Load() != nil {
+		return nil
+	}
 	sourceName := r.lifecycle.MostRecent()
 	name := r.lifecycle.Add()
 	window := r.newWindow(r.optionsForPeer(name, sourceName, restoreGeometry))
@@ -489,7 +496,9 @@ func (r *Registry) registerLifecycleHooks(
 ) {
 	r.trackNamedWorkspaceBounds(window, name)
 	window.OnWindowEvent(events.Common.WindowRuntimeReady, func(*application.WindowEvent) {
-		if _, staged := r.workspaceRestoreSlots.Load(name); !staged {
+		// The backend shows a window once its runtime is ready. A window a
+		// workspace switch is restoring is shown by the switch, once it has loaded.
+		if !r.restoringWindow(name) {
 			r.backend.WindowRuntimeReady(name, restoreGeometry)
 		}
 		r.markWorkspaceReady(name)
@@ -528,7 +537,7 @@ func (r *Registry) authorizeClose(name string) {
 // The native close hook can consume authorization synchronously. If no window
 // accepts the close, discard the unused authorization before returning.
 func (r *Registry) closeAuthorizedWindow(name string) bool {
-	r.failRestoreOfClosedWindow(name)
+	r.failCaptureOfClosedWindow(name)
 	r.authorizeClose(name)
 	// No native window answers only when there is none, so its bounds go either way.
 	r.normalWorkspaceBounds.Delete(name)
@@ -575,10 +584,6 @@ func (r *Registry) forgetWorkspaceReady(name string) {
 
 func (r *Registry) handlePanelClosingEvent(event *application.WindowEvent, name string) {
 	if r.consumeAuthorizedClose(name) {
-		return
-	}
-	if r.restoringWorkspaceWindow(name) {
-		cancelWindowEvent(event)
 		return
 	}
 	_, err := r.panels.Descriptor(name)
@@ -634,7 +639,9 @@ func (r *Registry) WindowDescriptor(name string) (NativeWindowDescriptor, error)
 // AcknowledgePanelWindowReady reveals the hidden native target, then commits the
 // directory move. A stale acknowledgement leaves the source transfer pending.
 func (r *Registry) AcknowledgePanelWindowReady(name, transferID string) (PanelWindowDescriptor, error) {
-	if _, staged := r.workspaceRestoreSlots.Load(name); staged {
+	// A panel window a workspace switch is restoring has no source to move
+	// from: its tabs are already placed, and the switch shows it.
+	if r.restoringWindow(name) {
 		descriptor, err := r.panels.AcknowledgeOpen(name, transferID)
 		if err != nil {
 			return PanelWindowDescriptor{}, err
@@ -670,7 +677,7 @@ func (r *Registry) withPanelGroup(descriptor PanelWindowDescriptor) PanelWindowD
 	if descriptor.State == PanelWindowStateOpening {
 		opening = descriptor.TransferID
 	}
-	descriptor.Group = r.workspaceDirectoryFor(descriptor.WindowName).WindowGroup(descriptor.ClusterID, descriptor.WindowName, descriptor.GroupID, opening)
+	descriptor.Group = r.workspace.WindowGroup(descriptor.ClusterID, descriptor.WindowName, descriptor.GroupID, opening)
 	return descriptor
 }
 
@@ -863,12 +870,10 @@ func (r *Registry) PublishPanelWindowGroup(windowName string, group panelwindow.
 	if err := r.panels.ValidatePublication(windowName, group); err != nil {
 		return err
 	}
-	if err := r.workspaceDirectoryFor(windowName).PublishWindow(windowName, panelwindow.PanelLocationWindow, []panelwindow.WorkspaceGroup{group}); err != nil {
+	if err := r.workspace.PublishWindow(windowName, panelwindow.PanelLocationWindow, []panelwindow.WorkspaceGroup{group}); err != nil {
 		return err
 	}
-	if _, staged := r.workspaceRestoreSlots.Load(windowName); !staged {
-		r.emitWorkspaceChanged(group.ClusterID)
-	}
+	r.emitWorkspaceChanged(group.ClusterID)
 	return nil
 }
 
@@ -893,26 +898,13 @@ func (r *Registry) RequestPanelTabClose(windowName, panelID string) error {
 // removal. Native destruction precedes removal of the panel directory entries
 // and release of its runtime references.
 func (r *Registry) AcknowledgePanelWindowClose(windowName string) error {
-	if r.restoringWorkspaceWindow(windowName) {
-		return fmt.Errorf("panel window %q is still being restored", windowName)
-	}
-	return r.closePanelWindow(windowName, false)
-}
-
-// closePanelWindow closes a panel window and releases what the registry holds
-// for it. With abandon, the registry gives the window up even when no native
-// window answers the close, and still reports that none did: the workspace
-// that replaced it is already live, so a kept entry would only block later
-// saves and switches.
-func (r *Registry) closePanelWindow(windowName string, abandon bool) error {
 	r.panelTransferMu.Lock()
 	defer r.panelTransferMu.Unlock()
 	descriptor, err := r.panels.Descriptor(windowName)
 	if err != nil {
 		return err
 	}
-	closed := r.closeAuthorizedWindow(windowName)
-	if !closed && !abandon {
+	if !r.closeAuthorizedWindow(windowName) {
 		return fmt.Errorf("panel window %q is not available", windowName)
 	}
 	r.failPanelTabTransfersForWindow(windowName, "panel window closed during tab transfer")
@@ -926,16 +918,10 @@ func (r *Registry) closePanelWindow(windowName string, abandon bool) error {
 	}
 	r.emitPanelClosed(descriptor)
 	r.emitWorkspaceChanged(descriptor.ClusterID)
-	if !closed {
-		return fmt.Errorf("panel window %q had no native window to close", windowName)
-	}
 	return nil
 }
 
 func (r *Registry) AcknowledgeWorkspaceWindowClose(windowName string) error {
-	if r.restoringWorkspaceWindow(windowName) {
-		return fmt.Errorf("app window %q is still being restored", windowName)
-	}
 	if !r.lifecycle.Contains(windowName) {
 		return fmt.Errorf("app window %q is not live", windowName)
 	}
@@ -1012,36 +998,6 @@ func (r *Registry) AcknowledgeApplicationQuitPreflight(
 	return nil
 }
 
-// restoringWorkspaceWindow reports whether name is a destination of a workspace
-// switch that has not committed. Until then the user cannot close it: closed
-// early, it would leave the switch to retire the previous windows with nothing
-// in their place. From the commit on it is an ordinary window.
-func (r *Registry) restoringWorkspaceWindow(name string) bool {
-	restore := r.activeRestore.Load()
-	return restore != nil && restore.stages(name)
-}
-
-// failRestoreOfClosedWindow aborts the switch in progress when the registry
-// closes one of its destinations before the commit. Every close the registry
-// starts passes through closeAuthorizedWindow, so no route has to remember to.
-// A destination still loading is released from its wait at once.
-func (r *Registry) failRestoreOfClosedWindow(name string) {
-	restore := r.activeRestore.Load()
-	if restore == nil || !restore.hasTarget(name) {
-		return
-	}
-	failure := fmt.Errorf("window %q closed before the workspace opened", name)
-	if !restore.fail(failure) {
-		return
-	}
-	if slot, staged := r.workspaceRestoreSlots.Load(name); staged {
-		select {
-		case slot.(*namedWorkspaceRestoreSlot).ready <- failure:
-		default:
-		}
-	}
-}
-
 func cancelWindowEvent(event *application.WindowEvent) {
 	if event != nil {
 		event.Cancel()
@@ -1049,13 +1005,9 @@ func cancelWindowEvent(event *application.WindowEvent) {
 }
 
 // refuseUnauthorizedAppClose keeps an app window open when the registry did not
-// ask for the close: a staged window stays, and a ready window is asked to run
-// its close guards first. It reports whether the close was refused.
+// ask for the close: a ready window is asked to run its close guards first. It
+// reports whether the close was refused.
 func (r *Registry) refuseUnauthorizedAppClose(event *application.WindowEvent, name string) bool {
-	if r.restoringWorkspaceWindow(name) {
-		cancelWindowEvent(event)
-		return true
-	}
 	if !r.isWorkspaceReady(name) {
 		return false
 	}
@@ -1152,10 +1104,22 @@ func (r *Registry) FocusMostRecent() {
 	focusApplicationWindow(r.application, r.lifecycle.MostRecent())
 }
 
+// rendererReady reports whether an app window's renderer has acknowledged that
+// it is mounted. Only then are its capture and close-guard handlers subscribed;
+// the native runtime is ready earlier, and a request sent in between is lost.
+func (r *Registry) rendererReady(name string) bool {
+	r.closeMu.Lock()
+	defer r.closeMu.Unlock()
+	_, ready := r.panelWorkspaceReady[name]
+	return ready
+}
+
+// readyWorkspaceNames lists the windows that can answer a request sent to every
+// window: a quit preflight, a workspace capture, a workspace switch.
 func (r *Registry) readyWorkspaceNames() []string {
 	ready := make([]string, 0)
 	for _, name := range r.lifecycle.Names() {
-		if r.isWorkspaceReady(name) {
+		if r.rendererReady(name) {
 			ready = append(ready, name)
 		}
 	}

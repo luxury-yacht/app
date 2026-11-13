@@ -150,20 +150,27 @@ it('warns in the restored window about each thing the switch could not do', asyn
         windowName,
         missingClusters: null,
         unclosedWindows: 0,
+        unrestoredWindows: 0,
         notFullscreen: 0,
         ...problems,
       });
     });
     return app.errors.take((record) => record.kinds.includes('warning')).length;
   };
-  // The window that asked for the switch is usually closed by it, so the
-  // backend addresses one window of the new workspace.
-  const everything = { missingClusters: ['stage'], unclosedWindows: 2, notFullscreen: 1 };
+  // The window that asked for the switch is closed by it, so the backend
+  // addresses one window of the new workspace.
+  const everything = {
+    missingClusters: ['stage'],
+    unclosedWindows: 2,
+    unrestoredWindows: 1,
+    notFullscreen: 1,
+  };
   expect(await warningsAfter('another-window', everything)).toBe(0);
-  expect(await warningsAfter(app.windowName, everything)).toBe(3);
+  expect(await warningsAfter(app.windowName, everything)).toBe(4);
   // Each problem is its own warning, and a switch with none raises nothing.
   expect(await warningsAfter(app.windowName, { missingClusters: ['stage'] })).toBe(1);
   expect(await warningsAfter(app.windowName, { unclosedWindows: 1 })).toBe(1);
+  expect(await warningsAfter(app.windowName, { unrestoredWindows: 2 })).toBe(1);
   expect(await warningsAfter(app.windowName, { notFullscreen: 1 })).toBe(1);
   expect(await warningsAfter(app.windowName, {})).toBe(0);
 });

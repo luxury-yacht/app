@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/luxury-yacht/app/internal/panelwindow"
 )
 
@@ -16,8 +17,12 @@ type NamedWorkspacePanelWindow = panelwindow.NamedWorkspacePanelWindow
 type NamedWorkspaceClusterTab = panelwindow.NamedWorkspaceClusterTab
 type NamedWorkspaceGlobalView = panelwindow.NamedWorkspaceGlobalView
 type NamedWorkspaceDockedGroup = panelwindow.NamedWorkspaceDockedGroup
+type NamedWorkspaceEntry = panelwindow.NamedWorkspaceEntry
 
-func (s *UIStateStore) SaveNamedWorkspace(name string, workspace NamedWorkspace, replace bool) error {
+// SaveNamedWorkspace stores a capture as a new snapshot with its own revision.
+// A replacement names the revision the caller listed; a first save takes a name
+// nobody holds.
+func (s *UIStateStore) SaveNamedWorkspace(name string, workspace NamedWorkspace, replace bool, revision string) error {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return fmt.Errorf("workspace name is required")
@@ -31,27 +36,71 @@ func (s *UIStateStore) SaveNamedWorkspace(name string, workspace NamedWorkspace,
 	if err != nil {
 		return err
 	}
+	if replace {
+		if _, err := listedNamedWorkspace(state, name, revision); err != nil {
+			return err
+		}
+	} else if _, exists := state.Workspaces[name]; exists {
+		return fmt.Errorf("workspace %q already exists", name)
+	}
 	if state.Workspaces == nil {
 		state.Workspaces = make(map[string]NamedWorkspace)
 	}
-	if _, exists := state.Workspaces[name]; exists && !replace {
-		return fmt.Errorf("workspace %q already exists", name)
-	}
+	workspace.Revision = uuid.NewString()
 	state.Workspaces[name] = workspace
 	return s.savePersistenceFile(state)
 }
 
-func (s *UIStateStore) ListNamedWorkspaces() ([]string, error) {
+// listedNamedWorkspace returns the snapshot saved under a name, but only while
+// it is still the one the caller listed. A name can be deleted or renamed and
+// then reused, so the name alone does not say which snapshot a window saw.
+// Snapshots saved before revisions existed get one the first time they are listed.
+func listedNamedWorkspace(state *persistenceFile, name, revision string) (NamedWorkspace, error) {
+	workspace, ok := state.Workspaces[name]
+	if !ok {
+		return NamedWorkspace{}, fmt.Errorf("workspace %q was not found", name)
+	}
+	if workspace.Revision != revision {
+		return NamedWorkspace{}, fmt.Errorf("workspace %q changed since it was listed", name)
+	}
+	return workspace, nil
+}
+
+func (s *UIStateStore) ListNamedWorkspaces() ([]NamedWorkspaceEntry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state, err := s.loadPersistenceFile()
 	if err != nil {
 		return nil, err
 	}
-	return slices.Sorted(maps.Keys(state.Workspaces)), nil
+	if stampNamedWorkspaceRevisions(state.Workspaces) {
+		if err := s.savePersistenceFile(state); err != nil {
+			return nil, err
+		}
+	}
+	var entries []NamedWorkspaceEntry
+	for _, name := range slices.Sorted(maps.Keys(state.Workspaces)) {
+		entries = append(entries, NamedWorkspaceEntry{Name: name, Revision: state.Workspaces[name].Revision})
+	}
+	return entries, nil
 }
 
-func (s *UIStateStore) DeleteNamedWorkspace(name string) error {
+// stampNamedWorkspaceRevisions gives a revision to every snapshot saved before
+// revisions existed. Without one, two such snapshots would look the same to a
+// dialog that listed one of them. It reports whether it changed anything.
+func stampNamedWorkspaceRevisions(workspaces map[string]NamedWorkspace) bool {
+	stamped := false
+	for name, workspace := range workspaces {
+		if workspace.Revision == "" {
+			workspace.Revision = uuid.NewString()
+			workspaces[name] = workspace
+			stamped = true
+		}
+	}
+	return stamped
+}
+
+func (s *UIStateStore) DeleteNamedWorkspace(name, revision string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state, err := s.loadPersistenceFile()
@@ -59,16 +108,17 @@ func (s *UIStateStore) DeleteNamedWorkspace(name string) error {
 		return err
 	}
 	key := strings.TrimSpace(name)
-	if _, ok := state.Workspaces[key]; !ok {
-		return fmt.Errorf("workspace %q was not found", key)
+	if _, err := listedNamedWorkspace(state, key, revision); err != nil {
+		return err
 	}
 	delete(state.Workspaces, key)
 	return s.savePersistenceFile(state)
 }
 
 // RenameNamedWorkspace moves a saved workspace to a new name. It never replaces
-// another workspace: that would discard a layout the user did not name.
-func (s *UIStateStore) RenameNamedWorkspace(name, newName string) error {
+// another workspace: that would discard a layout the user did not name. The
+// snapshot is unchanged, so it keeps its revision.
+func (s *UIStateStore) RenameNamedWorkspace(name, newName, revision string) error {
 	from, to := strings.TrimSpace(name), strings.TrimSpace(newName)
 	if to == "" {
 		return fmt.Errorf("workspace name is required")
@@ -79,9 +129,9 @@ func (s *UIStateStore) RenameNamedWorkspace(name, newName string) error {
 	if err != nil {
 		return err
 	}
-	workspace, ok := state.Workspaces[from]
-	if !ok {
-		return fmt.Errorf("workspace %q was not found", from)
+	workspace, err := listedNamedWorkspace(state, from, revision)
+	if err != nil {
+		return err
 	}
 	if from == to {
 		return nil
@@ -94,16 +144,16 @@ func (s *UIStateStore) RenameNamedWorkspace(name, newName string) error {
 	return s.savePersistenceFile(state)
 }
 
-func (s *UIStateStore) GetNamedWorkspace(name string) (*NamedWorkspace, error) {
+func (s *UIStateStore) GetNamedWorkspace(name, revision string) (*NamedWorkspace, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state, err := s.loadPersistenceFile()
 	if err != nil {
 		return nil, err
 	}
-	workspace, ok := state.Workspaces[strings.TrimSpace(name)]
-	if !ok {
-		return nil, fmt.Errorf("workspace %q was not found", name)
+	workspace, err := listedNamedWorkspace(state, strings.TrimSpace(name), revision)
+	if err != nil {
+		return nil, err
 	}
 	if err := validateNamedWorkspace(workspace); err != nil {
 		return nil, err

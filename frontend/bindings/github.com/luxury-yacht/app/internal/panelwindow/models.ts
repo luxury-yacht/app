@@ -106,6 +106,14 @@ export interface NamedWorkspaceDockedGroup {
 }
 
 /**
+ * NamedWorkspaceEntry is one saved workspace as a dialog lists it.
+ */
+export interface NamedWorkspaceEntry {
+    "name": string;
+    "revision": string;
+}
+
+/**
  * NamedWorkspaceGeometry is where a window sits in its normal state, and the
  * state it was saved in. Minimized combines with either of the others; a
  * fullscreen window is not also recorded as maximized.
@@ -147,6 +155,12 @@ export interface NamedWorkspaceWarningsEvent {
      * UnclosedWindows counts previous windows that did not close.
      */
     "unclosedWindows": number;
+
+    /**
+     * UnrestoredWindows counts saved windows that could not be opened or did not
+     * load their saved view.
+     */
+    "unrestoredWindows": number;
 
     /**
      * NotFullscreen counts restored windows that did not return to fullscreen.

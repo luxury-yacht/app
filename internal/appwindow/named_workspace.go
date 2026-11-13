@@ -30,12 +30,12 @@ func (r *Registry) CaptureNamedWorkspace(ctx context.Context, source string) (pa
 		return panelwindow.NamedWorkspace{}, fmt.Errorf("another workspace operation is in progress")
 	}
 	defer r.namedWorkspaceOperation.Unlock()
-	if !r.isWorkspaceReady(source) {
+	if !r.rendererReady(source) {
 		return panelwindow.NamedWorkspace{}, fmt.Errorf("source window is still opening")
 	}
 	apps, panels := r.lifecycle.Names(), r.panels.Names("")
 	participants := append(slices.Clone(apps), panels...)
-	if !slices.Equal(participants, r.readyWorkspaceNames()) {
+	if !slices.Equal(participants, r.readyWorkspaceNames()) || r.clusterViewMoving() {
 		return panelwindow.NamedWorkspace{}, fmt.Errorf("wait for all windows to finish opening or moving before saving")
 	}
 	if _, err := r.workspace.WorkspaceCaptureRevision(); err != nil {
@@ -95,6 +95,32 @@ func (r *Registry) requestNamedWorkspaceCapture(ctx context.Context, capture *na
 		}
 	}
 	return views, nil
+}
+
+// clusterViewMoving reports whether a cluster view is on its way between two
+// windows. Until the move settles the view belongs to neither, so the windows
+// cannot be saved or replaced.
+func (r *Registry) clusterViewMoving() bool {
+	r.clusterTransferMu.Lock()
+	defer r.clusterTransferMu.Unlock()
+	for range r.clusterTransfers.all() {
+		return true
+	}
+	return false
+}
+
+// failCaptureOfClosedWindow ends a capture that is waiting on a window the
+// registry is closing: that window can no longer answer. Every close the
+// registry starts passes through closeAuthorizedWindow, which calls this.
+func (r *Registry) failCaptureOfClosedWindow(name string) {
+	r.workspaceCaptureMu.Lock()
+	defer r.workspaceCaptureMu.Unlock()
+	capture := r.workspaceCapture
+	if capture == nil || !capture.waiting[name] {
+		return
+	}
+	delete(capture.waiting, name)
+	capture.replies <- namedWorkspaceCaptureReply{window: name, err: errors.New("the window closed before it could report its view")}
 }
 
 // SubmitNamedWorkspaceCapture is a window's one reply to a capture request: its

@@ -99,7 +99,7 @@ func TestQuitPreflightsAppAndPanelRenderersBeforeClosingAny(t *testing.T) {
 	lifecycle := newLifecycle()
 	appName := lifecycle.Add()
 	registry := &Registry{lifecycle: lifecycle, backend: &recordingLifecycleBackend{}, panels: newPanelIndex(), workspace: panelwindow.NewWorkspaceDirectory()}
-	registry.markWorkspaceReady(appName)
+	readyAppWindow(registry, appName)
 	snapshot := validPanelGroupSnapshot()
 	native, err := registry.panels.BeginOpen(snapshot)
 	require.NoError(t, err)

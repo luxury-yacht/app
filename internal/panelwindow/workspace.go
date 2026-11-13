@@ -348,9 +348,12 @@ func (d *WorkspaceDirectory) RemoveCluster(clusterID string) {
 	for key := range d.panels {
 		if key.clusterID == clusterID {
 			d.deletePanelLocked(key, removal)
-			d.revision++
 		}
 	}
+	// A removal changes which clusters the workspace can show even when this
+	// cluster had no panels, so anything staged against the earlier revision,
+	// such as a saved workspace being opened, must not commit.
+	d.revision++
 	for id, reserved := range d.reservations {
 		if reserved == clusterID {
 			delete(d.reservations, id)

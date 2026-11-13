@@ -22,6 +22,7 @@ export type {
     NamedWorkspaceCaptureRequest,
     NamedWorkspaceClusterTab,
     NamedWorkspaceDockedGroup,
+    NamedWorkspaceEntry,
     NamedWorkspaceGeometry,
     NamedWorkspaceGlobalView,
     NamedWorkspaceRestoreRequest,

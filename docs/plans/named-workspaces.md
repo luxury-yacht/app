@@ -22,12 +22,20 @@ process-local window identities.
 
 ## Open
 
-Run the current desktop's close guards before replacement. Stage the new windows
-with their cluster selections, routes, and table state, then commit panel
-placements after their destination renderers acknowledge mounting. Restore a
-shared panel once even when the cluster appears in multiple app windows. A
-renderer failure must leave the current desktop usable. A disconnected cluster
-should enter its normal connection lifecycle while other windows restore.
+Run the current desktop's close guards, close its windows, then load the saved
+ones as ordinary windows with their cluster selections, routes, table state,
+and panel placements. Restore a shared panel once even when the cluster appears
+in multiple app windows. A disconnected cluster should enter its normal
+connection lifecycle while other windows restore.
+
+The switch does not roll back. An earlier design staged the new windows hidden
+inside the running app and swapped only when all had mounted, so that a
+renderer failure left the current desktop usable. Four review rounds kept
+finding shared state the staged windows changed before the swap (cluster
+connections, the restart selection, table and tab-order persistence, themes),
+and that requirement was dropped on 2026-11-12: a saved window that fails to
+load is shown as it is with a warning, and the saved workspace is untouched, so
+it can be opened again.
 
 Use the existing logical work-area handling for each restored window. Capture
 and verify the normal bounds of maximized windows. Shell and port-forward
@@ -59,9 +67,9 @@ sessions, drain jobs, and unsaved editor content stay with their live owners.
 - **Panel transfer admission.** `TestWorkspaceCaptureWaitsForThePanelMoveToSettle`
   exercises the real panel directory. It blocks capture during a move and
   admits a retry once the move settles.
-- **Open and switch.** The registry tests cover close denial, a failed native
-  window factory, and committing new app and floating windows after their
-  readiness replies. The frontend harness verifies the saved dock is projected
+- **Open and switch (staged design, superseded).** The registry tests covered
+  close denial, a failed native window factory, and committing new app and
+  floating windows after their readiness replies. The frontend harness verifies the saved dock is projected
   before its acknowledgement. The isolated macOS app reopened the original
   saved workspace after quit, then switched between it and a second layout with
   a docked Node panel, a floating Node panel, and independent Nodes filters.
@@ -74,41 +82,31 @@ sessions, drain jobs, and unsaved editor content stay with their live owners.
   display disconnect and Windows and Linux placement were not exercised.
 - **Unavailable context.** The final isolated build reopened the available
   clusters and named the missing saved context in a visible warning.
-- **Review fixes (automated only).** Registry tests cover a window's capture
-  failure reply, refusing an unrestorable workspace before the close guards,
-  dropping app windows whose saved clusters are all missing, an approval that
-  outlives its collection timeout, and a floating panel window's remembered
-  normal bounds. `TestNamedWorkspaceSeedCannotOvertakeLastOwnerRemoval` covers a
-  seed that arrives while a cluster's last owner is being removed.
-  `TestNamedWorkspaceDeleteRemovesOnlyTheNamedSnapshot` and the Command Palette
-  test cover deleting a saved workspace.
-  `TestNamedWorkspaceRenameMovesTheSnapshotWithoutOverwritingAnother` and the
-  Command Palette test cover renaming one, including the refusal to take another
-  workspace's name. None of these were re-run in the native window.
-- **Second review (automated only).**
-  `TestNamedWorkspaceReportsPreviousWindowsThatDidNotClose` covers a committed
-  switch whose previous windows have no native window to close, and
-  `TestReplacedAppWindowThatRefusesItsCloseIsReportedAsStillOpen` covers one
-  that refuses.
-  `TestCancelledWorkspaceSwitchNeverLeavesItsWindowsFrozen` races a cancelled
-  switch against its last approval.
-  `TestPanelWindowOutOfItsNormalStateIsSavedWithTheBoundsItReturnsTo` covers
-  saving a maximized, fullscreen, or minimized window, and the replace test
-  checks each restored window is given its saved state.
-- **Third review (automated only).**
-  `TestStagedWindowRefusesCloseUntilTheSwitchCommits` covers a destination the
-  user tries to close. The `TestNamedWorkspaceAborts…` tests cover a destination
-  the registry closes, one that disappears, one that loses a saved cluster, a
-  panel whose cluster is torn down, and a panel that fails to load; without the
-  abort the last one waits out the 35-second staging deadline.
-  `TestClosingEveryNewWindowDuringRetirementQuitsTheApp` covers closing the new
-  windows while the previous ones are retired.
-  `TestCommittedSwitchWarnsOnlyAboutPreviousWindowsStillOpen` and
-  `TestSwitchWarningGoesToAWindowTheUserCanSee` cover what the warning counts
-  and which window shows it. `TestEnterFullscreenReportsWhetherTheWindowGotThere`
-  covers a dropped fullscreen request on each platform, against a stand-in
-  window. The frontend harness checks one warning per problem. None of this was
-  run in the native window.
+- **Simple switch (automated only).** The earlier native runs of open and
+  switch exercised the staged design and do not cover this one.
+  `TestSwitchClosesThePreviousWindowsThenShowsTheSavedOnes` covers the order:
+  saved windows created hidden, previous windows closed, saved windows shown,
+  previous clusters released, restart selection written.
+  `TestSwitchRefusedBeforeTheHandOverChangesNothing` covers a changed panel
+  directory and a cancelled request.
+  `TestSavedWindowsThatDoNotLoadAreShownAndReported` covers a window that fails
+  to load, one that never answers, and one that cannot be created.
+  `TestRestoredWindowOwnsItsDockedPanelsLikeAnyOtherWindow`,
+  `TestNewWindowIsRefusedDuringASwitch`,
+  `TestClosingEverySavedWindowDuringTheSwitchQuitsTheApp`, and the warning tests
+  cover the rest. `TestNamedWorkspaceSeedLeavesTheRestartSelectionUntilTheSwitchCommits`
+  runs against the real workspace coordinator.
+- **Save (automated only).** `TestCaptureEndsWhenAWindowClosesBeforeAnswering`,
+  `TestSaveAndSwitchWaitForAClusterViewMoveToFinish`,
+  `TestSaveAndSwitchWaitForARendererThatCanAnswer`, and
+  `TestCaptureNamedWorkspaceReportsAWindowsFailure` cover admission and early
+  exits. `TestNamedWorkspaceChangesApplyOnlyToTheListedSnapshot` and
+  `TestNamedWorkspaceSavedBeforeRevisionsIsStampedWhenListed` cover revisions,
+  and the Command Palette tests cover the dialogs passing them.
+- **Known gaps.** A renderer that crashes or reloads after acknowledging
+  readiness is still counted as ready, so save, switch, and quit wait out their
+  deadlines until it returns. A panel window that is live but not yet mounted
+  denies a switch or quit instead of answering. Both predate this design.
 - **Window state on macOS (native).** In an isolated development build with no
   cluster, three app windows were saved fullscreen, minimized, and maximized.
   The minimized window and the one in its own fullscreen space both answered

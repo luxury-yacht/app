@@ -15,7 +15,7 @@ func TestNativeWorkspaceClosePreservesGuardsWhenShutdownIsRejected(t *testing.T)
 			registry := NewRegistry(application.New(application.Options{}), backend)
 			registry.quitPreflightTimeout = 0
 			name := registry.Create(true).Name()
-			registry.markWorkspaceReady(name)
+			readyAppWindow(registry, name)
 			var requested, settled []string
 			registry.emitWindowEvent = func(target, eventName string, _ any) bool {
 				switch eventName {

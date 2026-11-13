@@ -169,8 +169,8 @@ export function DeleteGridTablePersistenceEntries(keys: string[] | null): $Cance
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.DeleteGridTablePersistenceEntries", keys);
 }
 
-export function DeleteNamedWorkspace(window: string, name: string): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.DeleteNamedWorkspace", window, name);
+export function DeleteNamedWorkspace(window: string, name: string, revision: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.DeleteNamedWorkspace", window, name, revision);
 }
 
 export function DeleteTheme(id: string): $CancellablePromise<void> {
@@ -353,7 +353,7 @@ export function IsWorkloadHPAManaged(target: resourcemodel$0.ResourceRef): $Canc
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.IsWorkloadHPAManaged", target);
 }
 
-export function ListNamedWorkspaces(): $CancellablePromise<string[] | null> {
+export function ListNamedWorkspaces(): $CancellablePromise<panelwindow$0.NamedWorkspaceEntry[] | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.ListNamedWorkspaces");
 }
 
@@ -393,8 +393,8 @@ export function OpenKubeconfigSearchPathDialog(): $CancellablePromise<string> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.OpenKubeconfigSearchPathDialog");
 }
 
-export function OpenNamedWorkspace(window: string, name: string): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.OpenNamedWorkspace", window, name);
+export function OpenNamedWorkspace(window: string, name: string, revision: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.OpenNamedWorkspace", window, name, revision);
 }
 
 export function OpenPanelWorkspaceObject(windowName: string, tab: panelwindow$0.TabSnapshot): $CancellablePromise<panelwindow$0.PanelOpenResult> {
@@ -420,8 +420,8 @@ export function RemoveApplicationUpdateSkip(): $CancellablePromise<$models.Updat
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.RemoveApplicationUpdateSkip");
 }
 
-export function RenameNamedWorkspace(window: string, name: string, newName: string): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.RenameNamedWorkspace", window, name, newName);
+export function RenameNamedWorkspace(window: string, name: string, newName: string, revision: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.RenameNamedWorkspace", window, name, newName, revision);
 }
 
 export function ReorderThemes(ids: string[] | null): $CancellablePromise<void> {
@@ -476,8 +476,8 @@ export function SaveLogFile(defaultFilename: string, content: string): $Cancella
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.SaveLogFile", defaultFilename, content);
 }
 
-export function SaveNamedWorkspace(window: string, name: string, replace: boolean): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.SaveNamedWorkspace", window, name, replace);
+export function SaveNamedWorkspace(window: string, name: string, replace: boolean, revision: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.SaveNamedWorkspace", window, name, replace, revision);
 }
 
 export function SaveTheme(theme: $models.Theme): $CancellablePromise<void> {
