@@ -14,7 +14,9 @@ type sharedWorkspaceBridgeRecorder struct {
 	err  error
 }
 
-func (r *sharedWorkspaceBridgeRecorder) record(args ...any) error { r.args = args; return r.err }
+func (r *sharedWorkspaceBridgeRecorder) record(args ...any) error           { r.args = args; return r.err }
+func (r *sharedWorkspaceBridgeRecorder) WithdrawRendererReady(string) error { return nil }
+
 func (r *sharedWorkspaceBridgeRecorder) AcknowledgePanelWorkspaceReady(windowName string) error {
 	return r.record(windowName)
 }

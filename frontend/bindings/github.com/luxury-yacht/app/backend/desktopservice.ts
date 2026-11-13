@@ -560,4 +560,12 @@ export function ValidateThemeClusterPattern(pattern: string): $CancellablePromis
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.ValidateThemeClusterPattern", pattern);
 }
 
+/**
+ * WithdrawRendererReady is a window's renderer saying it can no longer answer
+ * registry requests, as when a crash screen replaces its app tree.
+ */
+export function WithdrawRendererReady(windowName: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.WithdrawRendererReady", windowName);
+}
+
 void BindingModelAnchor;

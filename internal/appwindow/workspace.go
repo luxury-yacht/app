@@ -44,7 +44,14 @@ func (r *Registry) AcknowledgePanelWorkspaceReady(windowName string) error {
 	r.workspaceMu.Lock()
 	defer r.workspaceMu.Unlock()
 	if !r.lifecycle.Contains(windowName) {
-		return fmt.Errorf("app window %q is not live", windowName)
+		// A panel window announces the same way once its transfer is
+		// acknowledged and its handlers are subscribed. It is asked only
+		// while it is live, so one that announces mid-dock is accepted too.
+		if r.panels.State(windowName) == PanelWindowStateMissing {
+			return fmt.Errorf("window %q is not open", windowName)
+		}
+		r.markRendererReady(windowName)
+		return nil
 	}
 	r.closeMu.Lock()
 	if r.panelWorkspaceReady == nil {

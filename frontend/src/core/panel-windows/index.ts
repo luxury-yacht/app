@@ -24,6 +24,7 @@ import {
   RequestClusterTabTransfer,
   RequestPanelTabClose,
   RequestPanelTabTransfer,
+  WithdrawRendererReady,
 } from '@/core/backend-api';
 import type { panelwindow } from '@/core/backend-api/models';
 import { desktopRuntimeAvailable, onEvent } from '@/core/desktop-runtime';
@@ -188,6 +189,8 @@ export const onApplicationQuitPreflightSettled = (
 
 export const acknowledgePanelWorkspaceReady = (windowName: string) =>
   AcknowledgePanelWorkspaceReady(windowName);
+
+export const withdrawRendererReady = (windowName: string) => WithdrawRendererReady(windowName);
 
 export const requestClusterTabTransfer = (
   windowName: string,

@@ -190,6 +190,23 @@ describe('booting from its descriptor', () => {
     ]);
   });
 
+  it('announces its renderer once its handlers are subscribed, and withdraws when its app tree unmounts', async () => {
+    await openPanelWindow();
+    expect(app.backend.calls('AcknowledgePanelWorkspaceReady')).toEqual([['panel-1']]);
+
+    view.unmount();
+    expect(app.backend.calls('WithdrawRendererReady')).toEqual([['panel-1']]);
+  });
+
+  it('announces its renderer again when its app tree remounts in the same page', async () => {
+    await openPanelWindow();
+    view.unmount();
+    view = await app.render(<Probe />);
+
+    expect(app.backend.calls('AcknowledgePanelWindowReady')).toHaveLength(1);
+    expect(app.backend.calls('AcknowledgePanelWorkspaceReady')).toEqual([['panel-1'], ['panel-1']]);
+  });
+
   it('shows a warning inside the floating window that raised it', async () => {
     await openPanelWindow();
 
@@ -214,6 +231,26 @@ describe('booting from its descriptor', () => {
       ['panel-1', 'panel-1', 'transfer-ready-failure'],
     ]);
     expect(takeReports('acknowledge-ready')).toHaveLength(1);
+    expect(app.backend.calls('AcknowledgePanelWorkspaceReady')).toEqual([]);
+  });
+
+  it('becomes ready after rolling back a transfer it cannot acknowledge, if it is still open', async () => {
+    // As after a reload in the middle of a dock: once the dock is cancelled
+    // the window is live again, and acknowledges with no transfer.
+    app.backend.answer('AcknowledgePanelWindowReady', (_windowName, transferId) => {
+      if (transferId !== '') {
+        throw new Error('panel window is docking');
+      }
+      return undefined as never;
+    });
+
+    await openPanelWindow({ transferId: 'dock-in-flight' });
+
+    expect(app.backend.calls('FailPanelWindowTransfer')).toEqual([
+      ['panel-1', 'panel-1', 'dock-in-flight'],
+    ]);
+    expect(takeReports('acknowledge-ready')).toHaveLength(1);
+    expect(app.backend.calls('AcknowledgePanelWorkspaceReady')).toEqual([['panel-1']]);
   });
 
   it('reports when the registry already finished the ready-failure cleanup', async () => {

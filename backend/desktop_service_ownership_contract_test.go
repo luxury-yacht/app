@@ -31,7 +31,7 @@ func TestDesktopServiceCommandsDelegateToTheirDeclaredOwners(t *testing.T) {
 		"UpdateCommands":         {field: "updates", count: 6},
 		"AppLogCommands":         {field: "logs", count: 5},
 		"DesktopShellCommands":   {field: "desktopShell", count: 6},
-		"PanelWindowCommands":    {field: "panelWindows", count: 26},
+		"PanelWindowCommands":    {field: "panelWindows", count: 27},
 		"PanelMetricsCommands":   {field: "panelMetrics", count: 2},
 	}
 
@@ -64,8 +64,8 @@ func TestDesktopServiceCommandsDelegateToTheirDeclaredOwners(t *testing.T) {
 			require.Equal(t, owner.field+"."+method, delegations[method], method)
 		}
 	}
-	require.Len(t, seen, 126)
-	require.Len(t, delegations, 126)
+	require.Len(t, seen, 127)
+	require.Len(t, delegations, 127)
 }
 
 func desktopCommandInterfaces(

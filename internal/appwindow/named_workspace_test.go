@@ -46,6 +46,8 @@ func TestNamedWorkspaceKeepsCurrentWindowsWhenNoSavedWindowCanBeCreated(t *testi
 	})
 	require.NoError(t, err)
 	var told []string
+	var closed []panelwindow.PanelKey
+	r.workspace.SetPanelRemovalHandler(func(keys []panelwindow.PanelKey) { closed = append(closed, keys...) })
 	r.newWindow = func(application.WebviewWindowOptions) *application.WebviewWindow { return nil }
 	r.closeWindow = func(name string) bool { return false }
 	r.emitWindowEvent = func(window, event string, data any) bool {
@@ -64,9 +66,11 @@ func TestNamedWorkspaceKeepsCurrentWindowsWhenNoSavedWindowCanBeCreated(t *testi
 		}}},
 	})
 	require.Error(t, err)
-	// The panel directory was already handed over, so the window that stays
-	// must be told its panels are gone.
-	require.Equal(t, []string{name}, told)
+	// With no saved window to take their place, the current windows keep
+	// their panels.
+	require.Len(t, r.workspace.Snapshot(panel.ClusterID).Panels, 1)
+	require.Empty(t, closed, "a kept panel keeps what was recorded for it")
+	require.Empty(t, told, "nothing changed for the renderer to re-read")
 	require.Equal(t, []string{name}, r.lifecycle.Names(), "with nothing to replace them, the current windows stay")
 	require.Nil(t, r.pendingQuit)
 	require.Nil(t, r.activeRestore.Load())
@@ -86,6 +90,15 @@ func TestNamedWorkspaceReplacesAppAndPanelWindows(t *testing.T) {
 		WindowName: source, GroupID: "right", Kind: panelwindow.PanelLocationDocked, Active: true,
 	})
 	require.NoError(t, err)
+	// A second panel that the saved workspace does not hold.
+	onlyBefore := panel.Tabs[0]
+	onlyBefore.PanelID, onlyBefore.ObjectRef.Name = "panel-tab-2", "worker"
+	_, _, err = r.workspace.Open(onlyBefore, panelwindow.PanelLocation{
+		WindowName: source, GroupID: "right", Kind: panelwindow.PanelLocationDocked,
+	})
+	require.NoError(t, err)
+	var closedPanels []panelwindow.PanelKey
+	r.workspace.SetPanelRemovalHandler(func(keys []panelwindow.PanelKey) { closedPanels = append(closedPanels, keys...) })
 	newWindow := r.newWindow
 	r.newWindow = func(options application.WebviewWindowOptions) *application.WebviewWindow {
 		require.True(t, options.Hidden)
@@ -143,6 +156,8 @@ func TestNamedWorkspaceReplacesAppAndPanelWindows(t *testing.T) {
 	require.Equal(t, []string{"panel-1", "workspace-2"}, restoreOrder)
 	require.Equal(t, []string{"workspace-2"}, r.lifecycle.Names())
 	require.Equal(t, "panel-1", r.workspace.Snapshot(panel.ClusterID).Panels[0].Location.WindowName)
+	// Only the panel the saved workspace did not open again has closed.
+	require.Equal(t, []panelwindow.PanelKey{{ClusterID: panel.ClusterID, PanelID: "panel-tab-2"}}, closedPanels)
 	require.Nil(t, r.pendingQuit)
 }
 
@@ -400,6 +415,7 @@ func TestNamedWorkspaceReportsPreviousWindowsThatDidNotClose(t *testing.T) {
 	_, err = r.panels.AcknowledgeOpen(previous.WindowName, floating.TransferID)
 	require.NoError(t, err)
 	seedNativeGroup(t, r.workspace, previous.WindowName, floating)
+	r.markRendererReady(previous.WindowName)
 	newWindow := r.newWindow
 	r.newWindow = func(options application.WebviewWindowOptions) *application.WebviewWindow {
 		window := newWindow(options)
@@ -1086,4 +1102,147 @@ func TestRestoredWindowIsShownByTheSwitchNotByItsRuntime(t *testing.T) {
 	}
 	require.NoError(t, r.OpenNamedWorkspace(context.Background(), source, oneAppWindowWorkspace()))
 	require.NotContains(t, backend.readyWindows, "workspace-2")
+}
+
+// A window that reloads has no handlers until its renderer is back. Save,
+// switch and quit must not ask it meanwhile: its answer would never come, and
+// they would wait out a deadline with every window frozen.
+func TestWindowThatReloadsIsNotAskedUntilItsRendererIsBack(t *testing.T) {
+	registry := NewRegistry(application.New(application.Options{}), &recordingLifecycleBackend{windowClusters: map[string][]string{}})
+	first := registry.Create(true).Name()
+	reloading := registry.Create(false)
+	second := reloading.Name()
+	readyAppWindow(registry, first)
+	readyAppWindow(registry, second)
+	require.Equal(t, []string{first, second}, registry.readyWorkspaceNames())
+
+	// A page load announces itself with a runtime-ready event.
+	reloading.HandleWindowEvent(uint(events.Common.WindowRuntimeReady))
+	require.Equal(t, []string{first}, registry.readyWorkspaceNames())
+	registry.emitWindowEvent = func(window, event string, _ any) bool {
+		t.Errorf("window %q was sent %q while a window was reloading", window, event)
+		return true
+	}
+	_, err := registry.CaptureNamedWorkspace(context.Background(), first)
+	require.Error(t, err)
+
+	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(second))
+	require.Equal(t, []string{first, second}, registry.readyWorkspaceNames())
+}
+
+// A renderer whose app tree is replaced by a crash screen says so. It is left
+// out until it acknowledges again.
+func TestWindowThatWithdrawsReadinessIsLeftOutUntilItAcknowledgesAgain(t *testing.T) {
+	registry := NewRegistry(nil, &recordingLifecycleBackend{windowClusters: map[string][]string{}})
+	first, crashed := registry.lifecycle.Add(), registry.lifecycle.Add()
+	readyAppWindow(registry, first)
+	readyAppWindow(registry, crashed)
+	require.NoError(t, registry.WithdrawRendererReady(crashed))
+	require.Equal(t, []string{first}, registry.readyWorkspaceNames())
+	var asked []string
+	registry.emitWindowEvent = func(window, _ string, _ any) bool { asked = append(asked, window); return true }
+	require.False(t, registry.PrepareApplicationQuit())
+	require.Equal(t, []string{first}, asked, "quit asks only the window that can answer")
+}
+
+// A window that stops being able to answer after it was asked ends the request
+// at once: nothing waits out a deadline for a renderer that is gone.
+func TestRequestEndsWhenAnAskedWindowCanNoLongerAnswer(t *testing.T) {
+	registry := NewRegistry(nil, &recordingLifecycleBackend{windowClusters: map[string][]string{}})
+	first, crashed := registry.lifecycle.Add(), registry.lifecycle.Add()
+	readyAppWindow(registry, first)
+	readyAppWindow(registry, crashed)
+	registry.windowGeometry = func(string) (geometry, bool) { return geometry{Width: 1300, Height: 700}, true }
+	registry.emitWindowEvent = func(window, _ string, payload any) bool {
+		if _, capture := payload.(panelwindow.NamedWorkspaceCaptureRequest); capture && window == crashed {
+			go func() { _ = registry.WithdrawRendererReady(crashed) }()
+		}
+		return true
+	}
+	started := time.Now()
+	_, err := registry.CaptureNamedWorkspace(context.Background(), first)
+	require.ErrorContains(t, err, crashed)
+	require.Less(t, time.Since(started), 5*time.Second, "the save must not wait out its capture deadline")
+
+	readyAppWindow(registry, crashed)
+	var released []string
+	registry.emitWindowEvent = func(window, event string, _ any) bool {
+		if event == panelwindow.ApplicationQuitPreflightSettledEventName {
+			released = append(released, window)
+		}
+		return true
+	}
+	require.False(t, registry.PrepareApplicationQuit())
+	require.NoError(t, registry.WithdrawRendererReady(crashed))
+	require.Nil(t, registry.pendingQuit, "the quit is cancelled now, not at its deadline")
+	require.ElementsMatch(t, []string{first, crashed}, released, "the windows it froze are released")
+}
+
+type cancelFailingBackend struct{ *recordingLifecycleBackend }
+
+func (b cancelFailingBackend) CancelClusterViewTransfer(string, string) error {
+	return errors.New("selection mutation failed")
+}
+
+// A close the registry authorized can still be refused by the closing hook.
+// The window stays open with its handlers mounted, so it still takes part.
+func TestWindowWhoseCloseIsRefusedStillTakesPart(t *testing.T) {
+	registry := NewRegistry(application.New(application.Options{}), cancelFailingBackend{&recordingLifecycleBackend{windowClusters: map[string][]string{"workspace-1": {"cluster-1"}}}})
+	source := registry.Create(true).Name()
+	registry.emitWindowEvent = func(string, string, any) bool { return true }
+	readyAppWindow(registry, source)
+	request := panelwindow.ClusterTabTransferRequest{TransferID: "move", ClusterID: "cluster-1", SourceWindowName: source}
+	require.NoError(t, registry.RequestClusterTabTransfer(source, request))
+	require.NoError(t, registry.AcceptClusterTabTransfer(source, request.TransferID, panelwindow.ClusterViewSnapshot{SchemaVersion: 1, ViewState: "{}"}))
+	cancelled := false
+	registry.closeWindow = func(name string) bool {
+		event := application.NewWindowEvent()
+		registry.handleClosing(event, name)
+		cancelled = event.IsCancelled()
+		return true
+	}
+	_ = registry.AcknowledgeWorkspaceWindowClose(source)
+	require.True(t, cancelled, "the closing hook refused the close")
+	require.True(t, registry.lifecycle.Contains(source))
+	require.True(t, registry.rendererReady(source))
+}
+
+// A panel window that announces while it is docking (it recovered from its
+// crash screen mid-dock) takes part once the dock fails and it is live again.
+func TestPanelWindowThatAnnouncesWhileDockingTakesPartOnceLive(t *testing.T) {
+	snapshot := validPanelGroupSnapshot()
+	registry, panel := liveNativeWindow(t, snapshot)
+	require.NoError(t, registry.WithdrawRendererReady(panel))
+	dock := snapshot
+	dock.TransferID = "dock-1"
+	dock.SourceWindowName = panel
+	require.NoError(t, registry.panels.BeginDock(panel, dock))
+	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(panel))
+	require.Empty(t, registry.readyWorkspaceNames(), "a docking panel window is not asked")
+	require.NoError(t, registry.panels.FailTransfer(panel, "dock-1"))
+	require.Equal(t, []string{panel}, registry.readyWorkspaceNames())
+	require.Error(t, registry.AcknowledgePanelWorkspaceReady("panel-unknown"))
+}
+
+// A floating panel window takes part once its renderer has acknowledged, and
+// again after a reload: a reloaded panel window is already live, so it has no
+// transfer to name.
+func TestPanelWindowTakesPartOnlyWhileItsRendererHasAcknowledged(t *testing.T) {
+	app := application.New(application.Options{})
+	registry, panel := liveNativeWindow(t, validPanelGroupSnapshot())
+	window := app.Window.NewWithOptions(application.WebviewWindowOptions{Name: panel, Hidden: true})
+	registry.windowGeometry = func(string) (geometry, bool) { return geometry{}, false }
+	registry.registerPanelLifecycleHooks(window, panel)
+	require.Equal(t, []string{panel}, registry.readyWorkspaceNames())
+
+	window.HandleWindowEvent(uint(events.Common.WindowRuntimeReady))
+	require.Empty(t, registry.readyWorkspaceNames(), "a reloading panel window cannot answer")
+	_, err := registry.AcknowledgePanelWindowReady(panel, "")
+	require.NoError(t, err, "a reloaded panel window boots from its live descriptor")
+	require.Empty(t, registry.readyWorkspaceNames(), "its handlers are not subscribed until it says so")
+	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(panel))
+	require.Equal(t, []string{panel}, registry.readyWorkspaceNames())
+
+	require.NoError(t, registry.WithdrawRendererReady(panel))
+	require.Empty(t, registry.readyWorkspaceNames(), "a panel window showing its crash screen cannot answer")
 }

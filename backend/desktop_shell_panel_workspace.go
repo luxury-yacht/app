@@ -13,6 +13,13 @@ func (s *DesktopShell) OpenClusterWindow(windowName, clusterID string) error {
 	return s.panelWorkspace.OpenClusterWindow(windowName, clusterID)
 }
 
+func (s *DesktopShell) WithdrawRendererReady(windowName string) error {
+	if s.panelWorkspace == nil {
+		return fmt.Errorf("panel workspace registry is not available")
+	}
+	return s.panelWorkspace.WithdrawRendererReady(windowName)
+}
+
 func (s *DesktopShell) AcknowledgePanelWorkspaceReady(windowName string) error {
 	if s.panelWorkspace == nil {
 		return fmt.Errorf("panel workspace registry is not available")

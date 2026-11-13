@@ -55,6 +55,7 @@ type SharedWorkspaceCommands interface {
 	ClosePanelWorkspaceObject(string, string, string) error
 	PublishDockedPanels(string, []WorkspaceGroup) error
 	AcknowledgePanelWorkspaceReady(string) error
+	WithdrawRendererReady(string) error
 }
 
 const WorkspaceChangedEventName = "panel-workspace:changed"

@@ -376,15 +376,14 @@ func (a *WorkspaceCoordinator) PersistRestartSelection() {
 		return
 	}
 	err := a.runOrderedSelectionMutation("persist-restart-selection", func(*selectionMutation) error {
-		a.workspaceSelectionsMu.RLock()
-		windows := len(a.workspaceSelections)
-		a.workspaceSelectionsMu.RUnlock()
-		// With no window left the selection is empty, and closing the last window
-		// keeps what the next launch opens (see ReleaseWorkspaceWindow).
-		if windows == 0 {
+		// A workspace of floating panel windows alone still holds clusters. With
+		// nothing open at all the selection is empty, and what the last window
+		// showed is kept for the next launch (see ReleaseWorkspaceWindow).
+		selection := a.GetSelectedKubeconfigs()
+		if len(selection) == 0 {
 			return nil
 		}
-		return a.preferences.SaveSelectedKubeconfigs(a.GetSelectedKubeconfigs())
+		return a.preferences.SaveSelectedKubeconfigs(selection)
 	})
 	if err != nil && a.logger != nil {
 		a.logger.Warn(fmt.Sprintf("Failed to save kubeconfig selection: %v", err), "KubeconfigManager")

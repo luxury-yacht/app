@@ -121,10 +121,32 @@ sessions, drain jobs, and unsaved editor content stay with their live owners.
   exits. `TestNamedWorkspaceChangesApplyOnlyToTheListedSnapshot` and
   `TestNamedWorkspaceSavedBeforeRevisionsIsStampedWhenListed` cover revisions,
   and the Command Palette tests cover the dialogs passing them.
-- **Known gaps.** A renderer that crashes or reloads after acknowledging
-  readiness is still counted as ready, so save, switch, and quit wait out their
-  deadlines until it returns. A panel window that is live but not yet mounted
-  denies a switch or quit instead of answering. Both predate this design.
+- **Renderer readiness (automated only).** A window is asked to save, switch,
+  or quit only while its renderer has announced readiness since its last page
+  load. `TestWindowThatReloadsIsNotAskedUntilItsRendererIsBack`,
+  `TestWindowThatWithdrawsReadinessIsLeftOutUntilItAcknowledgesAgain`, and
+  `TestPanelWindowTakesPartOnlyWhileItsRendererHasAcknowledged` cover the
+  registry. `WorkspacePanelSync.test.tsx` covers an app window staying
+  announced through a kubeconfig reload, withdrawing when its tree unmounts,
+  and the withdrawal landing after the announcement. `PanelWindowApp.test.tsx`
+  covers a panel window announcing, withdrawing, and announcing again when its
+  tree remounts in the same page, and a window that reloaded in the middle of
+  a move becoming ready once the move is rolled back.
+  `TestRequestEndsWhenAnAskedWindowCanNoLongerAnswer` covers a save and a quit
+  ending at once when an asked window withdraws,
+  `TestWindowWhoseCloseIsRefusedStillTakesPart` a window whose close the
+  closing hook refused, and
+  `TestPanelWindowThatAnnouncesWhileDockingTakesPartOnceLive` an announcement
+  made mid-dock. Not run in a native window: a real reload and the crash
+  screen.
+- **Switch that can create no window.**
+  `TestNamedWorkspaceKeepsCurrentWindowsWhenNoSavedWindowCanBeCreated` covers
+  the current windows keeping their panels and what was recorded for them;
+  `TestNamedWorkspaceReplacesAppAndPanelWindows` covers a switch that goes
+  ahead reporting only the panels it did not open again as closed.
+- **Workspace of panel windows alone.**
+  `TestNamedWorkspaceSeedLeavesTheRestartSelectionUntilTheSwitchCommits` covers
+  its clusters becoming the next launch's selection.
 - **Window state on macOS (native, staged design).** In an isolated development build with no
   cluster, three app windows were saved fullscreen, minimized, and maximized.
   The minimized window and the one in its own fullscreen space both answered

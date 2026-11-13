@@ -105,6 +105,7 @@ func TestQuitPreflightsAppAndPanelRenderersBeforeClosingAny(t *testing.T) {
 	require.NoError(t, err)
 	_, err = registry.panels.AcknowledgeOpen(native.WindowName, snapshot.TransferID)
 	require.NoError(t, err)
+	registry.markRendererReady(native.WindowName)
 	preflights := make(map[string]string)
 	var closed []string
 	registry.emitWindowEvent = func(target, name string, payload any) bool {

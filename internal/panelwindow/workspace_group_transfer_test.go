@@ -184,17 +184,29 @@ func TestClearingForANamedWorkspaceClosesEveryPanelAtTheExpectedRevision(t *test
 	require.NoError(t, err)
 	require.Equal(t, []string{"production"}, directory.PanelClusters())
 
-	require.Error(t, directory.ClearForNamedWorkspace(revision-1))
+	_, err = directory.ClearForNamedWorkspace(revision - 1)
+	require.Error(t, err)
 	require.Len(t, directory.Snapshot("production").Panels, 2)
 	require.Empty(t, removed)
 	// An open that has reserved its cluster is still deciding where its panel goes.
 	reservation := directory.ReserveCluster("production")
-	require.Error(t, directory.ClearForNamedWorkspace(revision))
+	_, err = directory.ClearForNamedWorkspace(revision)
+	require.Error(t, err)
 	reservation.Release()
 
-	require.NoError(t, directory.ClearForNamedWorkspace(revision))
+	cleared, err := directory.ClearForNamedWorkspace(revision)
+	require.NoError(t, err)
 	require.Empty(t, directory.Snapshot("production").Panels)
-	require.Len(t, removed, 2, "the owner of panel state is told every panel closed")
+
+	// If no saved window can take their place, the panels go back as they
+	// were, and the owner of panel state never hears that they closed.
+	directory.RestoreClearedWorkspace(cleared)
+	require.Len(t, directory.DockedGroups("production", "app-a"), 1)
+	require.Empty(t, removed)
+	revision, err = directory.WorkspaceCaptureRevision()
+	require.NoError(t, err)
+	cleared, err = directory.ClearForNamedWorkspace(revision)
+	require.NoError(t, err)
 
 	group := WorkspaceGroup{ClusterID: "production", GroupID: "floating", Tabs: []TabSnapshot{kept}, ActivePanelID: kept.PanelID}
 	require.NoError(t, directory.PlaceNamedWorkspaceGroup("panel-2", PanelLocationWindow, group))
@@ -202,6 +214,11 @@ func TestClearingForANamedWorkspaceClosesEveryPanelAtTheExpectedRevision(t *test
 	panels := directory.Snapshot("production").Panels
 	require.Len(t, panels, 1)
 	require.Equal(t, "panel-2", panels[0].Location.WindowName)
+
+	// Once the saved workspace has its windows, the panels it did not open
+	// again are closed for good.
+	directory.CloseClearedWorkspace(cleared)
+	require.Equal(t, []PanelKey{{ClusterID: "production", PanelID: dropped.PanelID}}, removed)
 }
 
 func TestDockedGroupCommitAppendsAfterExistingTabsAndMovesActivation(t *testing.T) {
@@ -392,8 +409,10 @@ func TestRemovingAClusterStopsANamedWorkspaceFromTakingTheDirectory(t *testing.T
 	revision, err := directory.WorkspaceCaptureRevision()
 	require.NoError(t, err)
 	directory.RemoveCluster("cluster-without-panels")
-	require.Error(t, directory.ClearForNamedWorkspace(revision))
+	_, err = directory.ClearForNamedWorkspace(revision)
+	require.Error(t, err)
 	revision, err = directory.WorkspaceCaptureRevision()
 	require.NoError(t, err)
-	require.NoError(t, directory.ClearForNamedWorkspace(revision))
+	_, err = directory.ClearForNamedWorkspace(revision)
+	require.NoError(t, err)
 }

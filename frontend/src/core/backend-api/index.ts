@@ -130,4 +130,5 @@ export {
   UpdateAppPreferences,
   UpdateFavorite,
   ValidateThemeClusterPattern,
+  WithdrawRendererReady,
 } from '@bindings/github.com/luxury-yacht/app/backend/desktopservice';

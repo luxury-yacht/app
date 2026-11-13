@@ -50,6 +50,8 @@ type previousWindows struct {
 // it records problems for the user instead of deciding whether to go on.
 type namedWorkspaceRestore struct {
 	seed string
+	// cleared is the previous workspace's panels, kept until a saved window exists.
+	cleared panelwindow.ClearedWorkspace
 	// abandoned are saved windows that were given up: ones that could not be
 	// created, and panel windows that never loaded. Their backend holds are
 	// released with the previous windows', after the new ones are on screen.
@@ -160,8 +162,9 @@ func (r *Registry) OpenNamedWorkspace(ctx context.Context, source string, snapsh
 	// Nothing past this point is undone.
 	r.createRestoredWindows(restore, snapshot)
 	if len(restore.targets) == 0 {
-		return r.keepPreviousWindows(restore, panels, replacedClusters)
+		return r.keepPreviousWindows(restore)
 	}
+	r.workspace.CloseClearedWorkspace(restore.cleared)
 	previous, unclosed := r.closePreviousWindows(apps, panels)
 	previous.clusters = replacedClusters
 	r.waitForRestoredWindows(restore)
@@ -181,19 +184,12 @@ func (r *Registry) OpenNamedWorkspace(ctx context.Context, source string, snapsh
 
 // keepPreviousWindows ends a switch that could not create a single saved
 // window. Closing the current windows would leave the app with none, so they
-// stay, but the panel directory is already cleared: their renderers are told,
-// and floating panel windows, which now have nothing to show, are closed.
-func (r *Registry) keepPreviousWindows(restore *namedWorkspaceRestore, panels, replacedClusters []string) error {
-	for _, panel := range panels {
-		r.reportPanelLifecycleError(r.AcknowledgePanelWindowClose(panel), "close emptied panel window")
-	}
-	for _, cluster := range replacedClusters {
-		r.emitWorkspaceChanged(cluster)
-	}
-	r.releasePreviousWindows(previousWindows{clusters: replacedClusters})
+// stay, and their panels are put back in the directory.
+func (r *Registry) keepPreviousWindows(restore *namedWorkspaceRestore) error {
+	r.workspace.RestoreClearedWorkspace(restore.cleared)
 	r.releasePreviousWindows(restore.abandoned)
 	r.backend.ReleaseWorkspaceWindow(restore.seed)
-	return fmt.Errorf("no window of the workspace could be created; the current windows stay open and their panels are closed")
+	return fmt.Errorf("no window of the workspace could be created; the current windows are unchanged")
 }
 
 // handOverPanelDirectory claims the saved clusters and drops every panel of the
@@ -217,7 +213,7 @@ func (r *Registry) handOverPanelDirectory(ctx context.Context, restore *namedWor
 	}
 	replacedClusters := r.workspace.PanelClusters()
 	if err == nil {
-		err = r.workspace.ClearForNamedWorkspace(revision)
+		restore.cleared, err = r.workspace.ClearForNamedWorkspace(revision)
 	}
 	if err != nil {
 		// A seed that failed part-way can still have recorded its claim.

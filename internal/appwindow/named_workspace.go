@@ -113,9 +113,9 @@ func (r *Registry) clusterViewMoving() bool {
 	return false
 }
 
-// failCaptureOfClosedWindow ends a capture that is waiting on a window the
-// registry is closing: that window can no longer answer. closeAuthorizedWindow
-// calls this, which covers every close of a window that can be a participant.
+// failCaptureOfClosedWindow ends a capture that is waiting on a window that can
+// no longer answer: the registry is closing it (closeAuthorizedWindow, which
+// covers every close of a participant), or its renderer is gone (rendererLost).
 func (r *Registry) failCaptureOfClosedWindow(name string) {
 	r.workspaceCaptureMu.Lock()
 	defer r.workspaceCaptureMu.Unlock()
@@ -124,7 +124,7 @@ func (r *Registry) failCaptureOfClosedWindow(name string) {
 		return
 	}
 	delete(capture.waiting, name)
-	capture.replies <- namedWorkspaceCaptureReply{window: name, err: errors.New("the window closed before it could report its view")}
+	capture.replies <- namedWorkspaceCaptureReply{window: name, err: errors.New("the window closed or stopped responding before it could report its view")}
 }
 
 // SubmitNamedWorkspaceCapture is a window's one reply to a capture request: its

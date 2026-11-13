@@ -12,6 +12,15 @@ func (s *DesktopService) OpenClusterWindow(ctx context.Context, windowName, clus
 	return s.panelWindows.OpenClusterWindow(windowName, clusterID)
 }
 
+// WithdrawRendererReady is a window's renderer saying it can no longer answer
+// registry requests, as when a crash screen replaces its app tree.
+func (s *DesktopService) WithdrawRendererReady(ctx context.Context, windowName string) error {
+	if err := validatePanelCommandCaller(ctx, windowName); err != nil {
+		return err
+	}
+	return s.panelWindows.WithdrawRendererReady(windowName)
+}
+
 func (s *DesktopService) AcknowledgePanelWorkspaceReady(ctx context.Context, windowName string) error {
 	if err := validatePanelCommandCaller(ctx, windowName); err != nil {
 		return err

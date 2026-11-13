@@ -37,9 +37,17 @@ func TestNamedWorkspaceSeedLeavesTheRestartSelectionUntilTheSwitchCommits(t *tes
 	app.Lifecycle.PersistRestartSelection()
 	require.ElementsMatch(t, []string{"/tmp/config:prod", "/tmp/config:stage"}, app.Preferences.SelectedKubeconfigs())
 
-	// Closing the last window keeps the restart selection, and so does this.
+	// A workspace of floating panel windows alone still shows a cluster, and
+	// that is what the next launch opens.
+	require.NoError(t, w.RetainPanelCluster("panel-1", "config:stage"))
 	w.ReleaseWorkspaceWindow("current")
 	w.ReleaseWorkspaceWindow("restore")
+	require.Equal(t, []string{"/tmp/config:stage"}, w.GetSelectedKubeconfigs())
 	app.Lifecycle.PersistRestartSelection()
-	require.NotEmpty(t, app.Preferences.SelectedKubeconfigs())
+	require.Equal(t, []string{"/tmp/config:stage"}, app.Preferences.SelectedKubeconfigs())
+
+	// With nothing left open at all, the last selection is kept.
+	require.NoError(t, w.ReleasePanelCluster("panel-1"))
+	app.Lifecycle.PersistRestartSelection()
+	require.Equal(t, []string{"/tmp/config:stage"}, app.Preferences.SelectedKubeconfigs())
 }

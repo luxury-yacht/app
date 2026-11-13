@@ -495,6 +495,7 @@ func (r *Registry) registerLifecycleHooks(
 	restoreGeometry bool,
 ) {
 	r.trackNamedWorkspaceBounds(window, name)
+	r.forgetRendererOnPageLoad(window, name)
 	window.OnWindowEvent(events.Common.WindowRuntimeReady, func(*application.WindowEvent) {
 		// The backend shows a window once its runtime is ready. A window a
 		// workspace switch is restoring is shown by the switch, once it has loaded.
@@ -517,6 +518,7 @@ func (r *Registry) registerPanelLifecycleHooks(
 	name string,
 ) {
 	r.trackNamedWorkspaceBounds(window, name)
+	r.forgetRendererOnPageLoad(window, name)
 	window.OnWindowEvent(events.Common.WindowRuntimeReady, func(*application.WindowEvent) {
 		r.rememberNamedWorkspaceBounds(name)
 	})
@@ -638,6 +640,14 @@ func (r *Registry) WindowDescriptor(name string) (NativeWindowDescriptor, error)
 // AcknowledgePanelWindowReady reveals the hidden native target, then commits the
 // directory move. A stale acknowledgement leaves the source transfer pending.
 func (r *Registry) AcknowledgePanelWindowReady(name, transferID string) (PanelWindowDescriptor, error) {
+	// A panel window that reloads is already live, so it has no transfer to
+	// name. It boots from its descriptor and announces readiness afterwards.
+	if transferID == "" {
+		if r.panels.State(name) != PanelWindowStateLive {
+			return PanelWindowDescriptor{}, fmt.Errorf("panel window %q is not live", name)
+		}
+		return r.PanelDescriptor(name)
+	}
 	// A panel window a workspace switch is restoring has no source to move
 	// from: its tabs are already placed, and the switch shows it.
 	if r.restoringWindow(name) {
@@ -1103,14 +1113,60 @@ func (r *Registry) FocusMostRecent() {
 	focusApplicationWindow(r.application, r.lifecycle.MostRecent())
 }
 
-// rendererReady reports whether an app window's renderer has acknowledged that
-// it is mounted. Only then are its capture and close-guard handlers subscribed;
-// the native runtime is ready earlier, and a request sent in between is lost.
+// rendererReady reports whether a window's renderer has acknowledged that it is
+// mounted since its last page load. Only then are its capture and close-guard
+// handlers subscribed: the native runtime is ready earlier, a reload drops
+// them, and a crash screen unmounts them.
 func (r *Registry) rendererReady(name string) bool {
 	r.closeMu.Lock()
 	defer r.closeMu.Unlock()
 	_, ready := r.panelWorkspaceReady[name]
 	return ready
+}
+
+func (r *Registry) markRendererReady(name string) {
+	r.closeMu.Lock()
+	defer r.closeMu.Unlock()
+	if r.panelWorkspaceReady == nil {
+		r.panelWorkspaceReady = make(map[string]struct{})
+	}
+	r.panelWorkspaceReady[name] = struct{}{}
+}
+
+func (r *Registry) forgetRendererReady(name string) {
+	r.closeMu.Lock()
+	defer r.closeMu.Unlock()
+	delete(r.panelWorkspaceReady, name)
+}
+
+// WithdrawRendererReady is a renderer saying its handlers are gone, as when a
+// crash screen replaces its app tree. It is left out of save, switch and quit
+// until it acknowledges again.
+func (r *Registry) WithdrawRendererReady(name string) error {
+	r.rendererLost(name)
+	return nil
+}
+
+// rendererLost records that a window's renderer can no longer answer, and ends
+// what was waiting for its answer now instead of at a deadline: a capture
+// fails, and a quit or switch preflight is cancelled as a timeout would.
+func (r *Registry) rendererLost(name string) {
+	r.forgetRendererReady(name)
+	r.failCaptureOfClosedWindow(name)
+	r.cancelPendingApplicationQuitPreflight(func(pending *applicationQuitPreflight) bool {
+		_, waiting := pending.waiting[name]
+		return waiting
+	})
+}
+
+// forgetRendererOnPageLoad clears a window's readiness whenever its page
+// loads. Wails handles each window event on its own goroutine and runs hooks in
+// it, and a renderer acknowledges only after it has booted, so this runs before
+// that load's acknowledgement.
+func (r *Registry) forgetRendererOnPageLoad(window *application.WebviewWindow, name string) {
+	window.RegisterHook(events.Common.WindowRuntimeReady, func(*application.WindowEvent) {
+		r.rendererLost(name)
+	})
 }
 
 // readyWorkspaceNames lists the windows that can answer a request sent to every
@@ -1123,7 +1179,7 @@ func (r *Registry) readyWorkspaceNames() []string {
 		}
 	}
 	for _, name := range r.panels.Names("") {
-		if r.panels.State(name) == PanelWindowStateLive {
+		if r.panels.State(name) == PanelWindowStateLive && r.rendererReady(name) {
 			ready = append(ready, name)
 		}
 	}

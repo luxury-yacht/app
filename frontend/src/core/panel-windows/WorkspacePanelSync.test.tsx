@@ -544,6 +544,37 @@ describe('in the workspace window', () => {
     expect(app.backend.calls('AcknowledgePanelWorkspaceReady')).toEqual([[app.windowName]]);
   });
 
+  it('stays announced while kubeconfigs reload, and withdraws when its app tree unmounts', async () => {
+    production = app.cluster({ name: 'dev', context: 'production' });
+    app.namespaces(production, ['default']);
+    view = await app.render(null);
+
+    const reload = app.backend.hold('GetKubeconfigs');
+    await act(async () => app.events.emit('kubeconfig:available-changed'));
+    await app.settle();
+    expect(app.backend.calls('WithdrawRendererReady')).toEqual([]);
+    await act(async () => reload());
+    await app.settle();
+
+    view.unmount();
+    expect(app.backend.calls('WithdrawRendererReady')).toEqual([[app.windowName]]);
+  });
+
+  it('withdraws only after its announcement has landed', async () => {
+    production = app.cluster({ name: 'dev', context: 'production' });
+    app.namespaces(production, ['default']);
+    const announce = app.backend.hold('AcknowledgePanelWorkspaceReady');
+    view = await app.render(null);
+
+    view.unmount();
+    await app.settle();
+    expect(app.backend.calls('WithdrawRendererReady')).toEqual([]);
+    await act(async () => announce());
+    await app.settle();
+
+    expect(app.backend.calls('WithdrawRendererReady')).toEqual([[app.windowName]]);
+  });
+
   it('recovers an unchanged docked snapshot when close preparation flushes again', async () => {
     let refusals = 1;
     app.backend.answer('PublishDockedPanels', (_windowName, groups) => {

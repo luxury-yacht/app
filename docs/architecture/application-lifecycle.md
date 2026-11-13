@@ -60,8 +60,10 @@ close sequences: [dockable-panels.md](../frontend/dockable-panels.md).
   coordinator subscriptions.
 - A panel window's runtime-ready event only lets that webview bootstrap its
   descriptor (identity plus the group the directory moves into it); the panel
-  stays hidden until its reconstructed group acknowledges readiness. It never initializes or releases a workspace,
-  restores workspace geometry, or counts toward last-workspace quit.
+  stays hidden until its reconstructed group acknowledges readiness. A panel
+  window that reloads is already live and acknowledges with no transfer. It
+  never initializes or releases a workspace, restores workspace geometry, or
+  counts toward last-workspace quit.
 - `windowOptionsForPlatform`: macOS/Windows peers start hidden until runtime
   ready; Linux starts visible.
 - A window that a workspace switch is restoring is the exception to both: it
@@ -269,8 +271,12 @@ previous window failed.
 
 One case is not a warning. If no saved window can be created at all, closing
 the current windows would leave the app with none, so they stay and the command
-fails. The panel directory is already cleared by then: the current renderers
-are told, and floating panel windows, which have nothing left to show, close.
+fails. The panel directory was cleared in step 4, so the registry puts back what
+it cleared (`RestoreClearedWorkspace`): the current windows keep their docked
+and floating panels, and what was recorded for those panels (their metrics
+history). The owner of that state hears that panels closed only once a saved
+window exists (`CloseClearedWorkspace`), and only for the panels the saved
+workspace did not open again.
 
 Because the saved windows are ordinary windows from step 5, the user can close
 them all before the switch has finished. The switch then requests the quit that
@@ -285,10 +291,35 @@ minimized state, and both are applied when it reopens.
 Saving a workspace asks every ready app and panel window for one reply: its
 view, or the reason it has none. A failure reply ends the capture at once with
 that reason, and so does a window that closes before answering; nothing is
-written. Save and switch only start when every app window's renderer has
-acknowledged that it is mounted and no cluster view is moving between windows;
-a save checks the move again before it writes. The quit preflight asks the
-windows whose renderers have acknowledged and leaves the others out.
+written.
+
+A window is ready only while its renderer has announced readiness since its
+last page load:
+
+- A renderer announces with `AcknowledgePanelWorkspaceReady` once the handlers
+  that answer these requests are subscribed. An app window does so after its
+  first kubeconfig load, a panel window after its transfer acknowledgement has
+  returned. `useRendererReadiness` is the one caller for both.
+- A runtime-ready event is a page load, and a hook on it clears the window's
+  readiness, so a reloading window is not asked until it announces again.
+- When the tree that owns the handlers unmounts (the crash screen), the
+  renderer calls `WithdrawRendererReady`. Recovering in the same page announces
+  again. A window's readiness calls are sent in the order it made them.
+- A window that loses readiness after it was asked ends the request at once
+  instead of at its deadline: a save fails, and a quit or switch preflight is
+  cancelled and its windows released.
+
+Save and switch only start when every app and panel window is ready and no
+cluster view is moving between windows; a save checks the move again before it
+writes. A window that cannot answer therefore blocks save and switch until it
+is reloaded, recovered, or closed. The quit preflight asks the ready windows
+and leaves the others out, since a renderer that cannot answer has no close
+guard to run.
+
+After a switch the clusters the new workspace holds become the selection the
+next launch opens (`PersistRestartSelection`), including when the workspace is
+made of floating panel windows alone. With nothing open, the previous selection
+is kept.
 
 Each saved workspace has a revision, assigned when it is saved. The dialogs
 list name and revision, and replace, rename, delete, and open are refused when
