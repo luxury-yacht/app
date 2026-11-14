@@ -279,7 +279,7 @@ is rolled back.
    at a time: on macOS a window maximized during another's fullscreen
    transition is left part-way, and a fullscreen request made during a
    transition is dropped. If no usable saved window was shown, the registry
-   tries to show one plain app window without waiting for its renderer. Once
+   tries one plain app window and gives its renderer a bounded time to load. Once
    a replacement is shown, the registry closes the source window and writes
    the saved workspace's clusters as what the next launch opens
    (`WriteRestartSelectionOf`), because the user can quit from the next step
@@ -305,13 +305,16 @@ window fails or no replacement can be shown.
 If no saved window can be created at all, the command fails and leaves the
 current windows open. The panels were set aside in step 5, so the registry puts them back
 (`RestoreClearedWorkspace`): the current windows keep their docked and floating
-panels, and what was recorded for those panels (their metrics history). The owner of that state hears that panels closed only once a saved
-window exists (`CloseClearedWorkspace`), and only for the panels the saved
-workspace did not open again.
+panels, and what was recorded for those panels (their metrics history). On a
+successful handoff, `CloseClearedWorkspace` reports the panels the replacement
+did not reopen after it is usable.
 
 If all replacements fail at presentation, the registry brings the source
 window back to show the error, discards the failed replacements, and persists
-the cluster selection of the remaining windows.
+the cluster selection of the remaining windows. Until then, previous renderers
+read from their set-aside layout. The directory restores surviving windows'
+panel placements before revealing the source, and discards the placements of
+windows the switch already retired.
 
 Because the saved windows are ordinary windows from step 6, the user can close
 them all before the switch has finished. While a switch runs, closing the last

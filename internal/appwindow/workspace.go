@@ -134,6 +134,9 @@ func (r *Registry) GetPanelWorkspace(windowName, clusterID string) (panelwindow.
 	if !r.windowHasCluster(windowName, clusterID) {
 		return panelwindow.WorkspaceSnapshot{}, fmt.Errorf("window %q does not display cluster %q", windowName, clusterID)
 	}
+	if restore := r.activeRestore.Load(); restore != nil && slices.Contains(restore.previous, windowName) {
+		return r.workspace.SnapshotForPreviousWorkspace(clusterID), nil
+	}
 	return r.workspace.Snapshot(clusterID), nil
 }
 

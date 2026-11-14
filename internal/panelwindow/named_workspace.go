@@ -3,6 +3,7 @@ package panelwindow
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 )
 
 const NamedWorkspaceSchemaVersion = 1
@@ -84,12 +85,16 @@ func (d *WorkspaceDirectory) CloseClearedWorkspace() {
 	d.setAside = nil
 }
 
-// RestoreClearedWorkspace puts the set-aside panels back. It is for a switch
-// that could not create a single saved window. Panels whose window or cluster
-// went meanwhile are no longer set aside, so they do not come back.
-func (d *WorkspaceDirectory) RestoreClearedWorkspace() {
+// RestoreClearedWorkspace puts back the set-aside panels after a failed switch.
+// Discard placements in windows the switch already retired.
+func (d *WorkspaceDirectory) RestoreClearedWorkspace(retired ...string) {
+	removal := &panelRemoval{}
+	defer removal.report()
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	d.dropSetAsideLocked(removal, func(_ workspacePanelKey, panel WorkspacePanel) bool {
+		return slices.Contains(retired, panel.Location.WindowName)
+	})
 	for key, panel := range d.setAside {
 		if _, exists := d.panels[key]; !exists {
 			d.panels[key] = panel

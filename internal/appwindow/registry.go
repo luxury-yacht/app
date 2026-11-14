@@ -1144,6 +1144,12 @@ func (r *Registry) releaseClosedAppView(name string, remaining int) bool {
 
 func (r *Registry) retainClosedWorkspace(name string) {
 	r.forgetWorkspaceReady(name)
+	if r.unpublishedRestoredWindow(name) {
+		// A target that closes during presentation must not pass its saved
+		// panels to the surviving source as retained panels.
+		r.workspace.RemoveWindow(name)
+		return
+	}
 	r.workspace.RetainWindow(name)
 }
 

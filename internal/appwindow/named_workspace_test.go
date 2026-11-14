@@ -840,6 +840,79 @@ func TestSwitchKeepsTheSourceWhenNoReplacementCanBeShown(t *testing.T) {
 	require.Nil(t, r.pendingQuit)
 }
 
+func TestFailedSwitchRestoresTheSourcesDockedPanels(t *testing.T) {
+	panel := validPanelGroupSnapshot()
+	var warnings []panelwindow.NamedWorkspaceWarningsEvent
+	backend := &recordingLifecycleBackend{windowClusters: map[string][]string{}, availableWorkspaceClusters: []string{panel.ClusterID}}
+	r, source := switchRegistry(t, backend, &warnings)
+	backend.windowClusters[source] = []string{panel.ClusterID}
+	group := panelwindow.WorkspaceGroup{ClusterID: panel.ClusterID, GroupID: "right", Tabs: panel.Tabs, ActivePanelID: panel.ActivePanelID}
+	require.NoError(t, r.workspace.PlaceNamedWorkspaceGroup(source, panelwindow.PanelLocationDocked, group))
+	retired := r.lifecycle.Add()
+	readyAppWindow(r, retired)
+	backend.windowClusters[retired] = []string{panel.ClusterID}
+	other := panel.Tabs[0]
+	other.PanelID, other.ObjectRef.Name = "retired-panel", "worker"
+	retiredGroup := panelwindow.WorkspaceGroup{ClusterID: panel.ClusterID, GroupID: "bottom", Tabs: []panelwindow.TabSnapshot{other}, ActivePanelID: other.PanelID}
+	require.NoError(t, r.workspace.PlaceNamedWorkspaceGroup(retired, panelwindow.PanelLocationDocked, retiredGroup))
+	var removed []panelwindow.PanelKey
+	r.workspace.SetPanelRemovalHandler(func(keys []panelwindow.PanelKey) { removed = append(removed, keys...) })
+	r.showWindow = func(name string) bool {
+		if name == "workspace-3" {
+			view, err := r.GetPanelWorkspace(source, panel.ClusterID)
+			require.NoError(t, err)
+			require.True(t, slices.ContainsFunc(view.Panels, func(p panelwindow.WorkspacePanel) bool {
+				return p.Tab.PanelID == group.ActivePanelID && p.Location.WindowName == source
+			}), "a refresh while the source is hidden must still show its own panel placement")
+		}
+		return name == source
+	}
+	snapshot := oneAppWindowWorkspace(panel.ClusterID)
+	snapshot.AppWindows[0].DockedGroups = []panelwindow.NamedWorkspaceDockedGroup{{Group: group, Width: 500, Height: 400}}
+
+	require.Error(t, r.OpenNamedWorkspace(context.Background(), source, snapshot))
+	view := snapshot.AppWindows[0].NamedWorkspaceAppView
+	r.windowGeometry = func(string) (geometry, bool) { return geometry{Width: 1200, Height: 800}, true }
+	deliver := r.emitWindowEvent
+	r.emitWindowEvent = func(name, event string, payload any) bool {
+		if request, capture := payload.(panelwindow.NamedWorkspaceCaptureRequest); capture {
+			require.NoError(t, r.SubmitNamedWorkspaceCapture(name, request.ID, view, ""))
+			return true
+		}
+		return deliver(name, event, payload)
+	}
+	captured, err := r.CaptureNamedWorkspace(context.Background(), source)
+	require.NoError(t, err, "the source can save again with its original panels")
+	require.Equal(t, view.DockedGroups, captured.AppWindows[0].DockedGroups)
+	require.Equal(t, []panelwindow.PanelKey{{ClusterID: panel.ClusterID, PanelID: other.PanelID}}, removed)
+	require.NotContains(t, backend.releasedPanelReferences, "panel-workspace:"+panel.ClusterID)
+}
+
+func TestSwitchKeepsSourceWhenRecoveryRendererCannotStart(t *testing.T) {
+	for _, outcome := range []string{"failure", "timeout"} {
+		t.Run(outcome, func(t *testing.T) {
+			var warnings []panelwindow.NamedWorkspaceWarningsEvent
+			r, source := switchRegistry(t, &recordingLifecycleBackend{windowClusters: map[string][]string{}}, &warnings)
+			r.newWindow = func(options application.WebviewWindowOptions) *application.WebviewWindow {
+				if options.Name == "workspace-2" || outcome == "failure" {
+					require.NoError(t, r.AcknowledgeNamedWorkspaceRestore(options.Name, "could not start"))
+				}
+				return application.New(application.Options{}).Window.NewWithOptions(options)
+			}
+			var shown []string
+			r.showWindow = func(name string) bool { shown = append(shown, name); return true }
+
+			require.Error(t, r.OpenNamedWorkspace(context.Background(), source, oneAppWindowWorkspace()))
+			require.NotContains(t, shown, "workspace-3", "an unready recovery window must not be shown")
+			require.Equal(t, source, shown[len(shown)-1])
+			require.Equal(t, []string{source}, r.readyWorkspaceNames())
+			require.Equal(t, []string{source}, r.lifecycle.Names())
+			require.Nil(t, r.activeRestore.Load())
+			require.Nil(t, r.pendingQuit)
+		})
+	}
+}
+
 // A workspace made only of floating panel windows has no window left when its
 // one panel window fails to start. The switch must not end with nothing on
 // screen (and the process must never be without a native window): it opens a
@@ -1038,6 +1111,9 @@ func TestSavedAppWindowThatDoesNotLoadKeepsNothingOfItsSavedView(t *testing.T) {
 			var late []string
 			r.emitWindowEvent = func(window, event string, data any) bool {
 				if event == panelwindow.NamedWorkspaceRestoreRequested {
+					if window != "workspace-2" {
+						return deliver(window, event, data)
+					}
 					if outcome == "answers with a failure" {
 						require.NoError(t, r.AcknowledgeNamedWorkspaceRestore(window, "saved view could not be mounted"))
 					}
@@ -1060,7 +1136,11 @@ func TestSavedAppWindowThatDoesNotLoadKeepsNothingOfItsSavedView(t *testing.T) {
 
 			require.NoError(t, r.OpenNamedWorkspace(context.Background(), source, workspace))
 
-			require.Equal(t, []string{"workspace-2"}, r.lifecycle.Names(), "the window stays open")
+			want := []string{"workspace-2"}
+			if outcome == "never answers" {
+				want = append(want, "workspace-3")
+			}
+			require.Equal(t, want, r.lifecycle.Names(), "the window stays open")
 			require.Empty(t, r.workspace.Snapshot(docked.ClusterID).Panels)
 			require.Contains(t, backend.releasedPanelReferences, "panel-workspace:"+docked.ClusterID)
 			// The page loads late.

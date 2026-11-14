@@ -334,10 +334,24 @@ func (d *WorkspaceDirectory) PublishWindow(windowName string, kind PanelLocation
 }
 
 func (d *WorkspaceDirectory) Snapshot(clusterID string) WorkspaceSnapshot {
+	return d.snapshot(clusterID, false)
+}
+
+// SnapshotForPreviousWorkspace reads the set-aside layout until the switch
+// commits or restores it. A hidden source can still receive refresh events.
+func (d *WorkspaceDirectory) SnapshotForPreviousWorkspace(clusterID string) WorkspaceSnapshot {
+	return d.snapshot(clusterID, true)
+}
+
+func (d *WorkspaceDirectory) snapshot(clusterID string, previous bool) WorkspaceSnapshot {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	panels := d.panels
+	if previous && d.setAside != nil {
+		panels = d.setAside
+	}
 	snapshot := WorkspaceSnapshot{Revision: d.revision, Panels: []WorkspacePanel{}}
-	for key, panel := range d.panels {
+	for key, panel := range panels {
 		if key.clusterID == clusterID {
 			snapshot.Panels = append(snapshot.Panels, panel)
 		}
