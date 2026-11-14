@@ -790,7 +790,7 @@ func TestSwitchClosesThePreviousWindowsThenShowsTheSavedOnes(t *testing.T) {
 		return closeWindow(window)
 	}
 	r.hideWindow = func(window string) bool {
-		require.False(t, r.lifecycle.Contains(window), "the hidden window is no longer part of the workspace")
+		require.True(t, r.lifecycle.Contains(window), "the source can still show a failed switch")
 		steps = append(steps, "hide "+window)
 		return true
 	}
@@ -812,6 +812,34 @@ func TestSwitchClosesThePreviousWindowsThenShowsTheSavedOnes(t *testing.T) {
 	require.Empty(t, warnings)
 }
 
+func TestSwitchKeepsTheSourceWhenNoReplacementCanBeShown(t *testing.T) {
+	var warnings []panelwindow.NamedWorkspaceWarningsEvent
+	backend := &recordingLifecycleBackend{windowClusters: map[string][]string{}}
+	r, source := switchRegistry(t, backend, &warnings)
+	r.requestApplicationQuit = func() { t.Error("the app quit after failing to show a replacement") }
+	var attempted []string
+	r.showWindow = func(name string) bool {
+		attempted = append(attempted, name)
+		return name == source
+	}
+	closeWindow := r.closeWindow
+	r.closeWindow = func(name string) bool {
+		require.NotEqual(t, source, name)
+		return closeWindow(name)
+	}
+
+	err := r.OpenNamedWorkspace(context.Background(), source, oneAppWindowWorkspace())
+
+	require.ErrorContains(t, err, "no replacement window could be shown")
+	require.Equal(t, []string{"workspace-2", "workspace-3", source}, attempted)
+	require.Equal(t, []string{source}, r.lifecycle.Names())
+	require.Equal(t, []string{source}, r.readyWorkspaceNames())
+	require.NotContains(t, backend.released, source)
+	require.Empty(t, backend.restartSelectionsWritten)
+	require.Equal(t, 1, backend.restartSelectionsPersisted)
+	require.Nil(t, r.pendingQuit)
+}
+
 // A workspace made only of floating panel windows has no window left when its
 // one panel window fails to start. The switch must not end with nothing on
 // screen (and the process must never be without a native window): it opens a
@@ -825,24 +853,27 @@ func TestSwitchWhoseOnlySavedWindowFailsOpensAPlainWindow(t *testing.T) {
 	r.requestApplicationQuit = func() { t.Error("the app quit instead of showing what failed") }
 	var steps []string
 	open := map[string]bool{source: true}
+	sourceHidden := make(chan struct{})
 	create := r.newWindow
 	r.newWindow = func(options application.WebviewWindowOptions) *application.WebviewWindow {
 		steps = append(steps, "create "+options.Name)
 		open[options.Name] = true
 		if descriptor, err := r.PanelDescriptor(options.Name); err == nil {
 			window := application.New(application.Options{}).Window.NewWithOptions(options)
-			// Its page fails to start once the previous windows are gone.
+			// Its page fails to start once the source is hidden.
 			go func() {
-				for r.lifecycle.Contains(source) {
-					time.Sleep(time.Millisecond)
-				}
+				<-sourceHidden
 				_ = r.FailPanelWindowTransfer(options.Name, options.Name, descriptor.TransferID)
 			}()
 			return window
 		}
 		return create(options)
 	}
-	r.hideWindow = func(window string) bool { steps = append(steps, "hide "+window); return true }
+	r.hideWindow = func(window string) bool {
+		steps = append(steps, "hide "+window)
+		close(sourceHidden)
+		return true
+	}
 	closeWindow := r.closeWindow
 	r.closeWindow = func(window string) bool {
 		if !open[window] {
@@ -1098,17 +1129,17 @@ func TestSwitchDoesNotWaitForASavedWindowThatCanNoLongerAnswer(t *testing.T) {
 				return deliver(window, event, data)
 			}
 			if outcome == "it is closed" {
+				sourceHidden := make(chan struct{})
+				r.hideWindow = func(string) bool { close(sourceHidden); return true }
 				create := r.newWindow
 				r.newWindow = func(options application.WebviewWindowOptions) *application.WebviewWindow {
 					if options.Name != "workspace-2" {
 						return create(options)
 					}
-					// Its page never loads, and the user closes it once the
-					// previous windows are gone.
+					// Its page never loads, and the window closes while
+					// the source is hidden.
 					go func() {
-						for r.lifecycle.Contains(source) {
-							time.Sleep(time.Millisecond)
-						}
+						<-sourceHidden
 						r.handleClosing(application.NewWindowEvent(), options.Name)
 					}()
 					return application.New(application.Options{}).Window.NewWithOptions(options)
@@ -1500,6 +1531,26 @@ func TestWindowThatReloadsIsNotAskedUntilItsRendererIsBack(t *testing.T) {
 	require.Nil(t, registry.pendingQuit, "the quit that was waiting on the earlier page is cancelled")
 	require.ElementsMatch(t, []string{first, second}, released)
 	require.Equal(t, []string{first, second}, registry.readyWorkspaceNames())
+}
+
+func TestRendererAcknowledgementDoesNotOverrideANewerWithdrawal(t *testing.T) {
+	r := NewRegistry(nil, &recordingLifecycleBackend{})
+	window := r.lifecycle.Add()
+	require.NoError(t, r.AcknowledgePanelWorkspaceReady(window, 1))
+	r.emitWindowEvent = func(name, event string, _ any) bool {
+		if event == panelwindow.ApplicationQuitPreflightSettledEventName {
+			// The next page starts before the earlier binding call returns.
+			require.NoError(t, r.WithdrawRendererReady(name, 3))
+		}
+		return true
+	}
+	require.False(t, r.PrepareApplicationQuit())
+
+	require.NoError(t, r.AcknowledgePanelWorkspaceReady(window, 2))
+
+	require.Empty(t, r.readyWorkspaceNames())
+	require.NoError(t, r.AcknowledgePanelWorkspaceReady(window, 3))
+	require.Equal(t, []string{window}, r.readyWorkspaceNames())
 }
 
 // A renderer whose app tree is replaced by a crash screen says so. It is left

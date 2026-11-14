@@ -42,42 +42,40 @@ type workspaceWindowEvent struct {
 
 // AcknowledgePanelWorkspaceReady is a renderer announcing that the handlers
 // which answer save, switch, quit and close requests are subscribed. page is
-// the number of the page that sent it (enterRendererPage).
+// the number of the page that sent it.
 func (r *Registry) AcknowledgePanelWorkspaceReady(windowName string, page int64) error {
-	current, reloaded := r.enterRendererPage(windowName, page)
-	if !current {
-		return nil
+	r.workspaceMu.Lock()
+	// Panel windows can announce mid-dock. Only live panels are asked to
+	// answer requests, so accept any tracked panel here.
+	if !r.lifecycle.Contains(windowName) && r.panels.State(windowName) == PanelWindowStateMissing {
+		r.workspaceMu.Unlock()
+		return fmt.Errorf("window %q is not open", windowName)
 	}
+	reloaded, queued := r.announceRendererReady(windowName, page)
+	r.workspaceMu.Unlock()
 	if reloaded {
 		// The page before this one never said it was going.
-		r.rendererLost(windowName)
+		r.cancelRendererRequests(windowName)
 	}
-	r.workspaceMu.Lock()
-	defer r.workspaceMu.Unlock()
-	if !r.lifecycle.Contains(windowName) {
-		// A panel window announces the same way once its transfer is
-		// acknowledged and its handlers are subscribed. It is asked only
-		// while it is live, so one that announces mid-dock is accepted too.
-		if r.panels.State(windowName) == PanelWindowStateMissing {
-			return fmt.Errorf("window %q is not open", windowName)
-		}
-		r.markRendererReady(windowName)
-		return nil
-	}
-	r.closeMu.Lock()
-	if r.panelWorkspaceReady == nil {
-		r.panelWorkspaceReady = make(map[string]struct{})
-	}
-	r.panelWorkspaceReady[windowName] = struct{}{}
-	queued := r.queuedWorkspaceEvents[windowName]
-	delete(r.queuedWorkspaceEvents, windowName)
-	r.closeMu.Unlock()
 	for _, event := range queued {
 		if !r.emitWindowEvent(windowName, event.name, event.payload) {
 			return fmt.Errorf("app window %q is not available", windowName)
 		}
 	}
 	return nil
+}
+
+func (r *Registry) announceRendererReady(windowName string, page int64) (bool, []workspaceWindowEvent) {
+	r.closeMu.Lock()
+	defer r.closeMu.Unlock()
+	current, reloaded := r.enterRendererPageLocked(windowName, page)
+	if !current {
+		return false, nil
+	}
+	r.markRendererReadyLocked(windowName)
+	queued := r.queuedWorkspaceEvents[windowName]
+	delete(r.queuedWorkspaceEvents, windowName)
+	return reloaded, queued
 }
 
 func (r *Registry) queueWorkspaceEvent(windowName, name string, payload any) bool {

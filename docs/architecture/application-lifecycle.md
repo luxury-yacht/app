@@ -258,13 +258,11 @@ is rolled back.
    panels keeps its panel workspace.
 6. The saved windows are created hidden, as ordinary windows: each gets its
    cluster tabs and its panels in the live directory before it loads.
-7. The current windows are detached from the registry and taken off screen.
-   The registry does this itself instead of going through each window's own
-   close, because closing the last app view there means quitting. All but one
-   are closed; the last is only hidden until step 9. Windows and Linux end the
-   process the moment no native window is left, and the saved windows can
-   still fail to load; macOS asks `ShouldQuit`, which refuses while a switch
-   holds its preflight.
+7. The registry detaches and closes every current window except the one that
+   requested the switch. It hides that window and keeps it registered until
+   step 9. Windows and Linux end the process the moment no native window is
+   left, and the saved windows can still fail to load. On macOS, `ShouldQuit`
+   refuses while the switch holds its preflight.
 8. The saved windows get a bounded time to load their views. Each answers
    once: its view is mounted, or why it is not. One that can no longer answer
    does so with a failure at that moment: it closed, its page failed to start,
@@ -276,15 +274,14 @@ is rolled back.
    plain window: its docked panels leave the directory and its restore request
    is withdrawn, so a page that loads late does not apply a view the switch
    gave up on. One that is alive and still applying its view keeps what was
-   set up for it and finishes late. If no usable saved window is left (a page
-   that could not start does not count), the registry opens one plain app
-   window, so there is a window to show what failed and to try again from.
-   That window is not waited for.
+   set up for it and finishes late.
 9. The windows are shown and placed. Fullscreen is entered last and one window
    at a time: on macOS a window maximized during another's fullscreen
    transition is left part-way, and a fullscreen request made during a
-   transition is dropped. The hidden previous window is then closed, and the
-   saved workspace's clusters are written as what the next launch opens
+   transition is dropped. If no usable saved window was shown, the registry
+   tries to show one plain app window without waiting for its renderer. Once
+   a replacement is shown, the registry closes the source window and writes
+   the saved workspace's clusters as what the next launch opens
    (`WriteRestartSelectionOf`), because the user can quit from the next step
    on.
 10. The preflight ends. What the closed windows held in the backend is released
@@ -302,16 +299,19 @@ unavailable. The warnings go to one window of the new workspace in a single
 `named-workspace:warnings` event, since the window that asked is closed. The
 registry picks the window the user is most likely looking at (the last to enter
 fullscreen, otherwise one not reopened minimized), preferring one whose
-renderer has answered. The command returns an error only when closing a
-previous window failed.
+renderer has answered. The command returns an error when closing a previous
+window fails or no replacement can be shown.
 
-One case is not a warning. If no saved window can be created at all, closing
-the current windows would leave the app with none, so they stay and the command
-fails. The panels were set aside in step 5, so the registry puts them back
+If no saved window can be created at all, the command fails and leaves the
+current windows open. The panels were set aside in step 5, so the registry puts them back
 (`RestoreClearedWorkspace`): the current windows keep their docked and floating
 panels, and what was recorded for those panels (their metrics history). The owner of that state hears that panels closed only once a saved
 window exists (`CloseClearedWorkspace`), and only for the panels the saved
 workspace did not open again.
+
+If all replacements fail at presentation, the registry brings the source
+window back to show the error, discards the failed replacements, and persists
+the cluster selection of the remaining windows.
 
 Because the saved windows are ordinary windows from step 6, the user can close
 them all before the switch has finished. While a switch runs, closing the last

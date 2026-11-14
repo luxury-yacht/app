@@ -1185,15 +1185,10 @@ func (r *Registry) rendererReady(name string) bool {
 	return ready
 }
 
-// enterRendererPage places a readiness call among a window's page loads. Each
-// page takes a number that only grows for its window and sends it with every
-// readiness call. Calls from one page arrive in order, but a call from the page
-// before a reload can arrive after one from the page after it. A call from an
-// earlier page is stale. The first call from a later page means the window
-// loaded again.
-func (r *Registry) enterRendererPage(name string, page int64) (current, reloaded bool) {
-	r.closeMu.Lock()
-	defer r.closeMu.Unlock()
+// enterRendererPageLocked checks a readiness call against the latest page.
+// Hold closeMu through the ensuing readiness update so an earlier page cannot
+// overwrite a later page's state.
+func (r *Registry) enterRendererPageLocked(name string, page int64) (current, reloaded bool) {
 	last := r.rendererPage[name]
 	if page < last {
 		return false, false
@@ -1205,9 +1200,7 @@ func (r *Registry) enterRendererPage(name string, page int64) (current, reloaded
 	return true, page > last
 }
 
-func (r *Registry) markRendererReady(name string) {
-	r.closeMu.Lock()
-	defer r.closeMu.Unlock()
+func (r *Registry) markRendererReadyLocked(name string) {
 	if r.panelWorkspaceReady == nil {
 		r.panelWorkspaceReady = make(map[string]struct{})
 	}
@@ -1224,13 +1217,20 @@ func (r *Registry) forgetRendererReady(name string) {
 // just started loading, or a crash screen replaced its app tree. It is left
 // out of save, switch and quit until it announces again.
 func (r *Registry) WithdrawRendererReady(name string, page int64) error {
-	if current, _ := r.enterRendererPage(name, page); current {
-		announced := r.rendererReady(name)
-		r.rendererLost(name)
-		if announced {
-			// A page that had announced was working on its saved view.
-			r.failRestoreOfClosedWindow(name)
-		}
+	r.closeMu.Lock()
+	current, _ := r.enterRendererPageLocked(name, page)
+	_, announced := r.panelWorkspaceReady[name]
+	if current {
+		delete(r.panelWorkspaceReady, name)
+	}
+	r.closeMu.Unlock()
+	if !current {
+		return nil
+	}
+	r.cancelRendererRequests(name)
+	if announced {
+		// A page that had announced was working on its saved view.
+		r.failRestoreOfClosedWindow(name)
 	}
 	return nil
 }
@@ -1250,6 +1250,10 @@ func (r *Registry) switchParticipant(name string) bool {
 // as a timeout would.
 func (r *Registry) rendererLost(name string) {
 	r.forgetRendererReady(name)
+	r.cancelRendererRequests(name)
+}
+
+func (r *Registry) cancelRendererRequests(name string) {
 	r.failCaptureOfClosedWindow(name)
 	r.cancelPendingApplicationQuitPreflight(func(pending *applicationQuitPreflight) bool {
 		_, waiting := pending.waiting[name]

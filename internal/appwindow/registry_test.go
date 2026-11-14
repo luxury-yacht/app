@@ -1386,6 +1386,12 @@ func (b *recordingLifecycleBackend) NamedWorkspaceAvailableClusters() ([]string,
 
 // readyAppWindow marks an app window whose native runtime is up and whose
 // renderer has acknowledged that it can answer registry requests.
+func (r *Registry) markRendererReady(name string) {
+	r.closeMu.Lock()
+	defer r.closeMu.Unlock()
+	r.markRendererReadyLocked(name)
+}
+
 func readyAppWindow(r *Registry, name string) {
 	r.markRendererReady(name)
 }
