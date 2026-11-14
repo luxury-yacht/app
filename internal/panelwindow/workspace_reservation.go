@@ -46,6 +46,12 @@ func (d *WorkspaceDirectory) HasClusterReference(clusterID string) bool {
 			return true
 		}
 	}
+	// Panels a workspace switch set aside may still come back.
+	for key := range d.setAside {
+		if key.clusterID == clusterID {
+			return true
+		}
+	}
 	return false
 }
 

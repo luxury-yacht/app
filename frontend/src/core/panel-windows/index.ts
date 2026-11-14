@@ -187,10 +187,11 @@ export const onApplicationQuitPreflightSettled = (
   handler: (event: panelwindow.ApplicationQuitPreflightRequestedEvent) => void
 ) => onEvent('panel-window:application-quit-preflight-settled', handler);
 
-export const acknowledgePanelWorkspaceReady = (windowName: string) =>
-  AcknowledgePanelWorkspaceReady(windowName);
+export const acknowledgePanelWorkspaceReady = (windowName: string, page: number) =>
+  AcknowledgePanelWorkspaceReady(windowName, page);
 
-export const withdrawRendererReady = (windowName: string) => WithdrawRendererReady(windowName);
+export const withdrawRendererReady = (windowName: string, page: number) =>
+  WithdrawRendererReady(windowName, page);
 
 export const requestClusterTabTransfer = (
   windowName: string,

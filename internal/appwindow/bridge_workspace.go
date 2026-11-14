@@ -14,20 +14,20 @@ func (bridge *Bridge) OpenClusterWindow(windowName, clusterID string) error {
 	return registry.OpenClusterWindow(windowName, clusterID)
 }
 
-func (bridge *Bridge) WithdrawRendererReady(windowName string) error {
+func (bridge *Bridge) WithdrawRendererReady(windowName string, page int64) error {
 	registry, err := bridge.registryOrError()
 	if err != nil {
 		return err
 	}
-	return registry.WithdrawRendererReady(windowName)
+	return registry.WithdrawRendererReady(windowName, page)
 }
 
-func (bridge *Bridge) AcknowledgePanelWorkspaceReady(windowName string) error {
+func (bridge *Bridge) AcknowledgePanelWorkspaceReady(windowName string, page int64) error {
 	registry, err := bridge.registryOrError()
 	if err != nil {
 		return err
 	}
-	return registry.AcknowledgePanelWorkspaceReady(windowName)
+	return registry.AcknowledgePanelWorkspaceReady(windowName, page)
 }
 
 func (bridge *Bridge) GetPanelWorkspace(windowName, clusterID string) (panelwindow.WorkspaceSnapshot, error) {

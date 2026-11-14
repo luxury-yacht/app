@@ -137,7 +137,7 @@ func TestPanelTabMovesBetweenTwoAppViewsAfterTargetAcknowledgement(t *testing.T)
 	tab := validPanelGroupSnapshot().Tabs[0]
 	seedPanels(t, registry.workspace, source, panelwindow.PanelLocationDocked, []panelwindow.WorkspaceGroup{{ClusterID: "cluster-1", GroupID: "right", Tabs: []panelwindow.TabSnapshot{tab}, ActivePanelID: tab.PanelID}})
 	request := panelwindow.TabTransferRequest{TransferID: "cross-app", SourceWindowName: source, TargetWindowName: target, ClusterID: "cluster-1", SourceGroupID: "right", TargetGroupID: "bottom", TargetKind: panelwindow.TabTransferTargetWorkspace, Tab: tab}
-	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(target))
+	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(target, 0))
 	require.NoError(t, registry.RequestPanelTabTransfer(target, request))
 	require.Contains(t, events, source+":"+panelwindow.TabTransferRequestedEventName)
 	require.Error(t, registry.AcceptPanelTabTransfer(target, request.TransferID), "only the actual source may approve disposal")
@@ -166,7 +166,7 @@ func TestWholePanelDockKeepsSourceUntilAcknowledgementAfterTargetPublication(t *
 	seedNativeGroup(t, registry.workspace, native.WindowName, snapshot)
 	snapshot.SourceWindowName = native.WindowName
 	snapshot.TransferID = "dock-after-publish"
-	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(target))
+	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(target, 0))
 	require.NoError(t, registry.BeginPanelWindowDock(native.WindowName, "right", snapshot))
 	require.NoError(t, registry.PublishDockedPanels(target, []panelwindow.WorkspaceGroup{{ClusterID: snapshot.ClusterID, GroupID: "right", Tabs: snapshot.Tabs, ActivePanelID: snapshot.ActivePanelID}}))
 	require.Equal(t, native.WindowName, registry.workspace.Snapshot(snapshot.ClusterID).Panels[0].Location.WindowName)

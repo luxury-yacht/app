@@ -112,10 +112,13 @@ type WorkspaceCoordinator struct {
 
 	selectionMutationMu   sync.Mutex
 	workspaceSelectionsMu sync.RWMutex
-	workspaceSelections   map[string][]string
-	panelSelections       map[string]string
-	panelWorkspaceOnce    sync.Once
-	panelWorkspace        *panelwindow.WorkspaceDirectory
+	// restartSelectionHeld is set while a workspace switch replaces the
+	// windows: selection changes are then not written as the next launch's.
+	restartSelectionHeld atomic.Bool
+	workspaceSelections  map[string][]string
+	panelSelections      map[string]string
+	panelWorkspaceOnce   sync.Once
+	panelWorkspace       *panelwindow.WorkspaceDirectory
 
 	selectionMutationDrainMu   sync.Mutex
 	selectionMutationDrainCond *sync.Cond

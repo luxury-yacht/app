@@ -14,11 +14,11 @@ type sharedWorkspaceBridgeRecorder struct {
 	err  error
 }
 
-func (r *sharedWorkspaceBridgeRecorder) record(args ...any) error           { r.args = args; return r.err }
-func (r *sharedWorkspaceBridgeRecorder) WithdrawRendererReady(string) error { return nil }
+func (r *sharedWorkspaceBridgeRecorder) record(args ...any) error                  { r.args = args; return r.err }
+func (r *sharedWorkspaceBridgeRecorder) WithdrawRendererReady(string, int64) error { return nil }
 
-func (r *sharedWorkspaceBridgeRecorder) AcknowledgePanelWorkspaceReady(windowName string) error {
-	return r.record(windowName)
+func (r *sharedWorkspaceBridgeRecorder) AcknowledgePanelWorkspaceReady(windowName string, page int64) error {
+	return r.record(windowName, page)
 }
 func (r *sharedWorkspaceBridgeRecorder) GetPanelWorkspace(windowName, clusterID string) (panelwindow.WorkspaceSnapshot, error) {
 	return panelwindow.WorkspaceSnapshot{Revision: 7}, r.record(windowName, clusterID)
@@ -68,7 +68,7 @@ func TestSharedWorkspaceBridgePreservesIdentityAndReportsUnboundRegistry(t *test
 		{"AcknowledgeClusterPanelClose", func(bridge *Bridge) error {
 			return bridge.AcknowledgeClusterPanelClose("workspace-1", "close-1", false)
 		}, []any{"workspace-1", "close-1", false}},
-		{"AcknowledgePanelWorkspaceReady", func(bridge *Bridge) error { return bridge.AcknowledgePanelWorkspaceReady("workspace-1") }, []any{"workspace-1"}},
+		{"AcknowledgePanelWorkspaceReady", func(bridge *Bridge) error { return bridge.AcknowledgePanelWorkspaceReady("workspace-1", 7) }, []any{"workspace-1", int64(7)}},
 		{"GetPanelWorkspace", func(bridge *Bridge) error {
 			result, err := bridge.GetPanelWorkspace("workspace-1", "production")
 			if err == nil {

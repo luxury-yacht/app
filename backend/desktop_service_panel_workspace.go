@@ -12,20 +12,23 @@ func (s *DesktopService) OpenClusterWindow(ctx context.Context, windowName, clus
 	return s.panelWindows.OpenClusterWindow(windowName, clusterID)
 }
 
-// WithdrawRendererReady is a window's renderer saying it can no longer answer
-// registry requests, as when a crash screen replaces its app tree.
-func (s *DesktopService) WithdrawRendererReady(ctx context.Context, windowName string) error {
+// WithdrawRendererReady is a window's renderer saying it cannot answer registry
+// requests: its page has just started loading, or a crash screen replaced its
+// app tree. page is the number of the page that sent it.
+func (s *DesktopService) WithdrawRendererReady(ctx context.Context, windowName string, page int64) error {
 	if err := validatePanelCommandCaller(ctx, windowName); err != nil {
 		return err
 	}
-	return s.panelWindows.WithdrawRendererReady(windowName)
+	return s.panelWindows.WithdrawRendererReady(windowName, page)
 }
 
-func (s *DesktopService) AcknowledgePanelWorkspaceReady(ctx context.Context, windowName string) error {
+// AcknowledgePanelWorkspaceReady is a window's renderer announcing that it can
+// answer registry requests. page is the number of the page that sent it.
+func (s *DesktopService) AcknowledgePanelWorkspaceReady(ctx context.Context, windowName string, page int64) error {
 	if err := validatePanelCommandCaller(ctx, windowName); err != nil {
 		return err
 	}
-	return s.panelWindows.AcknowledgePanelWorkspaceReady(windowName)
+	return s.panelWindows.AcknowledgePanelWorkspaceReady(windowName, page)
 }
 
 func (s *DesktopService) GetPanelWorkspace(ctx context.Context, windowName, clusterID string) (panelwindow.WorkspaceSnapshot, error) {

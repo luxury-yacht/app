@@ -100,8 +100,31 @@ sessions, drain jobs, and unsaved editor content stay with their live owners.
 - **Simple switch (automated).** The earlier native runs of open and switch
   marked "staged design" below do not cover this one.
   `TestSwitchClosesThePreviousWindowsThenShowsTheSavedOnes` covers the order:
-  saved windows created hidden, previous windows closed, saved windows shown,
-  previous clusters released, restart selection written.
+  saved windows created hidden, the last previous window hidden, saved windows
+  shown, that window closed, previous clusters released, restart selection
+  written. `TestSwitchWhoseOnlySavedWindowFailsOpensAPlainWindow` covers a
+  workspace of one panel window that fails to start: the wait ends at once,
+  its panels leave the directory, a plain window opens with the warning, and a
+  native window exists throughout.
+  `TestSavedAppWindowThatDoesNotLoadKeepsNothingOfItsSavedView` covers an app
+  window that fails or never answers: it stays open, its docked panels leave
+  the directory, and a late page is not told to restore.
+  `TestSwitchDoesNotWaitForASavedWindowThatCanNoLongerAnswer` covers a saved
+  window whose renderer goes or that is closed before it loads.
+  `TestSwitchDoesNotReportAPreviousWindowThatIsAlreadyGone`,
+  `TestRemovingAClusterEndsTheRequestItsPanelWindowsWereAsked`, and
+  `TestClusterCloseDoesNotCommitDuringAWorkspaceSwitch` cover a cluster that
+  is removed or closed while a switch or quit is under way.
+  `TestWindowAskedToApproveASwitchCannotCloseOnItsOwn` covers a window that
+  tries to close after it was asked, and the selection written when the new
+  workspace is on screen. `TestSwitchWaitsForAClusterCloseToFinish`,
+  `TestSavedAppWindowThatCouldNotStartIsNotTheOnlyWindowLeft`, and
+  `TestSavedAppWindowStillWorkingAtTheDeadlineKeepsItsDockedPanels` cover the
+  cases their names give.
+  `TestSwitchIsRefusedWhenAWindowOpensWhileTheOthersApprove` covers a window
+  that opens during the approvals, and
+  `TestPanelsSetAsideForANamedWorkspaceFollowTheirWindowsAndClusters` the
+  set-aside panels of a window or cluster that goes during the switch.
   `TestSwitchRefusedBeforeTheHandOverChangesNothing` covers a changed panel
   directory and a cancelled request.
   `TestSavedWindowsThatDoNotLoadAreShownAndReported` covers a window that fails
@@ -111,7 +134,7 @@ sessions, drain jobs, and unsaved editor content stay with their live owners.
   `TestRestoredWindowOwnsItsDockedPanelsLikeAnyOtherWindow`,
   `TestNewWindowIsRefusedDuringASwitch`,
   `TestClosingEverySavedWindowDuringTheSwitchQuitsTheApp`, and the warning tests
-  cover the rest. `TestNamedWorkspaceSeedLeavesTheRestartSelectionUntilTheSwitchCommits`
+  cover the rest. `TestNamedWorkspaceSwitchWritesTheRestartSelectionOnce`
   runs against the real workspace coordinator.
 - **Save (automated only).** `TestCaptureEndsWhenAWindowClosesBeforeAnswering`,
   `TestSaveAndSwitchWaitForAClusterViewMoveToFinish`,
@@ -145,7 +168,7 @@ sessions, drain jobs, and unsaved editor content stay with their live owners.
   `TestNamedWorkspaceReplacesAppAndPanelWindows` covers a switch that goes
   ahead reporting only the panels it did not open again as closed.
 - **Workspace of panel windows alone.**
-  `TestNamedWorkspaceSeedLeavesTheRestartSelectionUntilTheSwitchCommits` covers
+  `TestNamedWorkspaceSwitchWritesTheRestartSelectionOnce` covers
   its clusters becoming the next launch's selection.
 - **Window state on macOS (native, staged design).** In an isolated development build with no
   cluster, three app windows were saved fullscreen, minimized, and maximized.

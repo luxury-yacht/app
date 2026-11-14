@@ -40,7 +40,18 @@ type workspaceWindowEvent struct {
 	payload any
 }
 
-func (r *Registry) AcknowledgePanelWorkspaceReady(windowName string) error {
+// AcknowledgePanelWorkspaceReady is a renderer announcing that the handlers
+// which answer save, switch, quit and close requests are subscribed. page is
+// the number of the page that sent it (enterRendererPage).
+func (r *Registry) AcknowledgePanelWorkspaceReady(windowName string, page int64) error {
+	current, reloaded := r.enterRendererPage(windowName, page)
+	if !current {
+		return nil
+	}
+	if reloaded {
+		// The page before this one never said it was going.
+		r.rendererLost(windowName)
+	}
 	r.workspaceMu.Lock()
 	defer r.workspaceMu.Unlock()
 	if !r.lifecycle.Contains(windowName) {
@@ -83,6 +94,16 @@ func (r *Registry) queueWorkspaceEvent(windowName, name string, payload any) boo
 	}
 	r.closeMu.Unlock()
 	return !ready || r.emitWindowEvent(windowName, name, payload)
+}
+
+// withdrawQueuedWorkspaceEvent drops an event that is still waiting for its
+// window's renderer to announce itself.
+func (r *Registry) withdrawQueuedWorkspaceEvent(windowName, name string) {
+	r.closeMu.Lock()
+	defer r.closeMu.Unlock()
+	r.queuedWorkspaceEvents[windowName] = slices.DeleteFunc(r.queuedWorkspaceEvents[windowName], func(event workspaceWindowEvent) bool {
+		return event.name == name
+	})
 }
 
 func (r *Registry) appWindowForCluster(clusterID, source string) (string, error) {

@@ -192,10 +192,12 @@ describe('booting from its descriptor', () => {
 
   it('announces its renderer once its handlers are subscribed, and withdraws when its app tree unmounts', async () => {
     await openPanelWindow();
-    expect(app.backend.calls('AcknowledgePanelWorkspaceReady')).toEqual([['panel-1']]);
+    expect(app.backend.calls('AcknowledgePanelWorkspaceReady')).toEqual([
+      ['panel-1', expect.any(Number)],
+    ]);
 
     view.unmount();
-    expect(app.backend.calls('WithdrawRendererReady')).toEqual([['panel-1']]);
+    expect(app.backend.calls('WithdrawRendererReady')).toEqual([['panel-1', expect.any(Number)]]);
   });
 
   it('announces its renderer again when its app tree remounts in the same page', async () => {
@@ -204,7 +206,10 @@ describe('booting from its descriptor', () => {
     view = await app.render(<Probe />);
 
     expect(app.backend.calls('AcknowledgePanelWindowReady')).toHaveLength(1);
-    expect(app.backend.calls('AcknowledgePanelWorkspaceReady')).toEqual([['panel-1'], ['panel-1']]);
+    expect(app.backend.calls('AcknowledgePanelWorkspaceReady')).toEqual([
+      ['panel-1', expect.any(Number)],
+      ['panel-1', expect.any(Number)],
+    ]);
   });
 
   it('shows a warning inside the floating window that raised it', async () => {
@@ -250,7 +255,9 @@ describe('booting from its descriptor', () => {
       ['panel-1', 'panel-1', 'dock-in-flight'],
     ]);
     expect(takeReports('acknowledge-ready')).toHaveLength(1);
-    expect(app.backend.calls('AcknowledgePanelWorkspaceReady')).toEqual([['panel-1']]);
+    expect(app.backend.calls('AcknowledgePanelWorkspaceReady')).toEqual([
+      ['panel-1', expect.any(Number)],
+    ]);
   });
 
   it('reports when the registry already finished the ready-failure cleanup', async () => {

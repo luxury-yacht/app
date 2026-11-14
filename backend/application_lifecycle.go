@@ -97,6 +97,8 @@ type refreshSubsystemTeardowner interface {
 
 type lifecycleWorkspace interface {
 	PersistRestartSelection()
+	HoldRestartSelection()
+	WriteRestartSelectionOf(string)
 	CloseClusterView(string, string) error
 	panelwindow.ClusterViewTransferLifecycle
 	ReleaseWorkspaceWindow(string)
@@ -457,7 +459,24 @@ func (a *ApplicationLifecycle) PersistRestartSelection() {
 	a.workspace.PersistRestartSelection()
 }
 
+// WriteRestartSelectionOf writes one window's clusters as what the next launch
+// opens, while a workspace switch still holds the restart selection.
+func (a *ApplicationLifecycle) WriteRestartSelectionOf(window string) {
+	a.workspace.WriteRestartSelectionOf(window)
+}
+
+// HoldRestartSelection keeps what the next launch opens as it is while a
+// workspace switch replaces the windows. PersistRestartSelection ends the hold.
+func (a *ApplicationLifecycle) HoldRestartSelection() {
+	a.workspace.HoldRestartSelection()
+}
+
 func (a *ApplicationLifecycle) SeedNamedWorkspaceWindow(window string, clusters []string, visible string) error {
+	// A window with no clusters needs nothing looked up, and must not fail
+	// because discovery does.
+	if len(clusters) == 0 {
+		return a.workspace.SeedNamedWorkspaceWindow(window, nil, visible)
+	}
 	discovered, err := a.clusterRuntime.GetKubeconfigs()
 	if err != nil {
 		return err

@@ -17,6 +17,10 @@ type clusterViewTransfer struct {
 }
 
 func (r *Registry) RequestClusterTabTransfer(caller string, request panelwindow.ClusterTabTransferRequest) error {
+	// Refused here, before anything is reserved for it.
+	if r.activeRestore.Load() != nil {
+		return errWorkspaceSwitching
+	}
 	r.clusterTransferMu.Lock()
 	defer r.clusterTransferMu.Unlock()
 	r.workspaceMu.Lock()
@@ -216,7 +220,10 @@ func (r *Registry) stageClusterTransferTarget(transfer *clusterViewTransfer) (bo
 	if !r.lifecycle.Contains(geometrySource) {
 		geometrySource = r.lifecycle.MostRecent()
 	}
-	target := r.lifecycle.Add()
+	var target string
+	if !r.admitWindow(func() { target = r.lifecycle.Add() }) {
+		return false, errWorkspaceSwitching
+	}
 	alreadyOpen, err := r.backend.StageClusterViewTransfer(request.SourceWindowName, target, request.ClusterID)
 	if err != nil {
 		r.lifecycle.BeginClose(target)

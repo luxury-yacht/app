@@ -53,55 +53,49 @@ func (d *WorkspaceDirectory) PlaceNamedWorkspaceGroup(window string, kind PanelL
 	return nil
 }
 
-// ClearedWorkspace is what ClearForNamedWorkspace took out of the directory.
-type ClearedWorkspace struct {
-	panels map[workspacePanelKey]WorkspacePanel
-}
-
-// ClearForNamedWorkspace takes every panel out so a saved workspace can take
+// ClearForNamedWorkspace sets every panel aside so a saved workspace can take
 // the directory. It refuses if anything changed since revision was read, or
 // while a move or an open is still in flight. The caller finishes with either
 // CloseClearedWorkspace or RestoreClearedWorkspace.
-func (d *WorkspaceDirectory) ClearForNamedWorkspace(revision uint64) (ClearedWorkspace, error) {
+func (d *WorkspaceDirectory) ClearForNamedWorkspace(revision uint64) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.revision != revision || len(d.transfers) != 0 || len(d.reservations) != 0 {
-		return ClearedWorkspace{}, fmt.Errorf("panel layout changed while opening the workspace")
+		return fmt.Errorf("panel layout changed while opening the workspace")
 	}
-	cleared := ClearedWorkspace{panels: d.panels}
+	d.setAside = d.panels
 	d.panels = make(map[workspacePanelKey]WorkspacePanel)
 	d.revision++
-	return cleared, nil
+	return nil
 }
 
 // CloseClearedWorkspace is for a switch that goes ahead. It tells the owner of
-// panel-lifetime state that the panels ClearForNamedWorkspace took out have
-// closed, except those the saved workspace opened again.
-func (d *WorkspaceDirectory) CloseClearedWorkspace(cleared ClearedWorkspace) {
+// panel-lifetime state that the set-aside panels have closed, except those the
+// saved workspace opened again.
+func (d *WorkspaceDirectory) CloseClearedWorkspace() {
 	removal := &panelRemoval{}
 	defer removal.report()
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	for key := range cleared.panels {
-		if _, reopened := d.panels[key]; !reopened {
-			removal.keys = append(removal.keys, PanelKey{ClusterID: key.clusterID, PanelID: key.panelID})
-		}
-	}
-	removal.notify = d.onPanelsRemoved
+	d.dropSetAsideLocked(removal, func(key workspacePanelKey, _ WorkspacePanel) bool {
+		_, reopened := d.panels[key]
+		return !reopened
+	})
+	d.setAside = nil
 }
 
-// RestoreClearedWorkspace puts back what ClearForNamedWorkspace took out. It
-// is for a switch that could not create a single saved window. The switch has
-// removed whatever it placed and the windows are frozen meanwhile, so the
-// directory is empty; a panel that is there all the same stays.
-func (d *WorkspaceDirectory) RestoreClearedWorkspace(cleared ClearedWorkspace) {
+// RestoreClearedWorkspace puts the set-aside panels back. It is for a switch
+// that could not create a single saved window. Panels whose window or cluster
+// went meanwhile are no longer set aside, so they do not come back.
+func (d *WorkspaceDirectory) RestoreClearedWorkspace() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	for key, panel := range cleared.panels {
+	for key, panel := range d.setAside {
 		if _, exists := d.panels[key]; !exists {
 			d.panels[key] = panel
 		}
 	}
+	d.setAside = nil
 	d.revision++
 }
 

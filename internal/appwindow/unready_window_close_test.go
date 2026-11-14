@@ -19,7 +19,7 @@ func TestAppWindowWhoseRendererCannotAnswerClosesWithoutBeingAsked(t *testing.T)
 	staying, crashed := registry.Create(true).Name(), registry.Create(false).Name()
 	readyAppWindow(registry, staying)
 	readyAppWindow(registry, crashed)
-	require.NoError(t, registry.WithdrawRendererReady(crashed))
+	require.NoError(t, registry.WithdrawRendererReady(crashed, 0))
 	registry.emitWindowEvent = func(target, eventName string, _ any) bool {
 		if eventName == panelwindow.WorkspaceCloseRequestedEventName {
 			t.Errorf("window %q was asked to run close guards it cannot run", target)
@@ -39,7 +39,7 @@ func TestPanelWindowWhoseRendererCannotAnswerClosesWithoutBeingAsked(t *testing.
 	snapshot := validPanelGroupSnapshot()
 	registry, panel := liveNativeWindow(t, snapshot)
 	registry.backend = &recordingLifecycleBackend{}
-	require.NoError(t, registry.WithdrawRendererReady(panel))
+	require.NoError(t, registry.WithdrawRendererReady(panel, 0))
 	var closed []string
 	registry.closeWindow = func(name string) bool { closed = append(closed, name); return true }
 	registry.emitWindowEvent = func(target, eventName string, _ any) bool {
@@ -58,7 +58,7 @@ func TestPanelWindowWhoseRendererCannotAnswerClosesWithoutBeingAsked(t *testing.
 
 func TestClusterCloseDoesNotAskAPanelWindowWhoseRendererCannotAnswer(t *testing.T) {
 	registry, _, source, windows := clusterCloseFixture(t)
-	require.NoError(t, registry.WithdrawRendererReady(windows[0]))
+	require.NoError(t, registry.WithdrawRendererReady(windows[0], 0))
 	var closed, asked []string
 	registry.closeWindow = func(name string) bool { closed = append(closed, name); return true }
 	registry.emitWindowEvent = func(target, event string, payload any) bool {
@@ -88,7 +88,7 @@ func TestClusterCloseEndsWhenAnAskedPanelWindowCanNoLongerAnswer(t *testing.T) {
 	}
 	registry.emitWindowEvent = func(target, event string, _ any) bool {
 		if event == panelwindow.ClusterPanelCloseRequestedEventName && target == windows[0] {
-			go func() { _ = registry.WithdrawRendererReady(target) }()
+			go func() { _ = registry.WithdrawRendererReady(target, 0) }()
 		}
 		return true
 	}
@@ -104,8 +104,8 @@ func TestClusterCloseEndsWhenAnAskedPanelWindowCanNoLongerAnswer(t *testing.T) {
 // With no panel window able to answer there is nobody to wait for.
 func TestClusterCloseWithOnlyPanelWindowsThatCannotAnswerClosesAtOnce(t *testing.T) {
 	registry, backend, source, windows := clusterCloseFixture(t)
-	require.NoError(t, registry.WithdrawRendererReady(windows[0]))
-	require.NoError(t, registry.WithdrawRendererReady(windows[1]))
+	require.NoError(t, registry.WithdrawRendererReady(windows[0], 0))
+	require.NoError(t, registry.WithdrawRendererReady(windows[1], 0))
 	var closed []string
 	registry.closeWindow = func(name string) bool { closed = append(closed, name); return true }
 	registry.emitWindowEvent = func(target, event string, _ any) bool {
@@ -130,8 +130,8 @@ func TestClusterCloseWithOnlyPanelWindowsThatCannotAnswerClosesAtOnce(t *testing
 // instead of stopping half way.
 func TestClusterCloseFinishesWhenAPanelWindowClosesWhileItCommits(t *testing.T) {
 	registry, backend, source, windows := clusterCloseFixture(t)
-	require.NoError(t, registry.WithdrawRendererReady(windows[0]))
-	require.NoError(t, registry.WithdrawRendererReady(windows[1]))
+	require.NoError(t, registry.WithdrawRendererReady(windows[0], 0))
+	require.NoError(t, registry.WithdrawRendererReady(windows[1], 0))
 	registry.closeWindow = func(name string) bool {
 		if name == windows[0] {
 			// The second window closes on its own, as its close button closes it.
@@ -145,4 +145,50 @@ func TestClusterCloseFinishesWhenAPanelWindowClosesWhileItCommits(t *testing.T) 
 	require.NoError(t, err)
 	require.True(t, allowed)
 	require.Equal(t, []string{"cluster-2"}, backend.windowClusters[source], "the cluster view closed")
+}
+
+// A cluster whose kubeconfig goes takes its panel windows with it. They close
+// without answering what they were asked, so the request ends then instead of
+// keeping every other window frozen until its deadline.
+func TestRemovingAClusterEndsTheRequestItsPanelWindowsWereAsked(t *testing.T) {
+	registry, _, source, _ := clusterCloseFixture(t)
+	readyAppWindow(registry, source)
+	registry.quitPreflightTimeout = 0
+	registry.closeWindow = func(string) bool { return true }
+	require.False(t, registry.PrepareApplicationQuit())
+
+	registry.clusterRemoved("cluster-1")
+
+	require.Eventually(t, func() bool {
+		registry.quitMu.Lock()
+		defer registry.quitMu.Unlock()
+		return registry.pendingQuit == nil
+	}, 5*time.Second, 5*time.Millisecond)
+	require.Eventually(t, func() bool { return len(registry.panels.Names("cluster-1")) == 0 }, 5*time.Second, 5*time.Millisecond)
+}
+
+// A workspace switch owns the windows and the panel directory while it runs.
+// A cluster close that was already under way must not go on to remove the
+// cluster: that would delete the panels the switch has placed for it.
+func TestClusterCloseDoesNotCommitDuringAWorkspaceSwitch(t *testing.T) {
+	registry, backend, source, _ := clusterCloseFixture(t)
+	registry.closeWindow = func(name string) bool {
+		t.Errorf("window %q closed during a workspace switch", name)
+		return true
+	}
+	registry.emitWindowEvent = func(target, event string, payload any) bool {
+		if event == panelwindow.ClusterPanelCloseRequestedEventName {
+			request := payload.(panelwindow.ClusterPanelCloseEvent)
+			// The switch takes over while the panel windows answer.
+			registry.activeRestore.Store(&namedWorkspaceRestore{})
+			go func() { _ = registry.AcknowledgeClusterPanelClose(target, request.TransactionID, true) }()
+		}
+		return true
+	}
+
+	allowed, err := registry.CloseClusterView(context.Background(), source, "cluster-1")
+
+	require.Error(t, err)
+	require.False(t, allowed)
+	require.Contains(t, backend.windowClusters[source], "cluster-1")
 }

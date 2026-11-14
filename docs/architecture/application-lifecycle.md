@@ -235,31 +235,67 @@ is rolled back.
    every window approves, the registry replaces the collected preflight, so a
    late collection timeout cannot release the frozen windows, and ending a
    preflight checks and claims it in one hold of the quit mutex.
-3. One selection claims every saved cluster, so a cluster both workspaces show
-   stays connected. The claim does not change what the next launch opens.
-4. The registry clears the panel directory at the revision it read after the
-   windows approved. This is the last step that can refuse: the directory
-   rejects it if anything changed since, a removed cluster included, and the
-   claim on the saved clusters is then given up.
-5. The saved windows are created hidden, as ordinary windows: each gets its
-   cluster tabs and its panels in the live directory before it loads. They are
-   created before the current windows close because Windows and Linux end the
-   process the moment no window is left; macOS asks `ShouldQuit`, which refuses
-   while a switch holds its preflight.
-6. The current windows close. The registry detaches each one itself instead of
-   going through the window's own close, because closing the last app view
-   there means quitting.
-7. The saved windows get a bounded time to load their views, then are shown and
-   placed. An app window that has not loaded is shown as it is. A panel window
-   that has not loaded is closed: it has no working close button, and it would
-   keep every later save and switch waiting for it. Fullscreen is entered last and one window at a time: on macOS a
-   window maximized during another's fullscreen transition is left part-way,
-   and a fullscreen request made during a transition is dropped.
-8. The preflight ends. What the closed windows held in the backend is released
-   only now, because those releases can queue behind cluster connections the
-   saved workspace started. The restart selection is written once, last.
+   A window that has been asked cannot close on its own until the switch ends
+   (`switchParticipant`): its close button is ignored and its renderer's own
+   close acknowledgement is refused. The switch works from the windows it
+   asked and closes them itself.
+3. The registry confirms that the windows which approved are still exactly the
+   windows that are open and that no cluster close is under way, and from then
+   on no new window is admitted and no cluster close or cluster-tab move
+   begins until the switch ends (`admitWindow`: File > New Window, a cluster
+   tear-off, a panel tear-off). A window that opened while the others were
+   approving was never asked, so the switch is refused.
+4. The restart selection is held (`HoldRestartSelection`): until the switch
+   ends, no selection change is written as what the next launch opens. One
+   selection then claims every saved cluster, so a cluster both workspaces
+   show stays connected.
+5. The registry sets the current panels aside in the directory at the revision
+   it read after the windows approved. This is the last step that can refuse:
+   the directory rejects it if anything changed since, a removed cluster
+   included, and the claim on the saved clusters is then given up. Set-aside
+   panels still follow their windows and clusters: a window or cluster that
+   goes takes its set-aside panels with it, and a cluster with set-aside
+   panels keeps its panel workspace.
+6. The saved windows are created hidden, as ordinary windows: each gets its
+   cluster tabs and its panels in the live directory before it loads.
+7. The current windows are detached from the registry and taken off screen.
+   The registry does this itself instead of going through each window's own
+   close, because closing the last app view there means quitting. All but one
+   are closed; the last is only hidden until step 9. Windows and Linux end the
+   process the moment no native window is left, and the saved windows can
+   still fail to load; macOS asks `ShouldQuit`, which refuses while a switch
+   holds its preflight.
+8. The saved windows get a bounded time to load their views. Each answers
+   once: its view is mounted, or why it is not. One that can no longer answer
+   does so with a failure at that moment: it closed, its page failed to start,
+   its cluster was removed, or its renderer went after announcing. The
+   registry then settles every window that did not mount its view
+   (`settleUnloadedWindows`). A panel window is closed: it has no working
+   close button, and it would keep every later save and switch waiting for it.
+   An app window that failed, or whose renderer cannot answer, stays open as a
+   plain window: its docked panels leave the directory and its restore request
+   is withdrawn, so a page that loads late does not apply a view the switch
+   gave up on. One that is alive and still applying its view keeps what was
+   set up for it and finishes late. If no usable saved window is left (a page
+   that could not start does not count), the registry opens one plain app
+   window, so there is a window to show what failed and to try again from.
+   That window is not waited for.
+9. The windows are shown and placed. Fullscreen is entered last and one window
+   at a time: on macOS a window maximized during another's fullscreen
+   transition is left part-way, and a fullscreen request made during a
+   transition is dropped. The hidden previous window is then closed, and the
+   saved workspace's clusters are written as what the next launch opens
+   (`WriteRestartSelectionOf`), because the user can quit from the next step
+   on.
+10. The preflight ends. What the closed windows held in the backend is released
+    only now, because those releases can queue behind cluster connections the
+    saved workspace started. `PersistRestartSelection` then ends the hold and
+    writes the settled selection: the saved workspace's clusters, an empty selection
+    included when its windows show none. The switch's own claim on the saved
+    clusters is given up after that, as an ordinary change, so with every
+    window closed since, the next launch still opens the saved workspace.
 
-Anything that fails after step 4 becomes a warning: a saved window that could
+Anything that fails after step 5 becomes a warning: a saved window that could
 not be created or did not load its view, a previous window that did not close,
 a window that did not return to fullscreen, a saved cluster that is
 unavailable. The warnings go to one window of the new workspace in a single
@@ -271,17 +307,18 @@ previous window failed.
 
 One case is not a warning. If no saved window can be created at all, closing
 the current windows would leave the app with none, so they stay and the command
-fails. The panel directory was cleared in step 4, so the registry puts back what
-it cleared (`RestoreClearedWorkspace`): the current windows keep their docked
-and floating panels, and what was recorded for those panels (their metrics
-history). The owner of that state hears that panels closed only once a saved
+fails. The panels were set aside in step 5, so the registry puts them back
+(`RestoreClearedWorkspace`): the current windows keep their docked and floating
+panels, and what was recorded for those panels (their metrics history). The owner of that state hears that panels closed only once a saved
 window exists (`CloseClearedWorkspace`), and only for the panels the saved
 workspace did not open again.
 
-Because the saved windows are ordinary windows from step 5, the user can close
-them all before the switch has finished. The switch then requests the quit that
-closing a last window means, since a quit asked for while the preflight was held
-was refused. File > New Window is refused while a switch runs: a new window
+Because the saved windows are ordinary windows from step 6, the user can close
+them all before the switch has finished. While a switch runs, closing the last
+app view releases it like any other view instead of starting a quit; the switch
+requests the quit itself at its end if no window is left. A cluster close does
+not commit while a switch runs, and a cluster whose kubeconfig goes ends
+whatever its panel windows were asked before it closes them. File > New Window is refused while a switch runs: a new window
 takes every selected cluster, and that selection is being replaced.
 
 Saved geometry uses the same logical work-area rules as startup. A window is
@@ -300,8 +337,13 @@ last page load:
   that answer these requests are subscribed. An app window does so after its
   first kubeconfig load, a panel window after its transfer acknowledgement has
   returned. `useRendererReadiness` is the one caller for both.
-- A runtime-ready event is a page load, and a hook on it clears the window's
-  readiness, so a reloading window is not asked until it announces again.
+- Every readiness call carries its page's number, which only grows for a
+  window (`useRendererReadiness`). A page says it has started, before it
+  renders anything, by withdrawing with its number, so a reloading window is
+  not asked until it announces again. The registry keeps the highest page per
+  window (`enterRendererPage`): a call from an earlier page is ignored, because
+  it can arrive after one from the page that replaced it, and the first call
+  from a later page clears what the earlier page announced.
 - When the tree that owns the handlers unmounts (the crash screen), the
   renderer calls `WithdrawRendererReady`. Recovering in the same page announces
   again. A window's readiness calls are sent in the order it made them.

@@ -14,11 +14,11 @@ type sharedWorkspaceRecorder struct {
 	err  error
 }
 
-func (r *sharedWorkspaceRecorder) record(args ...any) error           { r.args = args; return r.err }
-func (r *sharedWorkspaceRecorder) WithdrawRendererReady(string) error { return nil }
+func (r *sharedWorkspaceRecorder) record(args ...any) error                  { r.args = args; return r.err }
+func (r *sharedWorkspaceRecorder) WithdrawRendererReady(string, int64) error { return nil }
 
-func (r *sharedWorkspaceRecorder) AcknowledgePanelWorkspaceReady(windowName string) error {
-	return r.record(windowName)
+func (r *sharedWorkspaceRecorder) AcknowledgePanelWorkspaceReady(windowName string, page int64) error {
+	return r.record(windowName, page)
 }
 func (r *sharedWorkspaceRecorder) GetPanelWorkspace(windowName, clusterID string) (panelwindow.WorkspaceSnapshot, error) {
 	return panelwindow.WorkspaceSnapshot{Revision: 7}, r.record(windowName, clusterID)
@@ -70,8 +70,8 @@ func TestSharedPanelWorkspaceBoundaryAuthenticatesAndPreservesEveryCommand(t *te
 			return service.AcknowledgeClusterPanelClose(ctx, caller, "close-1", false)
 		}, []any{"workspace-1", "close-1", false}},
 		{"AcknowledgePanelWorkspaceReady", func(service *DesktopService, ctx context.Context, caller string) error {
-			return service.AcknowledgePanelWorkspaceReady(ctx, caller)
-		}, []any{"workspace-1"}},
+			return service.AcknowledgePanelWorkspaceReady(ctx, caller, 7)
+		}, []any{"workspace-1", int64(7)}},
 		{"GetPanelWorkspace", func(service *DesktopService, ctx context.Context, caller string) error {
 			result, err := service.GetPanelWorkspace(ctx, caller, "production")
 			if err == nil {

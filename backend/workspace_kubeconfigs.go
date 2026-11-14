@@ -115,7 +115,8 @@ func (a *WorkspaceCoordinator) commitKubeconfigSelection(mutation *selectionMuta
 		a.retainWorkspaceSelections(nil)
 	}
 	commitStart := time.Now()
-	a.commitSelectionChangeIntent(*intent, !mutation.preserveRestartSelection)
+	// A workspace switch holds the restart selection until it has settled.
+	a.commitSelectionChangeIntent(*intent, !mutation.preserveRestartSelection && !a.restartSelectionHeld.Load())
 	mutation.phases.commit = time.Since(commitStart)
 }
 
@@ -510,6 +511,9 @@ func (a *WorkspaceCoordinator) applySelectionPrune(
 		a.removeClusterWorkspaceState(id)
 	}
 
+	if a.restartSelectionHeld.Load() {
+		return
+	}
 	if err := a.preferences.SaveSelectedKubeconfigs(remainingSelections); err != nil {
 		a.logger.Warn(fmt.Sprintf("Failed to save updated selection: %v", err), logComponent)
 	}

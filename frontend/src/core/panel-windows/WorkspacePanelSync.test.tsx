@@ -541,7 +541,9 @@ describe('in the workspace window', () => {
     await act(async () => hydrate());
     await app.settle();
 
-    expect(app.backend.calls('AcknowledgePanelWorkspaceReady')).toEqual([[app.windowName]]);
+    expect(app.backend.calls('AcknowledgePanelWorkspaceReady')).toEqual([
+      [app.windowName, expect.any(Number)],
+    ]);
   });
 
   it('stays announced while kubeconfigs reload, and withdraws when its app tree unmounts', async () => {
@@ -557,7 +559,9 @@ describe('in the workspace window', () => {
     await app.settle();
 
     view.unmount();
-    expect(app.backend.calls('WithdrawRendererReady')).toEqual([[app.windowName]]);
+    expect(app.backend.calls('WithdrawRendererReady')).toEqual([
+      [app.windowName, expect.any(Number)],
+    ]);
   });
 
   it('withdraws only after its announcement has landed', async () => {
@@ -572,7 +576,9 @@ describe('in the workspace window', () => {
     await act(async () => announce());
     await app.settle();
 
-    expect(app.backend.calls('WithdrawRendererReady')).toEqual([[app.windowName]]);
+    expect(app.backend.calls('WithdrawRendererReady')).toEqual([
+      [app.windowName, expect.any(Number)],
+    ]);
   });
 
   it('recovers an unchanged docked snapshot when close preparation flushes again', async () => {

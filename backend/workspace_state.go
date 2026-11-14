@@ -274,7 +274,7 @@ func (a *WorkspaceCoordinator) ApplyClusterWorkspace(command ClusterWorkspaceCom
 		return clusterWorkspaceResult(a.latestClusterWorkspaceState(windowID), nil)
 	}
 	if windowID != "" {
-		return a.acceptWorkspaceSelection(windowID, command, false)
+		return a.acceptWorkspaceSelection(windowID, command)
 	}
 	var state ClusterWorkspaceState
 	captured := false
@@ -367,23 +367,52 @@ func appendWorkspaceSelection(union *[]string, wanted, seen map[string]struct{},
 	*union = append(*union, selection)
 }
 
-// PersistRestartSelection writes the clusters the next launch opens. A workspace
-// switch calls it once it has committed and retired the previous windows; the
-// selection changes it made while claiming the saved clusters were deliberately
-// not written.
+// HoldRestartSelection stops selection changes from being written as what the
+// next launch opens. A workspace switch claims clusters it may still give up
+// and releases the previous windows one at a time; none of those states is one
+// to restart into. PersistRestartSelection ends the hold.
+func (a *WorkspaceCoordinator) HoldRestartSelection() {
+	if a != nil {
+		a.restartSelectionHeld.Store(true)
+	}
+}
+
+// WriteRestartSelectionOf writes one window's clusters as what the next launch
+// opens, without ending a hold. A workspace switch calls it with its own claim
+// on the saved clusters once the new workspace is on screen: the user can quit
+// from then on, before the previous windows' clusters have been released.
+func (a *WorkspaceCoordinator) WriteRestartSelectionOf(window string) {
+	if a == nil {
+		return
+	}
+	a.workspaceSelectionsMu.RLock()
+	selection := slices.Clone(a.workspaceSelections[window])
+	a.workspaceSelectionsMu.RUnlock()
+	if selection == nil {
+		selection = []string{}
+	}
+	if err := a.preferences.SaveSelectedKubeconfigs(selection); err != nil && a.logger != nil {
+		a.logger.Warn(fmt.Sprintf("Failed to save kubeconfig selection: %v", err), "KubeconfigManager")
+	}
+}
+
+// PersistRestartSelection ends the hold a workspace switch placed and writes
+// the clusters the next launch opens. Windows that show no cluster are a
+// selection too, and an empty one is written for them. Only with nothing open
+// at all is what the last window showed kept (see ReleaseWorkspaceWindow).
 func (a *WorkspaceCoordinator) PersistRestartSelection() {
 	if a == nil {
 		return
 	}
 	err := a.runOrderedSelectionMutation("persist-restart-selection", func(*selectionMutation) error {
-		// A workspace of floating panel windows alone still holds clusters. With
-		// nothing open at all the selection is empty, and what the last window
-		// showed is kept for the next launch (see ReleaseWorkspaceWindow).
-		selection := a.GetSelectedKubeconfigs()
-		if len(selection) == 0 {
+		a.restartSelectionHeld.Store(false)
+		a.workspaceSelectionsMu.RLock()
+		nothingOpen := len(a.workspaceSelections) == 0 && len(a.panelSelections) == 0
+		a.workspaceSelectionsMu.RUnlock()
+		if nothingOpen {
 			return nil
 		}
-		return a.preferences.SaveSelectedKubeconfigs(selection)
+		return a.preferences.SaveSelectedKubeconfigs(a.GetSelectedKubeconfigs())
 	})
 	if err != nil && a.logger != nil {
 		a.logger.Warn(fmt.Sprintf("Failed to save kubeconfig selection: %v", err), "KubeconfigManager")
@@ -393,9 +422,8 @@ func (a *WorkspaceCoordinator) PersistRestartSelection() {
 // SeedNamedWorkspaceWindow admits the saved cluster tabs before renderer hydration.
 // Sharing selections that other views still own does not change the process
 // union. A selection without an owner may be mid-retirement, so it is admitted
-// through the ordered mutation instead (see retainOwnedPanelCluster). That
-// mutation leaves the restart selection alone: the switch may still be
-// abandoned, and PersistRestartSelection writes it once the switch commits.
+// through the ordered mutation instead (see retainOwnedPanelCluster). A switch
+// holds the restart selection meanwhile (HoldRestartSelection).
 func (a *WorkspaceCoordinator) SeedNamedWorkspaceWindow(window string, selections []string, visible string) error {
 	command := ClusterWorkspaceCommand{WindowID: window, SelectedKubeconfigs: selections, UpdateSelectedKubeconfigs: true, VisibleClusterID: visible}
 	a.workspaceSelectionsMu.Lock()
@@ -410,7 +438,7 @@ func (a *WorkspaceCoordinator) SeedNamedWorkspaceWindow(window string, selection
 		a.updateClusterWorkspaceVisibility(window, command)
 		return nil
 	}
-	result := a.acceptWorkspaceSelection(window, command, true)
+	result := a.acceptWorkspaceSelection(window, command)
 	if result.Error != nil {
 		return fmt.Errorf("seed workspace selection: %v", result.Error)
 	}

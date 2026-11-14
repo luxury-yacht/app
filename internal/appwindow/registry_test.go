@@ -23,6 +23,10 @@ type recordingLifecycleBackend struct {
 	allowQuit                  bool
 	readyWindows               []string
 	restartSelectionsPersisted int
+	restartSelectionHolds      int
+	// restartSelectionsWritten lists the windows whose clusters were written
+	// as the next launch's, in order.
+	restartSelectionsWritten []string
 	// released lists every window whose cluster tabs were given up, in order.
 	released []string
 	// onSeed runs when a window's saved clusters are claimed.
@@ -806,7 +810,7 @@ func TestRegistryFocusesAuthorizesAndClosesAnOwnedPanelWindow(t *testing.T) {
 	registry.showWindow = func(string) bool { return true }
 	_, err = registry.AcknowledgePanelWindowReady(descriptor.WindowName, snapshot.TransferID)
 	require.NoError(t, err)
-	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(descriptor.WindowName))
+	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(descriptor.WindowName, 0))
 
 	var routed []string
 	var focused []string
@@ -1325,7 +1329,7 @@ func beginTestPanelWindow(t *testing.T, registry *Registry, snapshot PanelGroupS
 			_, _, err := registry.workspace.Open(tab, panelwindow.PanelLocation{Kind: panelwindow.PanelLocationDocked, WindowName: snapshot.SourceWindowName, GroupID: "right"})
 			require.NoError(t, err)
 		}
-		require.NoError(t, registry.AcknowledgePanelWorkspaceReady(snapshot.SourceWindowName))
+		require.NoError(t, registry.AcknowledgePanelWorkspaceReady(snapshot.SourceWindowName, 0))
 	}
 	return registry.BeginPanelWindowOpen(snapshot)
 }
@@ -1387,6 +1391,10 @@ func readyAppWindow(r *Registry, name string) {
 }
 
 func (b *recordingLifecycleBackend) PersistRestartSelection() { b.restartSelectionsPersisted++ }
+func (b *recordingLifecycleBackend) HoldRestartSelection()    { b.restartSelectionHolds++ }
+func (b *recordingLifecycleBackend) WriteRestartSelectionOf(window string) {
+	b.restartSelectionsWritten = append(b.restartSelectionsWritten, window)
+}
 
 // A seeded window holds its clusters, as the workspace coordinator records them.
 func (b *recordingLifecycleBackend) SeedNamedWorkspaceWindow(window string, clusters []string, _ string) error {

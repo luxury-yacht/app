@@ -77,8 +77,12 @@ export function AcknowledgePanelWindowReady(windowName: string, transferID: stri
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.AcknowledgePanelWindowReady", windowName, transferID);
 }
 
-export function AcknowledgePanelWorkspaceReady(windowName: string): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.AcknowledgePanelWorkspaceReady", windowName);
+/**
+ * AcknowledgePanelWorkspaceReady is a window's renderer announcing that it can
+ * answer registry requests. page is the number of the page that sent it.
+ */
+export function AcknowledgePanelWorkspaceReady(windowName: string, page: number): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.AcknowledgePanelWorkspaceReady", windowName, page);
 }
 
 export function AcknowledgeWorkspaceWindowClose(callerWindowName: string): $CancellablePromise<void> {
@@ -561,11 +565,12 @@ export function ValidateThemeClusterPattern(pattern: string): $CancellablePromis
 }
 
 /**
- * WithdrawRendererReady is a window's renderer saying it can no longer answer
- * registry requests, as when a crash screen replaces its app tree.
+ * WithdrawRendererReady is a window's renderer saying it cannot answer registry
+ * requests: its page has just started loading, or a crash screen replaced its
+ * app tree. page is the number of the page that sent it.
  */
-export function WithdrawRendererReady(windowName: string): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.WithdrawRendererReady", windowName);
+export function WithdrawRendererReady(windowName: string, page: number): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.WithdrawRendererReady", windowName, page);
 }
 
 void BindingModelAnchor;

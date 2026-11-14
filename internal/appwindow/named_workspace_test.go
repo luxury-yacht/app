@@ -111,7 +111,7 @@ func TestNamedWorkspaceReplacesAppAndPanelWindows(t *testing.T) {
 			_, err = r.AcknowledgePanelWindowReady(options.Name, descriptor.TransferID)
 			require.NoError(t, err)
 		} else {
-			require.NoError(t, r.AcknowledgePanelWorkspaceReady(options.Name))
+			require.NoError(t, r.AcknowledgePanelWorkspaceReady(options.Name, 0))
 		}
 		return window
 	}
@@ -419,7 +419,7 @@ func TestNamedWorkspaceReportsPreviousWindowsThatDidNotClose(t *testing.T) {
 	newWindow := r.newWindow
 	r.newWindow = func(options application.WebviewWindowOptions) *application.WebviewWindow {
 		window := newWindow(options)
-		require.NoError(t, r.AcknowledgePanelWorkspaceReady(options.Name))
+		require.NoError(t, r.AcknowledgePanelWorkspaceReady(options.Name, 0))
 		return window
 	}
 	var warnings []panelwindow.NamedWorkspaceWarningsEvent
@@ -516,7 +516,7 @@ func switchRegistry(t *testing.T, backend *recordingLifecycleBackend, warnings *
 		} else {
 			// The runtime-ready hook marks a real app window ready.
 			readyAppWindow(r, options.Name)
-			require.NoError(t, r.AcknowledgePanelWorkspaceReady(options.Name))
+			require.NoError(t, r.AcknowledgePanelWorkspaceReady(options.Name, 0))
 		}
 		return window
 	}
@@ -592,7 +592,7 @@ func TestCommittedSwitchWarnsOnlyAboutPreviousWindowsStillOpen(t *testing.T) {
 		warnings = append(warnings, data.(panelwindow.NamedWorkspaceWarningsEvent))
 		return true
 	}
-	restore := &namedWorkspaceRestore{targets: []namedWorkspaceTarget{{name: restored}}}
+	restore := &namedWorkspaceRestore{targets: []namedWorkspaceTarget{{name: restored}}, shown: map[string]bool{restored: true}}
 	stillOpen := fmt.Errorf("app window %q could not be closed: %w", "workspace-9", errReplacedWindowStaysOpen)
 	gone := errors.New(`panel window "panel-4" had no native window to close`)
 
@@ -648,14 +648,15 @@ func TestSwitchWarningGoesToAWindowTheUserCanSee(t *testing.T) {
 	for name, test := range cases {
 		t.Run(name, func(t *testing.T) {
 			r := NewRegistry(nil, &recordingLifecycleBackend{})
-			restore := &namedWorkspaceRestore{answered: map[string]bool{}}
+			restore := &namedWorkspaceRestore{loaded: map[string]bool{}, shown: map[string]bool{}}
 			for _, target := range test.targets {
 				target.name = r.lifecycle.Add()
 				readyAppWindow(r, target.name)
 				restore.targets = append(restore.targets, target)
+				restore.shown[target.name] = true
 			}
 			for _, answered := range test.answered {
-				restore.answered[answered] = true
+				restore.loaded[answered] = true
 			}
 			for _, closed := range test.closed {
 				r.lifecycle.BeginClose(closed)
@@ -758,11 +759,12 @@ func requireSwitchRefused(t *testing.T, r *Registry, source string) {
 	require.Nil(t, r.activeRestore.Load())
 }
 
-// Opening a workspace closes the current windows and then loads the saved
-// ones. The saved windows are created hidden first, because Windows and Linux
-// end the process the moment no window is left, and they are shown only once
-// the previous windows are gone. What the previous windows held in the backend
-// is given up last, so a cluster both workspaces show stays connected.
+// Opening a workspace takes the current windows off screen and then loads the
+// saved ones. Windows and Linux end the process the moment no native window is
+// left, so the saved windows are created hidden first, and the last previous
+// window is only hidden until a saved window is on screen. What the previous
+// windows held in the backend is given up last, so a cluster both workspaces
+// show stays connected.
 func TestSwitchClosesThePreviousWindowsThenShowsTheSavedOnes(t *testing.T) {
 	panel := validPanelGroupSnapshot()
 	var warnings []panelwindow.NamedWorkspaceWarningsEvent
@@ -787,6 +789,11 @@ func TestSwitchClosesThePreviousWindowsThenShowsTheSavedOnes(t *testing.T) {
 		steps = append(steps, "close "+window)
 		return closeWindow(window)
 	}
+	r.hideWindow = func(window string) bool {
+		require.False(t, r.lifecycle.Contains(window), "the hidden window is no longer part of the workspace")
+		steps = append(steps, "hide "+window)
+		return true
+	}
 	r.showWindow = func(window string) bool {
 		require.NotNil(t, r.pendingQuit, "quit is refused until a saved window is on screen")
 		require.NotContains(t, backend.released, source, "the previous windows' clusters are held until the saved windows are up")
@@ -794,7 +801,7 @@ func TestSwitchClosesThePreviousWindowsThenShowsTheSavedOnes(t *testing.T) {
 		return true
 	}
 	require.NoError(t, r.OpenNamedWorkspace(context.Background(), source, oneAppWindowWorkspace(panel.ClusterID)))
-	require.Equal(t, []string{"create workspace-2", "close " + source, "show workspace-2"}, steps)
+	require.Equal(t, []string{"create workspace-2", "hide " + source, "show workspace-2", "close " + source}, steps)
 	require.Equal(t, []string{"workspace-2"}, r.lifecycle.Names())
 	require.Contains(t, backend.released, source)
 	require.Len(t, backend.released, 2, "the previous window's clusters and the switch's own claim are both given up")
@@ -805,9 +812,100 @@ func TestSwitchClosesThePreviousWindowsThenShowsTheSavedOnes(t *testing.T) {
 	require.Empty(t, warnings)
 }
 
+// A workspace made only of floating panel windows has no window left when its
+// one panel window fails to start. The switch must not end with nothing on
+// screen (and the process must never be without a native window): it opens a
+// plain window, which shows what could not be restored.
+func TestSwitchWhoseOnlySavedWindowFailsOpensAPlainWindow(t *testing.T) {
+	panel := validPanelGroupSnapshot()
+	var warnings []panelwindow.NamedWorkspaceWarningsEvent
+	backend := &recordingLifecycleBackend{windowClusters: map[string][]string{}, availableWorkspaceClusters: []string{panel.ClusterID}}
+	r, source := switchRegistry(t, backend, &warnings)
+	r.namedWorkspaceRestoreTimeout = time.Minute
+	r.requestApplicationQuit = func() { t.Error("the app quit instead of showing what failed") }
+	var steps []string
+	open := map[string]bool{source: true}
+	create := r.newWindow
+	r.newWindow = func(options application.WebviewWindowOptions) *application.WebviewWindow {
+		steps = append(steps, "create "+options.Name)
+		open[options.Name] = true
+		if descriptor, err := r.PanelDescriptor(options.Name); err == nil {
+			window := application.New(application.Options{}).Window.NewWithOptions(options)
+			// Its page fails to start once the previous windows are gone.
+			go func() {
+				for r.lifecycle.Contains(source) {
+					time.Sleep(time.Millisecond)
+				}
+				_ = r.FailPanelWindowTransfer(options.Name, options.Name, descriptor.TransferID)
+			}()
+			return window
+		}
+		return create(options)
+	}
+	r.hideWindow = func(window string) bool { steps = append(steps, "hide "+window); return true }
+	closeWindow := r.closeWindow
+	r.closeWindow = func(window string) bool {
+		if !open[window] {
+			return false
+		}
+		delete(open, window)
+		require.NotEmpty(t, open, "no native window was left when %q closed", window)
+		steps = append(steps, "close "+window)
+		if window == source {
+			return closeWindow(window)
+		}
+		return true
+	}
+	started := time.Now()
+
+	require.NoError(t, r.OpenNamedWorkspace(context.Background(), source, panelwindow.NamedWorkspace{
+		PanelWindows: []panelwindow.NamedWorkspacePanelWindow{{Group: panelwindow.WorkspaceGroup{
+			ClusterID: panel.ClusterID, GroupID: panel.GroupID, Tabs: panel.Tabs, ActivePanelID: panel.ActivePanelID,
+		}}},
+	}))
+
+	require.Less(t, time.Since(started), 10*time.Second, "a window that failed is not waited for until the deadline")
+	require.Equal(t, []string{"create panel-1", "hide " + source, "close panel-1", "create workspace-2", "close " + source}, steps)
+	require.Equal(t, []string{"workspace-2"}, r.lifecycle.Names())
+	require.Empty(t, r.panels.Names(""))
+	require.Empty(t, r.workspace.Snapshot(panel.ClusterID).Panels, "the failed window's panels are not left in the directory")
+	require.Len(t, warnings, 1)
+	require.Equal(t, "workspace-2", warnings[0].WindowName)
+	require.Equal(t, 1, warnings[0].UnrestoredWindows)
+}
+
+// A window that opens while the others are approving the switch was never
+// asked, and would outlive it holding the previous clusters. The switch is
+// refused before anything is handed over, and from then on no window can open
+// until it has finished.
+func TestSwitchIsRefusedWhenAWindowOpensWhileTheOthersApprove(t *testing.T) {
+	var warnings []panelwindow.NamedWorkspaceWarningsEvent
+	backend := &recordingLifecycleBackend{windowClusters: map[string][]string{}}
+	r, source := switchRegistry(t, backend, &warnings)
+	approve := r.emitWindowEvent
+	late := ""
+	r.emitWindowEvent = func(window, event string, data any) bool {
+		if event == panelwindow.ApplicationQuitPreflightRequestedEventName && late == "" {
+			late = r.lifecycle.Add()
+		}
+		return approve(window, event, data)
+	}
+	r.closeWindow = func(window string) bool {
+		t.Errorf("window %q was closed although the switch was refused", window)
+		return true
+	}
+
+	require.Error(t, r.OpenNamedWorkspace(context.Background(), source, oneAppWindowWorkspace()))
+
+	require.Equal(t, []string{source, late}, r.lifecycle.Names())
+	require.Nil(t, r.pendingQuit)
+	require.Nil(t, r.activeRestore.Load())
+	require.Empty(t, backend.released, "nothing was claimed")
+	require.Zero(t, backend.restartSelectionHolds)
+}
+
 // Until the panel directory is handed over, a switch that cannot go on leaves
-// the current workspace exactly as it was: no window closed, none created, and
-// nothing written for the next launch.
+// the current workspace exactly as it was: no window closed and none created.
 func TestSwitchRefusedBeforeTheHandOverChangesNothing(t *testing.T) {
 	cases := map[string]func(r *Registry, cancel context.CancelFunc){
 		// A removed cluster changes what the saved workspace may show.
@@ -836,7 +934,7 @@ func TestSwitchRefusedBeforeTheHandOverChangesNothing(t *testing.T) {
 			require.Error(t, r.OpenNamedWorkspace(ctx, source, oneAppWindowWorkspace("cluster-a")))
 			requireSwitchRefused(t, r, source)
 			require.Len(t, backend.released, 1, "the claim on the saved clusters is given up")
-			require.Zero(t, backend.restartSelectionsPersisted)
+			require.Equal(t, backend.restartSelectionHolds, backend.restartSelectionsPersisted, "the hold on what the next launch opens is ended")
 		})
 	}
 }
@@ -891,6 +989,262 @@ func TestSavedWindowsThatDoNotLoadAreShownAndReported(t *testing.T) {
 	require.Equal(t, []panelwindow.NamedWorkspaceWarningsEvent{{
 		WindowName: "workspace-2", MissingClusters: []string{}, UnrestoredWindows: 3,
 	}}, warnings)
+}
+
+// A saved app window that does not mount its view stays open as a plain
+// window. The switch takes back what it set up for it: its docked panels leave
+// the directory (the window does not show them, and left there they could not
+// be opened anywhere else), and a page that loads after the deadline is not
+// told to apply a view the switch has given up on.
+func TestSavedAppWindowThatDoesNotLoadKeepsNothingOfItsSavedView(t *testing.T) {
+	for _, outcome := range []string{"answers with a failure", "never answers"} {
+		t.Run(outcome, func(t *testing.T) {
+			docked := validPanelGroupSnapshot()
+			var warnings []panelwindow.NamedWorkspaceWarningsEvent
+			backend := &recordingLifecycleBackend{windowClusters: map[string][]string{}, availableWorkspaceClusters: []string{docked.ClusterID}}
+			r, source := switchRegistry(t, backend, &warnings)
+			deliver := r.emitWindowEvent
+			var late []string
+			r.emitWindowEvent = func(window, event string, data any) bool {
+				if event == panelwindow.NamedWorkspaceRestoreRequested {
+					if outcome == "answers with a failure" {
+						require.NoError(t, r.AcknowledgeNamedWorkspaceRestore(window, "saved view could not be mounted"))
+					}
+					return true
+				}
+				return deliver(window, event, data)
+			}
+			if outcome == "never answers" {
+				// Its page has not loaded by the deadline.
+				create := r.newWindow
+				r.newWindow = func(options application.WebviewWindowOptions) *application.WebviewWindow {
+					r.newWindow = create
+					return application.New(application.Options{}).Window.NewWithOptions(options)
+				}
+			}
+			workspace := oneAppWindowWorkspace(docked.ClusterID)
+			workspace.AppWindows[0].DockedGroups = []panelwindow.NamedWorkspaceDockedGroup{{Width: 600, Height: 400, Group: panelwindow.WorkspaceGroup{
+				ClusterID: docked.ClusterID, GroupID: "right", Tabs: docked.Tabs, ActivePanelID: docked.ActivePanelID,
+			}}}
+
+			require.NoError(t, r.OpenNamedWorkspace(context.Background(), source, workspace))
+
+			require.Equal(t, []string{"workspace-2"}, r.lifecycle.Names(), "the window stays open")
+			require.Empty(t, r.workspace.Snapshot(docked.ClusterID).Panels)
+			require.Contains(t, backend.releasedPanelReferences, "panel-workspace:"+docked.ClusterID)
+			// The page loads late.
+			r.emitWindowEvent = func(_, event string, data any) bool {
+				late = append(late, event)
+				if event == panelwindow.NamedWorkspaceWarnings {
+					warnings = append(warnings, data.(panelwindow.NamedWorkspaceWarningsEvent))
+				}
+				return true
+			}
+			require.NoError(t, r.AcknowledgePanelWorkspaceReady("workspace-2", 0))
+			require.NotContains(t, late, panelwindow.NamedWorkspaceRestoreRequested)
+			require.NoError(t, r.AcknowledgeNamedWorkspaceRestore("workspace-2", ""), "an answer the switch no longer waits for is not an error")
+			require.Len(t, warnings, 1)
+			require.Equal(t, 1, warnings[0].UnrestoredWindows)
+		})
+	}
+}
+
+// A saved app window that is alive but still applying its view at the deadline
+// is shown and counted, and keeps what was set up for it: it finishes late,
+// and its docked panels must still be in the directory when it does.
+func TestSavedAppWindowStillWorkingAtTheDeadlineKeepsItsDockedPanels(t *testing.T) {
+	docked := validPanelGroupSnapshot()
+	var warnings []panelwindow.NamedWorkspaceWarningsEvent
+	backend := &recordingLifecycleBackend{windowClusters: map[string][]string{}, availableWorkspaceClusters: []string{docked.ClusterID}}
+	r, source := switchRegistry(t, backend, &warnings)
+	deliver := r.emitWindowEvent
+	r.emitWindowEvent = func(window, event string, data any) bool {
+		// The renderer has the request and has not answered yet.
+		return event == panelwindow.NamedWorkspaceRestoreRequested || deliver(window, event, data)
+	}
+	workspace := oneAppWindowWorkspace(docked.ClusterID)
+	workspace.AppWindows[0].DockedGroups = []panelwindow.NamedWorkspaceDockedGroup{{Width: 600, Height: 400, Group: panelwindow.WorkspaceGroup{
+		ClusterID: docked.ClusterID, GroupID: "right", Tabs: docked.Tabs, ActivePanelID: docked.ActivePanelID,
+	}}}
+
+	require.NoError(t, r.OpenNamedWorkspace(context.Background(), source, workspace))
+
+	require.Len(t, r.workspace.Snapshot(docked.ClusterID).Panels, 1)
+	require.NotContains(t, backend.releasedPanelReferences, "panel-workspace:"+docked.ClusterID)
+	require.NoError(t, r.AcknowledgeNamedWorkspaceRestore("workspace-2", ""))
+	require.Len(t, warnings, 1)
+	require.Equal(t, 1, warnings[0].UnrestoredWindows)
+}
+
+// A saved window that can no longer answer does not hold the switch until its
+// deadline: its renderer went after announcing (a crash screen), or it was
+// closed through its own close button before its page had loaded.
+func TestSwitchDoesNotWaitForASavedWindowThatCanNoLongerAnswer(t *testing.T) {
+	for _, outcome := range []string{"its renderer goes", "it is closed"} {
+		t.Run(outcome, func(t *testing.T) {
+			var warnings []panelwindow.NamedWorkspaceWarningsEvent
+			backend := &recordingLifecycleBackend{windowClusters: map[string][]string{}}
+			r, source := switchRegistry(t, backend, &warnings)
+			r.namedWorkspaceRestoreTimeout = time.Minute
+			r.requestApplicationQuit = func() { t.Error("the app quit instead of opening a window") }
+			deliver := r.emitWindowEvent
+			r.emitWindowEvent = func(window, event string, data any) bool {
+				if event == panelwindow.NamedWorkspaceRestoreRequested && window == "workspace-2" {
+					if outcome == "its renderer goes" {
+						go func() { _ = r.WithdrawRendererReady(window, 0) }()
+					}
+					return true
+				}
+				return deliver(window, event, data)
+			}
+			if outcome == "it is closed" {
+				create := r.newWindow
+				r.newWindow = func(options application.WebviewWindowOptions) *application.WebviewWindow {
+					if options.Name != "workspace-2" {
+						return create(options)
+					}
+					// Its page never loads, and the user closes it once the
+					// previous windows are gone.
+					go func() {
+						for r.lifecycle.Contains(source) {
+							time.Sleep(time.Millisecond)
+						}
+						r.handleClosing(application.NewWindowEvent(), options.Name)
+					}()
+					return application.New(application.Options{}).Window.NewWithOptions(options)
+				}
+			}
+			started := time.Now()
+
+			require.NoError(t, r.OpenNamedWorkspace(context.Background(), source, oneAppWindowWorkspace()))
+
+			require.Less(t, time.Since(started), 10*time.Second)
+			require.Empty(t, backend.preparedWindow, "closing a saved window during the switch is not a quit")
+			if outcome == "it is closed" {
+				require.Equal(t, []string{"workspace-3"}, r.lifecycle.Names(), "a plain window takes its place")
+				require.Contains(t, backend.released, "workspace-2", "the closed window's clusters are given up")
+			} else {
+				// Its crash screen cannot show a warning, so a plain window opens beside it.
+				require.Equal(t, []string{"workspace-2", "workspace-3"}, r.lifecycle.Names())
+			}
+			require.Len(t, warnings, 1)
+			require.Equal(t, "workspace-3", warnings[0].WindowName)
+			require.Equal(t, 1, warnings[0].UnrestoredWindows)
+		})
+	}
+}
+
+// A previous panel window can close on its own after it approved the switch,
+// as when its cluster is removed. It is already gone when the switch comes to
+// close it, which is not a failure to report.
+func TestSwitchDoesNotReportAPreviousWindowThatIsAlreadyGone(t *testing.T) {
+	var warnings []panelwindow.NamedWorkspaceWarningsEvent
+	r, source := switchRegistry(t, &recordingLifecycleBackend{windowClusters: map[string][]string{}}, &warnings)
+	snapshot := validPanelGroupSnapshot()
+	native, err := r.panels.BeginOpen(snapshot)
+	require.NoError(t, err)
+	_, err = r.panels.AcknowledgeOpen(native.WindowName, snapshot.TransferID)
+	require.NoError(t, err)
+	r.markRendererReady(native.WindowName)
+	create := r.newWindow
+	r.newWindow = func(options application.WebviewWindowOptions) *application.WebviewWindow {
+		r.panels.Remove(native.WindowName)
+		return create(options)
+	}
+
+	require.NoError(t, r.OpenNamedWorkspace(context.Background(), source, oneAppWindowWorkspace()))
+
+	require.Empty(t, warnings)
+}
+
+// A window that has been asked to approve a switch is about to be closed by
+// it. It cannot close on its own in the meantime: the switch works from the
+// windows it asked, and a window that left would take the app's last window,
+// the kept native window, or a truthful result with it.
+func TestWindowAskedToApproveASwitchCannotCloseOnItsOwn(t *testing.T) {
+	var warnings []panelwindow.NamedWorkspaceWarningsEvent
+	backend := &recordingLifecycleBackend{windowClusters: map[string][]string{}}
+	r, source := switchRegistry(t, backend, &warnings)
+	snapshot := validPanelGroupSnapshot()
+	native, err := r.panels.BeginOpen(snapshot)
+	require.NoError(t, err)
+	_, err = r.panels.AcknowledgeOpen(native.WindowName, snapshot.TransferID)
+	require.NoError(t, err)
+	r.markRendererReady(native.WindowName)
+	asked := 0
+	approve := r.emitWindowEvent
+	r.emitWindowEvent = func(window, event string, data any) bool {
+		switch event {
+		case panelwindow.WorkspaceCloseRequestedEventName, panelwindow.WindowCloseRequestedEventName:
+			t.Errorf("window %q was asked to run its own close during a switch", window)
+		case panelwindow.ApplicationQuitPreflightRequestedEventName:
+			if asked++; asked == 1 {
+				// The user clicks both close buttons, and both renderers approve.
+				for _, name := range []string{source, native.WindowName} {
+					closing := application.NewWindowEvent()
+					if name == source {
+						r.handleClosing(closing, name)
+					} else {
+						r.handlePanelClosingEvent(closing, name)
+					}
+					require.True(t, closing.IsCancelled())
+				}
+				require.ErrorIs(t, r.AcknowledgeWorkspaceWindowClose(source), errWorkspaceSwitching)
+				require.ErrorIs(t, r.AcknowledgePanelWindowClose(native.WindowName), errWorkspaceSwitching)
+			}
+		}
+		return approve(window, event, data)
+	}
+
+	require.NoError(t, r.OpenNamedWorkspace(context.Background(), source, oneAppWindowWorkspace()))
+
+	require.Equal(t, []string{"workspace-2"}, r.lifecycle.Names())
+	require.Empty(t, r.panels.Names(""))
+	require.Empty(t, warnings)
+	// The next launch's selection is written as soon as the new workspace is
+	// on screen, and settled once the previous windows' clusters are released.
+	require.Len(t, backend.restartSelectionsWritten, 1)
+	require.Equal(t, 1, backend.restartSelectionsPersisted)
+}
+
+// A cluster close that is under way goes on to remove its cluster's panels.
+// A switch does not begin until it has finished.
+func TestSwitchWaitsForAClusterCloseToFinish(t *testing.T) {
+	var warnings []panelwindow.NamedWorkspaceWarningsEvent
+	r, source := switchRegistry(t, &recordingLifecycleBackend{windowClusters: map[string][]string{}}, &warnings)
+	r.clusterPanelCloses = map[string]*clusterPanelClose{"cluster-close-1": {id: "cluster-close-1", clusterID: "cluster-1"}}
+	r.closeWindow = func(window string) bool {
+		t.Errorf("window %q was closed although the switch was refused", window)
+		return true
+	}
+
+	require.Error(t, r.OpenNamedWorkspace(context.Background(), source, oneAppWindowWorkspace()))
+
+	requireSwitchRefused(t, r, source)
+}
+
+// A saved app window whose page could not start is open but shows nothing and
+// cannot show a warning. It does not count as a window of the new workspace:
+// a plain window opens beside it.
+func TestSavedAppWindowThatCouldNotStartIsNotTheOnlyWindowLeft(t *testing.T) {
+	var warnings []panelwindow.NamedWorkspaceWarningsEvent
+	r, source := switchRegistry(t, &recordingLifecycleBackend{windowClusters: map[string][]string{}}, &warnings)
+	create := r.newWindow
+	r.newWindow = func(options application.WebviewWindowOptions) *application.WebviewWindow {
+		if options.Name != "workspace-2" {
+			return create(options)
+		}
+		// Its bootstrap fails and says so; its renderer never announces.
+		require.NoError(t, r.AcknowledgeNamedWorkspaceRestore(options.Name, "The window could not start."))
+		return application.New(application.Options{}).Window.NewWithOptions(options)
+	}
+
+	require.NoError(t, r.OpenNamedWorkspace(context.Background(), source, oneAppWindowWorkspace()))
+
+	require.Equal(t, []string{"workspace-2", "workspace-3"}, r.lifecycle.Names())
+	require.Len(t, warnings, 1)
+	require.Equal(t, "workspace-3", warnings[0].WindowName)
+	require.Equal(t, 1, warnings[0].UnrestoredWindows)
 }
 
 // File > New Window gives the new window every selected cluster. During a
@@ -1106,18 +1460,18 @@ func TestRestoredWindowIsShownByTheSwitchNotByItsRuntime(t *testing.T) {
 
 // A window that reloads has no handlers until its renderer is back. Save,
 // switch and quit must not ask it meanwhile: its answer would never come, and
-// they would wait out a deadline with every window frozen.
+// they would wait out a deadline with every window frozen. Each page sends its
+// own number, so a call from the page before the reload that arrives late
+// neither brings the window back nor takes it out again.
 func TestWindowThatReloadsIsNotAskedUntilItsRendererIsBack(t *testing.T) {
-	registry := NewRegistry(application.New(application.Options{}), &recordingLifecycleBackend{windowClusters: map[string][]string{}})
-	first := registry.Create(true).Name()
-	reloading := registry.Create(false)
-	second := reloading.Name()
+	registry := NewRegistry(nil, &recordingLifecycleBackend{windowClusters: map[string][]string{}})
+	first, second := registry.lifecycle.Add(), registry.lifecycle.Add()
 	readyAppWindow(registry, first)
-	readyAppWindow(registry, second)
+	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(second, 1))
 	require.Equal(t, []string{first, second}, registry.readyWorkspaceNames())
 
-	// A page load announces itself with a runtime-ready event.
-	reloading.HandleWindowEvent(uint(events.Common.WindowRuntimeReady))
+	// The reloaded page says it has started before anything else.
+	require.NoError(t, registry.WithdrawRendererReady(second, 2))
 	require.Equal(t, []string{first}, registry.readyWorkspaceNames())
 	registry.emitWindowEvent = func(window, event string, _ any) bool {
 		t.Errorf("window %q was sent %q while a window was reloading", window, event)
@@ -1125,8 +1479,26 @@ func TestWindowThatReloadsIsNotAskedUntilItsRendererIsBack(t *testing.T) {
 	}
 	_, err := registry.CaptureNamedWorkspace(context.Background(), first)
 	require.Error(t, err)
+	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(second, 1))
+	require.Equal(t, []string{first}, registry.readyWorkspaceNames(), "the page before the reload cannot answer for the window")
 
-	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(second))
+	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(second, 2))
+	require.Equal(t, []string{first, second}, registry.readyWorkspaceNames())
+	require.NoError(t, registry.WithdrawRendererReady(second, 1))
+	require.Equal(t, []string{first, second}, registry.readyWorkspaceNames(), "the page before the reload cannot take the window out")
+
+	// A page whose start never arrived still replaces the one before it.
+	var released []string
+	registry.emitWindowEvent = func(window, event string, _ any) bool {
+		if event == panelwindow.ApplicationQuitPreflightSettledEventName {
+			released = append(released, window)
+		}
+		return true
+	}
+	require.False(t, registry.PrepareApplicationQuit())
+	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(second, 3))
+	require.Nil(t, registry.pendingQuit, "the quit that was waiting on the earlier page is cancelled")
+	require.ElementsMatch(t, []string{first, second}, released)
 	require.Equal(t, []string{first, second}, registry.readyWorkspaceNames())
 }
 
@@ -1137,7 +1509,7 @@ func TestWindowThatWithdrawsReadinessIsLeftOutUntilItAcknowledgesAgain(t *testin
 	first, crashed := registry.lifecycle.Add(), registry.lifecycle.Add()
 	readyAppWindow(registry, first)
 	readyAppWindow(registry, crashed)
-	require.NoError(t, registry.WithdrawRendererReady(crashed))
+	require.NoError(t, registry.WithdrawRendererReady(crashed, 0))
 	require.Equal(t, []string{first}, registry.readyWorkspaceNames())
 	var asked []string
 	registry.emitWindowEvent = func(window, _ string, _ any) bool { asked = append(asked, window); return true }
@@ -1155,7 +1527,7 @@ func TestRequestEndsWhenAnAskedWindowCanNoLongerAnswer(t *testing.T) {
 	registry.windowGeometry = func(string) (geometry, bool) { return geometry{Width: 1300, Height: 700}, true }
 	registry.emitWindowEvent = func(window, _ string, payload any) bool {
 		if _, capture := payload.(panelwindow.NamedWorkspaceCaptureRequest); capture && window == crashed {
-			go func() { _ = registry.WithdrawRendererReady(crashed) }()
+			go func() { _ = registry.WithdrawRendererReady(crashed, 0) }()
 		}
 		return true
 	}
@@ -1173,7 +1545,7 @@ func TestRequestEndsWhenAnAskedWindowCanNoLongerAnswer(t *testing.T) {
 		return true
 	}
 	require.False(t, registry.PrepareApplicationQuit())
-	require.NoError(t, registry.WithdrawRendererReady(crashed))
+	require.NoError(t, registry.WithdrawRendererReady(crashed, 0))
 	require.Nil(t, registry.pendingQuit, "the quit is cancelled now, not at its deadline")
 	require.ElementsMatch(t, []string{first, crashed}, released, "the windows it froze are released")
 }
@@ -1212,37 +1584,33 @@ func TestWindowWhoseCloseIsRefusedStillTakesPart(t *testing.T) {
 func TestPanelWindowThatAnnouncesWhileDockingTakesPartOnceLive(t *testing.T) {
 	snapshot := validPanelGroupSnapshot()
 	registry, panel := liveNativeWindow(t, snapshot)
-	require.NoError(t, registry.WithdrawRendererReady(panel))
+	require.NoError(t, registry.WithdrawRendererReady(panel, 0))
 	dock := snapshot
 	dock.TransferID = "dock-1"
 	dock.SourceWindowName = panel
 	require.NoError(t, registry.panels.BeginDock(panel, dock))
-	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(panel))
+	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(panel, 0))
 	require.Empty(t, registry.readyWorkspaceNames(), "a docking panel window is not asked")
 	require.NoError(t, registry.panels.FailTransfer(panel, "dock-1"))
 	require.Equal(t, []string{panel}, registry.readyWorkspaceNames())
-	require.Error(t, registry.AcknowledgePanelWorkspaceReady("panel-unknown"))
+	require.Error(t, registry.AcknowledgePanelWorkspaceReady("panel-unknown", 0))
 }
 
 // A floating panel window takes part once its renderer has acknowledged, and
 // again after a reload: a reloaded panel window is already live, so it has no
 // transfer to name.
 func TestPanelWindowTakesPartOnlyWhileItsRendererHasAcknowledged(t *testing.T) {
-	app := application.New(application.Options{})
 	registry, panel := liveNativeWindow(t, validPanelGroupSnapshot())
-	window := app.Window.NewWithOptions(application.WebviewWindowOptions{Name: panel, Hidden: true})
-	registry.windowGeometry = func(string) (geometry, bool) { return geometry{}, false }
-	registry.registerPanelLifecycleHooks(window, panel)
 	require.Equal(t, []string{panel}, registry.readyWorkspaceNames())
 
-	window.HandleWindowEvent(uint(events.Common.WindowRuntimeReady))
+	require.NoError(t, registry.WithdrawRendererReady(panel, 1))
 	require.Empty(t, registry.readyWorkspaceNames(), "a reloading panel window cannot answer")
 	_, err := registry.AcknowledgePanelWindowReady(panel, "")
 	require.NoError(t, err, "a reloaded panel window boots from its live descriptor")
 	require.Empty(t, registry.readyWorkspaceNames(), "its handlers are not subscribed until it says so")
-	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(panel))
+	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(panel, 1))
 	require.Equal(t, []string{panel}, registry.readyWorkspaceNames())
 
-	require.NoError(t, registry.WithdrawRendererReady(panel))
+	require.NoError(t, registry.WithdrawRendererReady(panel, 1))
 	require.Empty(t, registry.readyWorkspaceNames(), "a panel window showing its crash screen cannot answer")
 }

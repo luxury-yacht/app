@@ -730,6 +730,7 @@ const answerBootRpcs = (session: Session): void => {
   rpc.answer('PublishDockedPanels', () => undefined);
   rpc.answer('AcknowledgePanelWorkspaceReady', () => undefined);
   rpc.answer('WithdrawRendererReady', () => undefined);
+  rpc.answer('AcknowledgeNamedWorkspaceRestore', () => undefined);
   rpc.answer('PublishPanelWindowGroup', () => undefined);
   rpc.answer('SetAppLogsPanelVisible', () => undefined);
   rpc.answer('SetSidebarVisible', () => undefined);
