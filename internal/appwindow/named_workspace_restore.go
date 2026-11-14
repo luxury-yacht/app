@@ -16,6 +16,7 @@ import (
 )
 
 const errNamedWorkspaceOpenCancelled panelwindow.WorkspaceConflict = "workspace switch cancelled by an open window"
+const openWorkspaceAction = "open workspace"
 
 // errReplacedWindowStaysOpen marks a previous window that is still on screen
 // after the switch, as opposed to one that turned out to be gone already.
@@ -359,7 +360,7 @@ func (r *Registry) reportOpenedWorkspace(restore *namedWorkspaceRestore, missing
 		r.deliverWorkspaceWarnings(restore, warnings)
 	}
 	if len(restore.notFullscreen) != 0 {
-		r.reportPanelLifecycleError(fmt.Errorf("windows did not return to fullscreen: %v", restore.notFullscreen), "open workspace")
+		r.reportPanelLifecycleError(fmt.Errorf("windows did not return to fullscreen: %v", restore.notFullscreen), openWorkspaceAction)
 	}
 	if err := errors.Join(unclosed...); err != nil {
 		r.reportPanelLifecycleError(err, "close previous windows")
@@ -543,7 +544,7 @@ func (r *Registry) createRestoredWindows(restore *namedWorkspaceRestore, snapsho
 // (failRestoreOfClosedWindow), so nothing is waited for that cannot come.
 func (r *Registry) waitForRestoredWindows(restore *namedWorkspaceRestore) {
 	if !r.waitForRestoreReplies(restore, func() bool { return restore.unheard() == 0 }) {
-		r.reportPanelLifecycleError(fmt.Errorf("%d restored windows did not finish loading", restore.unheard()), "open workspace")
+		r.reportPanelLifecycleError(fmt.Errorf("%d restored windows did not finish loading", restore.unheard()), openWorkspaceAction)
 	}
 }
 
@@ -577,7 +578,7 @@ func (r *Registry) hearArrivedAnswers(restore *namedWorkspaceRestore) {
 func (r *Registry) hearRestoredWindow(restore *namedWorkspaceRestore, reply namedWorkspaceReply) {
 	restore.hear(reply)
 	if reply.err != nil {
-		r.reportPanelLifecycleError(fmt.Errorf("restore window %q: %w", reply.window, reply.err), "open workspace")
+		r.reportPanelLifecycleError(fmt.Errorf("restore window %q: %w", reply.window, reply.err), openWorkspaceAction)
 	}
 }
 
@@ -650,7 +651,7 @@ func (r *Registry) ensureWindowShown(restore *namedWorkspaceRestore) bool {
 	}
 	target := restore.targets[len(restore.targets)-1]
 	if !r.waitForRestoreReplies(restore, func() bool { return restore.hasAnswered(target.name) }) {
-		r.reportPanelLifecycleError(fmt.Errorf("recovery window %q did not finish loading", target.name), "open workspace")
+		r.reportPanelLifecycleError(fmt.Errorf("recovery window %q did not finish loading", target.name), openWorkspaceAction)
 		return false
 	}
 	r.hearArrivedAnswers(restore)
@@ -968,7 +969,7 @@ func (r *Registry) showRestoredWindow(restore *namedWorkspaceRestore, target nam
 	// One that did not load was counted when it was settled.
 	if restore.isLoaded(target.name) {
 		restore.unrestored++
-		r.reportPanelLifecycleError(fmt.Errorf("restored window %q could not be shown", target.name), "open workspace")
+		r.reportPanelLifecycleError(fmt.Errorf("restored window %q could not be shown", target.name), openWorkspaceAction)
 	}
 	return false
 }
