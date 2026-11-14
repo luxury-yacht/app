@@ -1,7 +1,7 @@
 import type { TabDragPayload, TabDragScope } from '@shared/components/tabs/dragCoordinator';
 import type React from 'react';
 import { createContext, useContext } from 'react';
-import type { DockPosition } from './panelLayoutStore';
+import type { DockPosition, GroupLayoutState } from './panelLayoutStore';
 import type { AdjacentTabActivationPreference } from './tabGroupState';
 import type { GroupKey, PanelRegistration, TabGroupState } from './tabGroupTypes';
 
@@ -77,6 +77,12 @@ export interface DockablePanelContextValue {
   detachPanelGroup: (clusterId: string, panelIds: readonly string[]) => void;
   // Remove closed native-panel layout and group state from its owning cluster.
   discardPanelLayouts: (clusterId: string, panelIds: readonly string[]) => void;
+  updateClusterGroupLayout: (
+    clusterId: string,
+    groupKey: GroupKey,
+    layout: Partial<GroupLayoutState>
+  ) => void;
+  getClusterGroupLayout: (clusterId: string, groupKey: GroupKey) => GroupLayoutState;
   getClusterTabGroups: (clusterId: string) => TabGroupState;
   requestGroupMove?: (groupKey: GroupKey, targetPosition: DockPosition) => boolean;
   requestTabMove: (panelId: string, targetPosition: DockPosition) => void;

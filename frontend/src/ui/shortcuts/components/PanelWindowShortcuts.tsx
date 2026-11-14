@@ -1,6 +1,6 @@
 import { panelTargetFromSnapshot } from '@modules/object-panel/panelTarget';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { backend } from '@/core/backend-api/models';
+import type { backend, panelwindow } from '@/core/backend-api/models';
 import { useZoom } from '@/core/contexts/ZoomContext';
 import { focusWindow, minimiseWindow, onEvent, openDevTools } from '@/core/desktop-runtime';
 import type { PanelWindowDescriptor } from '@/core/panel-windows';
@@ -36,6 +36,9 @@ import {
 } from '@/core/panel-windows/tabTransfer';
 import { useApplicationQuitPreflight } from '@/core/panel-windows/useApplicationQuitPreflight';
 import { useClosedPanelIntents } from '@/core/panel-windows/useClosedPanelIntents';
+import { useNamedWorkspaceCapture } from '@/core/panel-windows/useNamedWorkspaceCapture';
+import { useNamedWorkspaceNotice } from '@/core/panel-windows/useNamedWorkspaceNotice';
+import { useRendererReadiness } from '@/core/panel-windows/useRendererReadiness';
 import type { ViewType } from '@/modules/object-panel/components/ObjectPanel/types';
 import {
   useObjectPanelActiveTabs,
@@ -50,6 +53,13 @@ import {
   dispatchPanelApplicationMenuCommand,
   type PanelApplicationMenuActions,
 } from './panelApplicationMenuCommands';
+
+// A panel window has no app view of its own; its reply confirms that its
+// arrangement reached the panel directory before the capture reads it.
+async function capturePanelWindow(): Promise<panelwindow.NamedWorkspaceAppView> {
+  await nativePanelPublication.flush();
+  return { clusterTabs: null };
+}
 
 export function PanelWindowShortcuts({
   descriptor,
@@ -102,6 +112,9 @@ export function PanelWindowShortcuts({
     [guards, openPanels, ready, focusLifecycleBlocker]
   );
   useApplicationQuitPreflight(descriptor.windowName, prepareClose);
+  useNamedWorkspaceCapture(descriptor.windowName, capturePanelWindow);
+  useNamedWorkspaceNotice(descriptor.windowName);
+  useRendererReadiness(descriptor.windowName, ready);
 
   useEffect(() => {
     const stopRequest = onClusterPanelCloseRequested((event) => {

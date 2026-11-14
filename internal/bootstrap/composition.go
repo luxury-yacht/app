@@ -128,6 +128,8 @@ func newApplicationComposition(assets fs.FS, reporter sentryreporting.Reporter, 
 		PanelMetrics:   backendRuntime.PanelMetrics,
 		Lifecycle:      backendRuntime.Lifecycle,
 		HTTP:           backendRuntime.Refresh,
+
+		NamedWorkspaces: backend.NewNamedWorkspaceService(windowBridge, backendRuntime.UIState),
 	})
 	wailsApp.HandleStream(backend.RefreshResourceStreamName, backendRuntime.Refresh.HandleResourceStream)
 	wailsApp.HandleStream(backend.RefreshContainerLogsStreamName, backendRuntime.Refresh.HandleContainerLogsStream)

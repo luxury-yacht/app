@@ -96,10 +96,14 @@ type refreshSubsystemTeardowner interface {
 }
 
 type lifecycleWorkspace interface {
+	PersistRestartSelection()
+	HoldRestartSelection()
+	WriteRestartSelectionOf(string)
 	CloseClusterView(string, string) error
 	panelwindow.ClusterViewTransferLifecycle
 	ReleaseWorkspaceWindow(string)
 	WindowClusterIDs(string) []string
+	SeedNamedWorkspaceWindow(string, []string, string) error
 	PanelWorkspaceDirectory() *panelwindow.WorkspaceDirectory
 	RetainPanelCluster(string, string) error
 	ReleasePanelCluster(string) error
@@ -433,4 +437,69 @@ func (a *ApplicationLifecycle) CancelClusterViewTransfer(target, clusterID strin
 
 func (a *ApplicationLifecycle) CloseClusterView(windowID, clusterID string) error {
 	return a.workspace.CloseClusterView(windowID, clusterID)
+}
+
+func (a *ApplicationLifecycle) NamedWorkspaceAvailableClusters() ([]string, error) {
+	discovered, err := a.clusterRuntime.GetKubeconfigs()
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(discovered.Kubeconfigs))
+	for _, config := range discovered.Kubeconfigs {
+		if !config.Invalid {
+			ids = append(ids, clusterMetaForKubeconfig(config).ID)
+		}
+	}
+	return ids, nil
+}
+
+// PersistRestartSelection writes the clusters the next launch opens, once a
+// workspace switch has committed.
+func (a *ApplicationLifecycle) PersistRestartSelection() {
+	a.workspace.PersistRestartSelection()
+}
+
+// WriteRestartSelectionOf writes one window's clusters as what the next launch
+// opens, while a workspace switch still holds the restart selection.
+func (a *ApplicationLifecycle) WriteRestartSelectionOf(window string) {
+	a.workspace.WriteRestartSelectionOf(window)
+}
+
+// HoldRestartSelection keeps what the next launch opens as it is while a
+// workspace switch replaces the windows. PersistRestartSelection ends the hold.
+func (a *ApplicationLifecycle) HoldRestartSelection() {
+	a.workspace.HoldRestartSelection()
+}
+
+func (a *ApplicationLifecycle) SeedNamedWorkspaceWindow(window string, clusters []string, visible string) error {
+	// A window with no clusters needs nothing looked up, and must not fail
+	// because discovery does.
+	if len(clusters) == 0 {
+		return a.workspace.SeedNamedWorkspaceWindow(window, nil, visible)
+	}
+	discovered, err := a.clusterRuntime.GetKubeconfigs()
+	if err != nil {
+		return err
+	}
+	selectionByID := make(map[string]string, len(discovered.Kubeconfigs))
+	for _, config := range discovered.Kubeconfigs {
+		if !config.Invalid {
+			selectionByID[clusterMetaForKubeconfig(config).ID] = (kubeconfigSelection{Path: config.Path, Context: config.Context}).String()
+		}
+	}
+	selections := make([]string, 0, len(clusters))
+	for _, id := range clusters {
+		selection, exists := selectionByID[id]
+		if !exists {
+			return fmt.Errorf("saved cluster %q is no longer available", id)
+		}
+		selections = append(selections, selection)
+	}
+	return a.workspace.SeedNamedWorkspaceWindow(window, selections, visible)
+}
+
+func (a *ApplicationLifecycle) ResolveNamedWorkspaceGeometry(geometry panelwindow.NamedWorkspaceGeometry) (panelwindow.WindowBounds, bool) {
+	saved := WindowSettings{X: geometry.X, Y: geometry.Y, Width: geometry.Width, Height: geometry.Height, Maximized: geometry.Maximized}
+	bounds, positioned := resolveWindowRestore(saved, a.desktopShell.WindowWorkAreas())
+	return panelwindow.WindowBounds{X: bounds.X, Y: bounds.Y, Width: bounds.Width, Height: bounds.Height}, positioned
 }

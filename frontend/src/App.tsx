@@ -130,6 +130,8 @@ function AppContent({ children }: Readonly<{ children: ReactNode }>) {
       const actions: WorkspaceApplicationMenuActions = {
         close: () => eventBus.emit('application-menu:close'),
         openCluster: () => eventBus.emit('command-palette:open-kubeconfigs'),
+        saveWorkspace: () => eventBus.emit('named-workspace:save-dialog'),
+        openWorkspace: () => eventBus.emit('named-workspace:open-dialog'),
         toggleSettings: handleToggleSettings,
         openCommandPalette: () => eventBus.emit('command-palette:open'),
         zoomIn,

@@ -1,0 +1,8 @@
+.named-workspace-save-modal {
+  max-width: var(--modal-width-md);
+}
+
+/* Keeps the destructive action apart from the dialog's primary actions. */
+.named-workspace-delete {
+  margin-right: auto;
+}

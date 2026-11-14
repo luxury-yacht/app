@@ -155,6 +155,108 @@ func TestGroupTransferRejectsStaleSourceAndOverlappingTransferAtomically(t *test
 	require.Error(t, directory.BeginGroupTransfer(floatTransfer("float-3", "app-b", second)), "transfer IDs are unique")
 }
 
+func TestWorkspaceCaptureWaitsForThePanelMoveToSettle(t *testing.T) {
+	directory := NewWorkspaceDirectory()
+	tab := workspaceTab("production", "api")
+	openDocked(t, directory, "app-a", tab)
+	require.NoError(t, directory.BeginGroupTransfer(floatTransfer("float", "app-a", tab)))
+	_, err := directory.WorkspaceCaptureRevision()
+	require.Error(t, err)
+	directory.CancelGroupTransfer("float")
+	_, err = directory.WorkspaceCaptureRevision()
+	require.NoError(t, err)
+	groups := directory.DockedGroups("production", "app-a")
+	require.Len(t, groups, 1)
+	require.Equal(t, []TabSnapshot{tab}, groups[0].Tabs)
+	require.Empty(t, directory.DockedGroups("staging", "app-a"))
+}
+
+// Opening a saved workspace closes every panel of the current one in a single
+// step, and only if nothing changed since the windows agreed to close. The
+// saved panels are then placed for the windows that will show them.
+func TestClearingForANamedWorkspaceClosesEveryPanelAtTheExpectedRevision(t *testing.T) {
+	directory := NewWorkspaceDirectory()
+	kept, dropped := workspaceTab("production", "api"), workspaceTab("production", "worker")
+	openDocked(t, directory, "app-a", kept, dropped)
+	var removed []PanelKey
+	directory.SetPanelRemovalHandler(func(keys []PanelKey) { removed = append(removed, keys...) })
+	revision, err := directory.WorkspaceCaptureRevision()
+	require.NoError(t, err)
+	require.Equal(t, []string{"production"}, directory.PanelClusters())
+
+	require.Error(t, directory.ClearForNamedWorkspace(revision-1))
+	require.Len(t, directory.Snapshot("production").Panels, 2)
+	require.Empty(t, removed)
+	// An open that has reserved its cluster is still deciding where its panel goes.
+	reservation := directory.ReserveCluster("production")
+	require.Error(t, directory.ClearForNamedWorkspace(revision))
+	reservation.Release()
+
+	require.NoError(t, directory.ClearForNamedWorkspace(revision))
+	require.Empty(t, directory.Snapshot("production").Panels)
+
+	// If no saved window can take their place, the panels go back as they
+	// were, and the owner of panel state never hears that they closed.
+	directory.RestoreClearedWorkspace()
+	require.Len(t, directory.DockedGroups("production", "app-a"), 1)
+	require.Empty(t, removed)
+	revision, err = directory.WorkspaceCaptureRevision()
+	require.NoError(t, err)
+	require.NoError(t, directory.ClearForNamedWorkspace(revision))
+
+	group := WorkspaceGroup{ClusterID: "production", GroupID: "floating", Tabs: []TabSnapshot{kept}, ActivePanelID: kept.PanelID}
+	require.NoError(t, directory.PlaceNamedWorkspaceGroup("panel-2", PanelLocationWindow, group))
+	require.Error(t, directory.PlaceNamedWorkspaceGroup("panel-3", PanelLocationWindow, group), "a panel is placed in one window only")
+	panels := directory.Snapshot("production").Panels
+	require.Len(t, panels, 1)
+	require.Equal(t, "panel-2", panels[0].Location.WindowName)
+
+	// Once the saved workspace has its windows, the panels it did not open
+	// again are closed for good.
+	directory.CloseClearedWorkspace()
+	require.Equal(t, []PanelKey{{ClusterID: "production", PanelID: dropped.PanelID}}, removed)
+}
+
+// Panels taken out for a workspace switch still belong to their windows and
+// clusters. One whose window closed or whose cluster was removed meanwhile
+// does not come back when the switch gives the directory back.
+func TestPanelsSetAsideForANamedWorkspaceFollowTheirWindowsAndClusters(t *testing.T) {
+	directory := NewWorkspaceDirectory()
+	stays, windowCloses, clusterGoes, viewCloses := workspaceTab("production", "api"), workspaceTab("production", "worker"), workspaceTab("staging", "db"), workspaceTab("production", "cache")
+	openDocked(t, directory, "app-a", stays)
+	_, _, err := directory.Open(windowCloses, PanelLocation{Kind: PanelLocationWindow, WindowName: "panel-1", GroupID: "floating"})
+	require.NoError(t, err)
+	openDocked(t, directory, "app-a", clusterGoes)
+	openDocked(t, directory, "app-b", viewCloses)
+	var removed []PanelKey
+	directory.SetPanelRemovalHandler(func(keys []PanelKey) { removed = append(removed, keys...) })
+	revision, err := directory.WorkspaceCaptureRevision()
+	require.NoError(t, err)
+	require.NoError(t, directory.ClearForNamedWorkspace(revision))
+	require.True(t, directory.HasClusterReference("staging"), "a cluster whose panels may come back is still in use")
+
+	// A saved window that shows the same panel is given up again: the panel
+	// has not closed, it is still set aside.
+	reopened := WorkspaceGroup{ClusterID: "production", GroupID: "right", Tabs: []TabSnapshot{stays}, ActivePanelID: stays.PanelID}
+	require.NoError(t, directory.PlaceNamedWorkspaceGroup("app-new", PanelLocationDocked, reopened))
+	directory.RemoveWindow("app-new")
+	require.Empty(t, removed)
+
+	directory.RemoveWindow("panel-1")
+	directory.RemoveCluster("staging")
+	directory.RetainWindow("app-b")
+	directory.RestoreClearedWorkspace()
+
+	require.Empty(t, directory.Snapshot("staging").Panels)
+	require.False(t, directory.HasClusterReference("staging"))
+	locations := map[string]PanelLocationKind{}
+	for _, panel := range directory.Snapshot("production").Panels {
+		locations[panel.Tab.PanelID] = panel.Location.Kind
+	}
+	require.Equal(t, map[string]PanelLocationKind{stays.PanelID: PanelLocationDocked, viewCloses.PanelID: PanelLocationRetained}, locations)
+	require.ElementsMatch(t, []PanelKey{{ClusterID: "production", PanelID: windowCloses.PanelID}, {ClusterID: "staging", PanelID: clusterGoes.PanelID}}, removed)
+}
+
 func TestDockedGroupCommitAppendsAfterExistingTabsAndMovesActivation(t *testing.T) {
 	directory := NewWorkspaceDirectory()
 	source, existing := workspaceTab("production", "source"), workspaceTab("production", "existing")
@@ -332,4 +434,19 @@ func TestPublicationReportsArrangementOnly(t *testing.T) {
 	require.Equal(t, "app-b", panels[foreign.PanelID].Location.WindowName, "another window's panel is not claimed")
 	require.NotContains(t, panels, unknown.PanelID, "a publication does not open panels")
 	require.Empty(t, removed)
+}
+
+// A cluster that goes away after the windows agreed to close must stop the
+// saved workspace from taking the directory, whether or not the current
+// workspace had panels for that cluster: what the saved workspace may show has
+// changed.
+func TestRemovingAClusterStopsANamedWorkspaceFromTakingTheDirectory(t *testing.T) {
+	directory := NewWorkspaceDirectory()
+	revision, err := directory.WorkspaceCaptureRevision()
+	require.NoError(t, err)
+	directory.RemoveCluster("cluster-without-panels")
+	require.Error(t, directory.ClearForNamedWorkspace(revision))
+	revision, err = directory.WorkspaceCaptureRevision()
+	require.NoError(t, err)
+	require.NoError(t, directory.ClearForNamedWorkspace(revision))
 }

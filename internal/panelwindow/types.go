@@ -277,8 +277,9 @@ type TabCloseAuthorizedEvent struct {
 }
 
 type ApplicationQuitPreflightRequestedEvent struct {
-	TransactionID string `json:"transactionId"`
-	WindowName    string `json:"windowName"`
+	SwitchingWorkspace bool   `json:"switchingWorkspace,omitempty"`
+	TransactionID      string `json:"transactionId"`
+	WindowName         string `json:"windowName"`
 }
 
 const WindowTransferFailedEventName = "panel-window:transfer-failed"

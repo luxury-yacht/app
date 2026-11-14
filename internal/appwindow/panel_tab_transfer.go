@@ -342,7 +342,11 @@ func (r *Registry) beginPanelWindowOpenTransfer(
 			)
 		}
 	}
-	descriptor, err := r.panels.BeginOpen(snapshot)
+	var descriptor PanelWindowDescriptor
+	var err error
+	if !r.admitWindow(func() { descriptor, err = r.panels.BeginOpen(snapshot) }) {
+		return PanelWindowDescriptor{}, panelwindow.ErrWorkspaceSwitching
+	}
 	if err != nil {
 		return PanelWindowDescriptor{}, err
 	}

@@ -38,6 +38,8 @@ const WORKSPACE_COMMAND_EVENTS = [
   ['open-settings', menuCommand.ApplicationMenuCommandSettings],
   ['open-about', menuCommand.ApplicationMenuCommandAbout],
   ['open-cluster', menuCommand.ApplicationMenuCommandOpenCluster],
+  ['save-workspace', menuCommand.ApplicationMenuCommandSaveWorkspace],
+  ['open-workspace', menuCommand.ApplicationMenuCommandOpenWorkspace],
   ['open-command-palette', menuCommand.ApplicationMenuCommandCommandPalette],
   ['toggle-sidebar', menuCommand.ApplicationMenuCommandToggleSidebar],
   ['toggle-app-logs-panel', menuCommand.ApplicationMenuCommandToggleAppLogs],

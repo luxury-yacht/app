@@ -1,6 +1,7 @@
 package appwindow
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/internal/panelwindow"
@@ -8,10 +9,14 @@ import (
 )
 
 type nativeWindowRegistry interface {
+	OpenNamedWorkspace(context.Context, string, panelwindow.NamedWorkspace) error
+	AcknowledgeNamedWorkspaceRestore(string, string) error
+	CaptureNamedWorkspace(context.Context, string) (panelwindow.NamedWorkspace, error)
+	SubmitNamedWorkspaceCapture(string, string, panelwindow.NamedWorkspaceAppView, string) error
 	panelwindow.SharedWorkspaceCommands
 	PrepareApplicationQuit() bool
 	FocusMostRecent()
-	Create(bool) *application.WebviewWindow
+	CreateWorkspaceWindow() error
 	WindowDescriptor(string) (panelwindow.NativeDescriptor, error)
 	BeginPanelWindowOpen(panelwindow.GroupSnapshot) (panelwindow.WindowDescriptor, error)
 	AcknowledgePanelWindowReady(string, string) (panelwindow.WindowDescriptor, error)
@@ -27,6 +32,22 @@ type nativeWindowRegistry interface {
 	AcceptPanelTabTransfer(string, string) error
 	FailPanelTabTransfer(string, string) error
 	AcknowledgeApplicationQuitPreflight(string, string, bool) error
+}
+
+func (bridge *Bridge) CaptureNamedWorkspace(ctx context.Context, window string) (panelwindow.NamedWorkspace, error) {
+	registry, err := bridge.registryOrError()
+	if err != nil {
+		return panelwindow.NamedWorkspace{}, err
+	}
+	return registry.CaptureNamedWorkspace(ctx, window)
+}
+
+func (bridge *Bridge) SubmitNamedWorkspaceCapture(window, id string, view panelwindow.NamedWorkspaceAppView, failure string) error {
+	registry, err := bridge.registryOrError()
+	if err != nil {
+		return err
+	}
+	return registry.SubmitNamedWorkspaceCapture(window, id, view, failure)
 }
 
 // Bridge breaks the startup cycle between backend composition
@@ -59,10 +80,12 @@ func (bridge *Bridge) OnSecondInstanceLaunch(application.SecondInstanceData) {
 	}
 }
 
-func (bridge *Bridge) CreateWorkspaceWindow() {
-	if bridge.registry != nil {
-		bridge.registry.Create(false)
+func (bridge *Bridge) CreateWorkspaceWindow() error {
+	registry, err := bridge.registryOrError()
+	if err != nil {
+		return err
 	}
+	return registry.CreateWorkspaceWindow()
 }
 
 func (bridge *Bridge) IsWorkspaceWindow(windowName string) bool {
@@ -218,4 +241,20 @@ func (bridge *Bridge) AcknowledgeApplicationQuit(
 		return err
 	}
 	return registry.AcknowledgeApplicationQuitPreflight(callerWindowName, transactionID, allowed)
+}
+
+func (bridge *Bridge) OpenNamedWorkspace(ctx context.Context, window string, snapshot panelwindow.NamedWorkspace) error {
+	registry, err := bridge.registryOrError()
+	if err != nil {
+		return err
+	}
+	return registry.OpenNamedWorkspace(ctx, window, snapshot)
+}
+
+func (bridge *Bridge) AcknowledgeNamedWorkspaceRestore(window, failure string) error {
+	registry, err := bridge.registryOrError()
+	if err != nil {
+		return err
+	}
+	return registry.AcknowledgeNamedWorkspaceRestore(window, failure)
 }

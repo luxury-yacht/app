@@ -32,7 +32,7 @@ func newGroupTransferFixture(t *testing.T) *groupTransferFixture {
 	fixture.snapshot.SourceWindowName = fixture.owner
 	_, _, err := fixture.registry.workspace.Open(fixture.snapshot.Tabs[0], panelwindow.PanelLocation{Kind: panelwindow.PanelLocationDocked, WindowName: fixture.owner, GroupID: "right"})
 	require.NoError(t, err)
-	require.NoError(t, fixture.registry.AcknowledgePanelWorkspaceReady(fixture.owner))
+	require.NoError(t, fixture.registry.AcknowledgePanelWorkspaceReady(fixture.owner, 0))
 	// Mounted and published, so only transfer state (not an unmounted claim)
 	// can protect the panel from a later snapshot.
 	require.NoError(t, fixture.registry.PublishDockedPanels(fixture.owner, fixture.docked(t)))

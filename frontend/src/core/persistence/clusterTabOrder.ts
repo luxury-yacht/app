@@ -63,7 +63,9 @@ export const hydrateClusterTabOrder = async (options?: { force?: boolean }): Pro
         adapter: 'persistence-read',
         read: () => GetClusterTabOrder(),
       });
-      updateOrderCache(Array.isArray(order) ? order : []);
+      if (!hydrated || options?.force) {
+        updateOrderCache(Array.isArray(order) ? order : []);
+      }
     } catch (error) {
       reportOperationalError(error, {
         source: 'ClusterTabOrder',
@@ -124,9 +126,13 @@ export const getNextClusterTabSelectionAfterClose = (
   return rightNeighbor || leftNeighbor;
 };
 
-export const setClusterTabOrder = (order: string[]): void => {
+export const restoreWindowClusterTabOrder = (order: string[]): void => {
   updateOrderCache(order);
   hydrated = true;
+};
+
+export const setClusterTabOrder = (order: string[]): void => {
+  restoreWindowClusterTabOrder(order);
   void persistClusterTabOrder(cachedOrder).catch((error) => {
     reportOperationalError(error, {
       source: 'ClusterTabOrder',

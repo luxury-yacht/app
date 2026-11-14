@@ -41,6 +41,8 @@ export interface AppEvents {
   // Open the command palette in its normal (search) mode — the header search
   // button.
   'command-palette:open': undefined;
+  'named-workspace:save-dialog': undefined;
+  'named-workspace:open-dialog': undefined;
   'application-menu:close': undefined;
 
   // Auth events — bridged from the Wails runtime by ClusterWorkspaceStore.

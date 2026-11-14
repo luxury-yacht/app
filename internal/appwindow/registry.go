@@ -1,10 +1,13 @@
 package appwindow
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"runtime"
+	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/luxury-yacht/app/internal/panelwindow"
@@ -19,6 +22,12 @@ type lifecycleBackend interface {
 	PrepareQuitFromWindow(windowName string) bool
 	SaveWorkspaceWindowGeometry(string)
 	WindowClusterIDs(string) []string
+	PersistRestartSelection()
+	HoldRestartSelection()
+	NamedWorkspaceAvailableClusters() ([]string, error)
+	SeedNamedWorkspaceWindow(string, []string, string) error
+	WriteRestartSelectionOf(string)
+	ResolveNamedWorkspaceGeometry(panelwindow.NamedWorkspaceGeometry) (panelwindow.WindowBounds, bool)
 	panelwindow.ClusterViewTransferLifecycle
 	PanelWorkspaceDirectory() *panelwindow.WorkspaceDirectory
 	RetainPanelCluster(string, string) error
@@ -27,6 +36,12 @@ type lifecycleBackend interface {
 
 // Registry owns the application's peer workspace windows and their lifecycle.
 type Registry struct {
+	namedWorkspaceOperation sync.Mutex
+	// admissionMu orders new windows against a workspace switch. See admitWindow.
+	admissionMu            sync.Mutex
+	workspaceCaptureMu     sync.Mutex
+	workspaceCapture       *namedWorkspaceCapture
+	normalWorkspaceBounds  sync.Map
 	clusterCloseMu         sync.Mutex
 	nextClusterClose       uint64
 	clusterPanelCloses     map[string]*clusterPanelClose
@@ -41,16 +56,24 @@ type Registry struct {
 	newWindow              func(application.WebviewWindowOptions) *application.WebviewWindow
 	configurePanelWindow   func(*application.WebviewWindow)
 	showWindow             func(string) bool
+	hideWindow             func(string) bool
 	closeWindow            func(string) bool
 	requestApplicationQuit func()
 	focusWindow            func(string) bool
 	emitWindowEvent        func(string, string, any) bool
 	windowGeometry         func(string) (geometry, bool)
-	screenWorkAreas        func() []application.Rect
-	closeMu                sync.Mutex
-	authorizedClose        map[string]struct{}
-	workspaceReady         map[string]struct{}
-	panelWorkspaceReady    map[string]struct{}
+	restoreWindowState     func(string, panelwindow.NamedWorkspaceGeometry) bool
+	// activeRestore is the workspace switch in progress: the windows it created
+	// and their answers.
+	activeRestore                atomic.Pointer[namedWorkspaceRestore]
+	namedWorkspaceRestoreTimeout time.Duration
+	screenWorkAreas              func() []application.Rect
+	closeMu                      sync.Mutex
+	authorizedClose              map[string]struct{}
+	panelWorkspaceReady          map[string]struct{}
+	// rendererPage is the highest page number each window's renderer has sent
+	// with a readiness call. See enterRendererPage.
+	rendererPage           map[string]int64
 	queuedWorkspaceEvents  map[string][]workspaceWindowEvent
 	panelOpenTimeout       time.Duration
 	panelDockTimeout       time.Duration
@@ -71,20 +94,38 @@ type applicationQuitPreflight struct {
 	participants  []string
 	waiting       map[string]struct{}
 	timeout       *time.Timer
+	replacement   chan error
 }
 
 type geometry struct {
-	AbsoluteX int
-	AbsoluteY int
-	X         int
-	Y         int
-	Width     int
-	Height    int
-	Maximised bool
-	Screen    *application.Screen
+	AbsoluteX  int
+	AbsoluteY  int
+	X          int
+	Y          int
+	Width      int
+	Height     int
+	Maximised  bool
+	Fullscreen bool
+	Minimised  bool
+	Screen     *application.Screen
+}
+
+// normal reports whether the bounds are the window's own, not those of a
+// maximized, fullscreen, or minimized state.
+func (g geometry) normal() bool {
+	return !g.Maximised && !g.Fullscreen && !g.Minimised
 }
 
 const cascadeOffset = 24
+
+// The smallest size each kind of window can have. Saved bounds are never
+// smaller, whatever a window reported when it was captured.
+const (
+	appWindowMinWidth    = 1100
+	appWindowMinHeight   = 600
+	panelWindowMinWidth  = 450
+	panelWindowMinHeight = 200
+)
 
 func showApplicationWindow(app *application.App, name string) bool {
 	window, ok := app.Window.GetByName(name)
@@ -92,6 +133,15 @@ func showApplicationWindow(app *application.App, name string) bool {
 		return false
 	}
 	window.Show()
+	return true
+}
+
+func hideApplicationWindow(app *application.App, name string) bool {
+	window, ok := app.Window.GetByName(name)
+	if !ok {
+		return false
+	}
+	window.Hide()
 	return true
 }
 
@@ -141,9 +191,11 @@ func applicationWindowGeometry(app *application.App, name string) (geometry, boo
 		return geometry{}, false
 	}
 	result := geometry{
-		Width:     width,
-		Height:    height,
-		Maximised: window.IsMaximised(),
+		Width:      width,
+		Height:     height,
+		Maximised:  window.IsMaximised(),
+		Fullscreen: window.IsFullscreen(),
+		Minimised:  window.IsMinimised(),
 	}
 	result.AbsoluteX, result.AbsoluteY = window.Position()
 	if screen, err := window.GetScreen(); err == nil && screen != nil {
@@ -167,6 +219,9 @@ func bindApplicationWindowOperations(registry *Registry, app *application.App) {
 	registry.showWindow = func(name string) bool {
 		return showApplicationWindow(app, name)
 	}
+	registry.hideWindow = func(name string) bool {
+		return hideApplicationWindow(app, name)
+	}
 	registry.closeWindow = func(name string) bool {
 		return closeApplicationWindow(app, name)
 	}
@@ -179,6 +234,79 @@ func bindApplicationWindowOperations(registry *Registry, app *application.App) {
 	registry.windowGeometry = func(name string) (geometry, bool) {
 		return applicationWindowGeometry(app, name)
 	}
+	registry.restoreWindowState = func(name string, state panelwindow.NamedWorkspaceGeometry) bool {
+		return restoreApplicationWindowState(app, name, state)
+	}
+}
+
+// How long a window gets to finish entering fullscreen before the next one starts.
+const fullscreenTransitionTimeout = 3 * time.Second
+
+// fullscreenAnnouncement is the event a platform sends once a window has
+// entered fullscreen. Windows enters synchronously and needs no wait.
+func fullscreenAnnouncement(goos string) (events.WindowEventType, bool) {
+	switch goos {
+	case "darwin":
+		return events.Mac.WindowDidEnterFullScreen, true
+	case "linux":
+		return events.Common.WindowFullscreen, true
+	}
+	return 0, false
+}
+
+// enterFullscreenOn puts a window into fullscreen and reports whether it got
+// there. Where the platform enters asynchronously it waits for the transition
+// to finish: macOS runs one fullscreen transition at a time and drops a request
+// made while another is running, so windows must enter in turn.
+func enterFullscreenOn(goos string, window application.Window, timeout time.Duration) bool {
+	announcement, waits := fullscreenAnnouncement(goos)
+	if !waits {
+		window.Fullscreen()
+		return window.IsFullscreen()
+	}
+	entered := make(chan struct{}, 1)
+	stop := window.OnWindowEvent(announcement, func(*application.WindowEvent) {
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
+	})
+	defer stop()
+	window.Fullscreen()
+	select {
+	case <-entered:
+		return true
+	case <-time.After(timeout):
+		// The announcement can be missed; the window's own state decides.
+		return window.IsFullscreen()
+	}
+}
+
+// restoreApplicationWindowState puts a window back into the state it was saved
+// in. Minimise comes last so a maximized window that was minimized returns to
+// its maximized size when it is brought back.
+func restoreApplicationWindowState(app *application.App, name string, state panelwindow.NamedWorkspaceGeometry) bool {
+	window, ok := app.Window.GetByName(name)
+	if !ok {
+		return false
+	}
+	restored := true
+	if state.Maximized {
+		window.Maximise()
+	}
+	if state.Fullscreen {
+		restored = enterFullscreenOn(runtime.GOOS, window, fullscreenTransitionTimeout)
+	}
+	if state.Maximized || state.Fullscreen {
+		// Wails drops the minimum size to enter either state and puts it back only
+		// through its own exit, which the title bar and window manager never call.
+		// These windows have no maximum size for the minimum to conflict with.
+		window.EnableSizeConstraints()
+	}
+	if state.Minimized {
+		window.Minimise()
+	}
+	return restored
 }
 
 // NewRegistry creates the peer-window registry for a Wails application.
@@ -188,20 +316,20 @@ func NewRegistry(
 ) *Registry {
 	configureNativeTabDragAnimation()
 	registry := &Registry{
-		application:            app,
-		backend:                backend,
-		lifecycle:              newLifecycle(),
-		panels:                 newPanelIndex(),
-		workspace:              panelwindow.NewWorkspaceDirectory(),
-		authorizedClose:        make(map[string]struct{}),
-		workspaceReady:         make(map[string]struct{}),
-		panelOpenTimeout:       15 * time.Second,
-		panelDockTimeout:       15 * time.Second,
-		clusterTransferTimeout: 15 * time.Second,
-		clusterCloseTimeout:    15 * time.Second,
-		quitPreflightTimeout:   20 * time.Second,
-		tabTransferTimeout:     15 * time.Second,
-		configurePanelWindow:   configureNativePanelWindow,
+		application:                  app,
+		backend:                      backend,
+		lifecycle:                    newLifecycle(),
+		panels:                       newPanelIndex(),
+		workspace:                    panelwindow.NewWorkspaceDirectory(),
+		authorizedClose:              make(map[string]struct{}),
+		panelOpenTimeout:             15 * time.Second,
+		panelDockTimeout:             15 * time.Second,
+		clusterTransferTimeout:       15 * time.Second,
+		clusterCloseTimeout:          15 * time.Second,
+		quitPreflightTimeout:         20 * time.Second,
+		namedWorkspaceRestoreTimeout: defaultNamedWorkspaceRestoreTimeout,
+		tabTransferTimeout:           15 * time.Second,
+		configurePanelWindow:         configureNativePanelWindow,
 	}
 	if backend != nil {
 		registry.workspace = backend.PanelWorkspaceDirectory()
@@ -333,11 +461,46 @@ func (r *Registry) expirePanelOpen(windowName, transferID string) {
 
 // Create adds a peer window. Only the initial peer restores persisted geometry.
 func (r *Registry) Create(restoreGeometry bool) *application.WebviewWindow {
-	sourceName := r.lifecycle.MostRecent()
-	name := r.lifecycle.Add()
-	window := r.newWindow(r.optionsForPeer(name, sourceName, restoreGeometry))
-	r.registerLifecycleHooks(window, name, restoreGeometry)
+	window, _ := r.create(restoreGeometry)
 	return window
+}
+
+func (r *Registry) CreateWorkspaceWindow() error {
+	_, err := r.create(false)
+	return err
+}
+
+func (r *Registry) create(restoreGeometry bool) (*application.WebviewWindow, error) {
+	// A new peer takes the process's cluster selection, which a workspace switch
+	// is in the middle of replacing.
+	var sourceName, name string
+	if !r.admitWindow(func() {
+		sourceName = r.lifecycle.MostRecent()
+		name = r.lifecycle.Add()
+	}) {
+		return nil, panelwindow.ErrWorkspaceSwitching
+	}
+	window := r.newWindow(r.optionsForPeer(name, sourceName, restoreGeometry))
+	if window == nil {
+		r.lifecycle.BeginClose(name)
+		return nil, fmt.Errorf("could not create app window %q", name)
+	}
+	r.registerLifecycleHooks(window, name, restoreGeometry)
+	return window, nil
+}
+
+// admitWindow registers a new window by running add, unless a workspace switch
+// is replacing the windows. The switch takes the same lock to confirm which
+// windows exist before it closes them, so a window is either one it saw or one
+// it refused.
+func (r *Registry) admitWindow(add func()) bool {
+	r.admissionMu.Lock()
+	defer r.admissionMu.Unlock()
+	if r.activeRestore.Load() != nil {
+		return false
+	}
+	add()
+	return true
 }
 
 func (r *Registry) optionsForPeer(name, sourceName string, restoreGeometry bool) application.WebviewWindowOptions {
@@ -381,9 +544,14 @@ func (r *Registry) registerLifecycleHooks(
 	name string,
 	restoreGeometry bool,
 ) {
+	r.trackNamedWorkspaceBounds(window, name)
 	window.OnWindowEvent(events.Common.WindowRuntimeReady, func(*application.WindowEvent) {
-		r.backend.WindowRuntimeReady(name, restoreGeometry)
-		r.markWorkspaceReady(name)
+		// The backend shows a window once its runtime is ready. A window a
+		// workspace switch is restoring is shown by the switch, once it has loaded.
+		if !r.restoringWindow(name) {
+			r.backend.WindowRuntimeReady(name, restoreGeometry)
+		}
+		r.rememberNamedWorkspaceBounds(name)
 	})
 	window.OnWindowEvent(events.Common.WindowFocus, func(*application.WindowEvent) {
 		r.lifecycle.Focus(name)
@@ -397,6 +565,10 @@ func (r *Registry) registerPanelLifecycleHooks(
 	window *application.WebviewWindow,
 	name string,
 ) {
+	r.trackNamedWorkspaceBounds(window, name)
+	window.OnWindowEvent(events.Common.WindowRuntimeReady, func(*application.WindowEvent) {
+		r.rememberNamedWorkspaceBounds(name)
+	})
 	window.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {
 		r.handlePanelClosingEvent(event, name)
 	})
@@ -414,8 +586,11 @@ func (r *Registry) authorizeClose(name string) {
 // The native close hook can consume authorization synchronously. If no window
 // accepts the close, discard the unused authorization before returning.
 func (r *Registry) closeAuthorizedWindow(name string) bool {
+	r.failCaptureOfClosedWindow(name)
+	r.failRestoreOfClosedWindow(name)
 	r.authorizeClose(name)
 	if r.closeWindow(name) {
+		r.normalWorkspaceBounds.Delete(name)
 		return true
 	}
 	r.consumeAuthorizedClose(name)
@@ -432,27 +607,11 @@ func (r *Registry) consumeAuthorizedClose(name string) bool {
 	return true
 }
 
-func (r *Registry) markWorkspaceReady(name string) {
-	r.closeMu.Lock()
-	defer r.closeMu.Unlock()
-	if r.workspaceReady == nil {
-		r.workspaceReady = make(map[string]struct{})
-	}
-	r.workspaceReady[name] = struct{}{}
-}
-
-func (r *Registry) isWorkspaceReady(name string) bool {
-	r.closeMu.Lock()
-	defer r.closeMu.Unlock()
-	_, ready := r.workspaceReady[name]
-	return ready
-}
-
 func (r *Registry) forgetWorkspaceReady(name string) {
 	r.closeMu.Lock()
 	defer r.closeMu.Unlock()
-	delete(r.workspaceReady, name)
 	delete(r.panelWorkspaceReady, name)
+	delete(r.rendererPage, name)
 	delete(r.queuedWorkspaceEvents, name)
 }
 
@@ -466,6 +625,16 @@ func (r *Registry) handlePanelClosingEvent(event *application.WindowEvent, name 
 	}
 	if event != nil {
 		event.Cancel()
+	}
+	// A workspace switch is about to close this window itself.
+	if r.switchParticipant(name) {
+		return
+	}
+	// A live window whose renderer cannot answer has no close guard to run.
+	// It is closed the way its renderer would close it after approving.
+	if r.panels.State(name) == PanelWindowStateLive && !r.rendererReady(name) {
+		r.reportPanelLifecycleError(r.AcknowledgePanelWindowClose(name), "close a panel window whose renderer cannot answer")
+		return
 	}
 	r.emitWindowEvent(name, panelwindow.WindowCloseRequestedEventName, panelwindow.WindowCloseRequestedEvent{
 		WindowName: name,
@@ -513,6 +682,23 @@ func (r *Registry) WindowDescriptor(name string) (NativeWindowDescriptor, error)
 // AcknowledgePanelWindowReady reveals the hidden native target, then commits the
 // directory move. A stale acknowledgement leaves the source transfer pending.
 func (r *Registry) AcknowledgePanelWindowReady(name, transferID string) (PanelWindowDescriptor, error) {
+	// A panel window that reloads is already live, so it has no transfer to
+	// name. It boots from its descriptor and announces readiness afterwards.
+	if transferID == "" {
+		if r.panels.State(name) != PanelWindowStateLive {
+			return PanelWindowDescriptor{}, fmt.Errorf("panel window %q is not live", name)
+		}
+		return r.PanelDescriptor(name)
+	}
+	// A panel window a workspace switch is restoring has no source to move
+	// from: its tabs are already placed, and the switch shows it.
+	if r.restoringWindow(name) {
+		descriptor, err := r.panels.AcknowledgeOpen(name, transferID)
+		if err != nil {
+			return PanelWindowDescriptor{}, err
+		}
+		return r.withPanelGroup(descriptor), r.AcknowledgeNamedWorkspaceRestore(name, "")
+	}
 	r.panelTransferMu.Lock()
 	defer r.panelTransferMu.Unlock()
 	descriptor, err := r.panels.Pending(name, transferID, PanelWindowStateOpening)
@@ -671,6 +857,7 @@ func (r *Registry) FailPanelWindowTransfer(callerWindowName, windowName, transfe
 		return fmt.Errorf("window %q cannot fail panel transfer for %q", callerWindowName, windowName)
 	}
 	wasOpening := descriptor.State == PanelWindowStateOpening
+	restoring := r.restoringWindow(windowName)
 	if err := r.panels.FailTransfer(windowName, transferID); err != nil {
 		return err
 	}
@@ -680,6 +867,11 @@ func (r *Registry) FailPanelWindowTransfer(callerWindowName, windowName, transfe
 		return nil
 	}
 	r.failPanelTabTransfer(transferID, "new panel target failed before readiness")
+	if restoring {
+		// A workspace switch placed this window's panels directly; nothing else
+		// takes them back.
+		r.dropRestoredPanelPlacement(windowName, descriptor.ClusterID)
+	}
 	var closeErr error
 	if !r.closeAuthorizedWindow(windowName) {
 		closeErr = fmt.Errorf("panel window %q is not available", windowName)
@@ -763,14 +955,26 @@ func (r *Registry) RequestPanelTabClose(windowName, panelID string) error {
 // removal. Native destruction precedes removal of the panel directory entries
 // and release of its runtime references.
 func (r *Registry) AcknowledgePanelWindowClose(windowName string) error {
+	if r.switchParticipant(windowName) {
+		return panelwindow.ErrWorkspaceSwitching
+	}
+	open, err := r.closePanelWindow(windowName)
+	if err == nil && !open {
+		return fmt.Errorf("panel window %q is not live", windowName)
+	}
+	return err
+}
+
+// closePanelWindow closes a panel window and reports whether it was open.
+func (r *Registry) closePanelWindow(windowName string) (bool, error) {
 	r.panelTransferMu.Lock()
 	defer r.panelTransferMu.Unlock()
 	descriptor, err := r.panels.Descriptor(windowName)
 	if err != nil {
-		return err
+		return false, nil
 	}
 	if !r.closeAuthorizedWindow(windowName) {
-		return fmt.Errorf("panel window %q is not available", windowName)
+		return true, fmt.Errorf("panel window %q is not available", windowName)
 	}
 	r.failPanelTabTransfersForWindow(windowName, "panel window closed during tab transfer")
 	r.workspaceMu.Lock()
@@ -779,16 +983,19 @@ func (r *Registry) AcknowledgePanelWindowClose(windowName string) error {
 	r.workspaceMu.Unlock()
 	r.releaseUnusedPanelWorkspace(descriptor.ClusterID)
 	if err := r.releaseNativePanelReference(windowName); err != nil {
-		return err
+		return true, err
 	}
 	r.emitPanelClosed(descriptor)
 	r.emitWorkspaceChanged(descriptor.ClusterID)
-	return nil
+	return true, nil
 }
 
 func (r *Registry) AcknowledgeWorkspaceWindowClose(windowName string) error {
 	if !r.lifecycle.Contains(windowName) {
 		return fmt.Errorf("app window %q is not live", windowName)
+	}
+	if r.switchParticipant(windowName) {
+		return panelwindow.ErrWorkspaceSwitching
 	}
 	if r.closeAuthorizedWindow(windowName) {
 		return nil
@@ -812,12 +1019,9 @@ func (r *Registry) AcknowledgeApplicationQuitPreflight(
 		return fmt.Errorf("workspace %q is not awaiting application quit preflight", callerWindowName)
 	}
 	if !allowed {
-		if pending.timeout != nil {
-			pending.timeout.Stop()
-		}
 		r.pendingQuit = nil
 		r.quitMu.Unlock()
-		r.settleApplicationQuitPreflight(pending)
+		r.finishDeniedApplicationPreflight(pending)
 		return nil
 	}
 	delete(pending.waiting, callerWindowName)
@@ -828,6 +1032,21 @@ func (r *Registry) AcknowledgeApplicationQuitPreflight(
 	if pending.timeout != nil {
 		pending.timeout.Stop()
 	}
+	if pending.replacement != nil {
+		// As for quit below: a collection timeout already waiting on quitMu must
+		// not release the frozen renderers while the switch runs.
+		r.pendingQuit = &applicationQuitPreflight{
+			transactionID: pending.transactionID,
+			participants:  pending.participants,
+			replacement:   pending.replacement,
+		}
+		// Sent before the unlock: a cancellation can claim the approved preflight
+		// only afterwards, so its own answer can never fill the buffer first and
+		// leave this send with no reader.
+		pending.replacement <- nil
+		r.quitMu.Unlock()
+		return nil
+	}
 	// Replace the collection phase so an already-running collection timeout
 	// cannot cancel an approved handoff. Keep renderers frozen until shutdown.
 	approved := &applicationQuitPreflight{
@@ -837,12 +1056,12 @@ func (r *Registry) AcknowledgeApplicationQuitPreflight(
 	r.pendingQuit = approved
 	if r.quitPreflightTimeout > 0 {
 		approved.timeout = time.AfterFunc(r.quitPreflightTimeout, func() {
-			r.cancelApplicationQuitPreflight(approved)
+			r.cancelApplicationQuitPreflight(approved, context.DeadlineExceeded)
 		})
 	}
 	r.quitMu.Unlock()
 	if r.requestApplicationQuit == nil {
-		r.cancelApplicationQuitPreflight(approved)
+		r.cancelApplicationQuitPreflight(approved, context.Canceled)
 		return fmt.Errorf("application quit is unavailable")
 	}
 	// Closing individual views would remove their clusters from saved selection.
@@ -851,14 +1070,38 @@ func (r *Registry) AcknowledgeApplicationQuitPreflight(
 	return nil
 }
 
+func cancelWindowEvent(event *application.WindowEvent) {
+	if event != nil {
+		event.Cancel()
+	}
+}
+
+// refuseUnauthorizedAppClose keeps an app window open when the registry did not
+// ask for the close: a window whose renderer can answer is asked to run its
+// close guards first. One that cannot (still loading, or showing its crash
+// screen) has no guard to run and closes. It reports whether the close was
+// refused.
+func (r *Registry) refuseUnauthorizedAppClose(event *application.WindowEvent, name string) bool {
+	// A workspace switch is about to close this window itself.
+	if r.switchParticipant(name) {
+		cancelWindowEvent(event)
+		return true
+	}
+	if !r.rendererReady(name) {
+		return false
+	}
+	cancelWindowEvent(event)
+	r.emitWindowEvent(name, panelwindow.WorkspaceCloseRequestedEventName, panelwindow.WorkspaceCloseRequestedEvent{WindowName: name})
+	return true
+}
+
 func (r *Registry) handleClosing(event *application.WindowEvent, name string) {
-	if !r.consumeAuthorizedClose(name) && r.isWorkspaceReady(name) {
-		if event != nil {
-			event.Cancel()
-		}
-		r.emitWindowEvent(name, panelwindow.WorkspaceCloseRequestedEventName, panelwindow.WorkspaceCloseRequestedEvent{WindowName: name})
+	if !r.consumeAuthorizedClose(name) && r.refuseUnauthorizedAppClose(event, name) {
 		return
 	}
+	// A window a workspace switch is waiting for can no longer answer it. The
+	// switch goes on once this close has released what the window held.
+	defer r.failRestoreOfClosedWindow(name)
 	if err := r.failClusterTransfersForWindow(name); err != nil {
 		r.reportPanelLifecycleError(err, "cancel cluster transfer before close")
 		if event != nil {
@@ -879,10 +1122,8 @@ func (r *Registry) handleClosing(event *application.WindowEvent, name string) {
 		r.retainClosedWorkspace(name)
 		return
 	}
-	r.quitMu.Lock()
-	pending := r.pendingQuit
-	r.quitMu.Unlock()
-	r.cancelApplicationQuitPreflight(pending)
+	// The refused quit ends whichever preflight is pending, approved or not.
+	r.cancelPendingApplicationQuitPreflight(func(*applicationQuitPreflight) bool { return true }, context.Canceled)
 	r.lifecycle.CancelClose(name)
 	if event != nil {
 		event.Cancel()
@@ -902,7 +1143,10 @@ func (r *Registry) declinePanelMovesInto(windowName string) {
 // Closing the last app view while panels remain is not process Quit. Save its
 // geometry before releasing its presentation, while the native window still exists.
 func (r *Registry) releaseClosedAppView(name string, remaining int) bool {
-	if remaining == 0 && len(r.panels.Names("")) == 0 {
+	// During a workspace switch the last view is released like any other: the
+	// previous windows are already detached and more saved windows may be on
+	// their way. The switch quits at its end if no window is left.
+	if remaining == 0 && len(r.panels.Names("")) == 0 && r.activeRestore.Load() == nil {
 		return false
 	}
 	if remaining == 0 {
@@ -915,6 +1159,12 @@ func (r *Registry) releaseClosedAppView(name string, remaining int) bool {
 
 func (r *Registry) retainClosedWorkspace(name string) {
 	r.forgetWorkspaceReady(name)
+	if r.unpublishedRestoredWindow(name) {
+		// A target that closes during presentation must not pass its saved
+		// panels to the surviving source as retained panels.
+		r.workspace.RemoveWindow(name)
+		return
+	}
 	r.workspace.RetainWindow(name)
 }
 
@@ -945,28 +1195,137 @@ func (r *Registry) FocusMostRecent() {
 	focusApplicationWindow(r.application, r.lifecycle.MostRecent())
 }
 
+// rendererReady reports whether a window's renderer has announced that it is
+// mounted, from the page the window is showing now. Only then are its capture
+// and close-guard handlers subscribed: the native runtime is ready earlier, a
+// reload drops them, and a crash screen unmounts them.
+func (r *Registry) rendererReady(name string) bool {
+	r.closeMu.Lock()
+	defer r.closeMu.Unlock()
+	_, ready := r.panelWorkspaceReady[name]
+	return ready
+}
+
+// enterRendererPageLocked checks a readiness call against the latest page.
+// Hold closeMu through the ensuing readiness update so an earlier page cannot
+// overwrite a later page's state.
+func (r *Registry) enterRendererPageLocked(name string, page int64) (current, reloaded bool) {
+	last := r.rendererPage[name]
+	if page < last {
+		return false, false
+	}
+	if r.rendererPage == nil {
+		r.rendererPage = make(map[string]int64)
+	}
+	r.rendererPage[name] = page
+	return true, page > last
+}
+
+func (r *Registry) markRendererReadyLocked(name string) {
+	if r.panelWorkspaceReady == nil {
+		r.panelWorkspaceReady = make(map[string]struct{})
+	}
+	r.panelWorkspaceReady[name] = struct{}{}
+}
+
+func (r *Registry) forgetRendererReady(name string) {
+	r.closeMu.Lock()
+	defer r.closeMu.Unlock()
+	delete(r.panelWorkspaceReady, name)
+}
+
+// WithdrawRendererReady is a renderer saying it cannot answer: its page has
+// just started loading, or a crash screen replaced its app tree. It is left
+// out of save, switch and quit until it announces again.
+func (r *Registry) WithdrawRendererReady(name string, page int64) error {
+	r.closeMu.Lock()
+	current, _ := r.enterRendererPageLocked(name, page)
+	_, announced := r.panelWorkspaceReady[name]
+	if current {
+		delete(r.panelWorkspaceReady, name)
+	}
+	r.closeMu.Unlock()
+	if !current {
+		return nil
+	}
+	r.cancelRendererRequests(name)
+	if announced {
+		// A page that had announced was working on its saved view.
+		r.failRestoreOfClosedWindow(name)
+	}
+	return nil
+}
+
+// switchParticipant reports whether a workspace switch has asked this window
+// to approve and has not finished. Such a window does not close on its own:
+// the switch works from the windows it asked, and closes them itself.
+func (r *Registry) switchParticipant(name string) bool {
+	r.quitMu.Lock()
+	defer r.quitMu.Unlock()
+	return r.pendingQuit != nil && r.pendingQuit.replacement != nil && slices.Contains(r.pendingQuit.participants, name)
+}
+
+// rendererLost records that a window's renderer can no longer answer, and ends
+// what was waiting for its answer now instead of at a deadline: a capture
+// fails, and a quit preflight, switch preflight or cluster close is cancelled
+// as a timeout would.
+func (r *Registry) rendererLost(name string) {
+	r.forgetRendererReady(name)
+	r.cancelRendererRequests(name)
+}
+
+func (r *Registry) cancelRendererRequests(name string) {
+	r.failCaptureOfClosedWindow(name)
+	r.cancelPendingApplicationQuitPreflight(func(pending *applicationQuitPreflight) bool {
+		_, waiting := pending.waiting[name]
+		return waiting
+	}, panelwindow.WorkspaceConflict("a window stopped responding during workspace switch"))
+	r.cancelClusterPanelClosesWaitingOn(name)
+}
+
+// readyWorkspaceNames lists the windows that can answer a request sent to every
+// window: a quit preflight, a workspace capture, a workspace switch.
 func (r *Registry) readyWorkspaceNames() []string {
 	ready := make([]string, 0)
 	for _, name := range r.lifecycle.Names() {
-		if r.isWorkspaceReady(name) {
+		if r.rendererReady(name) {
 			ready = append(ready, name)
 		}
 	}
 	for _, name := range r.panels.Names("") {
-		if r.panels.State(name) == PanelWindowStateLive {
+		if r.panels.State(name) == PanelWindowStateLive && r.rendererReady(name) {
 			ready = append(ready, name)
 		}
 	}
 	return ready
 }
 
-func (r *Registry) expireApplicationQuitPreflight(pending *applicationQuitPreflight) {
-	r.cancelApplicationQuitPreflight(pending)
+func (r *Registry) finishDeniedApplicationPreflight(pending *applicationQuitPreflight) {
+	if pending.timeout != nil {
+		pending.timeout.Stop()
+	}
+	r.settleApplicationQuitPreflight(pending)
+	if pending.replacement != nil {
+		pending.replacement <- errNamedWorkspaceOpenCancelled
+	}
 }
 
-func (r *Registry) cancelApplicationQuitPreflight(pending *applicationQuitPreflight) {
+func (r *Registry) expireApplicationQuitPreflight(pending *applicationQuitPreflight) {
+	r.cancelApplicationQuitPreflight(pending, fmt.Errorf("timed out waiting for open windows to approve the workspace switch: %w", context.DeadlineExceeded))
+}
+
+func (r *Registry) cancelApplicationQuitPreflight(pending *applicationQuitPreflight, cause error) {
+	r.cancelPendingApplicationQuitPreflight(func(current *applicationQuitPreflight) bool { return current == pending }, cause)
+}
+
+// cancelPendingApplicationQuitPreflight ends the pending preflight if owns
+// accepts it. The check and the claim share one quitMu hold: an approval that
+// arrives between them would install an object the caller never saw, and its
+// renderers would stay frozen with nothing left to release them.
+func (r *Registry) cancelPendingApplicationQuitPreflight(owns func(*applicationQuitPreflight) bool, cause error) {
 	r.quitMu.Lock()
-	if pending == nil || r.pendingQuit != pending {
+	pending := r.pendingQuit
+	if pending == nil || !owns(pending) {
 		r.quitMu.Unlock()
 		return
 	}
@@ -976,6 +1335,12 @@ func (r *Registry) cancelApplicationQuitPreflight(pending *applicationQuitPrefli
 	r.pendingQuit = nil
 	r.quitMu.Unlock()
 	r.settleApplicationQuitPreflight(pending)
+	if pending.replacement != nil {
+		select {
+		case pending.replacement <- cause:
+		default:
+		}
+	}
 }
 
 func (r *Registry) settleApplicationQuitPreflight(pending *applicationQuitPreflight) {
@@ -1015,10 +1380,10 @@ func (r *Registry) emitApplicationQuitPreflight(
 ) {
 	for _, workspaceName := range readyWorkspaces {
 		if !r.emitWindowEvent(workspaceName, panelwindow.ApplicationQuitPreflightRequestedEventName, panelwindow.ApplicationQuitPreflightRequestedEvent{
-			TransactionID: pending.transactionID,
-			WindowName:    workspaceName,
+			TransactionID: pending.transactionID, SwitchingWorkspace: pending.replacement != nil,
+			WindowName: workspaceName,
 		}) {
-			r.cancelApplicationQuitPreflight(pending)
+			r.cancelApplicationQuitPreflight(pending, fmt.Errorf("could not reach window %q for quit preflight", workspaceName))
 			return
 		}
 	}
@@ -1040,7 +1405,7 @@ func (r *Registry) finishApprovedApplicationQuitLocked() bool {
 	if r.backend.PrepareQuitFromWindow(mostRecent) {
 		return true
 	}
-	r.cancelApplicationQuitPreflight(pending)
+	r.cancelApplicationQuitPreflight(pending, context.Canceled)
 	return false
 }
 
@@ -1050,7 +1415,7 @@ func (r *Registry) PrepareApplicationQuit() bool {
 		return true
 	}
 	r.quitMu.Lock()
-	if r.pendingQuit != nil && len(r.pendingQuit.waiting) == 0 {
+	if r.pendingQuit != nil && r.pendingQuit.replacement == nil && len(r.pendingQuit.waiting) == 0 {
 		return r.finishApprovedApplicationQuitLocked()
 	}
 	if r.pendingQuit != nil {
@@ -1098,8 +1463,8 @@ func panelWindowOptionsForPlatform(
 	}
 	options.Width = 500
 	options.Height = 400
-	options.MinWidth = 450
-	options.MinHeight = 200
+	options.MinWidth = panelWindowMinWidth
+	options.MinHeight = panelWindowMinHeight
 	options.Hidden = true
 	if initialBounds != nil {
 		options.Width = max(initialBounds.Width, options.MinWidth)
@@ -1140,8 +1505,8 @@ func windowOptionsForPlatform(name, goos string) application.WebviewWindowOption
 	options.Title = "Luxury Yacht"
 	options.Width = 1200
 	options.Height = 800
-	options.MinWidth = 1100
-	options.MinHeight = 600
+	options.MinWidth = appWindowMinWidth
+	options.MinHeight = appWindowMinHeight
 	options.Hidden = goos != "linux"
 	return options
 }

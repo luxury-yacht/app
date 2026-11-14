@@ -22,6 +22,14 @@ func workspaceNativeDescriptor(name string) (panelwindow.NativeDescriptor, error
 	}, nil
 }
 
+func TestNewWindowCommandReportsCreationRefusal(t *testing.T) {
+	refused := fmt.Errorf("workspace switch in progress")
+	shell := NewDesktopShell(nil, func() bool { return true }, nil, NewLogger(10), DesktopShellBindings{
+		CreateWorkspaceWindow: func() error { return refused },
+	})
+	require.ErrorIs(t, shell.ExecuteApplicationMenuCommand("workspace-1", ApplicationMenuCommandNewWindow), refused)
+}
+
 func menuItems(menu *application.Menu) []*application.MenuItem {
 	items := []*application.MenuItem{}
 	for index := 0; ; index++ {
@@ -126,7 +134,7 @@ func TestFileMenuOffersNewWindowAccelerator(t *testing.T) {
 func TestDesktopShellReceivesWorkspaceWindowCreatorAtConstruction(t *testing.T) {
 	called := false
 	app := NewDesktopShell(nil, nil, nil, nil, DesktopShellBindings{
-		CreateWorkspaceWindow: func() { called = true },
+		CreateWorkspaceWindow: func() error { called = true; return nil },
 	})
 
 	require.NotNil(t, app.createWorkspaceWindow)
@@ -143,7 +151,7 @@ func TestApplicationMenuCommandsShareOneTypedRoleAwareDispatcher(t *testing.T) {
 		func(name string, _ ...interface{}) { events = append(events, name) },
 		NewLogger(10),
 		DesktopShellBindings{
-			CreateWorkspaceWindow:  func() { created = true },
+			CreateWorkspaceWindow:  func() error { created = true; return nil },
 			NativeWindowDescriptor: workspaceNativeDescriptor,
 		},
 	)
@@ -224,7 +232,7 @@ func TestUntargetedNativeApplicationCommandsDoNotRequireACurrentWindow(t *testin
 		func(name string, _ ...interface{}) { events = append(events, name) },
 		NewLogger(10),
 		DesktopShellBindings{
-			CreateWorkspaceWindow:  func() { created = true },
+			CreateWorkspaceWindow:  func() error { created = true; return nil },
 			NativeWindowDescriptor: workspaceNativeDescriptor,
 			UpdateCheck:            func() error { checked <- struct{}{}; return nil },
 		},

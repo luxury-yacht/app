@@ -159,6 +159,21 @@ export const MenuPaste = "menu:paste";
 export const MenuSelectAll = "menu:selectAll";
 
 /**
+ * Name of the custom event "named-workspace:capture".
+ */
+export const NamedWorkspaceCapture = "named-workspace:capture";
+
+/**
+ * Name of the custom event "named-workspace:restore".
+ */
+export const NamedWorkspaceRestore = "named-workspace:restore";
+
+/**
+ * Name of the custom event "named-workspace:warnings".
+ */
+export const NamedWorkspaceWarnings = "named-workspace:warnings";
+
+/**
  * Name of the custom event "object-shell:list".
  */
 export const ObjectShellList = "object-shell:list";
@@ -192,6 +207,11 @@ export const OpenCommandPalette = "open-command-palette";
  * Name of the custom event "open-settings".
  */
 export const OpenSettings = "open-settings";
+
+/**
+ * Name of the custom event "open-workspace".
+ */
+export const OpenWorkspace = "open-workspace";
 
 /**
  * Name of the custom event "panel-window:application-quit-preflight-requested".
@@ -277,6 +297,11 @@ export const PortforwardStatus = "portforward:status";
  * Name of the custom event "runtime-operations:list".
  */
 export const RuntimeOperationsList = "runtime-operations:list";
+
+/**
+ * Name of the custom event "save-workspace".
+ */
+export const SaveWorkspace = "save-workspace";
 
 /**
  * Name of the custom event "settings:appearance-mode-changed".

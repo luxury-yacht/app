@@ -15,7 +15,7 @@ func TestNativeWorkspaceClosePreservesGuardsWhenShutdownIsRejected(t *testing.T)
 			registry := NewRegistry(application.New(application.Options{}), backend)
 			registry.quitPreflightTimeout = 0
 			name := registry.Create(true).Name()
-			registry.markWorkspaceReady(name)
+			readyAppWindow(registry, name)
 			var requested, settled []string
 			registry.emitWindowEvent = func(target, eventName string, _ any) bool {
 				switch eventName {
@@ -44,7 +44,7 @@ func TestNativeWorkspaceClosePreservesGuardsWhenShutdownIsRejected(t *testing.T)
 			require.Equal(t, name, backend.preparedWindow)
 			require.Empty(t, backend.releasedWindow, "the last view selection survives process shutdown")
 			require.Equal(t, !allowed, registry.lifecycle.Contains(name))
-			require.Equal(t, !allowed, registry.isWorkspaceReady(name), "rejected shutdown retains renderer guards")
+			require.Equal(t, !allowed, registry.rendererReady(name), "rejected shutdown retains renderer guards")
 			if !allowed {
 				require.Equal(t, []string{name}, settled)
 				require.Nil(t, registry.pendingQuit)

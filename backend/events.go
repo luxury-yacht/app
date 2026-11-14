@@ -99,6 +99,8 @@ func init() {
 	application.RegisterEvent[application.Void]("menu:selectAll")
 	application.RegisterEvent[application.Void]("open-about")
 	application.RegisterEvent[application.Void]("open-cluster")
+	application.RegisterEvent[application.Void]("save-workspace")
+	application.RegisterEvent[application.Void]("open-workspace")
 	application.RegisterEvent[application.Void]("open-command-palette")
 	application.RegisterEvent[application.Void]("open-settings")
 	application.RegisterEvent[application.Void]("toggle-app-logs-panel")
@@ -128,6 +130,9 @@ func init() {
 	application.RegisterEvent[panelwindow.ClusterPanelCloseEvent](panelwindow.ClusterPanelCloseRequestedEventName)
 	application.RegisterEvent[panelwindow.ClusterPanelCloseEvent](panelwindow.ClusterPanelCloseSettledEventName)
 	application.RegisterEvent[panelwindow.ApplicationQuitPreflightRequestedEvent](panelwindow.ApplicationQuitPreflightRequestedEventName)
+	application.RegisterEvent[panelwindow.NamedWorkspaceCaptureRequest](panelwindow.NamedWorkspaceCaptureRequested)
+	application.RegisterEvent[panelwindow.NamedWorkspaceRestoreRequest](panelwindow.NamedWorkspaceRestoreRequested)
+	application.RegisterEvent[panelwindow.NamedWorkspaceWarningsEvent](panelwindow.NamedWorkspaceWarnings)
 	application.RegisterEvent[panelwindow.ApplicationQuitPreflightRequestedEvent](panelwindow.ApplicationQuitPreflightSettledEventName)
 
 	application.RegisterEvent[[]ShellSessionInfo](shellListEventName)

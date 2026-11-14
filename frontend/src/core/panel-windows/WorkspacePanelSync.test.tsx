@@ -100,6 +100,144 @@ const start = async ({ open = ['api'] }: { open?: string[] } = {}) => {
   }
 };
 
+it('captures the addressed app window and its docked panel through the native request', async () => {
+  await start();
+  app.backend.answer('SubmitNamedWorkspaceCapture', () => undefined);
+  await act(async () => {
+    app.events.emit('named-workspace:capture', { id: 'other', windowName: 'another-window' });
+    app.events.emit('named-workspace:capture', { id: 'current', windowName: app.windowName });
+  });
+  await app.settle();
+  const calls = app.backend.calls('SubmitNamedWorkspaceCapture');
+  expect(calls).toHaveLength(1);
+  const [window, id, captured, failure] = calls[0];
+  expect(window).toBe(app.windowName);
+  expect(id).toBe('current');
+  expect(captured).toMatchObject({
+    selectedClusterId: production.clusterId,
+    clusterTabs: [
+      { clusterId: production.clusterId, viewState: { clusterId: production.clusterId } },
+    ],
+    dockedGroups: [{ group: { clusterId: production.clusterId, tabs: [tabOf('api')] } }],
+  });
+  expect(failure).toBe('');
+});
+
+it('answers a capture it cannot complete with the reason, so the save fails at once', async () => {
+  app.backend.answer('PublishDockedPanels', () => {
+    throw new Error('publication failed');
+  });
+  await start();
+  app.backend.answer('SubmitNamedWorkspaceCapture', () => undefined);
+  await act(async () => {
+    app.events.emit('named-workspace:capture', { id: 'current', windowName: app.windowName });
+  });
+  await app.settle();
+  const calls = app.backend.calls('SubmitNamedWorkspaceCapture');
+  expect(calls).toHaveLength(1);
+  const [window, id, , failure] = calls[0];
+  expect([window, id]).toEqual([app.windowName, 'current']);
+  expect(failure).toContain('publication failed');
+  // The publications this test fails are reported by their own owner.
+  app.errors.take((record) => (record.error as Error).message === 'publication failed');
+});
+
+it('warns in the restored window about each thing the switch could not do', async () => {
+  await start();
+  const warningsAfter = async (windowName: string, problems: object) => {
+    await act(async () => {
+      app.events.emit('named-workspace:warnings', {
+        windowName,
+        missingClusters: null,
+        unclosedWindows: 0,
+        unrestoredWindows: 0,
+        notFullscreen: 0,
+        ...problems,
+      });
+    });
+    return app.errors.take((record) => record.kinds.includes('warning')).length;
+  };
+  // The window that asked for the switch is closed by it, so the backend
+  // addresses one window of the new workspace.
+  const everything = {
+    missingClusters: ['stage'],
+    unclosedWindows: 2,
+    unrestoredWindows: 1,
+    notFullscreen: 1,
+  };
+  expect(await warningsAfter('another-window', everything)).toBe(0);
+  expect(await warningsAfter(app.windowName, everything)).toBe(4);
+  // Each problem is its own warning, and a switch with none raises nothing.
+  expect(await warningsAfter(app.windowName, { missingClusters: ['stage'] })).toBe(1);
+  expect(await warningsAfter(app.windowName, { unclosedWindows: 1 })).toBe(1);
+  expect(await warningsAfter(app.windowName, { unrestoredWindows: 2 })).toBe(1);
+  expect(await warningsAfter(app.windowName, { notFullscreen: 1 })).toBe(1);
+  expect(await warningsAfter(app.windowName, {})).toBe(0);
+});
+
+it('acknowledges workspace restoration only after projecting the saved dock', async () => {
+  await start({ open: [] });
+  const tab = tabOf('api');
+  await directorySays(2, [
+    {
+      tab,
+      location: {
+        kind: panelwindow.PanelLocationKind.PanelLocationDocked,
+        windowName: app.windowName,
+        groupId: 'right',
+        index: 0,
+        active: true,
+      },
+    },
+  ]);
+  const observed: string[][] = [];
+  app.backend.answer('AcknowledgeNamedWorkspaceRestore', (window, failure) => {
+    observed.push([window, failure, ...dockedIn('right')]);
+  });
+  const request = {
+    window: {
+      geometry: { x: 0, y: 0, width: 1200, height: 800, maximized: false },
+      selectedClusterId: production.clusterId,
+      clusterTabs: [
+        {
+          clusterId: production.clusterId,
+          viewState: {
+            clusterId: production.clusterId,
+            navigation: view.owners().viewState?.getClusterNavigationState(production.clusterId),
+            sidebar: null,
+            tables: {},
+          },
+        },
+      ],
+      dockedGroups: [
+        {
+          width: 430,
+          height: 400,
+          maximized: false,
+          group: {
+            clusterId: production.clusterId,
+            groupId: 'right',
+            activePanelId: tab.panelId,
+            tabs: [tab],
+          },
+        },
+      ],
+    },
+  };
+  await act(async () => {
+    app.events.emit('named-workspace:restore', {
+      windowName: app.windowName,
+      window: request.window,
+    });
+  });
+  await app.settle();
+  expect(observed).toEqual([[app.windowName, '', tab.panelId]]);
+  expect(isOpenHere('api')).toBe(true);
+  expect(
+    requireValue(dock, 'dock').getClusterGroupLayout(production.clusterId, 'right').rightSize.width
+  ).toBe(430);
+});
+
 /** The directory now answers `panels` for production; it rings its change. */
 const directorySays = async (revision: number, panels: panelwindow.WorkspacePanel[]) => {
   app.backend.answer('GetPanelWorkspace', () => ({ revision, panels }));
@@ -403,7 +541,44 @@ describe('in the workspace window', () => {
     await act(async () => hydrate());
     await app.settle();
 
-    expect(app.backend.calls('AcknowledgePanelWorkspaceReady')).toEqual([[app.windowName]]);
+    expect(app.backend.calls('AcknowledgePanelWorkspaceReady')).toEqual([
+      [app.windowName, expect.any(Number)],
+    ]);
+  });
+
+  it('stays announced while kubeconfigs reload, and withdraws when its app tree unmounts', async () => {
+    production = app.cluster({ name: 'dev', context: 'production' });
+    app.namespaces(production, ['default']);
+    view = await app.render(null);
+
+    const reload = app.backend.hold('GetKubeconfigs');
+    await act(async () => app.events.emit('kubeconfig:available-changed'));
+    await app.settle();
+    expect(app.backend.calls('WithdrawRendererReady')).toEqual([]);
+    await act(async () => reload());
+    await app.settle();
+
+    view.unmount();
+    expect(app.backend.calls('WithdrawRendererReady')).toEqual([
+      [app.windowName, expect.any(Number)],
+    ]);
+  });
+
+  it('withdraws only after its announcement has landed', async () => {
+    production = app.cluster({ name: 'dev', context: 'production' });
+    app.namespaces(production, ['default']);
+    const announce = app.backend.hold('AcknowledgePanelWorkspaceReady');
+    view = await app.render(null);
+
+    view.unmount();
+    await app.settle();
+    expect(app.backend.calls('WithdrawRendererReady')).toEqual([]);
+    await act(async () => announce());
+    await app.settle();
+
+    expect(app.backend.calls('WithdrawRendererReady')).toEqual([
+      [app.windowName, expect.any(Number)],
+    ]);
   });
 
   it('recovers an unchanged docked snapshot when close preparation flushes again', async () => {

@@ -67,6 +67,8 @@ export const buildApplicationMenuSections = (
           accelerator: primary('o'),
           command: command.ApplicationMenuCommandOpenCluster,
         },
+        { label: 'Open Workspace…', command: command.ApplicationMenuCommandOpenWorkspace },
+        { label: 'Save Workspace…', command: command.ApplicationMenuCommandSaveWorkspace },
         {
           label: 'Close',
           accelerator: primary('w'),

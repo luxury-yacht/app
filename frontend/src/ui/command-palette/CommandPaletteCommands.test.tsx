@@ -505,3 +505,350 @@ describe('in the full app', () => {
     expect(viewState().viewType).toBe('namespace');
   });
 });
+
+it('saves a named workspace from the full app command palette', async () => {
+  app.backend.answer('ListNamedWorkspaces', () => [
+    { name: 'Existing workspace', revision: 'rev-existing' },
+  ]);
+  app.backend.answer('SaveNamedWorkspace', () => undefined);
+  view = await app.mountApp();
+  await menu('open-command-palette');
+  vi.useFakeTimers();
+  await type('save workspace');
+  await choose('Save Workspace…');
+  const input = requireValue(
+    document.querySelector<HTMLInputElement>('[role="dialog"] input[name="workspace-name"]'),
+    'expected the workspace name input'
+  );
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+      input,
+      'Existing workspace'
+    );
+    input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+  });
+  const save = requireValue(
+    document.querySelector<HTMLButtonElement>('[role="dialog"] button[type="submit"]'),
+    'expected the replacement button'
+  );
+  await act(async () => save.click());
+  expect(app.backend.calls('SaveNamedWorkspace')).toEqual([
+    [app.windowName, 'Existing workspace', true, 'rev-existing'],
+  ]);
+  expect(document.body.contains(input)).toBe(false);
+});
+
+it('opens the selected workspace from the command palette', async () => {
+  app.backend.answer('ListNamedWorkspaces', () => [
+    { name: 'Incident', revision: 'rev-incident' },
+    { name: 'Release', revision: 'rev-release' },
+  ]);
+  app.backend.answer('OpenNamedWorkspace', () => undefined);
+  view = await app.mountApp();
+  await menu('open-command-palette');
+  vi.useFakeTimers();
+  await type('open workspace');
+  await choose('Open Workspace…');
+  const select = requireValue(
+    document.querySelector<HTMLSelectElement>('[role="dialog"] select'),
+    'expected the saved-workspace picker'
+  );
+  await act(async () => {
+    select.value = 'Release';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  const open = requireValue(
+    document.querySelector<HTMLButtonElement>('[role="dialog"] button[type="submit"]'),
+    'expected the Open button'
+  );
+  await act(async () => open.click());
+  expect(app.backend.calls('OpenNamedWorkspace')).toEqual([
+    [app.windowName, 'Release', 'rev-release'],
+  ]);
+});
+
+it('renames the selected saved workspace, but never onto another workspace', async () => {
+  let saved = [
+    { name: 'Incident', revision: 'rev-incident' },
+    { name: 'Release', revision: 'rev-release' },
+  ];
+  app.backend.answer('ListNamedWorkspaces', () => saved);
+  app.backend.answer('RenameNamedWorkspace', () => {
+    saved = [
+      { name: 'Outage', revision: 'rev-incident' },
+      { name: 'Release', revision: 'rev-release' },
+    ];
+  });
+  view = await app.mountApp();
+  await menu('open-command-palette');
+  vi.useFakeTimers();
+  await type('open workspace');
+  await choose('Open Workspace…');
+  const button = (label: string) =>
+    requireValue(
+      [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
+        (candidate) => candidate.textContent === label
+      ),
+      `expected the ${label} button`
+    );
+  await act(async () => button('Rename').click());
+  const input = requireValue(
+    document.querySelector<HTMLInputElement>('[role="dialog"] input[name="workspace-new-name"]'),
+    'expected the new name input'
+  );
+  const enter = (value: string) =>
+    act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value);
+      input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    });
+  const submit = () =>
+    requireValue(
+      document.querySelector<HTMLButtonElement>('[role="dialog"] button[type="submit"]'),
+      'expected the Rename submit button'
+    );
+  expect(input.value).toBe('Incident');
+  expect(document.activeElement).toBe(input);
+  expect(submit().disabled).toBe(true);
+  // Another workspace's name would discard that workspace's layout.
+  await enter('Release');
+  expect(submit().disabled).toBe(true);
+  await enter(' Outage ');
+  await act(async () => submit().click());
+  expect(app.backend.calls('RenameNamedWorkspace')).toEqual([
+    [app.windowName, 'Incident', 'Outage', 'rev-incident'],
+  ]);
+  const select = requireValue(
+    document.querySelector<HTMLSelectElement>('[role="dialog"] select'),
+    'expected the saved-workspace picker'
+  );
+  expect([...select.options].map((option) => option.value)).toEqual(['Outage', 'Release']);
+  expect(select.value).toBe('Outage');
+});
+
+it('selects nothing after a refused open whose workspace is gone, so a retry cannot open another', async () => {
+  let saved = [
+    { name: 'Incident', revision: 'r1' },
+    { name: 'Release', revision: 'r2' },
+  ];
+  app.backend.answer('ListNamedWorkspaces', () => saved);
+  app.backend.answer('OpenNamedWorkspace', () => {
+    // Another window deleted it after this dialog listed it.
+    saved = [{ name: 'Release', revision: 'r2' }];
+    throw new Error('workspace "Incident" was not found');
+  });
+  view = await app.mountApp();
+  await menu('open-command-palette');
+  vi.useFakeTimers();
+  await type('open workspace');
+  await choose('Open Workspace…');
+  const submit = () =>
+    requireValue(
+      document.querySelector<HTMLButtonElement>('[role="dialog"] button[type="submit"]'),
+      'expected the Open button'
+    );
+  await act(async () => submit().click());
+  // The refusal reloads the list before it reports the error.
+  await act(async () => {
+    await Promise.resolve();
+  });
+  const select = requireValue(
+    document.querySelector<HTMLSelectElement>('[role="dialog"] select'),
+    'expected the saved-workspace picker'
+  );
+  expect(select.value).toBe('');
+  expect(submit().disabled).toBe(true);
+  await act(async () => submit().click());
+  expect(app.backend.calls('OpenNamedWorkspace')).toHaveLength(1);
+  // The remaining workspace can still be chosen and opened.
+  expect(
+    [...select.options].filter((option) => !option.disabled).map((option) => option.value)
+  ).toEqual(['Release']);
+  app.errors.take(
+    (record) => record.kinds.includes('inline') || record.kinds.includes('operational')
+  );
+});
+
+it('deletes the selected saved workspace only after confirmation', async () => {
+  app.backend.answer('ListNamedWorkspaces', () => [
+    { name: 'Incident', revision: 'rev-incident' },
+    { name: 'Release', revision: 'rev-release' },
+  ]);
+  app.backend.answer('DeleteNamedWorkspace', () => undefined);
+  view = await app.mountApp();
+  await menu('open-command-palette');
+  vi.useFakeTimers();
+  await type('open workspace');
+  await choose('Open Workspace…');
+  const button = (label: string) =>
+    requireValue(
+      [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
+        (candidate) => candidate.textContent === label
+      ),
+      `expected the ${label} button`
+    );
+  await act(async () => button('Delete').click());
+  expect(app.backend.calls('DeleteNamedWorkspace')).toEqual([]);
+  // The confirmation is the topmost dialog; its Delete button confirms.
+  const confirm = requireValue(
+    [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')]
+      .filter((candidate) => candidate.textContent === 'Delete')
+      .pop(),
+    'expected the confirming Delete button'
+  );
+  await act(async () => confirm.click());
+  expect(app.backend.calls('DeleteNamedWorkspace')).toEqual([
+    [app.windowName, 'Incident', 'rev-incident'],
+  ]);
+  const select = requireValue(
+    document.querySelector<HTMLSelectElement>('[role="dialog"] select'),
+    'expected the saved-workspace picker'
+  );
+  expect([...select.options].map((option) => option.value)).toEqual(['Release']);
+  expect(select.value).toBe('Release');
+});
+
+// The dialogs below start from a list that another window then changes.
+const openWorkspaceDialog = async (query: string, command: string) => {
+  view = await app.mountApp();
+  await menu('open-command-palette');
+  vi.useFakeTimers();
+  await type(query);
+  await choose(command);
+};
+
+const dialogButtons = (label: string) =>
+  [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].filter(
+    (candidate) => candidate.textContent === label
+  );
+
+const dialogInput = (name: string) =>
+  document.querySelector<HTMLInputElement>(`[role="dialog"] input[name="${name}"]`);
+
+const enterInDialog = (name: string, value: string) =>
+  act(async () => {
+    const input = requireValue(dialogInput(name), `expected the ${name} input`);
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value);
+    input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+  });
+
+const submitDialog = () =>
+  act(async () =>
+    requireValue(
+      document.querySelector<HTMLButtonElement>('[role="dialog"] button[type="submit"]'),
+      'expected the submit button'
+    ).click()
+  );
+
+const listedWorkspaces = () =>
+  [
+    ...requireValue(
+      document.querySelector<HTMLSelectElement>('[role="dialog"] select'),
+      'expected the saved-workspace picker'
+    ).options,
+  ]
+    .filter((option) => !option.disabled)
+    .map((option) => option.value);
+
+it('reloads the saved workspaces when the one it listed was replaced under the same name', async () => {
+  let saved = [
+    { name: 'Incident', revision: 'rev-listed' },
+    { name: 'Release', revision: 'rev-release' },
+  ];
+  app.backend.answer('ListNamedWorkspaces', () => saved);
+  // The backend refuses a change that names a snapshot it no longer holds.
+  app.backend.answer('DeleteNamedWorkspace', (_window, name, revision) => {
+    if (!saved.some((entry) => entry.name === name && entry.revision === revision)) {
+      throw new Error('workspace changed since it was listed');
+    }
+    saved = saved.filter((entry) => entry.name !== name);
+  });
+  await openWorkspaceDialog('open workspace', 'Open Workspace…');
+  // Another window deletes Incident, saves a new one, and renames Release.
+  saved = [
+    { name: 'Incident', revision: 'rev-resaved' },
+    { name: 'Outage', revision: 'rev-release' },
+  ];
+  const confirmDelete = async () => {
+    const first = () => requireValue(dialogButtons('Delete')[0], 'expected the Delete button');
+    await act(async () => first().click());
+    // The confirmation is the topmost dialog; its Delete button confirms.
+    const confirm = () =>
+      requireValue(dialogButtons('Delete').pop(), 'expected the confirming Delete button');
+    await act(async () => confirm().click());
+  };
+
+  await confirmDelete();
+  expect(app.backend.calls('DeleteNamedWorkspace')).toEqual([
+    [app.windowName, 'Incident', 'rev-listed'],
+  ]);
+  expect(app.errors.take((record) => record.context?.action === 'delete')).toHaveLength(1);
+  expect(document.querySelector('[role="dialog"] [role="alert"]')).not.toBeNull();
+  expect(listedWorkspaces()).toEqual(['Incident', 'Outage']);
+
+  // The reloaded entry is the one the user now sees, so deleting it applies.
+  await confirmDelete();
+  expect(app.backend.calls('DeleteNamedWorkspace')[1]).toEqual([
+    app.windowName,
+    'Incident',
+    'rev-resaved',
+  ]);
+  expect(listedWorkspaces()).toEqual(['Outage']);
+});
+
+it('leaves the rename form when the workspace being renamed is gone', async () => {
+  let saved = [
+    { name: 'Incident', revision: 'rev-incident' },
+    { name: 'Release', revision: 'rev-release' },
+  ];
+  app.backend.answer('ListNamedWorkspaces', () => saved);
+  app.backend.answer('RenameNamedWorkspace', () => {
+    throw new Error('workspace was not found');
+  });
+  await openWorkspaceDialog('open workspace', 'Open Workspace…');
+  await act(async () =>
+    requireValue(dialogButtons('Rename')[0], 'expected the Rename button').click()
+  );
+  // Another window deletes Incident while its rename form is open.
+  saved = [{ name: 'Release', revision: 'rev-release' }];
+  await enterInDialog('workspace-new-name', 'Postmortem');
+  await submitDialog();
+
+  expect(app.backend.calls('RenameNamedWorkspace')).toEqual([
+    [app.windowName, 'Incident', 'Postmortem', 'rev-incident'],
+  ]);
+  expect(app.errors.take((record) => record.context?.action === 'rename')).toHaveLength(1);
+  // Staying in the form would rename Release, which the user never chose.
+  expect(dialogInput('workspace-new-name')).toBeNull();
+  expect(listedWorkspaces()).toEqual(['Release']);
+});
+
+it('replaces a workspace that changed since the save dialog listed it only on a second attempt', async () => {
+  let saved = [{ name: 'Triage', revision: 'rev-listed' }];
+  app.backend.answer('ListNamedWorkspaces', () => saved);
+  app.backend.answer('SaveNamedWorkspace', (_window, name, _replace, revision) => {
+    if (!saved.some((entry) => entry.name === name && entry.revision === revision)) {
+      throw new Error('workspace changed since it was listed');
+    }
+  });
+  await openWorkspaceDialog('save workspace', 'Save Workspace…');
+  // Another window replaces Triage with its own windows.
+  saved = [{ name: 'Triage', revision: 'rev-replaced' }];
+  await enterInDialog('workspace-name', 'Triage');
+  await submitDialog();
+
+  expect(app.backend.calls('SaveNamedWorkspace')).toEqual([
+    [app.windowName, 'Triage', true, 'rev-listed'],
+  ]);
+  expect(app.errors.take((record) => record.context?.action === 'save')).toHaveLength(1);
+  expect(dialogInput('workspace-name')).not.toBeNull();
+
+  // The user has been told; replacing again targets what is saved now.
+  await submitDialog();
+  expect(app.backend.calls('SaveNamedWorkspace')[1]).toEqual([
+    app.windowName,
+    'Triage',
+    true,
+    'rev-replaced',
+  ]);
+  expect(dialogInput('workspace-name')).toBeNull();
+});

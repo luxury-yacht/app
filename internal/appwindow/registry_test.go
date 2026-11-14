@@ -12,6 +12,7 @@ import (
 )
 
 type recordingLifecycleBackend struct {
+	availableWorkspaceClusters []string
 	commitClusterTransferError error
 	releasedPanelReferences    []string
 	directory                  *panelwindow.WorkspaceDirectory
@@ -21,6 +22,15 @@ type recordingLifecycleBackend struct {
 	savedWindow                string
 	allowQuit                  bool
 	readyWindows               []string
+	restartSelectionsPersisted int
+	restartSelectionHolds      int
+	// restartSelectionsWritten lists the windows whose clusters were written
+	// as the next launch's, in order.
+	restartSelectionsWritten []string
+	// released lists every window whose cluster tabs were given up, in order.
+	released []string
+	// onSeed runs when a window's saved clusters are claimed.
+	onSeed func(window string)
 }
 
 func (b *recordingLifecycleBackend) PanelWorkspaceDirectory() *panelwindow.WorkspaceDirectory {
@@ -49,6 +59,7 @@ func (b *recordingLifecycleBackend) WindowRuntimeReady(windowName string, _ bool
 
 func (b *recordingLifecycleBackend) ReleaseWorkspaceWindow(windowID string) {
 	b.releasedWindow = windowID
+	b.released = append(b.released, windowID)
 }
 
 func (b *recordingLifecycleBackend) SaveWorkspaceWindowGeometry(windowName string) {
@@ -315,7 +326,7 @@ func TestReadyWorkspaceCloseAlwaysRunsFrontendPreflight(t *testing.T) {
 		},
 	}
 
-	registry.markWorkspaceReady(workspaceName)
+	readyAppWindow(registry, workspaceName)
 	registry.handleClosing(nil, workspaceName)
 
 	require.Equal(t, panelwindow.WorkspaceCloseRequestedEventName, eventName)
@@ -799,6 +810,7 @@ func TestRegistryFocusesAuthorizesAndClosesAnOwnedPanelWindow(t *testing.T) {
 	registry.showWindow = func(string) bool { return true }
 	_, err = registry.AcknowledgePanelWindowReady(descriptor.WindowName, snapshot.TransferID)
 	require.NoError(t, err)
+	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(descriptor.WindowName, 0))
 
 	var routed []string
 	var focused []string
@@ -1112,8 +1124,8 @@ func TestPrepareApplicationQuitPreflightsEveryReadyWorkspaceBeforeClosingAny(t *
 	registry := NewRegistry(wailsApp, backend)
 	first := registry.Create(true)
 	second := registry.Create(false)
-	registry.markWorkspaceReady(first.Name())
-	registry.markWorkspaceReady(second.Name())
+	readyAppWindow(registry, first.Name())
+	readyAppWindow(registry, second.Name())
 	var requests []panelwindow.ApplicationQuitPreflightRequestedEvent
 	registry.emitWindowEvent = func(target, eventName string, payload any) bool {
 		require.Equal(t, panelwindow.ApplicationQuitPreflightRequestedEventName, eventName)
@@ -1136,8 +1148,8 @@ func TestApplicationQuitPreflightCommitsOnlyAfterEveryWorkspaceAllows(t *testing
 	registry := NewRegistry(wailsApp, backend)
 	first := registry.Create(true)
 	second := registry.Create(false)
-	registry.markWorkspaceReady(first.Name())
-	registry.markWorkspaceReady(second.Name())
+	readyAppWindow(registry, first.Name())
+	readyAppWindow(registry, second.Name())
 	var transactionID string
 	var closeRequests []string
 	quitRequests := 0
@@ -1170,8 +1182,8 @@ func TestApplicationQuitPreflightCancellationLeavesEveryWorkspaceOpen(t *testing
 	registry := NewRegistry(wailsApp, &recordingLifecycleBackend{allowQuit: true})
 	first := registry.Create(true)
 	second := registry.Create(false)
-	registry.markWorkspaceReady(first.Name())
-	registry.markWorkspaceReady(second.Name())
+	readyAppWindow(registry, first.Name())
+	readyAppWindow(registry, second.Name())
 	var transactionID string
 	var closeRequests []string
 	registry.emitWindowEvent = func(target, eventName string, payload any) bool {
@@ -1196,7 +1208,7 @@ func TestApplicationQuitPreflightTimeoutAllowsAFreshTransaction(t *testing.T) {
 		&recordingLifecycleBackend{allowQuit: true},
 	)
 	owner := registry.Create(true)
-	registry.markWorkspaceReady(owner.Name())
+	readyAppWindow(registry, owner.Name())
 	registry.quitPreflightTimeout = time.Millisecond
 	transactions := make(chan string, 2)
 	registry.emitWindowEvent = func(_ string, eventName string, payload any) bool {
@@ -1224,7 +1236,7 @@ func TestApplicationQuitPreflightDeliveryFailureAllowsAFreshTransaction(t *testi
 		&recordingLifecycleBackend{allowQuit: true},
 	)
 	owner := registry.Create(true)
-	registry.markWorkspaceReady(owner.Name())
+	readyAppWindow(registry, owner.Name())
 	deliver := false
 	registry.emitWindowEvent = func(string, string, any) bool { return deliver }
 
@@ -1317,7 +1329,7 @@ func beginTestPanelWindow(t *testing.T, registry *Registry, snapshot PanelGroupS
 			_, _, err := registry.workspace.Open(tab, panelwindow.PanelLocation{Kind: panelwindow.PanelLocationDocked, WindowName: snapshot.SourceWindowName, GroupID: "right"})
 			require.NoError(t, err)
 		}
-		require.NoError(t, registry.AcknowledgePanelWorkspaceReady(snapshot.SourceWindowName))
+		require.NoError(t, registry.AcknowledgePanelWorkspaceReady(snapshot.SourceWindowName, 0))
 	}
 	return registry.BeginPanelWindowOpen(snapshot)
 }
@@ -1366,4 +1378,40 @@ func (b *recordingLifecycleBackend) CloseClusterView(windowID, clusterID string)
 		b.windowClusters[windowID] = slices.DeleteFunc(slices.Clone(b.windowClusters[windowID]), func(value string) bool { return value == clusterID })
 	}
 	return nil
+}
+
+func (b *recordingLifecycleBackend) NamedWorkspaceAvailableClusters() ([]string, error) {
+	return b.availableWorkspaceClusters, nil
+}
+
+// readyAppWindow marks an app window whose native runtime is up and whose
+// renderer has acknowledged that it can answer registry requests.
+func (r *Registry) markRendererReady(name string) {
+	r.closeMu.Lock()
+	defer r.closeMu.Unlock()
+	r.markRendererReadyLocked(name)
+}
+
+func readyAppWindow(r *Registry, name string) {
+	r.markRendererReady(name)
+}
+
+func (b *recordingLifecycleBackend) PersistRestartSelection() { b.restartSelectionsPersisted++ }
+func (b *recordingLifecycleBackend) HoldRestartSelection()    { b.restartSelectionHolds++ }
+func (b *recordingLifecycleBackend) WriteRestartSelectionOf(window string) {
+	b.restartSelectionsWritten = append(b.restartSelectionsWritten, window)
+}
+
+// A seeded window holds its clusters, as the workspace coordinator records them.
+func (b *recordingLifecycleBackend) SeedNamedWorkspaceWindow(window string, clusters []string, _ string) error {
+	if b.windowClusters != nil {
+		b.windowClusters[window] = clusters
+	}
+	if b.onSeed != nil {
+		b.onSeed(window)
+	}
+	return nil
+}
+func (*recordingLifecycleBackend) ResolveNamedWorkspaceGeometry(geometry panelwindow.NamedWorkspaceGeometry) (panelwindow.WindowBounds, bool) {
+	return geometry.WindowBounds, true
 }

@@ -5,6 +5,8 @@ import "fmt"
 // A tab is admitted before its connection work. The renderer can then issue a
 // close while preflight is still running; runtime publication and teardown keep
 // the existing serialized mutation lease and shutdown drain.
+// acceptWorkspaceSelection commits a window's cluster selection through the
+// ordered mutation.
 func (a *WorkspaceCoordinator) acceptWorkspaceSelection(windowID string, command ClusterWorkspaceCommand) ClusterWorkspaceResult {
 	a.cancelObsoleteWorkspaceConnection(windowID, command.SelectedKubeconfigs)
 	accepted := make(chan ClusterWorkspaceResult, 1)

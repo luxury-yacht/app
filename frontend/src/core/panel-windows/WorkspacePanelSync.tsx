@@ -20,16 +20,12 @@ import { useDockablePanelContext } from '@/ui/dockable';
 import type { TabGroupState } from '@/ui/dockable/tabGroupTypes';
 import { reportOperationalError } from '@/utils/errorHandler';
 import { ClusterPanelActivity } from './clusterPanelActivity';
-import {
-  acknowledgePanelWorkspaceReady,
-  onPanelWorkspaceChanged,
-  openPanelWorkspaceObject,
-  publishDockedPanels,
-} from './index';
+import { onPanelWorkspaceChanged, openPanelWorkspaceObject, publishDockedPanels } from './index';
 import { PanelLayoutLifecycle } from './PanelLayoutLifecycle';
 import { nativePanelPublication, workspacePanelPublication } from './publicationQueue';
 import { settlePanelClose, useClosedPanelIntents } from './useClosedPanelIntents';
 import { useRemoveWorkspacePanels } from './useRemoveWorkspacePanels';
+import { useRendererReadiness } from './useRendererReadiness';
 import { useRestoreWorkspacePanels } from './useRestoreWorkspacePanels';
 
 interface WorkspaceSync {
@@ -456,17 +452,7 @@ export function WorkspacePanelSync({ children }: Readonly<{ children: ReactNode 
     closingClusters,
   ]);
 
-  useEffect(() => {
-    if (kubeconfigsLoading) {
-      return;
-    }
-    void acknowledgePanelWorkspaceReady(windowName).catch((error) =>
-      reportOperationalError(error, {
-        source: 'WorkspacePanelSync',
-        action: 'acknowledge-renderer-ready',
-      })
-    );
-  }, [windowName, kubeconfigsLoading]);
+  useRendererReadiness(windowName, !kubeconfigsLoading);
   return (
     <PublicationContext.Provider value={sync}>
       <IncomingTransfersContext.Provider value={incomingTransfers}>

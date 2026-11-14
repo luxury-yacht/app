@@ -169,6 +169,8 @@ export enum ApplicationMenuCommand {
     $zero = "",
 
     ApplicationMenuCommandNewWindow = "new-window",
+    ApplicationMenuCommandOpenWorkspace = "open-workspace",
+    ApplicationMenuCommandSaveWorkspace = "save-workspace",
     ApplicationMenuCommandOpenCluster = "open-cluster",
     ApplicationMenuCommandClose = "close",
     ApplicationMenuCommandSettings = "settings",

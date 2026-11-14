@@ -6,10 +6,7 @@ import { getWindowIdentity } from '@/core/desktop-runtime';
 import { getClusterTabOrder, setClusterTabOrder } from '@/core/persistence/clusterTabOrder';
 import { useKubeconfig } from '@/modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@/modules/namespace/contexts/NamespaceContext';
-import {
-  captureClusterTableState,
-  restoreClusterTableState,
-} from '@/shared/components/tables/persistence/gridTablePersistence';
+import { restoreClusterTableState } from '@/shared/components/tables/persistence/gridTablePersistence';
 import { useDockablePanelContext } from '@/ui/dockable';
 import { reportOperationalError } from '@/utils/errorHandler';
 import { type ClusterViewState, decodeClusterViewState } from './clusterViewState';
@@ -24,6 +21,7 @@ import {
 } from './index';
 import { usePanelLifecycleGuardRegistry } from './panelLifecycleGuards';
 import { samePanelTab } from './tabTransfer';
+import { useCaptureClusterViewState } from './useCaptureClusterViewState';
 import { useRemoveWorkspacePanels } from './useRemoveWorkspacePanels';
 import { usePanelWorkspaceSync } from './WorkspacePanelSync';
 
@@ -48,9 +46,10 @@ export function ClusterTabTransferCoordinator() {
     setActiveKubeconfig,
     loadKubeconfigs,
   } = useKubeconfig();
-  const { getClusterNavigationState, restoreClusterNavigationState } = useViewState();
-  const { getClusterSidebarSelection, setSidebarSelectionForCluster } = useSidebarState();
-  const { getClusterNamespace, setSelectedNamespace } = useNamespace();
+  const { restoreClusterNavigationState } = useViewState();
+  const captureCluster = useCaptureClusterViewState();
+  const { setSidebarSelectionForCluster } = useSidebarState();
+  const { setSelectedNamespace } = useNamespace();
   const { tabGroups } = useDockablePanelContext();
   const removeWorkspacePanels = useRemoveWorkspacePanels();
   const pending = useRef(new Map<string, PendingTarget>());
@@ -94,13 +93,7 @@ export function ClusterTabTransferCoordinator() {
           // Close intents queue with publications; land them before the
           // directory decides which docked panels travel with the view.
           await sync.flush();
-          const viewState: ClusterViewState = {
-            clusterId: request.clusterId,
-            navigation: getClusterNavigationState(request.clusterId),
-            sidebar: getClusterSidebarSelection(request.clusterId),
-            namespace: getClusterNamespace(request.clusterId),
-            tables: await captureClusterTableState(request.clusterId),
-          };
+          const viewState = await captureCluster(request.clusterId);
           await acceptClusterTabTransfer(windowName, request.transferId, {
             schemaVersion: 1,
             viewState: JSON.stringify(viewState),
@@ -108,16 +101,7 @@ export function ClusterTabTransferCoordinator() {
         };
         void accept().catch((error) => fail(request.transferId, error));
       }),
-    [
-      windowName,
-      sync,
-      guards,
-      selectedClusterIds,
-      getClusterNavigationState,
-      getClusterSidebarSelection,
-      getClusterNamespace,
-      fail,
-    ]
+    [windowName, sync, guards, selectedClusterIds, captureCluster, fail]
   );
 
   useEffect(

@@ -12,8 +12,11 @@ import (
 type clusterPanelClose struct {
 	id, caller, clusterID string
 	windows               []string
-	waiting               map[string]struct{}
-	answer                chan bool
+	// The windows whose renderers can answer. The others have no guard to
+	// run, and close with the cluster.
+	asked   []string
+	waiting map[string]struct{}
+	answer  chan bool
 }
 
 // CloseClusterView runs after the app renderer guards and flushes its
@@ -65,6 +68,11 @@ func (r *Registry) beginClusterPanelClose(caller, clusterID string) (*clusterPan
 	}
 	r.clusterCloseMu.Lock()
 	defer r.clusterCloseMu.Unlock()
+	// A workspace switch owns the windows and the panel directory while it
+	// runs; it checks for a cluster close under this same lock (beginRestore).
+	if r.activeRestore.Load() != nil {
+		return nil, panelwindow.ErrWorkspaceSwitching
+	}
 	for _, pending := range r.clusterPanelCloses {
 		if pending.clusterID == clusterID {
 			return nil, fmt.Errorf("cluster close is already pending")
@@ -79,7 +87,10 @@ func (r *Registry) beginClusterPanelClose(caller, clusterID string) (*clusterPan
 		pending.windows = r.panels.Names(clusterID)
 	}
 	for _, name := range pending.windows {
-		pending.waiting[name] = struct{}{}
+		if r.rendererReady(name) {
+			pending.asked = append(pending.asked, name)
+			pending.waiting[name] = struct{}{}
+		}
 	}
 	if r.clusterPanelCloses == nil {
 		r.clusterPanelCloses = make(map[string]*clusterPanelClose)
@@ -89,13 +100,13 @@ func (r *Registry) beginClusterPanelClose(caller, clusterID string) (*clusterPan
 }
 
 func (r *Registry) awaitClusterPanelClose(ctx context.Context, pending *clusterPanelClose) (bool, error) {
-	for _, name := range pending.windows {
+	for _, name := range pending.asked {
 		event := panelwindow.ClusterPanelCloseEvent{TransactionID: pending.id, WindowName: name, ClusterID: pending.clusterID}
 		if !r.emitWindowEvent(name, panelwindow.ClusterPanelCloseRequestedEventName, event) {
 			return false, fmt.Errorf("cluster panel window %q is unavailable", name)
 		}
 	}
-	if len(pending.windows) == 0 {
+	if len(pending.asked) == 0 {
 		return true, ctx.Err()
 	}
 	var timeout <-chan time.Time
@@ -134,7 +145,27 @@ func (r *Registry) AcknowledgeClusterPanelClose(windowName, transactionID string
 	return nil
 }
 
+// cancelClusterPanelClosesWaitingOn ends each cluster close still waiting for
+// an answer from a window whose renderer can no longer give one.
+func (r *Registry) cancelClusterPanelClosesWaitingOn(windowName string) {
+	r.clusterCloseMu.Lock()
+	defer r.clusterCloseMu.Unlock()
+	for _, pending := range r.clusterPanelCloses {
+		if _, waiting := pending.waiting[windowName]; waiting {
+			select {
+			case pending.answer <- false:
+			default:
+			}
+		}
+	}
+}
+
 func (r *Registry) commitClusterPanelClose(pending *clusterPanelClose) (bool, error) {
+	// A workspace switch has taken over the windows and the panel directory.
+	// Removing the cluster now would delete what the switch placed for it.
+	if r.activeRestore.Load() != nil {
+		return false, panelwindow.ErrWorkspaceSwitching
+	}
 	r.workspaceMu.Lock()
 	err := r.validateClusterPanelClose(pending.caller, pending.clusterID)
 	shared := r.hasOtherClusterAppView(pending.caller, pending.clusterID)
@@ -151,8 +182,11 @@ func (r *Registry) commitClusterPanelClose(pending *clusterPanelClose) (bool, er
 	}
 	// Native destruction can synchronously enter lifecycle hooks. Hold neither
 	// the workspace mutex nor the acknowledgement mutex while closing windows.
+	// A window whose renderer cannot answer can be closed by its own close
+	// button meanwhile; it is then one fewer to close, not a failure that
+	// leaves the cluster half closed.
 	for _, name := range pending.windows {
-		if err := r.AcknowledgePanelWindowClose(name); err != nil {
+		if _, err := r.closePanelWindow(name); err != nil {
 			return false, err
 		}
 	}

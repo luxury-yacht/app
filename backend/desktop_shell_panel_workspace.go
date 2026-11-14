@@ -13,11 +13,18 @@ func (s *DesktopShell) OpenClusterWindow(windowName, clusterID string) error {
 	return s.panelWorkspace.OpenClusterWindow(windowName, clusterID)
 }
 
-func (s *DesktopShell) AcknowledgePanelWorkspaceReady(windowName string) error {
+func (s *DesktopShell) WithdrawRendererReady(windowName string, page int64) error {
 	if s.panelWorkspace == nil {
 		return fmt.Errorf("panel workspace registry is not available")
 	}
-	return s.panelWorkspace.AcknowledgePanelWorkspaceReady(windowName)
+	return s.panelWorkspace.WithdrawRendererReady(windowName, page)
+}
+
+func (s *DesktopShell) AcknowledgePanelWorkspaceReady(windowName string, page int64) error {
+	if s.panelWorkspace == nil {
+		return fmt.Errorf("panel workspace registry is not available")
+	}
+	return s.panelWorkspace.AcknowledgePanelWorkspaceReady(windowName, page)
 }
 
 func (s *DesktopShell) GetPanelWorkspace(windowName, clusterID string) (panelwindow.WorkspaceSnapshot, error) {
