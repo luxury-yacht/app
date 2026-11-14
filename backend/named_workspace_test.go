@@ -161,7 +161,7 @@ func TestNamedWorkspaceKeepsEachWindowsLayoutAcrossRestart(t *testing.T) {
 				},
 			},
 		},
-		PanelWindows: []NamedWorkspacePanelWindow{{
+		PanelWindows: []panelwindow.NamedWorkspacePanelWindow{{
 			Geometry: panelwindow.NamedWorkspaceGeometry{WindowBounds: panelwindow.WindowBounds{X: -900, Y: 360, Width: 700, Height: 440}, Minimized: true},
 			Group: panelwindow.WorkspaceGroup{
 				ClusterID: clusterID, GroupID: "logs", ActivePanelID: "pod-logs",
@@ -199,7 +199,7 @@ func TestNamedWorkspaceKeepsGlobalAndDockedViews(t *testing.T) {
 				{ClusterID: clusterID, ViewState: json.RawMessage(`{"clusterId":"/config/ops:prod"}`)},
 				{ClusterID: stageID, ViewState: json.RawMessage(`{"clusterId":"/config/ops:stage"}`)},
 			},
-			GlobalView: &NamedWorkspaceGlobalView{
+			GlobalView: &panelwindow.NamedWorkspaceGlobalView{
 				View:   "global-namespaces",
 				Tables: map[string]json.RawMessage{"global-namespaces": json.RawMessage(`{"sort":{"key":"name","direction":"asc"}}`)},
 			},
@@ -221,7 +221,7 @@ func TestNamedWorkspaceKeepsGlobalAndDockedViews(t *testing.T) {
 	require.Equal(t, window, saved.AppWindows[0])
 
 	// A capture caught between docking and floating can report both placements.
-	workspace.PanelWindows = []NamedWorkspacePanelWindow{{
+	workspace.PanelWindows = []panelwindow.NamedWorkspacePanelWindow{{
 		Geometry: panelwindow.NamedWorkspaceGeometry{WindowBounds: panelwindow.WindowBounds{Width: 700, Height: 440}},
 		Group:    window.DockedGroups[0].Group,
 	}}

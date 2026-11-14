@@ -10,25 +10,37 @@ import { useKubeconfig } from '@/modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@/modules/namespace/contexts/NamespaceContext';
 import { useObjectPanelState } from '@/modules/object-panel/contexts/ObjectPanelStateContext';
 import {
-  restoreClusterTableState,
+  restoreSavedClusterTableState,
   restoreWorkspaceTableState,
 } from '@/shared/components/tables/persistence/gridTablePersistence';
 import { parseGlobalViewType } from '@/types/navigation/views';
 import { useDockablePanelContext } from '@/ui/dockable';
 import { reportOperationalError } from '@/utils/errorHandler';
-import { decodeClusterViewState } from './clusterViewState';
+import { readSavedClusterViewState } from './clusterViewState';
 import { workspaceFailureReason } from './useNamedWorkspaceCapture';
 import { useNamedWorkspaceNotice } from './useNamedWorkspaceNotice';
 import { useRestoreWorkspacePanels } from './useRestoreWorkspacePanels';
 
 type SavedWindow = panelwindow.NamedWorkspaceAppWindow;
 
+function savedTabOrder(states: { clusterId: string }[], selectionById: Map<string, string>) {
+  return states.map(({ clusterId }) => {
+    const selection = selectionById.get(clusterId);
+    if (!selection) {
+      throw new Error(`Saved cluster ${clusterId} could not be opened`);
+    }
+    return selection;
+  });
+}
+
 async function restoreTables(saved: SavedWindow) {
   const states = (saved.clusterTabs ?? []).map((tab) =>
-    decodeClusterViewState(JSON.stringify(tab.viewState), tab.clusterId)
+    readSavedClusterViewState(tab.viewState, tab.clusterId)
   );
   // Each cluster's tables are restored independently of the others.
-  await Promise.all(states.map((state) => restoreClusterTableState(state.clusterId, state.tables)));
+  await Promise.all(
+    states.map((state) => restoreSavedClusterTableState(state.clusterId, state.tables))
+  );
   if (saved.globalView) {
     await restoreWorkspaceTableState(
       Object.values(GLOBAL_TABLE_OWNERS).map(({ identity }) => identity),
@@ -71,21 +83,14 @@ export function NamedWorkspaceRestore() {
       const selectionById = new Map(
         selectedKubeconfigs.map((selection) => [getClusterMeta(selection).id, selection])
       );
-      const order = states.map(({ clusterId }) => {
-        const selection = selectionById.get(clusterId);
-        if (!selection) {
-          throw new Error(`Saved cluster ${clusterId} could not be opened`);
-        }
-        return selection;
-      });
-      restoreWindowClusterTabOrder(order);
-      for (const state of states) {
+      restoreWindowClusterTabOrder(savedTabOrder(states, selectionById));
+      states.forEach((state) => {
         restoreClusterNavigationState(state.clusterId, state.navigation);
         setSidebarSelectionForCluster(state.clusterId, state.sidebar);
         if (state.namespace !== undefined) {
           setSelectedNamespace(state.namespace, state.clusterId);
         }
-      }
+      });
       const active = selectionById.get(saved.selectedClusterId ?? '');
       if (active) {
         setActiveKubeconfig(active);
@@ -94,9 +99,7 @@ export function NamedWorkspaceRestore() {
       if (globalView) {
         navigateToGlobal(globalView);
       }
-      for (const dock of saved.dockedGroups ?? []) {
-        restoreDock(dock);
-      }
+      saved.dockedGroups?.forEach(restoreDock);
       setMounted(saved);
     },
     [

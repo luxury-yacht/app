@@ -11,6 +11,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -440,17 +442,8 @@ func (a *ApplicationLifecycle) CloseClusterView(windowID, clusterID string) erro
 }
 
 func (a *ApplicationLifecycle) NamedWorkspaceAvailableClusters() ([]string, error) {
-	discovered, err := a.clusterRuntime.GetKubeconfigs()
-	if err != nil {
-		return nil, err
-	}
-	ids := make([]string, 0, len(discovered.Kubeconfigs))
-	for _, config := range discovered.Kubeconfigs {
-		if !config.Invalid {
-			ids = append(ids, clusterMetaForKubeconfig(config).ID)
-		}
-	}
-	return ids, nil
+	selections, err := discoveredWorkspaceSelections(a.clusterRuntime)
+	return slices.Sorted(maps.Keys(selections)), err
 }
 
 // PersistRestartSelection writes the clusters the next launch opens, once a
@@ -477,15 +470,9 @@ func (a *ApplicationLifecycle) SeedNamedWorkspaceWindow(window string, clusters 
 	if len(clusters) == 0 {
 		return a.workspace.SeedNamedWorkspaceWindow(window, nil, visible)
 	}
-	discovered, err := a.clusterRuntime.GetKubeconfigs()
+	selectionByID, err := discoveredWorkspaceSelections(a.clusterRuntime)
 	if err != nil {
 		return err
-	}
-	selectionByID := make(map[string]string, len(discovered.Kubeconfigs))
-	for _, config := range discovered.Kubeconfigs {
-		if !config.Invalid {
-			selectionByID[clusterMetaForKubeconfig(config).ID] = (kubeconfigSelection{Path: config.Path, Context: config.Context}).String()
-		}
 	}
 	selections := make([]string, 0, len(clusters))
 	for _, id := range clusters {

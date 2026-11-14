@@ -16,7 +16,6 @@ const platformMock = vi.hoisted(() => ({
 }));
 
 const errorMock = vi.hoisted(() => ({
-  reportOperationalError: vi.fn(),
   handle: vi.fn(),
 }));
 
@@ -35,7 +34,6 @@ vi.mock('@/utils/errorHandler', () => ({
     handle: errorMock.handle,
     describe: (error: Error) => ({ message: error.message }),
   },
-  reportOperationalError: errorMock.reportOperationalError,
 }));
 
 describe('AppMenuBar', () => {
@@ -48,7 +46,6 @@ describe('AppMenuBar', () => {
     root = ReactDOM.createRoot(container);
     backendMock.executeApplicationMenuCommand.mockClear();
     backendMock.executeApplicationMenuCommand.mockResolvedValue(undefined);
-    errorMock.reportOperationalError.mockClear();
     errorMock.handle.mockClear();
     platformMock.isWindowsPlatform.mockReturnValue(true);
   });
@@ -235,10 +232,11 @@ describe('AppMenuBar', () => {
     });
 
     expect(document.activeElement).toBe(input);
-    expect(errorMock.reportOperationalError).toHaveBeenCalledWith(expect.any(Error), {
-      source: 'ApplicationMenuCommands',
-      action: 'execute:copy',
-    });
+    expect(errorMock.handle).toHaveBeenCalledWith(
+      expect.any(Error),
+      { source: 'ApplicationMenuCommands', action: 'execute:copy' },
+      expect.any(String)
+    );
     input.remove();
   });
 

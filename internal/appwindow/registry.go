@@ -37,6 +37,7 @@ type lifecycleBackend interface {
 // Registry owns the application's peer workspace windows and their lifecycle.
 type Registry struct {
 	namedWorkspaceOperation sync.Mutex
+	namedWorkspaceSwitch    sync.Mutex
 	// admissionMu orders new windows against a workspace switch. See admitWindow.
 	admissionMu            sync.Mutex
 	workspaceCaptureMu     sync.Mutex
@@ -474,7 +475,7 @@ func (r *Registry) create(restoreGeometry bool) (*application.WebviewWindow, err
 	// A new peer takes the process's cluster selection, which a workspace switch
 	// is in the middle of replacing.
 	var sourceName, name string
-	if !r.admitWindow(func() {
+	if !r.admitWindow(false, func() {
 		sourceName = r.lifecycle.MostRecent()
 		name = r.lifecycle.Add()
 	}) {
@@ -493,14 +494,19 @@ func (r *Registry) create(restoreGeometry bool) (*application.WebviewWindow, err
 // is replacing the windows. The switch takes the same lock to confirm which
 // windows exist before it closes them, so a window is either one it saw or one
 // it refused.
-func (r *Registry) admitWindow(add func()) bool {
+func (r *Registry) admitWindow(transfer bool, add func()) bool {
 	r.admissionMu.Lock()
 	defer r.admissionMu.Unlock()
-	if r.activeRestore.Load() != nil {
+	if restore := r.activeRestore.Load(); restore != nil && (!transfer || !restore.presented.Load()) {
 		return false
 	}
 	add()
 	return true
+}
+
+func (r *Registry) replacingWorkspaceLayout() bool {
+	restore := r.activeRestore.Load()
+	return restore != nil && !restore.presented.Load()
 }
 
 func (r *Registry) optionsForPeer(name, sourceName string, restoreGeometry bool) application.WebviewWindowOptions {

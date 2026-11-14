@@ -94,7 +94,7 @@ export type ClusterNavigationTarget =
       activeNamespaceView: NamespaceViewType;
     };
 
-const DEFAULT_NAVIGATION_STATE: NavigationTabState = {
+export const DEFAULT_NAVIGATION_STATE: NavigationTabState = {
   viewType: 'overview',
   previousView: 'overview',
   activeNamespaceView: 'workloads',

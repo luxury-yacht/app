@@ -56,6 +56,7 @@ type namedWorkspaceRestore struct {
 	// Previous renderers read their own layout while the replacement loads.
 	previous  []string
 	committed atomic.Bool
+	presented atomic.Bool
 	// abandoned are saved windows that were given up: ones that could not be
 	// created, and panel windows that never loaded. Their backend holds are
 	// released with the previous windows', after the new ones are on screen.
@@ -164,10 +165,19 @@ func (restore *namedWorkspaceRestore) answer(window string, err error) bool {
 // the current workspace as it was. The source window stays registered until a
 // replacement is shown so it can be brought back if presentation fails.
 func (r *Registry) OpenNamedWorkspace(ctx context.Context, source string, snapshot panelwindow.NamedWorkspace) error {
+	if !r.namedWorkspaceSwitch.TryLock() {
+		return panelwindow.WorkspaceConflict("another workspace operation is in progress")
+	}
+	defer r.namedWorkspaceSwitch.Unlock()
+	return r.replaceNamedWorkspace(ctx, source, snapshot)
+}
+
+func (r *Registry) replaceNamedWorkspace(ctx context.Context, source string, snapshot panelwindow.NamedWorkspace) error {
 	if !r.namedWorkspaceOperation.TryLock() {
 		return panelwindow.WorkspaceConflict("another workspace operation is in progress")
 	}
-	defer r.namedWorkspaceOperation.Unlock()
+	finishLayout := sync.OnceFunc(r.namedWorkspaceOperation.Unlock)
+	defer finishLayout()
 	// Decide what can be restored before any open window runs its close guards.
 	available, err := r.backend.NamedWorkspaceAvailableClusters()
 	if err != nil {
@@ -231,6 +241,8 @@ func (r *Registry) OpenNamedWorkspace(ctx context.Context, source string, snapsh
 	r.backend.WriteRestartSelectionOf(restore.seed)
 	r.endWorkspaceReplacement(guard.transactionID)
 	result := r.reportOpenedWorkspace(restore, missing, unclosed)
+	restore.presented.Store(true)
+	finishLayout()
 	// The releases can wait behind cluster connections the new workspace
 	// started, so they come after its windows are on screen and usable.
 	r.releasePreviousWindows(previous)

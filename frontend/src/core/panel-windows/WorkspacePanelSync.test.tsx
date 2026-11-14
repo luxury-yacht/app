@@ -175,68 +175,74 @@ it('warns in the restored window about each thing the switch could not do', asyn
   expect(await warningsAfter(app.windowName, {})).toBe(0);
 });
 
-it('acknowledges workspace restoration only after projecting the saved dock', async () => {
-  await start({ open: [] });
-  const tab = tabOf('api');
-  await directorySays(2, [
-    {
-      tab,
-      location: {
-        kind: panelwindow.PanelLocationKind.PanelLocationDocked,
-        windowName: app.windowName,
-        groupId: 'right',
-        index: 0,
-        active: true,
+it.each([false, true])(
+  'restores the saved dock with obsolete navigation fields: %s',
+  async (obsolete) => {
+    await start({ open: [] });
+    const tab = tabOf('api');
+    await directorySays(2, [
+      {
+        tab,
+        location: {
+          kind: panelwindow.PanelLocationKind.PanelLocationDocked,
+          windowName: app.windowName,
+          groupId: 'right',
+          index: 0,
+          active: true,
+        },
       },
-    },
-  ]);
-  const observed: string[][] = [];
-  app.backend.answer('AcknowledgeNamedWorkspaceRestore', (window, failure) => {
-    observed.push([window, failure, ...dockedIn('right')]);
-  });
-  const request = {
-    window: {
-      geometry: { x: 0, y: 0, width: 1200, height: 800, maximized: false },
-      selectedClusterId: production.clusterId,
-      clusterTabs: [
-        {
-          clusterId: production.clusterId,
-          viewState: {
-            clusterId: production.clusterId,
-            navigation: view.owners().viewState?.getClusterNavigationState(production.clusterId),
-            sidebar: null,
-            tables: {},
-          },
-        },
-      ],
-      dockedGroups: [
-        {
-          width: 430,
-          height: 400,
-          maximized: false,
-          group: {
-            clusterId: production.clusterId,
-            groupId: 'right',
-            activePanelId: tab.panelId,
-            tabs: [tab],
-          },
-        },
-      ],
-    },
-  };
-  await act(async () => {
-    app.events.emit('named-workspace:restore', {
-      windowName: app.windowName,
-      window: request.window,
+    ]);
+    const observed: string[][] = [];
+    app.backend.answer('AcknowledgeNamedWorkspaceRestore', (window, failure) => {
+      observed.push([window, failure, ...dockedIn('right')]);
     });
-  });
-  await app.settle();
-  expect(observed).toEqual([[app.windowName, '', tab.panelId]]);
-  expect(isOpenHere('api')).toBe(true);
-  expect(
-    requireValue(dock, 'dock').getClusterGroupLayout(production.clusterId, 'right').rightSize.width
-  ).toBe(430);
-});
+    const request = {
+      window: {
+        geometry: { x: 0, y: 0, width: 1200, height: 800, maximized: false },
+        selectedClusterId: production.clusterId,
+        clusterTabs: [
+          {
+            clusterId: production.clusterId,
+            viewState: {
+              clusterId: production.clusterId,
+              navigation: obsolete
+                ? { viewType: 'retired', activeNamespaceView: 'retired' }
+                : view.owners().viewState?.getClusterNavigationState(production.clusterId),
+              sidebar: null,
+              tables: {},
+            },
+          },
+        ],
+        dockedGroups: [
+          {
+            width: 430,
+            height: 400,
+            maximized: false,
+            group: {
+              clusterId: production.clusterId,
+              groupId: 'right',
+              activePanelId: tab.panelId,
+              tabs: [tab],
+            },
+          },
+        ],
+      },
+    };
+    await act(async () => {
+      app.events.emit('named-workspace:restore', {
+        windowName: app.windowName,
+        window: request.window,
+      });
+    });
+    await app.settle();
+    expect(observed).toEqual([[app.windowName, '', tab.panelId]]);
+    expect(isOpenHere('api')).toBe(true);
+    expect(
+      requireValue(dock, 'dock').getClusterGroupLayout(production.clusterId, 'right').rightSize
+        .width
+    ).toBe(430);
+  }
+);
 
 /** The directory now answers `panels` for production; it rings its change. */
 const directorySays = async (revision: number, panels: panelwindow.WorkspacePanel[]) => {

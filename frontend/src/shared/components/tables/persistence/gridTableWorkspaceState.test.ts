@@ -7,6 +7,7 @@ import {
   registerPendingGridTableSave,
   resetGridTablePersistenceCacheForTesting,
   restoreClusterTableState,
+  restoreSavedClusterTableState,
   savePersistedState,
 } from './gridTablePersistence';
 
@@ -57,4 +58,29 @@ it('captures a pending filter save before the debounce expires', async () => {
   const snapshot = await captureClusterTableState('production');
   expect(snapshot[key]?.pageSize).toBe(75);
   unregister();
+});
+
+it('restores valid saved table entries alongside obsolete entries without touching another cluster', async () => {
+  const keyFor = async (cluster: string, viewId: string) => {
+    const key = buildGridTableStorageKey({
+      clusterHash: await computeClusterHash(cluster),
+      viewId,
+    });
+    if (!key) {
+      throw new Error('Expected cluster table key');
+    }
+    return key;
+  };
+  const valid = await keyFor('production', 'workloads');
+  const obsolete = await keyFor('production', 'obsolete');
+  const foreign = await keyFor('staging', 'workloads');
+  savePersistedState(foreign, { version: 3, pageSize: 100 });
+  await restoreSavedClusterTableState('production', {
+    [valid]: { version: 3, pageSize: 50 },
+    [obsolete]: null,
+    [foreign]: { version: 3, pageSize: 10 },
+  });
+  expect(loadPersistedState(valid)?.pageSize).toBe(50);
+  expect(loadPersistedState(obsolete)).toBeNull();
+  expect(loadPersistedState(foreign)?.pageSize).toBe(100);
 });

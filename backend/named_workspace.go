@@ -14,9 +14,7 @@ import (
 
 type NamedWorkspace = panelwindow.NamedWorkspace
 type NamedWorkspaceAppWindow = panelwindow.NamedWorkspaceAppWindow
-type NamedWorkspacePanelWindow = panelwindow.NamedWorkspacePanelWindow
 type NamedWorkspaceClusterTab = panelwindow.NamedWorkspaceClusterTab
-type NamedWorkspaceGlobalView = panelwindow.NamedWorkspaceGlobalView
 type NamedWorkspaceDockedGroup = panelwindow.NamedWorkspaceDockedGroup
 type NamedWorkspaceEntry = panelwindow.NamedWorkspaceEntry
 

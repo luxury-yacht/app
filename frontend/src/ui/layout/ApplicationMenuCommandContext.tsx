@@ -1,25 +1,17 @@
 import { createContext, type ReactNode, useContext } from 'react';
 import { ExecuteApplicationMenuCommand } from '@/core/backend-api';
-import { backend } from '@/core/backend-api/models';
-import { errorHandler, reportOperationalError } from '@/utils/errorHandler';
+import type { backend } from '@/core/backend-api/models';
+import { errorHandler } from '@/utils/errorHandler';
 
 export type ApplicationMenuCommandExecutor = (command: backend.ApplicationMenuCommand) => void;
 
 export const executeBackendApplicationMenuCommand: ApplicationMenuCommandExecutor = (command) => {
   void ExecuteApplicationMenuCommand(command).catch((error) => {
-    const context = {
-      source: 'ApplicationMenuCommands',
-      action: `execute:${command}`,
-    };
-    if (command === backend.ApplicationMenuCommand.ApplicationMenuCommandNewWindow) {
-      errorHandler.handle(
-        error,
-        context,
-        `Could not open a new window. ${errorHandler.describe(error).message}`
-      );
-      return;
-    }
-    reportOperationalError(error, context);
+    errorHandler.handle(
+      error,
+      { source: 'ApplicationMenuCommands', action: `execute:${command}` },
+      errorHandler.describe(error).message
+    );
   });
 };
 

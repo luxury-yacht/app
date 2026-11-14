@@ -103,6 +103,16 @@ sessions, drain jobs, and unsaved editor content stay with their live owners.
   deadline to three seconds. The working app window showed a warning for the
   failed destination. Admission reopened 6 ms after presentation in this run.
   Windows and Linux were not exercised.
+- **Slow connection on macOS (native, Kind).** With an injected 18-second
+  pause in cluster connection work, both app windows and the floating panel
+  appeared before the pause ended. Save Workspace persisted the live layout
+  during the pause. New Window returned an expected conflict during cleanup
+  and succeeded afterward. The registry regression checks admission for
+  cluster close, cluster tear-off, and panel tear-off during cleanup.
+- **Hidden window creation on Linux (native, Ubuntu 24.04).** Under
+  Xvfb/Openbox, Wails MCP observed two replacement GTK/WebKit windows start
+  hidden, mount, and replace the source. One restored minimized. This fixture
+  had no clusters. Native Windows validation remains open.
 - **Unsaved edits on macOS (native, current switch).** A local CodeMirror YAML
   draft on the staging Node blocked Open Workspace. Both app windows and the
   floating panel stayed open, and the draft remained in the editor. The Wails

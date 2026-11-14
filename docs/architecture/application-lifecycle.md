@@ -69,7 +69,7 @@ close sequences: [dockable-panels.md](../frontend/dockable-panels.md).
 - A window that a workspace switch is restoring is the exception to both: it
   starts hidden on every platform, and its runtime-ready listener does not call
   `WindowRuntimeReady`, because the switch shows it once it has loaded and been
-  placed. Hidden creation of an app window has not been run on Linux.
+  placed.
 
 ## Process multiplicity and focus
 
@@ -242,8 +242,8 @@ is rolled back.
 3. The registry confirms that the windows which approved are still exactly the
    windows that are open and that no cluster close is under way, and from then
    on no new window is admitted and no cluster close or cluster-tab move
-   begins until the switch ends (`admitWindow`: File > New Window, a cluster
-   tear-off, a panel tear-off). A window that opened while the others were
+   begins until the replacement layout is presented. File > New Window waits
+   for cleanup too. A window that opened while the others were
    approving was never asked, so the switch is refused.
 4. The restart selection is held (`HoldRestartSelection`): until the switch
    ends, no selection change is written as what the next launch opens. One
@@ -284,8 +284,10 @@ is rolled back.
    the saved workspace's clusters as what the next launch opens
    (`WriteRestartSelectionOf`), because the user can quit from the next step
    on.
-10. The preflight ends. What the closed windows held in the backend is released
-    only now, because those releases can queue behind cluster connections the
+10. The preflight ends. Save Workspace, cluster close, and transfers can use
+    the presented layout while cleanup runs. Opening another named workspace
+    waits until restart-selection cleanup finishes. Backend releases and new
+    operations that change cluster ownership can queue behind connections the
     saved workspace started. `PersistRestartSelection` then ends the hold and
     writes the settled selection: the saved workspace's clusters, an empty selection
     included when its windows show none. The switch's own claim on the saved
@@ -319,8 +321,8 @@ windows the switch already retired.
 Because the saved windows are ordinary windows from step 6, the user can close
 them all before the switch has finished. While a switch runs, closing the last
 app view releases it like any other view instead of starting a quit; the switch
-requests the quit itself at its end if no window is left. A cluster close does
-not commit while a switch runs, and a cluster whose kubeconfig goes ends
+requests the quit itself at its end if no window is left. A cluster close waits
+for presentation, and a cluster whose kubeconfig goes ends
 whatever its panel windows were asked before it closes them. File > New Window is refused while a switch runs: a new window
 takes every selected cluster, and that selection is being replaced. The menu
 reports the refusal through the native menu dialog or the app-rendered menu's

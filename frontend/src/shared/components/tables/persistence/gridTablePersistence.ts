@@ -686,6 +686,10 @@ export const restoreClusterTableState = async (
   if (Object.keys(normalized).length !== Object.keys(entries).length) {
     throw new Error('Invalid transferred table state');
   }
+  await installClusterTableState(prefix, normalized);
+};
+
+const installClusterTableState = async (prefix: string, normalized: GridTablePersistenceMap) => {
   await hydrateGridTablePersistence();
   const remaining = Object.fromEntries(
     Object.entries(persistenceCache).filter(([key]) => !key.startsWith(prefix))
@@ -693,25 +697,20 @@ export const restoreClusterTableState = async (
   persistenceCache = { ...remaining, ...structuredClone(normalized) };
 };
 
+export const restoreSavedClusterTableState = async (
+  clusterId: string,
+  entries: Record<string, unknown>
+): Promise<void> => {
+  const prefix = `${STORAGE_PREFIX}:v${STORAGE_KEY_VERSION}:${await computeClusterHash(clusterId)}:`;
+  const scoped = Object.fromEntries(
+    Object.entries(entries).filter(([key]) => key.startsWith(prefix))
+  );
+  await installClusterTableState(prefix, normalizePersistenceMap(scoped));
+};
+
 export const restoreWorkspaceTableState = async (
   owners: readonly string[],
   entries: Record<string, unknown>
 ): Promise<void> => {
-  const prefixes = await Promise.all(
-    owners.map(async (id) => ({
-      id,
-      prefix: `${STORAGE_PREFIX}:v${STORAGE_KEY_VERSION}:${await computeClusterHash(id)}:`,
-    }))
-  );
-  if (Object.keys(entries).some((key) => !prefixes.some(({ prefix }) => key.startsWith(prefix)))) {
-    throw new Error('Table state belongs to another workspace view');
-  }
-  await Promise.all(
-    prefixes.map(({ id, prefix }) =>
-      restoreClusterTableState(
-        id,
-        Object.fromEntries(Object.entries(entries).filter(([key]) => key.startsWith(prefix)))
-      )
-    )
-  );
+  await Promise.all(owners.map((id) => restoreSavedClusterTableState(id, entries)));
 };

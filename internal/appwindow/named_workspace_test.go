@@ -1456,6 +1456,60 @@ func TestNewWindowIsRefusedDuringASwitch(t *testing.T) {
 	require.NotNil(t, r.Create(false), "once the switch is over, new windows open again")
 }
 
+type slowWorkspaceRelease struct {
+	*recordingLifecycleBackend
+	onRelease func(string)
+}
+
+func (b slowWorkspaceRelease) ReleaseWorkspaceWindow(name string) {
+	b.onRelease(name)
+	b.recordingLifecycleBackend.ReleaseWorkspaceWindow(name)
+}
+
+func TestPresentedWorkspaceAcceptsActionsWhilePreviousClustersRelease(t *testing.T) {
+	const cluster = "dev"
+	var warnings []panelwindow.NamedWorkspaceWarningsEvent
+	backend := &recordingLifecycleBackend{windowClusters: map[string][]string{}, availableWorkspaceClusters: []string{cluster}}
+	r, source := switchRegistry(t, backend, &warnings)
+	r.windowGeometry = func(string) (geometry, bool) { return geometry{Width: 1200, Height: 800}, true }
+	deliver := r.emitWindowEvent
+	r.emitWindowEvent = func(name, event string, payload any) bool {
+		if request, ok := payload.(panelwindow.NamedWorkspaceCaptureRequest); ok {
+			return r.SubmitNamedWorkspaceCapture(name, request.ID, oneAppWindowWorkspace(cluster).AppWindows[0].NamedWorkspaceAppView, "") == nil
+		}
+		return deliver(name, event, payload)
+	}
+	r.backend = slowWorkspaceRelease{backend, func(name string) {
+		if name != source {
+			return
+		}
+		const restored = "workspace-2"
+		_, err := r.CaptureNamedWorkspace(context.Background(), restored)
+		require.NoError(t, err)
+		request := panelwindow.ClusterTabTransferRequest{TransferID: "tear-off", SourceWindowName: restored, ClusterID: cluster}
+		require.NoError(t, r.RequestClusterTabTransfer(restored, request))
+		require.NoError(t, r.AcceptClusterTabTransfer(restored, request.TransferID, panelwindow.ClusterViewSnapshot{SchemaVersion: 1, ViewState: "{}"}))
+		require.NoError(t, r.FailClusterTabTransfer(restored, request.TransferID))
+		panel := validPanelGroupSnapshot()
+		panel.ClusterID, panel.Tabs[0].ObjectRef.ClusterID = cluster, cluster
+		panel.SourceWindowName = restored
+		_, _, err = r.workspace.Open(panel.Tabs[0], panelwindow.PanelLocation{Kind: panelwindow.PanelLocationDocked, WindowName: restored, GroupID: "right", Active: true})
+		require.NoError(t, err)
+		create := r.newWindow
+		r.newWindow = application.New(application.Options{}).Window.NewWithOptions
+		floating, err := r.BeginPanelWindowOpen(panel)
+		r.newWindow = create
+		require.NoError(t, err)
+		require.NoError(t, r.FailPanelWindowTransfer(restored, floating.WindowName, panel.TransferID))
+		require.ErrorIs(t, r.OpenNamedWorkspace(context.Background(), restored, oneAppWindowWorkspace(cluster)), panelwindow.WorkspaceConflict("another workspace operation is in progress"))
+		closed, err := r.CloseClusterView(context.Background(), restored, cluster)
+		require.NoError(t, err)
+		require.True(t, closed)
+		require.ErrorIs(t, r.CreateWorkspaceWindow(), panelwindow.ErrWorkspaceSwitching)
+	}}
+	require.NoError(t, r.OpenNamedWorkspace(context.Background(), source, oneAppWindowWorkspace(cluster)))
+}
+
 // The saved windows are ordinary windows from the moment the previous ones
 // close, so the user can close them all before the switch has finished. The
 // app then quits as it does for any last window, instead of running on with
