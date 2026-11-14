@@ -1311,7 +1311,7 @@ func (r *Registry) finishDeniedApplicationPreflight(pending *applicationQuitPref
 }
 
 func (r *Registry) expireApplicationQuitPreflight(pending *applicationQuitPreflight) {
-	r.cancelApplicationQuitPreflight(pending, context.DeadlineExceeded)
+	r.cancelApplicationQuitPreflight(pending, fmt.Errorf("timed out waiting for open windows to approve the workspace switch: %w", context.DeadlineExceeded))
 }
 
 func (r *Registry) cancelApplicationQuitPreflight(pending *applicationQuitPreflight, cause error) {

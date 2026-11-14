@@ -124,7 +124,7 @@ func (r *Registry) failCaptureOfClosedWindow(name string) {
 		return
 	}
 	delete(capture.waiting, name)
-	capture.replies <- namedWorkspaceCaptureReply{window: name, err: errors.New("the window closed or stopped responding before it could report its view")}
+	capture.replies <- namedWorkspaceCaptureReply{window: name, err: panelwindow.WorkspaceConflict("the window closed or stopped responding before it could report its view")}
 }
 
 // SubmitNamedWorkspaceCapture is a window's one reply to a capture request: its
@@ -196,11 +196,11 @@ func (r *Registry) checkNamedWorkspaceAppView(name string, state panelwindow.Nam
 		saved = append(saved, tab.ClusterID)
 	}
 	if !slices.Equal(slices.Sorted(slices.Values(clusters)), slices.Sorted(slices.Values(saved))) {
-		return fmt.Errorf("cluster tabs changed in window %q during capture", name)
+		return panelwindow.WorkspaceConflict(fmt.Sprintf("cluster tabs changed in window %q during capture", name))
 	}
 	for _, clusterID := range clusters {
 		if !sameNamedWorkspaceDockedGroups(clusterID, state.DockedGroups, r.workspace.DockedGroups(clusterID, name)) {
-			return fmt.Errorf("docked panels changed in window %q during capture", name)
+			return panelwindow.WorkspaceConflict(fmt.Sprintf("docked panels changed in window %q during capture", name))
 		}
 	}
 	return nil
@@ -225,7 +225,7 @@ func sameNamedWorkspaceDockedGroups(clusterID string, captured []panelwindow.Nam
 func (r *Registry) captureNamedPanelWindow(name string) (panelwindow.NamedWorkspacePanelWindow, error) {
 	descriptor, err := r.PanelDescriptor(name)
 	if err != nil || descriptor.State != PanelWindowStateLive {
-		return panelwindow.NamedWorkspacePanelWindow{}, fmt.Errorf("panel window %q changed during capture", name)
+		return panelwindow.NamedWorkspacePanelWindow{}, panelwindow.WorkspaceConflict(fmt.Sprintf("panel window %q changed during capture", name))
 	}
 	geometry, err := r.namedWorkspaceGeometry(name, panelWindowMinWidth, panelWindowMinHeight)
 	if err != nil {

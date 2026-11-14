@@ -49,6 +49,23 @@ func TestWorkspaceSwitchReportsPreflightDeliveryFailure(t *testing.T) {
 	require.Nil(t, r.pendingQuit)
 }
 
+func TestWorkspaceSwitchTimeoutExplainsWhatItWasWaitingFor(t *testing.T) {
+	r, source := switchRegistry(t, &recordingLifecycleBackend{}, new([]panelwindow.NamedWorkspaceWarningsEvent))
+	r.emitWindowEvent = func(_, event string, _ any) bool {
+		if event == panelwindow.ApplicationQuitPreflightRequestedEventName {
+			r.expireApplicationQuitPreflight(r.pendingQuit)
+		}
+		return true
+	}
+	err := r.OpenNamedWorkspace(context.Background(), source, oneAppWindowWorkspace())
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.ErrorContains(t, err, "waiting for open windows")
+	var conflict panelwindow.WorkspaceConflict
+	require.False(t, errors.As(err, &conflict))
+	require.Equal(t, []string{source}, r.lifecycle.Names())
+	require.Nil(t, r.pendingQuit)
+}
+
 func TestNamedWorkspaceKeepsCurrentWindowsWhenNoSavedWindowCanBeCreated(t *testing.T) {
 	r := NewRegistry(nil, &recordingLifecycleBackend{})
 	name := r.lifecycle.Add()
@@ -243,6 +260,45 @@ func TestCaptureNamedWorkspaceRejectsAWindowClosingDuringCapture(t *testing.T) {
 	workspace, err := registry.CaptureNamedWorkspace(context.Background(), first)
 	require.NoError(t, err)
 	require.Len(t, workspace.AppWindows, 1)
+}
+
+func TestCaptureNamedWorkspaceRejectsChangedLayoutAsConflict(t *testing.T) {
+	for _, change := range []string{"cluster tabs", "docked panels", "floating window"} {
+		t.Run(change, func(t *testing.T) {
+			group := validPanelGroupSnapshot()
+			r, panel := liveNativeWindow(t, group)
+			source := r.lifecycle.Add()
+			readyAppWindow(r, source)
+			backend := &recordingLifecycleBackend{windowClusters: map[string][]string{source: {group.ClusterID}}}
+			r.backend = backend
+			r.windowGeometry = func(string) (geometry, bool) { return geometry{Width: 1200, Height: 800}, true }
+			r.emitWindowEvent = func(name, _ string, payload any) bool {
+				request := payload.(panelwindow.NamedWorkspaceCaptureRequest)
+				view := panelwindow.NamedWorkspaceAppView{}
+				if name == source {
+					view.ClusterTabs = []panelwindow.NamedWorkspaceClusterTab{{ClusterID: group.ClusterID}}
+				}
+				require.NoError(t, r.SubmitNamedWorkspaceCapture(name, request.ID, view, ""))
+				if name == panel {
+					switch change {
+					case "cluster tabs":
+						delete(backend.windowClusters, source)
+					case "docked panels":
+						tab := group.Tabs[0]
+						tab.PanelID, tab.ObjectRef.Name = "new-dock", "new-object"
+						_, _, err := r.workspace.Open(tab, panelwindow.PanelLocation{Kind: panelwindow.PanelLocationDocked, WindowName: source, GroupID: "right", Active: true})
+						require.NoError(t, err)
+					case "floating window":
+						r.panels.Remove(panel)
+					}
+				}
+				return true
+			}
+			_, err := r.CaptureNamedWorkspace(context.Background(), source)
+			var conflict panelwindow.WorkspaceConflict
+			require.ErrorAs(t, err, &conflict)
+		})
+	}
 }
 
 func TestCaptureNamedWorkspaceKeepsDockedAndFloatingPanels(t *testing.T) {
@@ -1450,6 +1506,8 @@ func TestCaptureEndsWhenAWindowClosesBeforeAnswering(t *testing.T) {
 	started := time.Now()
 	_, err := registry.CaptureNamedWorkspace(context.Background(), first)
 	require.ErrorContains(t, err, second)
+	var conflict panelwindow.WorkspaceConflict
+	require.ErrorAs(t, err, &conflict)
 	require.Less(t, time.Since(started), 5*time.Second, "the save must not wait out its capture deadline")
 }
 
