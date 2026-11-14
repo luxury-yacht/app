@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/internal/panelwindow"
 )
 
@@ -34,7 +35,7 @@ func NewNamedWorkspaceService(windows NamedWorkspaceCaptureCommands, store Named
 
 func (s *NamedWorkspaceService) SaveNamedWorkspace(ctx context.Context, window, name string, replace bool, revision string) error {
 	if strings.TrimSpace(name) == "" {
-		return fmt.Errorf("workspace name is required")
+		return errorstatus.BadRequest(fmt.Errorf("workspace name is required"))
 	}
 	workspace, err := s.windows.CaptureNamedWorkspace(ctx, window)
 	if err != nil {

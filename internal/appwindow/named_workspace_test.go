@@ -36,6 +36,19 @@ func TestNamedWorkspaceRestoreKeepsCurrentWindowsWhenCloseIsDenied(t *testing.T)
 	require.False(t, errors.Is(err, context.DeadlineExceeded))
 }
 
+func TestWorkspaceSwitchReportsPreflightDeliveryFailure(t *testing.T) {
+	r, source := switchRegistry(t, &recordingLifecycleBackend{}, new([]panelwindow.NamedWorkspaceWarningsEvent))
+	r.emitWindowEvent = func(_, event string, _ any) bool {
+		return event != panelwindow.ApplicationQuitPreflightRequestedEventName
+	}
+	err := r.OpenNamedWorkspace(context.Background(), source, oneAppWindowWorkspace())
+	require.Error(t, err)
+	var conflict panelwindow.WorkspaceConflict
+	require.False(t, errors.As(err, &conflict), "delivery failure is an application error")
+	require.Equal(t, []string{source}, r.lifecycle.Names())
+	require.Nil(t, r.pendingQuit)
+}
+
 func TestNamedWorkspaceKeepsCurrentWindowsWhenNoSavedWindowCanBeCreated(t *testing.T) {
 	r := NewRegistry(nil, &recordingLifecycleBackend{})
 	name := r.lifecycle.Add()
@@ -1312,8 +1325,8 @@ func TestWindowAskedToApproveASwitchCannotCloseOnItsOwn(t *testing.T) {
 					}
 					require.True(t, closing.IsCancelled())
 				}
-				require.ErrorIs(t, r.AcknowledgeWorkspaceWindowClose(source), errWorkspaceSwitching)
-				require.ErrorIs(t, r.AcknowledgePanelWindowClose(native.WindowName), errWorkspaceSwitching)
+				require.ErrorIs(t, r.AcknowledgeWorkspaceWindowClose(source), panelwindow.ErrWorkspaceSwitching)
+				require.ErrorIs(t, r.AcknowledgePanelWindowClose(native.WindowName), panelwindow.ErrWorkspaceSwitching)
 			}
 		}
 		return approve(window, event, data)

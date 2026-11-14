@@ -103,6 +103,10 @@ sessions, drain jobs, and unsaved editor content stay with their live owners.
   deadline to three seconds. The working app window showed a warning for the
   failed destination. Admission reopened 6 ms after presentation in this run.
   Windows and Linux were not exercised.
+- **Unsaved edits on macOS (native, current switch).** A local CodeMirror YAML
+  draft on the staging Node blocked Open Workspace. Both app windows and the
+  floating panel stayed open, and the draft remained in the editor. The Wails
+  binding returned an expected `Conflict`. The draft was discarded locally.
 - **Simple switch (automated).** The earlier native runs of open and switch
   marked "staged design" below do not cover this one.
   `TestSwitchClosesThePreviousWindowsThenShowsTheSavedOnes` covers the order:

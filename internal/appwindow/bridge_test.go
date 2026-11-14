@@ -34,7 +34,7 @@ func (registry *recordingNativeWindowRegistry) FocusMostRecent() {
 	registry.record("focus-most-recent")
 }
 
-func (registry *recordingNativeWindowRegistry) Create(bool) *application.WebviewWindow {
+func (registry *recordingNativeWindowRegistry) CreateWorkspaceWindow() error {
 	registry.record("create-workspace")
 	return nil
 }
@@ -183,7 +183,7 @@ func TestWindowRegistryBridgeForwardsEveryRuntimeOperationAfterBinding(t *testin
 
 	require.False(t, bridge.PrepareApplicationQuit())
 	bridge.OnSecondInstanceLaunch(application.SecondInstanceData{})
-	require.ErrorIs(t, options.CreateWorkspaceWindow(), errWorkspaceSwitching)
+	require.NoError(t, options.CreateWorkspaceWindow())
 	require.True(t, options.IsWorkspaceWindow("workspace-1"))
 	_, err := options.NativeWindowDescriptor("workspace-1")
 	require.NoError(t, err)

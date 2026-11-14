@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/internal/panelwindow"
 	"github.com/stretchr/testify/require"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -15,6 +16,7 @@ import (
 type namedWorkspaceTestWindows struct {
 	state      NamedWorkspace
 	captureErr error
+	openErr    error
 	reply      panelwindow.NamedWorkspaceAppView
 	failure    string
 	opened     NamedWorkspace
@@ -100,6 +102,35 @@ func TestDesktopNamedWorkspaceSaveKeepsPreviousSnapshotOnCaptureFailure(t *testi
 	require.Error(t, service.AcknowledgeNamedWorkspaceRestore(ctx, "another-window", ""))
 	require.NoError(t, service.AcknowledgeNamedWorkspaceRestore(ctx, "workspace-1", ""))
 	require.Equal(t, "workspace-1", windows.restored)
+}
+
+func TestNamedWorkspaceBindingReportsRoutineRefusalsAsExpected(t *testing.T) {
+	setTestConfigEnv(t)
+	const window = "workspace-1"
+	windows := &namedWorkspaceTestWindows{state: NamedWorkspace{SchemaVersion: 1, AppWindows: []NamedWorkspaceAppWindow{{
+		Geometry: panelwindow.NamedWorkspaceGeometry{WindowBounds: panelwindow.WindowBounds{Width: 1200, Height: 800}},
+	}}}}
+	service := NewDesktopService(DesktopServiceDependencies{NamedWorkspaces: NewNamedWorkspaceService(windows, NewUIStateStore())})
+	ctx := context.WithValue(context.Background(), application.WindowKey, panelCommandCaller(window))
+	check := func(err error, reason errorstatus.Reason, expected bool) {
+		t.Helper()
+		require.Error(t, err)
+		var status errorstatus.Status
+		require.NoError(t, json.Unmarshal(MarshalBindingError(err), &status))
+		require.Equal(t, reason, status.Reason)
+		require.Equal(t, expected, status.Expected)
+	}
+	require.NoError(t, service.SaveNamedWorkspace(ctx, window, "Triage", false, ""))
+	revision := namedWorkspaceRevision(t, service, "Triage")
+	check(service.SaveNamedWorkspace(ctx, window, "Triage", false, ""), errorstatus.ReasonConflict, true)
+	check(service.OpenNamedWorkspace(ctx, window, "Triage", "stale-revision"), errorstatus.ReasonConflict, true)
+	check(service.DeleteNamedWorkspace(ctx, window, "Missing", ""), errorstatus.ReasonNotFound, true)
+	windows.openErr = panelwindow.WorkspaceConflict("workspace switch cancelled by an open window")
+	check(service.OpenNamedWorkspace(ctx, window, "Triage", revision), errorstatus.ReasonConflict, true)
+	windows.captureErr = panelwindow.ErrWorkspaceSwitching
+	check(service.SaveNamedWorkspace(ctx, window, "Triage", true, revision), errorstatus.ReasonConflict, true)
+	windows.openErr = errors.New("native window creation failed")
+	check(service.OpenNamedWorkspace(ctx, window, "Triage", revision), errorstatus.ReasonUnknown, false)
 }
 
 func TestNamedWorkspaceKeepsEachWindowsLayoutAcrossRestart(t *testing.T) {
@@ -258,7 +289,7 @@ func TestNamedWorkspaceRequiresExplicitReplacement(t *testing.T) {
 
 func (w *namedWorkspaceTestWindows) OpenNamedWorkspace(_ context.Context, _ string, snapshot NamedWorkspace) error {
 	w.opened = snapshot
-	return nil
+	return w.openErr
 }
 func (w *namedWorkspaceTestWindows) AcknowledgeNamedWorkspaceRestore(window, _ string) error {
 	w.restored = window

@@ -15,10 +15,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
-var errNamedWorkspaceOpenCancelled = errors.New("workspace switch cancelled by an open window")
-
-// errWorkspaceSwitching refuses a new window while a switch replaces them all.
-var errWorkspaceSwitching = errors.New("a workspace switch is in progress")
+const errNamedWorkspaceOpenCancelled panelwindow.WorkspaceConflict = "workspace switch cancelled by an open window"
 
 // errReplacedWindowStaysOpen marks a previous window that is still on screen
 // after the switch, as opposed to one that turned out to be gone already.
@@ -168,7 +165,7 @@ func (restore *namedWorkspaceRestore) answer(window string, err error) bool {
 // replacement is shown so it can be brought back if presentation fails.
 func (r *Registry) OpenNamedWorkspace(ctx context.Context, source string, snapshot panelwindow.NamedWorkspace) error {
 	if !r.namedWorkspaceOperation.TryLock() {
-		return fmt.Errorf("another workspace operation is in progress")
+		return panelwindow.WorkspaceConflict("another workspace operation is in progress")
 	}
 	defer r.namedWorkspaceOperation.Unlock()
 	// Decide what can be restored before any open window runs its close guards.
@@ -179,7 +176,7 @@ func (r *Registry) OpenNamedWorkspace(ctx context.Context, source string, snapsh
 	snapshot, missing := availableWorkspaceLayout(snapshot, available)
 	saved := len(snapshot.AppWindows) + len(snapshot.PanelWindows)
 	if saved == 0 {
-		return fmt.Errorf("no workspace windows can be restored; missing clusters: %v", missing)
+		return panelwindow.WorkspaceConflict(fmt.Sprintf("no workspace windows can be restored; missing clusters: %v", missing))
 	}
 	apps, panels := r.lifecycle.Names(), r.panels.Names("")
 	guard, err := r.beginWorkspaceReplacement(source, append(slices.Clone(apps), panels...))
@@ -264,11 +261,11 @@ func (r *Registry) beginRestore(restore *namedWorkspaceRestore, apps, panels []s
 	r.clusterCloseMu.Unlock()
 	r.admissionMu.Unlock()
 	if changed {
-		return fmt.Errorf("the open windows changed while switching workspace; try again")
+		return panelwindow.WorkspaceConflict("the open windows changed while switching workspace; try again")
 	}
 	if r.clusterViewMoving() {
 		r.activeRestore.Store(nil)
-		return fmt.Errorf("a cluster view is moving between windows; try again")
+		return panelwindow.WorkspaceConflict("a cluster view is moving between windows; try again")
 	}
 	return nil
 }
@@ -424,26 +421,23 @@ func (r *Registry) restoredWindowOpen(target namedWorkspaceTarget) bool {
 
 func (r *Registry) beginWorkspaceReplacement(source string, participants []string) (*applicationQuitPreflight, error) {
 	if !slices.Contains(participants, source) || !slices.Equal(participants, r.readyWorkspaceNames()) || r.clusterViewMoving() {
-		return nil, fmt.Errorf("wait for all windows to finish opening or moving before switching")
+		return nil, panelwindow.WorkspaceConflict("wait for all windows to finish opening or moving before switching")
 	}
 	r.quitMu.Lock()
 	defer r.quitMu.Unlock()
 	if r.pendingQuit != nil {
-		return nil, fmt.Errorf("another window close or workspace switch is in progress")
+		return nil, panelwindow.WorkspaceConflict("another window close or workspace switch is in progress")
 	}
 	pending := r.beginApplicationQuitPreflightLocked(participants)
-	pending.replacement = make(chan bool, 1)
+	pending.replacement = make(chan error, 1)
 	return pending, nil
 }
 
 func (r *Registry) waitForWorkspaceReplacement(ctx context.Context, guard *applicationQuitPreflight) error {
 	r.emitApplicationQuitPreflight(guard, guard.participants)
 	select {
-	case approved := <-guard.replacement:
-		if !approved {
-			return errNamedWorkspaceOpenCancelled
-		}
-		return nil
+	case err := <-guard.replacement:
+		return err
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -454,7 +448,7 @@ func (r *Registry) waitForWorkspaceReplacement(ctx context.Context, guard *appli
 func (r *Registry) endWorkspaceReplacement(transactionID string) {
 	r.cancelPendingApplicationQuitPreflight(func(current *applicationQuitPreflight) bool {
 		return current.transactionID == transactionID
-	})
+	}, context.Canceled)
 }
 
 func availableWorkspaceLayout(snapshot panelwindow.NamedWorkspace, available []string) (panelwindow.NamedWorkspace, []string) {

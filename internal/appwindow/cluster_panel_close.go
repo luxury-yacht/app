@@ -71,7 +71,7 @@ func (r *Registry) beginClusterPanelClose(caller, clusterID string) (*clusterPan
 	// A workspace switch owns the windows and the panel directory while it
 	// runs; it checks for a cluster close under this same lock (beginRestore).
 	if r.activeRestore.Load() != nil {
-		return nil, errWorkspaceSwitching
+		return nil, panelwindow.ErrWorkspaceSwitching
 	}
 	for _, pending := range r.clusterPanelCloses {
 		if pending.clusterID == clusterID {
@@ -164,7 +164,7 @@ func (r *Registry) commitClusterPanelClose(pending *clusterPanelClose) (bool, er
 	// A workspace switch has taken over the windows and the panel directory.
 	// Removing the cluster now would delete what the switch placed for it.
 	if r.activeRestore.Load() != nil {
-		return false, errWorkspaceSwitching
+		return false, panelwindow.ErrWorkspaceSwitching
 	}
 	r.workspaceMu.Lock()
 	err := r.validateClusterPanelClose(pending.caller, pending.clusterID)

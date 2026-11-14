@@ -27,16 +27,16 @@ type namedWorkspaceCaptureReply struct {
 
 func (r *Registry) CaptureNamedWorkspace(ctx context.Context, source string) (panelwindow.NamedWorkspace, error) {
 	if !r.namedWorkspaceOperation.TryLock() {
-		return panelwindow.NamedWorkspace{}, fmt.Errorf("another workspace operation is in progress")
+		return panelwindow.NamedWorkspace{}, panelwindow.WorkspaceConflict("another workspace operation is in progress")
 	}
 	defer r.namedWorkspaceOperation.Unlock()
 	if !r.rendererReady(source) {
-		return panelwindow.NamedWorkspace{}, fmt.Errorf("source window is still opening")
+		return panelwindow.NamedWorkspace{}, panelwindow.WorkspaceConflict("source window is still opening")
 	}
 	apps, panels := r.lifecycle.Names(), r.panels.Names("")
 	participants := append(slices.Clone(apps), panels...)
 	if !slices.Equal(participants, r.readyWorkspaceNames()) || r.clusterViewMoving() {
-		return panelwindow.NamedWorkspace{}, fmt.Errorf("wait for all windows to finish opening or moving before saving")
+		return panelwindow.NamedWorkspace{}, panelwindow.WorkspaceConflict("wait for all windows to finish opening or moving before saving")
 	}
 	if _, err := r.workspace.WorkspaceCaptureRevision(); err != nil {
 		return panelwindow.NamedWorkspace{}, err
@@ -54,7 +54,7 @@ func (r *Registry) CaptureNamedWorkspace(ctx context.Context, source string) (pa
 	}
 	// A move that began while the windows were answering has the view in both.
 	if r.clusterViewMoving() {
-		return panelwindow.NamedWorkspace{}, fmt.Errorf("a cluster view moved while the workspace was being saved")
+		return panelwindow.NamedWorkspace{}, panelwindow.WorkspaceConflict("a cluster view moved while the workspace was being saved")
 	}
 	return r.assembleNamedWorkspace(apps, panels, views)
 }
@@ -63,7 +63,7 @@ func (r *Registry) beginNamedWorkspaceCapture(windows []string) (*namedWorkspace
 	r.workspaceCaptureMu.Lock()
 	defer r.workspaceCaptureMu.Unlock()
 	if r.workspaceCapture != nil {
-		return nil, fmt.Errorf("a workspace capture is already in progress")
+		return nil, panelwindow.WorkspaceConflict("a workspace capture is already in progress")
 	}
 	capture := &namedWorkspaceCapture{id: uuid.NewString(), waiting: make(map[string]bool), replies: make(chan namedWorkspaceCaptureReply, len(windows))}
 	for _, window := range windows {
@@ -155,14 +155,14 @@ func (r *Registry) assembleNamedWorkspace(apps, panels []string, views map[strin
 		return panelwindow.NamedWorkspace{}, err
 	}
 	if !slices.Equal(apps, r.lifecycle.Names()) || !slices.Equal(panels, r.panels.Names("")) {
-		return panelwindow.NamedWorkspace{}, fmt.Errorf("windows changed during workspace capture")
+		return panelwindow.NamedWorkspace{}, panelwindow.WorkspaceConflict("windows changed during workspace capture")
 	}
 	finalRevision, err := r.workspace.WorkspaceCaptureRevision()
 	if err != nil {
 		return panelwindow.NamedWorkspace{}, err
 	}
 	if revision != finalRevision {
-		return panelwindow.NamedWorkspace{}, fmt.Errorf("panels changed during workspace capture")
+		return panelwindow.NamedWorkspace{}, panelwindow.WorkspaceConflict("panels changed during workspace capture")
 	}
 	return workspace, nil
 }

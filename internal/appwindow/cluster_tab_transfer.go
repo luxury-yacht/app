@@ -19,7 +19,7 @@ type clusterViewTransfer struct {
 func (r *Registry) RequestClusterTabTransfer(caller string, request panelwindow.ClusterTabTransferRequest) error {
 	// Refused here, before anything is reserved for it.
 	if r.activeRestore.Load() != nil {
-		return errWorkspaceSwitching
+		return panelwindow.ErrWorkspaceSwitching
 	}
 	r.clusterTransferMu.Lock()
 	defer r.clusterTransferMu.Unlock()
@@ -222,7 +222,7 @@ func (r *Registry) stageClusterTransferTarget(transfer *clusterViewTransfer) (bo
 	}
 	var target string
 	if !r.admitWindow(func() { target = r.lifecycle.Add() }) {
-		return false, errWorkspaceSwitching
+		return false, panelwindow.ErrWorkspaceSwitching
 	}
 	alreadyOpen, err := r.backend.StageClusterViewTransfer(request.SourceWindowName, target, request.ClusterID)
 	if err != nil {

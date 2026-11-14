@@ -16,7 +16,7 @@ type nativeWindowRegistry interface {
 	panelwindow.SharedWorkspaceCommands
 	PrepareApplicationQuit() bool
 	FocusMostRecent()
-	Create(bool) *application.WebviewWindow
+	CreateWorkspaceWindow() error
 	WindowDescriptor(string) (panelwindow.NativeDescriptor, error)
 	BeginPanelWindowOpen(panelwindow.GroupSnapshot) (panelwindow.WindowDescriptor, error)
 	AcknowledgePanelWindowReady(string, string) (panelwindow.WindowDescriptor, error)
@@ -85,10 +85,7 @@ func (bridge *Bridge) CreateWorkspaceWindow() error {
 	if err != nil {
 		return err
 	}
-	if registry.Create(false) == nil {
-		return errWorkspaceSwitching
-	}
-	return nil
+	return registry.CreateWorkspaceWindow()
 }
 
 func (bridge *Bridge) IsWorkspaceWindow(windowName string) bool {

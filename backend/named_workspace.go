@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/internal/panelwindow"
 )
 
@@ -25,7 +26,7 @@ type NamedWorkspaceEntry = panelwindow.NamedWorkspaceEntry
 func (s *UIStateStore) SaveNamedWorkspace(name string, workspace NamedWorkspace, replace bool, revision string) error {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return fmt.Errorf("workspace name is required")
+		return errorstatus.BadRequest(fmt.Errorf("workspace name is required"))
 	}
 	if err := validateNamedWorkspace(workspace); err != nil {
 		return err
@@ -41,7 +42,7 @@ func (s *UIStateStore) SaveNamedWorkspace(name string, workspace NamedWorkspace,
 			return err
 		}
 	} else if _, exists := state.Workspaces[name]; exists {
-		return fmt.Errorf("workspace %q already exists", name)
+		return errorstatus.Conflict(fmt.Errorf("workspace %q already exists", name))
 	}
 	if state.Workspaces == nil {
 		state.Workspaces = make(map[string]NamedWorkspace)
@@ -58,10 +59,10 @@ func (s *UIStateStore) SaveNamedWorkspace(name string, workspace NamedWorkspace,
 func listedNamedWorkspace(state *persistenceFile, name, revision string) (NamedWorkspace, error) {
 	workspace, ok := state.Workspaces[name]
 	if !ok {
-		return NamedWorkspace{}, fmt.Errorf("workspace %q was not found", name)
+		return NamedWorkspace{}, errorstatus.NotFound(fmt.Errorf("workspace %q was not found", name))
 	}
 	if workspace.Revision != revision {
-		return NamedWorkspace{}, fmt.Errorf("workspace %q changed since it was listed", name)
+		return NamedWorkspace{}, errorstatus.Conflict(fmt.Errorf("workspace %q changed since it was listed", name))
 	}
 	return workspace, nil
 }
@@ -125,7 +126,7 @@ func (s *UIStateStore) DeleteNamedWorkspace(name, revision string) error {
 func (s *UIStateStore) RenameNamedWorkspace(name, newName, revision string) error {
 	from, to := strings.TrimSpace(name), strings.TrimSpace(newName)
 	if to == "" {
-		return fmt.Errorf("workspace name is required")
+		return errorstatus.BadRequest(fmt.Errorf("workspace name is required"))
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -141,7 +142,7 @@ func (s *UIStateStore) RenameNamedWorkspace(name, newName, revision string) erro
 		return nil
 	}
 	if _, taken := state.Workspaces[to]; taken {
-		return fmt.Errorf("workspace %q already exists", to)
+		return errorstatus.Conflict(fmt.Errorf("workspace %q already exists", to))
 	}
 	delete(state.Workspaces, from)
 	state.Workspaces[to] = workspace

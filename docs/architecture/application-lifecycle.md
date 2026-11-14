@@ -323,7 +323,8 @@ requests the quit itself at its end if no window is left. A cluster close does
 not commit while a switch runs, and a cluster whose kubeconfig goes ends
 whatever its panel windows were asked before it closes them. File > New Window is refused while a switch runs: a new window
 takes every selected cluster, and that selection is being replaced. The menu
-reports the refusal and the command can be retried once cleanup finishes.
+reports the refusal through the native menu dialog or the app-rendered menu's
+notification. The command can be retried once cleanup finishes.
 
 Saved geometry uses the same logical work-area rules as startup. A window is
 saved with the bounds it returns to and with its maximized, fullscreen, and

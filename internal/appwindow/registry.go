@@ -1,6 +1,7 @@
 package appwindow
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"runtime"
@@ -93,7 +94,7 @@ type applicationQuitPreflight struct {
 	participants  []string
 	waiting       map[string]struct{}
 	timeout       *time.Timer
-	replacement   chan bool
+	replacement   chan error
 }
 
 type geometry struct {
@@ -460,6 +461,16 @@ func (r *Registry) expirePanelOpen(windowName, transferID string) {
 
 // Create adds a peer window. Only the initial peer restores persisted geometry.
 func (r *Registry) Create(restoreGeometry bool) *application.WebviewWindow {
+	window, _ := r.create(restoreGeometry)
+	return window
+}
+
+func (r *Registry) CreateWorkspaceWindow() error {
+	_, err := r.create(false)
+	return err
+}
+
+func (r *Registry) create(restoreGeometry bool) (*application.WebviewWindow, error) {
 	// A new peer takes the process's cluster selection, which a workspace switch
 	// is in the middle of replacing.
 	var sourceName, name string
@@ -467,11 +478,15 @@ func (r *Registry) Create(restoreGeometry bool) *application.WebviewWindow {
 		sourceName = r.lifecycle.MostRecent()
 		name = r.lifecycle.Add()
 	}) {
-		return nil
+		return nil, panelwindow.ErrWorkspaceSwitching
 	}
 	window := r.newWindow(r.optionsForPeer(name, sourceName, restoreGeometry))
+	if window == nil {
+		r.lifecycle.BeginClose(name)
+		return nil, fmt.Errorf("could not create app window %q", name)
+	}
 	r.registerLifecycleHooks(window, name, restoreGeometry)
-	return window
+	return window, nil
 }
 
 // admitWindow registers a new window by running add, unless a workspace switch
@@ -941,7 +956,7 @@ func (r *Registry) RequestPanelTabClose(windowName, panelID string) error {
 // and release of its runtime references.
 func (r *Registry) AcknowledgePanelWindowClose(windowName string) error {
 	if r.switchParticipant(windowName) {
-		return errWorkspaceSwitching
+		return panelwindow.ErrWorkspaceSwitching
 	}
 	open, err := r.closePanelWindow(windowName)
 	if err == nil && !open {
@@ -980,7 +995,7 @@ func (r *Registry) AcknowledgeWorkspaceWindowClose(windowName string) error {
 		return fmt.Errorf("app window %q is not live", windowName)
 	}
 	if r.switchParticipant(windowName) {
-		return errWorkspaceSwitching
+		return panelwindow.ErrWorkspaceSwitching
 	}
 	if r.closeAuthorizedWindow(windowName) {
 		return nil
@@ -1028,7 +1043,7 @@ func (r *Registry) AcknowledgeApplicationQuitPreflight(
 		// Sent before the unlock: a cancellation can claim the approved preflight
 		// only afterwards, so its own answer can never fill the buffer first and
 		// leave this send with no reader.
-		pending.replacement <- true
+		pending.replacement <- nil
 		r.quitMu.Unlock()
 		return nil
 	}
@@ -1041,12 +1056,12 @@ func (r *Registry) AcknowledgeApplicationQuitPreflight(
 	r.pendingQuit = approved
 	if r.quitPreflightTimeout > 0 {
 		approved.timeout = time.AfterFunc(r.quitPreflightTimeout, func() {
-			r.cancelApplicationQuitPreflight(approved)
+			r.cancelApplicationQuitPreflight(approved, context.DeadlineExceeded)
 		})
 	}
 	r.quitMu.Unlock()
 	if r.requestApplicationQuit == nil {
-		r.cancelApplicationQuitPreflight(approved)
+		r.cancelApplicationQuitPreflight(approved, context.Canceled)
 		return fmt.Errorf("application quit is unavailable")
 	}
 	// Closing individual views would remove their clusters from saved selection.
@@ -1108,7 +1123,7 @@ func (r *Registry) handleClosing(event *application.WindowEvent, name string) {
 		return
 	}
 	// The refused quit ends whichever preflight is pending, approved or not.
-	r.cancelPendingApplicationQuitPreflight(func(*applicationQuitPreflight) bool { return true })
+	r.cancelPendingApplicationQuitPreflight(func(*applicationQuitPreflight) bool { return true }, context.Canceled)
 	r.lifecycle.CancelClose(name)
 	if event != nil {
 		event.Cancel()
@@ -1264,7 +1279,7 @@ func (r *Registry) cancelRendererRequests(name string) {
 	r.cancelPendingApplicationQuitPreflight(func(pending *applicationQuitPreflight) bool {
 		_, waiting := pending.waiting[name]
 		return waiting
-	})
+	}, panelwindow.WorkspaceConflict("a window stopped responding during workspace switch"))
 	r.cancelClusterPanelClosesWaitingOn(name)
 }
 
@@ -1291,23 +1306,23 @@ func (r *Registry) finishDeniedApplicationPreflight(pending *applicationQuitPref
 	}
 	r.settleApplicationQuitPreflight(pending)
 	if pending.replacement != nil {
-		pending.replacement <- false
+		pending.replacement <- errNamedWorkspaceOpenCancelled
 	}
 }
 
 func (r *Registry) expireApplicationQuitPreflight(pending *applicationQuitPreflight) {
-	r.cancelApplicationQuitPreflight(pending)
+	r.cancelApplicationQuitPreflight(pending, context.DeadlineExceeded)
 }
 
-func (r *Registry) cancelApplicationQuitPreflight(pending *applicationQuitPreflight) {
-	r.cancelPendingApplicationQuitPreflight(func(current *applicationQuitPreflight) bool { return current == pending })
+func (r *Registry) cancelApplicationQuitPreflight(pending *applicationQuitPreflight, cause error) {
+	r.cancelPendingApplicationQuitPreflight(func(current *applicationQuitPreflight) bool { return current == pending }, cause)
 }
 
 // cancelPendingApplicationQuitPreflight ends the pending preflight if owns
 // accepts it. The check and the claim share one quitMu hold: an approval that
 // arrives between them would install an object the caller never saw, and its
 // renderers would stay frozen with nothing left to release them.
-func (r *Registry) cancelPendingApplicationQuitPreflight(owns func(*applicationQuitPreflight) bool) {
+func (r *Registry) cancelPendingApplicationQuitPreflight(owns func(*applicationQuitPreflight) bool, cause error) {
 	r.quitMu.Lock()
 	pending := r.pendingQuit
 	if pending == nil || !owns(pending) {
@@ -1322,7 +1337,7 @@ func (r *Registry) cancelPendingApplicationQuitPreflight(owns func(*applicationQ
 	r.settleApplicationQuitPreflight(pending)
 	if pending.replacement != nil {
 		select {
-		case pending.replacement <- false:
+		case pending.replacement <- cause:
 		default:
 		}
 	}
@@ -1368,7 +1383,7 @@ func (r *Registry) emitApplicationQuitPreflight(
 			TransactionID: pending.transactionID, SwitchingWorkspace: pending.replacement != nil,
 			WindowName: workspaceName,
 		}) {
-			r.cancelApplicationQuitPreflight(pending)
+			r.cancelApplicationQuitPreflight(pending, fmt.Errorf("could not reach window %q for quit preflight", workspaceName))
 			return
 		}
 	}
@@ -1390,7 +1405,7 @@ func (r *Registry) finishApprovedApplicationQuitLocked() bool {
 	if r.backend.PrepareQuitFromWindow(mostRecent) {
 		return true
 	}
-	r.cancelApplicationQuitPreflight(pending)
+	r.cancelApplicationQuitPreflight(pending, context.Canceled)
 	return false
 }
 

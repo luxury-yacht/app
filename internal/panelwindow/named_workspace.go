@@ -8,6 +8,14 @@ import (
 
 const NamedWorkspaceSchemaVersion = 1
 
+// WorkspaceConflict describes a workspace operation refused because its live
+// windows or panels are in a state that prevents the operation.
+type WorkspaceConflict string
+
+func (e WorkspaceConflict) Error() string { return string(e) }
+
+const ErrWorkspaceSwitching WorkspaceConflict = "a workspace switch is in progress"
+
 const NamedWorkspaceCaptureRequested = "named-workspace:capture"
 const NamedWorkspaceRestoreRequested = "named-workspace:restore"
 const NamedWorkspaceWarnings = "named-workspace:warnings"
@@ -62,7 +70,7 @@ func (d *WorkspaceDirectory) ClearForNamedWorkspace(revision uint64) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.revision != revision || len(d.transfers) != 0 || len(d.reservations) != 0 {
-		return fmt.Errorf("panel layout changed while opening the workspace")
+		return WorkspaceConflict("panel layout changed while opening the workspace")
 	}
 	d.setAside = d.panels
 	d.panels = make(map[workspacePanelKey]WorkspacePanel)
@@ -124,7 +132,7 @@ func (d *WorkspaceDirectory) WorkspaceCaptureRevision() (uint64, error) {
 	defer d.mu.Unlock()
 	for _, panel := range d.panels {
 		if panel.moving() {
-			return 0, fmt.Errorf("wait for panel moves to finish")
+			return 0, WorkspaceConflict("wait for panel moves to finish")
 		}
 	}
 	return d.revision, nil
