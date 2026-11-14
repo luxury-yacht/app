@@ -178,8 +178,6 @@ func (s *DesktopShell) executeProcessApplicationMenuCommand(
 	command ApplicationMenuCommand,
 ) bool {
 	switch command {
-	case ApplicationMenuCommandNewWindow:
-		s.createWorkspaceWindowFromMenu()
 	case ApplicationMenuCommandQuit:
 		s.quitApplicationFromMenu()
 	case ApplicationMenuCommandHide:
@@ -236,6 +234,9 @@ func (s *DesktopShell) ExecuteApplicationMenuCommand(
 	windowName string,
 	command ApplicationMenuCommand,
 ) error {
+	if command == ApplicationMenuCommandNewWindow {
+		return s.createWorkspaceWindowFromMenu()
+	}
 	// Native menu callbacks omit the sender. Resolve it before the no-window
 	// Settings/About paths so a focused panel routes through its workspace owner.
 	if windowName == "" {

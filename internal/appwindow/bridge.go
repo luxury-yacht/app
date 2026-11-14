@@ -80,10 +80,15 @@ func (bridge *Bridge) OnSecondInstanceLaunch(application.SecondInstanceData) {
 	}
 }
 
-func (bridge *Bridge) CreateWorkspaceWindow() {
-	if bridge.registry != nil {
-		bridge.registry.Create(false)
+func (bridge *Bridge) CreateWorkspaceWindow() error {
+	registry, err := bridge.registryOrError()
+	if err != nil {
+		return err
 	}
+	if registry.Create(false) == nil {
+		return errWorkspaceSwitching
+	}
+	return nil
 }
 
 func (bridge *Bridge) IsWorkspaceWindow(windowName string) bool {

@@ -95,8 +95,14 @@ sessions, drain jobs, and unsaved editor content stay with their live owners.
   replace, rename, delete, and open with an out-of-date revision behaved as
   designed, and the refused open left the windows untouched. Rename and delete
   were exercised through the dialog. File > New Window worked after a switch,
-  and the app quit cleanly. Not exercised: cluster tabs, docked or floating
-  panels, a saved window that fails to load, the warnings, Windows, and Linux.
+  and the app quit cleanly.
+- **Partial switch on macOS (native, Kind).** With no clusters selected at
+  launch, Open Workspace restored the dev and staging tabs, a docked staging
+  Node panel, and a floating dev Node panel. A scratch build prevented the
+  second saved app window from loading its renderer and shortened the load
+  deadline to three seconds. The working app window showed a warning for the
+  failed destination. Admission reopened 6 ms after presentation in this run.
+  Windows and Linux were not exercised.
 - **Simple switch (automated).** The earlier native runs of open and switch
   marked "staged design" below do not cover this one.
   `TestSwitchClosesThePreviousWindowsThenShowsTheSavedOnes` covers the order:

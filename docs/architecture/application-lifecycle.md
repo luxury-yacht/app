@@ -299,7 +299,7 @@ unavailable. The warnings go to one window of the new workspace in a single
 `named-workspace:warnings` event, since the window that asked is closed. The
 registry picks the window the user is most likely looking at (the last to enter
 fullscreen, otherwise one not reopened minimized), preferring one whose
-renderer has answered. The command returns an error when closing a previous
+renderer is ready to receive the warning. The command returns an error when closing a previous
 window fails or no replacement can be shown.
 
 If no saved window can be created at all, the command fails and leaves the
@@ -322,7 +322,8 @@ app view releases it like any other view instead of starting a quit; the switch
 requests the quit itself at its end if no window is left. A cluster close does
 not commit while a switch runs, and a cluster whose kubeconfig goes ends
 whatever its panel windows were asked before it closes them. File > New Window is refused while a switch runs: a new window
-takes every selected cluster, and that selection is being replaced.
+takes every selected cluster, and that selection is being replaced. The menu
+reports the refusal and the command can be retried once cleanup finishes.
 
 Saved geometry uses the same logical work-area rules as startup. A window is
 saved with the bounds it returns to and with its maximized, fullscreen, and

@@ -141,7 +141,7 @@ func TestWindowRegistryBridgePreservesUnboundStartupSemantics(t *testing.T) {
 
 	require.True(t, bridge.PrepareApplicationQuit())
 	require.False(t, options.IsWorkspaceWindow("workspace-1"))
-	require.NotPanics(t, options.CreateWorkspaceWindow)
+	require.Error(t, options.CreateWorkspaceWindow())
 	_, err := options.NativeWindowDescriptor("workspace-1")
 	require.ErrorContains(t, err, "native window registry is not available")
 	_, err = options.BeginPanelWindowOpen(panelwindow.GroupSnapshot{})
@@ -183,7 +183,7 @@ func TestWindowRegistryBridgeForwardsEveryRuntimeOperationAfterBinding(t *testin
 
 	require.False(t, bridge.PrepareApplicationQuit())
 	bridge.OnSecondInstanceLaunch(application.SecondInstanceData{})
-	options.CreateWorkspaceWindow()
+	require.ErrorIs(t, options.CreateWorkspaceWindow(), errWorkspaceSwitching)
 	require.True(t, options.IsWorkspaceWindow("workspace-1"))
 	_, err := options.NativeWindowDescriptor("workspace-1")
 	require.NoError(t, err)

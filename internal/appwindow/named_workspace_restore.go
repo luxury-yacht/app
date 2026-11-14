@@ -398,7 +398,17 @@ func (r *Registry) warningWindows(restore *namedWorkspaceRestore) []namedWorkspa
 	}
 	slices.Reverse(fullscreen)
 	ordered := slices.Concat(fullscreen, visible, minimized)
+	ready := make(map[string]bool, len(ordered))
+	for _, target := range ordered {
+		ready[target.name] = r.rendererReady(target.name)
+	}
 	slices.SortStableFunc(ordered, func(a, b namedWorkspaceTarget) int {
+		if ready[a.name] != ready[b.name] {
+			if ready[a.name] {
+				return -1
+			}
+			return 1
+		}
 		return cmp.Compare(restore.rank(a.name), restore.rank(b.name))
 	})
 	return ordered

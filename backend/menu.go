@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"fmt"
 	"runtime"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -8,6 +9,7 @@ import (
 
 type menuController interface {
 	ExecuteApplicationMenuCommand(string, ApplicationMenuCommand) error
+	showNewWindowError(error)
 	IsSidebarVisible() bool
 	IsAppLogsPanelVisible() bool
 	IsDiagnosticsPanelVisible() bool
@@ -87,6 +89,10 @@ func addDesktopFileMenuItems(fileMenu *application.Menu, app menuController) {
 func applicationMenuCallback(app menuController, command ApplicationMenuCommand) func() {
 	return func() {
 		if err := app.ExecuteApplicationMenuCommand("", command); err != nil {
+			if command == ApplicationMenuCommandNewWindow {
+				app.showNewWindowError(err)
+				return
+			}
 			println("Failed to execute application menu command:", err.Error())
 		}
 	}
@@ -216,9 +222,16 @@ func (s *DesktopShell) setApplicationMenu(menu *application.Menu) {
 	s.menu = menu
 }
 
-func (s *DesktopShell) createWorkspaceWindowFromMenu() {
-	if s != nil && s.createWorkspaceWindow != nil {
-		s.createWorkspaceWindow()
+func (s *DesktopShell) createWorkspaceWindowFromMenu() error {
+	if s == nil || s.createWorkspaceWindow == nil {
+		return fmt.Errorf("new window is unavailable")
+	}
+	return s.createWorkspaceWindow()
+}
+
+func (s *DesktopShell) showNewWindowError(err error) {
+	if s != nil && s.application != nil {
+		s.application.Dialog.Warning().SetTitle("Could not open a new window").SetMessage(err.Error()).Show()
 	}
 }
 

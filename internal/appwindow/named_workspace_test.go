@@ -611,13 +611,19 @@ func TestSwitchWarningGoesToAWindowTheUserCanSee(t *testing.T) {
 		targets     []namedWorkspaceTarget
 		closed      []string
 		unreachable []string
+		unready     []string
 		answered    []string
+		failed      []string
 		expected    []string
 	}{
 		// A window that has not loaded has no listener for the warning yet.
 		"prefers a window that has loaded": {
 			targets: []namedWorkspaceTarget{{}, {}}, answered: []string{"workspace-2"},
 			expected: []string{"workspace-2"},
+		},
+		"prefers a listening window even when its saved view failed": {
+			targets: []namedWorkspaceTarget{{}, {}}, unready: []string{"workspace-1"},
+			failed: []string{"workspace-2"}, expected: []string{"workspace-2"},
 		},
 		"skips a window reopened minimized": {
 			targets:  []namedWorkspaceTarget{{geometry: panelwindow.NamedWorkspaceGeometry{Minimized: true}}, {}},
@@ -648,15 +654,21 @@ func TestSwitchWarningGoesToAWindowTheUserCanSee(t *testing.T) {
 	for name, test := range cases {
 		t.Run(name, func(t *testing.T) {
 			r := NewRegistry(nil, &recordingLifecycleBackend{})
-			restore := &namedWorkspaceRestore{loaded: map[string]bool{}, shown: map[string]bool{}}
+			restore := &namedWorkspaceRestore{answered: map[string]bool{}, loaded: map[string]bool{}, shown: map[string]bool{}}
 			for _, target := range test.targets {
 				target.name = r.lifecycle.Add()
-				readyAppWindow(r, target.name)
+				if !slices.Contains(test.unready, target.name) {
+					readyAppWindow(r, target.name)
+				}
 				restore.targets = append(restore.targets, target)
 				restore.shown[target.name] = true
 			}
 			for _, answered := range test.answered {
+				restore.answered[answered] = true
 				restore.loaded[answered] = true
+			}
+			for _, failed := range test.failed {
+				restore.answered[failed] = true
 			}
 			for _, closed := range test.closed {
 				r.lifecycle.BeginClose(closed)
