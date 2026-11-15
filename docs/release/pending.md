@@ -1,7 +1,7 @@
 ### Added
 
 - Named workspaces. Save the arrangement of every app window and floating panel window under a name, and reopen it later.
-  - File → Open Workspace… (⇧⌘O / Ctrl+Shift+O), Save Workspace…, and Manage Workspaces…, or the same commands in the Command Palette's Workspaces section, which also lists the saved workspaces.
+  - File → Open Workspace… (⇧⌘O / Ctrl+Shift+O), Save Workspace…, and Manage Workspaces…, or the same commands in the Command Palette, which also lists the saved workspaces in its Workspaces section.
   - A workspace keeps each window's position and maximized, minimized, or fullscreen state, along with its cluster tabs, views, table filters, and docked and floating panels.
     - In Linux Wayland, window position is decided by the compositor, so positions will not be saved as part of the workspace.
   - Opening a workspace replaces the current windows. Unsaved edits stop the switch, and saved clusters that are no longer available are listed.

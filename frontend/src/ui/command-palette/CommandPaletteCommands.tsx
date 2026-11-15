@@ -39,6 +39,7 @@ import {
   ResetFiltersIcon,
   SettingsIcon,
   WarningIcon,
+  WorkspaceIcon,
 } from '@shared/components/icons/SharedIcons';
 import { clearAllGridTableState } from '@shared/components/tables/persistence/gridTablePersistenceReset';
 import { navigateToFavorite } from '@ui/favorites/navigateToFavorite';
@@ -523,37 +524,6 @@ export function useCommandPaletteCommands() {
         keywords: ['short', 'names', 'abbreviations', 'types', 'resources', 'toggle'],
       },
 
-      {
-        id: 'open-workspace',
-        label: 'Open Workspace…',
-        description: 'Replace the current windows with a saved layout',
-        icon: <SettingsIcon width={16} height={16} />,
-        category: 'Workspaces',
-        action: () => {
-          // Handled specially in CommandPalette component: opens the workspace picker.
-        },
-        keywords: ['workspace', 'open', 'restore', 'windows', 'layout'],
-        shortcut: openWorkspaceShortcut,
-      },
-      {
-        id: 'save-workspace',
-        label: 'Save Workspace…',
-        description: 'Save the layout of all app and panel windows',
-        icon: <SettingsIcon width={16} height={16} />,
-        category: 'Workspaces',
-        action: () => eventBus.emit('named-workspace:save-dialog'),
-        keywords: ['workspace', 'save', 'windows', 'layout'],
-      },
-      {
-        id: 'manage-workspaces',
-        label: 'Manage Workspaces…',
-        description: 'Rename or delete saved workspaces',
-        icon: <SettingsIcon width={16} height={16} />,
-        category: 'Workspaces',
-        action: () => eventBus.emit('named-workspace:manage-dialog'),
-        keywords: ['workspace', 'manage', 'rename', 'delete', 'layout'],
-      },
-
       // Navigation Commands
       {
         id: 'close-cluster-tab',
@@ -591,6 +561,36 @@ export function useCommandPaletteCommands() {
         },
         keywords: ['namespace', 'change', 'select'],
         shortcut: selectNamespaceShortcut,
+      },
+      {
+        id: 'open-workspace',
+        label: 'Open Workspace…',
+        description: 'Replace the current windows with a saved layout',
+        icon: <WorkspaceIcon width={16} height={16} />,
+        category: 'Navigation',
+        action: () => {
+          // Handled specially in CommandPalette component: opens the workspace picker.
+        },
+        keywords: ['workspace', 'open', 'restore', 'windows', 'layout'],
+        shortcut: openWorkspaceShortcut,
+      },
+      {
+        id: 'save-workspace',
+        label: 'Save Workspace…',
+        description: 'Save the layout of all app and panel windows',
+        icon: <WorkspaceIcon width={16} height={16} />,
+        category: 'Navigation',
+        action: () => eventBus.emit('named-workspace:save-dialog'),
+        keywords: ['workspace', 'save', 'windows', 'layout'],
+      },
+      {
+        id: 'manage-workspaces',
+        label: 'Manage Workspaces…',
+        description: 'Rename or delete saved workspaces',
+        icon: <WorkspaceIcon width={16} height={16} />,
+        category: 'Navigation',
+        action: () => eventBus.emit('named-workspace:manage-dialog'),
+        keywords: ['workspace', 'manage', 'rename', 'delete', 'layout'],
       },
       ...buildGlobalViewCommands(selectedKubeconfigs.length > 1, openGlobalView),
       ...buildClusterViewCommands(openClusterTab, availableClusterViews),
@@ -728,7 +728,7 @@ export function useCommandPaletteCommands() {
 const buildSavedWorkspaceCommand = (entry: panelwindow.NamedWorkspaceEntry): Command => ({
   id: `workspace-${entry.name}`,
   label: entry.name,
-  icon: <CategoryIcon width={16} height={16} />,
+  icon: <WorkspaceIcon width={16} height={16} />,
   description: 'Replace the current windows with this workspace',
   category: 'Workspaces',
   action: () => {

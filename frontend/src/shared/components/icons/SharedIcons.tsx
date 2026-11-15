@@ -442,6 +442,33 @@ export const ClusterResourcesIcon: React.FC<IconProps> = ({
   </svg>
 );
 
+/** A saved arrangement of windows: two window frames, the front one overlapping the back. */
+export const WorkspaceIcon: React.FC<FixedColorIconProps> = ({
+  width = 24,
+  height = 24,
+  className,
+}) => (
+  <svg
+    viewBox="0 0 24 24"
+    width={width}
+    height={height}
+    className={className}
+    aria-hidden="true"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={2}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    focusable="false"
+  >
+    {/* The back window, drawn only where the front one does not cover it. */}
+    <path d="M8 14H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v4" />
+    <path d="M3 7h13" />
+    <rect x="8" y="9" width="13" height="12" rx="2" />
+    <path d="M8 13h13" />
+  </svg>
+);
+
 export const CategoryIcon: React.FC<IconProps> = ({
   width = 24,
   height = 24,

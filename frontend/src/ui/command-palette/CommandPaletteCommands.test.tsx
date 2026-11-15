@@ -520,7 +520,7 @@ describe('saved workspaces', () => {
 
   const workspaceCommands = ['Open Workspace…', 'Save Workspace…', 'Manage Workspaces…'];
 
-  it('lists saved workspaces after the workspace commands in one section, and opens the chosen one', async () => {
+  it('lists saved workspaces alone in their section, with the workspace commands under Navigation, and opens the chosen one', async () => {
     app.backend.answer('ListNamedWorkspaces', () => [
       { name: 'Incident', revision: 'rev-incident' },
       { name: 'Release', revision: 'rev-release' },
@@ -529,8 +529,11 @@ describe('saved workspaces', () => {
     view = await app.mountApp();
     await menu('open-command-palette');
     vi.useFakeTimers();
-    expect(groupLabels('Workspaces')).toEqual([...workspaceCommands, 'Incident', 'Release']);
-    expect(groupLabels('Application')).not.toContain('Open Workspace…');
+    // Like Select kubeconfig… and Select namespace… beside their listed entries.
+    expect(groupLabels('Workspaces')).toEqual(['Incident', 'Release']);
+    const navigation = groupLabels('Navigation');
+    const pickers = navigation.indexOf('Select namespace...');
+    expect(navigation.slice(pickers + 1, pickers + 4)).toEqual(workspaceCommands);
 
     await choose('Release');
     // The revision it listed: a workspace replaced since then is refused, not opened.
@@ -608,13 +611,13 @@ describe('saved workspaces', () => {
     app.backend.answer('ListNamedWorkspaces', () => saved);
     view = await app.mountApp();
     await menu('open-command-palette');
-    expect(groupLabels('Workspaces')).toEqual([...workspaceCommands, 'Incident']);
+    expect(groupLabels('Workspaces')).toEqual(['Incident']);
     await closePalette();
 
     // Another window renames it while the palette is closed.
     saved = [{ name: 'Outage', revision: 'rev-incident' }];
     await menu('open-command-palette');
-    expect(groupLabels('Workspaces')).toEqual([...workspaceCommands, 'Outage']);
+    expect(groupLabels('Workspaces')).toEqual(['Outage']);
   });
 
   it('tells the user when opening a saved workspace is refused', async () => {
@@ -645,7 +648,8 @@ describe('saved workspaces', () => {
     view = await app.mountApp();
     await menu('open-command-palette');
 
-    expect(groupLabels('Workspaces')).toEqual(workspaceCommands);
+    expect(groupLabels('Workspaces')).toEqual([]);
+    expect(groupLabels('Navigation')).toEqual(expect.arrayContaining(workspaceCommands));
     const reports = app.errors.take((record) => record.context?.action === 'list');
     expect(reports.map((record) => record.kinds)).toEqual([['operational']]);
   });

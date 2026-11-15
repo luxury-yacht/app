@@ -1,6 +1,12 @@
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
-import { CheckIcon, CloseIcon, DeleteIcon, EditIcon } from '@shared/components/icons/SharedIcons';
+import {
+  CheckIcon,
+  CloseIcon,
+  DeleteIcon,
+  EditIcon,
+  WorkspaceIcon,
+} from '@shared/components/icons/SharedIcons';
 import { useEffect, useId, useRef, useState } from 'react';
 import { DeleteNamedWorkspace, RenameNamedWorkspace } from '@/core/backend-api';
 import type { panelwindow } from '@/core/backend-api/models';
@@ -161,6 +167,7 @@ export function NamedWorkspaceManageDialog() {
       >
         <ModalHeader
           title="Manage Workspaces"
+          icon={WorkspaceIcon}
           titleId={title}
           onClose={close}
           closeDisabled={busy}

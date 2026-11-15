@@ -1,3 +1,4 @@
+import { WorkspaceIcon } from '@shared/components/icons/SharedIcons';
 import { useId, useRef, useState } from 'react';
 import { SaveNamedWorkspace } from '@/core/backend-api';
 import type { panelwindow } from '@/core/backend-api/models';
@@ -12,6 +13,7 @@ import './NamedWorkspaceSaveDialog.css';
 
 export function NamedWorkspaceSaveDialog() {
   const titleId = useId();
+  const nameInputId = useId();
   const modalRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
@@ -79,6 +81,7 @@ export function NamedWorkspaceSaveDialog() {
     >
       <ModalHeader
         title="Save Workspace"
+        icon={WorkspaceIcon}
         titleId={titleId}
         onClose={close}
         closeDisabled={saving}
@@ -89,10 +92,11 @@ export function NamedWorkspaceSaveDialog() {
           void save();
         }}
       >
-        <div className="modal-content">
-          <label className="modal-form-field">
-            <span>Workspace name</span>
+        <div className="modal-content named-workspace-content">
+          <div className="named-workspace-field">
+            <label htmlFor={nameInputId}>Workspace name</label>
             <input
+              id={nameInputId}
               className="modal-input"
               name="workspace-name"
               value={name}
@@ -100,7 +104,7 @@ export function NamedWorkspaceSaveDialog() {
               disabled={saving}
               required
             />
-          </label>
+          </div>
           {!!failure && (
             <div role="alert">
               <ErrorSurface

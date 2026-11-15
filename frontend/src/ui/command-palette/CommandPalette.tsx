@@ -147,24 +147,15 @@ const PICKER_MODE_BY_COMMAND = new Map<string, PaletteSelectMode>([
   ['open-workspace', 'workspaces'],
 ]);
 
-// A picker lists only its own choices; workspaces come from the saved list
-// rather than a category, which also holds the workspace commands.
-const commandsForMode = (
-  mode: PaletteSelectMode,
-  commands: Command[],
-  savedWorkspaces: Command[]
-): Command[] => {
-  switch (mode) {
-    case 'namespaces':
-      return commands.filter((cmd) => cmd.category === 'Namespaces');
-    case 'kubeconfigs':
-      return commands.filter((cmd) => cmd.category === 'Kubeconfigs');
-    case 'workspaces':
-      return savedWorkspaces;
-    case 'none':
-      return commands;
-  }
+// A picker lists only its own category's choices.
+const PICKER_CATEGORY: Record<Exclude<PaletteSelectMode, 'none'>, string> = {
+  namespaces: 'Namespaces',
+  kubeconfigs: 'Kubeconfigs',
+  workspaces: 'Workspaces',
 };
+
+const commandsForMode = (mode: PaletteSelectMode, commands: Command[]): Command[] =>
+  mode === 'none' ? commands : commands.filter((cmd) => cmd.category === PICKER_CATEGORY[mode]);
 
 const paletteEmptyMessage = (
   query: string,
@@ -561,7 +552,7 @@ export const CommandPalette = memo(function CommandPaletteComponent({
 
   // Filter commands based on search query and mode
   const filteredCommands = useMemo(() => {
-    const filteredList = commandsForMode(selectMode, allCommands, savedWorkspaceCommands);
+    const filteredList = commandsForMode(selectMode, allCommands);
 
     if (!searchQuery.trim()) {
       return filteredList;
@@ -578,7 +569,7 @@ export const CommandPalette = memo(function CommandPaletteComponent({
 
       return matchesLabel || matchesDescription || matchesCategory || matchesKeywords;
     });
-  }, [allCommands, savedWorkspaceCommands, searchQuery, selectMode]);
+  }, [allCommands, searchQuery, selectMode]);
 
   // Group commands by category
   const groupedCommands = useMemo(() => {
