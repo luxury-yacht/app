@@ -9,6 +9,7 @@ import {
   GetShellSessionBacklog,
   GetThemes,
   GetZoomLevel,
+  ListNamedWorkspaces,
   ListPortForwards,
   ListRuntimeOperations,
   ListShellSessions,
@@ -24,6 +25,7 @@ export const readKubeconfigSearchPaths = async () => (await GetKubeconfigSearchP
 export const readAppInfo = () => GetAppInfo();
 export const readAppLogs = async () => (await GetAppLogs()) ?? [];
 export const readAppLogsSince = async (sequence: number) => (await GetAppLogsSince(sequence)) ?? [];
+export const readNamedWorkspaces = async () => (await ListNamedWorkspaces()) ?? [];
 export const readPortForwardSessions = async () => (await ListPortForwards()) ?? [];
 export const readRuntimeOperations = async () => (await ListRuntimeOperations()) ?? [];
 export const readShellSessions = async () =>

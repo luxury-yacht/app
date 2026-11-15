@@ -43,11 +43,14 @@ import {
 import { clearAllGridTableState } from '@shared/components/tables/persistence/gridTablePersistenceReset';
 import { navigateToFavorite } from '@ui/favorites/navigateToFavorite';
 import { closeActiveClusterOrWindow } from '@ui/navigation/closeActiveClusterOrWindow';
-import { type ReactNode, useCallback, useMemo } from 'react';
-import { CheckForUpdates } from '@/core/backend-api';
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { CheckForUpdates, OpenNamedWorkspace } from '@/core/backend-api';
+import type { panelwindow } from '@/core/backend-api/models';
 import { requestContextRefresh } from '@/core/data-access';
+import { getWindowIdentity } from '@/core/desktop-runtime';
 import { eventBus } from '@/core/events';
 import { GLOBAL_VIEW_DESCRIPTORS } from '@/core/navigation/viewRegistry';
+import { listNamedWorkspaces } from '@/core/persistence/namedWorkspaces';
 import {
   setAutoRefreshEnabled,
   setDimInactiveNamespaces,
@@ -57,7 +60,7 @@ import {
 import { usePreference } from '@/core/settings/usePreference';
 import type { ClusterViewType, NamespaceViewType } from '@/types/navigation/views';
 import { changeAppearanceMode } from '@/utils/appearanceMode';
-import { reportOperationalError } from '@/utils/errorHandler';
+import { errorHandler, reportOperationalError } from '@/utils/errorHandler';
 import { isMacPlatform } from '@/utils/platform';
 
 export interface Command {
@@ -520,7 +523,7 @@ export function useCommandPaletteCommands() {
         label: 'Open Workspace…',
         description: 'Replace the current windows with a saved layout',
         icon: <SettingsIcon width={16} height={16} />,
-        category: 'Application',
+        category: 'Workspaces',
         action: () => eventBus.emit('named-workspace:open-dialog'),
         keywords: ['workspace', 'open', 'restore', 'windows', 'layout'],
       },
@@ -529,7 +532,7 @@ export function useCommandPaletteCommands() {
         label: 'Save Workspace…',
         description: 'Save the layout of all app and panel windows',
         icon: <SettingsIcon width={16} height={16} />,
-        category: 'Application',
+        category: 'Workspaces',
         action: () => eventBus.emit('named-workspace:save-dialog'),
         keywords: ['workspace', 'save', 'windows', 'layout'],
       },
@@ -699,4 +702,51 @@ export function useCommandPaletteCommands() {
     ...namespaceCommands,
     ...kubeconfigCommands,
   ];
+}
+
+// Opens the snapshot the palette listed: one replaced since then is refused,
+// not opened in its place. The palette has closed by then, so a refusal is
+// shown as a notification.
+const buildSavedWorkspaceCommand = (entry: panelwindow.NamedWorkspaceEntry): Command => ({
+  id: `workspace-${entry.name}`,
+  label: entry.name,
+  icon: <CategoryIcon width={16} height={16} />,
+  description: 'Replace the current windows with this workspace',
+  category: 'Workspaces',
+  action: () => {
+    OpenNamedWorkspace(getWindowIdentity(), entry.name, entry.revision).catch((error) => {
+      errorHandler.handle(error, { source: 'NamedWorkspace', action: 'open' });
+    });
+  },
+  keywords: ['workspace', 'layout', 'windows'],
+});
+
+/**
+ * The saved workspaces as palette commands, read each time the palette opens.
+ * A failed read leaves them out and is not shown, since every open would show
+ * it again; the Open Workspace dialog reports it where the list is managed.
+ */
+export function useSavedWorkspaceCommands(paletteOpen: boolean): Command[] {
+  const [entries, setEntries] = useState<panelwindow.NamedWorkspaceEntry[]>([]);
+  useEffect(() => {
+    if (!paletteOpen) {
+      setEntries([]);
+      return;
+    }
+    // A list that arrives after its palette closed belongs to no open palette.
+    let current = true;
+    listNamedWorkspaces()
+      .then((saved) => {
+        if (current) {
+          setEntries(saved);
+        }
+      })
+      .catch((error) => {
+        reportOperationalError(error, { source: 'NamedWorkspace', action: 'list' });
+      });
+    return () => {
+      current = false;
+    };
+  }, [paletteOpen]);
+  return useMemo(() => entries.map(buildSavedWorkspaceCommand), [entries]);
 }

@@ -2,7 +2,58 @@
   max-width: var(--modal-width-md);
 }
 
-/* Keeps the destructive action apart from the dialog's primary actions. */
-.named-workspace-delete {
+.named-workspace-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.named-workspace-field > label {
+  display: block;
+  margin-bottom: var(--spacing-xs);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+/* The picker (or the rename input) fills the row; its actions sit beside it. */
+.named-workspace-field-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.named-workspace-field-row > .dropdown,
+.named-workspace-field-row > .modal-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.named-workspace-field-row .dropdown-trigger {
+  width: 100%;
+}
+
+.named-workspace-hint {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.named-workspace-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 1.5rem 1rem;
+  text-align: center;
+}
+
+.named-workspace-empty-title {
+  margin: 0;
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+/* Keeps the secondary action apart from Cancel and Open. */
+.named-workspace-footer-start {
   margin-right: auto;
 }

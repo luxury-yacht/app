@@ -25,7 +25,7 @@ import type { CatalogItem } from '@/core/refresh/types';
 import { usePreference } from '@/core/settings/usePreference';
 import { aliasToKindMap, canonicalKinds } from '@/utils/kindAliasMap';
 import { isMacPlatform } from '@/utils/platform';
-import type { Command } from './CommandPaletteCommands';
+import { type Command, useSavedWorkspaceCommands } from './CommandPaletteCommands';
 import {
   CATALOG_RESULT_LIMIT,
   type CatalogStats,
@@ -44,6 +44,7 @@ const CATEGORY_ORDER = [
   'View',
   'Navigation',
   'Favorites',
+  'Workspaces',
   'Namespaces',
   'Kubeconfigs',
   'General', // Fallback for any uncategorized commands
@@ -504,16 +505,22 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     return true;
   }, []);
 
+  const savedWorkspaceCommands = useSavedWorkspaceCommands(isOpen);
+  const allCommands = useMemo(
+    () => [...commands, ...savedWorkspaceCommands],
+    [commands, savedWorkspaceCommands]
+  );
+
   // Filter commands based on search query and mode
   const filteredCommands = useMemo(() => {
-    let filteredList = commands;
+    let filteredList = allCommands;
 
     // A selection sub-mode narrows the palette to that single category.
     if (selectMode === 'namespaces') {
-      filteredList = commands.filter((cmd) => cmd.category === 'Namespaces');
+      filteredList = allCommands.filter((cmd) => cmd.category === 'Namespaces');
     }
     if (selectMode === 'kubeconfigs') {
-      filteredList = commands.filter((cmd) => cmd.category === 'Kubeconfigs');
+      filteredList = allCommands.filter((cmd) => cmd.category === 'Kubeconfigs');
     }
 
     if (!searchQuery.trim()) {
@@ -531,7 +538,7 @@ export const CommandPalette = memo(function CommandPaletteComponent({
 
       return matchesLabel || matchesDescription || matchesCategory || matchesKeywords;
     });
-  }, [commands, searchQuery, selectMode]);
+  }, [allCommands, searchQuery, selectMode]);
 
   // Group commands by category
   const groupedCommands = useMemo(() => {

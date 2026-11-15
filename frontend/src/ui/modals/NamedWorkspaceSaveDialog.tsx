@@ -1,8 +1,9 @@
 import { useId, useRef, useState } from 'react';
-import { ListNamedWorkspaces, SaveNamedWorkspace } from '@/core/backend-api';
+import { SaveNamedWorkspace } from '@/core/backend-api';
 import type { panelwindow } from '@/core/backend-api/models';
 import { getWindowIdentity } from '@/core/desktop-runtime';
 import { useEventBus } from '@/core/events';
+import { listNamedWorkspaces } from '@/core/persistence/namedWorkspaces';
 import { ErrorSurface } from '@/shared/components/errors/ErrorSurface';
 import ModalHeader from '@/shared/components/modals/ModalHeader';
 import ModalSurface from '@/shared/components/modals/ModalSurface';
@@ -29,8 +30,8 @@ export function NamedWorkspaceSaveDialog() {
   };
 
   const load = () =>
-    ListNamedWorkspaces()
-      .then((saved) => setEntries(saved ?? []))
+    listNamedWorkspaces()
+      .then(setEntries)
       .catch((error) => setFailure({ error, action: 'list' }));
 
   useEventBus('named-workspace:save-dialog', () => {
