@@ -169,14 +169,54 @@ const PICKER_CATEGORIES: Record<Exclude<PaletteSelectMode, 'none'>, readonly str
   workspaces: ['Workspaces'],
 };
 
-// A command matches when every word of the query appears in its label,
-// description, category or keywords — the same every-word rule as object search,
-// so spaces and word order never hide a match.
-const commandMatchesWords = (command: Command, words: string[]): boolean => {
-  const fields = [command.label, command.description, command.category, ...(command.keywords ?? [])]
-    .filter((field): field is string => Boolean(field))
-    .map((field) => field.toLowerCase());
-  return words.every((word) => fields.some((field) => field.includes(word)));
+interface RankedCommand {
+  command: Command;
+  score: number;
+}
+
+// How well one search word matches a command, best first: the label starts with
+// it, a word in the label starts with it, the label contains it, a keyword or the
+// category contains it, only the (hidden) description contains it. Null: no match.
+const scoreCommandWord = (command: Command, word: string): number | null => {
+  const label = command.label.toLowerCase();
+  if (label.startsWith(word)) {
+    return 4;
+  }
+  if (label.split(/[^a-z0-9]+/).some((part) => part.startsWith(word))) {
+    return 3;
+  }
+  if (label.includes(word)) {
+    return 2;
+  }
+  const tags = [command.category ?? '', ...(command.keywords ?? [])];
+  if (tags.some((tag) => tag.toLowerCase().includes(word))) {
+    return 1;
+  }
+  return command.description?.toLowerCase().includes(word) ? 0 : null;
+};
+
+// Every word must match (the same every-word rule as object search, so spaces and
+// word order never hide a match); the command's score is the sum.
+const scoreCommand = (command: Command, words: string[]): number | null => {
+  let score = 0;
+  for (const word of words) {
+    const wordScore = scoreCommandWord(command, word);
+    if (wordScore === null) {
+      return null;
+    }
+    score += wordScore;
+  }
+  return score;
+};
+
+// The commands matching every word of the query, best first. The sort is stable,
+// so ties (and every command when the query is empty) keep their listed order.
+const rankCommands = (commands: Command[], query: string): RankedCommand[] => {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  return commands
+    .map((command) => ({ command, score: scoreCommand(command, words) }))
+    .filter((ranked): ranked is RankedCommand => ranked.score !== null)
+    .sort((a, b) => b.score - a.score);
 };
 
 const commandsForMode = (mode: PaletteSelectMode, commands: Command[]): Command[] =>
@@ -208,21 +248,24 @@ const compareCategories = (a: string, b: string): number => {
   return a.localeCompare(b);
 };
 
-const groupCommandsByCategory = (commands: Command[]): CommandGroup[] => {
-  const byCategory = new Map<string, Command[]>();
-  for (const command of commands) {
+// Groups ranked commands under their category headings: the group with the best
+// match first (ties in CATEGORY_ORDER), each group's commands best first.
+const groupCommandsByCategory = (ranked: RankedCommand[]): CommandGroup[] => {
+  // Ranked best first, so a group's first command carries its best score.
+  const byCategory = new Map<string, { best: number; commands: Command[] }>();
+  for (const { command, score } of ranked) {
     const category = command.category || 'General';
     const group = byCategory.get(category);
     if (group) {
-      group.push(command);
+      group.commands.push(command);
     } else {
-      byCategory.set(category, [command]);
+      byCategory.set(category, { best: score, commands: [command] });
     }
   }
   let startIndex = 0;
   return Array.from(byCategory.entries())
-    .sort(([a], [b]) => compareCategories(a, b))
-    .map(([category, groupCommands]) => {
+    .sort(([a, groupA], [b, groupB]) => groupB.best - groupA.best || compareCategories(a, b))
+    .map(([category, { commands: groupCommands }]) => {
       const group = { category, commands: groupCommands, startIndex };
       startIndex += groupCommands.length;
       return group;
@@ -762,21 +805,13 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     [commands, savedWorkspaceCommands]
   );
 
-  // Filter commands based on search query and mode
-  const filteredCommands = useMemo(() => {
-    const filteredList = commandsForMode(selectMode, allCommands);
-
-    const words = searchQuery.toLowerCase().split(/\s+/).filter(Boolean);
-    if (words.length === 0) {
-      return filteredList;
-    }
-    return filteredList.filter((command) => commandMatchesWords(command, words));
-  }, [allCommands, searchQuery, selectMode]);
-
-  const commandGroups = useMemo(
-    () => groupCommandsByCategory(filteredCommands),
-    [filteredCommands]
+  // This mode's commands that match every word of the search, best match first.
+  const rankedCommands = useMemo(
+    () => rankCommands(commandsForMode(selectMode, allCommands), searchQuery),
+    [allCommands, searchQuery, selectMode]
   );
+
+  const commandGroups = useMemo(() => groupCommandsByCategory(rankedCommands), [rankedCommands]);
 
   const showCatalogSearch = isOpen && selectMode === 'none' && searchQuery.trim().length > 0;
   const {
@@ -820,14 +855,14 @@ export const CommandPalette = memo(function CommandPaletteComponent({
 
   const paletteItemCount = paletteItems.length;
 
-  const hasCommandResults = filteredCommands.length > 0;
+  const hasCommandResults = rankedCommands.length > 0;
   const hasCatalogResults = catalogDisplayItems.length > 0;
   // While the workspace picker's list is still being read, it claims nothing.
   const workspacesLoading = selectMode === 'workspaces' && savedWorkspaces.status === 'loading';
   const noResults =
     !hasCommandResults && !hasCatalogResults && !catalogLoading && !workspacesLoading;
 
-  const catalogBaseIndex = filteredCommands.length;
+  const catalogBaseIndex = rankedCommands.length;
 
   const resetPalette = useCallback(() => {
     setSearchQuery('');

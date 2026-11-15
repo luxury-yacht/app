@@ -269,14 +269,17 @@ describe('navigation commands', () => {
     vi.useFakeTimers();
     await run('team-a', 'team-a');
 
-    expect(await search('cert-manager')).toEqual(['Namespace - Cert Manager', 'cert-manager']);
-    expect(highlightedLabels()).toEqual(['Namespace - Cert Manager']);
-    expect(activeOptionLabel()).toBe('Namespace - Cert Manager');
-
-    await pressFocused('ArrowDown');
+    // The namespace's label starts with the search, so it ranks above the view.
+    expect(await search('cert-manager')).toEqual(['cert-manager', 'Namespace - Cert Manager']);
     expect(highlightedLabels()).toEqual(['cert-manager']);
     expect(activeOptionLabel()).toBe('cert-manager');
 
+    await pressFocused('ArrowDown');
+    expect(highlightedLabels()).toEqual(['Namespace - Cert Manager']);
+    expect(activeOptionLabel()).toBe('Namespace - Cert Manager');
+
+    await pressFocused('ArrowUp');
+    expect(highlightedLabels()).toEqual(['cert-manager']);
     await pressFocused('Enter');
     await runChosenCommand();
     expect(view.owners().namespace.selectedNamespace).toBe('cert-manager');

@@ -485,6 +485,29 @@ describe('CommandPalette', () => {
     expect(optionLabels()).toEqual([]);
   });
 
+  it('lists the best match first, so Enter runs the command whose label starts with the search', async () => {
+    const refreshView = vi.fn();
+    await showPalette([
+      { ...command('diagnostics', 'Diagnostics panel', 'Application'), keywords: ['refresh'] },
+      command('auto-refresh', 'Disable auto-refresh', 'Settings'),
+      command('refresh-view', 'Refresh current view', 'Settings', refreshView),
+    ]);
+    await openFromViewMenu();
+    vi.useFakeTimers();
+
+    // Label start, then a word in the label, then a keyword-only match.
+    await type('refresh');
+    expect(optionLabels()).toEqual([
+      'Refresh current view',
+      'Disable auto-refresh',
+      'Diagnostics panel',
+    ]);
+
+    await press('Enter');
+    await runPendingCommand();
+    expect(refreshView).toHaveBeenCalledTimes(1);
+  });
+
   it('offers search help that Tab reaches and Enter opens, without running a result', async () => {
     const action = vi.fn();
     await showPalette([command('view-x', 'Toggle X', 'View', action)]);
