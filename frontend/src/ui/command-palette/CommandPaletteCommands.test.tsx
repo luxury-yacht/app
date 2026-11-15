@@ -48,10 +48,11 @@ const openCluster = (
   name: string,
   context: string,
   families: CatalogSnapshotPayload['resourceFamilies'] = {},
-  fixture: { open?: boolean } = {}
+  fixture: { open?: boolean; namespaces?: string[] } = {}
 ) => {
-  const cluster = app.cluster({ name, context, ...fixture });
-  app.namespaces(cluster, ['default', 'team-a']);
+  const { namespaces = ['default', 'team-a'], ...clusterFixture } = fixture;
+  const cluster = app.cluster({ name, context, ...clusterFixture });
+  app.namespaces(cluster, namespaces);
   app.snapshots.serve(
     'catalog',
     buildRefreshScope('catalog', {
@@ -119,21 +120,44 @@ const search = async (query: string) => {
   return optionLabels();
 };
 
-const closePalette = async () => {
-  await act(async () => {
-    document.activeElement?.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
-    );
+const press = (element: Element, key: string) =>
+  act(async () => {
+    element.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
   });
+
+/** Presses `key` where focus is, as a keyboard user does. */
+const pressFocused = (key: string) =>
+  press(requireValue(document.activeElement, 'expected a focused element'), key);
+
+const closePalette = () => pressFocused('Escape');
+
+/** Lets a chosen result's command run, which happens once the palette has closed. */
+const runChosenCommand = async () => {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(100);
+  });
+  await app.settle();
 };
 
 /** Clicks a result; its command runs once the palette has closed. */
 const click = async (option: HTMLElement) => {
   await act(async () => option.click());
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(100);
-  });
-  await app.settle();
+  await runChosenCommand();
+};
+
+// The results the palette marks as highlighted (what Enter runs).
+const highlightedLabels = () =>
+  options()
+    .filter((option) => option.getAttribute('aria-selected') === 'true')
+    .map(labelOf);
+
+// The result the search field names as its active option for assistive technology.
+const activeOptionLabel = () => {
+  const id = document
+    .querySelector('.command-palette [role="combobox"]')
+    ?.getAttribute('aria-activedescendant');
+  const active = id ? document.getElementById(id) : null;
+  return active ? labelOf(active) : null;
 };
 
 /** Clicks the result labelled `label`. */
@@ -222,6 +246,32 @@ describe('navigation commands', () => {
     await run('Namespace - Pods', 'Namespace - Pods');
     expect(view.owners().namespace.selectedNamespace).toBe('team-a');
     expect(viewState().activeNamespaceTab).toBe('pods');
+  });
+
+  // cert-manager installs into a namespace named like its view, so both results
+  // appear together; each must be highlighted, announced, and run on its own.
+  it('keeps a namespace named like a namespace view a separate result from that view', async () => {
+    dev = openCluster(
+      'dev',
+      'alpha',
+      { namespaced: ['cert-manager'] },
+      { namespaces: ['default', 'team-a', 'cert-manager'] }
+    );
+    await showPalette();
+    vi.useFakeTimers();
+    await run('team-a', 'team-a');
+
+    expect(await search('cert-manager')).toEqual(['Namespace - Cert Manager', 'cert-manager']);
+    expect(highlightedLabels()).toEqual(['Namespace - Cert Manager']);
+    expect(activeOptionLabel()).toBe('Namespace - Cert Manager');
+
+    await pressFocused('ArrowDown');
+    expect(highlightedLabels()).toEqual(['cert-manager']);
+    expect(activeOptionLabel()).toBe('cert-manager');
+
+    await pressFocused('Enter');
+    await runChosenCommand();
+    expect(view.owners().namespace.selectedNamespace).toBe('cert-manager');
   });
 
   it('opens All Namespaces on its Workloads view', async () => {
@@ -726,11 +776,6 @@ const submitDialog = () =>
       'expected the submit button'
     ).click()
   );
-
-const press = (element: HTMLElement, key: string) =>
-  act(async () => {
-    element.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
-  });
 
 const clickInDialog = (element: HTMLElement) => act(async () => element.click());
 

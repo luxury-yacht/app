@@ -157,6 +157,51 @@ const PICKER_CATEGORY: Record<Exclude<PaletteSelectMode, 'none'>, string> = {
 const commandsForMode = (mode: PaletteSelectMode, commands: Command[]): Command[] =>
   mode === 'none' ? commands : commands.filter((cmd) => cmd.category === PICKER_CATEGORY[mode]);
 
+interface CommandGroup {
+  category: string;
+  commands: Command[];
+  // The result index of the group's first command; rows are numbered by
+  // position so an index never depends on command ids being unique.
+  startIndex: number;
+}
+
+// Listed categories in CATEGORY_ORDER, then any others alphabetically.
+const compareCategories = (a: string, b: string): number => {
+  const indexA = CATEGORY_ORDER.indexOf(a);
+  const indexB = CATEGORY_ORDER.indexOf(b);
+  if (indexA !== -1 && indexB !== -1) {
+    return indexA - indexB;
+  }
+  if (indexA !== -1) {
+    return -1;
+  }
+  if (indexB !== -1) {
+    return 1;
+  }
+  return a.localeCompare(b);
+};
+
+const groupCommandsByCategory = (commands: Command[]): CommandGroup[] => {
+  const byCategory = new Map<string, Command[]>();
+  for (const command of commands) {
+    const category = command.category || 'General';
+    const group = byCategory.get(category);
+    if (group) {
+      group.push(command);
+    } else {
+      byCategory.set(category, [command]);
+    }
+  }
+  let startIndex = 0;
+  return Array.from(byCategory.entries())
+    .sort(([a], [b]) => compareCategories(a, b))
+    .map(([category, groupCommands]) => {
+      const group = { category, commands: groupCommands, startIndex };
+      startIndex += groupCommands.length;
+      return group;
+    });
+};
+
 const paletteEmptyMessage = (
   query: string,
   mode: PaletteSelectMode,
@@ -384,21 +429,20 @@ const CommandResultRow = ({ command, ...interaction }: Readonly<CommandResultRow
 );
 
 interface CommandGroupsProps extends Omit<ResultRowInteractionProps, 'currentIndex'> {
-  groupedCommands: Array<[string, Command[]]>;
-  commandIndexMap: Map<string, number>;
+  commandGroups: CommandGroup[];
   executePaletteItem: (item: PaletteItem) => void;
 }
 
 const CommandGroups = (props: CommandGroupsProps) => (
   <>
-    {props.groupedCommands.map(([category, commands]) => (
+    {props.commandGroups.map(({ category, commands, startIndex }) => (
       <fieldset key={category} className="command-palette-group">
         <legend className="command-palette-group-header">{category}</legend>
-        {commands.map((command) => (
+        {commands.map((command, offset) => (
           <CommandResultRow
             key={command.id}
             command={command}
-            currentIndex={props.commandIndexMap.get(command.id) ?? 0}
+            currentIndex={startIndex + offset}
             selectedIndex={props.selectedIndex}
             itemRefs={props.itemRefs}
             mouseSelectionArmedRef={props.mouseSelectionArmedRef}
@@ -471,8 +515,7 @@ interface PaletteResultsProps extends Omit<ResultRowInteractionProps, 'currentIn
   noResults: boolean;
   emptyMessage: string;
   hasCommandResults: boolean;
-  groupedCommands: Array<[string, Command[]]>;
-  commandIndexMap: Map<string, number>;
+  commandGroups: CommandGroup[];
   catalogLoading: boolean;
   catalogEntries: CatalogDisplayEntry[];
   catalogStats: CatalogStats;
@@ -571,39 +614,10 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     });
   }, [allCommands, searchQuery, selectMode]);
 
-  // Group commands by category
-  const groupedCommands = useMemo(() => {
-    const groups: Map<string, Command[]> = new Map();
-
-    filteredCommands.forEach((command) => {
-      const category = command.category || 'General';
-      const existing = groups.get(category) || [];
-      existing.push(command);
-      groups.set(category, existing);
-    });
-
-    // Sort categories according to CATEGORY_ORDER
-    return Array.from(groups.entries()).sort((a, b) => {
-      const indexA = CATEGORY_ORDER.indexOf(a[0]);
-      const indexB = CATEGORY_ORDER.indexOf(b[0]);
-
-      // If both are in the order array, sort by their position
-      if (indexA !== -1 && indexB !== -1) {
-        return indexA - indexB;
-      }
-
-      // If only one is in the order array, it comes first
-      if (indexA !== -1) {
-        return -1;
-      }
-      if (indexB !== -1) {
-        return 1;
-      }
-
-      // If neither is in the order array, sort alphabetically
-      return a[0].localeCompare(b[0]);
-    });
-  }, [filteredCommands]);
+  const commandGroups = useMemo(
+    () => groupCommandsByCategory(filteredCommands),
+    [filteredCommands]
+  );
 
   const showCatalogSearch = isOpen && selectMode === 'none' && searchQuery.trim().length > 0;
   const {
@@ -629,18 +643,16 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     );
   }, [showCatalogSearch, catalogResults, parsedTokens, useShortResourceNames]);
 
-  const paletteItems = useMemo<PaletteItem[]>(() => {
-    const flattened: PaletteItem[] = [];
-    groupedCommands.forEach(([_, categoryCommands]) => {
-      categoryCommands.forEach((command) => {
-        flattened.push({ type: 'command', command });
-      });
-    });
-    catalogDisplayItems.forEach((entry) => {
-      flattened.push({ type: 'catalog', item: entry.item });
-    });
-    return flattened;
-  }, [groupedCommands, catalogDisplayItems]);
+  // In render order, so a result's position here is its row index.
+  const paletteItems = useMemo<PaletteItem[]>(
+    () => [
+      ...commandGroups.flatMap(({ commands: groupCommands }) =>
+        groupCommands.map((command): PaletteItem => ({ type: 'command', command }))
+      ),
+      ...catalogDisplayItems.map((entry): PaletteItem => ({ type: 'catalog', item: entry.item })),
+    ],
+    [commandGroups, catalogDisplayItems]
+  );
 
   const resultsId = 'command-palette-results';
   const selectedOptionId =
@@ -656,18 +668,7 @@ export const CommandPalette = memo(function CommandPaletteComponent({
   const noResults =
     !hasCommandResults && !hasCatalogResults && !catalogLoading && !workspacesLoading;
 
-  // Pre-compute indices for rendering without IIFE
-  const commandIndexMap = useMemo(() => {
-    const map = new Map<string, number>();
-    let index = 0;
-    groupedCommands.forEach(([_, categoryCommands]) => {
-      categoryCommands.forEach((command) => {
-        map.set(command.id, index++);
-      });
-    });
-    return map;
-  }, [groupedCommands]);
-  const catalogBaseIndex = commandIndexMap.size;
+  const catalogBaseIndex = filteredCommands.length;
 
   const resetPalette = useCallback(() => {
     setSearchQuery('');
@@ -1105,8 +1106,7 @@ export const CommandPalette = memo(function CommandPaletteComponent({
             noResults={noResults}
             emptyMessage={paletteEmptyMessage(searchQuery, selectMode, savedWorkspaces.status)}
             hasCommandResults={hasCommandResults}
-            groupedCommands={groupedCommands}
-            commandIndexMap={commandIndexMap}
+            commandGroups={commandGroups}
             catalogLoading={catalogLoading}
             catalogEntries={catalogDisplayItems}
             catalogStats={catalogStats}

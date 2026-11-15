@@ -650,8 +650,11 @@ export function useCommandPaletteCommands() {
       return [];
     }
 
+    // Namespace views use `namespace-<view id>`, and a namespace can share a view's
+    // name (cert-manager installs into `cert-manager`). Namespace names are DNS
+    // labels and never contain ':', so this separator keeps the two id families apart.
     return namespace.namespaces.map((ns) => ({
-      id: `namespace-${ns.scope}`,
+      id: `namespace:${ns.scope}`,
       label: ns.name,
       icon: <NamespaceIcon width={16} height={16} />,
       description: 'Switch to this namespace',
