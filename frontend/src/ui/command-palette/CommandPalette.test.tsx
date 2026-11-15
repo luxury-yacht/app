@@ -485,6 +485,24 @@ describe('CommandPalette', () => {
     expect(optionLabels()).toEqual([]);
   });
 
+  it('offers search help that Tab reaches and Enter opens, without running a result', async () => {
+    const action = vi.fn();
+    await showPalette([command('view-x', 'Toggle X', 'View', action)]);
+    await openFromViewMenu();
+    vi.useFakeTimers();
+
+    await press('Tab');
+    const help = document.activeElement as HTMLElement;
+    expect(help.getAttribute('aria-label')).toBe('Search help');
+    await press('Enter');
+    const tooltipId = help.getAttribute('aria-describedby');
+    expect(tooltipId && document.getElementById(tooltipId)?.getAttribute('role')).toBe('tooltip');
+
+    await runPendingCommand();
+    expect(action).not.toHaveBeenCalled();
+    expect(palette()).not.toBeNull();
+  });
+
   it('selects the whole query on Cmd/Ctrl+A', async () => {
     await showPalette([command('open-settings', 'Open Settings', 'Application')]);
     await openFromViewMenu();

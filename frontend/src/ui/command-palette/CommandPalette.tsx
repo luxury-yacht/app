@@ -10,6 +10,7 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ListboxOptionButton } from '@shared/components/aria/ListboxOptionButton';
 import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
+import Tooltip from '@shared/components/Tooltip';
 import { kindDisplayName, kindNameDisplay } from '@shared/kinds/kindDisplay';
 import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
@@ -425,6 +426,90 @@ const KindFilters = ({
   );
 };
 
+const SEARCH_HELP = (
+  <div className="command-palette-help">
+    <p>You can use multiple search words to narrow down results.</p>
+    <p>
+      If one or more search words match a kind name or its short alias (e.g. pod, svc, deployment),
+      it shows only those kinds. The word is highlighted and its kind appears beside this icon.
+    </p>
+  </div>
+);
+
+interface PaletteSearchRowProps {
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  query: string;
+  // General search (not a picker): marks kind words and offers search help.
+  generalSearch: boolean;
+  kindTokens: string[];
+  useShortResourceNames: boolean;
+  label: string;
+  placeholder: string;
+  resultsId: string;
+  selectedOptionId: string | undefined;
+  onQueryChange: (query: string) => void;
+  onKeyDown: React.KeyboardEventHandler<HTMLInputElement>;
+}
+
+const PaletteSearchRow = ({
+  inputRef,
+  query,
+  generalSearch,
+  kindTokens,
+  useShortResourceNames,
+  label,
+  placeholder,
+  resultsId,
+  selectedOptionId,
+  onQueryChange,
+  onKeyDown,
+}: Readonly<PaletteSearchRowProps>) => {
+  const kindFilters = generalSearch ? kindTokens : NO_KINDS;
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const syncBackdropScroll = useCallback(() => {
+    if (backdropRef.current && inputRef.current) {
+      backdropRef.current.scrollLeft = inputRef.current.scrollLeft;
+    }
+  }, [inputRef]);
+  // Typing can scroll a long query sideways; keep the marks under their words.
+  useLayoutEffect(syncBackdropScroll);
+  return (
+    <div className="command-palette-header">
+      <div className="command-palette-field">
+        {generalSearch ? <KindWordBackdrop query={query} backdropRef={backdropRef} /> : null}
+        <input
+          ref={inputRef}
+          type="text"
+          className="command-palette-input"
+          placeholder={placeholder}
+          value={query}
+          role="combobox"
+          aria-label={label}
+          aria-describedby={kindFilters.length > 0 ? KIND_FILTERS_ID : undefined}
+          aria-autocomplete="list"
+          aria-expanded="true"
+          aria-controls={resultsId}
+          aria-activedescendant={selectedOptionId}
+          onChange={(e) => onQueryChange(e.target.value)}
+          onKeyDown={onKeyDown}
+          onScroll={syncBackdropScroll}
+        />
+      </div>
+      <KindFilters kinds={kindFilters} useShortResourceNames={useShortResourceNames} />
+      {generalSearch ? (
+        <span className="command-palette-help-trigger">
+          <Tooltip
+            content={SEARCH_HELP}
+            triggerLabel="Search help"
+            placement="bottom"
+            maxWidth={320}
+          />
+        </span>
+      ) : null}
+    </div>
+  );
+};
+
 const CommandResultIcon = ({ icon }: { icon: Command['icon'] }) => {
   if (icon === '✓') {
     return (
@@ -655,16 +740,6 @@ export const CommandPalette = memo(function CommandPaletteComponent({
   const { selectedClusterId } = useKubeconfig();
   const useShortResourceNames = usePreference('useShortResourceNames');
   const parsedTokens = useMemo(() => parseQueryTokens(searchQuery), [searchQuery]);
-  // Kind words are marked only in general search; pickers list their own choices.
-  const kindFilters = selectMode === 'none' ? parsedTokens.kindTokens : NO_KINDS;
-  const backdropRef = useRef<HTMLDivElement>(null);
-  const syncBackdropScroll = useCallback(() => {
-    if (backdropRef.current && inputRef.current) {
-      backdropRef.current.scrollLeft = inputRef.current.scrollLeft;
-    }
-  }, []);
-  // Typing can scroll a long query sideways; keep the marks under their words.
-  useLayoutEffect(syncBackdropScroll);
   const macPlatform = isMacPlatform();
   const selectNamespaceModifiers = macPlatform
     ? { meta: true, shift: true }
@@ -1156,36 +1231,26 @@ export const CommandPalette = memo(function CommandPaletteComponent({
         ref={containerRef}
         aria-label="Command Palette"
         aria-modal="true"
+        // Lets tooltips inside the palette layer above it.
+        data-modal-surface="true"
         tabIndex={-1}
       >
-        <div className="command-palette-header">
-          <div className="command-palette-field">
-            {selectMode === 'none' ? (
-              <KindWordBackdrop query={searchQuery} backdropRef={backdropRef} />
-            ) : null}
-            <input
-              ref={inputRef}
-              type="text"
-              className="command-palette-input"
-              placeholder={inputPlaceholder}
-              value={searchQuery}
-              role="combobox"
-              aria-label={inputLabel}
-              aria-describedby={kindFilters.length > 0 ? KIND_FILTERS_ID : undefined}
-              aria-autocomplete="list"
-              aria-expanded="true"
-              aria-controls={resultsId}
-              aria-activedescendant={selectedOptionId}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setSelectedIndex(0);
-              }}
-              onKeyDown={handleInputKeyDown}
-              onScroll={syncBackdropScroll}
-            />
-          </div>
-          <KindFilters kinds={kindFilters} useShortResourceNames={useShortResourceNames} />
-        </div>
+        <PaletteSearchRow
+          inputRef={inputRef}
+          query={searchQuery}
+          generalSearch={selectMode === 'none'}
+          kindTokens={parsedTokens.kindTokens}
+          useShortResourceNames={useShortResourceNames}
+          label={inputLabel}
+          placeholder={inputPlaceholder}
+          resultsId={resultsId}
+          selectedOptionId={selectedOptionId}
+          onQueryChange={(query) => {
+            setSearchQuery(query);
+            setSelectedIndex(0);
+          }}
+          onKeyDown={handleInputKeyDown}
+        />
 
         <div
           className="command-palette-results"

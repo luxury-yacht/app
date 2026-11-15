@@ -98,6 +98,20 @@
   padding: 0.1rem 0.4rem;
 }
 
+.command-palette-help-trigger {
+  display: flex;
+  flex-shrink: 0;
+  padding-right: 0.75rem;
+}
+
+.command-palette-help p {
+  margin: 0;
+}
+
+.command-palette-help p + p {
+  margin-top: 0.5rem;
+}
+
 .command-palette-input:focus-visible {
   box-shadow: none;
   border-color: transparent;
