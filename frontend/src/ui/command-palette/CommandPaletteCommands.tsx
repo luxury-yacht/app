@@ -46,7 +46,7 @@ import { navigateToFavorite } from '@ui/favorites/navigateToFavorite';
 import { closeActiveClusterOrWindow } from '@ui/navigation/closeActiveClusterOrWindow';
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckForUpdates, OpenNamedWorkspace } from '@/core/backend-api';
-import type { panelwindow } from '@/core/backend-api/models';
+import { backend, type panelwindow } from '@/core/backend-api/models';
 import { requestContextRefresh } from '@/core/data-access';
 import { getWindowIdentity } from '@/core/desktop-runtime';
 import { eventBus } from '@/core/events';
@@ -60,6 +60,13 @@ import {
 } from '@/core/settings/appPreferences';
 import { usePreference } from '@/core/settings/usePreference';
 import type { ClusterViewType, NamespaceViewType } from '@/types/navigation/views';
+import type { ShortcutModifiers } from '@/types/shortcuts';
+import { useApplicationMenuCommandExecutor } from '@/ui/layout/ApplicationMenuCommandContext';
+import {
+  type ApplicationMenuAccelerator,
+  buildApplicationMenuSections,
+  isApplicationMenuCommandItem,
+} from '@/ui/layout/applicationMenuCommands';
 import { changeAppearanceMode } from '@/utils/appearanceMode';
 import { errorHandler, reportOperationalError } from '@/utils/errorHandler';
 import { isMacPlatform } from '@/utils/platform';
@@ -77,6 +84,49 @@ export interface Command {
 }
 
 const platformShortcut = (mac: string[], other: string[]) => (isMacPlatform() ? mac : other);
+
+const menuCommand = backend.ApplicationMenuCommand;
+
+// The app menu owns the accelerator of each action it shares with the palette;
+// reading them from its table keeps the keycaps from drifting apart. Labels stay
+// the palette's own: it uses sentence case, the menu uses title case.
+const MENU_ACCELERATORS = new Map(
+  buildApplicationMenuSections(false)
+    .flatMap((section) => section.items.filter(isApplicationMenuCommandItem))
+    .flatMap((item) => (item.accelerator ? [[item.command, item.accelerator] as const] : []))
+);
+
+// Modifier keycaps in each platform's conventional order (⌃⌥⇧⌘ on macOS).
+const MAC_MODIFIER_KEYCAPS: ReadonlyArray<[keyof ShortcutModifiers, string]> = [
+  ['ctrl', '⌃'],
+  ['alt', '⌥'],
+  ['shift', '⇧'],
+  ['meta', '⌘'],
+];
+const OTHER_MODIFIER_KEYCAPS: ReadonlyArray<[keyof ShortcutModifiers, string]> = [
+  ['ctrl', 'Ctrl'],
+  ['alt', 'Alt'],
+  ['shift', 'Shift'],
+  ['meta', 'Win'],
+];
+
+const acceleratorKeycaps = ({
+  key,
+  modifiers,
+  macModifiers,
+}: ApplicationMenuAccelerator): string[] => {
+  const mac = isMacPlatform();
+  const active = (mac && macModifiers) || modifiers;
+  const modifierKeycaps = (mac ? MAC_MODIFIER_KEYCAPS : OTHER_MODIFIER_KEYCAPS)
+    .filter(([modifier]) => active[modifier])
+    .map(([, keycap]) => keycap);
+  return [...modifierKeycaps, key.length === 1 ? key.toUpperCase() : key];
+};
+
+const menuShortcut = (command: backend.ApplicationMenuCommand): string[] | undefined => {
+  const accelerator = MENU_ACCELERATORS.get(command);
+  return accelerator ? acceleratorKeycaps(accelerator) : undefined;
+};
 
 const toggleLabel = (enabled: boolean, disableLabel: string, enableLabel: string) =>
   enabled ? disableLabel : enableLabel;
@@ -184,7 +234,7 @@ const buildKubeconfigCommand = (
       <KubeconfigContextLabel config={config} favorite={favoriteClusters.includes(configValue)} />
     ),
     description: getKubeconfigDescription(config),
-    category: 'Kubeconfigs',
+    category: 'Clusters',
     icon: !config.invalid && isActive ? '✓' : undefined,
     action: () => {
       if (config.invalid) {
@@ -271,27 +321,27 @@ export function useCommandPaletteCommands() {
     [namespace, viewState]
   );
 
-  const closeTabShortcut = useMemo(() => platformShortcut(['⌘', 'W'], ['Ctrl', 'W']), []);
-  const diffObjectsShortcut = useMemo(() => platformShortcut(['⌘', 'D'], ['Ctrl', 'D']), []);
   const selectNamespaceShortcut = useMemo(
     () => platformShortcut(['⇧', '⌘', 'N'], ['Ctrl', 'Shift', 'N']),
     []
   );
-  // The same accelerator as File → Open Cluster… (backend/menu.go), which opens
-  // the palette in kubeconfig selection.
-  const selectKubeconfigShortcut = useMemo(() => platformShortcut(['⌘', 'O'], ['Ctrl', 'O']), []);
-  // The same accelerator as File → Open Workspace… (backend/menu.go).
-  const openWorkspaceShortcut = useMemo(
-    () => platformShortcut(['⇧', '⌘', 'O'], ['Ctrl', 'Shift', 'O']),
-    []
-  );
+  const executeMenuCommand = useApplicationMenuCommandExecutor();
 
   const commands = useMemo(
     () => [
       // Application Commands
       {
+        id: 'new-window',
+        label: 'New window',
+        description: 'Open another application window',
+        category: 'Application',
+        action: () => executeMenuCommand(menuCommand.ApplicationMenuCommandNewWindow),
+        keywords: ['window', 'new', 'open'],
+        shortcut: menuShortcut(menuCommand.ApplicationMenuCommandNewWindow),
+      },
+      {
         id: 'open-about',
-        label: 'About',
+        label: 'About Luxury Yacht',
         icon: <InfoIcon width={16} height={16} />,
         description: 'Open about dialog',
         category: 'Application',
@@ -302,7 +352,7 @@ export function useCommandPaletteCommands() {
       },
       {
         id: 'check-for-updates',
-        label: 'Check for Updates…',
+        label: 'Check for updates…',
         icon: <InfoIcon width={16} height={16} />,
         description: 'Open About and check for a new application version',
         category: 'Application',
@@ -319,7 +369,7 @@ export function useCommandPaletteCommands() {
       },
       {
         id: 'open-settings',
-        label: 'Settings',
+        label: 'Settings…',
         icon: <SettingsIcon width={16} height={16} />,
         description: 'Open application settings',
         category: 'Application',
@@ -327,11 +377,11 @@ export function useCommandPaletteCommands() {
           viewState.setIsSettingsOpen(true);
         },
         keywords: ['settings', 'preferences', 'config'],
-        shortcut: platformShortcut(['⌘', ','], ['Ctrl', ',']),
+        shortcut: menuShortcut(menuCommand.ApplicationMenuCommandSettings),
       },
       {
         id: 'toggle-sidebar',
-        label: toggleLabel(viewState.isSidebarVisible, 'Hide Sidebar', 'Show Sidebar'),
+        label: toggleLabel(viewState.isSidebarVisible, 'Hide sidebar', 'Show sidebar'),
         icon: <SidebarVisibilityIcon isVisible={viewState.isSidebarVisible} />,
         description: toggleLabel(
           viewState.isSidebarVisible,
@@ -343,7 +393,7 @@ export function useCommandPaletteCommands() {
           viewState.toggleSidebar();
         },
         keywords: ['sidebar', 'toggle', 'hide', 'show'],
-        shortcut: platformShortcut(['⌘', 'B'], ['Ctrl', 'B']),
+        shortcut: menuShortcut(menuCommand.ApplicationMenuCommandToggleSidebar),
       },
       {
         id: 'open-object-diff',
@@ -355,11 +405,11 @@ export function useCommandPaletteCommands() {
           viewState.setIsObjectDiffOpen(true);
         },
         keywords: ['diff', 'compare', 'yaml', 'objects', 'kubernetes'],
-        shortcut: diffObjectsShortcut,
+        shortcut: menuShortcut(menuCommand.ApplicationMenuCommandToggleObjectDiff),
       },
       {
         id: 'toggle-application-logs',
-        label: 'Application Logs panel',
+        label: 'Application logs',
         icon: <LogsIcon width={16} height={16} />,
         description: 'Toggle application logs',
         category: 'Application',
@@ -367,7 +417,7 @@ export function useCommandPaletteCommands() {
           eventBus.emit('view:toggle-app-logs-panel');
         },
         keywords: ['logs', 'application', 'debug'],
-        shortcut: platformShortcut(['⇧', '⌃', 'L'], ['Ctrl', 'Shift', 'L']),
+        shortcut: menuShortcut(menuCommand.ApplicationMenuCommandToggleAppLogs),
       },
       {
         id: 'toggle-diagnostics',
@@ -379,7 +429,7 @@ export function useCommandPaletteCommands() {
           eventBus.emit('view:toggle-diagnostics');
         },
         keywords: ['diagnostics', 'status', 'permissions', 'refresh'],
-        shortcut: platformShortcut(['⇧', '⌃', 'D'], ['Ctrl', 'Shift', 'D']),
+        shortcut: menuShortcut(menuCommand.ApplicationMenuCommandToggleDiagnostics),
       },
 
       // Zoom Commands
@@ -391,7 +441,7 @@ export function useCommandPaletteCommands() {
         category: 'View',
         action: zoomIn,
         keywords: ['zoom', 'in', 'bigger', 'larger', 'increase', 'magnify'],
-        shortcut: platformShortcut(['⌘', '+'], ['Ctrl', '+']),
+        shortcut: menuShortcut(menuCommand.ApplicationMenuCommandZoomIn),
       },
       {
         id: 'zoom-out',
@@ -401,7 +451,7 @@ export function useCommandPaletteCommands() {
         category: 'View',
         action: zoomOut,
         keywords: ['zoom', 'out', 'smaller', 'decrease', 'reduce'],
-        shortcut: platformShortcut(['⌘', '-'], ['Ctrl', '-']),
+        shortcut: menuShortcut(menuCommand.ApplicationMenuCommandZoomOut),
       },
       {
         id: 'zoom-reset',
@@ -410,7 +460,7 @@ export function useCommandPaletteCommands() {
         category: 'View',
         action: resetZoom,
         keywords: ['zoom', 'reset', 'default', 'normal', '100'],
-        shortcut: platformShortcut(['⌘', '0'], ['Ctrl', '0']),
+        shortcut: menuShortcut(menuCommand.ApplicationMenuCommandZoomReset),
       },
 
       // Settings Commands
@@ -526,21 +576,8 @@ export function useCommandPaletteCommands() {
 
       // Navigation Commands
       {
-        id: 'close-cluster-tab',
-        label: selectedKubeconfigs.length === 0 ? 'Close window' : 'Close active cluster tab',
-        icon: <CloseIcon width={16} height={16} />,
-        description:
-          selectedKubeconfigs.length === 0
-            ? 'Close the current window'
-            : 'Close the active cluster tab',
-        category: 'Navigation',
-        action: closeCurrentClusterTab,
-        shortcut: closeTabShortcut,
-        keywords: ['cluster', 'tab', 'close', 'kubeconfig', 'window'],
-      },
-      {
         id: 'select-kubeconfig',
-        label: 'Select kubeconfig...',
+        label: 'Open cluster…',
         icon: <KubeconfigsIcon width={16} height={16} />,
         description: 'Switch to a different kubeconfig',
         category: 'Navigation',
@@ -548,11 +585,24 @@ export function useCommandPaletteCommands() {
           // Will be handled specially in CommandPalette component
         },
         keywords: ['kubeconfig', 'context', 'cluster', 'switch'],
-        shortcut: selectKubeconfigShortcut,
+        shortcut: menuShortcut(menuCommand.ApplicationMenuCommandOpenCluster),
+      },
+      {
+        id: 'close-cluster-tab',
+        label: selectedKubeconfigs.length === 0 ? 'Close window' : 'Close cluster',
+        icon: <CloseIcon width={16} height={16} />,
+        description:
+          selectedKubeconfigs.length === 0
+            ? 'Close the current window'
+            : 'Close the active cluster tab',
+        category: 'Navigation',
+        action: closeCurrentClusterTab,
+        shortcut: menuShortcut(menuCommand.ApplicationMenuCommandClose),
+        keywords: ['cluster', 'tab', 'close', 'kubeconfig', 'window'],
       },
       {
         id: 'select-namespace',
-        label: 'Select namespace... ',
+        label: 'Select namespace…',
         icon: <NamespaceIcon width={16} height={16} />,
         description: 'Change to a different namespace',
         category: 'Navigation',
@@ -564,7 +614,7 @@ export function useCommandPaletteCommands() {
       },
       {
         id: 'open-workspace',
-        label: 'Open Workspace…',
+        label: 'Open workspace…',
         description: 'Replace the current windows with a saved layout',
         icon: <WorkspaceIcon width={16} height={16} />,
         category: 'Navigation',
@@ -572,11 +622,11 @@ export function useCommandPaletteCommands() {
           // Handled specially in CommandPalette component: opens the workspace picker.
         },
         keywords: ['workspace', 'open', 'restore', 'windows', 'layout'],
-        shortcut: openWorkspaceShortcut,
+        shortcut: menuShortcut(menuCommand.ApplicationMenuCommandOpenWorkspace),
       },
       {
         id: 'save-workspace',
-        label: 'Save Workspace…',
+        label: 'Save workspace…',
         description: 'Save the layout of all app and panel windows',
         icon: <WorkspaceIcon width={16} height={16} />,
         category: 'Navigation',
@@ -585,7 +635,7 @@ export function useCommandPaletteCommands() {
       },
       {
         id: 'manage-workspaces',
-        label: 'Manage Workspaces…',
+        label: 'Manage workspaces…',
         description: 'Rename or delete saved workspaces',
         icon: <WorkspaceIcon width={16} height={16} />,
         category: 'Navigation',
@@ -602,11 +652,8 @@ export function useCommandPaletteCommands() {
       availableClusterViews,
       openGlobalView,
       closeCurrentClusterTab,
-      closeTabShortcut,
       selectNamespaceShortcut,
-      selectKubeconfigShortcut,
-      openWorkspaceShortcut,
-      diffObjectsShortcut,
+      executeMenuCommand,
       autoRefreshEnabled,
       useShortResourceNames,
       dimInactiveNamespaces,

@@ -266,7 +266,7 @@ const namespaceAndKubeconfigCommands = () => [
   command('select-namespace', 'Select namespace...', 'Navigation'),
   command('select-kubeconfig', 'Select kubeconfig...', 'Navigation'),
   command('ns-prod', 'prod', 'Namespaces'),
-  command('kc-a', 'cluster-a', 'Kubeconfigs'),
+  command('kc-a', 'cluster-a', 'Clusters'),
   command('view-x', 'Toggle X', 'View'),
 ];
 
@@ -299,7 +299,7 @@ describe('CommandPalette', () => {
 
     await openFromOpenClusterMenu();
 
-    expect(groups()).toEqual(['Kubeconfigs']);
+    expect(groups()).toEqual(['Clusters']);
     expect(optionLabels()).toEqual(['cluster-a']);
     await press('Escape');
     expect(palette()).toBeNull();
@@ -318,7 +318,7 @@ describe('CommandPalette', () => {
 
   it.each([
     ['Select namespace...', 'Namespaces', 'prod'],
-    ['Select kubeconfig...', 'Kubeconfigs', 'cluster-a'],
+    ['Select kubeconfig...', 'Clusters', 'cluster-a'],
   ])(
     'enters a picker from the %s command, and Escape returns to every command',
     async (label, group, entry) => {
@@ -335,7 +335,7 @@ describe('CommandPalette', () => {
       expect(optionLabels()).toEqual([entry]);
       await press('Escape');
       expect(palette()).not.toBeNull();
-      expect(groups()).toEqual(['View', 'Navigation', 'Namespaces', 'Kubeconfigs']);
+      expect(groups()).toEqual(['View', 'Navigation', 'Namespaces', 'Clusters']);
     }
   );
 
@@ -348,7 +348,7 @@ describe('CommandPalette', () => {
 
     await openFromOpenClusterMenu();
 
-    expect(groups()).toEqual(['Kubeconfigs']);
+    expect(groups()).toEqual(['Clusters']);
     expect(optionLabels()).toEqual(['cluster-a']);
   });
 

@@ -50,7 +50,7 @@ const CATEGORY_ORDER = [
   'Favorites',
   'Workspaces',
   'Namespaces',
-  'Kubeconfigs',
+  'Clusters',
   'General', // Fallback for any uncategorized commands
 ];
 
@@ -150,7 +150,7 @@ const PICKER_MODE_BY_COMMAND = new Map<string, PaletteSelectMode>([
 // A picker lists only its own category's choices.
 const PICKER_CATEGORY: Record<Exclude<PaletteSelectMode, 'none'>, string> = {
   namespaces: 'Namespaces',
-  kubeconfigs: 'Kubeconfigs',
+  kubeconfigs: 'Clusters',
   workspaces: 'Workspaces',
 };
 
@@ -330,7 +330,7 @@ const getPaletteInputCopy = (mode: PaletteSelectMode) => {
     return { label: 'Select a namespace', placeholder: 'Select a namespace...' };
   }
   if (mode === 'kubeconfigs') {
-    return { label: 'Select a kubeconfig', placeholder: 'Select a kubeconfig...' };
+    return { label: 'Select a kubeconfig', placeholder: 'Select a cluster…' };
   }
   if (mode === 'workspaces') {
     return { label: 'Select a workspace', placeholder: 'Select a workspace...' };

@@ -157,17 +157,17 @@ describe('CommandPalette in the keyboard system', () => {
       <CommandPalette
         commands={[
           command('first', 'First', 'Application'),
-          command('kc-a', 'cluster-a', 'Kubeconfigs'),
+          command('kc-a', 'cluster-a', 'Clusters'),
         ]}
       />
     );
     await menu('open-command-palette');
-    expect(groups()).toEqual(['Application', 'Kubeconfigs']);
+    expect(groups()).toEqual(['Application', 'Clusters']);
 
     await press('o', primary());
 
     expect(palette()).not.toBeNull();
-    expect(groups()).toEqual(['Kubeconfigs']);
+    expect(groups()).toEqual(['Clusters']);
   });
 
   it('switches an open palette to the namespace picker on Cmd/Ctrl+Shift+N', async () => {
@@ -198,7 +198,7 @@ describe('CommandPalette in the keyboard system', () => {
           commands={[
             command('first', 'First', 'Application'),
             command('ns-prod', 'prod', 'Namespaces'),
-            command('kc-a', 'cluster-a', 'Kubeconfigs'),
+            command('kc-a', 'cluster-a', 'Clusters'),
           ]}
         />
       </>
