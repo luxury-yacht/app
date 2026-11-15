@@ -7,6 +7,7 @@ type WorkspaceCommand string
 const (
 	WorkspaceCommandOpenWorkspace      WorkspaceCommand = "open-workspace"
 	WorkspaceCommandSaveWorkspace      WorkspaceCommand = "save-workspace"
+	WorkspaceCommandManageWorkspaces   WorkspaceCommand = "manage-workspaces"
 	WorkspaceCommandOpenAbout          WorkspaceCommand = "open-about"
 	WorkspaceCommandOpenCluster        WorkspaceCommand = "open-cluster"
 	WorkspaceCommandOpenCommandPalette WorkspaceCommand = "open-command-palette"
@@ -26,6 +27,7 @@ func (command WorkspaceCommand) Valid() bool {
 	switch command {
 	case WorkspaceCommandOpenWorkspace,
 		WorkspaceCommandSaveWorkspace,
+		WorkspaceCommandManageWorkspaces,
 		WorkspaceCommandOpenAbout,
 		WorkspaceCommandOpenCluster,
 		WorkspaceCommandOpenCommandPalette,

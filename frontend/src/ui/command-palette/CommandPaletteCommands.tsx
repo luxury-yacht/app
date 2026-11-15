@@ -276,9 +276,14 @@ export function useCommandPaletteCommands() {
     () => platformShortcut(['⇧', '⌘', 'N'], ['Ctrl', 'Shift', 'N']),
     []
   );
-  // The same accelerator as File → Open Cluster (backend/menu.go), which opens
+  // The same accelerator as File → Open Cluster… (backend/menu.go), which opens
   // the palette in kubeconfig selection.
   const selectKubeconfigShortcut = useMemo(() => platformShortcut(['⌘', 'O'], ['Ctrl', 'O']), []);
+  // The same accelerator as File → Open Workspace… (backend/menu.go).
+  const openWorkspaceShortcut = useMemo(
+    () => platformShortcut(['⇧', '⌘', 'O'], ['Ctrl', 'Shift', 'O']),
+    []
+  );
 
   const commands = useMemo(
     () => [
@@ -524,8 +529,11 @@ export function useCommandPaletteCommands() {
         description: 'Replace the current windows with a saved layout',
         icon: <SettingsIcon width={16} height={16} />,
         category: 'Workspaces',
-        action: () => eventBus.emit('named-workspace:open-dialog'),
+        action: () => {
+          // Handled specially in CommandPalette component: opens the workspace picker.
+        },
         keywords: ['workspace', 'open', 'restore', 'windows', 'layout'],
+        shortcut: openWorkspaceShortcut,
       },
       {
         id: 'save-workspace',
@@ -535,6 +543,15 @@ export function useCommandPaletteCommands() {
         category: 'Workspaces',
         action: () => eventBus.emit('named-workspace:save-dialog'),
         keywords: ['workspace', 'save', 'windows', 'layout'],
+      },
+      {
+        id: 'manage-workspaces',
+        label: 'Manage Workspaces…',
+        description: 'Rename or delete saved workspaces',
+        icon: <SettingsIcon width={16} height={16} />,
+        category: 'Workspaces',
+        action: () => eventBus.emit('named-workspace:manage-dialog'),
+        keywords: ['workspace', 'manage', 'rename', 'delete', 'layout'],
       },
 
       // Navigation Commands
@@ -588,6 +605,7 @@ export function useCommandPaletteCommands() {
       closeTabShortcut,
       selectNamespaceShortcut,
       selectKubeconfigShortcut,
+      openWorkspaceShortcut,
       diffObjectsShortcut,
       autoRefreshEnabled,
       useShortResourceNames,
@@ -721,32 +739,43 @@ const buildSavedWorkspaceCommand = (entry: panelwindow.NamedWorkspaceEntry): Com
   keywords: ['workspace', 'layout', 'windows'],
 });
 
+/** The saved workspaces as the palette has them: still reading, unreadable, or listed. */
+export type SavedWorkspaceCommands =
+  | { status: 'loading' }
+  | { status: 'failed' }
+  | { status: 'ready'; commands: Command[] };
+
+const LOADING: SavedWorkspaceCommands = { status: 'loading' };
+
 /**
  * The saved workspaces as palette commands, read each time the palette opens.
- * A failed read leaves them out and is not shown, since every open would show
- * it again; the Open Workspace dialog reports it where the list is managed.
+ * A failed read is reported without a notification, since every open would
+ * show it again; the workspace picker says the list could not be read.
  */
-export function useSavedWorkspaceCommands(paletteOpen: boolean): Command[] {
-  const [entries, setEntries] = useState<panelwindow.NamedWorkspaceEntry[]>([]);
+export function useSavedWorkspaceCommands(paletteOpen: boolean): SavedWorkspaceCommands {
+  const [saved, setSaved] = useState<SavedWorkspaceCommands>(LOADING);
   useEffect(() => {
     if (!paletteOpen) {
-      setEntries([]);
+      setSaved(LOADING);
       return;
     }
     // A list that arrives after its palette closed belongs to no open palette.
     let current = true;
     listNamedWorkspaces()
-      .then((saved) => {
+      .then((entries) => {
         if (current) {
-          setEntries(saved);
+          setSaved({ status: 'ready', commands: entries.map(buildSavedWorkspaceCommand) });
         }
       })
       .catch((error) => {
         reportOperationalError(error, { source: 'NamedWorkspace', action: 'list' });
+        if (current) {
+          setSaved({ status: 'failed' });
+        }
       });
     return () => {
       current = false;
     };
   }, [paletteOpen]);
-  return useMemo(() => entries.map(buildSavedWorkspaceCommand), [entries]);
+  return saved;
 }

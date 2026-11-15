@@ -30,7 +30,7 @@ export interface AppEvents {
 
   // Open the command palette directly in kubeconfig-select mode — the entry
   // points for opening a cluster (the "+" in the cluster tab bar, ⌘O, and
-  // File → Open Cluster).
+  // File → Open Cluster…).
   'command-palette:open-kubeconfigs': undefined;
 
   // Open the command palette directly in namespace-select mode — the search
@@ -38,11 +38,15 @@ export interface AppEvents {
   // the frontend shortcut system).
   'command-palette:open-namespaces': undefined;
 
+  // Open the command palette directly in workspace-select mode — File → Open
+  // Workspace….
+  'command-palette:open-workspaces': undefined;
+
   // Open the command palette in its normal (search) mode — the header search
   // button.
   'command-palette:open': undefined;
   'named-workspace:save-dialog': undefined;
-  'named-workspace:open-dialog': undefined;
+  'named-workspace:manage-dialog': undefined;
   'application-menu:close': undefined;
 
   // Auth events — bridged from the Wails runtime by ClusterWorkspaceStore.

@@ -57,7 +57,7 @@ func addMacApplicationMenu(appMenu *application.Menu, app menuController) {
 	addMenuText(appSubmenu, "About Luxury Yacht", "", applicationMenuCallback(app, ApplicationMenuCommandAbout))
 	addMenuText(appSubmenu, "Check for Updates…", "", applicationMenuCallback(app, ApplicationMenuCommandCheckForUpdates))
 	appSubmenu.AddSeparator()
-	addMenuText(appSubmenu, "Settings...", "CmdOrCtrl+,", applicationMenuCallback(app, ApplicationMenuCommandSettings))
+	addMenuText(appSubmenu, "Settings…", "CmdOrCtrl+,", applicationMenuCallback(app, ApplicationMenuCommandSettings))
 	addMenuText(appSubmenu, "Hide Luxury Yacht", "CmdOrCtrl+h", applicationMenuCallback(app, ApplicationMenuCommandHide))
 	addMenuText(appSubmenu, "Quit", "CmdOrCtrl+q", applicationMenuCallback(app, ApplicationMenuCommandQuit))
 }
@@ -66,9 +66,12 @@ func addFileMenu(appMenu *application.Menu, app menuController) {
 	fileMenu := appMenu.AddSubmenu("File")
 	addMenuText(fileMenu, "New Window", "CmdOrCtrl+n", applicationMenuCallback(app, ApplicationMenuCommandNewWindow))
 	fileMenu.AddSeparator()
-	addMenuText(fileMenu, "Open Cluster", "CmdOrCtrl+o", applicationMenuCallback(app, ApplicationMenuCommandOpenCluster))
-	addMenuText(fileMenu, "Open Workspace…", "", applicationMenuCallback(app, ApplicationMenuCommandOpenWorkspace))
+	addMenuText(fileMenu, "Open Cluster…", "CmdOrCtrl+o", applicationMenuCallback(app, ApplicationMenuCommandOpenCluster))
+	fileMenu.AddSeparator()
+	addMenuText(fileMenu, "Open Workspace…", "CmdOrCtrl+Shift+o", applicationMenuCallback(app, ApplicationMenuCommandOpenWorkspace))
 	addMenuText(fileMenu, "Save Workspace…", "", applicationMenuCallback(app, ApplicationMenuCommandSaveWorkspace))
+	addMenuText(fileMenu, "Manage Workspaces…", "", applicationMenuCallback(app, ApplicationMenuCommandManageWorkspaces))
+	fileMenu.AddSeparator()
 	addMenuText(fileMenu, "Close", "CmdOrCtrl+w", applicationMenuCallback(app, ApplicationMenuCommandClose))
 	if runtime.GOOS != "darwin" {
 		addDesktopFileMenuItems(fileMenu, app)
@@ -77,7 +80,7 @@ func addFileMenu(appMenu *application.Menu, app menuController) {
 
 func addDesktopFileMenuItems(fileMenu *application.Menu, app menuController) {
 	fileMenu.AddSeparator()
-	addMenuText(fileMenu, "Settings...", "CmdOrCtrl+,", applicationMenuCallback(app, ApplicationMenuCommandSettings))
+	addMenuText(fileMenu, "Settings…", "CmdOrCtrl+,", applicationMenuCallback(app, ApplicationMenuCommandSettings))
 	fileMenu.AddSeparator()
 	exitLabel := "Quit"
 	if runtime.GOOS == "windows" {

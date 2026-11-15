@@ -25,7 +25,11 @@ import type { CatalogItem } from '@/core/refresh/types';
 import { usePreference } from '@/core/settings/usePreference';
 import { aliasToKindMap, canonicalKinds } from '@/utils/kindAliasMap';
 import { isMacPlatform } from '@/utils/platform';
-import { type Command, useSavedWorkspaceCommands } from './CommandPaletteCommands';
+import {
+  type Command,
+  type SavedWorkspaceCommands,
+  useSavedWorkspaceCommands,
+} from './CommandPaletteCommands';
 import {
   CATALOG_RESULT_LIMIT,
   type CatalogStats,
@@ -132,7 +136,49 @@ export const parseQueryTokens = (query: string): ParsedQueryTokens => {
 // The palette is either a general search or a single-category picker; one
 // union (instead of a boolean per picker) makes overlapping modes
 // unrepresentable, so switching pickers can never leave a stale mode behind.
-type PaletteSelectMode = 'none' | 'namespaces' | 'kubeconfigs';
+type PaletteSelectMode = 'none' | 'namespaces' | 'kubeconfigs' | 'workspaces';
+
+const NO_COMMANDS: Command[] = [];
+
+// Commands that switch the open palette to a picker instead of running.
+const PICKER_MODE_BY_COMMAND = new Map<string, PaletteSelectMode>([
+  ['select-namespace', 'namespaces'],
+  ['select-kubeconfig', 'kubeconfigs'],
+  ['open-workspace', 'workspaces'],
+]);
+
+// A picker lists only its own choices; workspaces come from the saved list
+// rather than a category, which also holds the workspace commands.
+const commandsForMode = (
+  mode: PaletteSelectMode,
+  commands: Command[],
+  savedWorkspaces: Command[]
+): Command[] => {
+  switch (mode) {
+    case 'namespaces':
+      return commands.filter((cmd) => cmd.category === 'Namespaces');
+    case 'kubeconfigs':
+      return commands.filter((cmd) => cmd.category === 'Kubeconfigs');
+    case 'workspaces':
+      return savedWorkspaces;
+    case 'none':
+      return commands;
+  }
+};
+
+const paletteEmptyMessage = (
+  query: string,
+  mode: PaletteSelectMode,
+  workspaces: SavedWorkspaceCommands['status']
+): string => {
+  if (query.trim()) {
+    return `No commands or objects found for "${query}"`;
+  }
+  if (mode !== 'workspaces') {
+    return 'No commands available';
+  }
+  return workspaces === 'failed' ? 'Saved workspaces could not be read' : 'No saved workspaces';
+};
 
 type PaletteItem =
   | {
@@ -249,6 +295,9 @@ const getPaletteInputCopy = (mode: PaletteSelectMode) => {
   }
   if (mode === 'kubeconfigs') {
     return { label: 'Select a kubeconfig', placeholder: 'Select a kubeconfig...' };
+  }
+  if (mode === 'workspaces') {
+    return { label: 'Select a workspace', placeholder: 'Select a workspace...' };
   }
   return {
     label: 'Search commands and Kubernetes objects',
@@ -429,7 +478,7 @@ const CatalogGroup = (props: CatalogGroupProps) => (
 
 interface PaletteResultsProps extends Omit<ResultRowInteractionProps, 'currentIndex'> {
   noResults: boolean;
-  searchQuery: string;
+  emptyMessage: string;
   hasCommandResults: boolean;
   groupedCommands: Array<[string, Command[]]>;
   commandIndexMap: Map<string, number>;
@@ -442,10 +491,7 @@ interface PaletteResultsProps extends Omit<ResultRowInteractionProps, 'currentIn
 
 const PaletteResults = (props: PaletteResultsProps) => {
   if (props.noResults) {
-    const message = props.searchQuery.trim()
-      ? `No commands or objects found for "${props.searchQuery}"`
-      : 'No commands available';
-    return <div className="command-palette-empty">{message}</div>;
+    return <div className="command-palette-empty">{props.emptyMessage}</div>;
   }
   return (
     <>
@@ -505,7 +551,9 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     return true;
   }, []);
 
-  const savedWorkspaceCommands = useSavedWorkspaceCommands(isOpen);
+  const savedWorkspaces = useSavedWorkspaceCommands(isOpen);
+  const savedWorkspaceCommands =
+    savedWorkspaces.status === 'ready' ? savedWorkspaces.commands : NO_COMMANDS;
   const allCommands = useMemo(
     () => [...commands, ...savedWorkspaceCommands],
     [commands, savedWorkspaceCommands]
@@ -513,15 +561,7 @@ export const CommandPalette = memo(function CommandPaletteComponent({
 
   // Filter commands based on search query and mode
   const filteredCommands = useMemo(() => {
-    let filteredList = allCommands;
-
-    // A selection sub-mode narrows the palette to that single category.
-    if (selectMode === 'namespaces') {
-      filteredList = allCommands.filter((cmd) => cmd.category === 'Namespaces');
-    }
-    if (selectMode === 'kubeconfigs') {
-      filteredList = allCommands.filter((cmd) => cmd.category === 'Kubeconfigs');
-    }
+    const filteredList = commandsForMode(selectMode, allCommands, savedWorkspaceCommands);
 
     if (!searchQuery.trim()) {
       return filteredList;
@@ -538,7 +578,7 @@ export const CommandPalette = memo(function CommandPaletteComponent({
 
       return matchesLabel || matchesDescription || matchesCategory || matchesKeywords;
     });
-  }, [allCommands, searchQuery, selectMode]);
+  }, [allCommands, savedWorkspaceCommands, searchQuery, selectMode]);
 
   // Group commands by category
   const groupedCommands = useMemo(() => {
@@ -620,7 +660,10 @@ export const CommandPalette = memo(function CommandPaletteComponent({
 
   const hasCommandResults = filteredCommands.length > 0;
   const hasCatalogResults = catalogDisplayItems.length > 0;
-  const noResults = !hasCommandResults && !hasCatalogResults && !catalogLoading;
+  // While the workspace picker's list is still being read, it claims nothing.
+  const workspacesLoading = selectMode === 'workspaces' && savedWorkspaces.status === 'loading';
+  const noResults =
+    !hasCommandResults && !hasCatalogResults && !catalogLoading && !workspacesLoading;
 
   // Pre-compute indices for rendering without IIFE
   const commandIndexMap = useMemo(() => {
@@ -671,13 +714,9 @@ export const CommandPalette = memo(function CommandPaletteComponent({
       if (item.type === 'command') {
         const command = item.command;
 
-        if (command.id === 'select-namespace') {
-          enterSelectMode('namespaces');
-          return;
-        }
-
-        if (command.id === 'select-kubeconfig') {
-          enterSelectMode('kubeconfigs');
+        const pickerMode = PICKER_MODE_BY_COMMAND.get(command.id);
+        if (pickerMode) {
+          enterSelectMode(pickerMode);
           return;
         }
 
@@ -875,8 +914,8 @@ export const CommandPalette = memo(function CommandPaletteComponent({
 
   // Open the palette directly in a selection sub-mode: kubeconfigs is the
   // "Open Cluster" surface (the "+" in the cluster tab bar, ⌘O, and File →
-  // Open Cluster all emit that event); namespaces is the ⇧⌘N shortcut below.
-  // open() resets the mode, so set it after.
+  // Open Cluster… all emit that event); namespaces is the ⇧⌘N shortcut below;
+  // workspaces is File → Open Workspace…. open() resets the mode, so set it after.
   const openInSelectMode = useCallback(
     (mode: PaletteSelectMode) => {
       if (isOpen) {
@@ -900,6 +939,11 @@ export const CommandPalette = memo(function CommandPaletteComponent({
   const openInNamespaceMode = useCallback(() => openInSelectMode('namespaces'), [openInSelectMode]);
   // The search button in the sidebar's Namespaces header emits this event.
   useEventBus('command-palette:open-namespaces', openInNamespaceMode, [openInNamespaceMode]);
+  // File → Open Workspace… emits this event.
+  const openInWorkspaceMode = useCallback(() => {
+    openInSelectMode('workspaces');
+  }, [openInSelectMode]);
+  useEventBus('command-palette:open-workspaces', openInWorkspaceMode, [openInWorkspaceMode]);
   // Open the palette straight into namespace selection through the frontend
   // shortcut system, like ⌘⇧P above.
   useShortcut({
@@ -1068,7 +1112,7 @@ export const CommandPalette = memo(function CommandPaletteComponent({
         >
           <PaletteResults
             noResults={noResults}
-            searchQuery={searchQuery}
+            emptyMessage={paletteEmptyMessage(searchQuery, selectMode, savedWorkspaces.status)}
             hasCommandResults={hasCommandResults}
             groupedCommands={groupedCommands}
             commandIndexMap={commandIndexMap}

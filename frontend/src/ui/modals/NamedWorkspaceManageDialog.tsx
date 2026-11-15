@@ -2,7 +2,7 @@ import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import { CheckIcon, CloseIcon, DeleteIcon, EditIcon } from '@shared/components/icons/SharedIcons';
 import { useEffect, useId, useRef, useState } from 'react';
-import { DeleteNamedWorkspace, OpenNamedWorkspace, RenameNamedWorkspace } from '@/core/backend-api';
+import { DeleteNamedWorkspace, RenameNamedWorkspace } from '@/core/backend-api';
 import type { panelwindow } from '@/core/backend-api/models';
 import { getWindowIdentity } from '@/core/desktop-runtime';
 import { eventBus, useEventBus } from '@/core/events';
@@ -14,13 +14,15 @@ import ModalSurface from '@/shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@/shared/components/modals/useModalFocusTrap';
 import './NamedWorkspaceSaveDialog.css';
 
-export function NamedWorkspaceOpenDialog() {
+// Renames and deletes saved workspaces. Opening one is the command palette's
+// workspace picker (File → Open Workspace…).
+export function NamedWorkspaceManageDialog() {
   const title = useId();
   const ref = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState(false);
   const [entries, setEntries] = useState<panelwindow.NamedWorkspaceEntry[] | null>(null);
   const [selected, setSelected] = useState('');
-  const [work, setWork] = useState<'open' | 'delete' | 'rename' | null>(null);
+  const [work, setWork] = useState<'delete' | 'rename' | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [failure, setFailure] = useState<{ error: unknown; action: string } | null>(null);
@@ -68,7 +70,7 @@ export function NamedWorkspaceOpenDialog() {
     return list;
   };
 
-  useEventBus('named-workspace:open-dialog', () => {
+  useEventBus('named-workspace:manage-dialog', () => {
     if (shown) {
       return;
     }
@@ -101,22 +103,6 @@ export function NamedWorkspaceOpenDialog() {
     }
     lastRenaming.current = renaming;
   }, [renaming, focusDefaultControl]);
-
-  const open = async () => {
-    if (busy || !selected) {
-      return;
-    }
-    setWork('open');
-    setFailure(null);
-    try {
-      await OpenNamedWorkspace(getWindowIdentity(), selected, revision);
-      setShown(false);
-    } catch (error) {
-      await refused('open', error);
-    } finally {
-      setWork(null);
-    }
-  };
 
   // Deleting removes the saved layout only; the open windows are untouched.
   const remove = async () => {
@@ -173,7 +159,12 @@ export function NamedWorkspaceOpenDialog() {
         onClose={close}
         containerClassName="named-workspace-save-modal"
       >
-        <ModalHeader title="Open Workspace" titleId={title} onClose={close} closeDisabled={busy} />
+        <ModalHeader
+          title="Manage Workspaces"
+          titleId={title}
+          onClose={close}
+          closeDisabled={busy}
+        />
         <div className="modal-content named-workspace-content">
           <SavedWorkspacePicker
             names={names}
@@ -191,17 +182,14 @@ export function NamedWorkspaceOpenDialog() {
           />
           {alert}
         </div>
-        <OpenWorkspaceFooter
+        <ManageWorkspacesFooter
           empty={names?.length === 0}
           busy={busy}
-          canOpen={!!selected && !renaming}
-          opening={work === 'open'}
-          onCancel={close}
+          onClose={close}
           onSaveCurrent={() => {
             close();
             eventBus.emit('named-workspace:save-dialog');
           }}
-          onOpen={() => void open()}
         />
       </ModalSurface>
       <ConfirmationModal
@@ -250,28 +238,23 @@ function SavedWorkspacePicker({
       </div>
     );
   }
-  return (
-    <>
-      {renaming ? (
-        <RenameWorkspaceField
-          current={selected}
-          names={names}
-          busy={busy}
-          onCancel={onCancelRename}
-          onRename={onRename}
-        />
-      ) : (
-        <WorkspaceChoice
-          names={names}
-          selected={selected}
-          busy={busy}
-          onSelect={onSelect}
-          onStartRename={onStartRename}
-          onDelete={onDelete}
-        />
-      )}
-      <p className="named-workspace-hint">Opening a workspace replaces the current windows.</p>
-    </>
+  return renaming ? (
+    <RenameWorkspaceField
+      current={selected}
+      names={names}
+      busy={busy}
+      onCancel={onCancelRename}
+      onRename={onRename}
+    />
+  ) : (
+    <WorkspaceChoice
+      names={names}
+      selected={selected}
+      busy={busy}
+      onSelect={onSelect}
+      onStartRename={onStartRename}
+      onDelete={onDelete}
+    />
   );
 }
 
@@ -405,29 +388,23 @@ function RenameWorkspaceField({
   );
 }
 
-function OpenWorkspaceFooter({
+function ManageWorkspacesFooter({
   empty,
   busy,
-  canOpen,
-  opening,
-  onCancel,
+  onClose,
   onSaveCurrent,
-  onOpen,
 }: Readonly<{
   empty: boolean;
   busy: boolean;
-  canOpen: boolean;
-  opening: boolean;
-  onCancel: () => void;
+  onClose: () => void;
   onSaveCurrent: () => void;
-  onOpen: () => void;
 }>) {
-  // With nothing saved there is nothing to open: saving is the dialog's action.
+  // With nothing saved, saving the current windows is all the dialog offers.
   if (empty) {
     return (
       <div className="modal-footer">
-        <button type="button" className="button cancel" disabled={busy} onClick={onCancel}>
-          Cancel
+        <button type="button" className="button cancel" disabled={busy} onClick={onClose}>
+          Close
         </button>
         <button type="button" className="button save" disabled={busy} onClick={onSaveCurrent}>
           Save Current As…
@@ -445,11 +422,8 @@ function OpenWorkspaceFooter({
       >
         Save Current As…
       </button>
-      <button type="button" className="button cancel" disabled={busy} onClick={onCancel}>
-        Cancel
-      </button>
-      <button type="button" className="button save" disabled={busy || !canOpen} onClick={onOpen}>
-        {opening ? 'Opening…' : 'Open'}
+      <button type="button" className="button cancel" disabled={busy} onClick={onClose}>
+        Close
       </button>
     </div>
   );

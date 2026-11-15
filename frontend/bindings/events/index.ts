@@ -134,6 +134,11 @@ export const FavoritesLibraryChanged = "favorites:library-changed";
 export const KubeconfigAvailableChanged = "kubeconfig:available-changed";
 
 /**
+ * Name of the custom event "manage-workspaces".
+ */
+export const ManageWorkspaces = "manage-workspaces";
+
+/**
  * Name of the custom event "menu:close".
  */
 export const MenuClose = "menu:close";

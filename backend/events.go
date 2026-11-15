@@ -101,6 +101,7 @@ func init() {
 	application.RegisterEvent[application.Void]("open-cluster")
 	application.RegisterEvent[application.Void]("save-workspace")
 	application.RegisterEvent[application.Void]("open-workspace")
+	application.RegisterEvent[application.Void]("manage-workspaces")
 	application.RegisterEvent[application.Void]("open-command-palette")
 	application.RegisterEvent[application.Void]("open-settings")
 	application.RegisterEvent[application.Void]("toggle-app-logs-panel")

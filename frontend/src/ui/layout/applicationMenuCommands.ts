@@ -63,12 +63,19 @@ export const buildApplicationMenuSections = (
         },
         separator('new-window'),
         {
-          label: 'Open Cluster',
+          label: 'Open Cluster…',
           accelerator: primary('o'),
           command: command.ApplicationMenuCommandOpenCluster,
         },
-        { label: 'Open Workspace…', command: command.ApplicationMenuCommandOpenWorkspace },
+        separator('open-cluster'),
+        {
+          label: 'Open Workspace…',
+          accelerator: primary('o', true),
+          command: command.ApplicationMenuCommandOpenWorkspace,
+        },
         { label: 'Save Workspace…', command: command.ApplicationMenuCommandSaveWorkspace },
+        { label: 'Manage Workspaces…', command: command.ApplicationMenuCommandManageWorkspaces },
+        separator('workspaces'),
         {
           label: 'Close',
           accelerator: primary('w'),

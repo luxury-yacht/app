@@ -15,6 +15,7 @@ describe('application menu command catalog', () => {
     expect(keys).toEqual([
       'ctrl+n',
       'ctrl+o',
+      'ctrl+shift+o',
       'ctrl+w',
       'ctrl+,',
       'ctrl+q',

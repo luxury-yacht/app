@@ -515,7 +515,12 @@ describe('saved workspaces', () => {
     return group ? [...group.querySelectorAll<HTMLElement>('[role="option"]')].map(labelOf) : [];
   };
 
-  it('lists saved workspaces after the Open and Save commands in one section, and opens the chosen one', async () => {
+  const emptyMessage = () =>
+    document.querySelector('.command-palette .command-palette-empty')?.textContent ?? null;
+
+  const workspaceCommands = ['Open Workspace…', 'Save Workspace…', 'Manage Workspaces…'];
+
+  it('lists saved workspaces after the workspace commands in one section, and opens the chosen one', async () => {
     app.backend.answer('ListNamedWorkspaces', () => [
       { name: 'Incident', revision: 'rev-incident' },
       { name: 'Release', revision: 'rev-release' },
@@ -524,12 +529,7 @@ describe('saved workspaces', () => {
     view = await app.mountApp();
     await menu('open-command-palette');
     vi.useFakeTimers();
-    expect(groupLabels('Workspaces')).toEqual([
-      'Open Workspace…',
-      'Save Workspace…',
-      'Incident',
-      'Release',
-    ]);
+    expect(groupLabels('Workspaces')).toEqual([...workspaceCommands, 'Incident', 'Release']);
     expect(groupLabels('Application')).not.toContain('Open Workspace…');
 
     await choose('Release');
@@ -539,18 +539,82 @@ describe('saved workspaces', () => {
     ]);
   });
 
+  it('opens from File → Open Workspace… on the saved workspaces alone, and opens the chosen one', async () => {
+    app.backend.answer('ListNamedWorkspaces', () => [
+      { name: 'Incident', revision: 'rev-incident' },
+      { name: 'Release', revision: 'rev-release' },
+    ]);
+    app.backend.answer('OpenNamedWorkspace', () => undefined);
+    view = await app.mountApp();
+    await menu('open-workspace');
+    vi.useFakeTimers();
+    expect(optionLabels()).toEqual(['Incident', 'Release']);
+
+    await choose('Incident');
+    expect(app.backend.calls('OpenNamedWorkspace')).toEqual([
+      [app.windowName, 'Incident', 'rev-incident'],
+    ]);
+  });
+
+  it('switches to the same picker from the palette’s Open Workspace… command', async () => {
+    app.backend.answer('ListNamedWorkspaces', () => [
+      { name: 'Incident', revision: 'rev-incident' },
+    ]);
+    view = await app.mountApp();
+    await menu('open-command-palette');
+    vi.useFakeTimers();
+    await choose('Open Workspace…');
+
+    expect(palette()).not.toBeNull();
+    expect(optionLabels()).toEqual(['Incident']);
+  });
+
+  it('says nothing is saved only once the list has arrived empty', async () => {
+    const release = app.backend.hold('ListNamedWorkspaces');
+    view = await app.mountApp();
+    await menu('open-workspace');
+    // Still reading: no claim that nothing is saved.
+    expect(optionLabels()).toEqual([]);
+    expect(emptyMessage()).toBeNull();
+
+    await act(async () => release());
+    await app.settle();
+    expect(emptyMessage()).not.toBeNull();
+  });
+
+  it('says the picker could not read the list instead of claiming nothing is saved', async () => {
+    let unreadable = false;
+    app.backend.answer('ListNamedWorkspaces', () => {
+      if (unreadable) {
+        throw new Error('workspace state is unreadable');
+      }
+      return [];
+    });
+    view = await app.mountApp();
+    await menu('open-workspace');
+    const noneSaved = emptyMessage();
+    await closePalette();
+
+    unreadable = true;
+    await menu('open-workspace');
+    expect(emptyMessage()).not.toBeNull();
+    expect(emptyMessage()).not.toBe(noneSaved);
+    const reports = app.errors.take((record) => record.context?.action === 'list');
+    expect(reports.map((record) => record.kinds)).toEqual([['operational']]);
+  });
+
   it('reads the saved list each time it opens, so changes from another window show', async () => {
     let saved = [{ name: 'Incident', revision: 'rev-incident' }];
     app.backend.answer('ListNamedWorkspaces', () => saved);
     view = await app.mountApp();
     await menu('open-command-palette');
-    expect(groupLabels('Workspaces')).toEqual(['Open Workspace…', 'Save Workspace…', 'Incident']);
+    expect(groupLabels('Workspaces')).toEqual([...workspaceCommands, 'Incident']);
     await closePalette();
 
     // Another window renames it while the palette is closed.
     saved = [{ name: 'Outage', revision: 'rev-incident' }];
     await menu('open-command-palette');
-    expect(groupLabels('Workspaces')).toEqual(['Open Workspace…', 'Save Workspace…', 'Outage']);
+    expect(groupLabels('Workspaces')).toEqual([...workspaceCommands, 'Outage']);
   });
 
   it('tells the user when opening a saved workspace is refused', async () => {
@@ -581,8 +645,7 @@ describe('saved workspaces', () => {
     view = await app.mountApp();
     await menu('open-command-palette');
 
-    // The Open dialog, where the list is managed, still reports the failure.
-    expect(groupLabels('Workspaces')).toEqual(['Open Workspace…', 'Save Workspace…']);
+    expect(groupLabels('Workspaces')).toEqual(workspaceCommands);
     const reports = app.errors.take((record) => record.context?.action === 'list');
     expect(reports.map((record) => record.kinds)).toEqual([['operational']]);
   });
@@ -667,8 +730,6 @@ const press = (element: HTMLElement, key: string) =>
 
 const clickInDialog = (element: HTMLElement) => act(async () => element.click());
 
-const openButton = () => requireValue(dialogButtons('Open')[0], 'expected the Open button');
-
 /** The saved-workspace picker, found by its visible label. */
 const workspacePicker = () => {
   const label = requireValue(
@@ -709,30 +770,6 @@ const pickerState = async () => {
   return state;
 };
 
-const pickWorkspace = async (name: string) => {
-  const offered = await openPicker();
-  await clickInDialog(
-    requireValue(
-      offered.find((option) => optionName(option) === name),
-      `expected ${name} among the saved workspaces`
-    )
-  );
-};
-
-it('opens the workspace picked from the saved list', async () => {
-  app.backend.answer('ListNamedWorkspaces', () => [
-    { name: 'Incident', revision: 'rev-incident' },
-    { name: 'Release', revision: 'rev-release' },
-  ]);
-  app.backend.answer('OpenNamedWorkspace', () => undefined);
-  await openWorkspaceDialog('open workspace', 'Open Workspace…');
-  await pickWorkspace('Release');
-  await clickInDialog(openButton());
-  expect(app.backend.calls('OpenNamedWorkspace')).toEqual([
-    [app.windowName, 'Release', 'rev-release'],
-  ]);
-});
-
 it('renames the selected saved workspace in place, but never onto another workspace', async () => {
   let saved = [
     { name: 'Incident', revision: 'rev-incident' },
@@ -745,7 +782,7 @@ it('renames the selected saved workspace in place, but never onto another worksp
       { name: 'Release', revision: 'rev-release' },
     ];
   });
-  await openWorkspaceDialog('open workspace', 'Open Workspace…');
+  await openWorkspaceDialog('manage workspace', 'Manage Workspaces…');
   await clickInDialog(dialogControl('Rename workspace'));
   const input = requireValue(dialogInput('workspace-new-name'), 'expected the new name input');
   expect(input.value).toBe('Incident');
@@ -772,7 +809,7 @@ it('cancels a rename with Escape and keeps the dialog open on the same workspace
     { name: 'Incident', revision: 'rev-incident' },
     { name: 'Release', revision: 'rev-release' },
   ]);
-  await openWorkspaceDialog('open workspace', 'Open Workspace…');
+  await openWorkspaceDialog('manage workspace', 'Manage Workspaces…');
   await clickInDialog(dialogControl('Rename workspace'));
   await enterInDialog('workspace-new-name', 'Outage');
   await press(requireValue(dialogInput('workspace-new-name'), 'expected the input'), 'Escape');
@@ -782,43 +819,13 @@ it('cancels a rename with Escape and keeps the dialog open on the same workspace
   expect(await pickerState()).toEqual({ listed: ['Incident', 'Release'], selected: ['Incident'] });
 });
 
-it('selects nothing after a refused open whose workspace is gone, so a retry cannot open another', async () => {
-  let saved = [
-    { name: 'Incident', revision: 'r1' },
-    { name: 'Release', revision: 'r2' },
-  ];
-  app.backend.answer('ListNamedWorkspaces', () => saved);
-  app.backend.answer('OpenNamedWorkspace', () => {
-    // Another window deleted it after this dialog listed it.
-    saved = [{ name: 'Release', revision: 'r2' }];
-    throw new Error('workspace "Incident" was not found');
-  });
-  await openWorkspaceDialog('open workspace', 'Open Workspace…');
-  await clickInDialog(openButton());
-  // The refusal reloads the list before it reports the error.
-  await act(async () => {
-    await Promise.resolve();
-  });
-  // Nothing selected: none of the selection's actions can reach another workspace.
-  expect(openButton().disabled).toBe(true);
-  expect(dialogControl('Rename workspace').disabled).toBe(true);
-  expect(dialogControl('Delete workspace').disabled).toBe(true);
-  await clickInDialog(openButton());
-  expect(app.backend.calls('OpenNamedWorkspace')).toHaveLength(1);
-  // The remaining workspace can still be chosen and opened.
-  expect(await pickerState()).toEqual({ listed: ['Release'], selected: [] });
-  app.errors.take(
-    (record) => record.kinds.includes('inline') || record.kinds.includes('operational')
-  );
-});
-
 it('deletes the selected saved workspace only after confirmation', async () => {
   app.backend.answer('ListNamedWorkspaces', () => [
     { name: 'Incident', revision: 'rev-incident' },
     { name: 'Release', revision: 'rev-release' },
   ]);
   app.backend.answer('DeleteNamedWorkspace', () => undefined);
-  await openWorkspaceDialog('open workspace', 'Open Workspace…');
+  await openWorkspaceDialog('manage workspace', 'Manage Workspaces…');
   await clickInDialog(dialogControl('Delete workspace'));
   expect(app.backend.calls('DeleteNamedWorkspace')).toEqual([]);
   // The confirmation is the topmost dialog; its Delete button confirms.
@@ -833,9 +840,7 @@ it('deletes the selected saved workspace only after confirmation', async () => {
 
 it('offers to save the current windows when nothing is saved yet', async () => {
   app.backend.answer('ListNamedWorkspaces', () => []);
-  await openWorkspaceDialog('open workspace', 'Open Workspace…');
-  // There is nothing to open, so the dialog's action is saving.
-  expect(dialogButtons('Open')).toEqual([]);
+  await openWorkspaceDialog('manage workspace', 'Manage Workspaces…');
   await clickInDialog(
     requireValue(dialogButtons('Save Current As…')[0], 'expected the Save Current As… button')
   );
@@ -857,7 +862,7 @@ it('reloads the saved workspaces when the one it listed was replaced under the s
     }
     saved = saved.filter((entry) => entry.name !== name);
   });
-  await openWorkspaceDialog('open workspace', 'Open Workspace…');
+  await openWorkspaceDialog('manage workspace', 'Manage Workspaces…');
   // Another window deletes Incident, saves a new one, and renames Release.
   saved = [
     { name: 'Incident', revision: 'rev-resaved' },
@@ -898,7 +903,7 @@ it('leaves rename mode when the workspace being renamed is gone', async () => {
   app.backend.answer('RenameNamedWorkspace', () => {
     throw new Error('workspace was not found');
   });
-  await openWorkspaceDialog('open workspace', 'Open Workspace…');
+  await openWorkspaceDialog('manage workspace', 'Manage Workspaces…');
   await clickInDialog(dialogControl('Rename workspace'));
   // Another window deletes Incident while it is being renamed.
   saved = [{ name: 'Release', revision: 'rev-release' }];
@@ -911,7 +916,10 @@ it('leaves rename mode when the workspace being renamed is gone', async () => {
   expect(app.errors.take((record) => record.context?.action === 'rename')).toHaveLength(1);
   // Staying in rename mode would rename Release, which the user never chose.
   expect(dialogInput('workspace-new-name')).toBeNull();
-  expect((await pickerState()).listed).toEqual(['Release']);
+  // Nothing is selected, so neither action can reach another workspace.
+  expect(dialogControl('Rename workspace').disabled).toBe(true);
+  expect(dialogControl('Delete workspace').disabled).toBe(true);
+  expect(await pickerState()).toEqual({ listed: ['Release'], selected: [] });
 });
 
 it('replaces a workspace that changed since the save dialog listed it only on a second attempt', async () => {

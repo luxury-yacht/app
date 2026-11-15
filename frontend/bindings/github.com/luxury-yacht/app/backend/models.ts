@@ -171,6 +171,7 @@ export enum ApplicationMenuCommand {
     ApplicationMenuCommandNewWindow = "new-window",
     ApplicationMenuCommandOpenWorkspace = "open-workspace",
     ApplicationMenuCommandSaveWorkspace = "save-workspace",
+    ApplicationMenuCommandManageWorkspaces = "manage-workspaces",
     ApplicationMenuCommandOpenCluster = "open-cluster",
     ApplicationMenuCommandClose = "close",
     ApplicationMenuCommandSettings = "settings",

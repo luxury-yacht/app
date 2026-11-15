@@ -5,6 +5,7 @@ export interface WorkspaceApplicationMenuActions {
   openCluster: () => void;
   saveWorkspace: () => void;
   openWorkspace: () => void;
+  manageWorkspaces: () => void;
   toggleSettings: () => void;
   openCommandPalette: () => void;
   zoomIn: () => void;
@@ -32,6 +33,7 @@ const localActionByCommand: Partial<
   [command.ApplicationMenuCommandOpenCluster]: 'openCluster',
   [command.ApplicationMenuCommandSaveWorkspace]: 'saveWorkspace',
   [command.ApplicationMenuCommandOpenWorkspace]: 'openWorkspace',
+  [command.ApplicationMenuCommandManageWorkspaces]: 'manageWorkspaces',
   [command.ApplicationMenuCommandSettings]: 'toggleSettings',
   [command.ApplicationMenuCommandCommandPalette]: 'openCommandPalette',
   [command.ApplicationMenuCommandZoomIn]: 'zoomIn',

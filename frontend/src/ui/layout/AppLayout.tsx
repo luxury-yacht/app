@@ -39,7 +39,7 @@ import { ClusterSelectionOverlay } from '@ui/layout/ClusterSelectionOverlay';
 import ClusterTabs from '@ui/layout/ClusterTabs';
 import { getClusterSelectionPhase } from '@ui/layout/clusterSelectionPhase';
 import { resolveObjectPanelMountTarget } from '@ui/layout/objectPanelMountTarget';
-import { NamedWorkspaceOpenDialog } from '@ui/modals/NamedWorkspaceOpenDialog';
+import { NamedWorkspaceManageDialog } from '@ui/modals/NamedWorkspaceManageDialog';
 import { NamedWorkspaceSaveDialog } from '@ui/modals/NamedWorkspaceSaveDialog';
 import type { NamespaceViewType } from '@ui/navigation/types';
 // Auth Failure Overlay
@@ -395,7 +395,7 @@ export const AppLayout: React.FC = () => {
       <ErrorNotificationSystem />
       <CommandPalette commands={commands} />
       <NamedWorkspaceSaveDialog />
-      <NamedWorkspaceOpenDialog />
+      <NamedWorkspaceManageDialog />
       <AppDebugOverlays />
     </div>
   );

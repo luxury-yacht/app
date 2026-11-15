@@ -8,6 +8,7 @@ import (
 
 func TestWorkspaceCommandValidationCoversTheCompleteCatalog(t *testing.T) {
 	commands := []WorkspaceCommand{
+		WorkspaceCommandManageWorkspaces,
 		WorkspaceCommandOpenAbout,
 		WorkspaceCommandOpenCluster,
 		WorkspaceCommandOpenCommandPalette,

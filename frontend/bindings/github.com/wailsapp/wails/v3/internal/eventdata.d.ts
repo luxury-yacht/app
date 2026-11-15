@@ -40,6 +40,7 @@ declare module "@wailsio/runtime" {
             "debug:toggle-panel-overlay": void;
             "favorites:library-changed": void;
             "kubeconfig:available-changed": void;
+            "manage-workspaces": void;
             "menu:close": void;
             "menu:copy": void;
             "menu:cut": void;

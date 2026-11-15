@@ -16,6 +16,7 @@ const (
 	ApplicationMenuCommandNewWindow         ApplicationMenuCommand = "new-window"
 	ApplicationMenuCommandOpenWorkspace     ApplicationMenuCommand = "open-workspace"
 	ApplicationMenuCommandSaveWorkspace     ApplicationMenuCommand = "save-workspace"
+	ApplicationMenuCommandManageWorkspaces  ApplicationMenuCommand = "manage-workspaces"
 	ApplicationMenuCommandOpenCluster       ApplicationMenuCommand = "open-cluster"
 	ApplicationMenuCommandClose             ApplicationMenuCommand = "close"
 	ApplicationMenuCommandSettings          ApplicationMenuCommand = "settings"
@@ -257,6 +258,8 @@ func (s *DesktopShell) ExecuteApplicationMenuCommand(
 		return s.emitOwnerApplicationMenuEvent(caller, panelwindow.WorkspaceCommandOpenWorkspace)
 	case ApplicationMenuCommandSaveWorkspace:
 		return s.emitOwnerApplicationMenuEvent(caller, panelwindow.WorkspaceCommandSaveWorkspace)
+	case ApplicationMenuCommandManageWorkspaces:
+		return s.emitOwnerApplicationMenuEvent(caller, panelwindow.WorkspaceCommandManageWorkspaces)
 	case ApplicationMenuCommandOpenCluster:
 		return s.emitOwnerApplicationMenuEvent(caller, panelwindow.WorkspaceCommandOpenCluster)
 	case ApplicationMenuCommandClose:
