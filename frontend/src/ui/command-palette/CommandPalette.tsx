@@ -1291,6 +1291,9 @@ export const CommandPalette = memo(function CommandPaletteComponent({
         </div>
       )}
     >
+      {/* Dims the app behind the palette, like the shared dialog backdrop. Visual
+          only: presses outside the palette are handled by the palette itself. */}
+      <div className="command-palette-backdrop" aria-hidden="true" />
       <dialog
         open
         className={[

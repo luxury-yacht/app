@@ -40,10 +40,11 @@ focus trap, backdrop, Escape handling, or app-background blocking.
 - A confirmation of an action on a cluster object passes `target`, so the modal
   names its kind, name, namespace, and cluster (resolved from `clusterId`). Its
   message states the consequence and does not repeat the object.
-- The command palette is the one blocking surface without a backdrop. It uses
-  the shared focus trap, so keys stay blocked; a press outside closes it and is
-  swallowed so it never acts on the app beneath; it sizes with the same zoom
-  correction as `--modal-viewport-height`.
+- The command palette is the one blocking surface whose backdrop does not take
+  presses. It uses the shared focus trap, so keys stay blocked; its backdrop
+  only dims the app with the shared overlay colors; a press outside closes it
+  and is swallowed so it never acts on the app beneath; it sizes with the same
+  zoom correction as `--modal-viewport-height`.
 - Nested modals only through the shared stack.
 - Size modals with the shared `--modal-viewport-height` and
   `--modal-viewport-width`, which account for app zoom; never raw `vh`/`vw`

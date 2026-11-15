@@ -22,11 +22,40 @@
   max-height: 600px;
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
+  /* Lit top edge and shadow, as on the shared dialogs. */
+  border-top-color: rgba(255, 255, 255, 0.1);
   border-radius: 12px;
+  box-shadow: var(--modal-container-shadow);
   display: flex;
   flex-direction: column;
   z-index: var(--z-index-overlay);
   animation: commandPaletteIn 200ms var(--ease-out, ease-out);
+}
+
+/* The shared dialog backdrop's dim, below the title bar and just under the
+   palette. It never takes presses: the palette closes on a press outside and
+   swallows it. No blur: the palette sits beside this layer, not inside it as a
+   dialog sits in its backdrop, and WebKit then draws stray lines where the
+   palette's shadow meets a blurred layer (the 1px blur is not visible anyway). */
+.command-palette-backdrop {
+  position: fixed;
+  top: var(--app-header-height);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: calc(var(--z-index-overlay) - 1);
+  background-color: var(--modal-overlay-bg);
+  pointer-events: none;
+  animation: commandPaletteBackdropIn 200ms ease-out both;
+}
+
+@keyframes commandPaletteBackdropIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes commandPaletteIn {
@@ -269,6 +298,9 @@
   gap: 1rem;
   padding: 0.5rem 1rem;
   border-top: 1px solid var(--color-border);
+  /* The palette's inner bottom curve (its 12px radius inside a 1px border), so
+     this background doesn't square off the palette's rounded corners. */
+  border-radius: 0 0 11px 11px;
   background-color: var(--color-bg-secondary);
   font-size: 0.75rem;
   color: var(--color-text-secondary);
