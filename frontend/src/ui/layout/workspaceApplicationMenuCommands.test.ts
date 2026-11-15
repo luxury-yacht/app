@@ -12,6 +12,9 @@ describe('dispatchWorkspaceApplicationMenuCommand', () => {
     const actions: WorkspaceApplicationMenuActions = {
       close: vi.fn(),
       openCluster: vi.fn(),
+      saveWorkspace: vi.fn(),
+      openWorkspace: vi.fn(),
+      manageWorkspaces: vi.fn(),
       toggleSettings: vi.fn(),
       openCommandPalette: vi.fn(),
       zoomIn: vi.fn(),
@@ -33,6 +36,7 @@ describe('dispatchWorkspaceApplicationMenuCommand', () => {
       [
         [command.ApplicationMenuCommandClose, 'close'],
         [command.ApplicationMenuCommandOpenCluster, 'openCluster'],
+        [command.ApplicationMenuCommandManageWorkspaces, 'manageWorkspaces'],
         [command.ApplicationMenuCommandSettings, 'toggleSettings'],
         [command.ApplicationMenuCommandCommandPalette, 'openCommandPalette'],
         [command.ApplicationMenuCommandZoomIn, 'zoomIn'],

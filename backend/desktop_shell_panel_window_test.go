@@ -135,6 +135,7 @@ func TestDesktopServiceUsesTheWailsSenderForRoleAwareMenuCommands(t *testing.T) 
 		event   string
 	}{
 		{ApplicationMenuCommandOpenCluster, "open-cluster"},
+		{ApplicationMenuCommandManageWorkspaces, "manage-workspaces"},
 		{ApplicationMenuCommandSettings, "open-settings"},
 		{ApplicationMenuCommandCommandPalette, "open-command-palette"},
 		{ApplicationMenuCommandToggleSidebar, "toggle-sidebar"},

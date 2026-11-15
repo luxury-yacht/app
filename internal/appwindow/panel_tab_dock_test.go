@@ -35,7 +35,7 @@ func TestPanelTabMenuDockResolvesClusterTargetAndWaitsForRenderer(t *testing.T) 
 	require.Equal(t, target, resolved.TargetWindowName)
 	require.NoError(t, registry.AcceptPanelTabTransfer(source.WindowName, request.TransferID))
 	require.Equal(t, nativeGroup(snapshot), requireNativeGroup(t, registry, source.WindowName))
-	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(target))
+	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(target, 0))
 	require.NotContains(t, eventNames(events), target+":"+panelwindow.TabTransferInsertRequestedEventName, "a ready target reads the directory instead")
 	// The resolved app view appends the tab to its bottom dock.
 	require.Equal(t, panelwindow.PanelLocation{Kind: panelwindow.PanelLocationDocked, WindowName: target, GroupID: "bottom", Active: true}, directoryPanel(t, registry, resolved).Transfer.Target)
@@ -89,7 +89,7 @@ func TestCancelledPanelTabMenuDockIsNotOfferedToALateTarget(t *testing.T) {
 	require.NoError(t, registry.RequestPanelTabTransfer(source.WindowName, request))
 	require.NoError(t, registry.AcceptPanelTabTransfer(source.WindowName, request.TransferID))
 	require.NoError(t, registry.FailPanelTabTransfer(source.WindowName, request.TransferID))
-	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(target))
+	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(target, 0))
 	// The target reads the directory when it becomes ready; nothing targets it.
 	workspace, err := registry.GetPanelWorkspace(target, request.ClusterID)
 	require.NoError(t, err)

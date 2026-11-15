@@ -122,6 +122,24 @@ describe('application bootstrap', () => {
     }
   );
 
+  // The backend leaves a window out of save, switch and quit from the moment
+  // its page starts until it announces readiness, and tells a page from the
+  // one before a reload by this number.
+  it('starts each page with a number that grows across reloads, even when the clock does not', async () => {
+    sessionStorage.clear();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1000);
+
+    await startWindow();
+    vi.resetModules();
+    await startWindow();
+    clock.mockRestore();
+
+    expect(app.backend.calls('WithdrawRendererReady')).toEqual([
+      [app.windowName, 1000],
+      [app.windowName, 1001],
+    ]);
+  });
+
   it('follows an error-reporting preference another window changes', async () => {
     app.preferences({ errorReportingEnabled: true });
     await startWindow();
@@ -188,5 +206,10 @@ describe('application bootstrap', () => {
     expect(alertText()).toContain('Could not open this application window');
     expect(app.backend.calls('FailPanelWindowTransfer')).toEqual([]);
     expect(bootstrapReports()).toHaveLength(1);
+    // A workspace switch waiting for this window is told at once that it
+    // will not load.
+    expect(app.backend.calls('AcknowledgeNamedWorkspaceRestore')).toEqual([
+      [app.windowName, expect.stringMatching(/./)],
+    ]);
   });
 });

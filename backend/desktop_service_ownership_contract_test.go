@@ -18,6 +18,7 @@ func TestDesktopServiceCommandsDelegateToTheirDeclaredOwners(t *testing.T) {
 	}{
 		"FavoritesCommands":      {field: "favorites", count: 7},
 		"UIStateCommands":        {field: "uiState", count: 7},
+		"NamedWorkspaceCommands": {field: "namedWorkspaces", count: 7},
 		"PreferencesCommands":    {field: "preferences", count: 12},
 		"DataManagementCommands": {field: "dataManagement", count: 5},
 		"ClusterAttentionCommands": {
@@ -30,7 +31,7 @@ func TestDesktopServiceCommandsDelegateToTheirDeclaredOwners(t *testing.T) {
 		"UpdateCommands":         {field: "updates", count: 6},
 		"AppLogCommands":         {field: "logs", count: 5},
 		"DesktopShellCommands":   {field: "desktopShell", count: 6},
-		"PanelWindowCommands":    {field: "panelWindows", count: 26},
+		"PanelWindowCommands":    {field: "panelWindows", count: 27},
 		"PanelMetricsCommands":   {field: "panelMetrics", count: 2},
 	}
 
@@ -45,6 +46,9 @@ func TestDesktopServiceCommandsDelegateToTheirDeclaredOwners(t *testing.T) {
 	shared, err := parser.ParseFile(token.NewFileSet(), "desktop_service_panel_workspace.go", nil, 0)
 	require.NoError(t, err)
 	parsed.Decls = append(parsed.Decls, shared.Decls...)
+	workspaces, err := parser.ParseFile(token.NewFileSet(), "desktop_service_named_workspace.go", nil, 0)
+	require.NoError(t, err)
+	parsed.Decls = append(parsed.Decls, workspaces.Decls...)
 	delegations := desktopCommandDelegations(t, parsed)
 
 	seen := make(map[string]string, len(delegations))
@@ -60,8 +64,8 @@ func TestDesktopServiceCommandsDelegateToTheirDeclaredOwners(t *testing.T) {
 			require.Equal(t, owner.field+"."+method, delegations[method], method)
 		}
 	}
-	require.Len(t, seen, 119)
-	require.Len(t, delegations, 119)
+	require.Len(t, seen, 127)
+	require.Len(t, delegations, 127)
 }
 
 func desktopCommandInterfaces(

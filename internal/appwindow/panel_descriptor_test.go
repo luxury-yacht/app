@@ -28,6 +28,7 @@ func liveNativeWindow(t *testing.T, snapshot PanelGroupSnapshot) (*Registry, str
 	_, err = registry.panels.AcknowledgeOpen(native.WindowName, snapshot.TransferID)
 	require.NoError(t, err)
 	seedNativeGroup(t, registry.workspace, native.WindowName, snapshot)
+	registry.markRendererReady(native.WindowName)
 	return registry, native.WindowName
 }
 

@@ -12,7 +12,10 @@ func (r *Registry) clusterRemoved(clusterID string) {
 			if _, err := r.panels.Descriptor(name); err != nil {
 				continue
 			}
-			r.reportPanelLifecycleError(r.AcknowledgePanelWindowClose(name), "close panel for removed cluster")
+			// The window closes without answering anything it was asked.
+			r.rendererLost(name)
+			_, err := r.closePanelWindow(name)
+			r.reportPanelLifecycleError(err, "close panel for removed cluster")
 		}
 	}()
 }

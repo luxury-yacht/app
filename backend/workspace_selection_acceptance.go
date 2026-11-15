@@ -2,7 +2,7 @@ package backend
 
 import "fmt"
 
-// A tab is admitted before its connection work. The renderer can then issue a
+// acceptWorkspaceSelection admits a tab before its connection work. The renderer can then issue a
 // close while preflight is still running; runtime publication and teardown keep
 // the existing serialized mutation lease and shutdown drain.
 func (a *WorkspaceCoordinator) acceptWorkspaceSelection(windowID string, command ClusterWorkspaceCommand) ClusterWorkspaceResult {

@@ -15,6 +15,7 @@ const COMMAND_HELP: Partial<
 > = {
   [command.ApplicationMenuCommandNewWindow]: { category: 'Windows & Panels', helpOrder: 10 },
   [command.ApplicationMenuCommandOpenCluster]: { category: 'Windows & Panels', helpOrder: 20 },
+  [command.ApplicationMenuCommandOpenWorkspace]: { category: 'Windows & Panels', helpOrder: 25 },
   [command.ApplicationMenuCommandClose]: { category: 'Windows & Panels', helpOrder: 30 },
   [command.ApplicationMenuCommandMinimise]: { category: 'Windows & Panels', helpOrder: 50 },
   [command.ApplicationMenuCommandToggleSidebar]: { category: 'Windows & Panels', helpOrder: 60 },

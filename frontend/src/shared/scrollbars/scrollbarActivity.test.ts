@@ -6,6 +6,12 @@ import {
   initializeScrollbarActivityTracking,
 } from './scrollbarActivity';
 
+const serializeClipPath = (value: string): string => {
+  const { style } = document.createElement('div');
+  style.clipPath = value;
+  return style.clipPath;
+};
+
 const defineMetric = (element: HTMLElement, name: keyof HTMLElement, value: number) => {
   Object.defineProperty(element, name, {
     configurable: true,
@@ -631,7 +637,7 @@ describe('scrollbar activity tracking', () => {
 
     const gutter = document.body.querySelector<HTMLElement>('.scrollbar-overlay-gutter--vertical');
     expect(gutter?.style.height).toBe('120px');
-    expect(gutter?.style.clipPath).toBe('inset(0px 0px 40px 0px)');
+    expect(gutter?.style.clipPath).toBe(serializeClipPath('inset(0px 0px 40px 0px)'));
   });
 
   it('repositions active child overlays when an ancestor scrolls', () => {
@@ -710,7 +716,7 @@ describe('scrollbar activity tracking', () => {
     const thumb = document.body.querySelector<HTMLElement>('.scrollbar-overlay-thumb--vertical');
     expect(thumb?.style.top).toBe('199.4px');
     expect(thumb?.style.height).toBe('49.6px');
-    expect(thumb?.style.clipPath).toBe('inset(0px 0px 149px 0px)');
+    expect(thumb?.style.clipPath).toBe(serializeClipPath('inset(0px 0px 149px 0px)'));
   });
 
   it('positions a horizontal-only thumb from the current scroll offset', () => {

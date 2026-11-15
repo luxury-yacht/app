@@ -32,6 +32,7 @@ func clusterCloseFixture(t *testing.T) (*Registry, *recordingLifecycleBackend, s
 		require.NoError(t, err)
 		_, err = registry.AcknowledgePanelWindowReady(descriptor.WindowName, snapshot.TransferID)
 		require.NoError(t, err)
+		require.NoError(t, registry.AcknowledgePanelWorkspaceReady(descriptor.WindowName, 0))
 		windows = append(windows, descriptor.WindowName)
 	}
 	return registry, backend, source, windows

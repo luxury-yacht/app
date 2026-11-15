@@ -40,26 +40,42 @@ type workspaceWindowEvent struct {
 	payload any
 }
 
-func (r *Registry) AcknowledgePanelWorkspaceReady(windowName string) error {
+// AcknowledgePanelWorkspaceReady is a renderer announcing that the handlers
+// which answer save, switch, quit and close requests are subscribed. page is
+// the number of the page that sent it.
+func (r *Registry) AcknowledgePanelWorkspaceReady(windowName string, page int64) error {
 	r.workspaceMu.Lock()
-	defer r.workspaceMu.Unlock()
-	if !r.lifecycle.Contains(windowName) {
-		return fmt.Errorf("app window %q is not live", windowName)
+	// Panel windows can announce mid-dock. Only live panels are asked to
+	// answer requests, so accept any tracked panel here.
+	if !r.lifecycle.Contains(windowName) && r.panels.State(windowName) == PanelWindowStateMissing {
+		r.workspaceMu.Unlock()
+		return fmt.Errorf("window %q is not open", windowName)
 	}
-	r.closeMu.Lock()
-	if r.panelWorkspaceReady == nil {
-		r.panelWorkspaceReady = make(map[string]struct{})
+	reloaded, queued := r.announceRendererReady(windowName, page)
+	r.workspaceMu.Unlock()
+	if reloaded {
+		// The page before this one never said it was going.
+		r.cancelRendererRequests(windowName)
 	}
-	r.panelWorkspaceReady[windowName] = struct{}{}
-	queued := r.queuedWorkspaceEvents[windowName]
-	delete(r.queuedWorkspaceEvents, windowName)
-	r.closeMu.Unlock()
 	for _, event := range queued {
 		if !r.emitWindowEvent(windowName, event.name, event.payload) {
 			return fmt.Errorf("app window %q is not available", windowName)
 		}
 	}
 	return nil
+}
+
+func (r *Registry) announceRendererReady(windowName string, page int64) (bool, []workspaceWindowEvent) {
+	r.closeMu.Lock()
+	defer r.closeMu.Unlock()
+	current, reloaded := r.enterRendererPageLocked(windowName, page)
+	if !current {
+		return false, nil
+	}
+	r.markRendererReadyLocked(windowName)
+	queued := r.queuedWorkspaceEvents[windowName]
+	delete(r.queuedWorkspaceEvents, windowName)
+	return reloaded, queued
 }
 
 func (r *Registry) queueWorkspaceEvent(windowName, name string, payload any) bool {
@@ -76,6 +92,16 @@ func (r *Registry) queueWorkspaceEvent(windowName, name string, payload any) boo
 	}
 	r.closeMu.Unlock()
 	return !ready || r.emitWindowEvent(windowName, name, payload)
+}
+
+// withdrawQueuedWorkspaceEvent drops an event that is still waiting for its
+// window's renderer to announce itself.
+func (r *Registry) withdrawQueuedWorkspaceEvent(windowName, name string) {
+	r.closeMu.Lock()
+	defer r.closeMu.Unlock()
+	r.queuedWorkspaceEvents[windowName] = slices.DeleteFunc(r.queuedWorkspaceEvents[windowName], func(event workspaceWindowEvent) bool {
+		return event.name == name
+	})
 }
 
 func (r *Registry) appWindowForCluster(clusterID, source string) (string, error) {
@@ -107,6 +133,9 @@ func (r *Registry) abortReadyPanelWindow(descriptor PanelWindowDescriptor) error
 func (r *Registry) GetPanelWorkspace(windowName, clusterID string) (panelwindow.WorkspaceSnapshot, error) {
 	if !r.windowHasCluster(windowName, clusterID) {
 		return panelwindow.WorkspaceSnapshot{}, fmt.Errorf("window %q does not display cluster %q", windowName, clusterID)
+	}
+	if restore := r.activeRestore.Load(); restore != nil && slices.Contains(restore.previous, windowName) {
+		return r.workspace.SnapshotForPreviousWorkspace(clusterID), nil
 	}
 	return r.workspace.Snapshot(clusterID), nil
 }

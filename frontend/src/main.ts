@@ -5,7 +5,10 @@
  * Implements main logic for the frontend.
  */
 
+import { AcknowledgeNamedWorkspaceRestore } from '@/core/backend-api';
+import { getWindowIdentity } from '@/core/desktop-runtime';
 import { failPanelWindowTransfer } from '@/core/panel-windows';
+import { startRendererPage } from '@/core/panel-windows/useRendererReadiness';
 import { createReactRootErrorHandlers } from '@/core/telemetry/sentry';
 import { reportOperationalError } from '@/utils/errorHandler';
 import {
@@ -33,6 +36,7 @@ if (appElement) {
         sentryRuntimeConfig,
         preparation
       );
+      startRendererPage(getWindowIdentity());
       const rootElement = await loadWindowRoot(descriptor);
       renderWindowRoot(
         appElement,
@@ -40,6 +44,13 @@ if (appElement) {
         createReactRootErrorHandlers(errorReportingAvailable)
       );
     } catch (error) {
+      // A page that failed to start cannot answer either, and a workspace
+      // switch that is waiting for this window to load should stop waiting.
+      startRendererPage(getWindowIdentity());
+      void AcknowledgeNamedWorkspaceRestore(
+        getWindowIdentity(),
+        'The window could not start.'
+      ).catch(() => undefined);
       disposeWindowPreparation(preparation);
       await abortOpeningPanel(preparation.openingPanel);
       const message = document.createElement('p');

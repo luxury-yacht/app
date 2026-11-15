@@ -165,11 +165,15 @@ describe('ApplicationMenuShortcuts', () => {
       groups.map(({ category, shortcuts }) => [category, shortcuts.map(({ key }) => key)])
     ).toEqual([
       ['Search', ['p', 'f']],
-      ['Windows & Panels', ['n', 'o', 'w', 'm', 'b', 'q']],
+      ['Windows & Panels', ['n', 'o', 'o', 'w', 'm', 'b', 'q']],
       ['Zoom', ['=', '-', '0']],
       ['Resource Data', ['d']],
       ['Settings & Tools', [',', 'l', 'd', 'F12']],
     ]);
+    // ⌘O opens a cluster and ⇧⌘O a workspace.
+    const windows = groups[1].shortcuts;
+    expect(windows[1].modifiers).toEqual(expect.objectContaining({ meta: true, shift: false }));
+    expect(windows[2].modifiers).toEqual(expect.objectContaining({ meta: true, shift: true }));
     expect(groups[0].shortcuts[0].modifiers).toEqual(
       expect.objectContaining({ meta: true, shift: true })
     );

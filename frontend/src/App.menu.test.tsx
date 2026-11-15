@@ -6,6 +6,7 @@
  * closes, and neither runs while the window itself is closing, whether given
  * with the menu's keyboard accelerators, as in a window that draws its own
  * menu (Windows and Linux), or as the commands the native macOS menu sends.
+ * File → Manage Workspaces… opens its dialog from either menu.
  * Runs in the full app over the faked backend (test-utils/appState);
  * `backend.hold` keeps a close in flight.
  */
@@ -25,10 +26,16 @@ let dev: TestCluster;
 let stg: TestCluster;
 
 /** Presses a menu accelerator (Ctrl+key outside macOS). */
-const pressAccelerator = async (key: string) => {
+const pressAccelerator = async (key: string, shiftKey = false) => {
   await act(async () => {
     document.body.dispatchEvent(
-      new KeyboardEvent('keydown', { key, ctrlKey: true, bubbles: true, cancelable: true })
+      new KeyboardEvent('keydown', {
+        key,
+        ctrlKey: true,
+        shiftKey,
+        bubbles: true,
+        cancelable: true,
+      })
     );
   });
   await app.settle();
@@ -82,6 +89,52 @@ describe('application menu commands', () => {
     await act(async () => approveClose());
     await app.settle();
     expect(view.owners().kubeconfig.managedClusterIds).toEqual([stg.clusterId]);
+  });
+
+  it('opens the workspace picker with Ctrl+Shift+O, not the cluster picker', async () => {
+    app.backend.answer('ListNamedWorkspaces', () => [
+      { name: 'Incident', revision: 'rev-incident' },
+    ]);
+    // Shift makes the browser report the key in upper case.
+    await pressAccelerator('O', true);
+
+    expect(paletteOpen()).toBe(true);
+    const offered = [...document.querySelectorAll('.command-palette [role="option"]')].map(
+      (option) => option.querySelector('.command-palette-item-label')?.textContent
+    );
+    expect(offered).toEqual(['Incident']);
+  });
+
+  describe('File → Manage Workspaces…', () => {
+    const manageDialogOpen = () =>
+      document.querySelector('[role="dialog"] button[aria-label="Rename workspace"]') !== null;
+
+    beforeEach(() => {
+      app.backend.answer('ListNamedWorkspaces', () => [
+        { name: 'Incident', revision: 'rev-incident' },
+      ]);
+    });
+
+    it('opens the dialog from the native macOS menu', async () => {
+      await act(async () => {
+        app.events.emit('manage-workspaces', undefined, { sender: app.windowName });
+      });
+      await app.settle();
+      expect(manageDialogOpen()).toBe(true);
+    });
+
+    it('opens the dialog from the menu the window draws itself (Windows and Linux)', async () => {
+      await act(async () =>
+        document.querySelector<HTMLButtonElement>('[aria-label="File menu"]')?.click()
+      );
+      await act(async () =>
+        document
+          .querySelector<HTMLButtonElement>('[data-menu-command="manage-workspaces"]')
+          ?.click()
+      );
+      await app.settle();
+      expect(manageDialogOpen()).toBe(true);
+    });
   });
 
   it('runs no menu command while the window is closing', async () => {

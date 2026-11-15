@@ -15,7 +15,7 @@ func TestClusterTabTransferWaitsForSourceAndDestinationAndRejectsStaleAcknowledg
 	backend := &recordingLifecycleBackend{}
 	registry := NewRegistry(application.New(application.Options{}), backend)
 	source, target := registry.Create(true).Name(), registry.Create(false).Name()
-	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(target))
+	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(target, 0))
 	var events []string
 	registry.emitWindowEvent = func(name, event string, _ any) bool { events = append(events, name+":"+event); return true }
 	request := panelwindow.ClusterTabTransferRequest{TransferID: "cluster-move", ClusterID: "cluster-1", SourceWindowName: source, TargetWindowName: target, TargetIndex: 0}
@@ -55,7 +55,7 @@ func clusterPanelWindows(registry *Registry) map[string]string {
 func TestClusterViewTransferMovesTheDirectorysPanelsAfterAcknowledgement(t *testing.T) {
 	registry := NewRegistry(application.New(application.Options{}), &recordingLifecycleBackend{})
 	source, target := registry.Create(true).Name(), registry.Create(false).Name()
-	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(target))
+	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(target, 0))
 	var inserted panelwindow.ClusterTabTransferEvent
 	registry.emitWindowEvent = func(_ string, name string, payload any) bool {
 		if name == panelwindow.ClusterTabTransferInsertEventName {
@@ -116,7 +116,7 @@ func TestCancelledClusterTransferDoesNotDeliverQueuedInsert(t *testing.T) {
 	require.NoError(t, registry.RequestClusterTabTransfer(target, request))
 	require.NoError(t, registry.AcceptClusterTabTransfer(source, request.TransferID, panelwindow.ClusterViewSnapshot{SchemaVersion: 1, ViewState: "{}"}))
 	require.NoError(t, registry.FailClusterTabTransfer(source, request.TransferID))
-	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(target))
+	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(target, 0))
 	require.NotContains(t, events, panelwindow.ClusterTabTransferInsertEventName)
 }
 
@@ -134,7 +134,7 @@ func TestClosingClusterTransferSourceCancelsPendingDestination(t *testing.T) {
 func TestClusterTransferReportsUnavailableDestination(t *testing.T) {
 	registry := NewRegistry(application.New(application.Options{}), &recordingLifecycleBackend{})
 	source, target := registry.Create(true).Name(), registry.Create(false).Name()
-	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(target))
+	require.NoError(t, registry.AcknowledgePanelWorkspaceReady(target, 0))
 	registry.emitWindowEvent = func(_ string, event string, _ any) bool {
 		return event != panelwindow.ClusterTabTransferInsertEventName
 	}
@@ -210,7 +210,7 @@ func TestClusterTabTransferClosesOnlyEmptySourceAfterAcknowledgement(t *testing.
 					backend.windowClusters[target] = append(backend.windowClusters[target], "cluster-1")
 				}
 			}
-			require.NoError(t, registry.AcknowledgePanelWorkspaceReady(source))
+			require.NoError(t, registry.AcknowledgePanelWorkspaceReady(source, 0))
 			var events, closed []string
 			registry.emitWindowEvent = func(name, event string, _ any) bool { events = append(events, name+":"+event); return true }
 			registry.closeWindow = func(name string) bool {
@@ -231,7 +231,7 @@ func TestClusterTabTransferClosesOnlyEmptySourceAfterAcknowledgement(t *testing.
 			}
 			require.NoError(t, registry.AcceptClusterTabTransfer(source, request.TransferID, panelwindow.ClusterViewSnapshot{SchemaVersion: 1, ViewState: "{}"}))
 			target = registry.clusterTransfers.get(request.TransferID).event.Request.TargetWindowName
-			require.NoError(t, registry.AcknowledgePanelWorkspaceReady(target))
+			require.NoError(t, registry.AcknowledgePanelWorkspaceReady(target, 0))
 			require.NoError(t, registry.PublishDockedPanels(target, groups))
 			require.Empty(t, closed, "source must survive destination reconstruction")
 			require.True(t, registry.lifecycle.Contains(source))

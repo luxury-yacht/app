@@ -16,7 +16,7 @@ const platformMock = vi.hoisted(() => ({
 }));
 
 const errorMock = vi.hoisted(() => ({
-  reportOperationalError: vi.fn(),
+  handle: vi.fn(),
 }));
 
 vi.mock('@/core/backend-api', () => ({
@@ -30,7 +30,10 @@ vi.mock('@/utils/platform', () => ({
 }));
 
 vi.mock('@/utils/errorHandler', () => ({
-  reportOperationalError: errorMock.reportOperationalError,
+  errorHandler: {
+    handle: errorMock.handle,
+    describe: (error: Error) => ({ message: error.message }),
+  },
 }));
 
 describe('AppMenuBar', () => {
@@ -43,7 +46,7 @@ describe('AppMenuBar', () => {
     root = ReactDOM.createRoot(container);
     backendMock.executeApplicationMenuCommand.mockClear();
     backendMock.executeApplicationMenuCommand.mockResolvedValue(undefined);
-    errorMock.reportOperationalError.mockClear();
+    errorMock.handle.mockClear();
     platformMock.isWindowsPlatform.mockReturnValue(true);
   });
 
@@ -79,6 +82,23 @@ describe('AppMenuBar', () => {
       backend.ApplicationMenuCommand.ApplicationMenuCommandNewWindow
     );
     expect(container.querySelector('[role="menu"]')).toBeNull();
+  });
+
+  it('shows a refused New Window command to the user', async () => {
+    const refusal = new Error('workspace switch in progress');
+    backendMock.executeApplicationMenuCommand.mockRejectedValueOnce(refusal);
+    renderMenu();
+
+    act(() => container.querySelector<HTMLButtonElement>('[aria-label="File menu"]')?.click());
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-menu-command="new-window"]')?.click();
+    });
+
+    expect(errorMock.handle).toHaveBeenCalledWith(
+      refusal,
+      { source: 'ApplicationMenuCommands', action: 'execute:new-window' },
+      expect.any(String)
+    );
   });
 
   it('highlights the open title without preselecting pointer-opened menu items', () => {
@@ -212,10 +232,11 @@ describe('AppMenuBar', () => {
     });
 
     expect(document.activeElement).toBe(input);
-    expect(errorMock.reportOperationalError).toHaveBeenCalledWith(expect.any(Error), {
-      source: 'ApplicationMenuCommands',
-      action: 'execute:copy',
-    });
+    expect(errorMock.handle).toHaveBeenCalledWith(
+      expect.any(Error),
+      { source: 'ApplicationMenuCommands', action: 'execute:copy' },
+      expect.any(String)
+    );
     input.remove();
   });
 

@@ -30,6 +30,8 @@ import {
   requestClusterTabTransfer,
   requestPanelTabTransfer,
 } from './index';
+import { NamedWorkspaceCapture } from './NamedWorkspaceCapture';
+import { NamedWorkspaceRestore } from './NamedWorkspaceRestore';
 import { usePanelLifecycleGuardRegistry } from './panelLifecycleGuards';
 import { requestPanelTabMove } from './panelTabActions';
 import {
@@ -325,6 +327,8 @@ export function WorkspacePanelCoordinator({ children }: Readonly<{ children: Rea
       <WorkspacePanelSync>
         <WorkspacePanelLifecycle />
         <ClusterTabTransferCoordinator />
+        <NamedWorkspaceCapture />
+        <NamedWorkspaceRestore />
         <WorkspaceObjectRouteCoordinator
           windowName={windowName}
           pendingAutoFloatRollbacks={pendingAutoFloatRollbacks}

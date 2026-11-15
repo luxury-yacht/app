@@ -1,5 +1,8 @@
 import type { SidebarSelectionType } from '@/core/contexts/SidebarStateContext';
-import type { NavigationTabState } from '@/core/contexts/ViewStateContext';
+import {
+  DEFAULT_NAVIGATION_STATE,
+  type NavigationTabState,
+} from '@/core/contexts/ViewStateContext';
 import { parseClusterViewType, parseNamespaceViewType, VIEW_TYPES } from '@/types/navigation/views';
 
 export interface ClusterViewState {
@@ -11,10 +14,41 @@ export interface ClusterViewState {
 }
 const record = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value);
-const localView = (value: unknown) =>
+const localView = (value: unknown): value is NavigationTabState['viewType'] =>
   typeof value === 'string' &&
   value !== 'global' &&
   (VIEW_TYPES as readonly string[]).includes(value);
+
+// A saved workspace can outlive a view or table schema. Keep ownership strict
+// and fall back field by field for presentation state.
+export function readSavedClusterViewState(value: unknown, clusterId: string): ClusterViewState {
+  if (!record(value) || value.clusterId !== clusterId) {
+    throw new Error('Invalid saved cluster identity');
+  }
+  const navigation = record(value.navigation) ? value.navigation : {};
+  return {
+    clusterId,
+    navigation: {
+      viewType: localView(navigation.viewType)
+        ? navigation.viewType
+        : DEFAULT_NAVIGATION_STATE.viewType,
+      previousView: localView(navigation.previousView)
+        ? navigation.previousView
+        : DEFAULT_NAVIGATION_STATE.previousView,
+      activeNamespaceView:
+        parseNamespaceViewType(stringField(navigation.activeNamespaceView)) ??
+        DEFAULT_NAVIGATION_STATE.activeNamespaceView,
+      activeClusterView:
+        parseClusterViewType(stringField(navigation.activeClusterView)) ??
+        DEFAULT_NAVIGATION_STATE.activeClusterView,
+    },
+    namespace: stringField(value.namespace),
+    sidebar: validSidebar(value.sidebar) ? value.sidebar : null,
+    tables: record(value.tables) ? value.tables : {},
+  };
+}
+
+const stringField = (value: unknown) => (typeof value === 'string' ? value : undefined);
 function validNavigation(value: unknown): value is NavigationTabState {
   if (!record(value) || !localView(value.viewType) || !localView(value.previousView)) {
     return false;

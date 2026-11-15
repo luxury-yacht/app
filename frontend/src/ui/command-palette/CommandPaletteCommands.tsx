@@ -39,15 +39,19 @@ import {
   ResetFiltersIcon,
   SettingsIcon,
   WarningIcon,
+  WorkspaceIcon,
 } from '@shared/components/icons/SharedIcons';
 import { clearAllGridTableState } from '@shared/components/tables/persistence/gridTablePersistenceReset';
 import { navigateToFavorite } from '@ui/favorites/navigateToFavorite';
 import { closeActiveClusterOrWindow } from '@ui/navigation/closeActiveClusterOrWindow';
-import { type ReactNode, useCallback, useMemo } from 'react';
-import { CheckForUpdates } from '@/core/backend-api';
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { CheckForUpdates, OpenNamedWorkspace } from '@/core/backend-api';
+import type { panelwindow } from '@/core/backend-api/models';
 import { requestContextRefresh } from '@/core/data-access';
+import { getWindowIdentity } from '@/core/desktop-runtime';
 import { eventBus } from '@/core/events';
 import { GLOBAL_VIEW_DESCRIPTORS } from '@/core/navigation/viewRegistry';
+import { listNamedWorkspaces } from '@/core/persistence/namedWorkspaces';
 import {
   setAutoRefreshEnabled,
   setDimInactiveNamespaces,
@@ -57,7 +61,7 @@ import {
 import { usePreference } from '@/core/settings/usePreference';
 import type { ClusterViewType, NamespaceViewType } from '@/types/navigation/views';
 import { changeAppearanceMode } from '@/utils/appearanceMode';
-import { reportOperationalError } from '@/utils/errorHandler';
+import { errorHandler, reportOperationalError } from '@/utils/errorHandler';
 import { isMacPlatform } from '@/utils/platform';
 
 export interface Command {
@@ -273,9 +277,14 @@ export function useCommandPaletteCommands() {
     () => platformShortcut(['⇧', '⌘', 'N'], ['Ctrl', 'Shift', 'N']),
     []
   );
-  // The same accelerator as File → Open Cluster (backend/menu.go), which opens
+  // The same accelerator as File → Open Cluster… (backend/menu.go), which opens
   // the palette in kubeconfig selection.
   const selectKubeconfigShortcut = useMemo(() => platformShortcut(['⌘', 'O'], ['Ctrl', 'O']), []);
+  // The same accelerator as File → Open Workspace… (backend/menu.go).
+  const openWorkspaceShortcut = useMemo(
+    () => platformShortcut(['⇧', '⌘', 'O'], ['Ctrl', 'Shift', 'O']),
+    []
+  );
 
   const commands = useMemo(
     () => [
@@ -553,6 +562,36 @@ export function useCommandPaletteCommands() {
         keywords: ['namespace', 'change', 'select'],
         shortcut: selectNamespaceShortcut,
       },
+      {
+        id: 'open-workspace',
+        label: 'Open Workspace…',
+        description: 'Replace the current windows with a saved layout',
+        icon: <WorkspaceIcon width={16} height={16} />,
+        category: 'Navigation',
+        action: () => {
+          // Handled specially in CommandPalette component: opens the workspace picker.
+        },
+        keywords: ['workspace', 'open', 'restore', 'windows', 'layout'],
+        shortcut: openWorkspaceShortcut,
+      },
+      {
+        id: 'save-workspace',
+        label: 'Save Workspace…',
+        description: 'Save the layout of all app and panel windows',
+        icon: <WorkspaceIcon width={16} height={16} />,
+        category: 'Navigation',
+        action: () => eventBus.emit('named-workspace:save-dialog'),
+        keywords: ['workspace', 'save', 'windows', 'layout'],
+      },
+      {
+        id: 'manage-workspaces',
+        label: 'Manage Workspaces…',
+        description: 'Rename or delete saved workspaces',
+        icon: <WorkspaceIcon width={16} height={16} />,
+        category: 'Navigation',
+        action: () => eventBus.emit('named-workspace:manage-dialog'),
+        keywords: ['workspace', 'manage', 'rename', 'delete', 'layout'],
+      },
       ...buildGlobalViewCommands(selectedKubeconfigs.length > 1, openGlobalView),
       ...buildClusterViewCommands(openClusterTab, availableClusterViews),
     ],
@@ -566,6 +605,7 @@ export function useCommandPaletteCommands() {
       closeTabShortcut,
       selectNamespaceShortcut,
       selectKubeconfigShortcut,
+      openWorkspaceShortcut,
       diffObjectsShortcut,
       autoRefreshEnabled,
       useShortResourceNames,
@@ -680,4 +720,62 @@ export function useCommandPaletteCommands() {
     ...namespaceCommands,
     ...kubeconfigCommands,
   ];
+}
+
+// Opens the snapshot the palette listed: one replaced since then is refused,
+// not opened in its place. The palette has closed by then, so a refusal is
+// shown as a notification.
+const buildSavedWorkspaceCommand = (entry: panelwindow.NamedWorkspaceEntry): Command => ({
+  id: `workspace-${entry.name}`,
+  label: entry.name,
+  icon: <WorkspaceIcon width={16} height={16} />,
+  description: 'Replace the current windows with this workspace',
+  category: 'Workspaces',
+  action: () => {
+    OpenNamedWorkspace(getWindowIdentity(), entry.name, entry.revision).catch((error) => {
+      errorHandler.handle(error, { source: 'NamedWorkspace', action: 'open' });
+    });
+  },
+  keywords: ['workspace', 'layout', 'windows'],
+});
+
+/** The saved workspaces as the palette has them: still reading, unreadable, or listed. */
+export type SavedWorkspaceCommands =
+  | { status: 'loading' }
+  | { status: 'failed' }
+  | { status: 'ready'; commands: Command[] };
+
+const LOADING: SavedWorkspaceCommands = { status: 'loading' };
+
+/**
+ * The saved workspaces as palette commands, read each time the palette opens.
+ * A failed read is reported without a notification, since every open would
+ * show it again; the workspace picker says the list could not be read.
+ */
+export function useSavedWorkspaceCommands(paletteOpen: boolean): SavedWorkspaceCommands {
+  const [saved, setSaved] = useState<SavedWorkspaceCommands>(LOADING);
+  useEffect(() => {
+    if (!paletteOpen) {
+      setSaved(LOADING);
+      return;
+    }
+    // A list that arrives after its palette closed belongs to no open palette.
+    let current = true;
+    listNamedWorkspaces()
+      .then((entries) => {
+        if (current) {
+          setSaved({ status: 'ready', commands: entries.map(buildSavedWorkspaceCommand) });
+        }
+      })
+      .catch((error) => {
+        reportOperationalError(error, { source: 'NamedWorkspace', action: 'list' });
+        if (current) {
+          setSaved({ status: 'failed' });
+        }
+      });
+    return () => {
+      current = false;
+    };
+  }, [paletteOpen]);
+  return saved;
 }

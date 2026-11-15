@@ -22,6 +22,14 @@ func workspaceNativeDescriptor(name string) (panelwindow.NativeDescriptor, error
 	}, nil
 }
 
+func TestNewWindowCommandReportsCreationRefusal(t *testing.T) {
+	refused := fmt.Errorf("workspace switch in progress")
+	shell := NewDesktopShell(nil, func() bool { return true }, nil, NewLogger(10), DesktopShellBindings{
+		CreateWorkspaceWindow: func() error { return refused },
+	})
+	require.ErrorIs(t, shell.ExecuteApplicationMenuCommand("workspace-1", ApplicationMenuCommandNewWindow), refused)
+}
+
 func menuItems(menu *application.Menu) []*application.MenuItem {
 	items := []*application.MenuItem{}
 	for index := 0; ; index++ {
@@ -126,12 +134,47 @@ func TestFileMenuOffersNewWindowAccelerator(t *testing.T) {
 func TestDesktopShellReceivesWorkspaceWindowCreatorAtConstruction(t *testing.T) {
 	called := false
 	app := NewDesktopShell(nil, nil, nil, nil, DesktopShellBindings{
-		CreateWorkspaceWindow: func() { called = true },
+		CreateWorkspaceWindow: func() error { called = true; return nil },
 	})
 
 	require.NotNil(t, app.createWorkspaceWindow)
 	app.createWorkspaceWindowFromMenu()
 	require.True(t, called)
+}
+
+// ⇧⌘O / Ctrl+Shift+O opens a workspace, beside ⌘O / Ctrl+O for Open Cluster.
+func TestFileMenuOffersOpenWorkspaceAccelerator(t *testing.T) {
+	fileMenu := findSubmenu(t, CreateMenu(&DesktopShell{sidebarVisible: true}), "File")
+	for _, item := range menuItems(fileMenu) {
+		if item.Label() != "Open Workspace…" {
+			continue
+		}
+		want := "Ctrl+Shift+O"
+		if runtime.GOOS == "darwin" {
+			want = "Cmd+Shift+O"
+		}
+		require.Equal(t, want, item.GetAccelerator())
+		return
+	}
+	t.Fatal("Open Workspace… menu item not found")
+}
+
+// The File menu offers Manage Workspaces…, and its command reaches the app
+// window, whose renderer opens the dialog on the "manage-workspaces" event.
+func TestFileMenuManageWorkspacesReachesTheAppWindow(t *testing.T) {
+	fileMenu := findSubmenu(t, CreateMenu(&DesktopShell{sidebarVisible: true}), "File")
+	labels := []string{}
+	for _, item := range menuItems(fileMenu) {
+		labels = append(labels, item.Label())
+	}
+	require.Contains(t, labels, "Manage Workspaces…")
+
+	events := []string{}
+	shell := NewDesktopShell(nil, func() bool { return true }, func(name string, _ ...interface{}) {
+		events = append(events, name)
+	}, NewLogger(10), DesktopShellBindings{NativeWindowDescriptor: workspaceNativeDescriptor})
+	require.NoError(t, shell.ExecuteApplicationMenuCommand("workspace-1", ApplicationMenuCommandManageWorkspaces))
+	require.Equal(t, []string{"manage-workspaces"}, events)
 }
 
 func TestApplicationMenuCommandsShareOneTypedRoleAwareDispatcher(t *testing.T) {
@@ -143,7 +186,7 @@ func TestApplicationMenuCommandsShareOneTypedRoleAwareDispatcher(t *testing.T) {
 		func(name string, _ ...interface{}) { events = append(events, name) },
 		NewLogger(10),
 		DesktopShellBindings{
-			CreateWorkspaceWindow:  func() { created = true },
+			CreateWorkspaceWindow:  func() error { created = true; return nil },
 			NativeWindowDescriptor: workspaceNativeDescriptor,
 		},
 	)
@@ -224,7 +267,7 @@ func TestUntargetedNativeApplicationCommandsDoNotRequireACurrentWindow(t *testin
 		func(name string, _ ...interface{}) { events = append(events, name) },
 		NewLogger(10),
 		DesktopShellBindings{
-			CreateWorkspaceWindow:  func() { created = true },
+			CreateWorkspaceWindow:  func() error { created = true; return nil },
 			NativeWindowDescriptor: workspaceNativeDescriptor,
 			UpdateCheck:            func() error { checked <- struct{}{}; return nil },
 		},

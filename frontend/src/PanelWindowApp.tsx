@@ -51,12 +51,49 @@ import '@styles/index.css';
 import './App.css';
 import './PanelWindowApp.css';
 
-const acknowledgedTransfers = new Set<string>();
+const acknowledgedTransfers = new Map<string, Promise<boolean>>();
 
 /** Test helper to clear acknowledged transfers between runs. */
 export const resetAcknowledgedPanelTransfersForTesting = (): void => {
   acknowledgedTransfers.clear();
 };
+
+// Acknowledges the transfer that opened this window, once per page. A remount
+// (React StrictMode, or recovery from the crash screen) waits on the same
+// acknowledgement, so it becomes ready without sending it twice. A refused
+// acknowledgement rolls the transfer back and may be tried again.
+function acknowledgeTransfer({ windowName, transferId }: PanelWindowDescriptor): Promise<boolean> {
+  const acknowledging = acknowledgedTransfers.get(transferId);
+  if (acknowledging) {
+    return acknowledging;
+  }
+  const acknowledge = async () => {
+    try {
+      await acknowledgePanelWindowReady(windowName, transferId);
+      return true;
+    } catch (error) {
+      acknowledgedTransfers.delete(transferId);
+      try {
+        await failPanelWindowTransfer(windowName, windowName, transferId);
+      } catch (cleanupError) {
+        reportOperationalError(cleanupError, {
+          source: 'PanelWindowApp',
+          action: 'fail-ready-transfer',
+        });
+      }
+      reportOperationalError(error, { source: 'PanelWindowApp', action: 'acknowledge-ready' });
+      // A window that reloaded in the middle of a move is still open, and live
+      // once the move is rolled back. A window whose open failed is gone.
+      return acknowledgePanelWindowReady(windowName, '').then(
+        () => true,
+        () => false
+      );
+    }
+  };
+  const started = acknowledge();
+  acknowledgedTransfers.set(transferId, started);
+  return started;
+}
 
 const initialGroups = (group: panelwindow.WorkspaceGroup): TabGroupState => ({
   right: {
@@ -104,32 +141,15 @@ function PanelWindowSurface({
   );
 
   useEffect(() => {
-    if (acknowledgedTransfers.has(descriptor.transferId)) {
-      return;
-    }
-    acknowledgedTransfers.add(descriptor.transferId);
-    const acknowledgeReady = async () => {
-      try {
-        await acknowledgePanelWindowReady(descriptor.windowName, descriptor.transferId);
+    let mounted = true;
+    void acknowledgeTransfer(descriptor).then((acknowledged) => {
+      if (acknowledged && mounted) {
         setReady(true);
-      } catch (error) {
-        acknowledgedTransfers.delete(descriptor.transferId);
-        try {
-          await failPanelWindowTransfer(
-            descriptor.windowName,
-            descriptor.windowName,
-            descriptor.transferId
-          );
-        } catch (cleanupError) {
-          reportOperationalError(cleanupError, {
-            source: 'PanelWindowApp',
-            action: 'fail-ready-transfer',
-          });
-        }
-        reportOperationalError(error, { source: 'PanelWindowApp', action: 'acknowledge-ready' });
       }
+    });
+    return () => {
+      mounted = false;
     };
-    void acknowledgeReady();
   }, [descriptor]);
 
   const getTabSnapshot = useCallback(

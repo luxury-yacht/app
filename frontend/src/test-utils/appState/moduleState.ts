@@ -15,6 +15,7 @@ import { __clearSearchShortcutTargetsForTest } from '@ui/shortcuts/searchShortcu
 import { __resetForTests as resetPermissionStoreForTests } from '@/core/capabilities/permissionStore';
 import { eventBus } from '@/core/events';
 import { resetPanelPublicationQueuesForTesting } from '@/core/panel-windows/publicationQueue';
+import { resetRendererReadinessForTesting } from '@/core/panel-windows/useRendererReadiness';
 import { resetClusterTabOrderCacheForTesting } from '@/core/persistence/clusterTabOrder';
 import { resetFavoritesCacheForTesting } from '@/core/persistence/favorites';
 import { resetBrokerReadDiagnosticsForTesting } from '@/core/read-diagnostics/store';
@@ -67,6 +68,7 @@ export const resetAppModuleState = (): void => {
   resetObjectPanelTabRequestsForTesting();
   resetAcknowledgedPanelTransfersForTesting();
   resetPanelPublicationQueuesForTesting();
+  resetRendererReadinessForTesting();
   __clearSearchShortcutTargetsForTest();
   __resetScrollbarActivityTrackingForTest();
   errorHandler.clearHistory();

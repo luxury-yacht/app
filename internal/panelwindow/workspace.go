@@ -54,7 +54,8 @@ type SharedWorkspaceCommands interface {
 	OpenPanelWorkspaceObject(string, TabSnapshot) (PanelOpenResult, error)
 	ClosePanelWorkspaceObject(string, string, string) error
 	PublishDockedPanels(string, []WorkspaceGroup) error
-	AcknowledgePanelWorkspaceReady(string) error
+	AcknowledgePanelWorkspaceReady(string, int64) error
+	WithdrawRendererReady(string, int64) error
 }
 
 const WorkspaceChangedEventName = "panel-workspace:changed"
@@ -96,9 +97,13 @@ func (r *panelRemoval) report() {
 // WorkspaceDirectory holds the application-wide panel collection independently
 // of the lifetime of any app-window renderer.
 type WorkspaceDirectory struct {
-	mu               sync.Mutex
-	revision         uint64
-	panels           map[workspacePanelKey]WorkspacePanel
+	mu       sync.Mutex
+	revision uint64
+	panels   map[workspacePanelKey]WorkspacePanel
+	// setAside holds the panels a workspace switch took out until it either
+	// closes them or puts them back. They still follow their windows and
+	// clusters: a window or cluster that goes takes its set-aside panels too.
+	setAside         map[workspacePanelKey]WorkspacePanel
 	onClusterRemoved func(string)
 	onPanelsRemoved  func([]PanelKey)
 	reservations     map[uint64]string
@@ -194,6 +199,13 @@ func (d *WorkspaceDirectory) RetainWindowCluster(windowName, clusterID string) {
 		d.panels[key] = panel
 		d.revision++
 	}
+	for key, panel := range d.setAside {
+		if panel.Location.WindowName == windowName && panel.Location.Kind == PanelLocationDocked && (clusterID == "" || key.clusterID == clusterID) {
+			panel.Location.Kind = PanelLocationRetained
+			panel.Location.WindowName = ""
+			d.setAside[key] = panel
+		}
+	}
 }
 
 func (d *WorkspaceDirectory) RemoveWindow(windowName string) {
@@ -205,6 +217,20 @@ func (d *WorkspaceDirectory) RemoveWindow(windowName string) {
 		if panel.Location.WindowName == windowName {
 			d.deletePanelLocked(key, removal)
 			d.revision++
+		}
+	}
+	d.dropSetAsideLocked(removal, func(_ workspacePanelKey, panel WorkspacePanel) bool {
+		return panel.Location.WindowName == windowName
+	})
+}
+
+// dropSetAsideLocked closes the set-aside panels that match.
+func (d *WorkspaceDirectory) dropSetAsideLocked(removal *panelRemoval, match func(workspacePanelKey, WorkspacePanel) bool) {
+	for key, panel := range d.setAside {
+		if match(key, panel) {
+			delete(d.setAside, key)
+			removal.keys = append(removal.keys, PanelKey{ClusterID: key.clusterID, PanelID: key.panelID})
+			removal.notify = d.onPanelsRemoved
 		}
 	}
 }
@@ -245,6 +271,11 @@ func (d *WorkspaceDirectory) HasPanel(clusterID, panelID string) bool {
 func (d *WorkspaceDirectory) deletePanelLocked(key workspacePanelKey, removal *panelRemoval) {
 	d.leaveTransferLocked(key)
 	delete(d.panels, key)
+	// A panel that is also set aside for a workspace switch has not closed: it
+	// comes back if the switch does not go ahead.
+	if _, setAside := d.setAside[key]; setAside {
+		return
+	}
 	removal.keys = append(removal.keys, PanelKey{ClusterID: key.clusterID, PanelID: key.panelID})
 	removal.notify = d.onPanelsRemoved
 }
@@ -303,10 +334,24 @@ func (d *WorkspaceDirectory) PublishWindow(windowName string, kind PanelLocation
 }
 
 func (d *WorkspaceDirectory) Snapshot(clusterID string) WorkspaceSnapshot {
+	return d.snapshot(clusterID, false)
+}
+
+// SnapshotForPreviousWorkspace reads the set-aside layout until the switch
+// commits or restores it. A hidden source can still receive refresh events.
+func (d *WorkspaceDirectory) SnapshotForPreviousWorkspace(clusterID string) WorkspaceSnapshot {
+	return d.snapshot(clusterID, true)
+}
+
+func (d *WorkspaceDirectory) snapshot(clusterID string, previous bool) WorkspaceSnapshot {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	panels := d.panels
+	if previous && d.setAside != nil {
+		panels = d.setAside
+	}
 	snapshot := WorkspaceSnapshot{Revision: d.revision, Panels: []WorkspacePanel{}}
-	for key, panel := range d.panels {
+	for key, panel := range panels {
 		if key.clusterID == clusterID {
 			snapshot.Panels = append(snapshot.Panels, panel)
 		}
@@ -348,9 +393,13 @@ func (d *WorkspaceDirectory) RemoveCluster(clusterID string) {
 	for key := range d.panels {
 		if key.clusterID == clusterID {
 			d.deletePanelLocked(key, removal)
-			d.revision++
 		}
 	}
+	d.dropSetAsideLocked(removal, func(key workspacePanelKey, _ WorkspacePanel) bool { return key.clusterID == clusterID })
+	// A removal changes which clusters the workspace can show even when this
+	// cluster had no panels, so anything decided at the earlier revision, such as
+	// a saved workspace about to take the directory, must not go ahead.
+	d.revision++
 	for id, reserved := range d.reservations {
 		if reserved == clusterID {
 			delete(d.reservations, id)

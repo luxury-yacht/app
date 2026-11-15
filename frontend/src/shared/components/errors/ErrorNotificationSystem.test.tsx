@@ -14,6 +14,7 @@ import { Clipboard } from '@wailsio/runtime';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireValue } from '@/test-utils/requireValue';
 
 const errorsRef: { current: ErrorNotification[] } = { current: [] };
 
@@ -178,14 +179,15 @@ describe('ErrorNotificationSystem header label', () => {
   });
 
   it('shows the stack count on the active notification', () => {
-    expect(notificationStyles).toContain('.error-notification-count');
     errorsRef.current = [makeError({ id: 'error-1' }), makeError({ id: 'error-2' })];
     act(() => root.render(<ErrorNotificationSystem />));
 
-    const count = container.querySelector<HTMLElement>(
-      '.error-notification--active .error-notification-count'
+    const count = requireValue(
+      container.querySelector('.error-notification--active .error-notification-count'),
+      'active notification stack count'
     );
-    expect(count).toBeTruthy();
-    expect(window.getComputedStyle(count as HTMLElement).display).toBe('inline-flex');
+    expect(count.textContent).toBe('2');
+    expect(window.getComputedStyle(count).display).not.toBe('none');
+    expect(container.querySelectorAll('.error-notification-count')).toHaveLength(1);
   });
 });

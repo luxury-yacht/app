@@ -11,7 +11,7 @@ func TestQuitSettlementKeepsApprovalFrozenUntilProcessHandoff(t *testing.T) {
 	for _, outcome := range []string{"denied", "collection-timeout", "delivery-failed", "quit-unavailable", "handoff-timeout", "persistence-denied", "approved"} {
 		t.Run(outcome, func(t *testing.T) {
 			registry, backend, source, panels := clusterCloseFixture(t)
-			registry.markWorkspaceReady(source)
+			readyAppWindow(registry, source)
 			registry.quitPreflightTimeout = 0
 			backend.allowQuit = outcome != "persistence-denied"
 			participants := append([]string{source}, panels...)

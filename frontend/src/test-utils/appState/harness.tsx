@@ -708,6 +708,8 @@ const answerBootRpcs = (session: Session): void => {
   rpc.answer('ListShellSessions', () => []);
   rpc.answer('ListPortForwards', () => []);
   rpc.answer('GetFavorites', () => []);
+  // The command palette reads the saved workspaces each time it opens.
+  rpc.answer('ListNamedWorkspaces', () => []);
   rpc.answer('GetFavoriteClusters', () => [...session.favoriteClusters]);
   // Mirrors backend/favorites_service_persistence.go SetClusterFavorite: a new
   // favorite is appended, an unfavorited one removed, and the list returned.
@@ -729,6 +731,8 @@ const answerBootRpcs = (session: Session): void => {
   rpc.answer('GetClusterAllowedNamespaces', () => []);
   rpc.answer('PublishDockedPanels', () => undefined);
   rpc.answer('AcknowledgePanelWorkspaceReady', () => undefined);
+  rpc.answer('WithdrawRendererReady', () => undefined);
+  rpc.answer('AcknowledgeNamedWorkspaceRestore', () => undefined);
   rpc.answer('PublishPanelWindowGroup', () => undefined);
   rpc.answer('SetAppLogsPanelVisible', () => undefined);
   rpc.answer('SetSidebarVisible', () => undefined);

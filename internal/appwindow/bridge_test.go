@@ -1,12 +1,20 @@
 package appwindow
 
 import (
+	"context"
 	"testing"
 
 	"github.com/luxury-yacht/app/internal/panelwindow"
 	"github.com/stretchr/testify/require"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
+
+func (*recordingNativeWindowRegistry) CaptureNamedWorkspace(context.Context, string) (panelwindow.NamedWorkspace, error) {
+	return panelwindow.NamedWorkspace{}, nil
+}
+func (*recordingNativeWindowRegistry) SubmitNamedWorkspaceCapture(string, string, panelwindow.NamedWorkspaceAppView, string) error {
+	return nil
+}
 
 type recordingNativeWindowRegistry struct {
 	panelwindow.SharedWorkspaceCommands
@@ -26,7 +34,7 @@ func (registry *recordingNativeWindowRegistry) FocusMostRecent() {
 	registry.record("focus-most-recent")
 }
 
-func (registry *recordingNativeWindowRegistry) Create(bool) *application.WebviewWindow {
+func (registry *recordingNativeWindowRegistry) CreateWorkspaceWindow() error {
 	registry.record("create-workspace")
 	return nil
 }
@@ -133,7 +141,7 @@ func TestWindowRegistryBridgePreservesUnboundStartupSemantics(t *testing.T) {
 
 	require.True(t, bridge.PrepareApplicationQuit())
 	require.False(t, options.IsWorkspaceWindow("workspace-1"))
-	require.NotPanics(t, options.CreateWorkspaceWindow)
+	require.Error(t, options.CreateWorkspaceWindow())
 	_, err := options.NativeWindowDescriptor("workspace-1")
 	require.ErrorContains(t, err, "native window registry is not available")
 	_, err = options.BeginPanelWindowOpen(panelwindow.GroupSnapshot{})
@@ -175,7 +183,7 @@ func TestWindowRegistryBridgeForwardsEveryRuntimeOperationAfterBinding(t *testin
 
 	require.False(t, bridge.PrepareApplicationQuit())
 	bridge.OnSecondInstanceLaunch(application.SecondInstanceData{})
-	options.CreateWorkspaceWindow()
+	require.NoError(t, options.CreateWorkspaceWindow())
 	require.True(t, options.IsWorkspaceWindow("workspace-1"))
 	_, err := options.NativeWindowDescriptor("workspace-1")
 	require.NoError(t, err)
@@ -217,4 +225,11 @@ func TestWindowRegistryBridgeForwardsEveryRuntimeOperationAfterBinding(t *testin
 		"fail-tab-transfer",
 		"acknowledge-quit",
 	}, registry.calls)
+}
+
+func (*recordingNativeWindowRegistry) OpenNamedWorkspace(context.Context, string, panelwindow.NamedWorkspace) error {
+	return nil
+}
+func (*recordingNativeWindowRegistry) AcknowledgeNamedWorkspaceRestore(string, string) error {
+	return nil
 }

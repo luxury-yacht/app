@@ -57,6 +57,10 @@ export function AcknowledgeClusterTabTransfer(windowName: string, transferID: st
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.AcknowledgeClusterTabTransfer", windowName, transferID);
 }
 
+export function AcknowledgeNamedWorkspaceRestore(window: string, failure: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.AcknowledgeNamedWorkspaceRestore", window, failure);
+}
+
 /**
  * AcknowledgePanelTransfer settles a directory move this renderer was asked to
  * reconstruct: mounted commits it, otherwise the source keeps the panels.
@@ -73,8 +77,12 @@ export function AcknowledgePanelWindowReady(windowName: string, transferID: stri
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.AcknowledgePanelWindowReady", windowName, transferID);
 }
 
-export function AcknowledgePanelWorkspaceReady(windowName: string): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.AcknowledgePanelWorkspaceReady", windowName);
+/**
+ * AcknowledgePanelWorkspaceReady is a window's renderer announcing that it can
+ * answer registry requests. page is the number of the page that sent it.
+ */
+export function AcknowledgePanelWorkspaceReady(windowName: string, page: number): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.AcknowledgePanelWorkspaceReady", windowName, page);
 }
 
 export function AcknowledgeWorkspaceWindowClose(callerWindowName: string): $CancellablePromise<void> {
@@ -163,6 +171,10 @@ export function DeleteGridTablePersistence(key: string): $CancellablePromise<voi
 
 export function DeleteGridTablePersistenceEntries(keys: string[] | null): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.DeleteGridTablePersistenceEntries", keys);
+}
+
+export function DeleteNamedWorkspace(window: string, name: string, revision: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.DeleteNamedWorkspace", window, name, revision);
 }
 
 export function DeleteTheme(id: string): $CancellablePromise<void> {
@@ -345,6 +357,10 @@ export function IsWorkloadHPAManaged(target: resourcemodel$0.ResourceRef): $Canc
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.IsWorkloadHPAManaged", target);
 }
 
+export function ListNamedWorkspaces(): $CancellablePromise<panelwindow$0.NamedWorkspaceEntry[] | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.ListNamedWorkspaces");
+}
+
 export function ListPortForwards(): $CancellablePromise<$models.PortForwardSession[] | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.ListPortForwards");
 }
@@ -381,6 +397,10 @@ export function OpenKubeconfigSearchPathDialog(): $CancellablePromise<string> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.OpenKubeconfigSearchPathDialog");
 }
 
+export function OpenNamedWorkspace(window: string, name: string, revision: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.OpenNamedWorkspace", window, name, revision);
+}
+
 export function OpenPanelWorkspaceObject(windowName: string, tab: panelwindow$0.TabSnapshot): $CancellablePromise<panelwindow$0.PanelOpenResult> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.OpenPanelWorkspaceObject", windowName, tab);
 }
@@ -402,6 +422,10 @@ export function QueryPermissions(queries: capabilities$0.PermissionQuery[] | nul
 
 export function RemoveApplicationUpdateSkip(): $CancellablePromise<$models.UpdateInfo | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.RemoveApplicationUpdateSkip");
+}
+
+export function RenameNamedWorkspace(window: string, name: string, newName: string, revision: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.RenameNamedWorkspace", window, name, newName, revision);
 }
 
 export function ReorderThemes(ids: string[] | null): $CancellablePromise<void> {
@@ -454,6 +478,10 @@ export function SaveCsvFile(defaultFilename: string, content: string): $Cancella
 
 export function SaveLogFile(defaultFilename: string, content: string): $CancellablePromise<$models.CatalogQueryCSVExport> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.SaveLogFile", defaultFilename, content);
+}
+
+export function SaveNamedWorkspace(window: string, name: string, replace: boolean, revision: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.SaveNamedWorkspace", window, name, replace, revision);
 }
 
 export function SaveTheme(theme: $models.Theme): $CancellablePromise<void> {
@@ -516,6 +544,14 @@ export function StopPortForward(sessionID: string): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.StopPortForward", sessionID);
 }
 
+/**
+ * SubmitNamedWorkspaceCapture is a window's reply to a capture request: its view,
+ * or the reason it could not report one.
+ */
+export function SubmitNamedWorkspaceCapture(window: string, id: string, view: panelwindow$0.NamedWorkspaceAppView, failure: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.SubmitNamedWorkspaceCapture", window, id, view, failure);
+}
+
 export function UpdateAppPreferences(request: $models.UpdateAppPreferencesRequest): $CancellablePromise<$models.UpdateAppPreferencesResponse | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.UpdateAppPreferences", request);
 }
@@ -526,6 +562,15 @@ export function UpdateFavorite(favorite: $models.Favorite): $CancellablePromise<
 
 export function ValidateThemeClusterPattern(pattern: string): $CancellablePromise<$models.ThemeClusterPatternValidationResult> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.ValidateThemeClusterPattern", pattern);
+}
+
+/**
+ * WithdrawRendererReady is a window's renderer saying it cannot answer registry
+ * requests: its page has just started loading, or a crash screen replaced its
+ * app tree. page is the number of the page that sent it.
+ */
+export function WithdrawRendererReady(windowName: string, page: number): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.WithdrawRendererReady", windowName, page);
 }
 
 void BindingModelAnchor;

@@ -166,7 +166,7 @@ describe('native panel-window transport', () => {
     const group = { clusterId: 'cluster-1', groupId: 'group-1', tabs: [], activePanelId: '' };
     await openPanelWorkspaceObject('workspace-2', tabTransfer.tab);
     await publishDockedPanels('workspace-2', []);
-    await acknowledgePanelWorkspaceReady('workspace-2');
+    await acknowledgePanelWorkspaceReady('workspace-2', 7);
     await beginPanelWindowOpen('workspace-1', snapshot);
     await acknowledgePanelWindowReady('panel-1', 'transfer-1');
     await beginPanelWindowDock('panel-1', 'right', snapshot);
@@ -186,7 +186,7 @@ describe('native panel-window transport', () => {
       tabTransfer.tab
     );
     expect(mocks.backend.PublishDockedPanels).toHaveBeenCalledWith('workspace-2', []);
-    expect(mocks.backend.AcknowledgePanelWorkspaceReady).toHaveBeenCalledWith('workspace-2');
+    expect(mocks.backend.AcknowledgePanelWorkspaceReady).toHaveBeenCalledWith('workspace-2', 7);
     expect(mocks.backend.BeginPanelWindowOpen).toHaveBeenCalledWith('workspace-1', snapshot);
     expect(mocks.backend.AcknowledgePanelWindowReady).toHaveBeenCalledWith('panel-1', 'transfer-1');
     expect(mocks.backend.BeginPanelWindowDock).toHaveBeenCalledWith('panel-1', 'right', snapshot);

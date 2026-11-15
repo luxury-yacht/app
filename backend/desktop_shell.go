@@ -47,7 +47,7 @@ type DesktopShellBindings struct {
 	PanelWorkspace             panelwindow.SharedWorkspaceCommands
 	UpdateCheck                func() error
 	KubeconfigSearchPaths      func() ([]string, error)
-	CreateWorkspaceWindow      func()
+	CreateWorkspaceWindow      func() error
 	NativeWindowDescriptor     func(string) (panelwindow.NativeDescriptor, error)
 	BeginPanelWindowOpen       func(panelwindow.GroupSnapshot) (panelwindow.WindowDescriptor, error)
 	AcknowledgePanelReady      func(string, string) (panelwindow.WindowDescriptor, error)
@@ -74,7 +74,7 @@ type DesktopShell struct {
 	fallbackEmitter            func(string, ...interface{})
 	logger                     *Logger
 	menu                       *application.Menu
-	createWorkspaceWindow      func()
+	createWorkspaceWindow      func() error
 	nativeWindowDescriptor     func(string) (panelwindow.NativeDescriptor, error)
 	beginPanelWindowOpen       func(panelwindow.GroupSnapshot) (panelwindow.WindowDescriptor, error)
 	acknowledgePanelReady      func(string, string) (panelwindow.WindowDescriptor, error)

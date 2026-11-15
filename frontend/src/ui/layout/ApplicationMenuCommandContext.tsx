@@ -1,16 +1,17 @@
 import { createContext, type ReactNode, useContext } from 'react';
 import { ExecuteApplicationMenuCommand } from '@/core/backend-api';
 import type { backend } from '@/core/backend-api/models';
-import { reportOperationalError } from '@/utils/errorHandler';
+import { errorHandler } from '@/utils/errorHandler';
 
 export type ApplicationMenuCommandExecutor = (command: backend.ApplicationMenuCommand) => void;
 
 export const executeBackendApplicationMenuCommand: ApplicationMenuCommandExecutor = (command) => {
   void ExecuteApplicationMenuCommand(command).catch((error) => {
-    reportOperationalError(error, {
-      source: 'ApplicationMenuCommands',
-      action: `execute:${command}`,
-    });
+    errorHandler.handle(
+      error,
+      { source: 'ApplicationMenuCommands', action: `execute:${command}` },
+      errorHandler.describe(error).message
+    );
   });
 };
 

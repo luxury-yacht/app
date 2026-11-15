@@ -47,7 +47,7 @@ type ApplicationRuntime struct {
 type ApplicationRuntimeOptions struct {
 	Reporter                   sentryreporting.Reporter
 	ApplicationUpdates         ApplicationUpdateOptions
-	CreateWorkspaceWindow      func()
+	CreateWorkspaceWindow      func() error
 	IsWorkspaceWindow          func(string) bool
 	NativeWindowDescriptor     func(string) (panelwindow.NativeDescriptor, error)
 	PanelWorkspace             panelwindow.SharedWorkspaceCommands

@@ -18,7 +18,10 @@ export function useApplicationQuitPreflight(
       if (event.windowName !== windowName || settled.current.has(event.transactionId)) {
         return;
       }
-      void prepare(event.transactionId, 'Closing application…')
+      void prepare(
+        event.transactionId,
+        event.switchingWorkspace ? 'Switching workspace…' : 'Closing application…'
+      )
         .catch((error) => {
           reportOperationalError(error, { source: 'ApplicationQuitPreflight', action: 'prepare' });
           return false;

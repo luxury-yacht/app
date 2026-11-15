@@ -15,10 +15,11 @@ const gridTablePersistenceVersionKey = "v1"
 
 // persistenceFile captures the persisted UI state stored in persistence.json.
 type persistenceFile struct {
-	SchemaVersion int                    `json:"schemaVersion"`
-	UpdatedAt     time.Time              `json:"updatedAt"`
-	ClusterTabs   persistenceClusterTabs `json:"clusterTabs"`
-	Tables        persistenceTables      `json:"tables"`
+	SchemaVersion int                       `json:"schemaVersion"`
+	UpdatedAt     time.Time                 `json:"updatedAt"`
+	ClusterTabs   persistenceClusterTabs    `json:"clusterTabs"`
+	Tables        persistenceTables         `json:"tables"`
+	Workspaces    map[string]NamedWorkspace `json:"workspaces,omitempty"`
 }
 
 type persistenceClusterTabs struct {

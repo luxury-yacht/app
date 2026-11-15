@@ -95,7 +95,6 @@
 .table-pagination-button:hover:not(:disabled),
 .table-pagination-button.keyboard-programmatic-focus:focus:not(:disabled) {
   border-color: var(--color-accent);
-  background: var(--color-bg-tertiary);
 }
 
 .table-pagination-button:focus-visible {

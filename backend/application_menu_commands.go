@@ -14,6 +14,9 @@ type ApplicationMenuCommand string
 
 const (
 	ApplicationMenuCommandNewWindow         ApplicationMenuCommand = "new-window"
+	ApplicationMenuCommandOpenWorkspace     ApplicationMenuCommand = "open-workspace"
+	ApplicationMenuCommandSaveWorkspace     ApplicationMenuCommand = "save-workspace"
+	ApplicationMenuCommandManageWorkspaces  ApplicationMenuCommand = "manage-workspaces"
 	ApplicationMenuCommandOpenCluster       ApplicationMenuCommand = "open-cluster"
 	ApplicationMenuCommandClose             ApplicationMenuCommand = "close"
 	ApplicationMenuCommandSettings          ApplicationMenuCommand = "settings"
@@ -176,8 +179,6 @@ func (s *DesktopShell) executeProcessApplicationMenuCommand(
 	command ApplicationMenuCommand,
 ) bool {
 	switch command {
-	case ApplicationMenuCommandNewWindow:
-		s.createWorkspaceWindowFromMenu()
 	case ApplicationMenuCommandQuit:
 		s.quitApplicationFromMenu()
 	case ApplicationMenuCommandHide:
@@ -234,6 +235,9 @@ func (s *DesktopShell) ExecuteApplicationMenuCommand(
 	windowName string,
 	command ApplicationMenuCommand,
 ) error {
+	if command == ApplicationMenuCommandNewWindow {
+		return s.createWorkspaceWindowFromMenu()
+	}
 	// Native menu callbacks omit the sender. Resolve it before the no-window
 	// Settings/About paths so a focused panel routes through its workspace owner.
 	if windowName == "" {
@@ -250,6 +254,12 @@ func (s *DesktopShell) ExecuteApplicationMenuCommand(
 	}
 
 	switch command {
+	case ApplicationMenuCommandOpenWorkspace:
+		return s.emitOwnerApplicationMenuEvent(caller, panelwindow.WorkspaceCommandOpenWorkspace)
+	case ApplicationMenuCommandSaveWorkspace:
+		return s.emitOwnerApplicationMenuEvent(caller, panelwindow.WorkspaceCommandSaveWorkspace)
+	case ApplicationMenuCommandManageWorkspaces:
+		return s.emitOwnerApplicationMenuEvent(caller, panelwindow.WorkspaceCommandManageWorkspaces)
 	case ApplicationMenuCommandOpenCluster:
 		return s.emitOwnerApplicationMenuEvent(caller, panelwindow.WorkspaceCommandOpenCluster)
 	case ApplicationMenuCommandClose:

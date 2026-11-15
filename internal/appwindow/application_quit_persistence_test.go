@@ -62,7 +62,7 @@ users:
 			SelectedKubeconfigs: []string{selection},
 		})
 		require.Equal(t, []string{selection}, result.State.SelectedKubeconfigs, result.Error)
-		registry.markWorkspaceReady(window.Name())
+		readyAppWindow(registry, window.Name())
 	}
 	require.ElementsMatch(t, selections, runtime.Preferences.SelectedKubeconfigs())
 	var transactionID string
