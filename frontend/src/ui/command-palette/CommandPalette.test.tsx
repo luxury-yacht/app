@@ -151,10 +151,10 @@ describe('parseQueryTokens', () => {
     expect(tokens.otherTokens).toEqual(['frontend', 'default']);
   });
 
-  it('promotes unique partial kind prefixes to canonical kind filters', () => {
-    const tokens = parseQueryTokens('depl');
-    expect(tokens.kindTokens).toEqual(['deployment']);
-    expect(tokens.otherTokens).toEqual([]);
+  it('keeps the start of a kind’s name as a search word, not a kind filter', () => {
+    const tokens = parseQueryTokens('sta depl');
+    expect(tokens.kindTokens).toEqual([]);
+    expect(tokens.otherTokens).toEqual(['sta', 'depl']);
   });
 });
 
@@ -467,6 +467,24 @@ describe('CommandPalette', () => {
     expect(palette()).not.toBeNull();
   });
 
+  it('matches commands by every word typed, in any order, ignoring extra spaces', async () => {
+    await showPalette([
+      command('ns-stg-web', 'stg-web', 'Namespaces'),
+      command('ns-prod-web', 'prod-web', 'Namespaces'),
+      command('view-x', 'Toggle X', 'View'),
+    ]);
+    await openFromViewMenu();
+    vi.useFakeTimers();
+
+    for (const query of ['stg ', 'web stg', '  STG  web ']) {
+      await type(query);
+      expect(optionLabels()).toEqual(['stg-web']);
+    }
+    // Every word must match: "x" is in another command, not this one.
+    await type('stg x');
+    expect(optionLabels()).toEqual([]);
+  });
+
   it('selects the whole query on Cmd/Ctrl+A', async () => {
     await showPalette([command('open-settings', 'Open Settings', 'Application')]);
     await openFromViewMenu();
@@ -637,6 +655,38 @@ describe('CommandPalette catalog search', () => {
   });
 });
 
+describe('CommandPalette kind words', () => {
+  // The words the search box marks as kind filters.
+  const kindWords = () =>
+    Array.from(
+      document.querySelectorAll('.command-palette-header mark'),
+      (mark) => mark.textContent
+    );
+  // What the search box tells assistive technology about its kind filters.
+  const description = () => {
+    const id = input().getAttribute('aria-describedby');
+    return id ? (document.getElementById(id)?.textContent ?? null) : null;
+  };
+
+  it('marks the words it searches as kinds and names the kinds they stand for', async () => {
+    await showPalette([]);
+    await openFromViewMenu();
+    vi.useFakeTimers();
+
+    // "pod" is a kind name and "svc" an alias; "stg" and "sta" (the start of
+    // StatefulSet) stay text.
+    await type('stg sta pod svc');
+    expect(kindWords()).toEqual(['pod', 'svc']);
+    expect(description()).toContain('Pod');
+    expect(description()).toContain('Service');
+    expect(description()).not.toContain('StatefulSet');
+
+    await type('post serv');
+    expect(kindWords()).toEqual([]);
+    expect(description()).toBeNull();
+  });
+});
+
 describe('buildCatalogDisplayEntries', () => {
   const noShortNames = false;
 
@@ -687,5 +737,23 @@ describe('buildCatalogDisplayEntries', () => {
       noShortNames
     );
     expect(entries.map((entry) => entry.displayName)).toEqual(['db/postgres']);
+  });
+
+  it('finds a kind by the start of its name without hiding other objects that contain it', () => {
+    const statefulSet = createCatalogItem({
+      ref: { kind: 'StatefulSet', resource: 'statefulsets', namespace: 'db', name: 'postgres' },
+    });
+    const staging = createCatalogItem({
+      ref: { kind: 'Deployment', resource: 'deployments', namespace: 'staging', name: 'api' },
+    });
+    const entries = buildCatalogDisplayEntries(
+      [statefulSet, staging],
+      parseQueryTokens('sta'),
+      noShortNames
+    );
+    expect(entries.map((entry) => entry.displayName).sort(compareUtf16Strings)).toEqual([
+      'db/postgres',
+      'staging/api',
+    ]);
   });
 });

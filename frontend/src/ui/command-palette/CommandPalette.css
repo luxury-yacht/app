@@ -38,20 +38,64 @@
 }
 
 .command-palette-header {
+  display: flex;
+  align-items: center;
   padding: 0;
   border-bottom: 1px solid var(--color-border);
 }
 
-.command-palette-input {
-  --focus-background: transparent;
-  width: 100%;
+.command-palette-field {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+/* The input and the kind-word backdrop under it share text metrics, so each
+   mark sits exactly under its typed word. */
+.command-palette-input,
+.command-palette-input-backdrop {
   padding: 0.5rem 1rem;
   font-size: 0.85rem;
+  box-sizing: border-box;
+}
+
+.command-palette-input {
+  --focus-background: transparent;
+  position: relative;
+  width: 100%;
   background: transparent;
   border: none;
   outline: none;
   color: var(--color-text);
-  box-sizing: border-box;
+}
+
+.command-palette-input-backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  white-space: pre;
+  color: transparent;
+  pointer-events: none;
+}
+
+/* The kind badge's tint, without its padding or uppercase, which would shift the
+   word out from under the typed text. */
+.command-palette-kind-word {
+  color: transparent;
+  background-color: color-mix(in srgb, var(--kind-color) 25%, transparent);
+  border-radius: 3px;
+}
+
+.command-palette-kind-filters {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.3rem;
+  padding-right: 0.75rem;
+}
+
+.command-palette-kind-filters .kind-badge {
+  font-size: 0.6rem;
+  padding: 0.1rem 0.4rem;
 }
 
 .command-palette-input:focus-visible {

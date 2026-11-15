@@ -242,7 +242,9 @@ describe('navigation commands', () => {
     dev = openCluster('dev', 'alpha');
     await showPalette();
     vi.useFakeTimers();
-    expect(await search('Namespace - ')).toEqual([]);
+    expect(
+      (await search('Namespace - ')).filter((label) => label.startsWith('Namespace - '))
+    ).toEqual([]);
 
     await run('team-a', 'team-a');
     expect(view.owners().namespace.selectedNamespace).toBe('team-a');

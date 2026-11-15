@@ -32,8 +32,3 @@ const buildAliasToKindMap = (): Map<string, string> => {
 
 // Reverse lookup: user input token -> canonical Kind (for search/query parsing).
 export const aliasToKindMap = buildAliasToKindMap();
-
-// Canonical kinds for partial matching in search.
-export const canonicalKinds = Array.from(new Set(aliasToKindMap.values())).map((k) =>
-  k.toLowerCase()
-);

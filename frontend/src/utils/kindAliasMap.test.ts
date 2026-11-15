@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { aliasToKindMap, canonicalKinds } from './kindAliasMap';
+import { aliasToKindMap } from './kindAliasMap';
 
 describe('aliasToKindMap', () => {
   it.each([
@@ -24,10 +24,5 @@ describe('aliasToKindMap', () => {
     ['helm', 'HelmRelease'],
   ])('resolves %s to %s', (token, kind) => {
     expect(aliasToKindMap.get(token)).toBe(kind);
-  });
-
-  it('lists each canonical kind once, lowercased', () => {
-    expect(canonicalKinds).toContain('deployment');
-    expect(new Set(canonicalKinds).size).toBe(canonicalKinds.length);
   });
 });

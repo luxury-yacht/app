@@ -10,7 +10,7 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ListboxOptionButton } from '@shared/components/aria/ListboxOptionButton';
 import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
-import { kindDisplayName } from '@shared/kinds/kindDisplay';
+import { kindDisplayName, kindNameDisplay } from '@shared/kinds/kindDisplay';
 import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
@@ -18,12 +18,12 @@ import { useKeyboardContext, useShortcut, useShortcuts } from '@ui/shortcuts';
 import { KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
 import { modifiersMatch } from '@ui/shortcuts/utils';
 import type React from 'react';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useEventBus } from '@/core/events';
 import type { CatalogItem } from '@/core/refresh/types';
 import { usePreference } from '@/core/settings/usePreference';
-import { aliasToKindMap, canonicalKinds } from '@/utils/kindAliasMap';
+import { aliasToKindMap } from '@/utils/kindAliasMap';
 import { isMacPlatform } from '@/utils/platform';
 import {
   type Command,
@@ -84,18 +84,13 @@ export interface ParsedQueryTokens {
   otherTokens: string[];
 }
 
+// A word that names a kind (its name, plural, short name or an alias) filters to
+// that kind. Anything else, including the start of a kind's name, stays a search
+// word: the search also matches each object's kind, so it still finds that kind
+// without hiding other objects that contain the word.
 const resolveKindToken = (token: string): string | null => {
-  const singularToken = token.replace(/s$/, '');
-  const aliasMatch = aliasToKindMap.get(token) ?? aliasToKindMap.get(singularToken);
-  if (aliasMatch) {
-    return aliasMatch.toLowerCase();
-  }
-  if (token.length < 3) {
-    return null;
-  }
-  const prefix = singularToken.length >= 3 ? singularToken : token;
-  const partialMatches = canonicalKinds.filter((kind) => kind.startsWith(prefix.toLowerCase()));
-  return partialMatches.length === 1 ? partialMatches[0] : null;
+  const aliasMatch = aliasToKindMap.get(token) ?? aliasToKindMap.get(token.replace(/s$/, ''));
+  return aliasMatch ? aliasMatch.toLowerCase() : null;
 };
 
 const appendSearchTokens = (token: string, otherTokens: string[]) => {
@@ -111,6 +106,24 @@ const appendSearchTokens = (token: string, otherTokens: string[]) => {
     otherTokens.push(namespacePart);
   }
 };
+
+interface QueryWord {
+  text: string;
+  // The lowercase kind this word filters to, or null for search text and spaces.
+  kind: string | null;
+}
+
+// The raw query as typed (words and the spaces between them), each word with the
+// kind it filters to — the same resolution parseQueryTokens uses — so the search
+// box can mark kind words where they were typed.
+const splitQueryWords = (query: string): QueryWord[] =>
+  query
+    .split(/(\s+)/)
+    .filter(Boolean)
+    .map((text) => ({
+      text,
+      kind: text.trim() ? resolveKindToken(text.toLowerCase()) : null,
+    }));
 
 export const parseQueryTokens = (query: string): ParsedQueryTokens => {
   const rawTokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -153,6 +166,16 @@ const PICKER_CATEGORIES: Record<Exclude<PaletteSelectMode, 'none'>, readonly str
   namespaces: ['Namespaces'],
   kubeconfigs: ['Favorite Clusters', 'Clusters'],
   workspaces: ['Workspaces'],
+};
+
+// A command matches when every word of the query appears in its label,
+// description, category or keywords — the same every-word rule as object search,
+// so spaces and word order never hide a match.
+const commandMatchesWords = (command: Command, words: string[]): boolean => {
+  const fields = [command.label, command.description, command.category, ...(command.keywords ?? [])]
+    .filter((field): field is string => Boolean(field))
+    .map((field) => field.toLowerCase());
+  return words.every((word) => fields.some((field) => field.includes(word)));
 };
 
 const commandsForMode = (mode: PaletteSelectMode, commands: Command[]): Command[] =>
@@ -344,6 +367,62 @@ const getPaletteInputCopy = (mode: PaletteSelectMode) => {
     label: 'Search commands and Kubernetes objects',
     placeholder: 'Type a command or search...',
   };
+};
+
+const KIND_FILTERS_ID = 'command-palette-kind-filters';
+const NO_KINDS: string[] = [];
+
+// Sits under the transparent search input with the same text metrics, tinting each
+// kind word in its kind's color. Renders nothing when no word is a kind.
+const KindWordBackdrop = ({
+  query,
+  backdropRef,
+}: {
+  query: string;
+  backdropRef: React.RefObject<HTMLDivElement | null>;
+}) => {
+  const words = useMemo(() => splitQueryWords(query), [query]);
+  if (!words.some((word) => word.kind)) {
+    return null;
+  }
+  return (
+    <div ref={backdropRef} className="command-palette-input-backdrop" aria-hidden="true">
+      {withStableListKeys(words, (word) => word.text).map(({ key, value: word }) =>
+        word.kind ? (
+          <mark key={key} className={`command-palette-kind-word ${getKindColorClass(word.kind)}`}>
+            {word.text}
+          </mark>
+        ) : (
+          <span key={key}>{word.text}</span>
+        )
+      )}
+    </div>
+  );
+};
+
+// The kinds the search is limited to, at the end of the search row; the input
+// names this element as its description while it exists.
+const KindFilters = ({
+  kinds,
+  useShortResourceNames,
+}: {
+  kinds: string[];
+  useShortResourceNames: boolean;
+}) => {
+  if (kinds.length === 0) {
+    return null;
+  }
+  const names = kinds.map((kind) => kindNameDisplay(kind, useShortResourceNames));
+  return (
+    <div id={KIND_FILTERS_ID} className="command-palette-kind-filters">
+      <span className="sr-only">Searching only these kinds: {names.join(', ')}</span>
+      {kinds.map((kind, index) => (
+        <span key={kind} className={`kind-badge ${getKindColorClass(kind)}`} aria-hidden="true">
+          {names[index]}
+        </span>
+      ))}
+    </div>
+  );
 };
 
 const CommandResultIcon = ({ icon }: { icon: Command['icon'] }) => {
@@ -576,6 +655,16 @@ export const CommandPalette = memo(function CommandPaletteComponent({
   const { selectedClusterId } = useKubeconfig();
   const useShortResourceNames = usePreference('useShortResourceNames');
   const parsedTokens = useMemo(() => parseQueryTokens(searchQuery), [searchQuery]);
+  // Kind words are marked only in general search; pickers list their own choices.
+  const kindFilters = selectMode === 'none' ? parsedTokens.kindTokens : NO_KINDS;
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const syncBackdropScroll = useCallback(() => {
+    if (backdropRef.current && inputRef.current) {
+      backdropRef.current.scrollLeft = inputRef.current.scrollLeft;
+    }
+  }, []);
+  // Typing can scroll a long query sideways; keep the marks under their words.
+  useLayoutEffect(syncBackdropScroll);
   const macPlatform = isMacPlatform();
   const selectNamespaceModifiers = macPlatform
     ? { meta: true, shift: true }
@@ -602,21 +691,11 @@ export const CommandPalette = memo(function CommandPaletteComponent({
   const filteredCommands = useMemo(() => {
     const filteredList = commandsForMode(selectMode, allCommands);
 
-    if (!searchQuery.trim()) {
+    const words = searchQuery.toLowerCase().split(/\s+/).filter(Boolean);
+    if (words.length === 0) {
       return filteredList;
     }
-
-    const query = searchQuery.toLowerCase();
-    return filteredList.filter((command) => {
-      const matchesLabel = command.label.toLowerCase().includes(query);
-      const matchesDescription = command.description?.toLowerCase().includes(query);
-      const matchesCategory = command.category?.toLowerCase().includes(query);
-      const matchesKeywords = command.keywords?.some((keyword) =>
-        keyword.toLowerCase().includes(query)
-      );
-
-      return matchesLabel || matchesDescription || matchesCategory || matchesKeywords;
-    });
+    return filteredList.filter((command) => commandMatchesWords(command, words));
   }, [allCommands, searchQuery, selectMode]);
 
   const commandGroups = useMemo(
@@ -1080,24 +1159,32 @@ export const CommandPalette = memo(function CommandPaletteComponent({
         tabIndex={-1}
       >
         <div className="command-palette-header">
-          <input
-            ref={inputRef}
-            type="text"
-            className="command-palette-input"
-            placeholder={inputPlaceholder}
-            value={searchQuery}
-            role="combobox"
-            aria-label={inputLabel}
-            aria-autocomplete="list"
-            aria-expanded="true"
-            aria-controls={resultsId}
-            aria-activedescendant={selectedOptionId}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setSelectedIndex(0);
-            }}
-            onKeyDown={handleInputKeyDown}
-          />
+          <div className="command-palette-field">
+            {selectMode === 'none' ? (
+              <KindWordBackdrop query={searchQuery} backdropRef={backdropRef} />
+            ) : null}
+            <input
+              ref={inputRef}
+              type="text"
+              className="command-palette-input"
+              placeholder={inputPlaceholder}
+              value={searchQuery}
+              role="combobox"
+              aria-label={inputLabel}
+              aria-describedby={kindFilters.length > 0 ? KIND_FILTERS_ID : undefined}
+              aria-autocomplete="list"
+              aria-expanded="true"
+              aria-controls={resultsId}
+              aria-activedescendant={selectedOptionId}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setSelectedIndex(0);
+              }}
+              onKeyDown={handleInputKeyDown}
+              onScroll={syncBackdropScroll}
+            />
+          </div>
+          <KindFilters kinds={kindFilters} useShortResourceNames={useShortResourceNames} />
         </div>
 
         <div
