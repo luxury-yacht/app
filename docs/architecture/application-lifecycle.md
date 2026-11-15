@@ -275,7 +275,10 @@ is rolled back.
    is withdrawn, so a page that loads late does not apply a view the switch
    gave up on. One that is alive and still applying its view keeps what was
    set up for it and finishes late.
-9. The windows are shown and placed. Fullscreen is entered last and one window
+9. The windows are shown and the registry requests their saved size and
+   position. Wails' Linux backend can read and set screen coordinates on X11.
+   On native Wayland, the compositor chooses where each window appears.
+   Fullscreen is entered last and one window
    at a time: on macOS a window maximized during another's fullscreen
    transition is left part-way, and a fullscreen request made during a
    transition is dropped. If no usable saved window was shown, the registry
@@ -381,11 +384,11 @@ list name and revision, and replace, rename, delete, and open are refused when
 the snapshot under that name is no longer the one listed. Snapshots saved
 before revisions existed get one the first time they are listed.
 
-| Close | Wails surface | Backend contract |
-| --- | --- | --- |
-| App window | Cancellable `events.Common.WindowClosing` starts a renderer preflight when the renderer is ready | Denial keeps it open. Releases only that view's cluster tabs and foreground demand; docked panel identities stay in the directory; floating panels stay live. Cancels the transfers it takes part in and declines every directory move addressed to it. |
-| Cluster tab | `KubeconfigContext` preflight calls the registry's cluster-panel close transaction | Requests and acknowledgements carry cluster, window, and transaction identity; denial, cancellation, unavailable windows, or changed participants abort. |
-| Panel window | Cancellable native hook sends a guard request to that renderer when it is ready | Closes through the registry, removes its shared entries, releases the native and any unused shared-panel reference; failure keeps the source. |
+| Close            | Wails surface                                                                                         | Backend contract                                                                                                                                                                                                                                                    |
+| ---------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| App window       | Cancellable `events.Common.WindowClosing` starts a renderer preflight when the renderer is ready      | Denial keeps it open. Releases only that view's cluster tabs and foreground demand; docked panel identities stay in the directory; floating panels stay live. Cancels the transfers it takes part in and declines every directory move addressed to it.             |
+| Cluster tab      | `KubeconfigContext` preflight calls the registry's cluster-panel close transaction                    | Requests and acknowledgements carry cluster, window, and transaction identity; denial, cancellation, unavailable windows, or changed participants abort.                                                                                                            |
+| Panel window     | Cancellable native hook sends a guard request to that renderer when it is ready                       | Closes through the registry, removes its shared entries, releases the native and any unused shared-panel reference; failure keeps the source.                                                                                                                       |
 | Application quit | `application.Options.ShouldQuit` asks every ready app and panel renderer to acknowledge one preflight | Unanimous approval requests Wails Quit; its `ShouldQuit` reentry runs the once-only persistence flush before teardown. Denial, timeout, delivery failure, or rejected handoff cancels; settlement reaches the original participants without holding the quit mutex. |
 
 Renderer guard and flush sequences:
