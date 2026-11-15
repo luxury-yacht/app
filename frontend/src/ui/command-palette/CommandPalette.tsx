@@ -816,15 +816,38 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     setHideCursor(false);
   }, []);
 
+  // A chosen command or object runs shortly after the palette closes. Reopening
+  // the palette first drops it, so it can never open a dialog over the palette.
+  const pendingRunRef = useRef<number | null>(null);
+  const cancelPendingRun = useCallback(() => {
+    if (pendingRunRef.current !== null) {
+      window.clearTimeout(pendingRunRef.current);
+      pendingRunRef.current = null;
+    }
+  }, []);
+
   const open = useCallback(() => {
+    cancelPendingRun();
     setIsOpen(true);
     resetPalette();
-  }, [resetPalette]);
+  }, [cancelPendingRun, resetPalette]);
 
   const close = useCallback(() => {
     setIsOpen(false);
     resetPalette();
   }, [resetPalette]);
+
+  // Closes the palette, then runs the choice once it has gone.
+  const runAfterClose = useCallback(
+    (run: () => void) => {
+      close();
+      pendingRunRef.current = window.setTimeout(() => {
+        pendingRunRef.current = null;
+        run();
+      }, 100);
+    },
+    [close]
+  );
 
   // Switch the open palette into a selection sub-mode with a clean query and
   // selection. Focus returns to the search box: a picker has no Search help, so
@@ -852,20 +875,14 @@ export const CommandPalette = memo(function CommandPaletteComponent({
           return;
         }
 
-        close();
-        setTimeout(() => {
-          command.action();
-        }, 100);
+        runAfterClose(command.action);
         return;
       }
 
       const catalogItem = item.item;
-      close();
-      setTimeout(() => {
-        openWithObject(buildRequiredObjectReference(catalogItem.ref));
-      }, 100);
+      runAfterClose(() => openWithObject(buildRequiredObjectReference(catalogItem.ref)));
     },
-    [close, enterSelectMode, openWithObject]
+    [enterSelectMode, openWithObject, runAfterClose]
   );
 
   const updateSelection = useCallback((index: number) => {

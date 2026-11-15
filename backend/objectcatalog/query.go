@@ -29,11 +29,13 @@ type customOnlyMatcher func(Summary) bool
 const (
 	catalogQueryDefaultSort      = "kind/namespace/name"
 	catalogQueryDefaultDirection = "asc"
-	// catalogQueryRelevanceSort orders a search's matches best first (see
-	// catalogSearchRank) before the limit applies; without a search it is the
-	// default order. Used by the command palette, which shows one page.
-	catalogQueryRelevanceSort = "relevance"
 )
+
+// QuerySortRelevance orders a search's matches best first (see catalogSearchRank)
+// before the limit applies; without a search it is the default order. It serves
+// one page: the request boundary rejects paging it (continue, startRank, anchor).
+// Used by the command palette.
+const QuerySortRelevance = "relevance"
 
 var catalogQueryExactMetadataThreshold = 100000
 
@@ -72,7 +74,7 @@ func normalizeCatalogQuerySortField(field string) string {
 	switch strings.ToLower(strings.TrimSpace(field)) {
 	case "", catalogQueryDefaultSort:
 		return catalogQueryDefaultSort
-	case catalogQueryRelevanceSort, "kind", "namespace", "name", "api", "age", "creationtimestamp", "creation-timestamp":
+	case QuerySortRelevance, "kind", "namespace", "name", "api", "age", "creationtimestamp", "creation-timestamp":
 		return strings.ToLower(strings.TrimSpace(field))
 	default:
 		return catalogQueryDefaultSort

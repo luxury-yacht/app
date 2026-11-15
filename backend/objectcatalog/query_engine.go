@@ -481,7 +481,7 @@ func catalogEnginePage(
 		}
 		page, outcome, err := store.QueryAround(engineQuery, key)
 		return page, &outcome, err
-	case normalizeCatalogQuerySortField(opts.SortField) == catalogQueryRelevanceSort &&
+	case normalizeCatalogQuerySortField(opts.SortField) == QuerySortRelevance &&
 		strings.TrimSpace(opts.Search) != "":
 		// Every match is ranked before the limit, so the page holds the best ones.
 		return store.QueryRanked(engineQuery, catalogSearchRank(opts.Search)), nil, nil

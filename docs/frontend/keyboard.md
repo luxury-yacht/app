@@ -158,9 +158,10 @@ Implementation: `ui/layout/{appFocusRegions.ts,AppRegionNavigation.tsx,AppLayout
   are dispatch-disabled (the native menu owns them). A panel keeps dispatch
   disabled until the native panel acknowledges readiness.
 - Menu accelerators get the active surface's first chance, then may cross
-  `suppressShortcuts`. They never implicitly dismiss a palette, modal,
-  dropdown, or context menu; a reacting surface receives the typed command
-  identity. The app-rendered menu closes itself before its own accelerator
+  `suppressShortcuts`. They never implicitly dismiss a modal, dropdown, or
+  context menu; a reacting surface receives the typed command identity. The
+  command palette is the exception: a menu command that opens a dialog closes
+  it first, because the palette never shares the screen with a dialog. The app-rendered menu closes itself before its own accelerator
   runs. Ordinary shortcuts stay suppressed; cut/copy/paste/select-all stay
   native editing.
 - Panel windows mount `PanelWindowShortcuts`, not `GlobalShortcuts`. Close,

@@ -361,6 +361,9 @@ func parseBrowseScope(scope string) (objectcatalog.QueryOptions, error) {
 	if err := request.validate(); err != nil {
 		return objectcatalog.QueryOptions{}, err
 	}
+	if err := validateCatalogRelevancePaging(request); err != nil {
+		return objectcatalog.QueryOptions{}, err
+	}
 	var resourceScope objectcatalog.Scope
 	switch strings.ToLower(strings.TrimSpace(values.Get("resourceScope"))) {
 	case "":
@@ -412,6 +415,19 @@ func parseBrowseScope(scope string) (objectcatalog.QueryOptions, error) {
 		}
 	}
 	return opts, nil
+}
+
+// validateCatalogRelevancePaging rejects paging a relevance sort: it serves one
+// ranked page, so a continue token, start rank, or anchor would otherwise be
+// ignored or answered in a different order.
+func validateCatalogRelevancePaging(request ResourceQueryRequest) error {
+	if !strings.EqualFold(strings.TrimSpace(request.SortField), objectcatalog.QuerySortRelevance) {
+		return nil
+	}
+	if request.Continue != "" || request.StartRank != nil || request.Anchor != nil {
+		return fmt.Errorf("catalog %s sort serves one page: continue, startRank, and anchor are not supported", objectcatalog.QuerySortRelevance)
+	}
+	return nil
 }
 
 // cloneCatalogValues detaches published slices and keeps empty JSON arrays non-null.

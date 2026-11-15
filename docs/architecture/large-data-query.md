@@ -14,7 +14,8 @@ Shared rules and table modes live in [large data](large-data.md).
   substring). `sort=relevance` with a search ranks every match (exact name, name
   prefix, name substring, exact namespace, namespace substring, kind) before the
   page limit and serves one page without cursors; the command palette uses it
-  and shows rows in that order.
+  and shows rows in that order. The request boundary rejects paging it
+  (`continue`, `startRank`, or an anchor).
 - Namespace and kind filters use the catalog query index. Default, search-only,
   and sort-only queries may stream every chunk (O(N) CPU) into a bounded page
   buffer and exact-metadata budget, never a full in-memory result.

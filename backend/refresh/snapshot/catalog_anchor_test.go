@@ -29,6 +29,25 @@ func TestParseBrowseScopeParsesAnchor(t *testing.T) {
 	}
 }
 
+// A relevance sort serves one ranked page, so a request that also asks to page it
+// (continue, startRank, or an anchor) is rejected instead of silently served in
+// another order or from the first page.
+func TestParseBrowseScopeRejectsPagingARelevanceSort(t *testing.T) {
+	for _, paging := range []string{
+		"continue=tok",
+		"startRank=20",
+		"anchor.clusterId=cluster-a&anchor.version=v1&anchor.kind=Pod&anchor.name=web-1",
+	} {
+		scope := "cluster-a|search=web&sort=relevance&" + paging
+		if _, err := parseBrowseScope(scope); err == nil || !strings.Contains(err.Error(), "relevance") {
+			t.Fatalf("relevance with %s: error = %v, want a relevance paging error", paging, err)
+		}
+	}
+	if _, err := parseBrowseScope("cluster-a|search=web&sort=relevance&limit=20"); err != nil {
+		t.Fatalf("a relevance search failed to parse: %v", err)
+	}
+}
+
 func TestParseBrowseScopeRejectsInvalidAnchor(t *testing.T) {
 	// anchor + continue → mutual exclusion error.
 	scope := "cluster-a|continue=tok&anchor.clusterId=cluster-a&anchor.version=v1&anchor.kind=Pod&anchor.name=web-1"

@@ -399,6 +399,23 @@ describe('CommandPalette', () => {
     expect(palette()).not.toBeNull();
   });
 
+  it('drops a chosen command that has not run yet when it is reopened', async () => {
+    // A command runs shortly after the palette closes; if the palette is reopened
+    // first, running it then could open a dialog over the palette.
+    const openSettings = vi.fn();
+    await showPalette([command('open-settings', 'Open Settings', 'Application', openSettings)]);
+    await openFromViewMenu();
+    vi.useFakeTimers();
+
+    await press('Enter');
+    expect(palette()).toBeNull();
+    await openFromViewMenu();
+    await runPendingCommand();
+
+    expect(openSettings).not.toHaveBeenCalled();
+    expect(palette()).not.toBeNull();
+  });
+
   it('returns focus to the search box when it switches to a picker', async () => {
     await showPalette([command('open-settings', 'Open Settings', 'Application')]);
     await openFromViewMenu();
