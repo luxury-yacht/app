@@ -413,6 +413,37 @@ const getPaletteInputCopy = (mode: PaletteSelectMode) => {
   };
 };
 
+const SWALLOWED_PRESS_EVENTS = [
+  'mousedown',
+  'pointerup',
+  'mouseup',
+  'click',
+  'auxclick',
+  'contextmenu',
+] as const;
+
+// Swallows the rest of a press that closed the palette, before the app sees it.
+// The listeners outlive the palette (the press continues after it closes) and
+// remove themselves at that press's click, or at the next press if it never
+// produced one (dragged off the window, right-click).
+const swallowRestOfPress = () => {
+  const done = new AbortController();
+  const swallow = (event: Event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.type === 'click') {
+      done.abort();
+    }
+  };
+  for (const type of SWALLOWED_PRESS_EVENTS) {
+    document.addEventListener(type, swallow, { capture: true, signal: done.signal });
+  }
+  document.addEventListener('pointerdown', () => done.abort(), {
+    capture: true,
+    signal: done.signal,
+  });
+};
+
 const KIND_FILTERS_ID = 'command-palette-kind-filters';
 const NO_KINDS: string[] = [];
 
@@ -1187,21 +1218,27 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     }
   }, [selectedIndex]);
 
-  // Handle clicks outside to close
+  // A press outside closes the palette. It is caught before the app sees it and
+  // the rest of that press is swallowed, so dismissing never also clicks whatever
+  // was under the pointer.
   useEffect(() => {
     if (!isOpen) {
       return;
     }
 
-    const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        close();
+    const handlePressOutside = (event: PointerEvent) => {
+      if (!containerRef.current || containerRef.current.contains(event.target as Node)) {
+        return;
       }
+      event.preventDefault();
+      event.stopPropagation();
+      swallowRestOfPress();
+      close();
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('pointerdown', handlePressOutside, true);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('pointerdown', handlePressOutside, true);
     };
   }, [isOpen, close]);
 

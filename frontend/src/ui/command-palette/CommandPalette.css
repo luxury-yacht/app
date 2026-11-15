@@ -1,8 +1,13 @@
 /* Command Palette Styles */
 
 .command-palette {
+  /* The palette is zoomed with the body; viewport units are not. Correct them as
+     the shared modal surface does, so the palette stays inside the window at any
+     app zoom: the top moves up on short windows, and the height leaves 1rem below. */
+  --palette-viewport-height: calc(100dvh / var(--app-zoom-factor, 1));
+  --palette-top: min(170px, calc(var(--palette-viewport-height) * 0.2));
   position: fixed;
-  top: 170px;
+  top: var(--palette-top);
   left: 0;
   right: 0;
   margin: 0 auto;
@@ -10,7 +15,10 @@
   color: inherit;
   width: 90%;
   max-width: 600px;
-  height: 60vh;
+  height: min(
+    calc(var(--palette-viewport-height) * 0.6),
+    calc(var(--palette-viewport-height) - var(--palette-top) - 1rem)
+  );
   max-height: 600px;
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);

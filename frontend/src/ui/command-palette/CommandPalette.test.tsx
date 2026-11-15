@@ -454,14 +454,32 @@ describe('CommandPalette', () => {
     expect(selectedIndex()).toBe(2);
   });
 
-  it('closes when the user clicks outside it, and opens again from the menu', async () => {
+  it('closes on a click outside it without that click reaching the app, and opens again from the menu', async () => {
     await showPalette([command('open-settings', 'Open Settings', 'Application')]);
     await openFromViewMenu();
+    // An app control under the pointer.
+    const clickedBehind = vi.fn();
+    const behind = document.createElement('button');
+    behind.addEventListener('click', clickedBehind);
+    document.body.append(behind);
 
     await act(async () => {
-      document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      behind.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      behind.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      behind.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+      behind.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+      behind.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(palette()).toBeNull();
+    expect(clickedBehind).not.toHaveBeenCalled();
+
+    // Only that click is swallowed: the next one reaches the app.
+    await act(async () => {
+      behind.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      behind.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(clickedBehind).toHaveBeenCalledTimes(1);
+    behind.remove();
 
     await openFromViewMenu();
     expect(palette()).not.toBeNull();
