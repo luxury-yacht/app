@@ -676,7 +676,10 @@ describe('NodeLogsTab', () => {
     }
     const wasFake = vi.isFakeTimers();
     if (!wasFake) {
-      vi.useFakeTimers();
+      // Only the tooltip's delays. jsdom runs animation frames on a setInterval it
+      // starts on demand; faking that here can leave jsdom holding a fake interval
+      // once real timers return, so no later test in this file gets a frame.
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     }
     try {
       await act(async () => {

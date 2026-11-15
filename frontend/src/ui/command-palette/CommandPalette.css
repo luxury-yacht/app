@@ -1,8 +1,13 @@
 /* Command Palette Styles */
 
 .command-palette {
+  /* The palette is zoomed with the body; viewport units are not. Correct them as
+     the shared modal surface does, so the palette stays inside the window at any
+     app zoom: the top moves up on short windows, and the height leaves 1rem below. */
+  --palette-viewport-height: calc(100dvh / var(--app-zoom-factor, 1));
+  --palette-top: min(170px, calc(var(--palette-viewport-height) * 0.2));
   position: fixed;
-  top: 170px;
+  top: var(--palette-top);
   left: 0;
   right: 0;
   margin: 0 auto;
@@ -10,15 +15,47 @@
   color: inherit;
   width: 90%;
   max-width: 600px;
-  height: 60vh;
+  height: min(
+    calc(var(--palette-viewport-height) * 0.6),
+    calc(var(--palette-viewport-height) - var(--palette-top) - 1rem)
+  );
   max-height: 600px;
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
+  /* Lit top edge and shadow, as on the shared dialogs. */
+  border-top-color: rgba(255, 255, 255, 0.1);
   border-radius: 12px;
+  box-shadow: var(--modal-container-shadow);
   display: flex;
   flex-direction: column;
   z-index: var(--z-index-overlay);
   animation: commandPaletteIn 200ms var(--ease-out, ease-out);
+}
+
+/* The shared dialog backdrop's dim, below the title bar and just under the
+   palette. It never takes presses: the palette closes on a press outside and
+   swallows it. No blur: the palette sits beside this layer, not inside it as a
+   dialog sits in its backdrop, and WebKit then draws stray lines where the
+   palette's shadow meets a blurred layer (the 1px blur is not visible anyway). */
+.command-palette-backdrop {
+  position: fixed;
+  top: var(--app-header-height);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: calc(var(--z-index-overlay) - 1);
+  background-color: var(--modal-overlay-bg);
+  pointer-events: none;
+  animation: commandPaletteBackdropIn 200ms ease-out both;
+}
+
+@keyframes commandPaletteBackdropIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes commandPaletteIn {
@@ -38,20 +75,88 @@
 }
 
 .command-palette-header {
+  display: flex;
+  align-items: center;
   padding: 0;
   border-bottom: 1px solid var(--color-border);
 }
 
-.command-palette-input {
-  --focus-background: transparent;
-  width: 100%;
+.command-palette-field {
+  position: relative;
+  flex: 1;
+  /* Room to keep typing however many kind badges share the row. */
+  min-width: 8rem;
+}
+
+/* The input and the kind-word backdrop under it share text metrics, so each
+   mark sits exactly under its typed word. */
+.command-palette-input,
+.command-palette-input-backdrop {
   padding: 0.5rem 1rem;
   font-size: 0.85rem;
+  box-sizing: border-box;
+}
+
+.command-palette-input {
+  --focus-background: transparent;
+  position: relative;
+  width: 100%;
   background: transparent;
   border: none;
   outline: none;
   color: var(--color-text);
-  box-sizing: border-box;
+}
+
+.command-palette-input-backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  white-space: pre;
+  color: transparent;
+  pointer-events: none;
+}
+
+/* The kind badge's tint, without its padding or uppercase, which would shift the
+   word out from under the typed text. */
+.command-palette-kind-word {
+  color: transparent;
+  background-color: color-mix(in srgb, var(--kind-color) 25%, transparent);
+  border-radius: 3px;
+}
+
+/* Shrinks before the search field does: badges shorten with an ellipsis, and
+   any that still don't fit are clipped. */
+.command-palette-kind-filters {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  gap: 0.3rem;
+  padding-right: 0.75rem;
+}
+
+.command-palette-kind-filters .kind-badge {
+  flex: 0 1 auto;
+  min-width: 2.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.6rem;
+  padding: 0.1rem 0.4rem;
+}
+
+.command-palette-help-trigger {
+  display: flex;
+  flex-shrink: 0;
+  padding-right: 0.75rem;
+}
+
+.command-palette-help p {
+  margin: 0;
+}
+
+.command-palette-help p + p {
+  margin-top: 0.5rem;
 }
 
 .command-palette-input:focus-visible {
@@ -203,6 +308,9 @@
   gap: 1rem;
   padding: 0.5rem 1rem;
   border-top: 1px solid var(--color-border);
+  /* The palette's inner bottom curve (its 12px radius inside a 1px border), so
+     this background doesn't square off the palette's rounded corners. */
+  border-radius: 0 0 11px 11px;
   background-color: var(--color-bg-secondary);
   font-size: 0.75rem;
   color: var(--color-text-secondary);

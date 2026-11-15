@@ -264,7 +264,8 @@ describe('ClusterTabs', () => {
     await choose('Favorite');
     expect(app.backend.calls('SetClusterFavorite')).toEqual([[bravo.selection, true]]);
     await click(buttonNamed('Open Cluster'));
-    expect(pickerContexts()).toEqual(['bravo', 'alpha']);
+    // Favorites first, then the full list, which keeps the favorite in its place.
+    expect(pickerContexts()).toEqual(['bravo', 'alpha', 'bravo']);
     await closePicker();
 
     expect(await openMenu('bravo')).toContain('Unfavorite');

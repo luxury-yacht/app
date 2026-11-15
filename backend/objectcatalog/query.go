@@ -11,6 +11,7 @@
 package objectcatalog
 
 import (
+	"slices"
 	"sort"
 	"strings"
 
@@ -29,6 +30,12 @@ const (
 	catalogQueryDefaultSort      = "kind/namespace/name"
 	catalogQueryDefaultDirection = "asc"
 )
+
+// QuerySortRelevance orders a search's matches best first (see catalogSearchRank)
+// before the limit applies; without a search it is the default order. It serves
+// one page: the request boundary rejects paging it (continue, startRank, anchor).
+// Used by the command palette.
+const QuerySortRelevance = "relevance"
 
 var catalogQueryExactMetadataThreshold = 100000
 
@@ -67,7 +74,7 @@ func normalizeCatalogQuerySortField(field string) string {
 	switch strings.ToLower(strings.TrimSpace(field)) {
 	case "", catalogQueryDefaultSort:
 		return catalogQueryDefaultSort
-	case "kind", "namespace", "name", "api", "age", "creationtimestamp", "creation-timestamp":
+	case QuerySortRelevance, "kind", "namespace", "name", "api", "age", "creationtimestamp", "creation-timestamp":
 		return strings.ToLower(strings.TrimSpace(field))
 	default:
 		return catalogQueryDefaultSort
@@ -218,22 +225,60 @@ func newNamespaceMatcher(filters []string) namespaceMatcher {
 	}
 }
 
+// catalogSearchRank ranks a search match for the relevance order from the row's
+// lowercased search text (name, namespace, and kind joined by
+// catalogEngineFieldSep; see the schema's SearchText). Each word scores where it
+// matches best — exact name, then a name starting with it, a name containing it,
+// an exact namespace, a namespace containing it, and only the kind — and the
+// word scores add up.
+func catalogSearchRank(search string) func(searchText string) int {
+	words := strings.Fields(strings.ToLower(search))
+	return func(searchText string) int {
+		// Cut returns substrings of searchText, so ranking a row allocates nothing.
+		name, rest, _ := strings.Cut(searchText, catalogEngineFieldSep)
+		namespace, kind, _ := strings.Cut(rest, catalogEngineFieldSep)
+		rank := 0
+		for _, word := range words {
+			rank += catalogWordRank(word, name, namespace, kind)
+		}
+		return rank
+	}
+}
+
+func catalogWordRank(word, name, namespace, kind string) int {
+	switch {
+	case name == word:
+		return 6
+	case strings.HasPrefix(name, word):
+		return 5
+	case strings.Contains(name, word):
+		return 4
+	case namespace == word:
+		return 3
+	case strings.Contains(namespace, word):
+		return 2
+	case strings.Contains(kind, word):
+		return 1
+	default:
+		return 0
+	}
+}
+
+// newSearchMatcher matches an object when every word of term appears in its name,
+// namespace or kind (case-insensitive). An empty term matches every object.
 func newSearchMatcher(term string) searchMatcher {
-	value := strings.ToLower(strings.TrimSpace(term))
-	if value == "" {
+	words := strings.Fields(strings.ToLower(term))
+	if len(words) == 0 {
 		return func(string, string, string) bool { return true }
 	}
 	return func(name, namespace, kind string) bool {
-		if strings.Contains(strings.ToLower(name), value) {
-			return true
+		fields := []string{strings.ToLower(name), strings.ToLower(namespace), strings.ToLower(kind)}
+		for _, word := range words {
+			if !slices.ContainsFunc(fields, func(field string) bool { return strings.Contains(field, word) }) {
+				return false
+			}
 		}
-		if namespace != "" && strings.Contains(strings.ToLower(namespace), value) {
-			return true
-		}
-		if strings.Contains(strings.ToLower(kind), value) {
-			return true
-		}
-		return false
+		return true
 	}
 }
 

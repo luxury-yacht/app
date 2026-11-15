@@ -55,6 +55,13 @@ import {
 } from '@/ui/layout/workspaceApplicationMenuCommands';
 import { applyAppearanceOverrides, resolveAppearanceMode } from '@/utils/appearanceMode';
 
+// An application-menu command that opens a dialog closes the command palette
+// first: the palette never opens over a dialog, and no dialog opens over it.
+const closePaletteThen = (openDialog: () => void) => () => {
+  eventBus.emit('command-palette:close');
+  openDialog();
+};
+
 /**
  * AppContent - The main app content that uses the contexts. It owns
  * window-level wiring (permission cluster, theme, menus, shortcuts) and renders
@@ -130,16 +137,16 @@ function AppContent({ children }: Readonly<{ children: ReactNode }>) {
       const actions: WorkspaceApplicationMenuActions = {
         close: () => eventBus.emit('application-menu:close'),
         openCluster: () => eventBus.emit('command-palette:open-kubeconfigs'),
-        saveWorkspace: () => eventBus.emit('named-workspace:save-dialog'),
+        saveWorkspace: closePaletteThen(() => eventBus.emit('named-workspace:save-dialog')),
         openWorkspace: () => eventBus.emit('command-palette:open-workspaces'),
-        manageWorkspaces: () => eventBus.emit('named-workspace:manage-dialog'),
-        toggleSettings: handleToggleSettings,
+        manageWorkspaces: closePaletteThen(() => eventBus.emit('named-workspace:manage-dialog')),
+        toggleSettings: closePaletteThen(handleToggleSettings),
         openCommandPalette: () => eventBus.emit('command-palette:open'),
         zoomIn,
         zoomOut,
         zoomReset: resetZoom,
         toggleSidebar: viewState.toggleSidebar,
-        toggleObjectDiff: handleToggleObjectDiff,
+        toggleObjectDiff: closePaletteThen(handleToggleObjectDiff),
         toggleAppLogs: handleToggleAppLogsPanel,
         toggleDiagnostics: handleToggleDiagnostics,
         openInspector: () => {
@@ -154,7 +161,7 @@ function AppContent({ children }: Readonly<{ children: ReactNode }>) {
         toggleMapDebug: () => eventBus.emit('debug:toggle-map-overlay'),
         toggleIconDebug: () => eventBus.emit('debug:toggle-icon-overlay'),
         toggleErrorDebug: () => eventBus.emit('debug:toggle-error-overlay'),
-        openAbout: () => viewState.setIsAboutOpen(true),
+        openAbout: closePaletteThen(() => viewState.setIsAboutOpen(true)),
       };
       if (!dispatchWorkspaceApplicationMenuCommand(menuCommand, actions)) {
         executeBackendApplicationMenuCommand(menuCommand);

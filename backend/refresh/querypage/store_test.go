@@ -2,6 +2,7 @@ package querypage
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -283,6 +284,61 @@ func TestSearchSubstring(t *testing.T) {
 		if r.name[:8] != "frontend" {
 			t.Fatalf("search leaked %q", r.name)
 		}
+	}
+}
+
+// A schema with SearchWords (the catalog) requires every word of a search, in any
+// order; without it (every typed table) a search stays one substring, so a search
+// with a space there still matches only that literal text.
+func TestSearchWordsRequireEveryWord(t *testing.T) {
+	wordsSchema := podSchema()
+	wordsSchema.SearchWords = true
+	words := NewStore(wordsSchema)
+	literal := NewStore(podSchema())
+	for i, nm := range []string{"frontend-api", "frontend-web", "backend-api"} {
+		row := podRow{uid: fmt.Sprintf("u%d", i), namespace: "default", name: nm, status: "Running"}
+		words.Upsert(row)
+		literal.Upsert(row)
+	}
+	// "API front" puts the short word first: the longer word narrows by trigram,
+	// the other is still required.
+	for _, search := range []string{"frontend api", "API front"} {
+		q := Query{ClusterID: "c", Signature: "sig", Sort: "name", Direction: Ascending, Limit: 10, Search: search}
+		if got := paginate(t, words, q); len(got) != 1 || got[0].name != "frontend-api" {
+			t.Fatalf("SearchWords %q = %+v, want only frontend-api", search, got)
+		}
+		if got := paginate(t, literal, q); len(got) != 0 {
+			t.Fatalf("literal %q = %+v, want no rows", search, got)
+		}
+	}
+}
+
+// A ranked query orders every match by the caller's rank of its search text before
+// taking the page, so a limited page holds the best matches, not the first ones in
+// a sort order. Ties keep UID order; the total counts every match.
+func TestQueryRankedTakesTheBestMatchesBeforeTheLimit(t *testing.T) {
+	s := NewStore(podSchema())
+	for i, nm := range []string{"api-a", "api-b", "api-c", "api", "web"} {
+		s.Upsert(podRow{uid: fmt.Sprintf("u%d", i), namespace: "default", name: nm, status: "Running"})
+	}
+	exactFirst := func(searchText string) int {
+		if searchText == "api" {
+			return 2
+		}
+		return 1
+	}
+
+	page := s.QueryRanked(Query{ClusterID: "c", Signature: "sig", Sort: "name", Direction: Ascending, Limit: 2, Search: "api"}, exactFirst)
+
+	got := make([]string, 0, len(page.Rows))
+	for _, r := range page.Rows {
+		got = append(got, r.name)
+	}
+	if want := []string{"api", "api-a"}; !slices.Equal(got, want) {
+		t.Fatalf("ranked page = %v, want %v", got, want)
+	}
+	if page.Total != 4 || page.NextCursor != "" {
+		t.Fatalf("total = %d, next = %q; want 4 matches and no cursor", page.Total, page.NextCursor)
 	}
 }
 

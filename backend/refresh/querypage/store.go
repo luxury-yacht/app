@@ -32,6 +32,10 @@ type Schema[R any] struct {
 	// search matches only when the query sets IncludeMetadata. It is not
 	// trigram-indexed, so it costs nothing for ordinary searches.
 	MetadataText func(R) string
+	// SearchWords splits Query.Search on whitespace: a row must match every word,
+	// each anywhere in its SearchText (or MetadataText, when the query includes
+	// metadata). Unset, Search is one substring.
+	SearchWords bool
 }
 
 func uniqueFacetValues(values []string) []string {
@@ -54,7 +58,7 @@ type Query struct {
 	Sort      string // a key in Schema.SortKeys
 	Direction Direction
 	Limit     int
-	Search    string              // case-insensitive substring filter over SearchText
+	Search    string              // case-insensitive substring filter over SearchText (all words with Schema.SearchWords)
 	Filters   map[string][]string // facet filters: facet name -> allowed values (set membership; OR within, AND across facets)
 	MatchNone bool                // explicit empty multiselect: no row can match
 	Cursor    string              // opaque continueToken from a previous Page
@@ -398,6 +402,43 @@ func (s *Store[R]) searchCandidates(searchLower string) (set map[uint32]struct{}
 	return s.tri.searchSet(searchLower), true
 }
 
+// querySearch is a query's lowercased search, prepared once: its words (just the
+// whole search unless the schema sets SearchWords), longest first, and the trigram
+// candidates of the first. Every matching row contains that word, so its candidates
+// narrow the scan; the other words are checked by substring.
+type querySearch struct {
+	words      []string
+	candidates map[uint32]struct{}
+	narrow     bool
+}
+
+func (s *Store[R]) prepareSearch(search string) querySearch {
+	lower := strings.ToLower(search)
+	words := []string{lower}
+	if s.schema.SearchWords {
+		words = strings.Fields(lower)
+		slices.SortStableFunc(words, func(a, b string) int { return len(b) - len(a) })
+	}
+	if len(words) == 0 || words[0] == "" {
+		return querySearch{}
+	}
+	candidates, narrow := s.searchCandidates(words[0])
+	return querySearch{words: words, candidates: candidates, narrow: narrow}
+}
+
+// searchAllMatch reports a row that matches every search word, in its SearchText
+// or, when the query includes metadata, its MetadataText. No words match every row.
+func (s *Store[R]) searchAllMatch(rowID uint32, values matchValues, search querySearch, includeMetadata bool) bool {
+	for i, word := range search.words {
+		narrow := search.narrow && i == 0
+		if !s.searchMatches(rowID, values.searchText, word, search.candidates, narrow) &&
+			!s.metadataMatches(values.metadataText, word, includeMetadata) {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *Store[R]) normalizeFacetFilters(filters map[string][]string) map[string][]string {
 	if len(filters) == 0 || len(s.schema.FacetNormalizers) == 0 {
 		return filters
@@ -531,6 +572,63 @@ func (s *Store[R]) Query(q Query) (Page[R], error) {
 	return Page[R]{Rows: rows, NextCursor: next, PrevCursor: prev, Facets: facets, Total: total, CursorInvalid: cursor.invalid, PageStartRank: -1}, nil
 }
 
+// QueryRanked serves the first page of the rows matching q's filters and search,
+// ordered by rank(lowercased SearchText) highest first, ties in UID order. Every
+// match is ranked before the limit is applied, so the page holds the best matches
+// rather than the first ones in a sort order. Ranks read the cached match values,
+// and only the best `limit` matches are kept while scanning; only the returned rows
+// are reconstructed. A ranked page is a single page: it has no cursors, and
+// q.Sort/q.Cursor are ignored.
+func (s *Store[R]) QueryRanked(q Query, rank func(searchText string) int) Page[R] {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	matches := s.matcherFor(q)
+	limit := queryLimit(q.Limit)
+	best := make([]rankedRow, 0, limit)
+	total := 0
+	for uid, rowID := range s.rows.rowByUID {
+		values := s.match[rowID]
+		if !matches.byRow(rowID, values) {
+			continue
+		}
+		total++
+		best = keepBestRanked(best, rankedRow{uid: uid, rowID: rowID, rank: rank(values.searchText)}, limit)
+	}
+	rows := make([]R, len(best))
+	for i, row := range best {
+		rows[i] = s.rows.getByRowID(row.rowID)
+	}
+	return Page[R]{Rows: rows, Facets: s.facetCounts(), Total: total, PageStartRank: 0}
+}
+
+type rankedRow struct {
+	uid   string
+	rowID uint32
+	rank  int
+}
+
+// compareRankedRows orders ranked rows best first: higher rank, then lower UID.
+func compareRankedRows(a, b rankedRow) int {
+	if a.rank != b.rank {
+		return b.rank - a.rank
+	}
+	return strings.Compare(a.uid, b.uid)
+}
+
+// keepBestRanked inserts row into best (sorted best first, at most limit long),
+// dropping whichever row falls past the limit.
+func keepBestRanked(best []rankedRow, row rankedRow, limit int) []rankedRow {
+	at, _ := slices.BinarySearchFunc(best, row, compareRankedRows)
+	if at >= limit {
+		return best
+	}
+	if len(best) == limit {
+		best = best[:limit-1]
+	}
+	return slices.Insert(best, at, row)
+}
+
 type queryCursorState struct {
 	hasPivot bool
 	backward bool
@@ -640,17 +738,15 @@ type queryMatcher struct {
 	byUID func(string) bool
 }
 
-// matcherFor prepares filters, lowercased search and trigram candidates once.
-// Index walks and column-only counts share this predicate without reconstructing
-// rows. Callers hold s.mu while creating and using the matcher.
+// matcherFor prepares filters, the lowercased search words and trigram candidates
+// once. Index walks and column-only counts share this predicate without
+// reconstructing rows. Callers hold s.mu while creating and using the matcher.
 func (s *Store[R]) matcherFor(q Query) queryMatcher {
 	filters := s.normalizeFacetFilters(q.Filters)
-	searchLower := strings.ToLower(q.Search)
-	candidates, narrow := s.searchCandidates(searchLower)
+	search := s.prepareSearch(q.Search)
 	byRow := func(rowID uint32, values matchValues) bool {
 		return !q.MatchNone && s.filtersMatch(values, filters) &&
-			(s.searchMatches(rowID, values.searchText, searchLower, candidates, narrow) ||
-				s.metadataMatches(values.metadataText, searchLower, q.IncludeMetadata))
+			s.searchAllMatch(rowID, values, search, q.IncludeMetadata)
 	}
 	return queryMatcher{
 		byRow: byRow,
@@ -677,11 +773,16 @@ func (s *Store[R]) facetsAndTotal(q Query, matches queryMatcher) (map[string]map
 			}
 		}
 	}
+	return s.facetCounts(), total
+}
+
+// facetCounts copies the unfiltered facet counters. Callers must hold s.mu.
+func (s *Store[R]) facetCounts() map[string]map[string]int {
 	facets := make(map[string]map[string]int, len(s.facets))
 	for name, counts := range s.facets {
 		facets[name] = maps.Clone(counts)
 	}
-	return facets, total
+	return facets
 }
 
 // pinCursor mints the opaque boundary cursor for one index entry under q's

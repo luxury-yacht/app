@@ -10,7 +10,8 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ListboxOptionButton } from '@shared/components/aria/ListboxOptionButton';
 import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
-import { kindDisplayName } from '@shared/kinds/kindDisplay';
+import Tooltip from '@shared/components/Tooltip';
+import { kindDisplayName, kindNameDisplay } from '@shared/kinds/kindDisplay';
 import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
@@ -18,23 +19,19 @@ import { useKeyboardContext, useShortcut, useShortcuts } from '@ui/shortcuts';
 import { KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
 import { modifiersMatch } from '@ui/shortcuts/utils';
 import type React from 'react';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useEventBus } from '@/core/events';
 import type { CatalogItem } from '@/core/refresh/types';
 import { usePreference } from '@/core/settings/usePreference';
-import { aliasToKindMap, canonicalKinds } from '@/utils/kindAliasMap';
+import { aliasToKindMap } from '@/utils/kindAliasMap';
 import { isMacPlatform } from '@/utils/platform';
 import {
   type Command,
   type SavedWorkspaceCommands,
   useSavedWorkspaceCommands,
 } from './CommandPaletteCommands';
-import {
-  CATALOG_RESULT_LIMIT,
-  type CatalogStats,
-  usePaletteCatalogSearch,
-} from './usePaletteCatalogSearch';
+import { type CatalogStats, usePaletteCatalogSearch } from './usePaletteCatalogSearch';
 import './CommandPalette.css';
 
 interface CommandPaletteProps {
@@ -50,7 +47,8 @@ const CATEGORY_ORDER = [
   'Favorites',
   'Workspaces',
   'Namespaces',
-  'Kubeconfigs',
+  'Favorite Clusters',
+  'Clusters',
   'General', // Fallback for any uncategorized commands
 ];
 
@@ -83,18 +81,13 @@ export interface ParsedQueryTokens {
   otherTokens: string[];
 }
 
+// A word that names a kind (its name, plural, short name or an alias) filters to
+// that kind. Anything else, including the start of a kind's name, stays a search
+// word: the search also matches each object's kind, so it still finds that kind
+// without hiding other objects that contain the word.
 const resolveKindToken = (token: string): string | null => {
-  const singularToken = token.replace(/s$/, '');
-  const aliasMatch = aliasToKindMap.get(token) ?? aliasToKindMap.get(singularToken);
-  if (aliasMatch) {
-    return aliasMatch.toLowerCase();
-  }
-  if (token.length < 3) {
-    return null;
-  }
-  const prefix = singularToken.length >= 3 ? singularToken : token;
-  const partialMatches = canonicalKinds.filter((kind) => kind.startsWith(prefix.toLowerCase()));
-  return partialMatches.length === 1 ? partialMatches[0] : null;
+  const aliasMatch = aliasToKindMap.get(token) ?? aliasToKindMap.get(token.replace(/s$/, ''));
+  return aliasMatch ? aliasMatch.toLowerCase() : null;
 };
 
 const appendSearchTokens = (token: string, otherTokens: string[]) => {
@@ -110,6 +103,24 @@ const appendSearchTokens = (token: string, otherTokens: string[]) => {
     otherTokens.push(namespacePart);
   }
 };
+
+interface QueryWord {
+  text: string;
+  // The lowercase kind this word filters to, or null for search text and spaces.
+  kind: string | null;
+}
+
+// The raw query as typed (words and the spaces between them), each word with the
+// kind it filters to — the same resolution parseQueryTokens uses — so the search
+// box can mark kind words where they were typed.
+const splitQueryWords = (query: string): QueryWord[] =>
+  query
+    .split(/(\s+)/)
+    .filter(Boolean)
+    .map((text) => ({
+      text,
+      kind: text.trim() ? resolveKindToken(text.toLowerCase()) : null,
+    }));
 
 export const parseQueryTokens = (query: string): ParsedQueryTokens => {
   const rawTokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -147,15 +158,115 @@ const PICKER_MODE_BY_COMMAND = new Map<string, PaletteSelectMode>([
   ['open-workspace', 'workspaces'],
 ]);
 
-// A picker lists only its own category's choices.
-const PICKER_CATEGORY: Record<Exclude<PaletteSelectMode, 'none'>, string> = {
-  namespaces: 'Namespaces',
-  kubeconfigs: 'Kubeconfigs',
-  workspaces: 'Workspaces',
+// A picker lists only its own categories' choices.
+const PICKER_CATEGORIES: Record<Exclude<PaletteSelectMode, 'none'>, readonly string[]> = {
+  namespaces: ['Namespaces'],
+  kubeconfigs: ['Favorite Clusters', 'Clusters'],
+  workspaces: ['Workspaces'],
+};
+
+interface RankedCommand {
+  command: Command;
+  score: number;
+}
+
+// How well one search word matches a command, best first: the label starts with
+// it, a word in the label starts with it, the label contains it, a keyword or the
+// category contains it, only the (hidden) description contains it. Null: no match.
+const scoreCommandWord = (command: Command, word: string): number | null => {
+  const label = command.label.toLowerCase();
+  if (label.startsWith(word)) {
+    return 4;
+  }
+  if (label.split(/[^a-z0-9]+/).some((part) => part.startsWith(word))) {
+    return 3;
+  }
+  if (label.includes(word)) {
+    return 2;
+  }
+  const tags = [command.category ?? '', ...(command.keywords ?? [])];
+  if (tags.some((tag) => tag.toLowerCase().includes(word))) {
+    return 1;
+  }
+  return command.description?.toLowerCase().includes(word) ? 0 : null;
+};
+
+// Every word must match (the same every-word rule as object search, so spaces and
+// word order never hide a match); the command's score is the sum.
+const scoreCommand = (command: Command, words: string[]): number | null => {
+  let score = 0;
+  for (const word of words) {
+    const wordScore = scoreCommandWord(command, word);
+    if (wordScore === null) {
+      return null;
+    }
+    score += wordScore;
+  }
+  return score;
+};
+
+// The commands matching every word of the query, best first. The sort is stable,
+// so ties (and every command when the query is empty) keep their listed order.
+const rankCommands = (commands: Command[], query: string): RankedCommand[] => {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  return commands
+    .map((command) => ({ command, score: scoreCommand(command, words) }))
+    .filter((ranked): ranked is RankedCommand => ranked.score !== null)
+    .sort((a, b) => b.score - a.score);
 };
 
 const commandsForMode = (mode: PaletteSelectMode, commands: Command[]): Command[] =>
-  mode === 'none' ? commands : commands.filter((cmd) => cmd.category === PICKER_CATEGORY[mode]);
+  mode === 'none'
+    ? commands
+    : commands.filter((cmd) => PICKER_CATEGORIES[mode].includes(cmd.category ?? ''));
+
+interface CommandGroup {
+  category: string;
+  commands: Command[];
+  // The result index of the group's first command; rows are numbered by
+  // position so an index never depends on command ids being unique.
+  startIndex: number;
+}
+
+// Listed categories in CATEGORY_ORDER, then any others alphabetically.
+const compareCategories = (a: string, b: string): number => {
+  const indexA = CATEGORY_ORDER.indexOf(a);
+  const indexB = CATEGORY_ORDER.indexOf(b);
+  if (indexA !== -1 && indexB !== -1) {
+    return indexA - indexB;
+  }
+  if (indexA !== -1) {
+    return -1;
+  }
+  if (indexB !== -1) {
+    return 1;
+  }
+  return a.localeCompare(b);
+};
+
+// Groups ranked commands under their category headings: the group with the best
+// match first (ties in CATEGORY_ORDER), each group's commands best first.
+const groupCommandsByCategory = (ranked: RankedCommand[]): CommandGroup[] => {
+  // Ranked best first, so a group's first command carries its best score.
+  const byCategory = new Map<string, { best: number; commands: Command[] }>();
+  for (const { command, score } of ranked) {
+    const category = command.category || 'General';
+    const group = byCategory.get(category);
+    if (group) {
+      group.commands.push(command);
+    } else {
+      byCategory.set(category, { best: score, commands: [command] });
+    }
+  }
+  let startIndex = 0;
+  return Array.from(byCategory.entries())
+    .sort(([a, groupA], [b, groupB]) => groupB.best - groupA.best || compareCategories(a, b))
+    .map(([category, { commands: groupCommands }]) => {
+      const group = { category, commands: groupCommands, startIndex };
+      startIndex += groupCommands.length;
+      return group;
+    });
+};
 
 const paletteEmptyMessage = (
   query: string,
@@ -188,104 +299,24 @@ type CatalogDisplayEntry = {
   displayName: string;
 };
 
-type ScoredCatalogEntry = CatalogDisplayEntry & { score: number };
-
-interface CatalogSearchFields {
-  namespace: string;
-  name: string;
-  combined: string;
-}
-
-const scoreKindTokens = (kindTokens: string[], kindCanonical: string): number | null => {
-  if (kindTokens.length === 0) {
-    return 0;
-  }
-  return kindTokens.includes(kindCanonical) ? 100 : null;
-};
-
-const scoreSearchToken = (token: string, fields: CatalogSearchFields): number | null => {
-  const namespaceMatch = fields.namespace.includes(token);
-  const nameMatch = fields.name.includes(token);
-  const combinedMatch = fields.combined.includes(token);
-  if (!namespaceMatch && !nameMatch && !combinedMatch) {
-    return null;
-  }
-  let score = 0;
-  if (namespaceMatch) {
-    score += fields.namespace === token ? 30 : 20;
-  }
-  if (nameMatch) {
-    score += fields.name === token ? 60 : 40;
-  }
-  if (!namespaceMatch && !nameMatch && combinedMatch) {
-    score += 10;
-  }
-  return score;
-};
-
-const scoreOtherTokens = (tokens: string[], fields: CatalogSearchFields): number | null => {
-  let score = 0;
-  for (const token of tokens) {
-    const tokenScore = scoreSearchToken(token, fields);
-    if (tokenScore === null) {
-      return null;
-    }
-    score += tokenScore;
-  }
-  return score;
-};
-
-const scoreCatalogEntry = (
+// The catalog filters (every word, kind words) and ranks its matches before its
+// limit (sort=relevance), so the palette shows the page it received in order.
+const toCatalogDisplayEntry = (
   item: CatalogItem,
-  tokens: ParsedQueryTokens,
   useShortResourceNames: boolean
-): ScoredCatalogEntry | null => {
-  const kindScore = scoreKindTokens(tokens.kindTokens, item.ref.kind.toLowerCase());
-  if (kindScore === null) {
-    return null;
-  }
-  const otherScore = scoreOtherTokens(tokens.otherTokens, {
-    namespace: item.ref.namespace?.toLowerCase() ?? '',
-    name: item.ref.name.toLowerCase(),
-    combined: `${item.ref.namespace ?? ''}/${item.ref.name}`.toLowerCase(),
-  });
-  if (otherScore === null) {
-    return null;
-  }
-  return {
-    item,
-    kindLabel: kindDisplayName(item.ref, useShortResourceNames),
-    kindClass: getKindColorClass(item.ref.kind),
-    displayName: item.ref.namespace ? `${item.ref.namespace}/${item.ref.name}` : item.ref.name,
-    score:
-      kindScore + otherScore + (tokens.kindTokens.length + tokens.otherTokens.length === 0 ? 5 : 0),
-  };
-};
-
-export function buildCatalogDisplayEntries(
-  items: CatalogItem[],
-  tokens: ParsedQueryTokens,
-  useShortResourceNames: boolean,
-  limit: number = CATALOG_RESULT_LIMIT
-): CatalogDisplayEntry[] {
-  if (items.length === 0 || limit <= 0) {
-    return [];
-  }
-
-  const scored: ScoredCatalogEntry[] = items
-    .map((item) => scoreCatalogEntry(item, tokens, useShortResourceNames))
-    .filter((entry): entry is ScoredCatalogEntry => entry !== null)
-    .sort((a, b) => b.score - a.score || a.displayName.localeCompare(b.displayName));
-
-  return scored.slice(0, limit).map(({ score: _score, ...entry }) => entry);
-}
+): CatalogDisplayEntry => ({
+  item,
+  kindLabel: kindDisplayName(item.ref, useShortResourceNames),
+  kindClass: getKindColorClass(item.ref.kind),
+  displayName: item.ref.namespace ? `${item.ref.namespace}/${item.ref.name}` : item.ref.name,
+});
 
 const getPaletteInputCopy = (mode: PaletteSelectMode) => {
   if (mode === 'namespaces') {
     return { label: 'Select a namespace', placeholder: 'Select a namespace...' };
   }
   if (mode === 'kubeconfigs') {
-    return { label: 'Select a kubeconfig', placeholder: 'Select a kubeconfig...' };
+    return { label: 'Select a kubeconfig', placeholder: 'Select a cluster…' };
   }
   if (mode === 'workspaces') {
     return { label: 'Select a workspace', placeholder: 'Select a workspace...' };
@@ -294,6 +325,177 @@ const getPaletteInputCopy = (mode: PaletteSelectMode) => {
     label: 'Search commands and Kubernetes objects',
     placeholder: 'Type a command or search...',
   };
+};
+
+const SWALLOWED_PRESS_EVENTS = [
+  'mousedown',
+  'pointerup',
+  'mouseup',
+  'click',
+  'auxclick',
+  'contextmenu',
+] as const;
+
+// Swallows the rest of a press that closed the palette, before the app sees it.
+// The listeners outlive the palette (the press continues after it closes) and
+// remove themselves at that press's click, or at the next press if it never
+// produced one (dragged off the window, right-click).
+const swallowRestOfPress = () => {
+  const done = new AbortController();
+  const swallow = (event: Event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.type === 'click') {
+      done.abort();
+    }
+  };
+  for (const type of SWALLOWED_PRESS_EVENTS) {
+    document.addEventListener(type, swallow, { capture: true, signal: done.signal });
+  }
+  document.addEventListener('pointerdown', () => done.abort(), {
+    capture: true,
+    signal: done.signal,
+  });
+};
+
+const KIND_FILTERS_ID = 'command-palette-kind-filters';
+const NO_KINDS: string[] = [];
+
+// Sits under the transparent search input with the same text metrics, tinting each
+// kind word in its kind's color. Renders nothing when no word is a kind.
+const KindWordBackdrop = ({
+  query,
+  backdropRef,
+}: {
+  query: string;
+  backdropRef: React.RefObject<HTMLDivElement | null>;
+}) => {
+  const words = useMemo(() => splitQueryWords(query), [query]);
+  if (!words.some((word) => word.kind)) {
+    return null;
+  }
+  return (
+    <div ref={backdropRef} className="command-palette-input-backdrop" aria-hidden="true">
+      {withStableListKeys(words, (word) => word.text).map(({ key, value: word }) =>
+        word.kind ? (
+          <mark key={key} className={`command-palette-kind-word ${getKindColorClass(word.kind)}`}>
+            {word.text}
+          </mark>
+        ) : (
+          <span key={key}>{word.text}</span>
+        )
+      )}
+    </div>
+  );
+};
+
+// The kinds the search is limited to, at the end of the search row; the input
+// names this element as its description while it exists.
+const KindFilters = ({
+  kinds,
+  useShortResourceNames,
+}: {
+  kinds: string[];
+  useShortResourceNames: boolean;
+}) => {
+  if (kinds.length === 0) {
+    return null;
+  }
+  const names = kinds.map((kind) => kindNameDisplay(kind, useShortResourceNames));
+  return (
+    <div id={KIND_FILTERS_ID} className="command-palette-kind-filters">
+      <span className="sr-only">Searching only these kinds: {names.join(', ')}</span>
+      {kinds.map((kind, index) => (
+        <span key={kind} className={`kind-badge ${getKindColorClass(kind)}`} aria-hidden="true">
+          {names[index]}
+        </span>
+      ))}
+    </div>
+  );
+};
+
+const SEARCH_HELP = (
+  <div className="command-palette-help">
+    <p>You can use multiple search words to narrow down results.</p>
+    <p>
+      If one or more search words match a kind name or its short alias (e.g. pod, svc, deployment),
+      it shows only those kinds. The word is highlighted and its kind appears beside this icon.
+    </p>
+  </div>
+);
+
+interface PaletteSearchRowProps {
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  query: string;
+  // General search (not a picker): marks kind words and offers search help.
+  generalSearch: boolean;
+  kindTokens: string[];
+  useShortResourceNames: boolean;
+  label: string;
+  placeholder: string;
+  resultsId: string;
+  selectedOptionId: string | undefined;
+  onQueryChange: (query: string) => void;
+  onKeyDown: React.KeyboardEventHandler<HTMLInputElement>;
+}
+
+const PaletteSearchRow = ({
+  inputRef,
+  query,
+  generalSearch,
+  kindTokens,
+  useShortResourceNames,
+  label,
+  placeholder,
+  resultsId,
+  selectedOptionId,
+  onQueryChange,
+  onKeyDown,
+}: Readonly<PaletteSearchRowProps>) => {
+  const kindFilters = generalSearch ? kindTokens : NO_KINDS;
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const syncBackdropScroll = useCallback(() => {
+    if (backdropRef.current && inputRef.current) {
+      backdropRef.current.scrollLeft = inputRef.current.scrollLeft;
+    }
+  }, [inputRef]);
+  // Typing can scroll a long query sideways; keep the marks under their words.
+  useLayoutEffect(syncBackdropScroll);
+  return (
+    <div className="command-palette-header">
+      <div className="command-palette-field">
+        {generalSearch ? <KindWordBackdrop query={query} backdropRef={backdropRef} /> : null}
+        <input
+          ref={inputRef}
+          type="text"
+          className="command-palette-input"
+          placeholder={placeholder}
+          value={query}
+          role="combobox"
+          aria-label={label}
+          aria-describedby={kindFilters.length > 0 ? KIND_FILTERS_ID : undefined}
+          aria-autocomplete="list"
+          aria-expanded="true"
+          aria-controls={resultsId}
+          aria-activedescendant={selectedOptionId}
+          onChange={(e) => onQueryChange(e.target.value)}
+          onKeyDown={onKeyDown}
+          onScroll={syncBackdropScroll}
+        />
+      </div>
+      <KindFilters kinds={kindFilters} useShortResourceNames={useShortResourceNames} />
+      {generalSearch ? (
+        <span className="command-palette-help-trigger">
+          <Tooltip
+            content={SEARCH_HELP}
+            triggerLabel="Search help"
+            placement="bottom"
+            maxWidth={320}
+          />
+        </span>
+      ) : null}
+    </div>
+  );
 };
 
 const CommandResultIcon = ({ icon }: { icon: Command['icon'] }) => {
@@ -384,21 +586,20 @@ const CommandResultRow = ({ command, ...interaction }: Readonly<CommandResultRow
 );
 
 interface CommandGroupsProps extends Omit<ResultRowInteractionProps, 'currentIndex'> {
-  groupedCommands: Array<[string, Command[]]>;
-  commandIndexMap: Map<string, number>;
+  commandGroups: CommandGroup[];
   executePaletteItem: (item: PaletteItem) => void;
 }
 
 const CommandGroups = (props: CommandGroupsProps) => (
   <>
-    {props.groupedCommands.map(([category, commands]) => (
+    {props.commandGroups.map(({ category, commands, startIndex }) => (
       <fieldset key={category} className="command-palette-group">
         <legend className="command-palette-group-header">{category}</legend>
-        {commands.map((command) => (
+        {commands.map((command, offset) => (
           <CommandResultRow
             key={command.id}
             command={command}
-            currentIndex={props.commandIndexMap.get(command.id) ?? 0}
+            currentIndex={startIndex + offset}
             selectedIndex={props.selectedIndex}
             itemRefs={props.itemRefs}
             mouseSelectionArmedRef={props.mouseSelectionArmedRef}
@@ -471,8 +672,7 @@ interface PaletteResultsProps extends Omit<ResultRowInteractionProps, 'currentIn
   noResults: boolean;
   emptyMessage: string;
   hasCommandResults: boolean;
-  groupedCommands: Array<[string, Command[]]>;
-  commandIndexMap: Map<string, number>;
+  commandGroups: CommandGroup[];
   catalogLoading: boolean;
   catalogEntries: CatalogDisplayEntry[];
   catalogStats: CatalogStats;
@@ -550,60 +750,13 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     [commands, savedWorkspaceCommands]
   );
 
-  // Filter commands based on search query and mode
-  const filteredCommands = useMemo(() => {
-    const filteredList = commandsForMode(selectMode, allCommands);
+  // This mode's commands that match every word of the search, best match first.
+  const rankedCommands = useMemo(
+    () => rankCommands(commandsForMode(selectMode, allCommands), searchQuery),
+    [allCommands, searchQuery, selectMode]
+  );
 
-    if (!searchQuery.trim()) {
-      return filteredList;
-    }
-
-    const query = searchQuery.toLowerCase();
-    return filteredList.filter((command) => {
-      const matchesLabel = command.label.toLowerCase().includes(query);
-      const matchesDescription = command.description?.toLowerCase().includes(query);
-      const matchesCategory = command.category?.toLowerCase().includes(query);
-      const matchesKeywords = command.keywords?.some((keyword) =>
-        keyword.toLowerCase().includes(query)
-      );
-
-      return matchesLabel || matchesDescription || matchesCategory || matchesKeywords;
-    });
-  }, [allCommands, searchQuery, selectMode]);
-
-  // Group commands by category
-  const groupedCommands = useMemo(() => {
-    const groups: Map<string, Command[]> = new Map();
-
-    filteredCommands.forEach((command) => {
-      const category = command.category || 'General';
-      const existing = groups.get(category) || [];
-      existing.push(command);
-      groups.set(category, existing);
-    });
-
-    // Sort categories according to CATEGORY_ORDER
-    return Array.from(groups.entries()).sort((a, b) => {
-      const indexA = CATEGORY_ORDER.indexOf(a[0]);
-      const indexB = CATEGORY_ORDER.indexOf(b[0]);
-
-      // If both are in the order array, sort by their position
-      if (indexA !== -1 && indexB !== -1) {
-        return indexA - indexB;
-      }
-
-      // If only one is in the order array, it comes first
-      if (indexA !== -1) {
-        return -1;
-      }
-      if (indexB !== -1) {
-        return 1;
-      }
-
-      // If neither is in the order array, sort alphabetically
-      return a[0].localeCompare(b[0]);
-    });
-  }, [filteredCommands]);
+  const commandGroups = useMemo(() => groupCommandsByCategory(rankedCommands), [rankedCommands]);
 
   const showCatalogSearch = isOpen && selectMode === 'none' && searchQuery.trim().length > 0;
   const {
@@ -617,30 +770,24 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     tokens: parsedTokens,
   });
 
-  const catalogDisplayItems = useMemo<CatalogDisplayEntry[]>(() => {
-    if (!showCatalogSearch) {
-      return [];
-    }
-    return buildCatalogDisplayEntries(
-      catalogResults,
-      parsedTokens,
-      useShortResourceNames,
-      CATALOG_RESULT_LIMIT
-    );
-  }, [showCatalogSearch, catalogResults, parsedTokens, useShortResourceNames]);
+  const catalogDisplayItems = useMemo<CatalogDisplayEntry[]>(
+    () =>
+      showCatalogSearch
+        ? catalogResults.map((item) => toCatalogDisplayEntry(item, useShortResourceNames))
+        : [],
+    [showCatalogSearch, catalogResults, useShortResourceNames]
+  );
 
-  const paletteItems = useMemo<PaletteItem[]>(() => {
-    const flattened: PaletteItem[] = [];
-    groupedCommands.forEach(([_, categoryCommands]) => {
-      categoryCommands.forEach((command) => {
-        flattened.push({ type: 'command', command });
-      });
-    });
-    catalogDisplayItems.forEach((entry) => {
-      flattened.push({ type: 'catalog', item: entry.item });
-    });
-    return flattened;
-  }, [groupedCommands, catalogDisplayItems]);
+  // In render order, so a result's position here is its row index.
+  const paletteItems = useMemo<PaletteItem[]>(
+    () => [
+      ...commandGroups.flatMap(({ commands: groupCommands }) =>
+        groupCommands.map((command): PaletteItem => ({ type: 'command', command }))
+      ),
+      ...catalogDisplayItems.map((entry): PaletteItem => ({ type: 'catalog', item: entry.item })),
+    ],
+    [commandGroups, catalogDisplayItems]
+  );
 
   const resultsId = 'command-palette-results';
   const selectedOptionId =
@@ -649,25 +796,14 @@ export const CommandPalette = memo(function CommandPaletteComponent({
 
   const paletteItemCount = paletteItems.length;
 
-  const hasCommandResults = filteredCommands.length > 0;
+  const hasCommandResults = rankedCommands.length > 0;
   const hasCatalogResults = catalogDisplayItems.length > 0;
   // While the workspace picker's list is still being read, it claims nothing.
   const workspacesLoading = selectMode === 'workspaces' && savedWorkspaces.status === 'loading';
   const noResults =
     !hasCommandResults && !hasCatalogResults && !catalogLoading && !workspacesLoading;
 
-  // Pre-compute indices for rendering without IIFE
-  const commandIndexMap = useMemo(() => {
-    const map = new Map<string, number>();
-    let index = 0;
-    groupedCommands.forEach(([_, categoryCommands]) => {
-      categoryCommands.forEach((command) => {
-        map.set(command.id, index++);
-      });
-    });
-    return map;
-  }, [groupedCommands]);
-  const catalogBaseIndex = commandIndexMap.size;
+  const catalogBaseIndex = rankedCommands.length;
 
   const resetPalette = useCallback(() => {
     setSearchQuery('');
@@ -680,24 +816,52 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     setHideCursor(false);
   }, []);
 
+  // A chosen command or object runs shortly after the palette closes. Reopening
+  // the palette first drops it, so it can never open a dialog over the palette.
+  const pendingRunRef = useRef<number | null>(null);
+  const cancelPendingRun = useCallback(() => {
+    if (pendingRunRef.current !== null) {
+      window.clearTimeout(pendingRunRef.current);
+      pendingRunRef.current = null;
+    }
+  }, []);
+
   const open = useCallback(() => {
+    cancelPendingRun();
     setIsOpen(true);
     resetPalette();
-  }, [resetPalette]);
+  }, [cancelPendingRun, resetPalette]);
 
   const close = useCallback(() => {
     setIsOpen(false);
     resetPalette();
   }, [resetPalette]);
 
+  // Closes the palette, then runs the choice once it has gone.
+  const runAfterClose = useCallback(
+    (run: () => void) => {
+      close();
+      pendingRunRef.current = window.setTimeout(() => {
+        pendingRunRef.current = null;
+        run();
+      }, 100);
+    },
+    [close]
+  );
+
   // Switch the open palette into a selection sub-mode with a clean query and
-  // selection.
-  const enterSelectMode = useCallback((mode: PaletteSelectMode) => {
-    setSelectMode(mode);
-    setSearchQuery('');
-    setSelectedIndex(0);
-    selectedIndexRef.current = 0;
-  }, []);
+  // selection. Focus returns to the search box: a picker has no Search help, so
+  // focus there would otherwise be lost when it unmounts.
+  const enterSelectMode = useCallback(
+    (mode: PaletteSelectMode) => {
+      setSelectMode(mode);
+      setSearchQuery('');
+      setSelectedIndex(0);
+      selectedIndexRef.current = 0;
+      focusSearchInput();
+    },
+    [focusSearchInput]
+  );
 
   // Execute selected item (command or catalog object)
   const executePaletteItem = useCallback(
@@ -711,20 +875,14 @@ export const CommandPalette = memo(function CommandPaletteComponent({
           return;
         }
 
-        close();
-        setTimeout(() => {
-          command.action();
-        }, 100);
+        runAfterClose(command.action);
         return;
       }
 
       const catalogItem = item.item;
-      close();
-      setTimeout(() => {
-        openWithObject(buildRequiredObjectReference(catalogItem.ref));
-      }, 100);
+      runAfterClose(() => openWithObject(buildRequiredObjectReference(catalogItem.ref)));
     },
-    [close, enterSelectMode, openWithObject]
+    [enterSelectMode, openWithObject, runAfterClose]
   );
 
   const updateSelection = useCallback((index: number) => {
@@ -951,6 +1109,9 @@ export const CommandPalette = memo(function CommandPaletteComponent({
   // the header search button open the palette in its normal (search) mode
   // through this one guarded open.
   useEventBus('command-palette:open', () => openShortcutRef.current(), []);
+  // An application-menu command is about to open a dialog; the palette never
+  // stays open under one (just as it never opens over one).
+  useEventBus('command-palette:close', close, [close]);
 
   // Focus input when opened
   useEffect(() => {
@@ -992,21 +1153,27 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     }
   }, [selectedIndex]);
 
-  // Handle clicks outside to close
+  // A press outside closes the palette. It is caught before the app sees it and
+  // the rest of that press is swallowed, so dismissing never also clicks whatever
+  // was under the pointer.
   useEffect(() => {
     if (!isOpen) {
       return;
     }
 
-    const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        close();
+    const handlePressOutside = (event: PointerEvent) => {
+      if (!containerRef.current || containerRef.current.contains(event.target as Node)) {
+        return;
       }
+      event.preventDefault();
+      event.stopPropagation();
+      swallowRestOfPress();
+      close();
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('pointerdown', handlePressOutside, true);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('pointerdown', handlePressOutside, true);
     };
   }, [isOpen, close]);
 
@@ -1059,6 +1226,9 @@ export const CommandPalette = memo(function CommandPaletteComponent({
         </div>
       )}
     >
+      {/* Dims the app behind the palette, like the shared dialog backdrop. Visual
+          only: presses outside the palette are handled by the palette itself. */}
+      <div className="command-palette-backdrop" aria-hidden="true" />
       <dialog
         open
         className={[
@@ -1071,28 +1241,26 @@ export const CommandPalette = memo(function CommandPaletteComponent({
         ref={containerRef}
         aria-label="Command Palette"
         aria-modal="true"
+        // Lets tooltips inside the palette layer above it.
+        data-modal-surface="true"
         tabIndex={-1}
       >
-        <div className="command-palette-header">
-          <input
-            ref={inputRef}
-            type="text"
-            className="command-palette-input"
-            placeholder={inputPlaceholder}
-            value={searchQuery}
-            role="combobox"
-            aria-label={inputLabel}
-            aria-autocomplete="list"
-            aria-expanded="true"
-            aria-controls={resultsId}
-            aria-activedescendant={selectedOptionId}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setSelectedIndex(0);
-            }}
-            onKeyDown={handleInputKeyDown}
-          />
-        </div>
+        <PaletteSearchRow
+          inputRef={inputRef}
+          query={searchQuery}
+          generalSearch={selectMode === 'none'}
+          kindTokens={parsedTokens.kindTokens}
+          useShortResourceNames={useShortResourceNames}
+          label={inputLabel}
+          placeholder={inputPlaceholder}
+          resultsId={resultsId}
+          selectedOptionId={selectedOptionId}
+          onQueryChange={(query) => {
+            setSearchQuery(query);
+            setSelectedIndex(0);
+          }}
+          onKeyDown={handleInputKeyDown}
+        />
 
         <div
           className="command-palette-results"
@@ -1105,8 +1273,7 @@ export const CommandPalette = memo(function CommandPaletteComponent({
             noResults={noResults}
             emptyMessage={paletteEmptyMessage(searchQuery, selectMode, savedWorkspaces.status)}
             hasCommandResults={hasCommandResults}
-            groupedCommands={groupedCommands}
-            commandIndexMap={commandIndexMap}
+            commandGroups={commandGroups}
             catalogLoading={catalogLoading}
             catalogEntries={catalogDisplayItems}
             catalogStats={catalogStats}

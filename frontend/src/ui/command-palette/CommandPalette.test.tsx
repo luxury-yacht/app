@@ -6,7 +6,8 @@
  * keyboard and the mouse move its selection; how a command runs; and how it
  * searches the selected cluster's object catalog, ignores a search the user
  * has moved on from, and opens a found object's panel with full identity.
- * Also the pure query parsing and catalog ranking it uses. Runs in provider
+ * Also the pure query parsing it uses; the catalog ranks its own matches
+ * (backend/objectcatalog query tests). Runs in provider
  * mode inside the real app shell (keyboard, kubeconfig, and object-panel
  * owners), with only the backend boundary faked (test-utils/appState); the
  * palette receives fixed commands, as AppLayout passes it the app's.
@@ -16,7 +17,6 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
 import type { CanonicalRowTestOverrides, CatalogItem } from '@/core/refresh/types';
-import { compareUtf16Strings } from '@/shared/utils/sort';
 import {
   installAppStateHarness,
   type MountedApp,
@@ -26,7 +26,7 @@ import { snapshotResponse, statusResponse } from '@/test-utils/appState/transpor
 import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { requireValue } from '@/test-utils/requireValue';
 import { isMacPlatform } from '@/utils/platform';
-import { buildCatalogDisplayEntries, CommandPalette, parseQueryTokens } from './CommandPalette';
+import { CommandPalette, parseQueryTokens } from './CommandPalette';
 import type { Command } from './CommandPaletteCommands';
 
 const baseTimestamp = '2024-01-01T00:00:00Z';
@@ -52,92 +52,6 @@ const createCatalogItem = (overrides: CanonicalRowTestOverrides<CatalogItem>): C
   };
 };
 
-const sampleCatalog: CatalogItem[] = [
-  createCatalogItem({
-    ref: {
-      kind: 'Pod',
-      resource: 'pods',
-      namespace: 'kube-system',
-      name: 'aws-node-abc123',
-      uid: 'pod-kube-system',
-    },
-  }),
-  createCatalogItem({
-    ref: {
-      kind: 'Pod',
-      resource: 'pods',
-      namespace: 'default',
-      name: 'frontend-123',
-      uid: 'pod-default',
-    },
-  }),
-  createCatalogItem({
-    ref: {
-      kind: 'Ingress',
-      group: 'networking.k8s.io',
-      resource: 'ingresses',
-      namespace: 'test-namespace',
-      name: 'test-gateway',
-      uid: 'ingress-test',
-    },
-  }),
-  createCatalogItem({
-    ref: {
-      kind: 'Ingress',
-      group: 'networking.k8s.io',
-      resource: 'ingresses',
-      namespace: 'kube-system',
-      name: 'metrics',
-      uid: 'ingress-metrics',
-    },
-  }),
-  createCatalogItem({
-    ref: {
-      kind: 'ConfigMap',
-      resource: 'configmaps',
-      namespace: 'kube-system',
-      name: 'aws-config',
-      uid: 'cm-aws',
-    },
-  }),
-  createCatalogItem({
-    ref: {
-      kind: 'Deployment',
-      group: 'apps',
-      resource: 'deployments',
-      namespace: 'default',
-      name: 'frontend',
-      uid: 'deploy-frontend',
-    },
-
-    scope: 'Namespace',
-  }),
-  createCatalogItem({
-    ref: {
-      kind: 'Deployment',
-      group: 'apps',
-      resource: 'deployments',
-      namespace: 'test-namespace',
-      name: 'gateway',
-      uid: 'deploy-gateway',
-    },
-
-    scope: 'Namespace',
-  }),
-  createCatalogItem({
-    ref: {
-      kind: 'Deployment',
-      group: 'apps',
-      resource: 'deployments',
-      namespace: 'kube-system',
-      name: 'metrics-server',
-      uid: 'deploy-metrics',
-    },
-
-    scope: 'Namespace',
-  }),
-];
-
 describe('parseQueryTokens', () => {
   it('derives kind aliases and de-duplicates them', () => {
     const tokens = parseQueryTokens('pods pod kube-system/aws-node');
@@ -151,10 +65,10 @@ describe('parseQueryTokens', () => {
     expect(tokens.otherTokens).toEqual(['frontend', 'default']);
   });
 
-  it('promotes unique partial kind prefixes to canonical kind filters', () => {
-    const tokens = parseQueryTokens('depl');
-    expect(tokens.kindTokens).toEqual(['deployment']);
-    expect(tokens.otherTokens).toEqual([]);
+  it('keeps the start of a kind’s name as a search word, not a kind filter', () => {
+    const tokens = parseQueryTokens('sta depl');
+    expect(tokens.kindTokens).toEqual([]);
+    expect(tokens.otherTokens).toEqual(['sta', 'depl']);
   });
 });
 
@@ -266,7 +180,7 @@ const namespaceAndKubeconfigCommands = () => [
   command('select-namespace', 'Select namespace...', 'Navigation'),
   command('select-kubeconfig', 'Select kubeconfig...', 'Navigation'),
   command('ns-prod', 'prod', 'Namespaces'),
-  command('kc-a', 'cluster-a', 'Kubeconfigs'),
+  command('kc-a', 'cluster-a', 'Clusters'),
   command('view-x', 'Toggle X', 'View'),
 ];
 
@@ -299,7 +213,7 @@ describe('CommandPalette', () => {
 
     await openFromOpenClusterMenu();
 
-    expect(groups()).toEqual(['Kubeconfigs']);
+    expect(groups()).toEqual(['Clusters']);
     expect(optionLabels()).toEqual(['cluster-a']);
     await press('Escape');
     expect(palette()).toBeNull();
@@ -318,7 +232,7 @@ describe('CommandPalette', () => {
 
   it.each([
     ['Select namespace...', 'Namespaces', 'prod'],
-    ['Select kubeconfig...', 'Kubeconfigs', 'cluster-a'],
+    ['Select kubeconfig...', 'Clusters', 'cluster-a'],
   ])(
     'enters a picker from the %s command, and Escape returns to every command',
     async (label, group, entry) => {
@@ -335,7 +249,7 @@ describe('CommandPalette', () => {
       expect(optionLabels()).toEqual([entry]);
       await press('Escape');
       expect(palette()).not.toBeNull();
-      expect(groups()).toEqual(['View', 'Navigation', 'Namespaces', 'Kubeconfigs']);
+      expect(groups()).toEqual(['View', 'Navigation', 'Namespaces', 'Clusters']);
     }
   );
 
@@ -348,7 +262,7 @@ describe('CommandPalette', () => {
 
     await openFromOpenClusterMenu();
 
-    expect(groups()).toEqual(['Kubeconfigs']);
+    expect(groups()).toEqual(['Clusters']);
     expect(optionLabels()).toEqual(['cluster-a']);
   });
 
@@ -454,16 +368,121 @@ describe('CommandPalette', () => {
     expect(selectedIndex()).toBe(2);
   });
 
-  it('closes when the user clicks outside it, and opens again from the menu', async () => {
+  it('closes on a click outside it without that click reaching the app, and opens again from the menu', async () => {
     await showPalette([command('open-settings', 'Open Settings', 'Application')]);
     await openFromViewMenu();
+    // An app control under the pointer.
+    const clickedBehind = vi.fn();
+    const behind = document.createElement('button');
+    behind.addEventListener('click', clickedBehind);
+    document.body.append(behind);
 
     await act(async () => {
-      document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      behind.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      behind.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      behind.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+      behind.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+      behind.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(palette()).toBeNull();
+    expect(clickedBehind).not.toHaveBeenCalled();
+
+    // Only that click is swallowed: the next one reaches the app.
+    await act(async () => {
+      behind.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      behind.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(clickedBehind).toHaveBeenCalledTimes(1);
+    behind.remove();
 
     await openFromViewMenu();
+    expect(palette()).not.toBeNull();
+  });
+
+  it('drops a chosen command that has not run yet when it is reopened', async () => {
+    // A command runs shortly after the palette closes; if the palette is reopened
+    // first, running it then could open a dialog over the palette.
+    const openSettings = vi.fn();
+    await showPalette([command('open-settings', 'Open Settings', 'Application', openSettings)]);
+    await openFromViewMenu();
+    vi.useFakeTimers();
+
+    await press('Enter');
+    expect(palette()).toBeNull();
+    await openFromViewMenu();
+    await runPendingCommand();
+
+    expect(openSettings).not.toHaveBeenCalled();
+    expect(palette()).not.toBeNull();
+  });
+
+  it('returns focus to the search box when it switches to a picker', async () => {
+    await showPalette([command('open-settings', 'Open Settings', 'Application')]);
+    await openFromViewMenu();
+    await press('Tab');
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Search help');
+
+    await menu('open-cluster');
+
+    expect(document.activeElement).toBe(input());
+  });
+
+  it('matches commands by every word typed, in any order, ignoring extra spaces', async () => {
+    await showPalette([
+      command('ns-stg-web', 'stg-web', 'Namespaces'),
+      command('ns-prod-web', 'prod-web', 'Namespaces'),
+      command('view-x', 'Toggle X', 'View'),
+    ]);
+    await openFromViewMenu();
+    vi.useFakeTimers();
+
+    for (const query of ['stg ', 'web stg', '  STG  web ']) {
+      await type(query);
+      expect(optionLabels()).toEqual(['stg-web']);
+    }
+    // Every word must match: "x" is in another command, not this one.
+    await type('stg x');
+    expect(optionLabels()).toEqual([]);
+  });
+
+  it('lists the best match first, so Enter runs the command whose label starts with the search', async () => {
+    const refreshView = vi.fn();
+    await showPalette([
+      { ...command('diagnostics', 'Diagnostics panel', 'Application'), keywords: ['refresh'] },
+      command('auto-refresh', 'Disable auto-refresh', 'Settings'),
+      command('refresh-view', 'Refresh current view', 'Settings', refreshView),
+    ]);
+    await openFromViewMenu();
+    vi.useFakeTimers();
+
+    // Label start, then a word in the label, then a keyword-only match.
+    await type('refresh');
+    expect(optionLabels()).toEqual([
+      'Refresh current view',
+      'Disable auto-refresh',
+      'Diagnostics panel',
+    ]);
+
+    await press('Enter');
+    await runPendingCommand();
+    expect(refreshView).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers search help that Tab reaches and Enter opens, without running a result', async () => {
+    const action = vi.fn();
+    await showPalette([command('view-x', 'Toggle X', 'View', action)]);
+    await openFromViewMenu();
+    vi.useFakeTimers();
+
+    await press('Tab');
+    const help = document.activeElement as HTMLElement;
+    expect(help.getAttribute('aria-label')).toBe('Search help');
+    await press('Enter');
+    const tooltipId = help.getAttribute('aria-describedby');
+    expect(tooltipId && document.getElementById(tooltipId)?.getAttribute('role')).toBe('tooltip');
+
+    await runPendingCommand();
+    expect(action).not.toHaveBeenCalled();
     expect(palette()).not.toBeNull();
   });
 
@@ -508,7 +527,12 @@ describe('CommandPalette catalog search', () => {
     const query = new URLSearchParams(
       requireValue(searches[0], 'expected the search').scope.split('|')[1]
     );
-    expect(Object.fromEntries(query)).toEqual({ limit: '20', kind: 'pod', search: 'metrics' });
+    expect(Object.fromEntries(query)).toEqual({
+      limit: '20',
+      kind: 'pod',
+      search: 'metrics',
+      sort: 'relevance',
+    });
     expect(searches[0]?.scope.startsWith(`${dev.clusterId}|`)).toBe(true);
     // The palette shows how many of the matches it lists.
     expect(groups()).toEqual(['Catalog Results (1 / 4)']);
@@ -529,6 +553,59 @@ describe('CommandPalette catalog search', () => {
         name: 'metrics-pod',
       },
     ]);
+  });
+
+  it('lists catalog results in the order the catalog ranked them', async () => {
+    // The catalog ranks every match before its 20-row limit; the palette keeps that
+    // order rather than re-ranking the page it received.
+    const ranked = [
+      createCatalogItem({
+        ref: {
+          clusterId: dev.clusterId,
+          kind: 'ConfigMap',
+          resource: 'configmaps',
+          name: 'frontend-b',
+          uid: 'cm-b',
+        },
+      }),
+      catalogPod(dev, 'default', 'frontend-a'),
+    ];
+    app.snapshots.answer(({ domain, scope }) =>
+      domain === 'catalog' && isPaletteSearch(dev, scope) ? catalogPayload(dev, ranked) : undefined
+    );
+    await showPalette([]);
+    await openFromViewMenu();
+    vi.useFakeTimers();
+
+    await type('frontend');
+    await finishSearchDebounce();
+    await app.settle();
+
+    expect(optionLabels()).toEqual([
+      expect.stringContaining('default/frontend-b'),
+      expect.stringContaining('default/frontend-a'),
+    ]);
+  });
+
+  it('sends every search word to the catalog, so an object matching all of them is found', async () => {
+    const found = catalogPod(dev, 'default', 'frontend');
+    // Like the catalog, return only an object that matches every word sent.
+    app.snapshots.answer(({ domain, scope }) => {
+      if (domain !== 'catalog' || !isPaletteSearch(dev, scope)) {
+        return undefined;
+      }
+      const search = new URLSearchParams(scope.split('|')[1]).get('search');
+      return catalogPayload(dev, search === 'frontend default' ? [found] : []);
+    });
+    await showPalette([]);
+    await openFromViewMenu();
+    vi.useFakeTimers();
+
+    await type('frontend default');
+    await finishSearchDebounce();
+    await app.settle();
+
+    expect(optionLabels()).toEqual([expect.stringContaining('default/frontend')]);
   });
 
   it.each(['resolves', 'fails'] as const)(
@@ -616,42 +693,34 @@ describe('CommandPalette catalog search', () => {
   });
 });
 
-describe('buildCatalogDisplayEntries', () => {
-  const noShortNames = false;
+describe('CommandPalette kind words', () => {
+  // The words the search box marks as kind filters.
+  const kindWords = () =>
+    Array.from(
+      document.querySelectorAll('.command-palette-header mark'),
+      (mark) => mark.textContent
+    );
+  // What the search box tells assistive technology about its kind filters.
+  const description = () => {
+    const id = input().getAttribute('aria-describedby');
+    return id ? (document.getElementById(id)?.textContent ?? null) : null;
+  };
 
-  const evaluate = (query: string, limit?: number) =>
-    buildCatalogDisplayEntries(sampleCatalog, parseQueryTokens(query), noShortNames, limit);
+  it('marks the words it searches as kinds and names the kinds they stand for', async () => {
+    await showPalette([]);
+    await openFromViewMenu();
+    vi.useFakeTimers();
 
-  it('matches pods within a fuzzy namespace search', () => {
-    const entries = evaluate('pod kube-sys');
-    expect(entries.map((entry) => entry.displayName)).toEqual(['kube-system/aws-node-abc123']);
-  });
+    // "pod" is a kind name and "svc" an alias; "stg" and "sta" (the start of
+    // StatefulSet) stay text.
+    await type('stg sta pod svc');
+    expect(kindWords()).toEqual(['pod', 'svc']);
+    expect(description()).toContain('Pod');
+    expect(description()).toContain('Service');
+    expect(description()).not.toContain('StatefulSet');
 
-  it('matches ingresses by partial name search', () => {
-    const entries = evaluate('ingress test');
-    expect(entries).toHaveLength(1);
-    expect(entries[0].displayName).toBe('test-namespace/test-gateway');
-  });
-
-  it('returns pods when only a kind is provided', () => {
-    const entries = evaluate('pod');
-    expect(entries.map((entry) => entry.displayName).sort(compareUtf16Strings)).toEqual([
-      'default/frontend-123',
-      'kube-system/aws-node-abc123',
-    ]);
-  });
-
-  it('returns deployments for partial kind searches', () => {
-    const entries = evaluate('depl');
-    expect(entries.map((entry) => entry.displayName).sort(compareUtf16Strings)).toEqual([
-      'default/frontend',
-      'kube-system/metrics-server',
-      'test-namespace/gateway',
-    ]);
-  });
-
-  it('limits results based on provided limit', () => {
-    const entries = evaluate('ingress', 1);
-    expect(entries).toHaveLength(1);
+    await type('post serv');
+    expect(kindWords()).toEqual([]);
+    expect(description()).toBeNull();
   });
 });

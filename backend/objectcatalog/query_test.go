@@ -7,6 +7,7 @@
 package objectcatalog
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -1072,5 +1073,87 @@ func TestQuerySearchFilter(t *testing.T) {
 	}
 	if !reflect.DeepEqual(result.Namespaces, []string{"default"}) {
 		t.Fatalf("unexpected namespaces for search: %+v", result.Namespaces)
+	}
+}
+
+func TestQueryRelevanceRanksMatchesBeforeTheLimit(t *testing.T) {
+	svc := NewService(Dependencies{Common: common.Dependencies{}}, nil)
+	podDesc := Descriptor{Namespaced: true, Kind: "Pod", Version: "v1", Resource: "pods", Scope: ScopeNamespace}
+	cmDesc := Descriptor{Namespaced: true, Kind: "ConfigMap", Version: "v1", Resource: "configmaps", Scope: ScopeNamespace}
+	add := func(desc Descriptor, namespace, name string) {
+		svc.items[catalogKey(desc, namespace, name)] = Summary{
+			Ref:   resourcemodel.ResourceRef{Version: "v1", Kind: desc.Kind, Resource: desc.Resource, Namespace: namespace, Name: name},
+			Scope: ScopeNamespace,
+		}
+	}
+
+	svc.mu.Lock()
+	svc.items = map[string]Summary{}
+	// 25 ConfigMaps sort ahead of every Pod in the default kind/namespace/name order.
+	for i := range 25 {
+		add(cmDesc, "default", fmt.Sprintf("frontend-%02d", i))
+	}
+	add(podDesc, "default", "frontend")
+	add(podDesc, "frontend", "api")
+	svc.resources = map[string]Descriptor{podDesc.GVR().String(): podDesc, cmDesc.GVR().String(): cmDesc}
+	svc.mu.Unlock()
+
+	// The default order fills the 20-row page with ConfigMaps.
+	byDefault := svc.Query(QueryOptions{Search: "frontend", Limit: 20})
+	if first := byDefault.Items[0].Ref; first.Kind != "ConfigMap" {
+		t.Fatalf("default order first = %s %s, want a ConfigMap", first.Kind, first.Name)
+	}
+
+	// Relevance puts the exact name first, then names that start with the word,
+	// and a match in the namespace only after them; the total counts every match.
+	ranked := svc.Query(QueryOptions{Search: "frontend", SortField: "relevance", Limit: 20})
+	if first := ranked.Items[0].Ref; first.Kind != "Pod" || first.Name != "frontend" {
+		t.Fatalf("relevance first = %s %s/%s, want Pod default/frontend", first.Kind, first.Namespace, first.Name)
+	}
+	if len(ranked.Items) != 20 || ranked.TotalItems != 27 {
+		t.Fatalf("relevance page = %d items of %d, want 20 of 27", len(ranked.Items), ranked.TotalItems)
+	}
+	for _, item := range ranked.Items[1:] {
+		if item.Ref.Kind != "ConfigMap" {
+			t.Fatalf("relevance listed %s %s/%s among the name-prefix matches", item.Ref.Kind, item.Ref.Namespace, item.Ref.Name)
+		}
+	}
+}
+
+func TestQuerySearchMatchesEveryWord(t *testing.T) {
+	svc := NewService(Dependencies{Common: common.Dependencies{}}, nil)
+	podDesc := Descriptor{
+		Namespaced: true,
+		Kind:       "Pod",
+		Version:    "v1",
+		Resource:   "pods",
+		Scope:      ScopeNamespace,
+	}
+
+	svc.mu.Lock()
+	svc.items = map[string]Summary{}
+	for _, ref := range [][2]string{{"default", "frontend"}, {"prod", "frontend"}, {"default", "backend"}} {
+		namespace, name := ref[0], ref[1]
+		svc.items[catalogKey(podDesc, namespace, name)] = Summary{
+			Ref:   resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: namespace, Name: name},
+			Scope: ScopeNamespace,
+		}
+	}
+	svc.resources = map[string]Descriptor{
+		podDesc.GVR().String(): podDesc,
+	}
+	svc.mu.Unlock()
+
+	// A search like the palette's "frontend default" names an object and its
+	// namespace: only the object matching both words is a result, in either order,
+	// and the total counts that same match.
+	for _, search := range []string{"frontend default", "default  frontend"} {
+		result := svc.Query(QueryOptions{Search: search})
+		if result.TotalItems != 1 || len(result.Items) != 1 {
+			t.Fatalf("search %q: expected 1 match, got total %d, items %+v", search, result.TotalItems, result.Items)
+		}
+		if ref := result.Items[0].Ref; ref.Namespace != "default" || ref.Name != "frontend" {
+			t.Fatalf("search %q: expected default/frontend, got %s/%s", search, ref.Namespace, ref.Name)
+		}
 	}
 }

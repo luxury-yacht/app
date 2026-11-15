@@ -159,4 +159,27 @@ describe('application menu commands', () => {
     await act(async () => acknowledgeClose());
     await app.settle();
   });
+
+  it.each(['open-settings', 'open-about'])(
+    'closes the command palette before the %s menu command opens its dialog',
+    async (command) => {
+      await act(async () => {
+        app.events.emit('open-command-palette', undefined, { sender: app.windowName });
+      });
+      await app.settle();
+      expect(paletteOpen()).toBe(true);
+
+      await act(async () => {
+        app.events.emit(command, undefined, { sender: app.windowName });
+      });
+      await app.settle();
+
+      // The palette never shares the screen with a dialog: it closes, and the
+      // dialog opens with focus.
+      expect(paletteOpen()).toBe(false);
+      const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
+      expect(dialog).not.toBeNull();
+      expect(dialog?.contains(document.activeElement)).toBe(true);
+    }
+  );
 });

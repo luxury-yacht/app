@@ -126,6 +126,10 @@ func newCatalogQueryStoreSchema() querypage.Schema[Summary] {
 		SearchText: func(s Summary) string {
 			return strings.Join([]string{s.Ref.Name, s.Ref.Namespace, s.Ref.Kind}, catalogEngineFieldSep)
 		},
+		// Like newSearchMatcher, every word of a search must match. None of these
+		// fields contains whitespace, so a search with several words names several
+		// fields (e.g. a name and its namespace).
+		SearchWords: true,
 	}
 }
 
@@ -417,30 +421,7 @@ func (s *Service) queryViaEngineWithStore(
 		Filters:   filters,
 		MatchNone: opts.MatchNone,
 	}
-	var page querypage.Page[Summary]
-	var err error
-	var anchorOutcome *querypage.AnchorOutcome
-	if opts.StartRank != nil && opts.Anchor == nil {
-		// Numbered page jump: the engine clamps past-the-end starts to the last
-		// aligned page and reports the served rank on PageStartRank.
-		page, err = store.QueryAt(engineQuery, *opts.StartRank)
-	} else if opts.Anchor != nil {
-		// Resolve the anchor to the engine's row key via the summary snapshot.
-		// The engine store holds ALL published summaries (filters apply at query
-		// time), so once the key resolves, the engine's found/filtered outcome is
-		// authoritative; an unresolved key (absent, or UID identity mismatch)
-		// walks the engine's not-found path — first page + reason.
-		key := ""
-		if summary, ok := findAnchorSummary(rows, opts.Anchor); ok {
-			key = catalogEngineUID(summary)
-		}
-		var outcome querypage.AnchorOutcome
-		page, outcome, err = store.QueryAround(engineQuery, key)
-		anchorOutcome = &outcome
-	} else {
-		engineQuery.Cursor = opts.Continue
-		page, err = store.Query(engineQuery)
-	}
+	page, anchorOutcome, err := catalogEnginePage(store, engineQuery, opts, rows)
 	if err != nil {
 		// The only remaining engine error is an unknown sort key; sortKey is
 		// normalized above, so this is defensive.
@@ -470,6 +451,44 @@ func (s *Service) queryViaEngineWithStore(
 		FacetsExact:     metadataExact,
 		AnchorOutcome:   anchorOutcome,
 		PageStartRank:   page.PageStartRank,
+	}
+}
+
+// catalogEnginePage serves the page the options ask for: a numbered page, the
+// page around an anchor, a search's best matches in relevance order, or the
+// cursor-addressed page in the sort order.
+func catalogEnginePage(
+	store *querypage.Store[Summary],
+	engineQuery querypage.Query,
+	opts QueryOptions,
+	rows []Summary,
+) (querypage.Page[Summary], *querypage.AnchorOutcome, error) {
+	switch {
+	case opts.StartRank != nil && opts.Anchor == nil:
+		// Numbered page jump: the engine clamps past-the-end starts to the last
+		// aligned page and reports the served rank on PageStartRank.
+		page, err := store.QueryAt(engineQuery, *opts.StartRank)
+		return page, nil, err
+	case opts.Anchor != nil:
+		// Resolve the anchor to the engine's row key via the summary snapshot.
+		// The engine store holds ALL published summaries (filters apply at query
+		// time), so once the key resolves, the engine's found/filtered outcome is
+		// authoritative; an unresolved key (absent, or UID identity mismatch)
+		// walks the engine's not-found path — first page + reason.
+		key := ""
+		if summary, ok := findAnchorSummary(rows, opts.Anchor); ok {
+			key = catalogEngineUID(summary)
+		}
+		page, outcome, err := store.QueryAround(engineQuery, key)
+		return page, &outcome, err
+	case normalizeCatalogQuerySortField(opts.SortField) == QuerySortRelevance &&
+		strings.TrimSpace(opts.Search) != "":
+		// Every match is ranked before the limit, so the page holds the best ones.
+		return store.QueryRanked(engineQuery, catalogSearchRank(opts.Search)), nil, nil
+	default:
+		engineQuery.Cursor = opts.Continue
+		page, err := store.Query(engineQuery)
+		return page, nil, err
 	}
 }
 

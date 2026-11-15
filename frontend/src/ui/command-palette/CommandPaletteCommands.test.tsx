@@ -48,10 +48,11 @@ const openCluster = (
   name: string,
   context: string,
   families: CatalogSnapshotPayload['resourceFamilies'] = {},
-  fixture: { open?: boolean } = {}
+  fixture: { open?: boolean; namespaces?: string[] } = {}
 ) => {
-  const cluster = app.cluster({ name, context, ...fixture });
-  app.namespaces(cluster, ['default', 'team-a']);
+  const { namespaces = ['default', 'team-a'], ...clusterFixture } = fixture;
+  const cluster = app.cluster({ name, context, ...clusterFixture });
+  app.namespaces(cluster, namespaces);
   app.snapshots.serve(
     'catalog',
     buildRefreshScope('catalog', {
@@ -119,21 +120,44 @@ const search = async (query: string) => {
   return optionLabels();
 };
 
-const closePalette = async () => {
-  await act(async () => {
-    document.activeElement?.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
-    );
+const press = (element: Element, key: string) =>
+  act(async () => {
+    element.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
   });
+
+/** Presses `key` where focus is, as a keyboard user does. */
+const pressFocused = (key: string) =>
+  press(requireValue(document.activeElement, 'expected a focused element'), key);
+
+const closePalette = () => pressFocused('Escape');
+
+/** Lets a chosen result's command run, which happens once the palette has closed. */
+const runChosenCommand = async () => {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(100);
+  });
+  await app.settle();
 };
 
 /** Clicks a result; its command runs once the palette has closed. */
 const click = async (option: HTMLElement) => {
   await act(async () => option.click());
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(100);
-  });
-  await app.settle();
+  await runChosenCommand();
+};
+
+// The results the palette marks as highlighted (what Enter runs).
+const highlightedLabels = () =>
+  options()
+    .filter((option) => option.getAttribute('aria-selected') === 'true')
+    .map(labelOf);
+
+// The result the search field names as its active option for assistive technology.
+const activeOptionLabel = () => {
+  const id = document
+    .querySelector('.command-palette [role="combobox"]')
+    ?.getAttribute('aria-activedescendant');
+  const active = id ? document.getElementById(id) : null;
+  return active ? labelOf(active) : null;
 };
 
 /** Clicks the result labelled `label`. */
@@ -161,6 +185,12 @@ const run = async (query: string, label: string) => {
 };
 
 const contextLabels = () => options().map(contextOf);
+
+/** The kubeconfig picker's contexts under the group headed `category`. */
+const groupContexts = (category: string) =>
+  [...document.querySelectorAll<HTMLFieldSetElement>('.command-palette .command-palette-group')]
+    .filter((group) => group.querySelector('legend')?.textContent === category)
+    .flatMap((group) => [...group.querySelectorAll<HTMLElement>('[role="option"]')].map(contextOf));
 
 beforeEach(() => {
   // Typing also searches the selected cluster's catalog; these searches find nothing.
@@ -212,7 +242,9 @@ describe('navigation commands', () => {
     dev = openCluster('dev', 'alpha');
     await showPalette();
     vi.useFakeTimers();
-    expect(await search('Namespace - ')).toEqual([]);
+    expect(
+      (await search('Namespace - ')).filter((label) => label.startsWith('Namespace - '))
+    ).toEqual([]);
 
     await run('team-a', 'team-a');
     expect(view.owners().namespace.selectedNamespace).toBe('team-a');
@@ -222,6 +254,35 @@ describe('navigation commands', () => {
     await run('Namespace - Pods', 'Namespace - Pods');
     expect(view.owners().namespace.selectedNamespace).toBe('team-a');
     expect(viewState().activeNamespaceTab).toBe('pods');
+  });
+
+  // cert-manager installs into a namespace named like its view, so both results
+  // appear together; each must be highlighted, announced, and run on its own.
+  it('keeps a namespace named like a namespace view a separate result from that view', async () => {
+    dev = openCluster(
+      'dev',
+      'alpha',
+      { namespaced: ['cert-manager'] },
+      { namespaces: ['default', 'team-a', 'cert-manager'] }
+    );
+    await showPalette();
+    vi.useFakeTimers();
+    await run('team-a', 'team-a');
+
+    // The namespace's label starts with the search, so it ranks above the view.
+    expect(await search('cert-manager')).toEqual(['cert-manager', 'Namespace - Cert Manager']);
+    expect(highlightedLabels()).toEqual(['cert-manager']);
+    expect(activeOptionLabel()).toBe('cert-manager');
+
+    await pressFocused('ArrowDown');
+    expect(highlightedLabels()).toEqual(['Namespace - Cert Manager']);
+    expect(activeOptionLabel()).toBe('Namespace - Cert Manager');
+
+    await pressFocused('ArrowUp');
+    expect(highlightedLabels()).toEqual(['cert-manager']);
+    await pressFocused('Enter');
+    await runChosenCommand();
+    expect(view.owners().namespace.selectedNamespace).toBe('cert-manager');
   });
 
   it('opens All Namespaces on its Workloads view', async () => {
@@ -254,7 +315,7 @@ describe('navigation commands', () => {
     expect(viewState().viewType).toBe('global');
     expect(viewState().activeGlobalTab).toBe('global-namespaces');
 
-    await run('close', 'Close active cluster tab');
+    await run('close', 'Close cluster');
 
     expect(app.backend.calls('CloseClusterView')).toEqual([]);
     expect(kubeconfig().selectedKubeconfigs).toEqual([dev.selection, prod.selection]);
@@ -267,7 +328,7 @@ describe('navigation commands', () => {
     await view.selectCluster(prod);
     vi.useFakeTimers();
 
-    await run('close', 'Close active cluster tab');
+    await run('close', 'Close cluster');
 
     expect(app.backend.calls('CloseClusterView')).toEqual([[app.windowName, prod.clusterId]]);
     expect(kubeconfig().selectedKubeconfigs).toEqual([dev.selection]);
@@ -286,7 +347,7 @@ describe('the kubeconfig picker', () => {
     expect(contextLabels()).toEqual(['alpha', 'bravo', 'charlie']);
   });
 
-  it('lists favorite clusters first, each group by context name', async () => {
+  it('lists favorite clusters in their own group and in the full list, each group by context name', async () => {
     dev = openCluster('zfile', 'charlie');
     const alpha = openCluster('afile', 'alpha', {}, { open: false });
     openCluster('mfile', 'bravo', {}, { open: false });
@@ -296,7 +357,13 @@ describe('the kubeconfig picker', () => {
 
     await menu('open-cluster');
 
-    expect(contextLabels()).toEqual(['alpha', 'delta', 'bravo', 'charlie']);
+    expect(groupContexts('Favorite Clusters')).toEqual(['alpha', 'delta']);
+    expect(groupContexts('Clusters')).toEqual(['alpha', 'bravo', 'charlie', 'delta']);
+
+    // A search lists a matching favorite in both groups too.
+    await type('delta');
+    expect(groupContexts('Favorite Clusters')).toEqual(['delta']);
+    expect(groupContexts('Clusters')).toEqual(['delta']);
   });
 
   it('opens a closed context as a new cluster tab, and switches to an open one without closing any', async () => {
@@ -369,25 +436,25 @@ describe('application commands', () => {
     await showPalette();
     vi.useFakeTimers();
 
-    await run('About', 'About');
+    await run('About', 'About Luxury Yacht');
     expect(viewState().isAboutOpen).toBe(true);
     await act(async () => viewState().setIsAboutOpen(false));
 
-    await run('Check for Updates', 'Check for Updates…');
+    await run('Check for Updates', 'Check for updates…');
     expect(app.backend.calls('CheckForUpdates')).toHaveLength(1);
     expect(viewState().isAboutOpen).toBe(true);
 
-    await run('Settings', 'Settings');
+    await run('Settings', 'Settings…');
     expect(viewState().isSettingsOpen).toBe(true);
 
     await run('Diff objects', 'Diff objects');
     expect(viewState().isObjectDiffOpen).toBe(true);
 
     const sidebarVisible = viewState().isSidebarVisible;
-    await run('sidebar', sidebarVisible ? 'Hide Sidebar' : 'Show Sidebar');
+    await run('sidebar', sidebarVisible ? 'Hide sidebar' : 'Show sidebar');
     expect(viewState().isSidebarVisible).toBe(!sidebarVisible);
 
-    await run('Application Logs', 'Application Logs panel');
+    await run('Application logs', 'Application logs');
     expect(viewState().showAppLogsPanel).toBe(true);
   });
 });
@@ -518,7 +585,7 @@ describe('saved workspaces', () => {
   const emptyMessage = () =>
     document.querySelector('.command-palette .command-palette-empty')?.textContent ?? null;
 
-  const workspaceCommands = ['Open Workspace…', 'Save Workspace…', 'Manage Workspaces…'];
+  const workspaceCommands = ['Open workspace…', 'Save workspace…', 'Manage workspaces…'];
 
   it('lists saved workspaces alone in their section, with the workspace commands under Navigation, and opens the chosen one', async () => {
     app.backend.answer('ListNamedWorkspaces', () => [
@@ -529,10 +596,10 @@ describe('saved workspaces', () => {
     view = await app.mountApp();
     await menu('open-command-palette');
     vi.useFakeTimers();
-    // Like Select kubeconfig… and Select namespace… beside their listed entries.
+    // Like Open cluster… and Select namespace… beside their listed entries.
     expect(groupLabels('Workspaces')).toEqual(['Incident', 'Release']);
     const navigation = groupLabels('Navigation');
-    const pickers = navigation.indexOf('Select namespace...');
+    const pickers = navigation.indexOf('Select namespace…');
     expect(navigation.slice(pickers + 1, pickers + 4)).toEqual(workspaceCommands);
 
     await choose('Release');
@@ -559,14 +626,14 @@ describe('saved workspaces', () => {
     ]);
   });
 
-  it('switches to the same picker from the palette’s Open Workspace… command', async () => {
+  it('switches to the same picker from the palette’s Open workspace… command', async () => {
     app.backend.answer('ListNamedWorkspaces', () => [
       { name: 'Incident', revision: 'rev-incident' },
     ]);
     view = await app.mountApp();
     await menu('open-command-palette');
     vi.useFakeTimers();
-    await choose('Open Workspace…');
+    await choose('Open workspace…');
 
     expect(palette()).not.toBeNull();
     expect(optionLabels()).toEqual(['Incident']);
@@ -664,7 +731,7 @@ it('saves a named workspace from the full app command palette', async () => {
   await menu('open-command-palette');
   vi.useFakeTimers();
   await type('save workspace');
-  await choose('Save Workspace…');
+  await choose('Save workspace…');
   const input = requireValue(
     document.querySelector<HTMLInputElement>('[role="dialog"] input[name="workspace-name"]'),
     'expected the workspace name input'
@@ -727,11 +794,6 @@ const submitDialog = () =>
     ).click()
   );
 
-const press = (element: HTMLElement, key: string) =>
-  act(async () => {
-    element.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
-  });
-
 const clickInDialog = (element: HTMLElement) => act(async () => element.click());
 
 /** The saved-workspace picker, found by its visible label. */
@@ -786,7 +848,7 @@ it('renames the selected saved workspace in place, but never onto another worksp
       { name: 'Release', revision: 'rev-release' },
     ];
   });
-  await openWorkspaceDialog('manage workspace', 'Manage Workspaces…');
+  await openWorkspaceDialog('manage workspace', 'Manage workspaces…');
   await clickInDialog(dialogControl('Rename workspace'));
   const input = requireValue(dialogInput('workspace-new-name'), 'expected the new name input');
   expect(input.value).toBe('Incident');
@@ -813,7 +875,7 @@ it('cancels a rename with Escape and keeps the dialog open on the same workspace
     { name: 'Incident', revision: 'rev-incident' },
     { name: 'Release', revision: 'rev-release' },
   ]);
-  await openWorkspaceDialog('manage workspace', 'Manage Workspaces…');
+  await openWorkspaceDialog('manage workspace', 'Manage workspaces…');
   await clickInDialog(dialogControl('Rename workspace'));
   await enterInDialog('workspace-new-name', 'Outage');
   await press(requireValue(dialogInput('workspace-new-name'), 'expected the input'), 'Escape');
@@ -829,7 +891,7 @@ it('deletes the selected saved workspace only after confirmation', async () => {
     { name: 'Release', revision: 'rev-release' },
   ]);
   app.backend.answer('DeleteNamedWorkspace', () => undefined);
-  await openWorkspaceDialog('manage workspace', 'Manage Workspaces…');
+  await openWorkspaceDialog('manage workspace', 'Manage workspaces…');
   await clickInDialog(dialogControl('Delete workspace'));
   expect(app.backend.calls('DeleteNamedWorkspace')).toEqual([]);
   // The confirmation is the topmost dialog; its Delete button confirms.
@@ -844,7 +906,7 @@ it('deletes the selected saved workspace only after confirmation', async () => {
 
 it('offers to save the current windows when nothing is saved yet', async () => {
   app.backend.answer('ListNamedWorkspaces', () => []);
-  await openWorkspaceDialog('manage workspace', 'Manage Workspaces…');
+  await openWorkspaceDialog('manage workspace', 'Manage workspaces…');
   await clickInDialog(
     requireValue(dialogButtons('Save Current As…')[0], 'expected the Save Current As… button')
   );
@@ -866,7 +928,7 @@ it('reloads the saved workspaces when the one it listed was replaced under the s
     }
     saved = saved.filter((entry) => entry.name !== name);
   });
-  await openWorkspaceDialog('manage workspace', 'Manage Workspaces…');
+  await openWorkspaceDialog('manage workspace', 'Manage workspaces…');
   // Another window deletes Incident, saves a new one, and renames Release.
   saved = [
     { name: 'Incident', revision: 'rev-resaved' },
@@ -907,7 +969,7 @@ it('leaves rename mode when the workspace being renamed is gone', async () => {
   app.backend.answer('RenameNamedWorkspace', () => {
     throw new Error('workspace was not found');
   });
-  await openWorkspaceDialog('manage workspace', 'Manage Workspaces…');
+  await openWorkspaceDialog('manage workspace', 'Manage workspaces…');
   await clickInDialog(dialogControl('Rename workspace'));
   // Another window deletes Incident while it is being renamed.
   saved = [{ name: 'Release', revision: 'rev-release' }];
@@ -934,7 +996,7 @@ it('replaces a workspace that changed since the save dialog listed it only on a 
       throw new Error('workspace changed since it was listed');
     }
   });
-  await openWorkspaceDialog('save workspace', 'Save Workspace…');
+  await openWorkspaceDialog('save workspace', 'Save workspace…');
   // Another window replaces Triage with its own windows.
   saved = [{ name: 'Triage', revision: 'rev-replaced' }];
   await enterInDialog('workspace-name', 'Triage');
