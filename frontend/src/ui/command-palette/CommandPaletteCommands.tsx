@@ -707,15 +707,20 @@ export function useCommandPaletteCommands() {
       return [];
     }
 
-    return sortKubeconfigs(kubeconfigs).map((config) =>
-      buildKubeconfigCommand(
+    return sortKubeconfigs(kubeconfigs).flatMap((config) => {
+      const command = buildKubeconfigCommand(
         config,
         selectedKubeconfigs,
         favoriteClusters,
         setActiveKubeconfig,
         openKubeconfig
-      )
-    );
+      );
+      if (command.category !== 'Favorite Clusters') {
+        return [command];
+      }
+      // A favorite also keeps its place in the full list.
+      return [command, { ...command, id: `listed-${command.id}`, category: 'Clusters' }];
+    });
   }, [favoriteClusters, kubeconfigs, openKubeconfig, selectedKubeconfigs, setActiveKubeconfig]);
 
   // Build commands from saved favorites so they appear as a searchable group.

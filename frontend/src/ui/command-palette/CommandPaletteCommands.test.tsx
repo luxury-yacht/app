@@ -347,7 +347,7 @@ describe('the kubeconfig picker', () => {
     expect(contextLabels()).toEqual(['alpha', 'bravo', 'charlie']);
   });
 
-  it('lists favorite clusters in their own group above the rest, each group by context name', async () => {
+  it('lists favorite clusters in their own group and in the full list, each group by context name', async () => {
     dev = openCluster('zfile', 'charlie');
     const alpha = openCluster('afile', 'alpha', {}, { open: false });
     openCluster('mfile', 'bravo', {}, { open: false });
@@ -358,8 +358,12 @@ describe('the kubeconfig picker', () => {
     await menu('open-cluster');
 
     expect(groupContexts('Favorite Clusters')).toEqual(['alpha', 'delta']);
-    expect(groupContexts('Clusters')).toEqual(['bravo', 'charlie']);
-    expect(contextLabels()).toEqual(['alpha', 'delta', 'bravo', 'charlie']);
+    expect(groupContexts('Clusters')).toEqual(['alpha', 'bravo', 'charlie', 'delta']);
+
+    // A search lists a matching favorite in both groups too.
+    await type('delta');
+    expect(groupContexts('Favorite Clusters')).toEqual(['delta']);
+    expect(groupContexts('Clusters')).toEqual(['delta']);
   });
 
   it('opens a closed context as a new cluster tab, and switches to an open one without closing any', async () => {
