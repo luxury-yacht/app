@@ -9,6 +9,12 @@ Shared rules and table modes live in [large data](large-data.md).
   page limits, cursor validation, totals, and facets. Cursors bind `clusterId`,
   query signature, backend sort contract, direction, page limit, cursor version,
   and the last row's sort/tie-breaker values.
+- Search requires every whitespace-separated word to match a row's name,
+  namespace, or kind (querypage `Schema.SearchWords`; typed tables keep a single
+  substring). `sort=relevance` with a search ranks every match (exact name, name
+  prefix, name substring, exact namespace, namespace substring, kind) before the
+  page limit and serves one page without cursors; the command palette uses it
+  and shows rows in that order.
 - Namespace and kind filters use the catalog query index. Default, search-only,
   and sort-only queries may stream every chunk (O(N) CPU) into a bounded page
   buffer and exact-metadata budget, never a full in-memory result.

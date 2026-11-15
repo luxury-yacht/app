@@ -31,11 +31,7 @@ import {
   type SavedWorkspaceCommands,
   useSavedWorkspaceCommands,
 } from './CommandPaletteCommands';
-import {
-  CATALOG_RESULT_LIMIT,
-  type CatalogStats,
-  usePaletteCatalogSearch,
-} from './usePaletteCatalogSearch';
+import { type CatalogStats, usePaletteCatalogSearch } from './usePaletteCatalogSearch';
 import './CommandPalette.css';
 
 interface CommandPaletteProps {
@@ -303,99 +299,17 @@ type CatalogDisplayEntry = {
   displayName: string;
 };
 
-type ScoredCatalogEntry = CatalogDisplayEntry & { score: number };
-
-// The fields a search word may match: the server's (name, namespace, kind), plus
-// `namespace/name` so a typed path matches.
-interface CatalogSearchFields {
-  namespace: string;
-  name: string;
-  combined: string;
-  kind: string;
-}
-
-const scoreKindTokens = (kindTokens: string[], kindCanonical: string): number | null => {
-  if (kindTokens.length === 0) {
-    return 0;
-  }
-  return kindTokens.includes(kindCanonical) ? 100 : null;
-};
-
-const scoreSearchToken = (token: string, fields: CatalogSearchFields): number | null => {
-  let score = 0;
-  if (fields.namespace.includes(token)) {
-    score += fields.namespace === token ? 30 : 20;
-  }
-  if (fields.name.includes(token)) {
-    score += fields.name === token ? 60 : 40;
-  }
-  if (score > 0) {
-    return score;
-  }
-  // Weaker matches: across the namespace/name boundary, then the kind alone.
-  if (fields.combined.includes(token)) {
-    return 10;
-  }
-  return fields.kind.includes(token) ? 5 : null;
-};
-
-const scoreOtherTokens = (tokens: string[], fields: CatalogSearchFields): number | null => {
-  let score = 0;
-  for (const token of tokens) {
-    const tokenScore = scoreSearchToken(token, fields);
-    if (tokenScore === null) {
-      return null;
-    }
-    score += tokenScore;
-  }
-  return score;
-};
-
-const scoreCatalogEntry = (
+// The catalog filters (every word, kind words) and ranks its matches before its
+// limit (sort=relevance), so the palette shows the page it received in order.
+const toCatalogDisplayEntry = (
   item: CatalogItem,
-  tokens: ParsedQueryTokens,
   useShortResourceNames: boolean
-): ScoredCatalogEntry | null => {
-  const kindScore = scoreKindTokens(tokens.kindTokens, item.ref.kind.toLowerCase());
-  if (kindScore === null) {
-    return null;
-  }
-  const otherScore = scoreOtherTokens(tokens.otherTokens, {
-    namespace: item.ref.namespace?.toLowerCase() ?? '',
-    name: item.ref.name.toLowerCase(),
-    combined: `${item.ref.namespace ?? ''}/${item.ref.name}`.toLowerCase(),
-    kind: item.ref.kind.toLowerCase(),
-  });
-  if (otherScore === null) {
-    return null;
-  }
-  return {
-    item,
-    kindLabel: kindDisplayName(item.ref, useShortResourceNames),
-    kindClass: getKindColorClass(item.ref.kind),
-    displayName: item.ref.namespace ? `${item.ref.namespace}/${item.ref.name}` : item.ref.name,
-    score:
-      kindScore + otherScore + (tokens.kindTokens.length + tokens.otherTokens.length === 0 ? 5 : 0),
-  };
-};
-
-export function buildCatalogDisplayEntries(
-  items: CatalogItem[],
-  tokens: ParsedQueryTokens,
-  useShortResourceNames: boolean,
-  limit: number = CATALOG_RESULT_LIMIT
-): CatalogDisplayEntry[] {
-  if (items.length === 0 || limit <= 0) {
-    return [];
-  }
-
-  const scored: ScoredCatalogEntry[] = items
-    .map((item) => scoreCatalogEntry(item, tokens, useShortResourceNames))
-    .filter((entry): entry is ScoredCatalogEntry => entry !== null)
-    .sort((a, b) => b.score - a.score || a.displayName.localeCompare(b.displayName));
-
-  return scored.slice(0, limit).map(({ score: _score, ...entry }) => entry);
-}
+): CatalogDisplayEntry => ({
+  item,
+  kindLabel: kindDisplayName(item.ref, useShortResourceNames),
+  kindClass: getKindColorClass(item.ref.kind),
+  displayName: item.ref.namespace ? `${item.ref.namespace}/${item.ref.name}` : item.ref.name,
+});
 
 const getPaletteInputCopy = (mode: PaletteSelectMode) => {
   if (mode === 'namespaces') {
@@ -856,17 +770,13 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     tokens: parsedTokens,
   });
 
-  const catalogDisplayItems = useMemo<CatalogDisplayEntry[]>(() => {
-    if (!showCatalogSearch) {
-      return [];
-    }
-    return buildCatalogDisplayEntries(
-      catalogResults,
-      parsedTokens,
-      useShortResourceNames,
-      CATALOG_RESULT_LIMIT
-    );
-  }, [showCatalogSearch, catalogResults, parsedTokens, useShortResourceNames]);
+  const catalogDisplayItems = useMemo<CatalogDisplayEntry[]>(
+    () =>
+      showCatalogSearch
+        ? catalogResults.map((item) => toCatalogDisplayEntry(item, useShortResourceNames))
+        : [],
+    [showCatalogSearch, catalogResults, useShortResourceNames]
+  );
 
   // In render order, so a result's position here is its row index.
   const paletteItems = useMemo<PaletteItem[]>(
@@ -917,13 +827,18 @@ export const CommandPalette = memo(function CommandPaletteComponent({
   }, [resetPalette]);
 
   // Switch the open palette into a selection sub-mode with a clean query and
-  // selection.
-  const enterSelectMode = useCallback((mode: PaletteSelectMode) => {
-    setSelectMode(mode);
-    setSearchQuery('');
-    setSelectedIndex(0);
-    selectedIndexRef.current = 0;
-  }, []);
+  // selection. Focus returns to the search box: a picker has no Search help, so
+  // focus there would otherwise be lost when it unmounts.
+  const enterSelectMode = useCallback(
+    (mode: PaletteSelectMode) => {
+      setSelectMode(mode);
+      setSearchQuery('');
+      setSelectedIndex(0);
+      selectedIndexRef.current = 0;
+      focusSearchInput();
+    },
+    [focusSearchInput]
+  );
 
   // Execute selected item (command or catalog object)
   const executePaletteItem = useCallback(
@@ -1177,6 +1092,9 @@ export const CommandPalette = memo(function CommandPaletteComponent({
   // the header search button open the palette in its normal (search) mode
   // through this one guarded open.
   useEventBus('command-palette:open', () => openShortcutRef.current(), []);
+  // An application-menu command is about to open a dialog; the palette never
+  // stays open under one (just as it never opens over one).
+  useEventBus('command-palette:close', close, [close]);
 
   // Focus input when opened
   useEffect(() => {

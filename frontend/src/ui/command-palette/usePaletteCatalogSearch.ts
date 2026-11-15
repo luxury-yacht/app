@@ -4,7 +4,7 @@ import { buildRefreshScope, CLUSTER_SELECTOR } from '@/core/refresh/scopeSelecto
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { reportOperationalError } from '@/utils/errorHandler';
 
-export const CATALOG_RESULT_LIMIT = 20;
+const CATALOG_RESULT_LIMIT = 20;
 export type CatalogStats = { total: number; truncated: boolean } | null;
 
 interface SearchOptions {
@@ -37,6 +37,10 @@ export function usePaletteCatalogSearch({ enabled, clusterId, query, tokens }: S
       params.set('search', tokens.otherTokens.join(' '));
     } else if (tokens.kindTokens.length === 0) {
       params.set('search', query.trim());
+    }
+    if (params.has('search')) {
+      // Rank every match before the 20-row limit, so the page holds the best ones.
+      params.set('sort', 'relevance');
     }
     // Identity includes the full query and each cluster visit, even when the
     // server's primary search term is unchanged.

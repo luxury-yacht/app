@@ -45,6 +45,10 @@ export interface AppEvents {
   // Open the command palette in its normal (search) mode — the header search
   // button.
   'command-palette:open': undefined;
+
+  // Close the command palette if it is open — before an application-menu
+  // command opens a dialog, so the two never share the screen.
+  'command-palette:close': undefined;
   'named-workspace:save-dialog': undefined;
   'named-workspace:manage-dialog': undefined;
   'application-menu:close': undefined;

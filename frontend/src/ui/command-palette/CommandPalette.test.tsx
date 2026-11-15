@@ -6,7 +6,8 @@
  * keyboard and the mouse move its selection; how a command runs; and how it
  * searches the selected cluster's object catalog, ignores a search the user
  * has moved on from, and opens a found object's panel with full identity.
- * Also the pure query parsing and catalog ranking it uses. Runs in provider
+ * Also the pure query parsing it uses; the catalog ranks its own matches
+ * (backend/objectcatalog query tests). Runs in provider
  * mode inside the real app shell (keyboard, kubeconfig, and object-panel
  * owners), with only the backend boundary faked (test-utils/appState); the
  * palette receives fixed commands, as AppLayout passes it the app's.
@@ -16,7 +17,6 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
 import type { CanonicalRowTestOverrides, CatalogItem } from '@/core/refresh/types';
-import { compareUtf16Strings } from '@/shared/utils/sort';
 import {
   installAppStateHarness,
   type MountedApp,
@@ -26,7 +26,7 @@ import { snapshotResponse, statusResponse } from '@/test-utils/appState/transpor
 import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { requireValue } from '@/test-utils/requireValue';
 import { isMacPlatform } from '@/utils/platform';
-import { buildCatalogDisplayEntries, CommandPalette, parseQueryTokens } from './CommandPalette';
+import { CommandPalette, parseQueryTokens } from './CommandPalette';
 import type { Command } from './CommandPaletteCommands';
 
 const baseTimestamp = '2024-01-01T00:00:00Z';
@@ -51,92 +51,6 @@ const createCatalogItem = (overrides: CanonicalRowTestOverrides<CatalogItem>): C
     ...row,
   };
 };
-
-const sampleCatalog: CatalogItem[] = [
-  createCatalogItem({
-    ref: {
-      kind: 'Pod',
-      resource: 'pods',
-      namespace: 'kube-system',
-      name: 'aws-node-abc123',
-      uid: 'pod-kube-system',
-    },
-  }),
-  createCatalogItem({
-    ref: {
-      kind: 'Pod',
-      resource: 'pods',
-      namespace: 'default',
-      name: 'frontend-123',
-      uid: 'pod-default',
-    },
-  }),
-  createCatalogItem({
-    ref: {
-      kind: 'Ingress',
-      group: 'networking.k8s.io',
-      resource: 'ingresses',
-      namespace: 'test-namespace',
-      name: 'test-gateway',
-      uid: 'ingress-test',
-    },
-  }),
-  createCatalogItem({
-    ref: {
-      kind: 'Ingress',
-      group: 'networking.k8s.io',
-      resource: 'ingresses',
-      namespace: 'kube-system',
-      name: 'metrics',
-      uid: 'ingress-metrics',
-    },
-  }),
-  createCatalogItem({
-    ref: {
-      kind: 'ConfigMap',
-      resource: 'configmaps',
-      namespace: 'kube-system',
-      name: 'aws-config',
-      uid: 'cm-aws',
-    },
-  }),
-  createCatalogItem({
-    ref: {
-      kind: 'Deployment',
-      group: 'apps',
-      resource: 'deployments',
-      namespace: 'default',
-      name: 'frontend',
-      uid: 'deploy-frontend',
-    },
-
-    scope: 'Namespace',
-  }),
-  createCatalogItem({
-    ref: {
-      kind: 'Deployment',
-      group: 'apps',
-      resource: 'deployments',
-      namespace: 'test-namespace',
-      name: 'gateway',
-      uid: 'deploy-gateway',
-    },
-
-    scope: 'Namespace',
-  }),
-  createCatalogItem({
-    ref: {
-      kind: 'Deployment',
-      group: 'apps',
-      resource: 'deployments',
-      namespace: 'kube-system',
-      name: 'metrics-server',
-      uid: 'deploy-metrics',
-    },
-
-    scope: 'Namespace',
-  }),
-];
 
 describe('parseQueryTokens', () => {
   it('derives kind aliases and de-duplicates them', () => {
@@ -485,6 +399,17 @@ describe('CommandPalette', () => {
     expect(palette()).not.toBeNull();
   });
 
+  it('returns focus to the search box when it switches to a picker', async () => {
+    await showPalette([command('open-settings', 'Open Settings', 'Application')]);
+    await openFromViewMenu();
+    await press('Tab');
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Search help');
+
+    await menu('open-cluster');
+
+    expect(document.activeElement).toBe(input());
+  });
+
   it('matches commands by every word typed, in any order, ignoring extra spaces', async () => {
     await showPalette([
       command('ns-stg-web', 'stg-web', 'Namespaces'),
@@ -585,7 +510,12 @@ describe('CommandPalette catalog search', () => {
     const query = new URLSearchParams(
       requireValue(searches[0], 'expected the search').scope.split('|')[1]
     );
-    expect(Object.fromEntries(query)).toEqual({ limit: '20', kind: 'pod', search: 'metrics' });
+    expect(Object.fromEntries(query)).toEqual({
+      limit: '20',
+      kind: 'pod',
+      search: 'metrics',
+      sort: 'relevance',
+    });
     expect(searches[0]?.scope.startsWith(`${dev.clusterId}|`)).toBe(true);
     // The palette shows how many of the matches it lists.
     expect(groups()).toEqual(['Catalog Results (1 / 4)']);
@@ -605,6 +535,38 @@ describe('CommandPalette catalog search', () => {
         namespace: 'metrics',
         name: 'metrics-pod',
       },
+    ]);
+  });
+
+  it('lists catalog results in the order the catalog ranked them', async () => {
+    // The catalog ranks every match before its 20-row limit; the palette keeps that
+    // order rather than re-ranking the page it received.
+    const ranked = [
+      createCatalogItem({
+        ref: {
+          clusterId: dev.clusterId,
+          kind: 'ConfigMap',
+          resource: 'configmaps',
+          name: 'frontend-b',
+          uid: 'cm-b',
+        },
+      }),
+      catalogPod(dev, 'default', 'frontend-a'),
+    ];
+    app.snapshots.answer(({ domain, scope }) =>
+      domain === 'catalog' && isPaletteSearch(dev, scope) ? catalogPayload(dev, ranked) : undefined
+    );
+    await showPalette([]);
+    await openFromViewMenu();
+    vi.useFakeTimers();
+
+    await type('frontend');
+    await finishSearchDebounce();
+    await app.settle();
+
+    expect(optionLabels()).toEqual([
+      expect.stringContaining('default/frontend-b'),
+      expect.stringContaining('default/frontend-a'),
     ]);
   });
 
@@ -743,76 +705,5 @@ describe('CommandPalette kind words', () => {
     await type('post serv');
     expect(kindWords()).toEqual([]);
     expect(description()).toBeNull();
-  });
-});
-
-describe('buildCatalogDisplayEntries', () => {
-  const noShortNames = false;
-
-  const evaluate = (query: string, limit?: number) =>
-    buildCatalogDisplayEntries(sampleCatalog, parseQueryTokens(query), noShortNames, limit);
-
-  it('matches pods within a fuzzy namespace search', () => {
-    const entries = evaluate('pod kube-sys');
-    expect(entries.map((entry) => entry.displayName)).toEqual(['kube-system/aws-node-abc123']);
-  });
-
-  it('matches ingresses by partial name search', () => {
-    const entries = evaluate('ingress test');
-    expect(entries).toHaveLength(1);
-    expect(entries[0].displayName).toBe('test-namespace/test-gateway');
-  });
-
-  it('returns pods when only a kind is provided', () => {
-    const entries = evaluate('pod');
-    expect(entries.map((entry) => entry.displayName).sort(compareUtf16Strings)).toEqual([
-      'default/frontend-123',
-      'kube-system/aws-node-abc123',
-    ]);
-  });
-
-  it('returns deployments for partial kind searches', () => {
-    const entries = evaluate('depl');
-    expect(entries.map((entry) => entry.displayName).sort(compareUtf16Strings)).toEqual([
-      'default/frontend',
-      'kube-system/metrics-server',
-      'test-namespace/gateway',
-    ]);
-  });
-
-  it('limits results based on provided limit', () => {
-    const entries = evaluate('ingress', 1);
-    expect(entries).toHaveLength(1);
-  });
-
-  it('keeps an object whose kind matches a search word, as the server does', () => {
-    // "serv" starts two kinds (Service, ServiceAccount), so it stays a search word.
-    const postgres = createCatalogItem({
-      ref: { kind: 'Service', resource: 'services', namespace: 'db', name: 'postgres' },
-    });
-    const entries = buildCatalogDisplayEntries(
-      [...sampleCatalog, postgres],
-      parseQueryTokens('post serv'),
-      noShortNames
-    );
-    expect(entries.map((entry) => entry.displayName)).toEqual(['db/postgres']);
-  });
-
-  it('finds a kind by the start of its name without hiding other objects that contain it', () => {
-    const statefulSet = createCatalogItem({
-      ref: { kind: 'StatefulSet', resource: 'statefulsets', namespace: 'db', name: 'postgres' },
-    });
-    const staging = createCatalogItem({
-      ref: { kind: 'Deployment', resource: 'deployments', namespace: 'staging', name: 'api' },
-    });
-    const entries = buildCatalogDisplayEntries(
-      [statefulSet, staging],
-      parseQueryTokens('sta'),
-      noShortNames
-    );
-    expect(entries.map((entry) => entry.displayName).sort(compareUtf16Strings)).toEqual([
-      'db/postgres',
-      'staging/api',
-    ]);
   });
 });

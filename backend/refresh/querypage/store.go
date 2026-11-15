@@ -572,6 +572,63 @@ func (s *Store[R]) Query(q Query) (Page[R], error) {
 	return Page[R]{Rows: rows, NextCursor: next, PrevCursor: prev, Facets: facets, Total: total, CursorInvalid: cursor.invalid, PageStartRank: -1}, nil
 }
 
+// QueryRanked serves the first page of the rows matching q's filters and search,
+// ordered by rank(lowercased SearchText) highest first, ties in UID order. Every
+// match is ranked before the limit is applied, so the page holds the best matches
+// rather than the first ones in a sort order. Ranks read the cached match values,
+// and only the best `limit` matches are kept while scanning; only the returned rows
+// are reconstructed. A ranked page is a single page: it has no cursors, and
+// q.Sort/q.Cursor are ignored.
+func (s *Store[R]) QueryRanked(q Query, rank func(searchText string) int) Page[R] {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	matches := s.matcherFor(q)
+	limit := queryLimit(q.Limit)
+	best := make([]rankedRow, 0, limit)
+	total := 0
+	for uid, rowID := range s.rows.rowByUID {
+		values := s.match[rowID]
+		if !matches.byRow(rowID, values) {
+			continue
+		}
+		total++
+		best = keepBestRanked(best, rankedRow{uid: uid, rowID: rowID, rank: rank(values.searchText)}, limit)
+	}
+	rows := make([]R, len(best))
+	for i, row := range best {
+		rows[i] = s.rows.getByRowID(row.rowID)
+	}
+	return Page[R]{Rows: rows, Facets: s.facetCounts(), Total: total, PageStartRank: 0}
+}
+
+type rankedRow struct {
+	uid   string
+	rowID uint32
+	rank  int
+}
+
+// compareRankedRows orders ranked rows best first: higher rank, then lower UID.
+func compareRankedRows(a, b rankedRow) int {
+	if a.rank != b.rank {
+		return b.rank - a.rank
+	}
+	return strings.Compare(a.uid, b.uid)
+}
+
+// keepBestRanked inserts row into best (sorted best first, at most limit long),
+// dropping whichever row falls past the limit.
+func keepBestRanked(best []rankedRow, row rankedRow, limit int) []rankedRow {
+	at, _ := slices.BinarySearchFunc(best, row, compareRankedRows)
+	if at >= limit {
+		return best
+	}
+	if len(best) == limit {
+		best = best[:limit-1]
+	}
+	return slices.Insert(best, at, row)
+}
+
 type queryCursorState struct {
 	hasPivot bool
 	backward bool
@@ -716,11 +773,16 @@ func (s *Store[R]) facetsAndTotal(q Query, matches queryMatcher) (map[string]map
 			}
 		}
 	}
+	return s.facetCounts(), total
+}
+
+// facetCounts copies the unfiltered facet counters. Callers must hold s.mu.
+func (s *Store[R]) facetCounts() map[string]map[string]int {
 	facets := make(map[string]map[string]int, len(s.facets))
 	for name, counts := range s.facets {
 		facets[name] = maps.Clone(counts)
 	}
-	return facets, total
+	return facets
 }
 
 // pinCursor mints the opaque boundary cursor for one index entry under q's

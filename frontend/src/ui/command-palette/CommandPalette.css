@@ -84,7 +84,8 @@
 .command-palette-field {
   position: relative;
   flex: 1;
-  min-width: 0;
+  /* Room to keep typing however many kind badges share the row. */
+  min-width: 8rem;
 }
 
 /* The input and the kind-word backdrop under it share text metrics, so each
@@ -123,14 +124,23 @@
   border-radius: 3px;
 }
 
+/* Shrinks before the search field does: badges shorten with an ellipsis, and
+   any that still don't fit are clipped. */
 .command-palette-kind-filters {
   display: flex;
-  flex-shrink: 0;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
   gap: 0.3rem;
   padding-right: 0.75rem;
 }
 
 .command-palette-kind-filters .kind-badge {
+  flex: 0 1 auto;
+  min-width: 2.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 0.6rem;
   padding: 0.1rem 0.4rem;
 }

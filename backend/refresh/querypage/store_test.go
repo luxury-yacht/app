@@ -2,6 +2,7 @@ package querypage
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -309,6 +310,35 @@ func TestSearchWordsRequireEveryWord(t *testing.T) {
 		if got := paginate(t, literal, q); len(got) != 0 {
 			t.Fatalf("literal %q = %+v, want no rows", search, got)
 		}
+	}
+}
+
+// A ranked query orders every match by the caller's rank of its search text before
+// taking the page, so a limited page holds the best matches, not the first ones in
+// a sort order. Ties keep UID order; the total counts every match.
+func TestQueryRankedTakesTheBestMatchesBeforeTheLimit(t *testing.T) {
+	s := NewStore(podSchema())
+	for i, nm := range []string{"api-a", "api-b", "api-c", "api", "web"} {
+		s.Upsert(podRow{uid: fmt.Sprintf("u%d", i), namespace: "default", name: nm, status: "Running"})
+	}
+	exactFirst := func(searchText string) int {
+		if searchText == "api" {
+			return 2
+		}
+		return 1
+	}
+
+	page := s.QueryRanked(Query{ClusterID: "c", Signature: "sig", Sort: "name", Direction: Ascending, Limit: 2, Search: "api"}, exactFirst)
+
+	got := make([]string, 0, len(page.Rows))
+	for _, r := range page.Rows {
+		got = append(got, r.name)
+	}
+	if want := []string{"api", "api-a"}; !slices.Equal(got, want) {
+		t.Fatalf("ranked page = %v, want %v", got, want)
+	}
+	if page.Total != 4 || page.NextCursor != "" {
+		t.Fatalf("total = %d, next = %q; want 4 matches and no cursor", page.Total, page.NextCursor)
 	}
 }
 

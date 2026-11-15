@@ -44,7 +44,9 @@ focus trap, backdrop, Escape handling, or app-background blocking.
   presses. It uses the shared focus trap, so keys stay blocked; its backdrop
   only dims the app with the shared overlay colors; a press outside closes it
   and is swallowed so it never acts on the app beneath; it sizes with the same
-  zoom correction as `--modal-viewport-height`.
+  zoom correction as `--modal-viewport-height`. It never shares the screen with
+  a dialog: it does not open over one, and an application-menu command that
+  opens a dialog closes it first.
 - Nested modals only through the shared stack.
 - Size modals with the shared `--modal-viewport-height` and
   `--modal-viewport-width`, which account for app zoom; never raw `vh`/`vw`
