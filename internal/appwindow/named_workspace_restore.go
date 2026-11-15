@@ -229,6 +229,9 @@ func (r *Registry) replaceNamedWorkspace(ctx context.Context, source string, sna
 		return r.recoverPreviousWindow(restore, source, previous, unclosed)
 	}
 	restore.committed.Store(true)
+	// Take the restart selection while the presented windows still own their
+	// clusters. The user can close them before the previous windows are released.
+	r.backend.WriteRestartSelectionOf(r.shownRestoredWindows(restore)...)
 	if err := r.closePreviousWindow(source, slices.Contains(panels, source), &previous); err != nil {
 		unclosed = append(unclosed, err)
 		if errors.Is(err, errReplacedWindowStaysOpen) {
@@ -236,10 +239,6 @@ func (r *Registry) replaceNamedWorkspace(ctx context.Context, source string, sna
 		}
 	}
 	r.workspace.CloseClearedWorkspace()
-	// From here the user can quit. The next launch then opens the saved
-	// workspace's clusters, which the switch's own claim holds, even if the
-	// releases below have not finished.
-	r.backend.WriteRestartSelectionOf(restore.seed)
 	r.endWorkspaceReplacement(guard.transactionID)
 	result := r.reportOpenedWorkspace(restore, missing, unclosed)
 	restore.presented.Store(true)
@@ -248,14 +247,20 @@ func (r *Registry) replaceNamedWorkspace(ctx context.Context, source string, sna
 	// started, so they come after its windows are on screen and usable.
 	r.releasePreviousWindows(previous)
 	r.releasePreviousWindows(restore.abandoned)
-	// The selection is now the saved workspace's: its windows' clusters and the
-	// switch's own claim on every saved cluster. Written before that claim is
-	// given up, it is what the next launch opens even if every window has been
-	// closed since. Giving the claim up is then an ordinary change.
-	r.backend.PersistRestartSelection()
 	r.backend.ReleaseWorkspaceWindow(restore.seed)
+	r.backend.PersistRestartSelection()
 	r.quitWithoutWindows()
 	return result
+}
+
+func (r *Registry) shownRestoredWindows(restore *namedWorkspaceRestore) []string {
+	var windows []string
+	for _, target := range restore.targets {
+		if restore.shown[target.name] && r.restoredWindowOpen(target) {
+			windows = append(windows, target.name)
+		}
+	}
+	return windows
 }
 
 // beginRestore marks the switch active, which stops new windows (admitWindow),

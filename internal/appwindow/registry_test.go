@@ -24,9 +24,10 @@ type recordingLifecycleBackend struct {
 	readyWindows               []string
 	restartSelectionsPersisted int
 	restartSelectionHolds      int
+	releasedBeforeRestartSave  []string
 	// restartSelectionsWritten lists the windows whose clusters were written
 	// as the next launch's, in order.
-	restartSelectionsWritten []string
+	restartSelectionsWritten [][]string
 	// released lists every window whose cluster tabs were given up, in order.
 	released []string
 	// onSeed runs when a window's saved clusters are claimed.
@@ -1396,10 +1397,13 @@ func readyAppWindow(r *Registry, name string) {
 	r.markRendererReady(name)
 }
 
-func (b *recordingLifecycleBackend) PersistRestartSelection() { b.restartSelectionsPersisted++ }
-func (b *recordingLifecycleBackend) HoldRestartSelection()    { b.restartSelectionHolds++ }
-func (b *recordingLifecycleBackend) WriteRestartSelectionOf(window string) {
-	b.restartSelectionsWritten = append(b.restartSelectionsWritten, window)
+func (b *recordingLifecycleBackend) PersistRestartSelection() {
+	b.restartSelectionsPersisted++
+	b.releasedBeforeRestartSave = slices.Clone(b.released)
+}
+func (b *recordingLifecycleBackend) HoldRestartSelection() { b.restartSelectionHolds++ }
+func (b *recordingLifecycleBackend) WriteRestartSelectionOf(windows ...string) {
+	b.restartSelectionsWritten = append(b.restartSelectionsWritten, slices.Clone(windows))
 }
 
 // A seeded window holds its clusters, as the workspace coordinator records them.

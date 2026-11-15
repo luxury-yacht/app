@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -86,4 +87,33 @@ func TestNamedWorkspaceSwitchWritesTheRestartSelectionOnce(t *testing.T) {
 	w.ReleaseWorkspaceWindow("empty")
 	app.Lifecycle.PersistRestartSelection()
 	require.Equal(t, []string{"/tmp/config:stage"}, app.Preferences.SelectedKubeconfigs())
+}
+
+func TestNamedWorkspacePartialRestorePersistsTheSurvivingPanelCluster(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
+	w := app.Workspace
+	app.ClusterRuntime.availableKubeconfigs = []KubeconfigInfo{
+		{Name: "config", Path: "/tmp/config", Context: "app"},
+		{Name: "config", Path: "/tmp/config", Context: "panel"},
+	}
+	current := []string{"/tmp/config:app", "/tmp/config:panel"}
+	w.kubeconfigsMu.Lock()
+	w.setSelectedKubeconfigsLocked(current)
+	w.kubeconfigsMu.Unlock()
+	require.NoError(t, app.Lifecycle.SeedNamedWorkspaceWindow("previous", []string{"config:app", "config:panel"}, ""))
+
+	app.Lifecycle.HoldRestartSelection()
+	require.NoError(t, app.Lifecycle.SeedNamedWorkspaceWindow("restore", []string{"config:app", "config:panel"}, ""))
+	// The saved app window failed to open, but the floating panel took ownership of its cluster.
+	require.NoError(t, w.RetainPanelCluster("panel-1", "config:panel"))
+	want := []string{"/tmp/config:panel"}
+	app.Lifecycle.WriteRestartSelectionOf("panel-1")
+	assert.Equal(t, want, app.Preferences.SelectedKubeconfigs(), "quitting while cleanup runs should open the presented selection")
+
+	w.ReleaseWorkspaceWindow("previous")
+	w.ReleaseWorkspaceWindow("restore")
+	app.Lifecycle.PersistRestartSelection()
+	require.Equal(t, want, w.GetSelectedKubeconfigs())
+	require.Equal(t, want, app.Preferences.SelectedKubeconfigs(), "quitting after cleanup should open the surviving panel's cluster")
 }

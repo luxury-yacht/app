@@ -377,21 +377,20 @@ func (a *WorkspaceCoordinator) HoldRestartSelection() {
 	}
 }
 
-// WriteRestartSelectionOf writes one window's clusters as what the next launch
-// opens, without ending a hold. A workspace switch calls it with its own claim
-// on the saved clusters once the new workspace is on screen: the user can quit
-// from then on, before the previous windows' clusters have been released.
-func (a *WorkspaceCoordinator) WriteRestartSelectionOf(window string) {
+// WriteRestartSelectionOf saves the clusters owned by the presented windows
+// while the restart selection is still held. The user can quit before the
+// previous windows' clusters have been released.
+func (a *WorkspaceCoordinator) WriteRestartSelectionOf(windows ...string) {
 	if a == nil {
 		return
 	}
+	var selections []string
 	a.workspaceSelectionsMu.RLock()
-	selection := slices.Clone(a.workspaceSelections[window])
-	a.workspaceSelectionsMu.RUnlock()
-	if selection == nil {
-		selection = []string{}
+	for _, window := range windows {
+		selections = append(selections, a.selectedKubeconfigsForWorkspaceLocked(window)...)
 	}
-	if err := a.preferences.SaveSelectedKubeconfigs(selection); err != nil && a.logger != nil {
+	a.workspaceSelectionsMu.RUnlock()
+	if err := a.preferences.SaveSelectedKubeconfigs(normalizeKubeconfigSelections(selections)); err != nil && a.logger != nil {
 		a.logger.Warn(fmt.Sprintf("Failed to save kubeconfig selection: %v", err), "KubeconfigManager")
 	}
 }

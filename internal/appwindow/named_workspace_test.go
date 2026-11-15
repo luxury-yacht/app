@@ -1171,6 +1171,8 @@ func TestSavedWindowsThatDoNotLoadAreShownAndReported(t *testing.T) {
 	require.Contains(t, backend.releasedPanelReferences, "panel-workspace:"+lost.ClusterID, "nor is its cluster kept alive for them")
 	require.Equal(t, []string{"workspace-2", "workspace-3", "workspace-4"}, shown)
 	require.Equal(t, []string{"workspace-2", "workspace-3", "workspace-4"}, r.lifecycle.Names())
+	require.Equal(t, [][]string{shown}, backend.restartSelectionsWritten, "only presented windows supply the restart selection")
+	require.Equal(t, backend.released, backend.releasedBeforeRestartSave, "cleanup releases the failed window and temporary claim before saving")
 	require.Equal(t, []panelwindow.NamedWorkspaceWarningsEvent{{
 		WindowName: "workspace-2", MissingClusters: []string{}, UnrestoredWindows: 3,
 	}}, warnings)
@@ -1516,7 +1518,8 @@ func TestPresentedWorkspaceAcceptsActionsWhilePreviousClustersRelease(t *testing
 // nothing on screen.
 func TestClosingEverySavedWindowDuringTheSwitchQuitsTheApp(t *testing.T) {
 	var warnings []panelwindow.NamedWorkspaceWarningsEvent
-	r, source := switchRegistry(t, &recordingLifecycleBackend{windowClusters: map[string][]string{}, allowQuit: true}, &warnings)
+	backend := &recordingLifecycleBackend{windowClusters: map[string][]string{}, allowQuit: true}
+	r, source := switchRegistry(t, backend, &warnings)
 	quits := 0
 	r.requestApplicationQuit = func() {
 		require.Nil(t, r.pendingQuit, "the switch must not be holding quit back any more")
@@ -1525,6 +1528,7 @@ func TestClosingEverySavedWindowDuringTheSwitchQuitsTheApp(t *testing.T) {
 	closeWindow := r.closeWindow
 	r.closeWindow = func(window string) bool {
 		if window == source {
+			require.Equal(t, [][]string{{"workspace-2"}}, backend.restartSelectionsWritten)
 			// The previous window is on its way out; the user closes the new one.
 			require.NoError(t, r.AcknowledgeWorkspaceWindowClose("workspace-2"))
 		}

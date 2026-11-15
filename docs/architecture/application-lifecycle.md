@@ -283,19 +283,18 @@ is rolled back.
    transition is left part-way, and a fullscreen request made during a
    transition is dropped. If no usable saved window was shown, the registry
    tries one plain app window and gives its renderer a bounded time to load. Once
-   a replacement is shown, the registry closes the source window and writes
-   the saved workspace's clusters as what the next launch opens
-   (`WriteRestartSelectionOf`), because the user can quit from the next step
-   on.
+   a replacement is shown, the registry writes the clusters owned by the
+   presented app and panel windows (`WriteRestartSelectionOf`) and closes the
+   source window. The user can quit while cleanup runs.
 10. The preflight ends. Save Workspace, cluster close, and transfers can use
     the presented layout while cleanup runs. Opening another named workspace
     waits until restart-selection cleanup finishes. Backend releases and new
     operations that change cluster ownership can queue behind connections the
-    saved workspace started. `PersistRestartSelection` then ends the hold and
-    writes the settled selection: the saved workspace's clusters, an empty selection
-    included when its windows show none. The switch's own claim on the saved
-    clusters is given up after that, as an ordinary change, so with every
-    window closed since, the next launch still opens the saved workspace.
+    saved workspace started. Cleanup releases the switch's temporary cluster
+    claim before `PersistRestartSelection` ends the hold and writes the
+    settled selection. An open window with no clusters can produce an empty
+    selection. If all windows closed during cleanup, the restart selection
+    written at presentation is kept.
 
 Anything that fails after step 5 becomes a warning: a saved window that could
 not be created or did not load its view, a previous window that did not close,

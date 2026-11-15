@@ -100,7 +100,7 @@ type refreshSubsystemTeardowner interface {
 type lifecycleWorkspace interface {
 	PersistRestartSelection()
 	HoldRestartSelection()
-	WriteRestartSelectionOf(string)
+	WriteRestartSelectionOf(...string)
 	CloseClusterView(string, string) error
 	panelwindow.ClusterViewTransferLifecycle
 	ReleaseWorkspaceWindow(string)
@@ -452,10 +452,10 @@ func (a *ApplicationLifecycle) PersistRestartSelection() {
 	a.workspace.PersistRestartSelection()
 }
 
-// WriteRestartSelectionOf writes one window's clusters as what the next launch
+// WriteRestartSelectionOf writes the presented windows' clusters as what the next launch
 // opens, while a workspace switch still holds the restart selection.
-func (a *ApplicationLifecycle) WriteRestartSelectionOf(window string) {
-	a.workspace.WriteRestartSelectionOf(window)
+func (a *ApplicationLifecycle) WriteRestartSelectionOf(windows ...string) {
+	a.workspace.WriteRestartSelectionOf(windows...)
 }
 
 // HoldRestartSelection keeps what the next launch opens as it is while a

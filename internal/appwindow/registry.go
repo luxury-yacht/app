@@ -26,7 +26,7 @@ type lifecycleBackend interface {
 	HoldRestartSelection()
 	NamedWorkspaceAvailableClusters() ([]string, error)
 	SeedNamedWorkspaceWindow(string, []string, string) error
-	WriteRestartSelectionOf(string)
+	WriteRestartSelectionOf(...string)
 	ResolveNamedWorkspaceGeometry(panelwindow.NamedWorkspaceGeometry) (panelwindow.WindowBounds, bool)
 	panelwindow.ClusterViewTransferLifecycle
 	PanelWorkspaceDirectory() *panelwindow.WorkspaceDirectory
