@@ -202,21 +202,12 @@ const getKubeconfigDescription = (config: KubeconfigEntry) => {
 
 const kubeconfigSelection = (config: KubeconfigEntry) => `${config.path}:${config.context}`;
 
-// Favorite clusters first, then by context (the primary identity users read),
-// then filename to keep duplicate context names deterministic.
-const sortKubeconfigs = (
-  kubeconfigs: KubeconfigEntry[],
-  favoriteClusters: readonly string[]
-): KubeconfigEntry[] => {
-  const isFavorite = (config: KubeconfigEntry) =>
-    favoriteClusters.includes(kubeconfigSelection(config));
-  return [...kubeconfigs].sort(
-    (a, b) =>
-      Number(isFavorite(b)) - Number(isFavorite(a)) ||
-      a.context.localeCompare(b.context) ||
-      a.name.localeCompare(b.name)
+// By context (the primary identity users read), then filename to keep duplicate
+// context names deterministic. Favorites are split into their own group.
+const sortKubeconfigs = (kubeconfigs: KubeconfigEntry[]): KubeconfigEntry[] =>
+  [...kubeconfigs].sort(
+    (a, b) => a.context.localeCompare(b.context) || a.name.localeCompare(b.name)
   );
-};
 
 const buildKubeconfigCommand = (
   config: KubeconfigEntry,
@@ -227,14 +218,13 @@ const buildKubeconfigCommand = (
 ): Command => {
   const configValue = kubeconfigSelection(config);
   const isActive = selectedKubeconfigs.includes(configValue);
+  const isFavorite = favoriteClusters.includes(configValue);
   return {
     id: `kubeconfig-${configValue}`,
     label: `${config.name}:${config.context}`,
-    renderLabel: (
-      <KubeconfigContextLabel config={config} favorite={favoriteClusters.includes(configValue)} />
-    ),
+    renderLabel: <KubeconfigContextLabel config={config} favorite={isFavorite} />,
     description: getKubeconfigDescription(config),
-    category: 'Clusters',
+    category: isFavorite ? 'Favorite Clusters' : 'Clusters',
     icon: !config.invalid && isActive ? '✓' : undefined,
     action: () => {
       if (config.invalid) {
@@ -717,7 +707,7 @@ export function useCommandPaletteCommands() {
       return [];
     }
 
-    return sortKubeconfigs(kubeconfigs, favoriteClusters).map((config) =>
+    return sortKubeconfigs(kubeconfigs).map((config) =>
       buildKubeconfigCommand(
         config,
         selectedKubeconfigs,

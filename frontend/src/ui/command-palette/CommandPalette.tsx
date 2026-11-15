@@ -50,6 +50,7 @@ const CATEGORY_ORDER = [
   'Favorites',
   'Workspaces',
   'Namespaces',
+  'Favorite Clusters',
   'Clusters',
   'General', // Fallback for any uncategorized commands
 ];
@@ -147,15 +148,17 @@ const PICKER_MODE_BY_COMMAND = new Map<string, PaletteSelectMode>([
   ['open-workspace', 'workspaces'],
 ]);
 
-// A picker lists only its own category's choices.
-const PICKER_CATEGORY: Record<Exclude<PaletteSelectMode, 'none'>, string> = {
-  namespaces: 'Namespaces',
-  kubeconfigs: 'Clusters',
-  workspaces: 'Workspaces',
+// A picker lists only its own categories' choices.
+const PICKER_CATEGORIES: Record<Exclude<PaletteSelectMode, 'none'>, readonly string[]> = {
+  namespaces: ['Namespaces'],
+  kubeconfigs: ['Favorite Clusters', 'Clusters'],
+  workspaces: ['Workspaces'],
 };
 
 const commandsForMode = (mode: PaletteSelectMode, commands: Command[]): Command[] =>
-  mode === 'none' ? commands : commands.filter((cmd) => cmd.category === PICKER_CATEGORY[mode]);
+  mode === 'none'
+    ? commands
+    : commands.filter((cmd) => PICKER_CATEGORIES[mode].includes(cmd.category ?? ''));
 
 interface CommandGroup {
   category: string;

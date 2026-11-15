@@ -186,6 +186,12 @@ const run = async (query: string, label: string) => {
 
 const contextLabels = () => options().map(contextOf);
 
+/** The kubeconfig picker's contexts under the group headed `category`. */
+const groupContexts = (category: string) =>
+  [...document.querySelectorAll<HTMLFieldSetElement>('.command-palette .command-palette-group')]
+    .filter((group) => group.querySelector('legend')?.textContent === category)
+    .flatMap((group) => [...group.querySelectorAll<HTMLElement>('[role="option"]')].map(contextOf));
+
 beforeEach(() => {
   // Typing also searches the selected cluster's catalog; these searches find nothing.
   app.snapshots.answer(({ domain, scope }) =>
@@ -336,7 +342,7 @@ describe('the kubeconfig picker', () => {
     expect(contextLabels()).toEqual(['alpha', 'bravo', 'charlie']);
   });
 
-  it('lists favorite clusters first, each group by context name', async () => {
+  it('lists favorite clusters in their own group above the rest, each group by context name', async () => {
     dev = openCluster('zfile', 'charlie');
     const alpha = openCluster('afile', 'alpha', {}, { open: false });
     openCluster('mfile', 'bravo', {}, { open: false });
@@ -346,6 +352,8 @@ describe('the kubeconfig picker', () => {
 
     await menu('open-cluster');
 
+    expect(groupContexts('Favorite Clusters')).toEqual(['alpha', 'delta']);
+    expect(groupContexts('Clusters')).toEqual(['bravo', 'charlie']);
     expect(contextLabels()).toEqual(['alpha', 'delta', 'bravo', 'charlie']);
   });
 
