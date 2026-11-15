@@ -286,6 +286,32 @@ func TestSearchSubstring(t *testing.T) {
 	}
 }
 
+// A schema with SearchWords (the catalog) requires every word of a search, in any
+// order; without it (every typed table) a search stays one substring, so a search
+// with a space there still matches only that literal text.
+func TestSearchWordsRequireEveryWord(t *testing.T) {
+	wordsSchema := podSchema()
+	wordsSchema.SearchWords = true
+	words := NewStore(wordsSchema)
+	literal := NewStore(podSchema())
+	for i, nm := range []string{"frontend-api", "frontend-web", "backend-api"} {
+		row := podRow{uid: fmt.Sprintf("u%d", i), namespace: "default", name: nm, status: "Running"}
+		words.Upsert(row)
+		literal.Upsert(row)
+	}
+	// "API front" puts the short word first: the longer word narrows by trigram,
+	// the other is still required.
+	for _, search := range []string{"frontend api", "API front"} {
+		q := Query{ClusterID: "c", Signature: "sig", Sort: "name", Direction: Ascending, Limit: 10, Search: search}
+		if got := paginate(t, words, q); len(got) != 1 || got[0].name != "frontend-api" {
+			t.Fatalf("SearchWords %q = %+v, want only frontend-api", search, got)
+		}
+		if got := paginate(t, literal, q); len(got) != 0 {
+			t.Fatalf("literal %q = %+v, want no rows", search, got)
+		}
+	}
+}
+
 func TestFacetsAndTotal(t *testing.T) {
 	s := NewStore(podSchema())
 	for i := 0; i < 30; i++ {

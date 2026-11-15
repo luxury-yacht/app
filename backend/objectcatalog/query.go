@@ -11,6 +11,7 @@
 package objectcatalog
 
 import (
+	"slices"
 	"sort"
 	"strings"
 
@@ -218,22 +219,21 @@ func newNamespaceMatcher(filters []string) namespaceMatcher {
 	}
 }
 
+// newSearchMatcher matches an object when every word of term appears in its name,
+// namespace or kind (case-insensitive). An empty term matches every object.
 func newSearchMatcher(term string) searchMatcher {
-	value := strings.ToLower(strings.TrimSpace(term))
-	if value == "" {
+	words := strings.Fields(strings.ToLower(term))
+	if len(words) == 0 {
 		return func(string, string, string) bool { return true }
 	}
 	return func(name, namespace, kind string) bool {
-		if strings.Contains(strings.ToLower(name), value) {
-			return true
+		fields := []string{strings.ToLower(name), strings.ToLower(namespace), strings.ToLower(kind)}
+		for _, word := range words {
+			if !slices.ContainsFunc(fields, func(field string) bool { return strings.Contains(field, word) }) {
+				return false
+			}
 		}
-		if namespace != "" && strings.Contains(strings.ToLower(namespace), value) {
-			return true
-		}
-		if strings.Contains(strings.ToLower(kind), value) {
-			return true
-		}
-		return false
+		return true
 	}
 }
 

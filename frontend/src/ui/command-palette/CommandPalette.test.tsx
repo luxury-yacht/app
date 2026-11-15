@@ -531,6 +531,27 @@ describe('CommandPalette catalog search', () => {
     ]);
   });
 
+  it('sends every search word to the catalog, so an object matching all of them is found', async () => {
+    const found = catalogPod(dev, 'default', 'frontend');
+    // Like the catalog, return only an object that matches every word sent.
+    app.snapshots.answer(({ domain, scope }) => {
+      if (domain !== 'catalog' || !isPaletteSearch(dev, scope)) {
+        return undefined;
+      }
+      const search = new URLSearchParams(scope.split('|')[1]).get('search');
+      return catalogPayload(dev, search === 'frontend default' ? [found] : []);
+    });
+    await showPalette([]);
+    await openFromViewMenu();
+    vi.useFakeTimers();
+
+    await type('frontend default');
+    await finishSearchDebounce();
+    await app.settle();
+
+    expect(optionLabels()).toEqual([expect.stringContaining('default/frontend')]);
+  });
+
   it.each(['resolves', 'fails'] as const)(
     'waits for the current cluster’s search when a search the user moved on from %s',
     async (settlement) => {
@@ -653,5 +674,18 @@ describe('buildCatalogDisplayEntries', () => {
   it('limits results based on provided limit', () => {
     const entries = evaluate('ingress', 1);
     expect(entries).toHaveLength(1);
+  });
+
+  it('keeps an object whose kind matches a search word, as the server does', () => {
+    // "serv" starts two kinds (Service, ServiceAccount), so it stays a search word.
+    const postgres = createCatalogItem({
+      ref: { kind: 'Service', resource: 'services', namespace: 'db', name: 'postgres' },
+    });
+    const entries = buildCatalogDisplayEntries(
+      [...sampleCatalog, postgres],
+      parseQueryTokens('post serv'),
+      noShortNames
+    );
+    expect(entries.map((entry) => entry.displayName)).toEqual(['db/postgres']);
   });
 });

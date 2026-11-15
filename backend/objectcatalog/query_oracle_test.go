@@ -292,8 +292,9 @@ func TestCatalogQueryMatchesBruteForceOracle(t *testing.T) {
 	}
 
 	// Search dimension: empty (match-all), a >=3-char stem that hits many rows, a short
-	// (<3-char) substring, a namespace substring, a kind substring, and a no-match term.
-	searches := []string{"", "alpha", "sv", "kube", "config", "zzz-nomatch"}
+	// (<3-char) substring, a namespace substring, a kind substring, a no-match term, and
+	// two words that must both match (namespace word + name stem).
+	searches := []string{"", "alpha", "sv", "kube", "config", "zzz-nomatch", "kube alpha"}
 
 	pageSizes := []int{3, 7}
 

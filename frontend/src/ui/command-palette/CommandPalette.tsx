@@ -238,10 +238,13 @@ type CatalogDisplayEntry = {
 
 type ScoredCatalogEntry = CatalogDisplayEntry & { score: number };
 
+// The fields a search word may match: the server's (name, namespace, kind), plus
+// `namespace/name` so a typed path matches.
 interface CatalogSearchFields {
   namespace: string;
   name: string;
   combined: string;
+  kind: string;
 }
 
 const scoreKindTokens = (kindTokens: string[], kindCanonical: string): number | null => {
@@ -252,23 +255,21 @@ const scoreKindTokens = (kindTokens: string[], kindCanonical: string): number | 
 };
 
 const scoreSearchToken = (token: string, fields: CatalogSearchFields): number | null => {
-  const namespaceMatch = fields.namespace.includes(token);
-  const nameMatch = fields.name.includes(token);
-  const combinedMatch = fields.combined.includes(token);
-  if (!namespaceMatch && !nameMatch && !combinedMatch) {
-    return null;
-  }
   let score = 0;
-  if (namespaceMatch) {
+  if (fields.namespace.includes(token)) {
     score += fields.namespace === token ? 30 : 20;
   }
-  if (nameMatch) {
+  if (fields.name.includes(token)) {
     score += fields.name === token ? 60 : 40;
   }
-  if (!namespaceMatch && !nameMatch && combinedMatch) {
-    score += 10;
+  if (score > 0) {
+    return score;
   }
-  return score;
+  // Weaker matches: across the namespace/name boundary, then the kind alone.
+  if (fields.combined.includes(token)) {
+    return 10;
+  }
+  return fields.kind.includes(token) ? 5 : null;
 };
 
 const scoreOtherTokens = (tokens: string[], fields: CatalogSearchFields): number | null => {
@@ -296,6 +297,7 @@ const scoreCatalogEntry = (
     namespace: item.ref.namespace?.toLowerCase() ?? '',
     name: item.ref.name.toLowerCase(),
     combined: `${item.ref.namespace ?? ''}/${item.ref.name}`.toLowerCase(),
+    kind: item.ref.kind.toLowerCase(),
   });
   if (otherScore === null) {
     return null;

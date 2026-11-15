@@ -126,6 +126,10 @@ func newCatalogQueryStoreSchema() querypage.Schema[Summary] {
 		SearchText: func(s Summary) string {
 			return strings.Join([]string{s.Ref.Name, s.Ref.Namespace, s.Ref.Kind}, catalogEngineFieldSep)
 		},
+		// Like newSearchMatcher, every word of a search must match. None of these
+		// fields contains whitespace, so a search with several words names several
+		// fields (e.g. a name and its namespace).
+		SearchWords: true,
 	}
 }
 

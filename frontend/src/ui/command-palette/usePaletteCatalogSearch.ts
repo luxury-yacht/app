@@ -31,9 +31,10 @@ export function usePaletteCatalogSearch({ enabled, clusterId, query, tokens }: S
     for (const kind of tokens.kindTokens) {
       params.append('kind', kind);
     }
-    const primarySearchTerm = tokens.otherTokens[0];
-    if (primarySearchTerm) {
-      params.set('search', primarySearchTerm);
+    // The catalog requires every word to match, so the server's page and total
+    // cover the whole query, not just its first word.
+    if (tokens.otherTokens.length > 0) {
+      params.set('search', tokens.otherTokens.join(' '));
     } else if (tokens.kindTokens.length === 0) {
       params.set('search', query.trim());
     }

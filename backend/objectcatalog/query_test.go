@@ -1074,3 +1074,41 @@ func TestQuerySearchFilter(t *testing.T) {
 		t.Fatalf("unexpected namespaces for search: %+v", result.Namespaces)
 	}
 }
+
+func TestQuerySearchMatchesEveryWord(t *testing.T) {
+	svc := NewService(Dependencies{Common: common.Dependencies{}}, nil)
+	podDesc := Descriptor{
+		Namespaced: true,
+		Kind:       "Pod",
+		Version:    "v1",
+		Resource:   "pods",
+		Scope:      ScopeNamespace,
+	}
+
+	svc.mu.Lock()
+	svc.items = map[string]Summary{}
+	for _, ref := range [][2]string{{"default", "frontend"}, {"prod", "frontend"}, {"default", "backend"}} {
+		namespace, name := ref[0], ref[1]
+		svc.items[catalogKey(podDesc, namespace, name)] = Summary{
+			Ref:   resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: namespace, Name: name},
+			Scope: ScopeNamespace,
+		}
+	}
+	svc.resources = map[string]Descriptor{
+		podDesc.GVR().String(): podDesc,
+	}
+	svc.mu.Unlock()
+
+	// A search like the palette's "frontend default" names an object and its
+	// namespace: only the object matching both words is a result, in either order,
+	// and the total counts that same match.
+	for _, search := range []string{"frontend default", "default  frontend"} {
+		result := svc.Query(QueryOptions{Search: search})
+		if result.TotalItems != 1 || len(result.Items) != 1 {
+			t.Fatalf("search %q: expected 1 match, got total %d, items %+v", search, result.TotalItems, result.Items)
+		}
+		if ref := result.Items[0].Ref; ref.Namespace != "default" || ref.Name != "frontend" {
+			t.Fatalf("search %q: expected default/frontend, got %s/%s", search, ref.Namespace, ref.Name)
+		}
+	}
+}

@@ -32,6 +32,10 @@ type Schema[R any] struct {
 	// search matches only when the query sets IncludeMetadata. It is not
 	// trigram-indexed, so it costs nothing for ordinary searches.
 	MetadataText func(R) string
+	// SearchWords splits Query.Search on whitespace: a row must match every word,
+	// each anywhere in its SearchText (or MetadataText, when the query includes
+	// metadata). Unset, Search is one substring.
+	SearchWords bool
 }
 
 func uniqueFacetValues(values []string) []string {
@@ -54,7 +58,7 @@ type Query struct {
 	Sort      string // a key in Schema.SortKeys
 	Direction Direction
 	Limit     int
-	Search    string              // case-insensitive substring filter over SearchText
+	Search    string              // case-insensitive substring filter over SearchText (all words with Schema.SearchWords)
 	Filters   map[string][]string // facet filters: facet name -> allowed values (set membership; OR within, AND across facets)
 	MatchNone bool                // explicit empty multiselect: no row can match
 	Cursor    string              // opaque continueToken from a previous Page
@@ -398,6 +402,43 @@ func (s *Store[R]) searchCandidates(searchLower string) (set map[uint32]struct{}
 	return s.tri.searchSet(searchLower), true
 }
 
+// querySearch is a query's lowercased search, prepared once: its words (just the
+// whole search unless the schema sets SearchWords), longest first, and the trigram
+// candidates of the first. Every matching row contains that word, so its candidates
+// narrow the scan; the other words are checked by substring.
+type querySearch struct {
+	words      []string
+	candidates map[uint32]struct{}
+	narrow     bool
+}
+
+func (s *Store[R]) prepareSearch(search string) querySearch {
+	lower := strings.ToLower(search)
+	words := []string{lower}
+	if s.schema.SearchWords {
+		words = strings.Fields(lower)
+		slices.SortStableFunc(words, func(a, b string) int { return len(b) - len(a) })
+	}
+	if len(words) == 0 || words[0] == "" {
+		return querySearch{}
+	}
+	candidates, narrow := s.searchCandidates(words[0])
+	return querySearch{words: words, candidates: candidates, narrow: narrow}
+}
+
+// searchAllMatch reports a row that matches every search word, in its SearchText
+// or, when the query includes metadata, its MetadataText. No words match every row.
+func (s *Store[R]) searchAllMatch(rowID uint32, values matchValues, search querySearch, includeMetadata bool) bool {
+	for i, word := range search.words {
+		narrow := search.narrow && i == 0
+		if !s.searchMatches(rowID, values.searchText, word, search.candidates, narrow) &&
+			!s.metadataMatches(values.metadataText, word, includeMetadata) {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *Store[R]) normalizeFacetFilters(filters map[string][]string) map[string][]string {
 	if len(filters) == 0 || len(s.schema.FacetNormalizers) == 0 {
 		return filters
@@ -640,17 +681,15 @@ type queryMatcher struct {
 	byUID func(string) bool
 }
 
-// matcherFor prepares filters, lowercased search and trigram candidates once.
-// Index walks and column-only counts share this predicate without reconstructing
-// rows. Callers hold s.mu while creating and using the matcher.
+// matcherFor prepares filters, the lowercased search words and trigram candidates
+// once. Index walks and column-only counts share this predicate without
+// reconstructing rows. Callers hold s.mu while creating and using the matcher.
 func (s *Store[R]) matcherFor(q Query) queryMatcher {
 	filters := s.normalizeFacetFilters(q.Filters)
-	searchLower := strings.ToLower(q.Search)
-	candidates, narrow := s.searchCandidates(searchLower)
+	search := s.prepareSearch(q.Search)
 	byRow := func(rowID uint32, values matchValues) bool {
 		return !q.MatchNone && s.filtersMatch(values, filters) &&
-			(s.searchMatches(rowID, values.searchText, searchLower, candidates, narrow) ||
-				s.metadataMatches(values.metadataText, searchLower, q.IncludeMetadata))
+			s.searchAllMatch(rowID, values, search, q.IncludeMetadata)
 	}
 	return queryMatcher{
 		byRow: byRow,
