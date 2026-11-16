@@ -22,7 +22,7 @@ Luxury Yacht has all the standard features of a Kubernetes management app. If yo
 
 Here are some of the features of Luxury Yacht that you might not find in other apps.
 
-- **Maybe the best log viewer you've ever used.** Highlight search text. Invert your search to only show lines without the text. Use regular expressions. Show system timestamps for logs without their own timestamps, or logs that have indecipherable formats like unix epoch time. Customize the timestamp format. Show times in UTC or your local time zone. Toggle support for ASCII color codes. Make JSON logs more readable by showing them in tabular or pretty-print format.
+- **Maybe the best log viewer you've ever used.** Highlight search text. Invert your search to only show lines without the text. Use regular expressions. Show system timestamps for logs without their own timestamps, or logs that have indecipherable formats like unix epoch time. Customize the timestamp format. Show times in UTC or your local time zone. Toggle support for ASCII color codes. Make JSON, logfmt, and klog formats more readable by displaying them in tabular or pretty-print format.
 
 - **Object Maps.** Visualize the relationships between objects in your clusters. View a node-level map, an namespace-level map, or drill down to specific objects.
 
@@ -30,15 +30,21 @@ Here are some of the features of Luxury Yacht that you might not find in other a
 
 - **Attention View.** Quickly identify problems in your cluster. Selectively ignore issues that you don't want to be notified about, per-object, per-cluster, or globally.
 
-- **Split-Pane Workloads View.** See workloads and their associated Pods in a single view. Highlight a specific workload to filter the view to show only that workload's pods.
+- **Identities View.** Shows users and groups derived from RBAC objects in the cluster.
+
+- **View Pods by Owners.** Expand workloads and nodes to see their associated pods in an embedded table.
 
 - **Flexible Layouts.** Organize your info however you like. Open multiple windows. Dock panels to the right, bottom, or float them as a resizable window. Open multiple object tabs in each panel. Drag tabs between panels, or drag out to create a new window.
+
+- **Workspaces.** Save your app windows and layouts as a workspace to easily configure the app for the views you use most often.
 
 - **Object Diff.** Can't understand why a deployment is working correctly in one cluster, but not the other? Open both deployments in the Diff Objects panel to see exactly what the differences are. Compare any kind of object to any other object, in any cluster.
 
 - **Command Palette.** Instant access to nearly everything in the app. Open clusters, toggle settings, select a namespace, go straight to a specific object's details, change the app's appearance, and much more.
 
-- **Favorites.** Save a view and its filter settings for quick access. Favorites can be cluster-specific, or create a generic favorite that works in any cluster.
+- **Favorites.** Save a view and its filter settings for quick access. Favorites can be cluster-specific, or create a generic favorite that works in any cluster. Save favorite clusters so they show up at the top of the cluster list.
+
+- **Batch Operations.** Perform delete, restart, scale, cordon, drain, and more actions on multiple objects at once.
 
 - **Themes per cluster.** The flexible theme system allows you to assign colors to specific clusters or patterns in cluster names. Assign your dev clusters a blue theme, and your prod clusters a red theme, so you can instantly know when you're working in production. And, of course, you can have light and dark versions of your themes.
 
@@ -49,6 +55,17 @@ Here are some of the features of Luxury Yacht that you might not find in other a
 - **Simple port forwarding.** Right-click on a workload, pod, or service and click Port Forward. Select a port and click Start. That's it. Run multiple port forwards simultaneously, and easily track them in a centralized status console.
 
 - **Shell support with debug containers.** Of course you expect to be able to get a shell in a container, but what if the container doesn't support shell access? Luxury Yacht gives you a simple way to start an ephemeral debug container in that pod, attached to the container.
+
+- **Debug shell for nodes.** Run a privileged debug pod on a node for easy access to the node's filesystem.
+
+- **First-class support for common CRDs.** Get rich data for commonly-used custom resources. These are currently supported, with more to come.
+  - Argo CD
+  - Cert Manager
+  - External Secrets Operator
+  - Karpenter
+  - Prometheus Operator
+
+- **Consistent features and UX across platforms.** Thanks to the Wails framework, Luxury Yacht looks and works the same, whether you run on macOS, Linux, or Windows.
 
 ## Installation
 
@@ -76,9 +93,9 @@ If you prefer to build the app from source, see the Development section.
 
 Luxury Yacht uses GTK4 and WebKitGTK 6.0. Installation will vary depending on your distro.
 
-| Distro      | Installation                                           |
-| ----------- | ------------------------------------------------------ |
-| Ubuntu 24.04 | `sudo apt install libgtk-4-1 libwebkitgtk-6.0-4`      |
-| Debian 13    | `sudo apt install libgtk-4-1 libwebkitgtk-6.0-4`      |
+| Distro       | Installation                                     |
+| ------------ | ------------------------------------------------ |
+| Ubuntu 24.04 | `sudo apt install libgtk-4-1 libwebkitgtk-6.0-4` |
+| Debian 13    | `sudo apt install libgtk-4-1 libwebkitgtk-6.0-4` |
 
 If your distro isn't on this (admittedly short) list, you'll have to search your package manager to determine the exact package name. If you have info you'd like to add to this list, email [admin@luxury-yacht.app](mailto:admin@luxury-yacht.app) or open an issue.
