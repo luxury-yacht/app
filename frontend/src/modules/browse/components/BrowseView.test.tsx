@@ -443,9 +443,9 @@ describe('BrowseView', () => {
   // API Resources lists the kinds CustomResourceDefinitions define. A
   // definition whose kind the cluster does not serve (it never became
   // Established) has no row there, but the definition still exists and Browse
-  // lists it. "Show in list" on it must end in Browse, narrowed to that
-  // definition, instead of reporting that it may have been deleted. When the
-  // definition really is gone, the narrowed Browse is empty.
+  // lists it. The cluster says which case it is, by the definition's exact
+  // name: "show in list" on one that exists ends in Browse, with that
+  // definition's row focused; one that does not exist is reported as not found.
   describe('a definition API Resources has no row for', () => {
     const definition = (name: string) =>
       catalogItem({
@@ -455,14 +455,11 @@ describe('BrowseView', () => {
         resource: 'customresourcedefinitions',
       });
 
-    const showInList = async (name: string) => {
-      // The cluster serves no kind for it: API Resources has no row, and a
-      // read that asks for the definition's row is told so.
+    /** `reason` is the cluster's answer to the read that asks for the definition's row. */
+    const showInList = async (name: string, reason: 'unlisted' | 'not-found') => {
       app.serveTable(dev, 'cluster-api-resources', ({ scope }) => ({
         rows: [],
-        ...(scope.includes('anchor.name=')
-          ? { anchor: { found: false, rank: -1, reason: 'not-found' as const } }
-          : {}),
+        ...(scope.includes('anchor.name=') ? { anchor: { found: false, rank: -1, reason } } : {}),
       }));
       let navigateToView: ReturnType<typeof useNavigateToView>['navigateToView'] | undefined;
       const NavigateProbe = () => {
@@ -484,33 +481,56 @@ describe('BrowseView', () => {
           name,
         });
       });
-      // API Resources answers that it has no such row, then Browse loads.
+      // API Resources answers that it has no such row, then Browse may load.
       await app.settle();
       await app.settle();
     };
 
-    it('is shown in Browse, narrowed to it', async () => {
-      serveCatalog([node(), definition('gadgets.example.com'), definition('widgets.example.com')]);
+    // Browse's search matches names that contain the text, so a definition
+    // with a longer name is listed too; the one asked for is the one focused.
+    it('is shown in Browse with its own row focused when it exists', async () => {
+      serveCatalog([
+        node(),
+        definition('widgets.example.com'),
+        definition('widgets.example.com.au'),
+      ]);
 
-      await showInList('widgets.example.com');
+      await showInList('widgets.example.com', 'unlisted');
 
       expect(view.owners().viewState?.activeClusterTab).toBe('browse');
       expect(lastPageQuery().getAll('kind')).toEqual(['CustomResourceDefinition']);
       expect(lastPageQuery().get('search')).toBe('widgets.example.com');
-      expect(rowNames()).toEqual(['widgets.example.com']);
       expect(rowOf('widgets.example.com').getAttribute('data-row-focused')).toBe('true');
+      expect(rowOf('widgets.example.com.au').getAttribute('data-row-focused')).toBeNull();
     });
 
-    it('leaves Browse empty when the definition no longer exists', async () => {
+    // A definition that is gone must not be answered with a different
+    // definition whose name starts the same: the user stays in API Resources
+    // and is told it was not found.
+    it('is reported as not found, without going to Browse, when it does not exist', async () => {
+      serveCatalog([node(), definition('widgets.example.com.au')]);
+
+      await showInList('widgets.example.com', 'not-found');
+
+      expect(view.owners().viewState?.activeClusterTab).toBe('api-resources');
+      const reports = app.errors
+        .take((record) => record.context?.source === 'resource-grid-anchor')
+        .map((record) => (record.error as Error).message);
+      expect(reports).toHaveLength(1);
+      expect(reports[0]).toContain('CustomResourceDefinition widgets.example.com');
+    });
+
+    // The request is handed to Browse once. If Browse has no row for the
+    // definition either (it was deleted in between), opening API Resources
+    // again must show API Resources, not send the user back to Browse.
+    it('leaves API Resources reachable when Browse has no row for it either', async () => {
       serveCatalog([node(), definition('gadgets.example.com')]);
 
-      await showInList('widgets.example.com');
+      await showInList('widgets.example.com', 'unlisted');
 
       expect(view.owners().viewState?.activeClusterTab).toBe('browse');
       expect(rowNames()).toEqual([]);
 
-      // The request was handed to Browse once. Opening API Resources again
-      // must show API Resources, not send the user back to Browse.
       await view.goTo({ clusterView: 'api-resources' });
       await app.settle();
       expect(view.owners().viewState?.activeClusterTab).toBe('api-resources');

@@ -81,7 +81,7 @@ export type NamespaceQuotaPressure = '' | 'warning' | 'critical';
 
 export type AttentionSeverity = 'info' | 'warning' | 'error';
 
-export type ResourceQueryAnchorReason = 'filtered' | 'not-found';
+export type ResourceQueryAnchorReason = 'filtered' | 'not-found' | 'unlisted';
 
 export type ResourceSource = 'kubernetes' | 'synthetic';
 

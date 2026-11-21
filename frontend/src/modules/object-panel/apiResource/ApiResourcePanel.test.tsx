@@ -177,6 +177,13 @@ const tab = (label: string) =>
     `expected the ${label} tab`
   );
 
+/** The panel's notice that the details it shows may be out of date. */
+const staleNotice = () =>
+  requireValue(
+    document.body.querySelector<HTMLElement>('.object-panel-dockable'),
+    'expected the kind panel'
+  ).querySelector<HTMLElement>('output');
+
 // A field is addressed by its name under each ancestor, one segment per level.
 const field = (...segments: string[]) =>
   requireValue(
@@ -505,12 +512,45 @@ describe('ApiResourcePanel', () => {
     await click(tab('Explain'));
     await click(field('spec'));
 
+    expect(staleNotice()).toBeNull();
+
     stopServingKinds();
-    app.serveTable(dev, 'cluster-api-resources', { rows: [], unreadGroups: ['apps'] });
+    stopServingKinds = app.serveTable(dev, 'cluster-api-resources', {
+      rows: [],
+      unreadGroups: ['apps'],
+    });
     await ringKindsChanged('v2');
 
     expect(field('spec').getAttribute('aria-expanded')).toBe('true');
+    // What is shown was read before the group became unreadable: say so.
+    expect(staleNotice()).not.toBeNull();
+
+    stopServingKinds();
+    app.serveTable(dev, 'cluster-api-resources', { rows: [deployments()] });
+    await ringKindsChanged('v3');
+    expect(staleNotice()).toBeNull();
   });
+
+  // Discovery keeps the last kinds of a group it can no longer read, so the
+  // cluster can still answer with the kind's row. Those details may be out of
+  // date, on either tab, and the panel says so while showing them.
+  it.each([
+    ['could not read the kind’s group', { unreadGroups: ['apps'] }],
+    ['failed outright', { discoveryFailed: true }],
+  ])(
+    'marks the kind’s details as possibly out of date when discovery %s',
+    async (_case, discovery) => {
+      await start();
+      stopServingKinds();
+      app.serveTable(dev, 'cluster-api-resources', { rows: [deployments()], ...discovery });
+      await openKindPanel();
+
+      expect(panel().textContent).toContain('Namespaced');
+      expect(staleNotice()).not.toBeNull();
+      await click(tab('Explain'));
+      expect(staleNotice()).not.toBeNull();
+    }
+  );
 
   // A panel whose first read failed has nothing to show. While its next read
   // is out the cluster has not answered, so the panel must not claim the kind

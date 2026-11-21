@@ -11,6 +11,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/stretchr/testify/require"
 	authorizationv1 "k8s.io/api/authorization/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -237,7 +238,7 @@ func TestAFailedDiscoveryIsReportedUntilTheNextSuccess(t *testing.T) {
 	require.Error(t, err)
 
 	inventory := svc.APIResources()
-	require.Equal(t, "the server is currently unable to handle the request", inventory.DiscoveryError)
+	require.EqualError(t, inventory.DiscoveryFailure, "the server is currently unable to handle the request")
 	require.Len(t, inventory.Resources, 7, "the last discovered kinds stay")
 	requireAPIResourcesUpdate(t, updates)
 
@@ -247,13 +248,41 @@ func TestAFailedDiscoveryIsReportedUntilTheNextSuccess(t *testing.T) {
 	_, err = svc.discoverResources(context.Background())
 	require.Error(t, err)
 	requireNoAPIResourcesUpdate(t, updates)
-	require.Equal(t, "the server is currently unable to handle the request", svc.APIResources().DiscoveryError)
+	require.EqualError(t, svc.APIResources().DiscoveryFailure, "the server is currently unable to handle the request")
 
 	*source = working
 	_, err = svc.discoverResources(context.Background())
 	require.NoError(t, err)
-	require.Empty(t, svc.APIResources().DiscoveryError)
+	require.NoError(t, svc.APIResources().DiscoveryFailure)
 	requireAPIResourcesUpdate(t, updates)
+}
+
+// When the very first discovery fails there is nothing to show, but a table
+// waiting for discovery must learn of it: the failure is published and
+// signalled, and the first success after it is signalled too.
+func TestAFailedFirstDiscoveryIsSignalled(t *testing.T) {
+	source := multiVersionDiscovery()
+	working := *source
+	denied := apierrors.NewForbidden(schema.GroupResource{Resource: "apis"}, "", errors.New("discovery is forbidden"))
+	source.groups, source.lists, source.err = nil, nil, denied
+	svc := &Service{clusterID: "c1", discoveryClient: source}
+	updates, cancel := svc.SubscribeAPIResources()
+	defer cancel()
+
+	_, err := svc.discoverResources(context.Background())
+	require.Error(t, err)
+
+	requireAPIResourcesUpdate(t, updates)
+	inventory := svc.APIResources()
+	require.False(t, inventory.Ready)
+	require.ErrorIs(t, inventory.DiscoveryFailure, denied)
+
+	*source = working
+	_, err = svc.discoverResources(context.Background())
+	require.NoError(t, err)
+	requireAPIResourcesUpdate(t, updates)
+	require.True(t, svc.APIResources().Ready)
+	require.NoError(t, svc.APIResources().DiscoveryFailure)
 }
 
 // A discovery interrupted because its run was cancelled (the cluster is being
@@ -270,7 +299,7 @@ func TestACancelledDiscoveryIsNotReportedAsAFailure(t *testing.T) {
 	_, err = svc.discoverResources(ctx)
 	require.Error(t, err)
 
-	require.Empty(t, svc.APIResources().DiscoveryError)
+	require.NoError(t, svc.APIResources().DiscoveryFailure)
 }
 
 func requireAPIResourcesUpdate(t *testing.T, updates <-chan SubsetUpdate) SubsetUpdate {

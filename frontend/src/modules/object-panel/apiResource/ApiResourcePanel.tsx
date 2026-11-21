@@ -23,7 +23,12 @@ import { resolveObjectPanelOpenTarget } from '../components/ObjectPanel/objectPa
 import type { ViewType } from '../components/ObjectPanel/types';
 import { useObjectPanelActiveTab, useObjectPanelState } from '../contexts/ObjectPanelStateContext';
 import { type ApiResourcePanelRef, isApiResourcePanelView } from '../panelTarget';
-import { ApiResourceDetails, ApiResourceUnavailable, type KindAbsence } from './ApiResourceDetails';
+import {
+  ApiResourceDetails,
+  ApiResourceOutOfDateNotice,
+  ApiResourceUnavailable,
+  type KindAbsence,
+} from './ApiResourceDetails';
 import { useApiResourceDetails } from './useApiResourceDetails';
 import '../components/ObjectPanel/ObjectPanel.css';
 import '../components/ObjectPanel/Details/DetailsTab.css';
@@ -63,9 +68,13 @@ function useKindRow(kind: ApiResourcePanelRef, enabled: boolean) {
       setHeldRow(liveRow);
     }
   }, [conclusive, liveRow]);
+  const details = liveRow ?? heldRow;
   return {
-    details: liveRow ?? heldRow,
+    details,
     absence: kindAbsence(answered, groupUnread),
+    // A row is shown, but discovery could not read its group: the row is what
+    // was last read (the backend keeps an unreadable group's kinds too).
+    outOfDate: answered && groupUnread && Boolean(details),
     error: query.error,
   };
 }
@@ -135,7 +144,7 @@ export function ApiResourcePanel({
   );
   // The kind's row says what the cluster serves now. The panel is not tied to a
   // version: Explain reads whichever version the row currently prefers.
-  const { details, absence, error } = useKindRow(kind, enabled);
+  const { details, absence, outOfDate, error } = useKindRow(kind, enabled);
   const servedKind = details?.kind;
   const servedVersion = details?.version;
   const explainTarget = useMemo(
@@ -173,6 +182,7 @@ export function ApiResourcePanel({
       <PanelLifecycleClusterSurface clusterId={kind.clusterId}>
         <ObjectPanelHeader kind={kindLabel} kindAlias={null} name={name} />
         <ObjectPanelTabs tabs={tabs} activeTab={activeTab} onSelect={selectTab} />
+        {outOfDate ? <ApiResourceOutOfDateNotice /> : null}
         <div className="object-panel-content">
           <ApiResourcePanelContent
             activeTab={activeTab}

@@ -77,7 +77,10 @@ type APIResourceSource interface {
 type ClusterAPIResourcesBuilder struct {
 	source            func() APIResourceSource
 	definitionsDenied func() bool
-	discoveryWait     time.Duration
+	// definitionExists reports whether a CustomResourceDefinition with exactly
+	// this name is known to exist; false also covers "cannot tell".
+	definitionExists func(name string) bool
+	discoveryWait    time.Duration
 }
 
 // RegisterClusterAPIResourcesDomain registers the API Resources domain.
@@ -101,6 +104,9 @@ func RegisterClusterAPIResourcesDomain(reg *domain.Registry, catalogService func
 		},
 		definitionsDenied: func() bool {
 			return ingestManager != nil && ingestManager.PermissionSkippedFor(apiextensions.Identity.GVR())
+		},
+		definitionExists: func(name string) bool {
+			return ingestManager != nil && ingestManager.HoldsCustomResourceDefinition(name)
 		},
 		discoveryWait: config.SnapshotAPIResourcesDiscoveryWait,
 	}
@@ -138,6 +144,7 @@ func (b *ClusterAPIResourcesBuilder) Build(ctx context.Context, scope string) (*
 	resolved := resolveTypedSnapshotPageViaStore(ClusterAPIResourcesDomainName, rows, query, adapter,
 		querypageSchemaFromAdapter(adapter, lowerTrimAll(capabilities.SortableFields)),
 		newTypedSnapshotPageConfig(capabilities, config.SnapshotClusterAPIResourcesEntryLimit, "API resources", adapter.Kind, issues))
+	b.markUnlistedDefinition(resolved.Envelope.Anchor, query.Request.Anchor)
 	return &refresh.Snapshot{
 		Domain:  ClusterAPIResourcesDomainName,
 		Scope:   scope,
@@ -145,10 +152,25 @@ func (b *ClusterAPIResourcesBuilder) Build(ctx context.Context, scope string) (*
 		Payload: ClusterAPIResourcesSnapshot{
 			ClusterMeta: meta, ResourceQueryEnvelope: resolved.Envelope, Rows: resolved.Rows,
 			UnreadGroups:    unreadGroups(inventory.FailedGroupVersions),
-			DiscoveryFailed: inventory.DiscoveryError != "",
+			DiscoveryFailed: inventory.DiscoveryFailure != nil,
 		},
 		Stats: resolved.Stats,
 	}, nil
+}
+
+// markUnlistedDefinition refines a not-found anchor for a
+// CustomResourceDefinition. The table lists a definition as the kind it
+// defines, so a definition that exists but defines no served kind (it is not
+// Established) has no row under any filters: that is "unlisted", and the app
+// shows the definition itself in Browse. A definition that is not known to
+// exist stays "not-found". The lookup is the definition's exact name.
+func (b *ClusterAPIResourcesBuilder) markUnlistedDefinition(result *ResourceQueryAnchorResult, anchor *ResourceQueryAnchor) {
+	if result == nil || anchor == nil || result.Found || result.Reason != ResourceQueryAnchorNotFound {
+		return
+	}
+	if anchor.Kind == apiextensions.Identity.Kind && b.definitionExists(strings.TrimSpace(anchor.Name)) {
+		result.Reason = ResourceQueryAnchorUnlisted
+	}
 }
 
 // clusterAPIResourceIssues reports what makes the served inventory less than
@@ -169,11 +191,11 @@ func clusterAPIResourceIssues(inventory objectcatalog.APIResourceInventory, defi
 		})
 	}
 	switch {
-	case inventory.DiscoveryError != "":
+	case inventory.DiscoveryFailure != nil:
 		issues = append(issues, ResourceQueryIssue{
 			Kind: "API discovery",
 			Message: fmt.Sprintf("API discovery failed (%s). Kinds are shown as last discovered and may be missing or out of date",
-				inventory.DiscoveryError),
+				inventory.DiscoveryFailure),
 		})
 	case len(inventory.FailedGroupVersions) > 0:
 		issues = append(issues, ResourceQueryIssue{
@@ -209,7 +231,8 @@ func unreadGroups(failedGroupVersions []string) []string {
 
 // discovered returns the cluster's API surface, waiting a bounded time for the
 // first discovery so a view opened right after connecting loads instead of
-// rendering an empty table.
+// rendering an empty table. A first discovery that failed ends the wait with
+// its failure; only a discovery still pending reads as "not ready".
 func (b *ClusterAPIResourcesBuilder) discovered(ctx context.Context) (objectcatalog.APIResourceInventory, error) {
 	source := b.source()
 	if source == nil {
@@ -218,8 +241,8 @@ func (b *ClusterAPIResourcesBuilder) discovered(ctx context.Context) (objectcata
 	// Subscribe before reading, so a discovery that completes in between is seen.
 	updates, cancel := source.SubscribeAPIResources()
 	defer cancel()
-	if inventory := source.APIResources(); inventory.Ready {
-		return inventory, nil
+	if inventory, settled, err := discoveryOutcome(source.APIResources()); settled {
+		return inventory, err
 	}
 	timer := time.NewTimer(b.discoveryWait)
 	defer timer.Stop()
@@ -229,15 +252,25 @@ func (b *ClusterAPIResourcesBuilder) discovered(ctx context.Context) (objectcata
 	case <-ctx.Done():
 		return objectcatalog.APIResourceInventory{}, ctx.Err()
 	}
-	inventory := source.APIResources()
-	if inventory.Ready {
-		return inventory, nil
-	}
-	if inventory.DiscoveryError != "" {
-		// No discovery has succeeded yet, and the last one failed: say why.
-		return objectcatalog.APIResourceInventory{}, errorstatus.ClusterNotReady(fmt.Errorf("API discovery has not completed: %s", inventory.DiscoveryError))
+	if inventory, settled, err := discoveryOutcome(source.APIResources()); settled {
+		return inventory, err
 	}
 	return objectcatalog.APIResourceInventory{}, errorstatus.ClusterNotReady(errors.New("API discovery has not completed"))
+}
+
+// discoveryOutcome reports whether discovery has an answer for a read: the
+// inventory, or the failure of a first discovery that failed. Without either
+// (settled false), discovery is still pending. The failure keeps its type, so
+// a denied discovery is reported as a permission error and not as a cluster
+// that is still starting.
+func discoveryOutcome(inventory objectcatalog.APIResourceInventory) (objectcatalog.APIResourceInventory, bool, error) {
+	if inventory.Ready {
+		return inventory, true, nil
+	}
+	if inventory.DiscoveryFailure != nil {
+		return objectcatalog.APIResourceInventory{}, true, fmt.Errorf("API discovery failed: %w", inventory.DiscoveryFailure)
+	}
+	return objectcatalog.APIResourceInventory{}, false, nil
 }
 
 // newClusterAPIResourceEntry describes one kind. typesKnown says whether the

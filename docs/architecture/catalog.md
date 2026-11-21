@@ -203,13 +203,16 @@ collects (Events, kinds that cannot be listed, the metrics API).
   group versions in `FailedGroupVersions`; a later complete discovery clears
   them. Catalog descriptors still come from the reachable groups only.
 - A discovery that fails outright keeps the last published resources and
-  records its error in `DiscoveryError` until a discovery succeeds again. The
-  first failure's error is kept: retries that fail with other text change
+  records its error in `DiscoveryFailure` until a discovery succeeds again.
+  The first failure's error is kept: retries that fail with other text change
   nothing. A cancelled run (the cluster is disconnecting) records nothing.
 - Subscribers (`SubscribeAPIResources`) are signalled only when the published
-  inventory changes, and only from the first successful discovery on; after
-  it, a failure and its recovery are changes. Before it, the domain answers
-  not-ready, with the discovery error when there is one.
+  inventory changes: a failure and its recovery are changes, before the first
+  successful discovery too. Nothing else is signalled before it.
+- Before the first successful discovery the domain has no rows. While
+  discovery is pending it answers not-ready, which the app treats as still
+  loading. Once an attempt has failed it answers that failure itself, typed,
+  so a denied discovery reads as a permission error and any other is reported.
 - The `cluster-api-resources` refresh domain
   (`backend/refresh/snapshot/cluster_api_resources.go`) serves the inventory as
   the API Resources table and the kind panel's details. It waits a bounded
@@ -221,17 +224,23 @@ collects (Events, kinds that cannot be listed, the metrics API).
   (the core group is `""`) and `discoveryFailed`. The kind panel reads one row
   by resource name; an empty answer means the kind is gone only when discovery
   read the kind's group. Otherwise the panel keeps the row it holds, or says
-  the group could not be read.
+  the group could not be read. A row shown while its group is unread (held, or
+  retained by the backend) carries a notice that it may be out of date.
 - A CustomResourceDefinition is listed there as the custom kind it defines:
   every row is keyed as the definition that defines its kind or would
   (`<plural>.<group>`), and an anchor for a CustomResourceDefinition resolves
   to that row, so "show in list" lands on it whether or not the classification
   has arrived. A definition whose kind the cluster does not serve (not
-  Established) has no row; the definition is still an object, so API Resources
-  hands that request to Browse, narrowed to the definition (its kind and
-  name) and re-addressed to Browse so API Resources does not act on it again.
-  Browse then shows its row, or nothing when it really is gone. A kind the
-  table's own filters hide is not handed off; the table says so.
+  Established) has no row. The domain tells that case from a definition that
+  does not exist by looking the definition up by exact name in the CRD
+  reflector (`IngestManager.HoldsCustomResourceDefinition`): the anchor result
+  is `unlisted` for one that exists and `not-found` otherwise.
+- On `unlisted`, API Resources hands the request to Browse, where the
+  definition itself is listed: narrowed to the definition's kind and name so
+  its row is on the page, and re-addressed to Browse so API Resources does not
+  act on it again. Browse's search is a substring match, so other definitions
+  may be listed too; the request's row key focuses the one asked for. A
+  `not-found` or `filtered` target is reported in API Resources.
 - `kubectl explain` output for a kind comes from
   `backend/resources/apiresources`, read from the cluster's OpenAPI v3
   documents on demand (`ResourceGateway.ExplainKindSchema`,

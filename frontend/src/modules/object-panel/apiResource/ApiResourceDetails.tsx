@@ -6,6 +6,7 @@
  */
 
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
+import { WarningIcon } from '@shared/components/icons/SharedIcons';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { failureMessage, type RefreshFailure } from '@/core/refresh/refreshFailure';
 import type { ClusterAPIResourceEntry } from '@/core/refresh/types';
@@ -27,6 +28,23 @@ const ABSENCE_MESSAGES: Record<Exclude<KindAbsence, 'pending'>, string> = {
     'This kind’s API group could not be read from the cluster, so its details are unavailable.',
   gone: 'The cluster no longer serves this kind.',
 };
+
+/**
+ * Shown above a kind's details while the cluster's API discovery cannot read
+ * the kind's group: what the panel shows was read before that, and may no
+ * longer be what the cluster serves.
+ */
+export function ApiResourceOutOfDateNotice() {
+  return (
+    <output className="resource-deleted-warning">
+      <WarningIcon />
+      <span>
+        This kind’s API group could not be read from the cluster. These details are the last ones
+        read and may be out of date.
+      </span>
+    </output>
+  );
+}
 
 /** Shown in place of a tab's content while the panel has no row for its kind. */
 export function ApiResourceUnavailable({

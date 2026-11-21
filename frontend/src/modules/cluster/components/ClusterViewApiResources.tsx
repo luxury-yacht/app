@@ -108,12 +108,13 @@ export default function ClusterViewApiResources() {
   const { openWithObject, openWithApiResource } = useObjectPanel();
   const { setActiveClusterView } = useViewState();
   // "Show in list" on a CustomResourceDefinition lands on the kind it defines.
-  // A definition with no row defines no kind the cluster serves (it is not
-  // Established), but it is still an object, and Browse lists objects. Hand the
-  // request to Browse narrowed to that definition, so what Browse shows is the
-  // answer: its row, or nothing when the definition really is gone. The
-  // request becomes Browse's: left addressed to this table, it would send the
-  // user back to Browse every time they opened API Resources.
+  // The backend says when a definition exists (by its exact name) but defines
+  // no kind the cluster serves, because it is not Established. It has no row
+  // here, but it is still an object, and Browse lists objects: hand the
+  // request to Browse, narrowed to the definition's kind and name so its row
+  // is on the page, where the request's own row key focuses it. The request
+  // becomes Browse's: left addressed to this table, it would send the user
+  // back to Browse every time they opened API Resources.
   const showDefinitionInBrowse = useCallback(
     (request: GridTableFocusRequest) => {
       setPendingFocusRequest({ ...request, destinationViewId: BROWSE_VIEW_ID });

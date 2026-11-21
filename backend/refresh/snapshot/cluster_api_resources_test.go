@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -10,6 +11,8 @@ import (
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/stretchr/testify/require"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // fakeAPIResourceSource stands in for the object catalog's discovered API surface.
@@ -21,14 +24,14 @@ type fakeAPIResourceSource struct {
 	// customUnknown models a catalog that has not read the CRD list yet.
 	customUnknown       bool
 	failedGroupVersions []string
-	discoveryError      string
+	discoveryFailure    error
 }
 
 func (f *fakeAPIResourceSource) APIResources() objectcatalog.APIResourceInventory {
 	return objectcatalog.APIResourceInventory{
 		Resources: f.resources, Revision: 7, Ready: f.ready.Load(),
 		CustomKnown: !f.customUnknown, FailedGroupVersions: f.failedGroupVersions,
-		DiscoveryError: f.discoveryError,
+		DiscoveryFailure: f.discoveryFailure,
 	}
 }
 
@@ -56,6 +59,7 @@ func apiResourceTestBuilder(source *fakeAPIResourceSource) *ClusterAPIResourcesB
 	return &ClusterAPIResourcesBuilder{
 		source:            func() APIResourceSource { return source },
 		definitionsDenied: func() bool { return false },
+		definitionExists:  func(string) bool { return false },
 		discoveryWait:     10 * time.Millisecond,
 	}
 }
@@ -203,7 +207,7 @@ func TestClusterAPIResourcesReportsGroupsDiscoveryCouldNotRead(t *testing.T) {
 // and says why.
 func TestClusterAPIResourcesReportsAFailedDiscovery(t *testing.T) {
 	source := apiResourceTestSource()
-	source.discoveryError = "the server is currently unable to handle the request"
+	source.discoveryFailure = errors.New("the server is currently unable to handle the request")
 
 	payload := apiResourceTestBuild(t, apiResourceTestBuilder(source), "?limit=100")
 
@@ -258,6 +262,37 @@ func TestClusterAPIResourcesAnchorsACustomResourceDefinitionToItsKind(t *testing
 	require.False(t, missing.Anchor.Found)
 }
 
+// "Show in list" on a definition with no row needs to know whether the
+// definition exists. One that does defines no kind the cluster serves, and the
+// app shows the definition itself in Browse ("unlisted"); one that does not is
+// gone ("not-found"). The check is the definition's exact name, so a
+// definition whose name merely starts the same is not mistaken for it.
+func TestClusterAPIResourcesTellsAnUnservedDefinitionFromAMissingOne(t *testing.T) {
+	b := apiResourceTestBuilder(apiResourceTestSource())
+	b.definitionExists = func(name string) bool { return name == "gadgets.example.io" }
+
+	unserved := apiResourceTestBuild(t, b, "?limit=100"+definitionAnchor+"gadgets.example.io")
+	require.False(t, unserved.Anchor.Found)
+	require.Equal(t, ResourceQueryAnchorUnlisted, unserved.Anchor.Reason)
+
+	missing := apiResourceTestBuild(t, b, "?limit=100"+definitionAnchor+"gadgets.example.io.au")
+	require.False(t, missing.Anchor.Found)
+	require.Equal(t, ResourceQueryAnchorNotFound, missing.Anchor.Reason)
+
+	// A kind the cluster serves but the request's filters hide is "filtered",
+	// whether or not its definition exists: clearing the filter shows it here.
+	b.definitionExists = func(string) bool { return true }
+	filtered := apiResourceTestBuild(t, b, "?limit=100&facet.types=Built-in"+definitionAnchor+"certificates.cert-manager.io")
+	require.False(t, filtered.Anchor.Found)
+	require.Equal(t, ResourceQueryAnchorFiltered, filtered.Anchor.Reason)
+
+	// Only a definition is listed here through its kind; another kind of
+	// object with a definition's name is simply not in this table.
+	other := apiResourceTestBuild(t, b, "?limit=100&anchor.clusterId=cluster-a&anchor.version=v1&anchor.kind=ConfigMap&anchor.namespace=default&anchor.name=gadgets.example.io")
+	require.False(t, other.Anchor.Found)
+	require.Equal(t, ResourceQueryAnchorNotFound, other.Anchor.Reason)
+}
+
 // Only a CustomResourceDefinition is listed here as a row; an object of any
 // other kind must not be matched to a kind that happens to share its name.
 func TestClusterAPIResourcesAnchorsNoOtherKindOfObject(t *testing.T) {
@@ -297,17 +332,21 @@ func TestClusterAPIResourcesFailsAsNotReadyWhenDiscoveryNeverCompletes(t *testin
 	require.Equal(t, errorstatus.ReasonClusterNotReady, errorstatus.Classify(err).Reason)
 }
 
-// When no discovery has succeeded and the last one failed, the table is still
-// not ready (it retries), but the error says why discovery has not completed.
-func TestClusterAPIResourcesNotReadyErrorCarriesTheDiscoveryFailure(t *testing.T) {
+// When no discovery has succeeded and an attempt has failed, the table is not
+// "still loading": it gets the failure itself, typed, so the app reports why
+// (a denied discovery reads as a permission error). It does not wait for a
+// discovery that already failed.
+func TestClusterAPIResourcesReturnsTheFailureOfAFailedFirstDiscovery(t *testing.T) {
 	source := apiResourceTestSource()
 	source.ready.Store(false)
-	source.discoveryError = "Unauthorized"
+	source.discoveryFailure = apierrors.NewForbidden(schema.GroupResource{Resource: "apis"}, "", errors.New("discovery is forbidden"))
+	builder := apiResourceTestBuilder(source)
+	builder.discoveryWait = time.Minute
 
-	_, err := apiResourceTestBuilder(source).Build(
+	_, err := builder.Build(
 		WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"}), "cluster-a|?limit=100")
 
 	require.Error(t, err)
-	require.Equal(t, errorstatus.ReasonClusterNotReady, errorstatus.Classify(err).Reason)
-	require.Contains(t, err.Error(), "Unauthorized")
+	require.Equal(t, errorstatus.ReasonForbidden, errorstatus.Classify(err).Reason)
+	require.Contains(t, err.Error(), "discovery is forbidden")
 }

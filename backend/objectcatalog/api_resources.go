@@ -160,10 +160,10 @@ type APIResourceInventory struct {
 	// FailedGroupVersions are the group versions the last discovery could not
 	// read. Their groups' resources are the ones last successfully discovered.
 	FailedGroupVersions []string
-	// DiscoveryError is the error of the last discovery when it failed
-	// outright. Resources are then the ones last successfully discovered, and
-	// may be out of date. The next successful discovery clears it.
-	DiscoveryError string
+	// DiscoveryFailure is the error of a discovery that failed outright, kept
+	// until a discovery succeeds. Resources are then the ones last successfully
+	// discovered and may be out of date; with Ready false, none ever were.
+	DiscoveryFailure error
 }
 
 // replace publishes a discovery's API resources. failed lists the group
@@ -177,7 +177,7 @@ func (s *apiResourceStore) replace(discovered []APIResource, failed []schema.Gro
 	next := s.published
 	next.Ready = true
 	next.FailedGroupVersions = groupVersionNames(failed)
-	next.DiscoveryError = ""
+	next.DiscoveryFailure = nil
 	s.publishLocked(next)
 }
 
@@ -189,11 +189,11 @@ func (s *apiResourceStore) replace(discovered []APIResource, failed []schema.Gro
 func (s *apiResourceStore) failed(err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.published.DiscoveryError != "" {
+	if s.published.DiscoveryFailure != nil {
 		return
 	}
 	next := s.published
-	next.DiscoveryError = err.Error()
+	next.DiscoveryFailure = err
 	s.publishLocked(next)
 }
 
@@ -256,8 +256,9 @@ func (s *apiResourceStore) markCustomKnown() {
 }
 
 // publishLocked flags the discovered resources and installs next, signalling
-// subscribers when the published inventory changed. Nothing is signalled
-// before the first discovery.
+// subscribers when the published inventory changed. Before the first
+// successful discovery the only change signalled is a discovery failing: a
+// reader waiting for discovery must learn that an attempt failed.
 func (s *apiResourceStore) publishLocked(next APIResourceInventory) {
 	next.Resources = make([]APIResource, len(s.discovered))
 	for i, resource := range s.discovered {
@@ -269,7 +270,8 @@ func (s *apiResourceStore) publishLocked(next APIResourceInventory) {
 	if !firstDiscovery && reflect.DeepEqual(s.published, next) {
 		return
 	}
-	if !next.Ready {
+	newFailure := next.DiscoveryFailure != nil && s.published.DiscoveryFailure == nil
+	if !next.Ready && !newFailure {
 		// Classification can arrive before discovery; keep it without signalling.
 		s.published = next
 		return

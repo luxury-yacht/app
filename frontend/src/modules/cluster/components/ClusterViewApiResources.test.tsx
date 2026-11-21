@@ -11,6 +11,7 @@
 
 import { act } from 'react';
 import { describe, expect, it } from 'vitest';
+import { buildRefreshScope, CLUSTER_SELECTOR } from '@/core/refresh/scopeSelector';
 import type { ClusterAPIResourceEntry, ClusterAPIResourcesSnapshot } from '@/core/refresh/types';
 import { useNavigateToView } from '@/shared/hooks/useNavigateToView';
 import {
@@ -19,6 +20,8 @@ import {
   type ObjectIdentity,
   type TestCluster,
 } from '@/test-utils/appState/harness';
+import { statusResponse } from '@/test-utils/appState/transport';
+import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { requireValue } from '@/test-utils/requireValue';
 
 const app = installAppStateHarness();
@@ -230,6 +233,43 @@ describe('ClusterViewApiResources', () => {
       .map((record) => (record.error as Error).message);
     expect(reports).toHaveLength(1);
     expect(reports[0]).toContain('filters');
+  });
+
+  // The identity may not be allowed to read the cluster's API discovery at
+  // all. The first discovery then fails, and the table must say so rather than
+  // look like it is still loading or broken; it loads once discovery succeeds.
+  it('says the identity lacks permission when discovery is denied, and loads when it succeeds', async () => {
+    app.snapshots.respond((request) =>
+      request.domain === 'cluster-api-resources'
+        ? statusResponse(
+            makeErrorStatus('Forbidden', 'API discovery failed: discovery is forbidden')
+          )
+        : undefined
+    );
+    await start();
+
+    expect(view.container.textContent).toContain('Insufficient permissions');
+    expect(view.container.querySelectorAll('.gridtable-row')).toHaveLength(0);
+
+    app.snapshots.respond(null);
+    await act(async () => {
+      app.streams.ring(
+        'cluster-api-resources',
+        buildRefreshScope('cluster-api-resources', {
+          clusterId: dev.clusterId,
+          selector: CLUSTER_SELECTOR,
+        }),
+        'catalog',
+        'v1'
+      );
+      // Signals apply after the stream's 150 ms coalescing window
+      // (resourceStreamManager.ts UPDATE_COALESCE_MS).
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    });
+    await app.settle();
+
+    expect(rowOf('deployments')).toBeDefined();
+    expect(view.container.textContent).not.toContain('Insufficient permissions');
   });
 
   // API Resources replaced the CRDs view. A favorite saved there still opens:
