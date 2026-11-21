@@ -8,9 +8,7 @@ import type { KindReadTarget } from '@/core/data-access';
 import type { ObjectDetail } from '@/core/refresh/types';
 
 /**
- * Returns the custom kind a CustomResourceDefinition's detail describes, at a
- * version the cluster serves: the stored version when it is served, otherwise
- * the first served one. Null for any other object, or while nothing is served.
+ * Returns the custom kind at the preferred served version in its CRD details.
  */
 export function definedKindOf(
   clusterId: string,
@@ -19,11 +17,9 @@ export function definedKindOf(
   if (detail?.detailType !== 'customresourcedefinition') {
     return null;
   }
-  const { group, names, versions } = detail.details;
-  const served = (versions ?? []).filter((candidate) => candidate.served);
-  const version = served.find((candidate) => candidate.storage) ?? served[0];
-  if (!version || !names?.plural || !names.kind) {
+  const { group, names, preferredVersion } = detail.details;
+  if (!clusterId || !group || !preferredVersion || !names?.plural || !names.kind) {
     return null;
   }
-  return { clusterId, group, version: version.name, kind: names.kind, resource: names.plural };
+  return { clusterId, group, version: preferredVersion, kind: names.kind, resource: names.plural };
 }

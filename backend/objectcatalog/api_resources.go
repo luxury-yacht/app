@@ -137,10 +137,8 @@ func cloneStrings(values []string) []string {
 // unchanged cluster stays silent. The zero value is ready to use.
 type apiResourceStore struct {
 	mu sync.RWMutex
-	// discovered is the inventory from discovery; custom is the set of resources
-	// CustomResourceDefinitions define. published is discovered with Custom set,
-	// plus what is known about its completeness.
-	discovered  []APIResource
+	// custom is the latest CRD set. Published rows retain their Custom flag
+	// until discovery replaces those rows.
 	custom      map[schema.GroupResource]struct{}
 	watched     map[schema.GroupResource]struct{}
 	watchListed bool
@@ -171,19 +169,54 @@ type APIResourceInventory struct {
 	DiscoveryFailure error
 }
 
+// customForDiscovery snapshots the current CRD set before a discovery read.
+// The set is replaced wholesale, so it can be read after releasing the lock.
+// A removal needs uncached discovery, including when it was seen through LIST.
+func (s *apiResourceStore) customForDiscovery() (map[schema.GroupResource]struct{}, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.published.CustomKnown {
+		for _, resource := range s.published.Resources {
+			if _, present := s.custom[resource.groupResource()]; resource.Custom && !present {
+				return s.custom, true
+			}
+		}
+	}
+	return s.custom, false
+}
+
 // replace publishes a discovery's API resources. failed lists the group
 // versions that discovery could not read: a group with a failed version keeps
 // the resources last published for it, because a partial answer would
 // re-describe or drop kinds that are only temporarily unreachable.
-func (s *apiResourceStore) replace(discovered []APIResource, failed []schema.GroupVersion) {
+func (s *apiResourceStore) replace(discovered []APIResource, failed []schema.GroupVersion, customAtStart map[schema.GroupResource]struct{}) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.discovered = retainFailedGroups(s.discovered, discovered, failed)
 	next := s.published
+	// If a definition disappeared during this read, keep its flag until a read
+	// started after the removal can replace the row. Additions apply immediately.
+	fresh := withCustomResources(discovered, s.custom, customAtStart, false)
+	next.Resources = retainFailedGroups(next.Resources, fresh, failed)
 	next.Ready = true
 	next.FailedGroupVersions = groupVersionNames(failed)
 	next.DiscoveryFailure = nil
 	s.publishLocked(next)
+}
+
+func (r APIResource) groupResource() schema.GroupResource {
+	return schema.GroupResource{Group: r.Group, Resource: r.Resource}
+}
+
+func withCustomResources(resources []APIResource, current, atDiscoveryStart map[schema.GroupResource]struct{}, retainPublished bool) []APIResource {
+	classified := make([]APIResource, len(resources))
+	for i, resource := range resources {
+		key := resource.groupResource()
+		_, defined := current[key]
+		_, definedAtStart := atDiscoveryStart[key]
+		resource.Custom = defined || definedAtStart || (retainPublished && resource.Custom)
+		classified[i] = resource
+	}
+	return classified
 }
 
 // failed records that a discovery failed outright. The published resources
@@ -218,12 +251,12 @@ func retainFailedGroups(previous, fresh []APIResource, failed []schema.GroupVers
 	merged := make([]APIResource, 0, len(fresh)+len(previous))
 	for _, resource := range previous {
 		if _, isFailed := failedGroups[resource.Group]; isFailed {
-			kept[schema.GroupResource{Group: resource.Group, Resource: resource.Resource}] = struct{}{}
+			kept[resource.groupResource()] = struct{}{}
 			merged = append(merged, resource)
 		}
 	}
 	for _, resource := range fresh {
-		if _, alreadyKept := kept[schema.GroupResource{Group: resource.Group, Resource: resource.Resource}]; !alreadyKept {
+		if _, alreadyKept := kept[resource.groupResource()]; !alreadyKept {
 			merged = append(merged, resource)
 		}
 	}
@@ -252,8 +285,7 @@ func (s *apiResourceStore) setWatchedCustomResources(custom map[schema.GroupReso
 		s.useWatchedCustomResourcesLocked()
 	} else if !s.published.CustomKnown && !s.published.CustomListDenied {
 		// Before a complete list, keep the flags for definitions seen so far.
-		s.custom = custom
-		s.publishLocked(s.published)
+		s.publishClassificationLocked(s.published, custom)
 	}
 }
 
@@ -270,10 +302,15 @@ func (s *apiResourceStore) useWatchedCustomResourcesLocked() {
 }
 
 func (s *apiResourceStore) publishCustomResourcesLocked(custom map[schema.GroupResource]struct{}, denied bool) {
-	s.custom = custom
 	next := s.published
 	next.CustomKnown = !denied
 	next.CustomListDenied = denied
+	s.publishClassificationLocked(next, custom)
+}
+
+func (s *apiResourceStore) publishClassificationLocked(next APIResourceInventory, custom map[schema.GroupResource]struct{}) {
+	s.custom = custom
+	next.Resources = withCustomResources(next.Resources, custom, nil, !next.CustomListDenied)
 	s.publishLocked(next)
 }
 
@@ -307,16 +344,11 @@ func (run *catalogSync) publishListedDefinitions(complete, denied map[string]str
 	run.service.apiResources.applyDefinitionList(run.succeeded[gvr.String()], listed, forbidden)
 }
 
-// publishLocked flags the discovered resources and installs next, signalling
+// publishLocked installs next, signalling
 // subscribers when the published inventory changed. Before the first
 // successful discovery the only change signalled is a discovery failing: a
 // reader waiting for discovery must learn that an attempt failed.
 func (s *apiResourceStore) publishLocked(next APIResourceInventory) {
-	next.Resources = make([]APIResource, len(s.discovered))
-	for i, resource := range s.discovered {
-		_, resource.Custom = s.custom[schema.GroupResource{Group: resource.Group, Resource: resource.Resource}]
-		next.Resources[i] = resource
-	}
 	next.Revision = s.published.Revision
 	firstDiscovery := next.Ready && !s.published.Ready
 	if !firstDiscovery && reflect.DeepEqual(s.published, next) {

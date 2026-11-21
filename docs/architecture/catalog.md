@@ -194,6 +194,9 @@ collects (Events, kinds that cannot be listed, the metrics API).
   successful LIST results until the CRD reflector has completed its own list
   and can supply live changes. A WATCH denial still allows LIST-based
   classification. An explicit LIST denial is reported as a permission issue.
+- A removed definition keeps its Custom classification on published rows
+  until a discovery started after the removal refreshes its group. Failed
+  discovery retains the rows and their classification together.
 - A partial discovery (some group versions unreachable) keeps the last
   published resources of every group with a failed version, and lists those
   group versions in `FailedGroupVersions`; a later complete discovery clears
@@ -245,8 +248,10 @@ collects (Events, kinds that cannot be listed, the metrics API).
 - `kubectl explain` output for a kind comes from
   `backend/resources/apiresources`, read from the cluster's OpenAPI v3
   documents on demand (`ResourceGateway.ExplainKindSchema`,
-  `ExplainKindField`). A field read carries the tree's document revision. If
-  the document has changed, Explain reloads the tree and clears all cached
+  `ExplainKindField`). CRD Explain picks the highest served version using
+  Kubernetes discovery's version ordering. The tab labels the API version
+  returned with the schema. A field read carries the tree's document revision.
+  If the document has changed, Explain reloads the tree and clears all cached
   field descriptions together.
 
 ## Discovered resource families

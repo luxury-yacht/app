@@ -514,7 +514,11 @@ describe('ObjectPanelContent', () => {
           definition,
           objectDetailOf('customresourcedefinition', {
             group: 'cert-manager.io',
-            versions: [{ name: 'v1', served: true, storage: true }],
+            preferredVersion: 'v1',
+            versions: [
+              { name: 'v1beta1', served: true, storage: true },
+              { name: 'v1', served: true, storage: false },
+            ],
             names: { plural: 'certificates', kind: 'Certificate' },
           })
         ),

@@ -219,6 +219,7 @@ describe('ApiResourcePanel', () => {
     await click(tab('Explain'));
 
     expect(app.backend.calls('ExplainKindSchema')).toEqual([[deploymentKind()]]);
+    expect(panel().textContent).toContain('apps/v1');
     // Top-level fields are listed; nested fields appear when their parent opens.
     expect(fieldPaths()).toEqual(['apiVersion', 'spec']);
     expect(panel().textContent).toContain(

@@ -21,12 +21,12 @@ import (
 
 // discoverResources re-discovers the cluster's resource kinds through the catalog's
 // per-cluster discovery client, which is disk-cached + ETag-revalidating in production. The
-// cache is invalidated first iff a CRD change marked discovery stale since the last
-// discover, so periodic re-discovers stay served from the cache while a newly-created or
-// deleted CRD forces a fresh fetch.
+// cache is invalidated when a CRD change marks discovery stale or a published
+// custom row awaits fresh discovery after its definition disappears.
 func (s *Service) discoverResources(ctx context.Context) ([]Descriptor, error) {
 	s.ensureDiscovery()
-	if s.discoveryInvalidate != nil && s.discoveryStale.Swap(false) {
+	customAtStart, pendingRemoval := s.apiResources.customForDiscovery()
+	if s.discoveryInvalidate != nil && (s.discoveryStale.Swap(false) || pendingRemoval) {
 		s.discoveryInvalidate()
 	}
 	result, err := discoverFromClient(ctx, s.discoveryClient)
@@ -38,7 +38,7 @@ func (s *Service) discoverResources(ctx context.Context) ([]Descriptor, error) {
 		}
 		return nil, err
 	}
-	s.apiResources.replace(result.apiResources, result.failedGroupVersions)
+	s.apiResources.replace(result.apiResources, result.failedGroupVersions, customAtStart)
 	return result.descriptors, nil
 }
 

@@ -3,6 +3,7 @@ package objectcatalog
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -28,9 +29,13 @@ type groupedDiscovery struct {
 	groups []*metav1.APIGroup
 	lists  []*metav1.APIResourceList
 	err    error
+	onRead func()
 }
 
 func (d *groupedDiscovery) ServerGroupsAndResources() ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
+	if d.onRead != nil {
+		d.onRead()
+	}
 	return d.groups, d.lists, d.err
 }
 
@@ -376,11 +381,26 @@ func TestAPIResourcesFlagKindsDefinedByCRDs(t *testing.T) {
 	require.True(t, custom("example.io", "widgets"))
 
 	hook.DeleteBundle(crdBundle(updated))
+	requireNoAPIResourcesUpdate(t, updates)
+	require.True(t, custom("example.io", "widgets"))
+
+	// The first discovery without widgets removes the row directly.
+	withoutWidgets := multiVersionDiscovery()
+	for _, list := range withoutWidgets.lists {
+		list.APIResources = slices.DeleteFunc(list.APIResources, func(resource metav1.APIResource) bool {
+			return resource.Name == "widgets"
+		})
+	}
+	svc.discoveryClient = withoutWidgets
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
 	requireAPIResourcesUpdate(t, updates)
-	require.False(t, custom("example.io", "widgets"))
+	require.False(t, slices.ContainsFunc(svc.APIResources().Resources, func(resource APIResource) bool {
+		return resource.Group == "example.io" && resource.Resource == "widgets"
+	}))
 }
 
-// A relist replaces the whole CRD set at once.
+// A relist updates the CRD set, and discovery publishes any removed flags.
 func TestAPIResourcesFollowARelistedCRDSet(t *testing.T) {
 	svc := newTestWatchService()
 	svc.discoveryClient = multiVersionDiscovery()
@@ -398,8 +418,44 @@ func TestAPIResourcesFollowARelistedCRDSet(t *testing.T) {
 	hook.ReplaceBundles([]ingest.Bundle{crdBundle(relics)})
 
 	resources := svc.APIResources().Resources
+	require.True(t, apiResourceByName(t, resources, "example.io", "widgets").Custom)
+
+	// Partial discovery retains the group's old rows and their classification.
+	svc.discoveryClient = partialDiscovery(schema.GroupVersion{Group: "example.io", Version: "v1"})
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	require.True(t, apiResourceByName(t, svc.APIResources().Resources, "example.io", "widgets").Custom)
+
+	// A complete discovery can publish a kind that is now served by another API.
+	svc.discoveryClient = multiVersionDiscovery()
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	resources = svc.APIResources().Resources
 	require.False(t, apiResourceByName(t, resources, "example.io", "widgets").Custom)
 	require.True(t, apiResourceByName(t, resources, "example.io", "relics").Custom)
+}
+
+func TestAPIResourcesKeepClassificationWhenAReadOverlapsADeletion(t *testing.T) {
+	svc := newTestWatchService()
+	discovery := multiVersionDiscovery()
+	svc.discoveryClient = discovery
+	_, err := svc.discoverResources(t.Context())
+	require.NoError(t, err)
+
+	hook := newCRDDiscoveryHook(newWatchNotifier(svc))
+	definition := exampleWidgetDefinition()
+	hook.ReplaceBundles([]ingest.Bundle{definition})
+
+	// The response was requested before the deletion and still lists the kind.
+	discovery.onRead = func() { hook.DeleteBundle(definition) }
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	require.True(t, apiResourceByName(t, svc.APIResources().Resources, "example.io", "widgets").Custom)
+
+	discovery.onRead = nil
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	require.False(t, apiResourceByName(t, svc.APIResources().Resources, "example.io", "widgets").Custom)
 }
 
 // crdListSource is an ingest source whose CustomResourceDefinition store the
@@ -536,6 +592,17 @@ func TestAPIResourceClassificationUsesListUntilACompleteWatchTakesOver(t *testin
 	require.True(t, inventory.CustomKnown)
 	require.True(t, apiResourceByName(t, inventory.Resources, "example.io", "widgets").Custom)
 
+	// A LIST-only client also needs fresh discovery after a definition vanishes.
+	svc.apiResources.applyDefinitionList(nil, true, false)
+	require.True(t, apiResourceByName(t, svc.APIResources().Resources, "example.io", "widgets").Custom)
+	invalidations := 0
+	svc.discoveryInvalidate = func() { invalidations++ }
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, 1, invalidations)
+	require.False(t, apiResourceByName(t, svc.APIResources().Resources, "example.io", "widgets").Custom)
+
+	svc.apiResources.applyDefinitionList(listed, true, false)
 	svc.apiResources.applyDefinitionList(nil, false, true)
 	inventory = svc.APIResources()
 	require.False(t, inventory.CustomKnown)

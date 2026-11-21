@@ -11,7 +11,8 @@ import type { ObjectDetail } from '@/core/refresh/types';
 import { definedKindOf } from './definedKind';
 
 const certificates = (
-  versions: apiextensions.CRDVersion[]
+  versions: apiextensions.CRDVersion[],
+  preferredVersion?: string
 ): ObjectDetail<'customresourcedefinition'> => ({
   detailType: 'customresourcedefinition',
   details: {
@@ -21,16 +22,20 @@ const certificates = (
     scope: 'Namespaced',
     details: 'Certificate',
     versions,
+    preferredVersion,
     names: { plural: 'certificates', singular: 'certificate', kind: 'Certificate' },
   } as apiextensions.CustomResourceDefinitionDetails,
 });
 
 describe('definedKindOf', () => {
-  it('explains the custom kind at its stored version', () => {
-    const detail = certificates([
-      { name: 'v1alpha2', served: true, storage: false },
-      { name: 'v1', served: true, storage: true },
-    ]);
+  it('explains the preferred served version when the storage version differs', () => {
+    const detail = certificates(
+      [
+        { name: 'v1beta1', served: true, storage: true },
+        { name: 'v1', served: true, storage: false },
+      ],
+      'v1'
+    );
 
     expect(definedKindOf('cluster-a', detail)).toEqual({
       clusterId: 'cluster-a',
@@ -41,11 +46,14 @@ describe('definedKindOf', () => {
     });
   });
 
-  it('falls back to a served version when the stored one is not served', () => {
-    const detail = certificates([
-      { name: 'v2', served: false, storage: true },
-      { name: 'v1', served: true, storage: false },
-    ]);
+  it('uses the preferred served version when the storage version is unserved', () => {
+    const detail = certificates(
+      [
+        { name: 'v2', served: false, storage: true },
+        { name: 'v1', served: true, storage: false },
+      ],
+      'v1'
+    );
 
     expect(definedKindOf('cluster-a', detail)?.version).toBe('v1');
   });

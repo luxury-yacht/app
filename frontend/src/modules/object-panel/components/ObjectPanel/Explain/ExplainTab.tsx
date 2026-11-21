@@ -179,12 +179,16 @@ export default function ExplainTab({ kind, isActive = true }: Readonly<ExplainTa
     );
   }
 
-  const fields = schema.schema.fields ?? [];
+  const { group, version, fields, description } = schema.schema;
+  const apiVersion = group ? `${group}/${version}` : version;
   return (
     <div className="object-panel-tab-content explain-tab">
+      <p className="explain-api-version">
+        API version <code>{apiVersion}</code>
+      </p>
       <div className="explain-tree">
         <FieldTree
-          fields={fields}
+          fields={fields ?? []}
           parentPath={KIND_PATH}
           expanded={expanded}
           selectedKey={selectedPath === null ? null : fieldKey(selectedPath)}
@@ -192,7 +196,7 @@ export default function ExplainTab({ kind, isActive = true }: Readonly<ExplainTa
         />
       </div>
       {selectedPath === null ? (
-        <p className="explain-description">{schema.schema.description}</p>
+        <p className="explain-description">{description}</p>
       ) : (
         <SelectedField path={selectedPath} state={selectedExplanation} />
       )}
