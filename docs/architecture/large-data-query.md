@@ -85,7 +85,7 @@ A request addresses its page exactly one way (validated server-side):
 | Field | Contract |
 | --- | --- |
 | `continue` | Opaque backend-minted keyset cursor. Every engine-served response carries `previous` and `continue`; the client keeps no token stack. |
-| `anchor.*` | Full object reference (`clusterId` equals the request cluster; version, kind, name required). Serves the page-aligned window containing it plus `anchor: {found, rank, reason}`; a missing anchor serves the first page with `reason: "filtered" \| "not-found"` in one round trip. |
+| `anchor.*` | Full object reference (`clusterId` equals the request cluster; version, kind, name required). Serves the page-aligned window containing it plus `anchor: {found, rank, reason}`; a missing anchor serves the first page with `reason: "filtered" \| "not-found" \| "unlisted"` in one round trip (`unlisted`: the object exists but the table has no row for it under any filters; only API Resources reports it, for a definition that defines no served kind). |
 | `startRank` | 0-based offset for numbered jumps, offered only while `totalIsExact`; past-the-end starts clamp to the last aligned page. |
 
 - Counted serves (anchor, `startRank`) also return `pageStartRank` (exact

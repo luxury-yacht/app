@@ -68,13 +68,21 @@ function useKindRow(kind: ApiResourcePanelRef, enabled: boolean) {
       setHeldRow(liveRow);
     }
   }, [conclusive, liveRow]);
+  // Whether the group was unread at the last answer, held like the row is: a
+  // panel brought back to the front shows its held row before its read answers.
+  const [heldUnread, setHeldUnread] = useState(false);
+  useEffect(() => {
+    if (answered) {
+      setHeldUnread(groupUnread);
+    }
+  }, [answered, groupUnread]);
   const details = liveRow ?? heldRow;
   return {
     details,
     absence: kindAbsence(answered, groupUnread),
     // A row is shown, but discovery could not read its group: the row is what
     // was last read (the backend keeps an unreadable group's kinds too).
-    outOfDate: answered && groupUnread && Boolean(details),
+    outOfDate: Boolean(details) && (answered ? groupUnread : heldUnread),
     error: query.error,
   };
 }

@@ -235,41 +235,60 @@ describe('ClusterViewApiResources', () => {
     expect(reports[0]).toContain('filters');
   });
 
-  // The identity may not be allowed to read the cluster's API discovery at
-  // all. The first discovery then fails, and the table must say so rather than
-  // look like it is still loading or broken; it loads once discovery succeeds.
-  it('says the identity lacks permission when discovery is denied, and loads when it succeeds', async () => {
-    app.snapshots.respond((request) =>
-      request.domain === 'cluster-api-resources'
-        ? statusResponse(
-            makeErrorStatus('Forbidden', 'API discovery failed: discovery is forbidden')
-          )
-        : undefined
-    );
-    await start();
-
-    expect(view.container.textContent).toContain('Insufficient permissions');
-    expect(view.container.querySelectorAll('.gridtable-row')).toHaveLength(0);
-
-    app.snapshots.respond(null);
-    await act(async () => {
-      app.streams.ring(
-        'cluster-api-resources',
-        buildRefreshScope('cluster-api-resources', {
-          clusterId: dev.clusterId,
-          selector: CLUSTER_SELECTOR,
-        }),
-        'catalog',
-        'v1'
+  // The first discovery can fail outright: the identity may not be allowed to
+  // read the cluster's API discovery, or the API server may be failing. The
+  // table must say what happened rather than look like it is still loading,
+  // and must load once a discovery succeeds.
+  describe('when the first discovery fails', () => {
+    const failDiscovery = (reason: 'Forbidden' | 'InternalError', message: string) =>
+      app.snapshots.respond((request) =>
+        request.domain === 'cluster-api-resources'
+          ? statusResponse(makeErrorStatus(reason, message))
+          : undefined
       );
-      // Signals apply after the stream's 150 ms coalescing window
-      // (resourceStreamManager.ts UPDATE_COALESCE_MS).
-      await new Promise((resolve) => setTimeout(resolve, 200));
-    });
-    await app.settle();
 
-    expect(rowOf('deployments')).toBeDefined();
-    expect(view.container.textContent).not.toContain('Insufficient permissions');
+    const discoverySucceeds = async () => {
+      app.snapshots.respond(null);
+      await act(async () => {
+        app.streams.ring(
+          'cluster-api-resources',
+          buildRefreshScope('cluster-api-resources', {
+            clusterId: dev.clusterId,
+            selector: CLUSTER_SELECTOR,
+          }),
+          'catalog',
+          'v1'
+        );
+        // Signals apply after the stream's 150 ms coalescing window
+        // (resourceStreamManager.ts UPDATE_COALESCE_MS).
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      });
+      await app.settle();
+    };
+
+    it('says the identity lacks permission when discovery is denied', async () => {
+      failDiscovery('Forbidden', 'API discovery failed: discovery is forbidden');
+      await start();
+
+      expect(view.container.textContent).toContain('Insufficient permissions');
+      expect(view.container.querySelectorAll('.gridtable-row')).toHaveLength(0);
+
+      await discoverySucceeds();
+      expect(rowOf('deployments')).toBeDefined();
+      expect(view.container.textContent).not.toContain('Insufficient permissions');
+    });
+
+    it('reports any other failure with its reason', async () => {
+      failDiscovery('InternalError', 'API discovery failed: the server is unavailable');
+      await start();
+
+      expect(view.container.querySelectorAll('.gridtable-row')).toHaveLength(0);
+      const reports = app.errors.take(() => true).map((record) => (record.error as Error).message);
+      expect(reports.some((message) => message.includes('the server is unavailable'))).toBe(true);
+
+      await discoverySucceeds();
+      expect(rowOf('deployments')).toBeDefined();
+    });
   });
 
   // API Resources replaced the CRDs view. A favorite saved there still opens:

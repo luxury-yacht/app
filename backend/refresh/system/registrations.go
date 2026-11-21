@@ -53,9 +53,13 @@ type domainRegistration struct {
 	// domain serves synthesized names) — the permission gate must always
 	// match the data source's actual scope.
 	skipRuntimePolicy bool
-	// feedIndependent marks a domain whose payload reads no object feed (the
+	// feedIndependent marks a domain whose rows come from no object feed (the
 	// catalog service, live GETs, metrics, the maintenance store). It declares
-	// an empty readiness set, so its builds never wait on feed sync.
+	// an empty readiness set, so its builds never wait on feed sync. Such a
+	// domain may still consult a feed's current state without waiting for it,
+	// and must then treat "not listed yet" as "unknown": API Resources asks the
+	// CustomResourceDefinition reflector whether definitions are readable and
+	// whether one exists.
 	feedIndependent bool
 }
 

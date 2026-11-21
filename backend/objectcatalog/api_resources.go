@@ -183,13 +183,15 @@ func (s *apiResourceStore) replace(discovered []APIResource, failed []schema.Gro
 
 // failed records that a discovery failed outright. The published resources
 // stay: an unreachable API server does not mean the cluster serves nothing.
-// The first failure's error is kept until a discovery succeeds: retries fail
-// with different text (a network error names a new local port each time), and
-// that is not a change worth signalling.
+// Once a discovery has succeeded, the first failure's error is kept until the
+// next success: retries fail with different text (a network error names a new
+// local port each time), and that is not a change worth signalling. Before any
+// success there is nothing to show but the reason, so the latest failure
+// replaces the last one, without a signal.
 func (s *apiResourceStore) failed(err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.published.DiscoveryFailure != nil {
+	if s.published.Ready && s.published.DiscoveryFailure != nil {
 		return
 	}
 	next := s.published

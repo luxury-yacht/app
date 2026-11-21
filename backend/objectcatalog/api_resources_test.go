@@ -277,6 +277,20 @@ func TestAFailedFirstDiscoveryIsSignalled(t *testing.T) {
 	require.False(t, inventory.Ready)
 	require.ErrorIs(t, inventory.DiscoveryFailure, denied)
 
+	// The definitions list arriving before any discovery succeeds is not news.
+	svc.apiResources.markCustomKnown()
+	requireNoAPIResourcesUpdate(t, updates)
+
+	// Until a discovery succeeds there is nothing to show but the reason, so
+	// it is the latest one: a denied attempt followed by an unreachable server
+	// must not keep reading as a permission problem. A retry is not signalled.
+	unreachable := errors.New("dial tcp 10.0.0.1:443: connect: connection refused")
+	source.err = unreachable
+	_, err = svc.discoverResources(context.Background())
+	require.Error(t, err)
+	require.ErrorIs(t, svc.APIResources().DiscoveryFailure, unreachable)
+	requireNoAPIResourcesUpdate(t, updates)
+
 	*source = working
 	_, err = svc.discoverResources(context.Background())
 	require.NoError(t, err)

@@ -210,9 +210,16 @@ collects (Events, kinds that cannot be listed, the metrics API).
   inventory changes: a failure and its recovery are changes, before the first
   successful discovery too. Nothing else is signalled before it.
 - Before the first successful discovery the domain has no rows. While
-  discovery is pending it answers not-ready, which the app treats as still
-  loading. Once an attempt has failed it answers that failure itself, typed,
-  so a denied discovery reads as a permission error and any other is reported.
+  discovery is pending it waits up to `SnapshotAPIResourcesDiscoveryWait` and
+  then answers not-ready, which the app does not report as an error (a read
+  that outlasts the startup window shows the table's generic unavailable
+  state until the first discovery signals). Once an attempt has failed it
+  answers the latest failure itself, typed, so a denied discovery reads as a
+  permission error and any other is reported.
+- The domain is feed-independent: it never waits on the CRD reflector. Until
+  that reflector has listed, classification is unknown and a definition
+  lookup answers "not known to exist", so "show in list" on an unserved
+  definition in that window is reported as not found.
 - The `cluster-api-resources` refresh domain
   (`backend/refresh/snapshot/cluster_api_resources.go`) serves the inventory as
   the API Resources table and the kind panel's details. It waits a bounded

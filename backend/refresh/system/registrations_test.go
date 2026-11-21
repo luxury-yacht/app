@@ -889,8 +889,8 @@ func TestDomainReadinessResourcesUnionsDeclaredContracts(t *testing.T) {
 // Every domain declares which object feeds it waits on. A domain left out
 // would fall back to the whole-feed gate, which waits on every kind (so one
 // slow watch delays it) yet skips on-demand dynamic reflectors (so its first
-// build could serve one of those unsynced as empty). Domains whose payload
-// reads no object feed (catalog service, live GETs, metrics, maintenance)
+// build could serve one of those unsynced as empty). Domains whose rows come
+// from no object feed (catalog service, live GETs, metrics, maintenance)
 // declare an empty set and build without waiting.
 func TestEveryDomainDeclaresItsFeedReadiness(t *testing.T) {
 	registrations := domainRegistrations(context.Background(), registrationDeps{cfg: Config{}})

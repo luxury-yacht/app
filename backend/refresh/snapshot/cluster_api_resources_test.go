@@ -3,6 +3,7 @@ package snapshot
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -25,9 +26,20 @@ type fakeAPIResourceSource struct {
 	customUnknown       bool
 	failedGroupVersions []string
 	discoveryFailure    error
+	// failureMu guards discoveryFailure for tests that fail discovery while a
+	// build is waiting on it.
+	failureMu sync.Mutex
+}
+
+func (f *fakeAPIResourceSource) failDiscovery(err error) {
+	f.failureMu.Lock()
+	f.discoveryFailure = err
+	f.failureMu.Unlock()
 }
 
 func (f *fakeAPIResourceSource) APIResources() objectcatalog.APIResourceInventory {
+	f.failureMu.Lock()
+	defer f.failureMu.Unlock()
 	return objectcatalog.APIResourceInventory{
 		Resources: f.resources, Revision: 7, Ready: f.ready.Load(),
 		CustomKnown: !f.customUnknown, FailedGroupVersions: f.failedGroupVersions,
@@ -335,18 +347,41 @@ func TestClusterAPIResourcesFailsAsNotReadyWhenDiscoveryNeverCompletes(t *testin
 // When no discovery has succeeded and an attempt has failed, the table is not
 // "still loading": it gets the failure itself, typed, so the app reports why
 // (a denied discovery reads as a permission error). It does not wait for a
-// discovery that already failed.
+// discovery that already failed: the request would time out first.
 func TestClusterAPIResourcesReturnsTheFailureOfAFailedFirstDiscovery(t *testing.T) {
 	source := apiResourceTestSource()
 	source.ready.Store(false)
-	source.discoveryFailure = apierrors.NewForbidden(schema.GroupResource{Resource: "apis"}, "", errors.New("discovery is forbidden"))
+	source.failDiscovery(apierrors.NewForbidden(schema.GroupResource{Resource: "apis"}, "", errors.New("discovery is forbidden")))
 	builder := apiResourceTestBuilder(source)
 	builder.discoveryWait = time.Minute
+	ctx, cancel := context.WithTimeout(WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"}), 2*time.Second)
+	defer cancel()
 
-	_, err := builder.Build(
-		WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"}), "cluster-a|?limit=100")
+	_, err := builder.Build(ctx, "cluster-a|?limit=100")
 
 	require.Error(t, err)
 	require.Equal(t, errorstatus.ReasonForbidden, errorstatus.Classify(err).Reason)
 	require.Contains(t, err.Error(), "discovery is forbidden")
+}
+
+// A table opened while the first discovery is still running waits for it. If
+// that discovery then fails, the wait ends with the failure instead of
+// running out and reading as "not ready".
+func TestClusterAPIResourcesStopsWaitingWhenTheFirstDiscoveryFails(t *testing.T) {
+	source := apiResourceTestSource()
+	source.ready.Store(false)
+	builder := apiResourceTestBuilder(source)
+	builder.discoveryWait = time.Minute
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		source.failDiscovery(apierrors.NewForbidden(schema.GroupResource{Resource: "apis"}, "", errors.New("discovery is forbidden")))
+		source.updates <- objectcatalog.SubsetUpdate{Revision: 1}
+	}()
+	ctx, cancel := context.WithTimeout(WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"}), 5*time.Second)
+	defer cancel()
+
+	_, err := builder.Build(ctx, "cluster-a|?limit=100")
+
+	require.Error(t, err)
+	require.Equal(t, errorstatus.ReasonForbidden, errorstatus.Classify(err).Reason)
 }

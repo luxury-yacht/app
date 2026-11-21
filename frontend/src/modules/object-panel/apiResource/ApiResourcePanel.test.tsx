@@ -178,11 +178,7 @@ const tab = (label: string) =>
   );
 
 /** The panel's notice that the details it shows may be out of date. */
-const staleNotice = () =>
-  requireValue(
-    document.body.querySelector<HTMLElement>('.object-panel-dockable'),
-    'expected the kind panel'
-  ).querySelector<HTMLElement>('output');
+const staleNotice = () => document.body.querySelector<HTMLElement>('.object-panel-dockable output');
 
 // A field is addressed by its name under each ancestor, one segment per level.
 const field = (...segments: string[]) =>
@@ -551,6 +547,35 @@ describe('ApiResourcePanel', () => {
       expect(staleNotice()).not.toBeNull();
     }
   );
+
+  // Coming back to the front, the panel reads its kind again. Until that read
+  // answers, what it shows is still the possibly out-of-date row, so the
+  // notice stays rather than dropping out and pushing the content back down.
+  it('keeps the out-of-date notice while a panel brought back to the front reads again', async () => {
+    const pods = (): ClusterAPIResourceEntry => ({
+      ...deployments(),
+      kind: 'Pod',
+      group: '',
+      apiVersion: 'v1',
+      resource: 'pods',
+      singular: 'pod',
+      shortNames: ['po'],
+    });
+    await start(deployments, pods);
+    stopServingKinds();
+    app.serveTable(dev, 'cluster-api-resources', {
+      rows: [deployments(), pods()],
+      unreadGroups: ['apps'],
+    });
+    await openKindPanel();
+    expect(staleNotice()).not.toBeNull();
+    await openKindPanel('pods');
+
+    answerDeploymentsRead(() => new Promise<Response>(() => undefined));
+    await frontDockTab('deployments');
+
+    expect(staleNotice()).not.toBeNull();
+  });
 
   // A panel whose first read failed has nothing to show. While its next read
   // is out the cluster has not answered, so the panel must not claim the kind
