@@ -2,6 +2,7 @@ package objectcatalog
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -216,6 +217,57 @@ func TestServiceKeepsAPIResourcesWhenDiscoveryFails(t *testing.T) {
 	inventory := svc.APIResources()
 	require.True(t, inventory.Ready)
 	require.Len(t, inventory.Resources, 7)
+}
+
+// A discovery that fails outright keeps the last API surface, but the
+// inventory must say it is not current, and tell its subscribers, until a
+// discovery succeeds again.
+func TestAFailedDiscoveryIsReportedUntilTheNextSuccess(t *testing.T) {
+	source := multiVersionDiscovery()
+	svc := &Service{clusterID: "c1", discoveryClient: source}
+	_, err := svc.discoverResources(context.Background())
+	require.NoError(t, err)
+	updates, cancel := svc.SubscribeAPIResources()
+	defer cancel()
+	requireAPIResourcesUpdate(t, updates)
+
+	working := *source
+	source.groups, source.lists, source.err = nil, nil, errors.New("the server is currently unable to handle the request")
+	_, err = svc.discoverResources(context.Background())
+	require.Error(t, err)
+
+	inventory := svc.APIResources()
+	require.Equal(t, "the server is currently unable to handle the request", inventory.DiscoveryError)
+	require.Len(t, inventory.Resources, 7, "the last discovered kinds stay")
+	requireAPIResourcesUpdate(t, updates)
+
+	// The same failure again is not news.
+	_, err = svc.discoverResources(context.Background())
+	require.Error(t, err)
+	requireNoAPIResourcesUpdate(t, updates)
+
+	*source = working
+	_, err = svc.discoverResources(context.Background())
+	require.NoError(t, err)
+	require.Empty(t, svc.APIResources().DiscoveryError)
+	requireAPIResourcesUpdate(t, updates)
+}
+
+// A discovery interrupted because its run was cancelled (the cluster is being
+// disconnected) says nothing about the cluster's API.
+func TestACancelledDiscoveryIsNotReportedAsAFailure(t *testing.T) {
+	source := multiVersionDiscovery()
+	svc := &Service{clusterID: "c1", discoveryClient: source}
+	_, err := svc.discoverResources(context.Background())
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	source.groups, source.lists, source.err = nil, nil, context.Canceled
+	_, err = svc.discoverResources(ctx)
+	require.Error(t, err)
+
+	require.Empty(t, svc.APIResources().DiscoveryError)
 }
 
 func requireAPIResourcesUpdate(t *testing.T, updates <-chan SubsetUpdate) SubsetUpdate {

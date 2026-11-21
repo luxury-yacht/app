@@ -244,7 +244,7 @@ func newPermissionInfrastructure(cfg Config) (*permissions.Checker, *permissions
 	return runtimePerms, permissions.NewGrants(runtimePerms), nil
 }
 
-func newIngestInfrastructure(cfg Config, runtimePerms *permissions.Checker) (*ingest.IngestManager, error) {
+func newIngestInfrastructure(cfg Config, runtimePerms *permissions.Checker, grants *permissions.Grants) (*ingest.IngestManager, error) {
 	clusterMeta := snapshot.ClusterMeta{ClusterID: cfg.ClusterID, ClusterName: cfg.ClusterName}
 	manager := ingest.NewIngestManager(
 		streamrows.ClusterMeta{ClusterID: cfg.ClusterID, ClusterName: cfg.ClusterName},
@@ -280,7 +280,7 @@ func newIngestInfrastructure(cfg Config, runtimePerms *permissions.Checker) (*in
 	}
 	// Before registerCustomResourceIngest, which attaches to this reflector's store.
 	registerCustomResourceDefinitionReflector(manager, clusterMeta)
-	manager.SetPermissionFilter(ingestPermissionFilter(runtimePerms))
+	manager.SetPermissionFilter(ingestPermissionFilter(runtimePerms, grants))
 	registerCustomResourceIngest(manager, cfg.ClusterID)
 	return manager, nil
 }
@@ -360,8 +360,10 @@ func restServerHost(cfg *rest.Config) string {
 // subsystemPreflightRequests are the permission checks of the subsystem's own
 // readers, which no domain declares: the metrics poller's, and the
 // CustomResourceDefinition reflector's (it feeds the object catalog and the
-// dynamic custom-resource sources; no table lists definitions). Priming records
-// each decision, so permission revalidation notices when that access changes.
+// dynamic custom-resource sources; no table lists definitions). Priming runs
+// them in parallel with the domains' checks, so the reflector's own admission
+// check (ingestPermissionFilter, which records the decision that revalidation
+// rechecks) is served from the cache instead of reviewing inline at start.
 func subsystemPreflightRequests() []permissions.Request {
 	definitions := apiextensions.Identity
 	return []permissions.Request{
@@ -395,7 +397,7 @@ func NewSubsystemWithServices(ctx context.Context, cfg Config) (*Subsystem, erro
 	if err != nil {
 		return nil, err
 	}
-	ingestManager, err := newIngestInfrastructure(cfg, runtimePerms)
+	ingestManager, err := newIngestInfrastructure(cfg, runtimePerms, grants)
 	if err != nil {
 		return nil, err
 	}
@@ -551,19 +553,37 @@ func metricsSignalObserver(bell doorbell.Bell) func(metrics.Metadata) {
 // but conservatively: it skips a kind ONLY on a confirmed denial (allowed==false with no
 // error). On an SSAR error it returns true so the reflector still runs — the per-kind
 // sync-deadline degrade is the backstop, so a transient permission blip never wrongly
-// excludes a kind with no retry. canList/canWatch are the factory's CanListResource/
-// CanWatchResource.
-func ingestPermissionFilter(checker *permissions.Checker) func(group, resource, namespace string) bool {
-	return func(group, resource, namespace string) bool {
+// excludes a kind with no retry.
+//
+// A built-in kind's reflector is admitted once per generation, so its decision
+// is made through grants: permission revalidation then rebuilds the generation
+// when that access changes, whether or not the connect-time preflight reached
+// the kind. A custom resource's source is admitted again on every catalog
+// collection (IngestManager.ReconcileDiscoveredResource), so its checks are not
+// recorded; recording them would add two reviews per custom resource to every
+// revalidation pass.
+func ingestPermissionFilter(checker *permissions.Checker, grants *permissions.Grants) func(group, resource, namespace string) bool {
+	admittedOnce := make(map[string]struct{}, len(kindregistry.All))
+	for _, d := range kindregistry.All {
+		admittedOnce[permissions.ResourceKey(d.Identity.Group, d.Identity.Resource)] = struct{}{}
+	}
+	allowed := func(group, resource, verb, namespace string) (bool, error) {
 		ctx := context.Background()
+		if _, recorded := admittedOnce[permissions.ResourceKey(group, resource)]; recorded {
+			return grants.CanInNamespace(ctx, group, resource, verb, namespace)
+		}
+		decision, err := checker.CanInNamespace(ctx, group, resource, verb, namespace)
+		return decision.Allowed, err
+	}
+	return func(group, resource, namespace string) bool {
 		// namespace "" is the cluster-wide part — exactly the pre-scope check.
 		// A scoped part asks about ITS namespace only, so one denied namespace
-		// skips one reflector, never the kind's siblings.
-		if decision, err := checker.CanInNamespace(ctx, group, resource, "list", namespace); err == nil && !decision.Allowed {
-			return false
-		}
-		if decision, err := checker.CanInNamespace(ctx, group, resource, "watch", namespace); err == nil && !decision.Allowed {
-			return false
+		// skips one reflector, never the kind's siblings. A denied list asks
+		// nothing about watch.
+		for _, verb := range []string{"list", "watch"} {
+			if ok, err := allowed(group, resource, verb, namespace); err == nil && !ok {
+				return false
+			}
 		}
 		return true
 	}

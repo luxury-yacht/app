@@ -20,7 +20,7 @@ import TablePaginationControls, {
 } from '@shared/components/tables/TablePaginationControls';
 import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
 import { errorHandler } from '@utils/errorHandler';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
 import { useRefreshScopedDomain } from '@/core/refresh';
 import { useQueryStreamSignal } from '@/core/refresh/hooks/useQueryStreamSignal';
@@ -224,6 +224,7 @@ function useTypedQueryLifecycle<
   defaultSort,
   persistence,
   liveScope,
+  onFocusTargetNotListed,
 }: {
   clusterId?: string | null;
   enabled: boolean;
@@ -241,6 +242,7 @@ function useTypedQueryLifecycle<
   defaultSort: SortConfig;
   persistence: UseGridTablePersistenceResult;
   liveScope: string;
+  onFocusTargetNotListed?: FocusTargetNotListedHandler;
 }): TypedQueryLifecycle<TPayload, TRow> {
   const { tableState, handleTableStateChange } = useQueryBackedTableState(defaultSort);
   const [tableStateReady, setTableStateReady] = useState(false);
@@ -344,6 +346,7 @@ function useTypedQueryLifecycle<
     rows: data,
     anchorTo: query.anchorTo,
     anchorResult: query.anchorResult,
+    onTargetNotListed: onFocusTargetNotListed,
   });
 
   return {
@@ -379,6 +382,7 @@ function useAnchorOnUnmatchedFocusRequest<TRow>({
   rows,
   anchorTo,
   anchorResult,
+  onTargetNotListed,
 }: {
   clusterId?: string | null;
   enabled?: boolean;
@@ -388,8 +392,13 @@ function useAnchorOnUnmatchedFocusRequest<TRow>({
   rows: TRow[];
   anchorTo: UseTypedResourceQueryResult<TRow>['anchorTo'];
   anchorResult: UseTypedResourceQueryResult<TRow>['anchorResult'];
+  onTargetNotListed?: FocusTargetNotListedHandler;
 }): void {
   const anchoredRequestRef = useRef<GridTableFocusRequest | null>(null);
+  // Read at report time, so a new handler identity never re-reports a result.
+  const handedOff = useEffectEvent(
+    (request: GridTableFocusRequest) => onTargetNotListed?.(request) ?? false
+  );
 
   useEffect(() => {
     if (!enabled || !clusterId || !loaded) {
@@ -441,29 +450,35 @@ function useAnchorOnUnmatchedFocusRequest<TRow>({
       return;
     }
     const request = anchoredRequestRef.current;
-    let target: string;
-
-    if (request) {
-      const namespacedName = request.namespace
-        ? `${request.namespace}/${request.name}`
-        : request.name;
-      target = `${request.kind} ${namespacedName}`;
-    } else {
-      target = 'The requested object';
+    // The table has no such row. A view that lists the object may take over.
+    if (request && anchorResult.reason !== 'filtered' && handedOff(request)) {
+      return;
     }
-
     // Loud, inline-adjacent truth (degraded states must be visible): the jump
     // landed on page 1 because the object is not in this view.
     errorHandler.handle(
-      new Error(
-        anchorResult.reason === 'filtered'
-          ? `${target} is not shown: the current filters exclude it`
-          : `${target} was not found — it may have been deleted`
-      ),
+      new Error(missingFocusTargetMessage(request, anchorResult.reason === 'filtered')),
       { source: 'resource-grid-anchor', domain }
     );
   }, [anchorResult, domain]);
 }
+
+/** Why a "show in list" target has no row to land on. */
+const missingFocusTargetMessage = (
+  request: GridTableFocusRequest | null,
+  filteredOut: boolean
+): string => {
+  let target = 'The requested object';
+  if (request) {
+    const namespacedName = request.namespace
+      ? `${request.namespace}/${request.name}`
+      : request.name;
+    target = `${request.kind} ${namespacedName}`;
+  }
+  return filteredOut
+    ? `${target} is not shown: the current filters exclude it`
+    : `${target} was not found — it may have been deleted`;
+};
 
 // Builds the shared result for both scopes: the pagination footer (query scope
 // only) plus the normalized controller source (typed query source when enabled,
@@ -708,7 +723,15 @@ export interface QueryBackedClusterGridParams<
    * (requestGridTableFilters); the first query already carries them.
    */
   acceptsFilterRequests?: boolean;
+  /**
+   * Called when "show in list" targets an object this table has no row for
+   * (not one the current filters hide). Return true when the request was
+   * handed to a view that lists the object; the table then reports nothing.
+   */
+  onFocusTargetNotListed?: FocusTargetNotListedHandler;
 }
+
+type FocusTargetNotListedHandler = (request: GridTableFocusRequest) => boolean;
 
 export function useQueryBackedClusterResourceGridTable<
   TPayload extends TypedQueryPayload,
@@ -730,6 +753,7 @@ export function useQueryBackedClusterResourceGridTable<
   defaultSortDirection = 'asc',
   supportsCustomMetadataColumns,
   acceptsFilterRequests = false,
+  onFocusTargetNotListed,
   ...tableParams
 }: QueryBackedClusterGridParams<TPayload, TRow>): QueryBackedNamespaceGridResult<TRow, TPayload> {
   const defaultSort = useMemo(
@@ -773,6 +797,7 @@ export function useQueryBackedClusterResourceGridTable<
     defaultSort,
     persistence,
     liveScope,
+    onFocusTargetNotListed,
   });
   const table = useClusterResourceGridTable<TRow>({
     ...tableParams,

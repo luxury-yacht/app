@@ -14,12 +14,16 @@ import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScop
 import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
+import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
+import { requestGridTableFilters } from '@shared/components/tables/hooks/gridTableFilterRequest';
+import type { GridTableFocusRequest } from '@shared/components/tables/hooks/gridTableFocusRequest';
 import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
+import { useViewState } from '@/core/contexts/ViewStateContext';
 import type { ClusterAPIResourceEntry, ClusterAPIResourcesSnapshot } from '@/core/refresh/types';
 
 type ObjectPanelOpeners = Pick<
@@ -95,9 +99,34 @@ const buildColumns = ({
   );
 };
 
+// The cluster Browse table's view id (BrowseView.tsx).
+const BROWSE_VIEW_ID = 'browse';
+
 export default function ClusterViewApiResources() {
   const { selectedClusterId } = useKubeconfig();
   const { openWithObject, openWithApiResource } = useObjectPanel();
+  const { setActiveClusterView } = useViewState();
+  // "Show in list" on a CustomResourceDefinition lands on the kind it defines.
+  // A definition with no row defines no kind the cluster serves (it is not
+  // Established), but it is still an object, and Browse lists objects. Hand the
+  // request to Browse narrowed to that definition, so what Browse shows is the
+  // answer: its row, or nothing when the definition really is gone.
+  const showDefinitionInBrowse = useCallback(
+    (request: GridTableFocusRequest) => {
+      requestGridTableFilters({
+        clusterId: request.clusterId,
+        destinationViewId: BROWSE_VIEW_ID,
+        filters: {
+          ...DEFAULT_GRID_TABLE_FILTER_STATE,
+          search: request.name,
+          kinds: { mode: 'some', values: [request.kind] },
+        },
+      });
+      setActiveClusterView('browse');
+      return true;
+    },
+    [setActiveClusterView]
+  );
   const columns = useMemo(
     () => buildColumns({ openWithObject, openWithApiResource }),
     [openWithObject, openWithApiResource]
@@ -120,6 +149,7 @@ export default function ClusterViewApiResources() {
     showNamespaceFilters: false,
     filterAccessors: { getKind: (row) => row.kind },
     diagnosticsLabel: 'API Resources',
+    onFocusTargetNotListed: showDefinitionInBrowse,
   });
   return (
     <ResourceInventoryTable

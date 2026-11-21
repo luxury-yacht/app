@@ -15,11 +15,24 @@ import '../components/ObjectPanel/Details/Overview/shared/OverviewBlocks.css';
 const list = (values: readonly string[] | null | undefined) =>
   values?.length ? values.join(', ') : '-';
 
+/**
+ * Why the panel has no row for its kind: the cluster has not answered yet, its
+ * API discovery could not read the kind's group (so nothing is known about the
+ * kind), or it read the group and the kind is not in it.
+ */
+export type KindAbsence = 'pending' | 'unread' | 'gone';
+
+const ABSENCE_MESSAGES: Record<Exclude<KindAbsence, 'pending'>, string> = {
+  unread:
+    'This kind’s API group could not be read from the cluster, so its details are unavailable.',
+  gone: 'The cluster no longer serves this kind.',
+};
+
 /** Shown in place of a tab's content while the panel has no row for its kind. */
 export function ApiResourceUnavailable({
-  loaded,
+  absence,
   error,
-}: Readonly<{ loaded: boolean; error: RefreshFailure | null | undefined }>) {
+}: Readonly<{ absence: KindAbsence; error: RefreshFailure | null | undefined }>) {
   if (error) {
     return (
       <div className="details-content">
@@ -32,10 +45,10 @@ export function ApiResourceUnavailable({
   }
   return (
     <div className="details-content">
-      {loaded ? (
-        <p className="object-panel-empty-state">The cluster no longer serves this kind.</p>
-      ) : (
+      {absence === 'pending' ? (
         <LoadingSpinner message="Loading kind details..." />
+      ) : (
+        <p className="object-panel-empty-state">{ABSENCE_MESSAGES[absence]}</p>
       )}
     </div>
   );

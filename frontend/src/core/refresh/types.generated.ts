@@ -518,6 +518,8 @@ export interface ClusterAPIResourcesSnapshot {
   dynamic?: ResourceQueryDynamicRef;
   capabilities: ResourceQueryCapabilities;
   rows: Array<ClusterAPIResourceEntry> | null;
+  unreadGroups?: Array<string>;
+  discoveryFailed?: boolean;
 }
 
 export interface ClusterAttentionFinding {

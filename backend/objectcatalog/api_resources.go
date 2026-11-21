@@ -160,6 +160,10 @@ type APIResourceInventory struct {
 	// FailedGroupVersions are the group versions the last discovery could not
 	// read. Their groups' resources are the ones last successfully discovered.
 	FailedGroupVersions []string
+	// DiscoveryError is the error of the last discovery when it failed
+	// outright. Resources are then the ones last successfully discovered, and
+	// may be out of date. The next successful discovery clears it.
+	DiscoveryError string
 }
 
 // replace publishes a discovery's API resources. failed lists the group
@@ -173,6 +177,17 @@ func (s *apiResourceStore) replace(discovered []APIResource, failed []schema.Gro
 	next := s.published
 	next.Ready = true
 	next.FailedGroupVersions = groupVersionNames(failed)
+	next.DiscoveryError = ""
+	s.publishLocked(next)
+}
+
+// failed records that a discovery failed outright. The published resources
+// stay: an unreachable API server does not mean the cluster serves nothing.
+func (s *apiResourceStore) failed(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	next := s.published
+	next.DiscoveryError = err.Error()
 	s.publishLocked(next)
 }
 

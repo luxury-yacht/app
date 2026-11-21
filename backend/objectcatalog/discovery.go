@@ -31,6 +31,11 @@ func (s *Service) discoverResources(ctx context.Context) ([]Descriptor, error) {
 	}
 	result, err := discoverFromClient(ctx, s.discoveryClient)
 	if err != nil {
+		// A cancelled run (the cluster is disconnecting) says nothing about the
+		// cluster's API; any other failure leaves the inventory out of date.
+		if ctx.Err() == nil {
+			s.apiResources.failed(err)
+		}
 		return nil, err
 	}
 	s.apiResources.replace(result.apiResources, result.failedGroupVersions)

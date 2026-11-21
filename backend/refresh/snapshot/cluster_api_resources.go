@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
+
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/errorstatus"
@@ -54,6 +57,12 @@ type ClusterAPIResourcesSnapshot struct {
 	ClusterMeta
 	ResourceQueryEnvelope
 	Rows []ClusterAPIResourceEntry `json:"rows"`
+	// UnreadGroups are the API groups the last discovery could not read (the
+	// core group is ""), and DiscoveryFailed says it failed outright. A kind
+	// with no row is known to be gone only when discovery read its group; the
+	// kind panel decides that from these.
+	UnreadGroups    []string `json:"unreadGroups,omitempty"`
+	DiscoveryFailed bool     `json:"discoveryFailed,omitempty"`
 }
 
 // APIResourceSource supplies the discovered API surface; the object catalog
@@ -133,8 +142,12 @@ func (b *ClusterAPIResourcesBuilder) Build(ctx context.Context, scope string) (*
 		Domain:  ClusterAPIResourcesDomainName,
 		Scope:   scope,
 		Version: inventory.Revision,
-		Payload: ClusterAPIResourcesSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: resolved.Envelope, Rows: resolved.Rows},
-		Stats:   resolved.Stats,
+		Payload: ClusterAPIResourcesSnapshot{
+			ClusterMeta: meta, ResourceQueryEnvelope: resolved.Envelope, Rows: resolved.Rows,
+			UnreadGroups:    unreadGroups(inventory.FailedGroupVersions),
+			DiscoveryFailed: inventory.DiscoveryError != "",
+		},
+		Stats: resolved.Stats,
 	}, nil
 }
 
@@ -155,7 +168,14 @@ func clusterAPIResourceIssues(inventory objectcatalog.APIResourceInventory, defi
 			Message: "CustomResourceDefinitions are still being listed; custom and built-in kinds are told apart once that finishes",
 		})
 	}
-	if len(inventory.FailedGroupVersions) > 0 {
+	switch {
+	case inventory.DiscoveryError != "":
+		issues = append(issues, ResourceQueryIssue{
+			Kind: "API discovery",
+			Message: fmt.Sprintf("API discovery failed (%s). Kinds are shown as last discovered and may be missing or out of date",
+				inventory.DiscoveryError),
+		})
+	case len(inventory.FailedGroupVersions) > 0:
 		issues = append(issues, ResourceQueryIssue{
 			Kind: "API discovery",
 			Message: fmt.Sprintf("These API groups could not be read: %s. Their kinds are shown as last discovered and may be missing or out of date",
@@ -163,6 +183,28 @@ func clusterAPIResourceIssues(inventory objectcatalog.APIResourceInventory, defi
 		})
 	}
 	return issues
+}
+
+// unreadGroups are the API groups of the group versions discovery could not
+// read, sorted, with the core group as "".
+func unreadGroups(failedGroupVersions []string) []string {
+	if len(failedGroupVersions) == 0 {
+		return nil
+	}
+	groups := make(map[string]struct{}, len(failedGroupVersions))
+	for _, name := range failedGroupVersions {
+		groupVersion, err := schema.ParseGroupVersion(name)
+		if err != nil {
+			continue
+		}
+		groups[groupVersion.Group] = struct{}{}
+	}
+	sorted := make([]string, 0, len(groups))
+	for group := range groups {
+		sorted = append(sorted, group)
+	}
+	sort.Strings(sorted)
+	return sorted
 }
 
 // discovered returns the cluster's API surface, waiting a bounded time for the

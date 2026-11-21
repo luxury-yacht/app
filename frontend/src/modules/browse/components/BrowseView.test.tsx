@@ -25,6 +25,7 @@ import {
   computeClusterHash,
   type GridTablePersistedState,
 } from '@/shared/components/tables/persistence/gridTablePersistence';
+import { useNavigateToView } from '@/shared/hooks/useNavigateToView';
 import {
   installAppStateHarness,
   type MountedApp,
@@ -438,4 +439,72 @@ describe('BrowseView', () => {
       expect(lastPageQuery().getAll('apiGroup')).toEqual(['apps']);
     }
   );
+
+  // API Resources lists the kinds CustomResourceDefinitions define. A
+  // definition whose kind the cluster does not serve (it never became
+  // Established) has no row there, but the definition still exists and Browse
+  // lists it. "Show in list" on it must end in Browse, narrowed to that
+  // definition, instead of reporting that it may have been deleted. When the
+  // definition really is gone, the narrowed Browse is empty.
+  describe('a definition API Resources has no row for', () => {
+    const definition = (name: string) =>
+      catalogItem({
+        kind: 'CustomResourceDefinition',
+        name,
+        group: 'apiextensions.k8s.io',
+        resource: 'customresourcedefinitions',
+      });
+
+    const showInList = async (name: string) => {
+      // The cluster serves no kind for it: API Resources has no row to land on.
+      app.serveTable(dev, 'cluster-api-resources', {
+        rows: [],
+        anchor: { found: false, rank: -1 },
+      });
+      let navigateToView: ReturnType<typeof useNavigateToView>['navigateToView'] | undefined;
+      const NavigateProbe = () => {
+        navigateToView = useNavigateToView().navigateToView;
+        return null;
+      };
+      view = await app.mountApp(<NavigateProbe />);
+      await view.goTo({ clusterView: 'overview' });
+      await act(async () => {
+        requireValue(
+          navigateToView,
+          'mounted navigation hook'
+        )({
+          clusterId: dev.clusterId,
+          clusterName: dev.clusterName,
+          group: 'apiextensions.k8s.io',
+          version: 'v1',
+          kind: 'CustomResourceDefinition',
+          name,
+        });
+      });
+      // API Resources answers that it has no such row, then Browse loads.
+      await app.settle();
+      await app.settle();
+    };
+
+    it('is shown in Browse, narrowed to it', async () => {
+      serveCatalog([node(), definition('gadgets.example.com'), definition('widgets.example.com')]);
+
+      await showInList('widgets.example.com');
+
+      expect(view.owners().viewState?.activeClusterTab).toBe('browse');
+      expect(lastPageQuery().getAll('kind')).toEqual(['CustomResourceDefinition']);
+      expect(lastPageQuery().get('search')).toBe('widgets.example.com');
+      expect(rowNames()).toEqual(['widgets.example.com']);
+      expect(rowOf('widgets.example.com').getAttribute('data-row-focused')).toBe('true');
+    });
+
+    it('leaves Browse empty when the definition no longer exists', async () => {
+      serveCatalog([node(), definition('gadgets.example.com')]);
+
+      await showInList('widgets.example.com');
+
+      expect(view.owners().viewState?.activeClusterTab).toBe('browse');
+      expect(rowNames()).toEqual([]);
+    });
+  });
 });

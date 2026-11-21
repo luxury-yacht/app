@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
+	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 )
 
 // TestIngestPermissionFilterConservative pins the conservative gating contract: the
@@ -36,7 +37,7 @@ func TestIngestPermissionFilterConservative(t *testing.T) {
 			checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, verb, _ string) (bool, error) {
 				return tc.review(verb)
 			})
-			got := ingestPermissionFilter(checker)("g", "r", "")
+			got := ingestPermissionFilter(checker, permissions.NewGrants(checker))("g", "r", "")
 			if got != tc.wantRun {
 				t.Fatalf("ingestPermissionFilter run=%v, want %v", got, tc.wantRun)
 			}
@@ -51,7 +52,7 @@ func TestIngestPermissionFilterChecksThePartNamespace(t *testing.T) {
 	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _, namespace string) (bool, error) {
 		return namespace != "prod", nil
 	})
-	filter := ingestPermissionFilter(checker)
+	filter := ingestPermissionFilter(checker, permissions.NewGrants(checker))
 
 	if filter("g", "r", "prod") {
 		t.Fatal("prod is denied: its part must be skipped")
@@ -61,5 +62,41 @@ func TestIngestPermissionFilterChecksThePartNamespace(t *testing.T) {
 	}
 	if !filter("g", "r", "") {
 		t.Fatal("cluster-wide part uses the cluster-wide check")
+	}
+}
+
+// A built-in kind's reflector is admitted once per generation. Its decision
+// must be the one permission revalidation rechecks, even when the connect-time
+// preflight never reached the kind (it timed out): a reflector skipped for a
+// denied list has to come back when access is restored.
+func TestSkippedBuiltInReflectorIsRevalidatedWithoutAPreflight(t *testing.T) {
+	denied := permissions.NewCheckerWithReview("test", time.Minute, func(context.Context, string, string, string, string) (bool, error) { return false, nil })
+	grants := permissions.NewGrants(denied)
+	definitions := apiextensions.Identity
+
+	if ingestPermissionFilter(denied, grants)(definitions.Group, definitions.Resource, "") {
+		t.Fatal("a denied list must skip the reflector")
+	}
+
+	allowed := permissions.NewCheckerWithReview("test", time.Minute, func(context.Context, string, string, string, string) (bool, error) { return true, nil })
+	subsystem := &Subsystem{RuntimePerms: allowed, PermissionGrants: grants}
+	if !subsystem.permissionsChanged(context.Background()) {
+		t.Fatal("restored access to a skipped reflector's kind must request a rebuild")
+	}
+}
+
+// A custom resource's source is admitted again on every discovery, so its
+// checks are not held for revalidation: a cluster with hundreds of custom
+// resources must not add hundreds of reviews to each revalidation pass, or
+// rebuild the generation when one custom resource's access changes.
+func TestCustomResourceAdmissionIsNotHeldForRevalidation(t *testing.T) {
+	checker := permissions.NewCheckerWithReview("test", time.Minute, func(context.Context, string, string, string, string) (bool, error) { return true, nil })
+	grants := permissions.NewGrants(checker)
+
+	if !ingestPermissionFilter(checker, grants)("example.com", "widgets", "") {
+		t.Fatal("an allowed custom resource must be admitted")
+	}
+	if recorded := grants.Snapshot(); len(recorded) != 0 {
+		t.Fatalf("custom resource checks must not be recorded, got %d", len(recorded))
 	}
 }

@@ -21,12 +21,14 @@ type fakeAPIResourceSource struct {
 	// customUnknown models a catalog that has not read the CRD list yet.
 	customUnknown       bool
 	failedGroupVersions []string
+	discoveryError      string
 }
 
 func (f *fakeAPIResourceSource) APIResources() objectcatalog.APIResourceInventory {
 	return objectcatalog.APIResourceInventory{
 		Resources: f.resources, Revision: 7, Ready: f.ready.Load(),
 		CustomKnown: !f.customUnknown, FailedGroupVersions: f.failedGroupVersions,
+		DiscoveryError: f.discoveryError,
 	}
 }
 
@@ -194,6 +196,42 @@ func TestClusterAPIResourcesReportsGroupsDiscoveryCouldNotRead(t *testing.T) {
 	require.Equal(t, "API discovery", payload.Issues[0].Kind)
 	require.Contains(t, payload.Issues[0].Message, "metrics.k8s.io/v1beta1")
 	require.Len(t, payload.Rows, 5, "the kinds that were read are still listed")
+}
+
+// When discovery fails outright the last inventory is still served, but the
+// table must not present it as the cluster's current API: the page is partial
+// and says why.
+func TestClusterAPIResourcesReportsAFailedDiscovery(t *testing.T) {
+	source := apiResourceTestSource()
+	source.discoveryError = "the server is currently unable to handle the request"
+
+	payload := apiResourceTestBuild(t, apiResourceTestBuilder(source), "?limit=100")
+
+	require.Equal(t, ResourceQueryPartial, payload.Completeness)
+	require.Len(t, payload.Issues, 1)
+	require.Equal(t, "API discovery", payload.Issues[0].Kind)
+	require.Contains(t, payload.Issues[0].Message, "the server is currently unable to handle the request")
+	require.True(t, payload.DiscoveryFailed)
+	require.Len(t, payload.Rows, 5, "the last discovered kinds are still listed")
+}
+
+// The kind panel reads one kind and may get no row. Whether that means the
+// cluster stopped serving the kind depends on what discovery could read, so
+// the payload states it as data: the groups it could not read (the core group
+// is ""), and whether it failed outright.
+func TestClusterAPIResourcesSaysWhichGroupsAnEmptyAnswerDoesNotCover(t *testing.T) {
+	source := apiResourceTestSource()
+	source.failedGroupVersions = []string{"metrics.k8s.io/v1beta1", "v1"}
+
+	unread := apiResourceTestBuild(t, apiResourceTestBuilder(source), "?limit=1&predicate.resource=nodes.metrics.k8s.io")
+	require.Empty(t, unread.Rows)
+	require.Equal(t, []string{"", "metrics.k8s.io"}, unread.UnreadGroups)
+	require.False(t, unread.DiscoveryFailed)
+
+	complete := apiResourceTestBuild(t, apiResourceTestBuilder(apiResourceTestSource()), "?limit=1&predicate.resource=widgets.example.com")
+	require.Empty(t, complete.Rows)
+	require.Empty(t, complete.UnreadGroups)
+	require.False(t, complete.DiscoveryFailed)
 }
 
 const definitionAnchor = "&anchor.clusterId=cluster-a&anchor.group=apiextensions.k8s.io&anchor.version=v1&anchor.kind=CustomResourceDefinition&anchor.name="

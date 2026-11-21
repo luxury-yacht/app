@@ -57,6 +57,12 @@ failure behavior, and diagnostics.
 - Revalidation compares both allowed and denied decisions against the exact
   scopes used to build the generation. Denied decisions share the normal cache
   so restored grants are detected.
+- A built-in kind's reflector is admitted once per generation, and that
+  admission decision is recorded for revalidation itself
+  (`ingestPermissionFilter`), so a kind skipped while the connect-time preflight
+  timed out still comes back when access is restored. A custom resource's
+  source is admitted again on every catalog collection, so its checks are not
+  recorded.
 - Revocation and restoration delegate replacement to `RefreshCoordinator`; the
   revalidator never stops a still-routed subsystem. A failed replacement leaves
   the old generation serving and revalidating.

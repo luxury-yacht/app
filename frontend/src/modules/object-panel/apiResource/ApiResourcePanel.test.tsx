@@ -445,6 +445,53 @@ describe('ApiResourcePanel', () => {
     expect(panel().querySelector('button[data-explain-path]')).toBeNull();
   });
 
+  // Discovery can fail to read an API group (an aggregated API that is down),
+  // or fail outright. A kind in that group then has no row, which is not the
+  // cluster saying the kind is gone: the panel says what it could not read,
+  // and shows the kind again when discovery recovers.
+  it.each([
+    ['could not read the kind’s group', { unreadGroups: ['apps'] }],
+    ['failed outright', { discoveryFailed: true }],
+  ])('does not call the kind gone when discovery %s', async (_case, discovery) => {
+    await start();
+    stopServingKinds();
+    stopServingKinds = app.serveTable(dev, 'cluster-api-resources', { rows: [], ...discovery });
+    await openKindPanel();
+
+    expect(panel().textContent).not.toContain('no longer serves this kind');
+    expect(panel().textContent).toContain('could not be read');
+
+    stopServingKinds();
+    app.serveTable(dev, 'cluster-api-resources', { rows: [deployments()] });
+    await ringKindsChanged('v2');
+    expect(panel().textContent).toContain('Namespaced');
+  });
+
+  // An unread group in another part of the API says nothing about this kind:
+  // discovery read the kind's own group and found no such kind.
+  it('calls the kind gone when discovery read its group but not another', async () => {
+    await start();
+    stopServingKinds();
+    app.serveTable(dev, 'cluster-api-resources', { rows: [], unreadGroups: ['metrics.k8s.io'] });
+    await openKindPanel();
+
+    expect(panel().textContent).toContain('no longer serves this kind');
+  });
+
+  // The panel keeps what it was showing while the kind's group is unreadable.
+  it('keeps the Explain tree while discovery cannot read the kind’s group', async () => {
+    await start();
+    await openKindPanel();
+    await click(tab('Explain'));
+    await click(field('spec'));
+
+    stopServingKinds();
+    app.serveTable(dev, 'cluster-api-resources', { rows: [], unreadGroups: ['apps'] });
+    await ringKindsChanged('v2');
+
+    expect(field('spec').getAttribute('aria-expanded')).toBe('true');
+  });
+
   // A panel whose first read failed has nothing to show. While its next read
   // is out the cluster has not answered, so the panel must not claim the kind
   // is gone.

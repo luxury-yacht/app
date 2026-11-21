@@ -202,21 +202,31 @@ collects (Events, kinds that cannot be listed, the metrics API).
   published resources of every group with a failed version, and lists those
   group versions in `FailedGroupVersions`; a later complete discovery clears
   them. Catalog descriptors still come from the reachable groups only.
+- A discovery that fails outright keeps the last published resources and
+  records its error in `DiscoveryError` until a discovery succeeds again. A
+  cancelled run (the cluster is disconnecting) records nothing.
 - Subscribers (`SubscribeAPIResources`) are signalled only when the published
-  inventory changes; a discovery that fails outright keeps the last one.
+  inventory changes, a failure and its recovery included.
 - The `cluster-api-resources` refresh domain
   (`backend/refresh/snapshot/cluster_api_resources.go`) serves the inventory as
   the API Resources table and the kind panel's details. It waits a bounded
   time for the first discovery. A row has no Type and no definition while the
   classification is unknown (CRDs not yet read, or not listable by this
   identity), and the payload is partial, with an issue, then and while any
-  group version is unreadable.
+  group version is unreadable or the last discovery failed outright.
+- The payload states what discovery could not read as data: `unreadGroups`
+  (the core group is `""`) and `discoveryFailed`. The kind panel reads one row
+  by resource name; an empty answer means the kind is gone only when discovery
+  read the kind's group. Otherwise the panel keeps the row it holds, or says
+  the group could not be read.
 - A CustomResourceDefinition is listed there as the custom kind it defines:
   every row is keyed as the definition that defines its kind or would
   (`<plural>.<group>`), and an anchor for a CustomResourceDefinition resolves
   to that row, so "show in list" lands on it whether or not the classification
   has arrived. A definition whose kind the cluster does not serve (not
-  Established) has no row.
+  Established) has no row; the definition is still an object, so API Resources
+  hands that request to Browse, narrowed to the definition (its kind and
+  name). Browse then shows its row, or nothing when it really is gone.
 - `kubectl explain` output for a kind comes from
   `backend/resources/apiresources`, read from the cluster's OpenAPI v3
   documents on demand (`ResourceGateway.ExplainKindSchema`,

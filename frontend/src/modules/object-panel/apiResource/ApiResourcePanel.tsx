@@ -23,34 +23,74 @@ import { resolveObjectPanelOpenTarget } from '../components/ObjectPanel/objectPa
 import type { ViewType } from '../components/ObjectPanel/types';
 import { useObjectPanelActiveTab, useObjectPanelState } from '../contexts/ObjectPanelStateContext';
 import { type ApiResourcePanelRef, isApiResourcePanelView } from '../panelTarget';
-import { ApiResourceDetails, ApiResourceUnavailable } from './ApiResourceDetails';
+import { ApiResourceDetails, ApiResourceUnavailable, type KindAbsence } from './ApiResourceDetails';
 import { useApiResourceDetails } from './useApiResourceDetails';
 import '../components/ObjectPanel/ObjectPanel.css';
 import '../components/ObjectPanel/Details/DetailsTab.css';
 
 const tabs = [TABS.DETAILS, TABS.EXPLAIN];
 
+/** What an answer with no row for the kind means. */
+const kindAbsence = (answered: boolean, groupUnread: boolean): KindAbsence => {
+  if (!answered) {
+    return 'pending';
+  }
+  return groupUnread ? 'unread' : 'gone';
+};
+
+/**
+ * The row the panel shows for its kind, and what having none means.
+ *
+ * The row is the one last read. The query holds no rows while another panel is
+ * the group's front tab; keeping the last one keeps this panel's content, and
+ * Explain's open fields and selection, mounted until it is shown again. Only
+ * an answer read while in front replaces or clears it. A read that failed, or
+ * one still out, is not an answer (the query's rows are then stale), so it
+ * leaves the held row alone. So does an answer with no row from a discovery
+ * that could not read the kind's group: it says nothing about the kind.
+ */
+function useKindRow(kind: ApiResourcePanelRef, enabled: boolean) {
+  const query = useApiResourceDetails(kind, enabled);
+  const liveRow = query.rows[0];
+  const [heldRow, setHeldRow] = useState(liveRow);
+  const answered = enabled && !query.pageStale;
+  const groupUnread =
+    Boolean(query.payload?.discoveryFailed) ||
+    (query.payload?.unreadGroups ?? []).includes(kind.group);
+  const conclusive = answered && (Boolean(liveRow) || !groupUnread);
+  useEffect(() => {
+    if (conclusive) {
+      setHeldRow(liveRow);
+    }
+  }, [conclusive, liveRow]);
+  return {
+    details: liveRow ?? heldRow,
+    absence: kindAbsence(answered, groupUnread),
+    error: query.error,
+  };
+}
+
 /** The active tab's content, or the row's loading, error, or gone state. */
 function ApiResourcePanelContent({
   activeTab,
   details,
   explainTarget,
-  answered,
+  absence,
   error,
   enabled,
 }: Readonly<{
   activeTab: ViewType;
   details: ClusterAPIResourceEntry | undefined;
   explainTarget: KindReadTarget | null;
-  /** The cluster has answered the panel's current read of its kind. */
-  answered: boolean;
+  /** What having no row means, when there is none. */
+  absence: KindAbsence;
   error: RefreshFailure | null;
   enabled: boolean;
 }>) {
   // A failed refresh does not take away a row the panel already holds. With no
   // row, the kind is gone only once the cluster has answered that it is.
   if (!details || !explainTarget) {
-    return <ApiResourceUnavailable loaded={answered} error={error} />;
+    return <ApiResourceUnavailable absence={absence} error={error} />;
   }
   return activeTab === 'explain' ? (
     <ExplainTab kind={explainTarget} isActive={enabled} />
@@ -95,22 +135,7 @@ export function ApiResourcePanel({
   );
   // The kind's row says what the cluster serves now. The panel is not tied to a
   // version: Explain reads whichever version the row currently prefers.
-  const query = useApiResourceDetails(kind, enabled);
-  const liveRow = query.rows[0];
-  // The row last read for this kind. The query holds no rows while another
-  // panel is the group's front tab; keeping the last one keeps this panel's
-  // content, and Explain's open fields and selection, mounted until it is
-  // shown again. Only an answer read while in front replaces or clears it. A
-  // read that failed, or one still out, is not an answer (the query's rows are
-  // then stale), so it leaves the held row alone.
-  const [heldRow, setHeldRow] = useState(liveRow);
-  const answered = enabled && !query.pageStale;
-  useEffect(() => {
-    if (answered) {
-      setHeldRow(liveRow);
-    }
-  }, [answered, liveRow]);
-  const details = liveRow ?? heldRow;
+  const { details, absence, error } = useKindRow(kind, enabled);
   const servedKind = details?.kind;
   const servedVersion = details?.version;
   const explainTarget = useMemo(
@@ -153,8 +178,8 @@ export function ApiResourcePanel({
             activeTab={activeTab}
             details={details}
             explainTarget={explainTarget}
-            answered={answered}
-            error={query.error}
+            absence={absence}
+            error={error}
             enabled={enabled}
           />
         </div>
