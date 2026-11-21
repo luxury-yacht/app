@@ -9,12 +9,17 @@ export interface IdentityPanelRef {
   name: string;
 }
 
-/** A kind the cluster serves (not an object of that kind). `group` is empty for the core group. */
+/**
+ * A kind the cluster serves (not an object of that kind). Cluster, group (empty
+ * for the core group) and plural resource identify it, exactly what its panel
+ * ID encodes; `kind` is the label shown until the panel has read the kind's
+ * details. It names no version: the panel reads the kind at whichever version
+ * the cluster currently prefers.
+ */
 export interface ApiResourcePanelRef {
   targetType: 'api-resource';
   clusterId: string;
   group: string;
-  version: string;
   kind: string;
   resource: string;
 }
@@ -43,19 +48,13 @@ export const isApiResourcePanelView = (view: string): view is ApiResourcePanelVi
   (API_RESOURCE_PANEL_VIEWS as readonly string[]).includes(view);
 
 const buildApiResourcePanelRef = (input: ApiResourcePanelRef): ApiResourcePanelRef => {
-  if (
-    !input.clusterId?.trim() ||
-    !input.version?.trim() ||
-    !input.kind?.trim() ||
-    !input.resource?.trim()
-  ) {
+  if (!input.clusterId?.trim() || !input.kind?.trim() || !input.resource?.trim()) {
     throw new Error('Incomplete kind panel reference');
   }
   return {
     targetType: 'api-resource',
     clusterId: input.clusterId,
     group: input.group ?? '',
-    version: input.version,
     kind: input.kind,
     resource: input.resource,
   };
@@ -84,7 +83,7 @@ export const panelTargetId = (ref: PanelTarget): string => {
     return `obj:identity:${JSON.stringify([ref.clusterId, ref.kind, ref.name])}`;
   }
   if (isApiResourcePanelRef(ref)) {
-    // Group and plural identify the kind; the version is how it is read.
+    // Cluster, group and plural identify the kind.
     return `obj:api-resource:${JSON.stringify([ref.clusterId, ref.group, ref.resource])}`;
   }
   return objectPanelId(ref);
@@ -141,7 +140,6 @@ export function panelTargetSnapshot(
       apiResourceRef: {
         clusterId: ref.clusterId,
         group: ref.group,
-        version: ref.version,
         kind: ref.kind,
         resource: ref.resource,
       },

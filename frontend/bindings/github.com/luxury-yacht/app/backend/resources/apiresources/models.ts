@@ -3,10 +3,12 @@
 
 /**
  * FieldExplanation is what `kubectl explain <kind>.<path>` says about one
- * field. An empty Path describes the kind itself.
+ * field. Path is the field's name under each of its ancestors, one segment per
+ * level, because a field name may itself contain a dot. An empty Path
+ * describes the kind itself.
  */
 export interface FieldExplanation {
-    "path": string;
+    "path": string[] | null;
     "type"?: string;
     "description": string;
     "enum"?: string[] | null;

@@ -196,7 +196,7 @@ export function ExecuteApplicationMenuCommand(command: $models.ApplicationMenuCo
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.ExecuteApplicationMenuCommand", command);
 }
 
-export function ExplainKindField(target: resourcemodel$0.ResourceRef, fieldPath: string): $CancellablePromise<apiresources$0.FieldExplanation | null> {
+export function ExplainKindField(target: resourcemodel$0.ResourceRef, fieldPath: string[] | null): $CancellablePromise<apiresources$0.FieldExplanation | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.ExplainKindField", target, fieldPath);
 }
 

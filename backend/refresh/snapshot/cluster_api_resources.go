@@ -59,7 +59,7 @@ type ClusterAPIResourcesSnapshot struct {
 // APIResourceSource supplies the discovered API surface; the object catalog
 // implements it.
 type APIResourceSource interface {
-	APIResources() ([]objectcatalog.APIResource, uint64, bool)
+	APIResources() objectcatalog.APIResourceInventory
 	SubscribeAPIResources() (<-chan objectcatalog.SubsetUpdate, func())
 }
 
@@ -109,23 +109,20 @@ func (b *ClusterAPIResourcesBuilder) Build(ctx context.Context, scope string) (*
 	if base != "" {
 		return nil, fmt.Errorf("API resources scope must be cluster-wide")
 	}
-	discovered, revision, err := b.discovered(ctx)
+	inventory, err := b.discovered(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	definitionsDenied := b.definitionsDenied()
-	rows := make([]ClusterAPIResourceEntry, 0, len(discovered))
-	for _, resource := range discovered {
-		rows = append(rows, newClusterAPIResourceEntry(meta.ClusterID, resource, definitionsDenied))
+	// Whether a kind is custom is known only once the CustomResourceDefinition
+	// list has been read, which this identity may not be allowed to do.
+	typesKnown := inventory.CustomKnown && !definitionsDenied
+	rows := make([]ClusterAPIResourceEntry, 0, len(inventory.Resources))
+	for _, resource := range inventory.Resources {
+		rows = append(rows, newClusterAPIResourceEntry(meta.ClusterID, resource, typesKnown))
 	}
-	var issues []ResourceQueryIssue
-	if definitionsDenied {
-		issues = append(issues, ResourceQueryIssue{
-			Kind:    apiextensions.Identity.Kind,
-			Message: "CustomResourceDefinitions cannot be listed, so custom kinds cannot be told apart from built-in kinds",
-		})
-	}
+	issues := clusterAPIResourceIssues(inventory, definitionsDenied)
 
 	adapter := clusterAPIResourcesQueryAdapter()
 	capabilities := clusterAPIResourcesQueryCapabilities()
@@ -135,25 +132,52 @@ func (b *ClusterAPIResourcesBuilder) Build(ctx context.Context, scope string) (*
 	return &refresh.Snapshot{
 		Domain:  ClusterAPIResourcesDomainName,
 		Scope:   scope,
-		Version: revision,
+		Version: inventory.Revision,
 		Payload: ClusterAPIResourcesSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: resolved.Envelope, Rows: resolved.Rows},
 		Stats:   resolved.Stats,
 	}, nil
 }
 
+// clusterAPIResourceIssues reports what makes the served inventory less than
+// complete: an unknown custom/built-in classification, and group versions the
+// last discovery could not read.
+func clusterAPIResourceIssues(inventory objectcatalog.APIResourceInventory, definitionsDenied bool) []ResourceQueryIssue {
+	var issues []ResourceQueryIssue
+	switch {
+	case definitionsDenied:
+		issues = append(issues, ResourceQueryIssue{
+			Kind:    apiextensions.Identity.Kind,
+			Message: "CustomResourceDefinitions cannot be listed, so custom kinds cannot be told apart from built-in kinds",
+		})
+	case !inventory.CustomKnown:
+		issues = append(issues, ResourceQueryIssue{
+			Kind:    apiextensions.Identity.Kind,
+			Message: "CustomResourceDefinitions are still being listed; custom and built-in kinds are told apart once that finishes",
+		})
+	}
+	if len(inventory.FailedGroupVersions) > 0 {
+		issues = append(issues, ResourceQueryIssue{
+			Kind: "API discovery",
+			Message: fmt.Sprintf("These API groups could not be read: %s. Their kinds are shown as last discovered and may be missing or out of date",
+				strings.Join(inventory.FailedGroupVersions, ", ")),
+		})
+	}
+	return issues
+}
+
 // discovered returns the cluster's API surface, waiting a bounded time for the
 // first discovery so a view opened right after connecting loads instead of
 // rendering an empty table.
-func (b *ClusterAPIResourcesBuilder) discovered(ctx context.Context) ([]objectcatalog.APIResource, uint64, error) {
+func (b *ClusterAPIResourcesBuilder) discovered(ctx context.Context) (objectcatalog.APIResourceInventory, error) {
 	source := b.source()
 	if source == nil {
-		return nil, 0, errorstatus.ClusterNotReady(errors.New("object catalog service unavailable"))
+		return objectcatalog.APIResourceInventory{}, errorstatus.ClusterNotReady(errors.New("object catalog service unavailable"))
 	}
 	// Subscribe before reading, so a discovery that completes in between is seen.
 	updates, cancel := source.SubscribeAPIResources()
 	defer cancel()
-	if resources, revision, ready := source.APIResources(); ready {
-		return resources, revision, nil
+	if inventory := source.APIResources(); inventory.Ready {
+		return inventory, nil
 	}
 	timer := time.NewTimer(b.discoveryWait)
 	defer timer.Stop()
@@ -161,15 +185,18 @@ func (b *ClusterAPIResourcesBuilder) discovered(ctx context.Context) ([]objectca
 	case <-updates:
 	case <-timer.C:
 	case <-ctx.Done():
-		return nil, 0, ctx.Err()
+		return objectcatalog.APIResourceInventory{}, ctx.Err()
 	}
-	if resources, revision, ready := source.APIResources(); ready {
-		return resources, revision, nil
+	if inventory := source.APIResources(); inventory.Ready {
+		return inventory, nil
 	}
-	return nil, 0, errorstatus.ClusterNotReady(errors.New("API discovery has not completed"))
+	return objectcatalog.APIResourceInventory{}, errorstatus.ClusterNotReady(errors.New("API discovery has not completed"))
 }
 
-func newClusterAPIResourceEntry(clusterID string, resource objectcatalog.APIResource, definitionsDenied bool) ClusterAPIResourceEntry {
+// newClusterAPIResourceEntry describes one kind. typesKnown says whether the
+// custom/built-in classification can be trusted; when it cannot, the row has
+// no Type and offers no definition to open.
+func newClusterAPIResourceEntry(clusterID string, resource objectcatalog.APIResource, typesKnown bool) ClusterAPIResourceEntry {
 	entry := ClusterAPIResourceEntry{
 		ClusterID:  clusterID,
 		Kind:       resource.Kind,
@@ -191,7 +218,7 @@ func newClusterAPIResourceEntry(clusterID string, resource objectcatalog.APIReso
 		entry.Scope = apiResourceScopeNS
 	}
 	switch {
-	case definitionsDenied:
+	case !typesKnown:
 	case resource.Custom:
 		entry.Type = apiResourceTypeCustom
 		definition := resourcemodel.NewResourceRef(resourcemodel.ResourceRef{
@@ -243,6 +270,15 @@ func clusterAPIResourcesQueryAdapter() typedTableQueryAdapter[ClusterAPIResource
 		Key: func(row ClusterAPIResourceEntry) string {
 			return strings.ToLower(apiResourceName(row.Group, row.Resource))
 		},
+		// "Show in list" on a CustomResourceDefinition lands on the kind it
+		// defines: a definition is named for its resource, which is the row key.
+		// No other kind of object has a row here.
+		AnchorKey: func(kind, _, name string) string {
+			if kind != apiextensions.Identity.Kind {
+				return ""
+			}
+			return strings.ToLower(strings.TrimSpace(name))
+		},
 		Namespace: func(ClusterAPIResourceEntry) string { return "" },
 		Kind:      func(row ClusterAPIResourceEntry) string { return row.Kind },
 		Facets: []typedTableQueryFacet[ClusterAPIResourceEntry]{
@@ -255,8 +291,10 @@ func clusterAPIResourcesQueryAdapter() typedTableQueryAdapter[ClusterAPIResource
 				Value:      func(row ClusterAPIResourceEntry) string { return row.Scope },
 			},
 		},
+		// The fully qualified name is one element so a search for it, as kubectl
+		// prints it or as a definition is named, matches.
 		SearchText: func(row ClusterAPIResourceEntry) []string {
-			return append([]string{row.Kind, row.Resource, row.Group}, row.ShortNames...)
+			return append([]string{row.Kind, apiResourceName(row.Group, row.Resource), row.Group}, row.ShortNames...)
 		},
 		// The kind panel selects its one row by fully qualified resource name.
 		Predicate: func(row ClusterAPIResourceEntry, field, value string) bool {

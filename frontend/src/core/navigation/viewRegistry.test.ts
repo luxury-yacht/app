@@ -3,6 +3,7 @@ import {
   parseClusterViewType,
   parseGlobalViewType,
   parseNamespaceViewType,
+  parsePersistedClusterViewType,
 } from '@/types/navigation/views';
 import {
   CLUSTER_VIEW_DESCRIPTORS,
@@ -49,6 +50,15 @@ describe('view registry', () => {
     expect(parseClusterViewType('nodes')).toBe('nodes');
     expect(parseClusterViewType('fleet')).toBeUndefined();
     expect(parseClusterViewType('global-namespaces')).toBeUndefined();
+  });
+
+  // The CRDs view was folded into API Resources. A stored value may still name
+  // it; a live value never does, so only the stored-value parser maps it.
+  it('reads a stored id of the retired CRDs view as API Resources', () => {
+    expect(parsePersistedClusterViewType('crds')).toBe('api-resources');
+    expect(parsePersistedClusterViewType('nodes')).toBe('nodes');
+    expect(parsePersistedClusterViewType('invented')).toBeUndefined();
+    expect(parseClusterViewType('crds')).toBeUndefined();
   });
 
   it('declares which namespace views support the all-namespaces scope', () => {

@@ -7,12 +7,14 @@ import * as json$0 from "../../../../../encoding/json/models.js";
 
 /**
  * APIResourceReference identifies a kind the cluster serves, not an API object.
- * Group is empty for the core group.
+ * Cluster, group (empty for the core group) and plural resource are its
+ * identity, the same fields its panel ID encodes. Kind is the label shown
+ * until the panel has read the kind's details. It carries no version: the
+ * panel reads the kind at whichever version the cluster currently prefers.
  */
 export interface APIResourceReference {
     "clusterId": string;
     "group": string;
-    "version": string;
     "kind": string;
     "resource": string;
 }

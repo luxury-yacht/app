@@ -9,8 +9,11 @@ import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import { DockablePanel, type DockPosition, useDockablePanelContext } from '@ui/dockable';
 import { getGroupForPanel, getGroupTabs } from '@ui/dockable/tabGroupState';
 import type { GroupKey } from '@ui/dockable/tabGroupTypes';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { KindReadTarget } from '@/core/data-access';
 import { PanelLifecycleClusterSurface } from '@/core/panel-windows/panelLifecycleGuards';
+import type { RefreshFailure } from '@/core/refresh/refreshFailure';
+import type { ClusterAPIResourceEntry } from '@/core/refresh/types';
 import { getPreference } from '@/core/settings/appPreferences';
 import { TABS } from '../components/ObjectPanel/constants';
 import ExplainTab from '../components/ObjectPanel/Explain/ExplainTab';
@@ -20,11 +23,41 @@ import { resolveObjectPanelOpenTarget } from '../components/ObjectPanel/objectPa
 import type { ViewType } from '../components/ObjectPanel/types';
 import { useObjectPanelActiveTab, useObjectPanelState } from '../contexts/ObjectPanelStateContext';
 import { type ApiResourcePanelRef, isApiResourcePanelView } from '../panelTarget';
-import { ApiResourceDetails } from './ApiResourceDetails';
+import { ApiResourceDetails, ApiResourceUnavailable } from './ApiResourceDetails';
+import { useApiResourceDetails } from './useApiResourceDetails';
 import '../components/ObjectPanel/ObjectPanel.css';
 import '../components/ObjectPanel/Details/DetailsTab.css';
 
 const tabs = [TABS.DETAILS, TABS.EXPLAIN];
+
+/** The active tab's content, or the row's loading, error, or gone state. */
+function ApiResourcePanelContent({
+  activeTab,
+  details,
+  explainTarget,
+  answered,
+  error,
+  enabled,
+}: Readonly<{
+  activeTab: ViewType;
+  details: ClusterAPIResourceEntry | undefined;
+  explainTarget: KindReadTarget | null;
+  /** The cluster has answered the panel's current read of its kind. */
+  answered: boolean;
+  error: RefreshFailure | null;
+  enabled: boolean;
+}>) {
+  // A failed refresh does not take away a row the panel already holds. With no
+  // row, the kind is gone only once the cluster has answered that it is.
+  if (!details || !explainTarget) {
+    return <ApiResourceUnavailable loaded={answered} error={error} />;
+  }
+  return activeTab === 'explain' ? (
+    <ExplainTab kind={explainTarget} isActive={enabled} />
+  ) : (
+    <ApiResourceDetails details={details} />
+  );
+}
 
 export function ApiResourcePanel({
   panelId,
@@ -60,23 +93,47 @@ export function ApiResourcePanel({
     (tab: ViewType) => setObjectPanelActiveTab(kind.clusterId, panelId, tab),
     [setObjectPanelActiveTab, kind.clusterId, panelId]
   );
+  // The kind's row says what the cluster serves now. The panel is not tied to a
+  // version: Explain reads whichever version the row currently prefers.
+  const query = useApiResourceDetails(kind, enabled);
+  const liveRow = query.rows[0];
+  // The row last read for this kind. The query holds no rows while another
+  // panel is the group's front tab; keeping the last one keeps this panel's
+  // content, and Explain's open fields and selection, mounted until it is
+  // shown again. Only an answer read while in front replaces or clears it. A
+  // read that failed, or one still out, is not an answer (the query's rows are
+  // then stale), so it leaves the held row alone.
+  const [heldRow, setHeldRow] = useState(liveRow);
+  const answered = enabled && !query.pageStale;
+  useEffect(() => {
+    if (answered) {
+      setHeldRow(liveRow);
+    }
+  }, [answered, liveRow]);
+  const details = liveRow ?? heldRow;
+  const servedKind = details?.kind;
+  const servedVersion = details?.version;
   const explainTarget = useMemo(
-    () => ({
-      clusterId: kind.clusterId,
-      group: kind.group,
-      version: kind.version,
-      kind: kind.kind,
-      resource: kind.resource,
-    }),
-    [kind.clusterId, kind.group, kind.version, kind.kind, kind.resource]
+    () =>
+      servedKind && servedVersion
+        ? {
+            clusterId: kind.clusterId,
+            group: kind.group,
+            version: servedVersion,
+            kind: servedKind,
+            resource: kind.resource,
+          }
+        : null,
+    [kind.clusterId, kind.group, kind.resource, servedKind, servedVersion]
   );
+  const kindLabel = servedKind ?? kind.kind;
   // The fully qualified resource name, as kubectl accepts it.
   const name = kind.group ? `${kind.resource}.${kind.group}` : kind.resource;
   return (
     <DockablePanel
       panelId={panelId}
       title={name}
-      tabKindClass={getKindColorClass(kind.kind)}
+      tabKindClass={getKindColorClass(kindLabel)}
       isOpen
       defaultPosition={target.position}
       defaultGroupKey={target.groupKey}
@@ -89,14 +146,17 @@ export function ApiResourcePanel({
       onClose={close}
     >
       <PanelLifecycleClusterSurface clusterId={kind.clusterId}>
-        <ObjectPanelHeader kind={kind.kind} kindAlias={null} name={name} />
+        <ObjectPanelHeader kind={kindLabel} kindAlias={null} name={name} />
         <ObjectPanelTabs tabs={tabs} activeTab={activeTab} onSelect={selectTab} />
         <div className="object-panel-content">
-          {activeTab === 'explain' ? (
-            <ExplainTab kind={explainTarget} isActive={enabled} />
-          ) : (
-            <ApiResourceDetails kind={kind} enabled={enabled} />
-          )}
+          <ApiResourcePanelContent
+            activeTab={activeTab}
+            details={details}
+            explainTarget={explainTarget}
+            answered={answered}
+            error={query.error}
+            enabled={enabled}
+          />
         </div>
       </PanelLifecycleClusterSurface>
     </DockablePanel>

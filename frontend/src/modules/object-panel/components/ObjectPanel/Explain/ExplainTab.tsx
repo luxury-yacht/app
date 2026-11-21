@@ -12,7 +12,7 @@ import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { type ReactNode, useCallback, useState } from 'react';
 import type { KindReadTarget } from '@/core/data-access';
-import { type FieldExplanationState, useKindExplain } from './useKindExplain';
+import { type FieldExplanationState, fieldKey, useKindExplain } from './useKindExplain';
 import './ExplainTab.css';
 
 interface ExplainTabProps {
@@ -21,19 +21,21 @@ interface ExplainTabProps {
   isActive?: boolean;
 }
 
+// Fields are identified by their path segments (see fieldKey): `expanded` and
+// `selectedKey` hold field keys, never dotted strings.
 interface FieldTreeState {
   expanded: ReadonlySet<string>;
-  selectedPath: string | null;
-  onSelect: (path: string, hasChildren: boolean) => void;
+  selectedKey: string | null;
+  onSelect: (path: readonly string[], hasChildren: boolean) => void;
 }
 
 interface FieldTreeProps extends FieldTreeState {
   fields: apiresources.SchemaField[];
-  parentPath: string;
+  parentPath: readonly string[];
 }
 
-const fieldPath = (parentPath: string, name: string) =>
-  parentPath ? `${parentPath}.${name}` : name;
+// The kind itself: the parent of its top-level fields.
+const KIND_PATH: readonly string[] = [];
 
 // The caret of a field with nested fields; a leaf field has none.
 const caretFor = (hasChildren: boolean, open: boolean) => {
@@ -48,17 +50,18 @@ function FieldRow({
   field,
   path,
   ...tree
-}: Readonly<FieldTreeState & { field: apiresources.SchemaField; path: string }>) {
+}: Readonly<FieldTreeState & { field: apiresources.SchemaField; path: readonly string[] }>) {
   const children = field.fields ?? [];
   const hasChildren = children.length > 0;
-  const open = hasChildren && tree.expanded.has(path);
+  const key = fieldKey(path);
+  const open = hasChildren && tree.expanded.has(key);
   return (
     <li>
       <button
         type="button"
         className="explain-tree-row"
-        data-explain-field={path}
-        aria-current={tree.selectedPath === path ? 'true' : undefined}
+        data-explain-path={key}
+        aria-current={tree.selectedKey === key ? 'true' : undefined}
         aria-expanded={hasChildren ? open : undefined}
         onClick={() => tree.onSelect(path, hasChildren)}
       >
@@ -78,8 +81,8 @@ function FieldTree({ fields, parentPath, ...tree }: Readonly<FieldTreeProps>) {
   return (
     <ul className="explain-tree-list">
       {fields.map((field) => {
-        const path = fieldPath(parentPath, field.name);
-        return <FieldRow key={path} field={field} path={path} {...tree} />;
+        const path = [...parentPath, field.name];
+        return <FieldRow key={fieldKey(path)} field={field} path={path} {...tree} />;
       })}
     </ul>
   );
@@ -88,7 +91,7 @@ function FieldTree({ fields, parentPath, ...tree }: Readonly<FieldTreeProps>) {
 function SelectedField({
   path,
   state,
-}: Readonly<{ path: string; state: FieldExplanationState | null }>) {
+}: Readonly<{ path: readonly string[]; state: FieldExplanationState | null }>) {
   let body: ReactNode = null;
   if (state?.status === 'error') {
     body = (
@@ -112,7 +115,7 @@ function SelectedField({
   return (
     <div className="explain-selected">
       <div className="explain-selected-path">
-        <span>{path}</span>
+        <span>{path.join('.')}</span>
         {state?.status === 'ready' && state.explanation.type ? (
           <span className="explain-type">{`<${state.explanation.type}>`}</span>
         ) : null}
@@ -126,17 +129,18 @@ export default function ExplainTab({ kind, isActive = true }: Readonly<ExplainTa
   const { schema, selectedPath, selectedExplanation, selectField } = useKindExplain(kind, isActive);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const handleSelect = useCallback(
-    (path: string, hasChildren: boolean) => {
+    (path: readonly string[], hasChildren: boolean) => {
       selectField(path);
       if (!hasChildren) {
         return;
       }
+      const key = fieldKey(path);
       setExpanded((current) => {
         const next = new Set(current);
-        if (next.has(path)) {
-          next.delete(path);
+        if (next.has(key)) {
+          next.delete(key);
         } else {
-          next.add(path);
+          next.add(key);
         }
         return next;
       });
@@ -181,9 +185,9 @@ export default function ExplainTab({ kind, isActive = true }: Readonly<ExplainTa
       <div className="explain-tree">
         <FieldTree
           fields={fields}
-          parentPath=""
+          parentPath={KIND_PATH}
           expanded={expanded}
-          selectedPath={selectedPath}
+          selectedKey={selectedPath === null ? null : fieldKey(selectedPath)}
           onSelect={handleSelect}
         />
       </div>

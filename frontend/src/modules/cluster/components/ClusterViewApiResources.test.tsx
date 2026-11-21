@@ -12,6 +12,7 @@
 import { act } from 'react';
 import { describe, expect, it } from 'vitest';
 import type { ClusterAPIResourceEntry } from '@/core/refresh/types';
+import { useNavigateToView } from '@/shared/hooks/useNavigateToView';
 import {
   installAppStateHarness,
   type MountedApp,
@@ -23,6 +24,12 @@ import { requireValue } from '@/test-utils/requireValue';
 const app = installAppStateHarness();
 let dev: TestCluster;
 let view: MountedApp;
+let navigateToView: ReturnType<typeof useNavigateToView>['navigateToView'] | undefined;
+
+function NavigateProbe() {
+  navigateToView = useNavigateToView().navigateToView;
+  return null;
+}
 
 const certificatesDefinition: ObjectIdentity = {
   group: 'apiextensions.k8s.io',
@@ -68,12 +75,12 @@ const kinds = (): ClusterAPIResourceEntry[] => [
   },
 ];
 
-const start = async () => {
+const start = async (rows: () => ClusterAPIResourceEntry[] = kinds) => {
   dev = app.cluster({ name: 'dev', context: 'alpha' });
   app.namespaces(dev, ['payments']);
   app.startScreen(dev);
-  app.serveTable(dev, 'cluster-api-resources', { rows: kinds() });
-  view = await app.mountApp();
+  app.serveTable(dev, 'cluster-api-resources', { rows: rows() });
+  view = await app.mountApp(<NavigateProbe />);
   await view.goTo({ clusterView: 'api-resources' });
 };
 
@@ -124,7 +131,6 @@ describe('ClusterViewApiResources', () => {
         targetType: 'api-resource',
         clusterId: dev.clusterId,
         group: 'apps',
-        version: 'v1',
         kind: 'Deployment',
         resource: 'deployments',
       },
@@ -140,5 +146,107 @@ describe('ClusterViewApiResources', () => {
     expect(view.openPanels()).toEqual([
       { clusterId: dev.clusterId, clusterName: dev.clusterName, ...certificatesDefinition },
     ]);
+  });
+
+  // "Show in list" on a CustomResourceDefinition (Alt+click in Browse, or from
+  // its panel) lands here, on the custom kind the definition defines.
+  it('focuses the kind a CustomResourceDefinition defines when asked to show it in its list', async () => {
+    await start();
+    await view.goTo({ clusterView: 'overview' });
+
+    await act(async () => {
+      requireValue(
+        navigateToView,
+        'mounted navigation hook'
+      )({
+        ...certificatesDefinition,
+        clusterId: dev.clusterId,
+        clusterName: dev.clusterName,
+        uid: 'definition-uid',
+      });
+    });
+    await app.settle();
+
+    expect(view.owners().viewState?.activeClusterTab).toBe('api-resources');
+    expect(rowOf('certificates').getAttribute('data-row-focused')).toBe('true');
+    expect(rowOf('deployments').getAttribute('data-row-focused')).toBeNull();
+  });
+
+  // Right after connecting, the table is served before the cluster's
+  // CustomResourceDefinitions have been read: rows have no Type and no
+  // definition yet. Showing a definition in its list must still find its kind.
+  it("focuses a definition's kind before kinds are known to be custom", async () => {
+    await start(() => kinds().map(({ definition: _definition, ...row }) => ({ ...row, type: '' })));
+    await view.goTo({ clusterView: 'overview' });
+
+    await act(async () => {
+      requireValue(
+        navigateToView,
+        'mounted navigation hook'
+      )({
+        ...certificatesDefinition,
+        clusterId: dev.clusterId,
+        clusterName: dev.clusterName,
+      });
+    });
+    await app.settle();
+
+    expect(rowOf('certificates').getAttribute('data-row-focused')).toBe('true');
+  });
+
+  // API Resources replaced the CRDs view. A favorite saved there still opens:
+  // on API Resources, showing custom kinds, with the search and order saved.
+  it('opens a favorite saved on the retired CRDs view as custom kinds in its saved order', async () => {
+    app.backend.answer('GetFavorites', () => [
+      {
+        id: 'fav-crds',
+        name: 'cert-manager definitions',
+        clusterSelection: '',
+        viewType: 'cluster',
+        view: 'crds',
+        namespace: '',
+        filters: {
+          search: 'cert-manager',
+          kinds: { mode: 'all' },
+          namespaces: { mode: 'all' },
+          clusters: { mode: 'all' },
+          includeMetadata: false,
+        },
+        tableState: { sortColumn: 'scope', sortDirection: 'desc', columnVisibility: {} },
+        order: 0,
+      },
+    ]);
+    await start();
+    await view.goTo({ clusterView: 'overview' });
+
+    await click(
+      requireValue(
+        view.container.querySelector<HTMLButtonElement>('button[aria-label="Favorites"]'),
+        'the Favorites trigger'
+      )
+    );
+    await click(
+      requireValue(
+        Array.from(
+          view.container.querySelectorAll<HTMLElement>('.fav-dropdown-anchor [role="menuitem"]')
+        ).find((row) => row.textContent?.includes('cert-manager definitions')),
+        'the saved favorite'
+      )
+    );
+
+    // A query's search applies after the 250 ms pause-in-typing wait
+    // (useCursorPageSession.ts useQuerySearch).
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    });
+    await app.settle();
+
+    expect(view.owners().viewState?.activeClusterTab).toBe('api-resources');
+    const reads = app.snapshots.reads('cluster-api-resources');
+    const asked = new URLSearchParams(reads[reads.length - 1]?.scope.split('?')[1]);
+    expect(asked.getAll('facet.types')).toEqual(['Custom']);
+    expect(asked.get('search')).toBe('cert-manager');
+    expect(asked.get('sort')).toBe('scope');
+    expect(asked.get('sortDirection')).toBe('desc');
   });
 });

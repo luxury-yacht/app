@@ -3,12 +3,21 @@ package objectcatalog
 import (
 	"context"
 	"testing"
+	"time"
 
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
+	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
+	"github.com/luxury-yacht/app/backend/refresh/ingest/ingesttest"
+	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/stretchr/testify/require"
+	authorizationv1 "k8s.io/api/authorization/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
+	kubefake "k8s.io/client-go/kubernetes/fake"
+	clienttesting "k8s.io/client-go/testing"
 )
 
 // groupedDiscovery serves a fixed groups-and-resources document, the single
@@ -169,8 +178,7 @@ func TestServicePublishesAPIResourcesOnlyWhenDiscoveryChanges(t *testing.T) {
 	source := multiVersionDiscovery()
 	svc := &Service{clusterID: "c1", discoveryClient: source}
 
-	_, _, ready := svc.APIResources()
-	require.False(t, ready, "nothing is published before the first discovery")
+	require.False(t, svc.APIResources().Ready, "nothing is published before the first discovery")
 
 	updates, cancel := svc.SubscribeAPIResources()
 	defer cancel()
@@ -178,10 +186,10 @@ func TestServicePublishesAPIResourcesOnlyWhenDiscoveryChanges(t *testing.T) {
 	_, err := svc.discoverResources(context.Background())
 	require.NoError(t, err)
 	first := requireAPIResourcesUpdate(t, updates)
-	resources, revision, ready := svc.APIResources()
-	require.True(t, ready)
-	require.Equal(t, first.Revision, revision)
-	require.Len(t, resources, 7)
+	inventory := svc.APIResources()
+	require.True(t, inventory.Ready)
+	require.Equal(t, first.Revision, inventory.Revision)
+	require.Len(t, inventory.Resources, 7)
 
 	_, err = svc.discoverResources(context.Background())
 	require.NoError(t, err)
@@ -192,8 +200,7 @@ func TestServicePublishesAPIResourcesOnlyWhenDiscoveryChanges(t *testing.T) {
 	require.NoError(t, err)
 	second := requireAPIResourcesUpdate(t, updates)
 	require.Greater(t, second.Revision, first.Revision)
-	resources, _, _ = svc.APIResources()
-	require.Len(t, resources, 6)
+	require.Len(t, svc.APIResources().Resources, 6)
 }
 
 // A failed discovery keeps the last published API surface instead of emptying
@@ -208,9 +215,9 @@ func TestServiceKeepsAPIResourcesWhenDiscoveryFails(t *testing.T) {
 	_, err = svc.discoverResources(context.Background())
 	require.Error(t, err)
 
-	resources, _, ready := svc.APIResources()
-	require.True(t, ready)
-	require.Len(t, resources, 7)
+	inventory := svc.APIResources()
+	require.True(t, inventory.Ready)
+	require.Len(t, inventory.Resources, 7)
 }
 
 func requireAPIResourcesUpdate(t *testing.T, updates <-chan SubsetUpdate) SubsetUpdate {
@@ -245,8 +252,7 @@ func TestAPIResourcesFlagKindsDefinedByCRDs(t *testing.T) {
 	defer cancel()
 	requireAPIResourcesUpdate(t, updates)
 	custom := func(group, resource string) bool {
-		resources, _, _ := svc.APIResources()
-		return apiResourceByName(t, resources, group, resource).Custom
+		return apiResourceByName(t, svc.APIResources().Resources, group, resource).Custom
 	}
 	require.False(t, custom("example.io", "widgets"))
 
@@ -294,7 +300,235 @@ func TestAPIResourcesFollowARelistedCRDSet(t *testing.T) {
 	hook.ReplaceBundles([]ingest.Bundle{crdBundle(widgets), crdBundle(relics)})
 	hook.ReplaceBundles([]ingest.Bundle{crdBundle(relics)})
 
-	resources, _, _ := svc.APIResources()
+	resources := svc.APIResources().Resources
 	require.False(t, apiResourceByName(t, resources, "example.io", "widgets").Custom)
 	require.True(t, apiResourceByName(t, resources, "example.io", "relics").Custom)
+}
+
+// crdListSource is an ingest source whose CustomResourceDefinition store the
+// test drives by hand. listed reports that the store's list has really been
+// read; settled is the ingest layer's liveness answer, which is also true for a
+// store that gave up waiting (degraded) without listing anything. The
+// subscribed sink receives what the store would deliver.
+type crdListSource struct {
+	*controlledIngestSource
+	listed   bool
+	settled  bool
+	replayed []ingest.Bundle
+	sink     ingest.BundleSink
+}
+
+func (s *crdListSource) HasSyncedFor(schema.GroupVersionResource) bool {
+	return s.listed || s.settled
+}
+
+func (s *crdListSource) PartitionReadinessFor(schema.GroupVersionResource) []ingest.PartitionReadiness {
+	if s.listed {
+		return []ingest.PartitionReadiness{{State: refresh.ResourceReadinessReady}}
+	}
+	if s.settled {
+		return []ingest.PartitionReadiness{{State: refresh.ResourceReadinessDegraded}}
+	}
+	return []ingest.PartitionReadiness{{State: refresh.ResourceReadinessPending}}
+}
+
+// SubscribeBundleSink replays the store's current rows as upserts, as the
+// ingest store does.
+func (s *crdListSource) SubscribeBundleSink(_ schema.GroupVersionResource, sink ingest.BundleSink) func() {
+	s.sink = sink
+	for _, bundle := range s.replayed {
+		sink.UpsertBundle(bundle)
+	}
+	return func() {}
+}
+
+func exampleWidgetDefinition() ingest.Bundle {
+	widgets := establishedWidgetDefinition()
+	widgets.Spec.Group = "example.io"
+	return crdBundle(widgets)
+}
+
+// Discovery finishes before the CustomResourceDefinition list is read. Until it
+// is, "not flagged custom" does not mean built-in, so the inventory must say
+// the classification is unknown, and signal when it becomes known.
+func TestAPIResourceClassificationIsUnknownUntilTheCRDListIsRead(t *testing.T) {
+	source := &crdListSource{controlledIngestSource: &controlledIngestSource{}}
+	svc := newTestWatchService()
+	svc.deps.IngestSource = source
+	svc.discoveryClient = multiVersionDiscovery()
+	_, err := svc.discoverResources(context.Background())
+	require.NoError(t, err)
+	updates, cancel := svc.SubscribeAPIResources()
+	defer cancel()
+	requireAPIResourcesUpdate(t, updates)
+	require.False(t, svc.APIResources().CustomKnown, "the CRD hook has not registered yet")
+
+	// The hook registers while the CRD store is still listing.
+	detach := svc.registerCRDDiscoveryHook(newWatchNotifier(svc))
+	defer detach()
+	require.False(t, svc.APIResources().CustomKnown, "an unsynced CRD store has not told us anything")
+	requireNoAPIResourcesUpdate(t, updates)
+
+	// The store's first list arrives as a relist.
+	source.sink.(ingest.BundleReplacer).ReplaceBundles([]ingest.Bundle{exampleWidgetDefinition()})
+	requireAPIResourcesUpdate(t, updates)
+	inventory := svc.APIResources()
+	require.True(t, inventory.CustomKnown)
+	require.True(t, apiResourceByName(t, inventory.Resources, "example.io", "widgets").Custom)
+}
+
+// When the CRD store finished listing before the hook registers (the usual
+// order: the initial catalog sync waits for it), the registration replay is the
+// complete list, including the case of a cluster with no CRDs at all.
+func TestAPIResourceClassificationIsKnownOnceASyncedCRDStoreIsReplayed(t *testing.T) {
+	for name, replayed := range map[string][]ingest.Bundle{
+		"with definitions": {exampleWidgetDefinition()},
+		"with none":        nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			source := &crdListSource{controlledIngestSource: &controlledIngestSource{}, listed: true, replayed: replayed}
+			svc := newTestWatchService()
+			svc.deps.IngestSource = source
+			svc.discoveryClient = multiVersionDiscovery()
+			_, err := svc.discoverResources(context.Background())
+			require.NoError(t, err)
+
+			detach := svc.registerCRDDiscoveryHook(newWatchNotifier(svc))
+			defer detach()
+
+			inventory := svc.APIResources()
+			require.True(t, inventory.CustomKnown)
+			require.Equal(t, len(replayed) > 0, apiResourceByName(t, inventory.Resources, "example.io", "widgets").Custom)
+		})
+	}
+}
+
+// The ingest layer stops waiting for a store that cannot finish its first list
+// and calls it settled. Nothing was listed, so an empty replay must not be
+// taken for "this cluster has no custom kinds".
+func TestAPIResourceClassificationStaysUnknownForACRDStoreThatGaveUpListing(t *testing.T) {
+	source := &crdListSource{controlledIngestSource: &controlledIngestSource{}, settled: true}
+	svc := newTestWatchService()
+	svc.deps.IngestSource = source
+	svc.discoveryClient = multiVersionDiscovery()
+	_, err := svc.discoverResources(context.Background())
+	require.NoError(t, err)
+
+	detach := svc.registerCRDDiscoveryHook(newWatchNotifier(svc))
+	defer detach()
+	require.False(t, svc.APIResources().CustomKnown)
+
+	// The list finally arrives.
+	source.sink.(ingest.BundleReplacer).ReplaceBundles([]ingest.Bundle{exampleWidgetDefinition()})
+	require.True(t, svc.APIResources().CustomKnown)
+}
+
+// partialDiscovery fails one group version and serves the rest, as an API
+// server does while an aggregated API is unavailable.
+func partialDiscovery(failed schema.GroupVersion) *groupedDiscovery {
+	source := multiVersionDiscovery()
+	lists := source.lists[:0:0]
+	for _, list := range source.lists {
+		if list.GroupVersion != failed.String() {
+			lists = append(lists, list)
+		}
+	}
+	source.lists = lists
+	source.err = &discovery.ErrGroupDiscoveryFailed{Groups: map[schema.GroupVersion]error{failed: context.DeadlineExceeded}}
+	return source
+}
+
+// A group that is temporarily unreachable must not vanish from the table as if
+// its kinds had been removed: its last known kinds stay, and the inventory
+// names the group versions it could not read.
+func TestPartialDiscoveryKeepsTheUnreachableGroupsKinds(t *testing.T) {
+	metrics := schema.GroupVersion{Group: "metrics.k8s.io", Version: "v1beta1"}
+	svc := &Service{clusterID: "c1", discoveryClient: multiVersionDiscovery()}
+	_, err := svc.discoverResources(context.Background())
+	require.NoError(t, err)
+	require.Empty(t, svc.APIResources().FailedGroupVersions)
+
+	svc.discoveryClient = partialDiscovery(metrics)
+	_, err = svc.discoverResources(context.Background())
+	require.NoError(t, err, "the reachable groups still discover")
+
+	inventory := svc.APIResources()
+	require.Equal(t, []string{"metrics.k8s.io/v1beta1"}, inventory.FailedGroupVersions)
+	require.Len(t, inventory.Resources, 7)
+	require.Equal(t, "NodeMetrics", apiResourceByName(t, inventory.Resources, "metrics.k8s.io", "nodes").Kind)
+
+	// The group answers again: the failure clears.
+	svc.discoveryClient = multiVersionDiscovery()
+	_, err = svc.discoverResources(context.Background())
+	require.NoError(t, err)
+	require.Empty(t, svc.APIResources().FailedGroupVersions)
+}
+
+// One version of a group failing must not rewrite the group from its other
+// versions: example.io/v1 is preferred, and losing it would re-describe
+// widgets by v1beta1 until the next discovery.
+func TestPartialDiscoveryKeepsAGroupWhoseOtherVersionsStillAnswer(t *testing.T) {
+	svc := &Service{clusterID: "c1", discoveryClient: multiVersionDiscovery()}
+	_, err := svc.discoverResources(context.Background())
+	require.NoError(t, err)
+	before := apiResourceByName(t, svc.APIResources().Resources, "example.io", "widgets")
+
+	svc.discoveryClient = partialDiscovery(schema.GroupVersion{Group: "example.io", Version: "v1"})
+	_, err = svc.discoverResources(context.Background())
+	require.NoError(t, err)
+
+	inventory := svc.APIResources()
+	require.Equal(t, before, apiResourceByName(t, inventory.Resources, "example.io", "widgets"))
+	require.Equal(t, []string{"example.io/v1"}, inventory.FailedGroupVersions)
+}
+
+// The first discovery of a session can be partial too: there is nothing to
+// keep, but the table must still be told it is incomplete.
+func TestAFirstPartialDiscoveryReportsTheUnreachableGroup(t *testing.T) {
+	svc := &Service{clusterID: "c1", discoveryClient: partialDiscovery(schema.GroupVersion{Group: "metrics.k8s.io", Version: "v1beta1"})}
+	_, err := svc.discoverResources(context.Background())
+	require.NoError(t, err)
+
+	inventory := svc.APIResources()
+	require.True(t, inventory.Ready)
+	require.Len(t, inventory.Resources, 6)
+	require.Equal(t, []string{"metrics.k8s.io/v1beta1"}, inventory.FailedGroupVersions)
+}
+
+// The same contract through the production owners: a real ingest manager that
+// lists CustomResourceDefinitions from an API server, and the catalog's own run
+// loop registering the hook. A definition that exists before the catalog
+// starts must end up classified, with the classification marked known.
+func TestCatalogClassifiesCustomKindsFromTheRealCRDStore(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	kube := kubefake.NewClientset()
+	kube.PrependReactor("create", "selfsubjectaccessreviews", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		review := action.(clienttesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
+		review.Status.Allowed = true
+		return true, review, nil
+	})
+	server := ingesttest.NewAPIServer(t)
+	server.Create(t, establishedWidgetDefinition())
+	definitions := ingest.NewIngestManager(streamrows.ClusterMeta{ClusterID: "c1"}, server.Client(t), server.APIExtensionsClient(t), nil)
+	definitions.Start(ctx)
+	t.Cleanup(definitions.Stop)
+	require.Eventually(t, definitions.HasSynced, 5*time.Second, time.Millisecond)
+
+	svc := NewService(Dependencies{
+		Common:    common.Dependencies{KubernetesClient: kube, DynamicClient: widgetDynamicClient()},
+		ClusterID: "c1", IngestSource: definitions,
+	}, nil)
+	svc.discoveryClient = &stubDiscovery{DiscoveryInterface: kube.Discovery(), lists: []*metav1.APIResourceList{
+		{GroupVersion: "example.com/v1", APIResources: []metav1.APIResource{{Name: "widgets", Kind: "Widget", Namespaced: true, Verbs: []string{"list", "watch"}}}},
+		{GroupVersion: "v1", APIResources: []metav1.APIResource{{Name: "pods", Kind: "Pod", Namespaced: true, Verbs: []string{"list", "watch"}}}},
+	}}
+	done := make(chan error, 1)
+	go func() { done <- svc.Run(ctx) }()
+	t.Cleanup(func() { cancel(); <-done })
+
+	require.Eventually(t, func() bool { return svc.APIResources().CustomKnown }, 5*time.Second, time.Millisecond)
+	inventory := svc.APIResources()
+	require.True(t, apiResourceByName(t, inventory.Resources, "example.com", "widgets").Custom)
+	require.False(t, apiResourceByName(t, inventory.Resources, "", "pods").Custom)
 }

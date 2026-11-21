@@ -1,48 +1,47 @@
 /**
  * frontend/src/modules/object-panel/apiResource/ApiResourceDetails.tsx
  *
- * The kind panel's Details tab: what API discovery reports about a kind.
+ * The kind panel's Details tab: what API discovery reports about a kind, and
+ * the state shown while the kind's row is loading, failed, or gone.
  */
 
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
-import { failureMessage } from '@/core/refresh/refreshFailure';
+import { failureMessage, type RefreshFailure } from '@/core/refresh/refreshFailure';
+import type { ClusterAPIResourceEntry } from '@/core/refresh/types';
 import { OverviewItem } from '../components/ObjectPanel/Details/Overview/shared/OverviewItem';
-import type { ApiResourcePanelRef } from '../panelTarget';
-import { useApiResourceDetails } from './useApiResourceDetails';
 import '../components/ObjectPanel/Details/Overview/shared/OverviewBlocks.css';
 
 const list = (values: readonly string[] | null | undefined) =>
   values?.length ? values.join(', ') : '-';
 
-export function ApiResourceDetails({
-  kind,
-  enabled,
-}: Readonly<{ kind: ApiResourcePanelRef; enabled: boolean }>) {
-  const query = useApiResourceDetails(kind, enabled);
-  const details = query.rows[0];
-
-  if (query.error) {
+/** Shown in place of a tab's content while the panel has no row for its kind. */
+export function ApiResourceUnavailable({
+  loaded,
+  error,
+}: Readonly<{ loaded: boolean; error: RefreshFailure | null | undefined }>) {
+  if (error) {
     return (
       <div className="details-content">
         <div className="error-message" role="alert">
           Error loading kind details:{' '}
-          <ErrorSurface kind="reported" message={failureMessage(query.error)} />
+          <ErrorSurface kind="reported" message={failureMessage(error)} />
         </div>
       </div>
     );
   }
-  if (!details) {
-    return (
-      <div className="details-content">
-        {query.loaded ? (
-          <p className="object-panel-empty-state">The cluster no longer serves this kind.</p>
-        ) : (
-          <LoadingSpinner message="Loading kind details..." />
-        )}
-      </div>
-    );
-  }
+  return (
+    <div className="details-content">
+      {loaded ? (
+        <p className="object-panel-empty-state">The cluster no longer serves this kind.</p>
+      ) : (
+        <LoadingSpinner message="Loading kind details..." />
+      )}
+    </div>
+  );
+}
+
+export function ApiResourceDetails({ details }: Readonly<{ details: ClusterAPIResourceEntry }>) {
   return (
     <div className="details-content">
       <div className="object-panel-section">

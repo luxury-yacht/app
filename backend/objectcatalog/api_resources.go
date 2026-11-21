@@ -51,13 +51,19 @@ func buildAPIResources(groups []*metav1.APIGroup, lists []*metav1.APIResourceLis
 	for _, resource := range byResource {
 		result = append(result, *resource)
 	}
-	sort.Slice(result, func(i, j int) bool {
-		if result[i].Group != result[j].Group {
-			return result[i].Group < result[j].Group
-		}
-		return result[i].Resource < result[j].Resource
-	})
+	sortAPIResources(result)
 	return result
+}
+
+// sortAPIResources orders an inventory by group, then plural resource, so two
+// discoveries of the same cluster compare equal.
+func sortAPIResources(resources []APIResource) {
+	sort.Slice(resources, func(i, j int) bool {
+		if resources[i].Group != resources[j].Group {
+			return resources[i].Group < resources[j].Group
+		}
+		return resources[i].Resource < resources[j].Resource
+	})
 }
 
 func resourceListsByVersion(lists []*metav1.APIResourceList) map[schema.GroupVersion]*metav1.APIResourceList {
@@ -130,24 +136,83 @@ func cloneStrings(values []string) []string {
 // unchanged cluster stays silent. The zero value is ready to use.
 type apiResourceStore struct {
 	mu sync.RWMutex
-	// discovered is the last discovery's list; custom is the set of resources
-	// CustomResourceDefinitions define. items is discovered with Custom set.
+	// discovered is the inventory from discovery; custom is the set of resources
+	// CustomResourceDefinitions define. published is discovered with Custom set,
+	// plus what is known about its completeness.
 	discovered  []APIResource
 	custom      map[schema.GroupResource]struct{}
-	items       []APIResource
-	revision    uint64
-	ready       bool
+	published   APIResourceInventory
 	subscribers subsetSubscribers
 }
 
-// replace publishes a successful discovery's API resources.
-func (s *apiResourceStore) replace(discovered []APIResource) {
+// APIResourceInventory is the cluster's API surface as last published.
+type APIResourceInventory struct {
+	// Resources is shared: do not mutate its entries.
+	Resources []APIResource
+	// Revision changes whenever anything else in the inventory does.
+	Revision uint64
+	// Ready reports that a discovery has succeeded.
+	Ready bool
+	// CustomKnown reports that the CustomResourceDefinition list has been read,
+	// so a resource that is not flagged Custom really has no definition. Until
+	// then, and for an identity that cannot list definitions, Custom says nothing.
+	CustomKnown bool
+	// FailedGroupVersions are the group versions the last discovery could not
+	// read. Their groups' resources are the ones last successfully discovered.
+	FailedGroupVersions []string
+}
+
+// replace publishes a discovery's API resources. failed lists the group
+// versions that discovery could not read: a group with a failed version keeps
+// the resources last published for it, because a partial answer would
+// re-describe or drop kinds that are only temporarily unreachable.
+func (s *apiResourceStore) replace(discovered []APIResource, failed []schema.GroupVersion) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.discovered = discovered
-	first := !s.ready
-	s.ready = true
-	s.publishLocked(first)
+	s.discovered = retainFailedGroups(s.discovered, discovered, failed)
+	next := s.published
+	next.Ready = true
+	next.FailedGroupVersions = groupVersionNames(failed)
+	s.publishLocked(next)
+}
+
+// retainFailedGroups returns fresh with every resource of a failed group taken
+// from previous instead, when previous knew that group's resource.
+func retainFailedGroups(previous, fresh []APIResource, failed []schema.GroupVersion) []APIResource {
+	if len(failed) == 0 {
+		return fresh
+	}
+	failedGroups := make(map[string]struct{}, len(failed))
+	for _, groupVersion := range failed {
+		failedGroups[groupVersion.Group] = struct{}{}
+	}
+	kept := make(map[schema.GroupResource]struct{})
+	merged := make([]APIResource, 0, len(fresh)+len(previous))
+	for _, resource := range previous {
+		if _, isFailed := failedGroups[resource.Group]; isFailed {
+			kept[schema.GroupResource{Group: resource.Group, Resource: resource.Resource}] = struct{}{}
+			merged = append(merged, resource)
+		}
+	}
+	for _, resource := range fresh {
+		if _, alreadyKept := kept[schema.GroupResource{Group: resource.Group, Resource: resource.Resource}]; !alreadyKept {
+			merged = append(merged, resource)
+		}
+	}
+	sortAPIResources(merged)
+	return merged
+}
+
+func groupVersionNames(groupVersions []schema.GroupVersion) []string {
+	if len(groupVersions) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(groupVersions))
+	for _, groupVersion := range groupVersions {
+		names = append(names, groupVersion.String())
+	}
+	sort.Strings(names)
+	return names
 }
 
 // setCustomResources replaces the set of CRD-defined resources. CRD rows are
@@ -156,39 +221,55 @@ func (s *apiResourceStore) setCustomResources(custom map[schema.GroupResource]st
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.custom = custom
-	if s.ready {
-		s.publishLocked(false)
-	}
+	s.publishLocked(s.published)
 }
 
-// publishLocked rebuilds the flagged list and signals subscribers when it
-// changed, or unconditionally when force is set (the first discovery).
-func (s *apiResourceStore) publishLocked(force bool) {
-	next := make([]APIResource, len(s.discovered))
+// markCustomKnown records that the CustomResourceDefinition list has been read
+// and handed to setCustomResources.
+func (s *apiResourceStore) markCustomKnown() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	next := s.published
+	next.CustomKnown = true
+	s.publishLocked(next)
+}
+
+// publishLocked flags the discovered resources and installs next, signalling
+// subscribers when the published inventory changed. Nothing is signalled
+// before the first discovery.
+func (s *apiResourceStore) publishLocked(next APIResourceInventory) {
+	next.Resources = make([]APIResource, len(s.discovered))
 	for i, resource := range s.discovered {
 		_, resource.Custom = s.custom[schema.GroupResource{Group: resource.Group, Resource: resource.Resource}]
-		next[i] = resource
+		next.Resources[i] = resource
 	}
-	if !force && reflect.DeepEqual(s.items, next) {
+	next.Revision = s.published.Revision
+	firstDiscovery := next.Ready && !s.published.Ready
+	if !firstDiscovery && reflect.DeepEqual(s.published, next) {
 		return
 	}
-	s.items = next
-	s.revision++
-	s.subscribers.publish(SubsetUpdate{Revision: s.revision})
+	if !next.Ready {
+		// Classification can arrive before discovery; keep it without signalling.
+		s.published = next
+		return
+	}
+	next.Revision++
+	s.published = next
+	s.subscribers.publish(SubsetUpdate{Revision: next.Revision})
 }
 
-func (s *apiResourceStore) snapshot() ([]APIResource, uint64, bool) {
+func (s *apiResourceStore) snapshot() APIResourceInventory {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return append([]APIResource(nil), s.items...), s.revision, s.ready
+	return s.published
 }
 
 func (s *apiResourceStore) subscribe() (<-chan SubsetUpdate, func()) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var current *SubsetUpdate
-	if s.ready {
-		current = &SubsetUpdate{Revision: s.revision}
+	if s.published.Ready {
+		current = &SubsetUpdate{Revision: s.published.Revision}
 	}
 	ch, id := s.subscribers.add(current)
 	return ch, func() {
@@ -198,12 +279,11 @@ func (s *apiResourceStore) subscribe() (<-chan SubsetUpdate, func()) {
 	}
 }
 
-// APIResources returns the kinds the cluster serves, the revision of that list,
-// and whether a discovery has succeeded yet. The list is shared: do not mutate
-// its entries.
-func (s *Service) APIResources() ([]APIResource, uint64, bool) {
+// APIResources returns the kinds the cluster serves and what is known about
+// that list's completeness.
+func (s *Service) APIResources() APIResourceInventory {
 	if s == nil {
-		return nil, 0, false
+		return APIResourceInventory{}
 	}
 	return s.apiResources.snapshot()
 }

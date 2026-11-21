@@ -12,6 +12,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/discovery"
 	disk "k8s.io/client-go/discovery/cached/disk"
@@ -32,7 +33,7 @@ func (s *Service) discoverResources(ctx context.Context) ([]Descriptor, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.apiResources.replace(result.apiResources)
+	s.apiResources.replace(result.apiResources, result.failedGroupVersions)
 	return result.descriptors, nil
 }
 
@@ -124,6 +125,9 @@ func discoverResourceDescriptors(ctx context.Context, deps common.Dependencies, 
 type discoveryResult struct {
 	apiResources []APIResource
 	descriptors  []Descriptor
+	// failedGroupVersions are the group versions the server could not answer
+	// for; apiResources and descriptors cover only the ones it could.
+	failedGroupVersions []schema.GroupVersion
 }
 
 // discoverFromClient runs one aggregated discovery via discoveryClient and
@@ -152,7 +156,22 @@ func discoverFromClient(ctx context.Context, discoveryClient discovery.Discovery
 	}
 
 	apiResources := buildAPIResources(groups, resourceLists)
-	return discoveryResult{apiResources: apiResources, descriptors: catalogDescriptors(apiResources)}, nil
+	return discoveryResult{
+		apiResources:        apiResources,
+		descriptors:         catalogDescriptors(apiResources),
+		failedGroupVersions: failedGroupVersions(err),
+	}, nil
+}
+
+// failedGroupVersions names the group versions a partial discovery error says
+// it could not read.
+func failedGroupVersions(err error) []schema.GroupVersion {
+	groups, _ := discovery.GroupDiscoveryFailedErrorGroups(err)
+	failed := make([]schema.GroupVersion, 0, len(groups))
+	for groupVersion := range groups {
+		failed = append(failed, groupVersion)
+	}
+	return failed
 }
 
 // Kinds the catalog never collects objects for.

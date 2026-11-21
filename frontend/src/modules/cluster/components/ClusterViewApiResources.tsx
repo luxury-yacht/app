@@ -14,8 +14,11 @@ import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScop
 import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
-import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
-import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
+import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
+import {
+  buildRequiredCanonicalObjectRowKey,
+  buildRequiredObjectReference,
+} from '@shared/utils/objectIdentity';
 import { useMemo } from 'react';
 import type { ClusterAPIResourceEntry, ClusterAPIResourcesSnapshot } from '@/core/refresh/types';
 
@@ -24,9 +27,21 @@ type ObjectPanelOpeners = Pick<
   'openWithObject' | 'openWithApiResource'
 >;
 
-// Group and plural identify a kind within a cluster.
+const DEFINITION_KIND = 'CustomResourceDefinition';
+
+// Every row is keyed as the CustomResourceDefinition that defines its kind, or
+// would: a definition is named `<plural>.<group>`, which also identifies the
+// kind within its cluster. "Show in list" on a definition then finds the row
+// by the object's own key. The key does not depend on `row.definition`, which
+// is absent until the cluster's definitions have been read, so the row keeps
+// its key, and a focus request finds it, before and after.
 const apiResourceKey = (row: ClusterAPIResourceEntry) =>
-  buildClusterScopedKey(row, JSON.stringify([row.group, row.resource]));
+  buildRequiredCanonicalObjectRowKey({
+    clusterId: row.clusterId,
+    ...resolveBuiltinGroupVersion(DEFINITION_KIND),
+    kind: DEFINITION_KIND,
+    name: row.group ? `${row.resource}.${row.group}` : row.resource,
+  });
 
 const buildColumns = ({
   openWithObject,
@@ -42,7 +57,6 @@ const buildColumns = ({
         targetType: 'api-resource',
         clusterId: row.clusterId,
         group: row.group,
-        version: row.version,
         kind: row.kind,
         resource: row.resource,
       });

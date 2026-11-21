@@ -18,10 +18,16 @@ type fakeAPIResourceSource struct {
 	// ready flips from another goroutine when a test completes discovery late.
 	ready   atomic.Bool
 	updates chan objectcatalog.SubsetUpdate
+	// customUnknown models a catalog that has not read the CRD list yet.
+	customUnknown       bool
+	failedGroupVersions []string
 }
 
-func (f *fakeAPIResourceSource) APIResources() ([]objectcatalog.APIResource, uint64, bool) {
-	return f.resources, 7, f.ready.Load()
+func (f *fakeAPIResourceSource) APIResources() objectcatalog.APIResourceInventory {
+	return objectcatalog.APIResourceInventory{
+		Resources: f.resources, Revision: 7, Ready: f.ready.Load(),
+		CustomKnown: !f.customUnknown, FailedGroupVersions: f.failedGroupVersions,
+	}
 }
 
 func (f *fakeAPIResourceSource) SubscribeAPIResources() (<-chan objectcatalog.SubsetUpdate, func()) {
@@ -116,6 +122,13 @@ func TestClusterAPIResourcesFiltersByTypeScopeAndSearch(t *testing.T) {
 	byGroup := apiResourceTestBuild(t, b, "?limit=100&sort=kind&search=cert-manager")
 	require.Equal(t, []string{"Certificate", "ClusterIssuer"}, apiResourceRowKinds(byGroup.Rows))
 
+	// The fully qualified name, as kubectl prints it and as a definition is
+	// named, finds its one kind.
+	byQualifiedName := apiResourceTestBuild(t, b, "?limit=100&search=certificates.cert-manager.io")
+	require.Equal(t, []string{"Certificate"}, apiResourceRowKinds(byQualifiedName.Rows))
+	builtInByQualifiedName := apiResourceTestBuild(t, b, "?limit=100&search=horizontalpodautoscalers.autoscaling")
+	require.Equal(t, []string{"HorizontalPodAutoscaler"}, apiResourceRowKinds(builtInByQualifiedName.Rows))
+
 	facetKeys := make([]string, 0)
 	for _, facet := range custom.Capabilities.QueryFacets {
 		facetKeys = append(facetKeys, facet.Key)
@@ -134,25 +147,87 @@ func TestClusterAPIResourcesSelectsOneResource(t *testing.T) {
 	require.Equal(t, []string{"Pod"}, apiResourceRowKinds(core.Rows))
 }
 
-// Without access to CustomResourceDefinitions the app cannot tell custom kinds
-// from built-in ones; it must say so instead of labelling everything built-in.
-func TestClusterAPIResourcesReportsUnknownTypesWhenDefinitionsAreDenied(t *testing.T) {
+// Without the CustomResourceDefinition list the app cannot tell custom kinds
+// from built-in ones: when the identity may not list them, and on a cold start
+// until the list has been read. It must say so instead of labelling everything
+// built-in, and must not offer a definition to open.
+func TestClusterAPIResourcesReportsUnknownTypesWithoutTheDefinitionList(t *testing.T) {
+	for name, configure := range map[string]func(*fakeAPIResourceSource, *ClusterAPIResourcesBuilder){
+		"definitions denied": func(_ *fakeAPIResourceSource, b *ClusterAPIResourcesBuilder) {
+			b.definitionsDenied = func() bool { return true }
+		},
+		"definitions not read yet": func(source *fakeAPIResourceSource, _ *ClusterAPIResourcesBuilder) {
+			source.customUnknown = true
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			source := apiResourceTestSource()
+			for i := range source.resources {
+				source.resources[i].Custom = false
+			}
+			b := apiResourceTestBuilder(source)
+			configure(source, b)
+
+			payload := apiResourceTestBuild(t, b, "?limit=100")
+
+			for _, row := range payload.Rows {
+				require.Empty(t, row.Type)
+				require.Nil(t, row.Definition)
+			}
+			require.Equal(t, ResourceQueryPartial, payload.Completeness)
+			require.Len(t, payload.Issues, 1)
+			require.Equal(t, "CustomResourceDefinition", payload.Issues[0].Kind)
+		})
+	}
+}
+
+// A partial discovery keeps the unreachable groups' last known kinds; the table
+// must not present that as a complete, current inventory.
+func TestClusterAPIResourcesReportsGroupsDiscoveryCouldNotRead(t *testing.T) {
 	source := apiResourceTestSource()
-	for i := range source.resources {
-		source.resources[i].Custom = false
-	}
-	b := apiResourceTestBuilder(source)
-	b.definitionsDenied = func() bool { return true }
+	source.failedGroupVersions = []string{"metrics.k8s.io/v1beta1"}
 
-	payload := apiResourceTestBuild(t, b, "?limit=100")
+	payload := apiResourceTestBuild(t, apiResourceTestBuilder(source), "?limit=100")
 
-	for _, row := range payload.Rows {
-		require.Empty(t, row.Type)
-		require.Nil(t, row.Definition)
-	}
 	require.Equal(t, ResourceQueryPartial, payload.Completeness)
 	require.Len(t, payload.Issues, 1)
-	require.Equal(t, "CustomResourceDefinition", payload.Issues[0].Kind)
+	require.Equal(t, "API discovery", payload.Issues[0].Kind)
+	require.Contains(t, payload.Issues[0].Message, "metrics.k8s.io/v1beta1")
+	require.Len(t, payload.Rows, 5, "the kinds that were read are still listed")
+}
+
+const definitionAnchor = "&anchor.clusterId=cluster-a&anchor.group=apiextensions.k8s.io&anchor.version=v1&anchor.kind=CustomResourceDefinition&anchor.name="
+
+// "Show in list" on a CustomResourceDefinition lands on the row of the custom
+// kind it defines, on whichever page that row is.
+func TestClusterAPIResourcesAnchorsACustomResourceDefinitionToItsKind(t *testing.T) {
+	b := apiResourceTestBuilder(apiResourceTestSource())
+
+	// Sorted by kind descending, two per page, Certificate is alone on the third
+	// page: Pod, Node | HorizontalPodAutoscaler, ClusterIssuer | Certificate.
+	firstPage := apiResourceTestBuild(t, b, "?limit=2&sort=kind&sortDirection=desc")
+	require.Equal(t, []string{"Pod", "Node"}, apiResourceRowKinds(firstPage.Rows))
+
+	payload := apiResourceTestBuild(t, b, "?limit=2&sort=kind&sortDirection=desc"+definitionAnchor+"certificates.cert-manager.io")
+	require.NotNil(t, payload.Anchor)
+	require.True(t, payload.Anchor.Found)
+	require.Contains(t, apiResourceRowKinds(payload.Rows), "Certificate")
+	require.NotContains(t, apiResourceRowKinds(payload.Rows), "Pod", "the anchor lands on the definition's page, not the first")
+
+	// A definition whose kind the cluster does not serve has no row here.
+	missing := apiResourceTestBuild(t, b, "?limit=2&sort=kind&sortDirection=desc"+definitionAnchor+"gadgets.example.io")
+	require.NotNil(t, missing.Anchor)
+	require.False(t, missing.Anchor.Found)
+}
+
+// Only a CustomResourceDefinition is listed here as a row; an object of any
+// other kind must not be matched to a kind that happens to share its name.
+func TestClusterAPIResourcesAnchorsNoOtherKindOfObject(t *testing.T) {
+	payload := apiResourceTestBuild(t, apiResourceTestBuilder(apiResourceTestSource()),
+		"?limit=2&sort=kind&anchor.clusterId=cluster-a&anchor.version=v1&anchor.kind=ConfigMap&anchor.namespace=default&anchor.name=pods")
+
+	require.NotNil(t, payload.Anchor)
+	require.False(t, payload.Anchor.Found)
 }
 
 // A view opened before the cluster's first discovery waits for it rather than

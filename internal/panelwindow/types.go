@@ -16,11 +16,13 @@ const (
 )
 
 // APIResourceReference identifies a kind the cluster serves, not an API object.
-// Group is empty for the core group.
+// Cluster, group (empty for the core group) and plural resource are its
+// identity, the same fields its panel ID encodes. Kind is the label shown
+// until the panel has read the kind's details. It carries no version: the
+// panel reads the kind at whichever version the cluster currently prefers.
 type APIResourceReference struct {
 	ClusterID string `json:"clusterId"`
 	Group     string `json:"group"`
-	Version   string `json:"version"`
 	Kind      string `json:"kind"`
 	Resource  string `json:"resource"`
 }
@@ -82,7 +84,10 @@ type panelIdentity struct {
 }
 
 func (tab TabSnapshot) identity() panelIdentity {
-	return panelIdentity{tab.Kind, tab.ObjectRef, tab.IdentityRef, tab.APIResourceRef}
+	// A kind panel's Kind is a label, not identity.
+	apiResource := tab.APIResourceRef
+	apiResource.Kind = ""
+	return panelIdentity{tab.Kind, tab.ObjectRef, tab.IdentityRef, apiResource}
 }
 
 // SameIdentity reports whether two tabs show the same panel and target,
@@ -119,7 +124,6 @@ func validateAPIResourceTab(tab TabSnapshot) error {
 	}
 	ref := tab.APIResourceRef
 	if strings.TrimSpace(ref.ClusterID) == "" ||
-		strings.TrimSpace(ref.Version) == "" ||
 		strings.TrimSpace(ref.Kind) == "" ||
 		strings.TrimSpace(ref.Resource) == "" {
 		return fmt.Errorf("incomplete kind identity")

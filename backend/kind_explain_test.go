@@ -64,7 +64,7 @@ func TestExplainKindReadsTheSchemaAndItsFieldsFromOneDownload(t *testing.T) {
 	require.Equal(t, "Deployment", kindSchema.Kind)
 	require.NotEmpty(t, kindSchema.Fields)
 
-	explanation, err := fixture.gateway.ExplainKindField(deploymentKindRef, "spec.strategy")
+	explanation, err := fixture.gateway.ExplainKindField(deploymentKindRef, []string{"spec", "strategy"})
 	require.NoError(t, err)
 	require.Equal(t, "DeploymentStrategy", explanation.Type)
 	require.Equal(t, 1, *downloads)
@@ -81,7 +81,7 @@ func TestExplainKindRejectsIncompleteKindIdentity(t *testing.T) {
 			change(&target)
 			_, err := fixture.gateway.ExplainKindSchema(target)
 			require.Equal(t, errorstatus.ReasonBadRequest, errorstatus.Classify(err).Reason)
-			_, err = fixture.gateway.ExplainKindField(target, "spec")
+			_, err = fixture.gateway.ExplainKindField(target, []string{"spec"})
 			require.Equal(t, errorstatus.ReasonBadRequest, errorstatus.Classify(err).Reason)
 		})
 	}

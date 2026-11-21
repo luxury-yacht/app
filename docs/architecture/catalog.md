@@ -192,13 +192,31 @@ collects (Events, kinds that cannot be listed, the metrics API).
 - A resource is `Custom` when a CustomResourceDefinition visible to the
   identity defines it. The CRD discovery hook supplies that set, so the flag
   follows the CRD list even when it arrives after discovery.
+- `CustomKnown` says whether the CRD list has been read. Discovery publishes
+  before the hook registers, so until the hook has replayed a CRD store whose
+  initial list completed (every partition Ready), or has received a relist,
+  "not flagged custom" does not mean built-in. A store that only settled
+  (permission-skipped, or degraded past the sync deadline) has listed nothing
+  and does not count.
+- A partial discovery (some group versions unreachable) keeps the last
+  published resources of every group with a failed version, and lists those
+  group versions in `FailedGroupVersions`; a later complete discovery clears
+  them. Catalog descriptors still come from the reachable groups only.
 - Subscribers (`SubscribeAPIResources`) are signalled only when the published
-  list changes; a failed discovery keeps the last list.
+  inventory changes; a discovery that fails outright keeps the last one.
 - The `cluster-api-resources` refresh domain
-  (`backend/refresh/snapshot/cluster_api_resources.go`) serves the list as the
-  API Resources table and the kind panel's details. It waits a bounded time
-  for the first discovery, and reports an issue instead of a Type when
-  CustomResourceDefinitions cannot be listed.
+  (`backend/refresh/snapshot/cluster_api_resources.go`) serves the inventory as
+  the API Resources table and the kind panel's details. It waits a bounded
+  time for the first discovery. A row has no Type and no definition while the
+  classification is unknown (CRDs not yet read, or not listable by this
+  identity), and the payload is partial, with an issue, then and while any
+  group version is unreadable.
+- A CustomResourceDefinition is listed there as the custom kind it defines:
+  every row is keyed as the definition that defines its kind or would
+  (`<plural>.<group>`), and an anchor for a CustomResourceDefinition resolves
+  to that row, so "show in list" lands on it whether or not the classification
+  has arrived. A definition whose kind the cluster does not serve (not
+  Established) has no row.
 - `kubectl explain` output for a kind comes from
   `backend/resources/apiresources`, read from the cluster's OpenAPI v3
   documents on demand (`ResourceGateway.ExplainKindSchema`,

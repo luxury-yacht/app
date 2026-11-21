@@ -107,7 +107,7 @@ type ResourceCommands interface {
 	ApplyObjectYaml(string, ObjectYAMLMutationRequest) (*ObjectYAMLMutationResponse, error)
 	CheckObjectYamlOwnership(string, ObjectYAMLMutationRequest) (*ObjectYAMLOwnershipCheckResponse, error)
 	DiscoverNodeLogs(resourcemodel.ResourceRef) NodeLogDiscoveryResponse
-	ExplainKindField(resourcemodel.ResourceRef, string) (*apiresources.FieldExplanation, error)
+	ExplainKindField(resourcemodel.ResourceRef, []string) (*apiresources.FieldExplanation, error)
 	ExplainKindSchema(resourcemodel.ResourceRef) (*apiresources.KindSchema, error)
 	FetchContainerLogs(string, ContainerLogsFetchRequest) (ContainerLogsFetchResponse, error)
 	FetchNodeLogs(resourcemodel.ResourceRef, NodeLogFetchRequest) (NodeLogFetchResponse, error)
@@ -479,7 +479,7 @@ func (s *DesktopService) DiscoverNodeLogs(target resourcemodel.ResourceRef) Node
 	return s.resources.DiscoverNodeLogs(target)
 }
 
-func (s *DesktopService) ExplainKindField(target resourcemodel.ResourceRef, fieldPath string) (*apiresources.FieldExplanation, error) {
+func (s *DesktopService) ExplainKindField(target resourcemodel.ResourceRef, fieldPath []string) (*apiresources.FieldExplanation, error) {
 	return s.resources.ExplainKindField(target, fieldPath)
 }
 

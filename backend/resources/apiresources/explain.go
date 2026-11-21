@@ -35,9 +35,11 @@ type SchemaField struct {
 }
 
 // FieldExplanation is what `kubectl explain <kind>.<path>` says about one
-// field. An empty Path describes the kind itself.
+// field. Path is the field's name under each of its ancestors, one segment per
+// level, because a field name may itself contain a dot. An empty Path
+// describes the kind itself.
 type FieldExplanation struct {
-	Path        string   `json:"path"`
+	Path        []string `json:"path"`
 	Type        string   `json:"type,omitempty"`
 	Description string   `json:"description"`
 	Enum        []string `json:"enum,omitempty"`
@@ -59,21 +61,16 @@ func ExplainSchema(client openapi.Client, gvr schema.GroupVersionResource) (*Kin
 	}, nil
 }
 
-// ExplainField returns the type and description of the field at the dot path
-// under the kind served at gvr.
-func ExplainField(client openapi.Client, gvr schema.GroupVersionResource, path string) (*FieldExplanation, error) {
-	path = strings.TrimSpace(path)
-	var fieldPath []string
-	if path != "" {
-		fieldPath = strings.Split(path, ".")
-	}
+// ExplainField returns the type and description of the field reached by
+// following fieldPath, one field name per level, under the kind served at gvr.
+func ExplainField(client openapi.Client, gvr schema.GroupVersionResource, fieldPath []string) (*FieldExplanation, error) {
 	output, err := renderExplain(client, gvr, fieldPath, false)
 	if err != nil {
 		return nil, err
 	}
 	sections := splitExplainOutput(output)
 	return &FieldExplanation{
-		Path:        path,
+		Path:        append([]string{}, fieldPath...),
 		Type:        sections.fieldType,
 		Description: sections.description,
 		Enum:        sections.enum,
@@ -150,8 +147,9 @@ var (
 	headerLinePattern = regexp.MustCompile(`^([A-Z]+):\s+(\S.*)$`)
 	fieldTypePattern  = regexp.MustCompile(`<(.+)>\s*$`)
 	// A field list line: indentation, the name, a tab, the type in angle
-	// brackets, and the required marker when the parent requires the field.
-	fieldListPattern = regexp.MustCompile(`^( +)(\S+)\t<(.+?)>( -required-)?$`)
+	// brackets, and the required marker when the parent requires the field. The
+	// tab ends the name, which may contain dots and spaces.
+	fieldListPattern = regexp.MustCompile(`^( +)([^\t]+)\t<(.+?)>( -required-)?$`)
 )
 
 func splitExplainOutput(output string) explainSections {

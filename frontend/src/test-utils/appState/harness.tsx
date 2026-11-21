@@ -184,7 +184,6 @@ export type OpenPanelTarget =
       targetType: 'api-resource';
       clusterId: string;
       group: string;
-      version: string;
       kind: string;
       resource: string;
     };

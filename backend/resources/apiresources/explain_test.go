@@ -74,10 +74,10 @@ func TestExplainSchemaOfACoreKindHasNoGroup(t *testing.T) {
 }
 
 func TestExplainFieldDescribesOneField(t *testing.T) {
-	explanation, err := ExplainField(openapitest.NewEmbeddedFileClient(), deploymentsGVR, "spec.strategy")
+	explanation, err := ExplainField(openapitest.NewEmbeddedFileClient(), deploymentsGVR, []string{"spec", "strategy"})
 	require.NoError(t, err)
 
-	require.Equal(t, "spec.strategy", explanation.Path)
+	require.Equal(t, []string{"spec", "strategy"}, explanation.Path)
 	require.Equal(t, "DeploymentStrategy", explanation.Type)
 	require.Equal(t,
 		"The deployment strategy to use to replace existing pods with new ones.\n"+
@@ -86,7 +86,7 @@ func TestExplainFieldDescribesOneField(t *testing.T) {
 }
 
 func TestExplainFieldWithoutAPathDescribesTheKind(t *testing.T) {
-	explanation, err := ExplainField(openapitest.NewEmbeddedFileClient(), deploymentsGVR, "")
+	explanation, err := ExplainField(openapitest.NewEmbeddedFileClient(), deploymentsGVR, nil)
 	require.NoError(t, err)
 
 	require.Empty(t, explanation.Path)
@@ -108,7 +108,7 @@ func TestExplainReportsMissingSchemasAsNotFound(t *testing.T) {
 			return err
 		},
 		"field not in the schema": func() error {
-			_, err := ExplainField(client, deploymentsGVR, "spec.nope")
+			_, err := ExplainField(client, deploymentsGVR, []string{"spec", "nope"})
 			return err
 		},
 	}
@@ -152,7 +152,10 @@ const widgetDocument = `{
       "x-kubernetes-group-version-kind": [{"group": "example.io", "version": "v1", "kind": "Widget"}],
       "properties": {
         "mode": {"type": "string", "description": "How fast the widget runs.", "enum": ["Fast", "Slow"]},
-        "root": {"$ref": "#/components/schemas/io.example.v1.Node"}
+        "root": {"$ref": "#/components/schemas/io.example.v1.Node"},
+        "a.b": {"type": "string", "description": "The field literally named a.b."},
+        "a": {"type": "object", "properties": {"b": {"type": "string", "description": "The field b nested under a."}}},
+        "display name": {"type": "string", "description": "A name with a space in it."}
       }
     },
     "io.example.v1.Node": {
@@ -174,7 +177,7 @@ func widgetClient() openapi.Client {
 }
 
 func TestExplainFieldListsEnumValues(t *testing.T) {
-	explanation, err := ExplainField(widgetClient(), widgetsGVR, "mode")
+	explanation, err := ExplainField(widgetClient(), widgetsGVR, []string{"mode"})
 	require.NoError(t, err)
 
 	require.Equal(t, "string", explanation.Type)
@@ -194,4 +197,28 @@ func TestExplainSchemaStopsAtSelfReferentialFields(t *testing.T) {
 	children := findField(t, kindSchema.Fields, "root", "children")
 	require.Equal(t, "[]Node", children.Type)
 	require.Empty(t, children.Fields)
+}
+
+// Schemas may name a property with dots (label-style keys are common in custom
+// kinds). That field and a same-spelled nested path are different fields and
+// must be explained separately.
+func TestExplainFieldTellsADottedNameFromANestedPath(t *testing.T) {
+	literal, err := ExplainField(widgetClient(), widgetsGVR, []string{"a.b"})
+	require.NoError(t, err)
+	require.Equal(t, "The field literally named a.b.", literal.Description)
+
+	nested, err := ExplainField(widgetClient(), widgetsGVR, []string{"a", "b"})
+	require.NoError(t, err)
+	require.Equal(t, "The field b nested under a.", nested.Description)
+}
+
+// Field names are whatever the schema says; the tree must keep a name with a
+// dot or a space as one field rather than dropping or splitting it.
+func TestExplainSchemaKeepsUnusualFieldNamesWhole(t *testing.T) {
+	kindSchema, err := ExplainSchema(widgetClient(), widgetsGVR)
+	require.NoError(t, err)
+
+	require.Equal(t, "string", findField(t, kindSchema.Fields, "a.b").Type)
+	require.Equal(t, "string", findField(t, kindSchema.Fields, "a", "b").Type)
+	require.Equal(t, "string", findField(t, kindSchema.Fields, "display name").Type)
 }

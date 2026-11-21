@@ -29,6 +29,12 @@ export type FieldExplanationState =
   | { status: 'ready'; explanation: apiresources.FieldExplanation }
   | { status: 'error'; message: string };
 
+/**
+ * Identifies a field by its name under each ancestor. A field name may itself
+ * contain a dot, so a dotted string cannot tell `a.b` from `b` nested under `a`.
+ */
+export const fieldKey = (path: readonly string[]): string => JSON.stringify(path);
+
 const kindScope = (target: KindReadTarget) =>
   `${target.clusterId}:${target.group}/${target.version}/${target.resource}`;
 
@@ -39,8 +45,8 @@ const describeFailure = (error: unknown, action: string, clusterId: string): str
 export function useKindExplain(target: KindReadTarget, enabled: boolean) {
   const { clusterId, group, version, kind, resource } = target;
   const [schema, setSchema] = useState<KindSchemaState>({ status: 'loading' });
-  const [selectedPath, setSelectedPath] = useState<string | null>(null);
-  // Explanations already read for this kind, keyed by field path.
+  const [selectedPath, setSelectedPath] = useState<readonly string[] | null>(null);
+  // Explanations already read for this kind, keyed by fieldKey.
   const [explanations, setExplanations] = useState<Record<string, FieldExplanationState>>({});
   const requestedPaths = useRef(new Set<string>());
   // Identifies the kind the in-flight reads belong to, so a late answer for a
@@ -103,17 +109,18 @@ export function useKindExplain(target: KindReadTarget, enabled: boolean) {
   }, [enabled, clusterId, group, version, kind, resource]);
 
   const selectField = useCallback(
-    (path: string) => {
+    (path: readonly string[]) => {
+      const key = fieldKey(path);
       setSelectedPath(path);
-      if (requestedPaths.current.has(path)) {
+      if (requestedPaths.current.has(key)) {
         return;
       }
-      requestedPaths.current.add(path);
+      requestedPaths.current.add(key);
       const kindTarget = { clusterId, group, version, kind, resource };
       const current = generation.current;
       const settle = (state: FieldExplanationState) => {
         if (generation.current === current) {
-          setExplanations((previous) => ({ ...previous, [path]: state }));
+          setExplanations((previous) => ({ ...previous, [key]: state }));
         }
       };
       settle({ status: 'loading' });
@@ -122,7 +129,7 @@ export function useKindExplain(target: KindReadTarget, enabled: boolean) {
         reason: 'user',
         adapter: 'rpc-read',
         label: 'Explain field',
-        scope: `${kindScope(kindTarget)}:${path}`,
+        scope: `${kindScope(kindTarget)}:${key}`,
         read: () => readKindField(kindTarget, path),
       })
         .then((result) => {
@@ -131,11 +138,11 @@ export function useKindExplain(target: KindReadTarget, enabled: boolean) {
             return;
           }
           // Let a later selection ask again.
-          requestedPaths.current.delete(path);
+          requestedPaths.current.delete(key);
           settle({ status: 'error', message: 'The field could not be explained' });
         })
         .catch((error: unknown) => {
-          requestedPaths.current.delete(path);
+          requestedPaths.current.delete(key);
           settle({
             status: 'error',
             message: describeFailure(error, 'loadKindField', clusterId),
@@ -148,7 +155,8 @@ export function useKindExplain(target: KindReadTarget, enabled: boolean) {
   return {
     schema,
     selectedPath,
-    selectedExplanation: selectedPath === null ? null : (explanations[selectedPath] ?? null),
+    selectedExplanation:
+      selectedPath === null ? null : (explanations[fieldKey(selectedPath)] ?? null),
     selectField,
   };
 }
