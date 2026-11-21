@@ -30,7 +30,7 @@ func TestStreamRegistryMatchesContract(t *testing.T) {
 func TestStreamDescriptorKindsDoNotDrift(t *testing.T) {
 	want := []string{
 		"BackendTLSPolicy", "ClusterRole", "ClusterRoleBinding", "ConfigMap",
-		"CustomResourceDefinition", "GRPCRoute", "Gateway", "GatewayClass", "HTTPRoute", "HorizontalPodAutoscaler",
+		"GRPCRoute", "Gateway", "GatewayClass", "HTTPRoute", "HorizontalPodAutoscaler",
 		"Ingress", "IngressClass", "LimitRange", "ListenerSet",
 		"MutatingWebhookConfiguration", "NetworkPolicy", "PersistentVolume",
 		"PersistentVolumeClaim", "PodDisruptionBudget", "ReferenceGrant",

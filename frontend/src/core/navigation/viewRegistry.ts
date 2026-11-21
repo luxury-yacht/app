@@ -71,7 +71,7 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
     sidebarGroup: 'primary',
     id: 'api-resources',
     // CustomResourceDefinitions are listed here, as the custom kinds they define.
-    listDomain: 'cluster-crds',
+    listDomain: 'cluster-api-resources',
     label: 'API Resources',
     description: 'View every kind the cluster serves, built-in and custom, with its schema',
     keywords: ['api', 'resources', 'kinds', 'crds', 'definitions', 'explain', 'schema'],

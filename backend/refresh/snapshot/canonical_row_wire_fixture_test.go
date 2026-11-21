@@ -16,7 +16,6 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
@@ -30,7 +29,6 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
-	apiextensionsres "github.com/luxury-yacht/app/backend/resources/apiextensions"
 	clusterroleres "github.com/luxury-yacht/app/backend/resources/clusterrole"
 	configmapres "github.com/luxury-yacht/app/backend/resources/configmap"
 	customres "github.com/luxury-yacht/app/backend/resources/customresource"
@@ -139,17 +137,6 @@ func canonicalRowWireFixtures(t *testing.T) canonicalRowWireFixtureDocument {
 	storageClass := &storagev1.StorageClass{ObjectMeta: canonicalFixtureObjectMeta("storage-wire", "", created), Provisioner: "example.io/wire"}
 	configRow := storageclassres.BuildStreamSummary(meta, storageClass)
 
-	crd := &apiextensionsv1.CustomResourceDefinition{
-		ObjectMeta: canonicalFixtureObjectMeta("widgets.example.io", "", created),
-		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
-			Group:    "example.io",
-			Names:    apiextensionsv1.CustomResourceDefinitionNames{Plural: "widgets", Singular: "widget", Kind: "Widget"},
-			Scope:    apiextensionsv1.NamespaceScoped,
-			Versions: []apiextensionsv1.CustomResourceDefinitionVersion{{Name: "v1", Served: true, Storage: true}},
-		},
-	}
-	crdRow := apiextensionsres.BuildStreamSummary(meta, crd)
-
 	clusterRole := &rbacv1.ClusterRole{ObjectMeta: canonicalFixtureObjectMeta("reader-wire", "", created)}
 	clusterRBACRow := clusterroleres.BuildStreamSummary(meta, clusterRole)
 
@@ -249,7 +236,6 @@ func canonicalRowWireFixtures(t *testing.T) canonicalRowWireFixtureDocument {
 		{Family: "cluster-attention", Boundary: "refresh-snapshot", Domain: "cluster-attention", RowPath: "payload.rows", Snapshot: canonicalFixtureSnapshot("cluster-attention", ClusterAttentionSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: queryEnvelope, Rows: []AttentionFinding{*attentionRow}})},
 		{Family: "catalog", Boundary: "refresh-snapshot", Domain: "catalog", RowPath: "payload.items", Snapshot: canonicalFixtureSnapshot("catalog", CatalogSnapshot{ClusterMeta: meta, Items: []objectcatalog.Summary{catalogRow}, Total: 1, UnfilteredTotal: 1})},
 		{Family: "cluster-config", Boundary: "refresh-snapshot", Domain: "cluster-config", RowPath: "payload.rows", Snapshot: canonicalFixtureSnapshot("cluster-config", ClusterConfigSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: queryEnvelope, Rows: []ClusterConfigEntry{configRow}})},
-		{Family: "cluster-crds", Boundary: "refresh-snapshot", Domain: "cluster-crds", RowPath: "payload.rows", Snapshot: canonicalFixtureSnapshot("cluster-crds", ClusterCRDSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: queryEnvelope, Rows: []ClusterCRDEntry{crdRow}})},
 		{Family: "cluster-rbac", Boundary: "refresh-snapshot", Domain: "cluster-rbac", RowPath: "payload.rows", Snapshot: canonicalFixtureSnapshot("cluster-rbac", ClusterRBACSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: queryEnvelope, Rows: []ClusterRBACEntry{clusterRBACRow}})},
 		{Family: "cluster-storage", Boundary: "refresh-snapshot", Domain: "cluster-storage", RowPath: "payload.rows", Snapshot: canonicalFixtureSnapshot("cluster-storage", ClusterStorageSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: queryEnvelope, Rows: []ClusterStorageEntry{clusterStorageRow}})},
 		{Family: "cluster-events", Boundary: "refresh-snapshot", Domain: "cluster-events", RowPath: "payload.rows", Snapshot: canonicalFixtureSnapshot("cluster-events", ClusterEventsSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: queryEnvelope, Rows: []ClusterEventEntry{clusterEventRow}})},
@@ -304,7 +290,7 @@ func TestCanonicalResourceRowWireMetadataOverheadStaysMeasured(t *testing.T) {
 	var withoutMetadata any
 	require.NoError(t, json.Unmarshal(withMetadata, &withoutMetadata))
 	metadataRows := removeCanonicalFixtureTableMetadata(withoutMetadata)
-	require.Equal(t, 16, metadataRows)
+	require.Equal(t, 15, metadataRows)
 	withoutMetadataBytes, err := json.Marshal(withoutMetadata)
 	require.NoError(t, err)
 

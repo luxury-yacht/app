@@ -30,8 +30,11 @@ func definitionTestManager(t *testing.T, definitions ...*apiextensionsv1.CustomR
 		}
 	}
 	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), kinds)
-	crds := &entry{desc: apiextensions.StreamDescriptor, gvr: apiextensions.Identity.GVR()}
-	crds.store = newIngestProjectingStore(projectionFor(testMeta, crds))
+	crds := &entry{gvr: apiextensions.Identity.GVR()}
+	// The Definition half is all the dynamic sources read from a CRD's bundle.
+	crds.store = newIngestProjectingStore(func(obj interface{}) (interface{}, error) {
+		return Bundle{Aggregate: apiextensions.BuildDefinition(obj.(*apiextensionsv1.CustomResourceDefinition))}, nil
+	})
 	mgr := &IngestManager{dynamic: dyn, entries: map[schema.GroupVersionResource]*entry{crds.gvr: crds}, syncDeadline: time.Minute, now: time.Now}
 	require.True(t, mgr.SetCustomResourceDefinitions(dynamicTestProjector))
 	require.NoError(t, crds.store.Replace(objects, "1"))

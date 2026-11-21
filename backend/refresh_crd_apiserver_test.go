@@ -15,7 +15,9 @@ import (
 // using the cluster's fake clients for discovery and its own reviews.
 func crdAPIServer(t *testing.T, allowed []string, crds ...*apiextensionsv1.CustomResourceDefinition) *ingesttest.APIServer {
 	t.Helper()
-	server := ingesttest.NewAPIServer(t)
+	// The subsystem watches CustomResourceDefinitions without a stream
+	// descriptor, so the API server must serve them explicitly.
+	server := ingesttest.NewAPIServer(t, apiextensionsv1.SchemeGroupVersion.WithKind("CustomResourceDefinition"))
 	server.Allow(func(attrs authorizationv1.ResourceAttributes) bool { return slices.Contains(allowed, attrs.Resource) })
 	for _, crd := range crds {
 		server.Create(t, crd)

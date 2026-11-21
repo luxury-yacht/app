@@ -26,15 +26,13 @@ func BuildResourceModel(clusterID string, crd *apiextensionsv1.CustomResourceDef
 
 // BuildFacts extracts the CustomResourceDefinition facts from the raw object.
 func BuildFacts(crd *apiextensionsv1.CustomResourceDefinition) Facts {
-	storageVersion, extraServed := versionSummary(crd.Spec.Versions)
 	facts := Facts{
-		Group:                   crd.Spec.Group,
-		Scope:                   string(crd.Spec.Scope),
-		Names:                   namesFacts(crd.Spec.Names),
-		Versions:                versionFacts(crd.Spec.Versions),
-		Conditions:              conditionFacts(crd.Status.Conditions),
-		StorageVersion:          storageVersion,
-		ExtraServedVersionCount: extraServed,
+		Group:          crd.Spec.Group,
+		Scope:          string(crd.Spec.Scope),
+		Names:          namesFacts(crd.Spec.Names),
+		Versions:       versionFacts(crd.Spec.Versions),
+		Conditions:     conditionFacts(crd.Status.Conditions),
+		StorageVersion: storageVersionOf(crd.Spec.Versions),
 	}
 	if crd.Spec.Conversion != nil {
 		facts.ConversionStrategy = string(crd.Spec.Conversion.Strategy)
@@ -61,7 +59,7 @@ func statusPresentation(crd *apiextensionsv1.CustomResourceDefinition, facts Fac
 }
 
 // CustomResourceDefinitionVersionDetails renders the one-line "Versions: ..." label
-// used by both the status presentation and the snapshot streaming summary.
+// the status presentation shows.
 func CustomResourceDefinitionVersionDetails(facts Facts) string {
 	if len(facts.Versions) == 0 {
 		return "Versions: -"
@@ -77,33 +75,23 @@ func CustomResourceDefinitionVersionDetails(facts Facts) string {
 	return fmt.Sprintf("Versions: %s", strings.Join(versions, ","))
 }
 
-func versionSummary(versions []apiextensionsv1.CustomResourceDefinitionVersion) (storageVersion string, extraServed int) {
+// storageVersionOf is the version the API server persists: the one flagged as
+// storage, else the first served version, else the first listed.
+func storageVersionOf(versions []apiextensionsv1.CustomResourceDefinitionVersion) string {
 	if len(versions) == 0 {
-		return "", 0
+		return ""
 	}
 	for _, version := range versions {
 		if version.Storage {
-			storageVersion = version.Name
-			break
+			return version.Name
 		}
-	}
-	if storageVersion == "" {
-		for _, version := range versions {
-			if version.Served {
-				storageVersion = version.Name
-				break
-			}
-		}
-	}
-	if storageVersion == "" {
-		storageVersion = versions[0].Name
 	}
 	for _, version := range versions {
-		if version.Served && version.Name != storageVersion {
-			extraServed++
+		if version.Served {
+			return version.Name
 		}
 	}
-	return storageVersion, extraServed
+	return versions[0].Name
 }
 
 func namesFacts(names apiextensionsv1.CustomResourceDefinitionNames) NamesFacts {

@@ -263,7 +263,6 @@ func TestTypedResourceProvidersPublishKindVocabulary(t *testing.T) {
 		"cluster-config":    {"StorageClass", "IngressClass", "GatewayClass", "MutatingWebhookConfiguration", "ValidatingWebhookConfiguration"},
 		"cluster-storage":   {"PersistentVolume"},
 		"cluster-rbac":      {"ClusterRole", "ClusterRoleBinding"},
-		"cluster-crds":      {"CustomResourceDefinition"},
 		"cluster-events":    nil,
 		"cluster-attention": nil,
 		// Rows are kinds, an open set; the view filters by Type and Scope instead.

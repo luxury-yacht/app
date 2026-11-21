@@ -92,15 +92,6 @@ func clusterStorageCollectIndexer(pvIdx cache.Indexer) func(streamspec.Descripto
 	}
 }
 
-func clusterCRDCollectIndexer(crdIdx cache.Indexer) func(streamspec.Descriptor) cache.Indexer {
-	return func(d streamspec.Descriptor) cache.Indexer {
-		if d.Resource == "customresourcedefinitions" {
-			return crdIdx
-		}
-		return nil
-	}
-}
-
 // networkIndexers holds the per-kind test indexers for the descriptor-driven
 // network kinds (nil = kind unavailable).
 type networkIndexers struct {

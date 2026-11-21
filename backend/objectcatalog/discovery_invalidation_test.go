@@ -79,7 +79,22 @@ func TestCatalogDiscoveryInvalidatesAfterCRDChange(t *testing.T) {
 // crdBundle is the CRD's ingest bundle half the discovery hook reads, as the
 // CRD reflector projects it.
 func crdBundle(crd *apiextensionsv1.CustomResourceDefinition) ingest.Bundle {
-	return ingest.Bundle{Aggregate: apiextensions.StreamDescriptor.AggregateRow(crd)}
+	return ingest.Bundle{Aggregate: apiextensions.BuildDefinition(crd)}
+}
+
+// definitionIngest is an API server serving CustomResourceDefinitions and an
+// ingest manager watching them, as the refresh system wires the CRD reflector:
+// each definition's bundle carries the Definition the discovery hook reads.
+// (The system's projector also adds the catalog Summary, which the hook ignores.)
+func definitionIngest(t *testing.T) (*ingesttest.APIServer, *ingest.IngestManager) {
+	t.Helper()
+	gvk := apiextensionsv1.SchemeGroupVersion.WithKind(apiextensions.Identity.Kind)
+	server := ingesttest.NewAPIServer(t, gvk)
+	definitions := ingest.NewIngestManager(streamrows.ClusterMeta{ClusterID: "c1"}, server.Client(t), server.APIExtensionsClient(t), nil)
+	require.True(t, definitions.RegisterReflector(apiextensions.Identity.GVR(), gvk, func(obj interface{}) (interface{}, error) {
+		return crdBundle(obj.(*apiextensionsv1.CustomResourceDefinition)), nil
+	}, false))
+	return server, definitions
 }
 
 func establishedWidgetDefinition() *apiextensionsv1.CustomResourceDefinition {
@@ -184,8 +199,7 @@ func TestNewCRDAppearsWithoutWaitingForPeriodicCatalogRefresh(t *testing.T) {
 		review.Status.Allowed = true
 		return true, review, nil
 	})
-	server := ingesttest.NewAPIServer(t)
-	definitions := ingest.NewIngestManager(streamrows.ClusterMeta{ClusterID: "c1"}, server.Client(t), server.APIExtensionsClient(t), nil)
+	server, definitions := definitionIngest(t)
 	definitions.Start(ctx)
 	t.Cleanup(definitions.Stop)
 	require.Eventually(t, definitions.HasSynced, 5*time.Second, time.Millisecond)

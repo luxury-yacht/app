@@ -629,44 +629,6 @@ func clusterRBACTableQueryAdapter() typedTableQueryAdapter[ClusterRBACEntry] {
 	}
 }
 
-func clusterCRDTableQueryAdapter() typedTableQueryAdapter[ClusterCRDEntry] {
-	return typedTableQueryAdapter[ClusterCRDEntry]{
-		MetadataText: func(row ClusterCRDEntry) []string { return tableMetadataSearchText(row.Metadata) },
-		Key:          func(row ClusterCRDEntry) string { return clusterTableKey("CustomResourceDefinition", row.Ref.Name) },
-		AnchorKey:    func(_, _, name string) string { return clusterTableKey("CustomResourceDefinition", name) },
-		Namespace:    func(ClusterCRDEntry) string { return "" },
-		Kind:         func(ClusterCRDEntry) string { return "CustomResourceDefinition" },
-		SearchText: func(row ClusterCRDEntry) []string {
-			return []string{row.Ref.Kind, row.TypeAlias, row.Ref.Name, row.Group, row.Scope, row.Details, row.StorageVersion}
-		},
-		Predicate: func(ClusterCRDEntry, string, string) bool { return true },
-		SortValue: func(row ClusterCRDEntry, field string) string {
-			switch strings.ToLower(field) {
-			case "kind":
-				return row.Ref.Kind
-			case "group":
-				return row.Group
-			case "scope":
-				return row.Scope
-			case "details":
-				return row.Details
-			case "version", "storageversion":
-				return row.StorageVersion
-			case "age":
-				return row.Age
-			default:
-				return row.Ref.Name
-			}
-		},
-		NumericSort: func(row ClusterCRDEntry, field string) (float64, bool) {
-			if strings.EqualFold(field, "age") {
-				return numericAgeSortValue(row.AgeTimestamp)
-			}
-			return 0, false
-		},
-	}
-}
-
 func namespacedTableKey(kind, namespace, name string) string {
 	return fmt.Sprintf("%s/%s/%s", strings.ToLower(kind), strings.ToLower(namespace), strings.ToLower(name))
 }

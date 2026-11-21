@@ -32,7 +32,6 @@ const EXPECTED_DOMAINS: ResourceDomain[] = [
   'cluster-rbac',
   'cluster-storage',
   'cluster-config',
-  'cluster-crds',
   'nodes',
 ];
 
@@ -40,7 +39,6 @@ const CLUSTER_SCOPED_DOMAINS = new Set<ResourceDomain>([
   'cluster-rbac',
   'cluster-storage',
   'cluster-config',
-  'cluster-crds',
   'nodes',
 ]);
 

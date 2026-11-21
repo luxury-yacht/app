@@ -15,7 +15,6 @@ var streamDomains = map[string]struct{}{
 	domainClusterRBAC:          {},
 	domainClusterStorage:       {},
 	domainClusterConfig:        {},
-	domainClusterCRDs:          {},
 	domainCatalog:              {},
 	domainClusterEvents:        {},
 	domainNamespaces:           {},

@@ -171,11 +171,6 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 		"storageclass.BuildStreamSummary / ingressclass.BuildStreamSummary / gatewayapi.BuildGatewayClassStreamSummary / admission.Build{Validating,Mutating}StreamSummary",
 		streamResourceDescriptors(domainClusterConfig),
 	),
-	domainClusterCRDs: clusterDescriptor(
-		domainClusterCRDs,
-		"apiextensions.BuildStreamSummary",
-		streamResourceDescriptors(domainClusterCRDs),
-	),
 	domainNodes: {
 		Domain:               domainNodes,
 		RowIdentity:          "clusterId + /v1 Node name",

@@ -29,7 +29,6 @@ describe('diagnosticsPanelConfig domain behavior sets', () => {
       'cluster-api-resources',
       'cluster-attention',
       'cluster-config',
-      'cluster-crds',
       'cluster-events',
       'cluster-identities',
       'cluster-rbac',

@@ -85,9 +85,6 @@ const (
 	// SnapshotClusterRBACEntryLimit caps cluster RBAC snapshot rows.
 	SnapshotClusterRBACEntryLimit = 1000
 
-	// SnapshotClusterCRDEntryLimit caps cluster CRD snapshot rows.
-	SnapshotClusterCRDEntryLimit = 1000
-
 	// SnapshotClusterAPIResourcesEntryLimit caps API Resources snapshot rows.
 	SnapshotClusterAPIResourcesEntryLimit = 1000
 

@@ -42,7 +42,6 @@ const (
 	domainClusterRBAC     = "cluster-rbac"
 	domainClusterStorage  = "cluster-storage"
 	domainClusterConfig   = "cluster-config"
-	domainClusterCRDs     = "cluster-crds"
 	domainNodes           = "nodes"
 	domainCatalog         = "catalog"
 	domainClusterEvents   = "cluster-events"

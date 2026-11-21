@@ -32,7 +32,6 @@ describe('refresh domain registry', () => {
       'cluster-rbac',
       'cluster-storage',
       'cluster-config',
-      'cluster-crds',
       'namespace-events',
       'namespace-workloads',
       'namespace-config',

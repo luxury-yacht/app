@@ -168,8 +168,6 @@ var contractTypes = []typeSpec{
 	{name: "ClusterStorageSnapshotPayload", typeOf: typeOf[snapshot.ClusterStorageSnapshot]()},
 	{name: "ClusterConfigEntry", typeOf: typeOf[streamrows.ClusterConfigEntry]()},
 	{name: "ClusterConfigSnapshotPayload", typeOf: typeOf[snapshot.ClusterConfigSnapshot]()},
-	{name: "ClusterCRDEntry", typeOf: typeOf[streamrows.ClusterCRDEntry]()},
-	{name: "ClusterCRDSnapshotPayload", typeOf: typeOf[snapshot.ClusterCRDSnapshot]()},
 	{name: "ClusterEventEntry", typeOf: typeOf[snapshot.ClusterEventEntry]()},
 	{name: "ClusterEventsSnapshotPayload", typeOf: typeOf[snapshot.ClusterEventsSnapshot]()},
 	{name: "KindInfo", typeOf: typeOf[objectcatalog.KindInfo]()},

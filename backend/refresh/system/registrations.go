@@ -405,25 +405,6 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 			},
 		}),
 
-		"cluster-crds": listWatchRegistration(listWatchDomainConfig{
-			name:          "cluster-crds",
-			issueResource: "apiextensions.k8s.io/customresourcedefinitions",
-			logGroup:      "apiextensions.k8s.io",
-			logResource:   "customresourcedefinitions",
-			deniedReason:  "apiextensions.k8s.io/customresourcedefinitions",
-			checks: []listWatchCheck{
-				{group: "apiextensions.k8s.io", resource: "customresourcedefinitions"},
-			},
-			registerListWatch: func() error {
-				return snapshot.RegisterClusterCRDDomain(
-					deps.registry,
-					clusterMeta,
-					deps.ingestManager,
-					deps.bell,
-				)
-			},
-		}),
-
 		"cluster-events": directRegistration("cluster-events", func() error {
 			_, err := snapshot.RegisterClusterEventsDomain(deps.registry, deps.ingestManager, clusterMeta, deps.bell)
 			return err

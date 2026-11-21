@@ -327,60 +327,6 @@
     },
     {
       "boundary": "refresh-snapshot",
-      "domain": "cluster-crds",
-      "family": "cluster-crds",
-      "rowPath": "payload.rows",
-      "snapshot": {
-        "checksum": "canonical-row-wire-fixture",
-        "domain": "cluster-crds",
-        "generatedAt": 1700000000000,
-        "payload": {
-          "capabilities": {},
-          "clusterId": "cluster-wire",
-          "clusterName": "Wire Cluster",
-          "facetsExact": true,
-          "provider": "",
-          "rows": [
-            {
-              "age": "\u003cage\u003e",
-              "ageTimestamp": 1699999000000,
-              "details": "Versions: v1*",
-              "group": "example.io",
-              "metadata": {
-                "labels": {
-                  "app": "wire-fixture"
-                }
-              },
-              "ref": {
-                "clusterId": "cluster-wire",
-                "group": "apiextensions.k8s.io",
-                "kind": "CustomResourceDefinition",
-                "name": "widgets.example.io",
-                "resource": "customresourcedefinitions",
-                "uid": "widgets.example.io-uid",
-                "version": "v1"
-              },
-              "scope": "Namespaced",
-              "storageVersion": "v1",
-              "typeAlias": "CRD"
-            }
-          ],
-          "table": "",
-          "total": 1,
-          "totalIsExact": true,
-          "unfilteredTotal": 1
-        },
-        "scope": "cluster-wire|",
-        "sequence": 1,
-        "stats": {
-          "buildDurationMs": 0,
-          "itemCount": 1
-        },
-        "version": 1
-      }
-    },
-    {
-      "boundary": "refresh-snapshot",
       "domain": "cluster-rbac",
       "family": "cluster-rbac",
       "rowPath": "payload.rows",

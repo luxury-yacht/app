@@ -18,7 +18,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -36,7 +35,6 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
-	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 )
 
 var (
@@ -197,22 +195,6 @@ func markDeleting(meta *metav1.ObjectMeta, deleting bool) {
 	meta.Finalizers = []string{"test.example/hold"}
 }
 
-func crdObject(name, rv string, deleting bool) *apiextv1.CustomResourceDefinition {
-	crd := &apiextv1.CustomResourceDefinition{
-		ObjectMeta: metav1.ObjectMeta{Name: name, ResourceVersion: rv, UID: types.UID("uid-" + name)},
-		Spec: apiextv1.CustomResourceDefinitionSpec{
-			Group: "example.com",
-			Names: apiextv1.CustomResourceDefinitionNames{Plural: "widgets", Kind: "Widget"},
-			Scope: apiextv1.NamespaceScoped,
-			Versions: []apiextv1.CustomResourceDefinitionVersion{{
-				Name: "v1", Served: true, Storage: true,
-			}},
-		},
-	}
-	markDeleting(&crd.ObjectMeta, deleting)
-	return crd
-}
-
 type ingestFedCase struct {
 	name     string
 	gvr      schema.GroupVersionResource
@@ -288,10 +270,6 @@ func ingestFedCases() []ingestFedCase {
 			},
 			// The workloads table joins each row's HPA at serve.
 			derived: []struct{ domain, scope string }{{"namespace-workloads", "namespace:team-a"}},
-		},
-		{
-			name: "CustomResourceDefinition", gvr: apiextensions.Identity.GVR(), domain: "cluster-crds", scope: "", rowName: "widgets.example.com", heldRing: true,
-			object: func(rv string, deleting bool) interface{} { return crdObject("widgets.example.com", rv, deleting) },
 		},
 		{
 			name: "Helm release", gvr: secretGVR, domain: "namespace-helm", scope: "namespace:team-a", rowName: "web", heldRing: true,

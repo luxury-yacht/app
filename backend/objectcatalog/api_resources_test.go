@@ -5,10 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
-	"github.com/luxury-yacht/app/backend/refresh/ingest/ingesttest"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/stretchr/testify/require"
 	authorizationv1 "k8s.io/api/authorization/v1"
@@ -508,9 +506,8 @@ func TestCatalogClassifiesCustomKindsFromTheRealCRDStore(t *testing.T) {
 		review.Status.Allowed = true
 		return true, review, nil
 	})
-	server := ingesttest.NewAPIServer(t)
+	server, definitions := definitionIngest(t)
 	server.Create(t, establishedWidgetDefinition())
-	definitions := ingest.NewIngestManager(streamrows.ClusterMeta{ClusterID: "c1"}, server.Client(t), server.APIExtensionsClient(t), nil)
 	definitions.Start(ctx)
 	t.Cleanup(definitions.Stop)
 	require.Eventually(t, definitions.HasSynced, 5*time.Second, time.Millisecond)

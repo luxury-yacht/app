@@ -47,10 +47,6 @@ func maintainedFromIndexers[T any](meta ClusterMeta, spec typedTableDomainSpec[T
 	return maintained
 }
 
-func clusterCRDBuilderFor(meta ClusterMeta, indexerFor func(streamspec.Descriptor) cache.Indexer) *ClusterCRDBuilder {
-	return &ClusterCRDBuilder{available: availableFromIndexers(indexerFor), maintained: maintainedFromIndexers(meta, clusterCRDDomainSpec(), indexerFor)}
-}
-
 func clusterConfigBuilderFor(meta ClusterMeta, indexerFor func(streamspec.Descriptor) cache.Indexer) *ClusterConfigBuilder {
 	return &ClusterConfigBuilder{available: availableFromIndexers(indexerFor), maintained: maintainedFromIndexers(meta, clusterConfigDomainSpec(), indexerFor)}
 }

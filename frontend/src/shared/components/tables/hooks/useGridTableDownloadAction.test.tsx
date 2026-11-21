@@ -55,7 +55,7 @@ describe('table Download button', () => {
         getTextContent: String,
         fetchAllRows: canFetchAllPages ? fetchRows : undefined,
         allMatchingRows: true,
-        defaultFilename: 'cluster-crds',
+        defaultFilename: 'cluster-rbac',
       }) as IconBarMenu;
       return null;
     };
@@ -155,7 +155,7 @@ describe('table Download button', () => {
   it('saves with an export-time-stamped file name', async () => {
     await renderAction();
     await act(async () => choose('Save to File'));
-    expect(savedFiles()[0]?.[0]).toMatch(/^luxury-yacht-cluster-crds-\d{14}\.csv$/);
+    expect(savedFiles()[0]?.[0]).toMatch(/^luxury-yacht-cluster-rbac-\d{14}\.csv$/);
   });
 
   // A table that cannot fetch every page saves the rows it holds, as Copy does.

@@ -18,7 +18,6 @@ var typedCapabilityConformance = map[string]ResourceQueryCapabilities{
 	"cluster-config":        clusterConfigQueryCapabilities(),
 	"cluster-storage":       clusterStorageQueryCapabilities(),
 	"cluster-rbac":          clusterRBACQueryCapabilities(),
-	"cluster-crds":          clusterCRDQueryCapabilities(),
 	"cluster-events":        clusterEventsQueryCapabilities(),
 	"cluster-attention":     clusterAttentionQueryCapabilities(),
 	"cluster-api-resources": clusterAPIResourcesQueryCapabilities(),

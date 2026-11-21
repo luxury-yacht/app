@@ -40,6 +40,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 	"github.com/luxury-yacht/app/backend/resources/common"
 )
 
@@ -277,6 +278,8 @@ func newIngestInfrastructure(cfg Config, runtimePerms *permissions.Checker) (*in
 	if err := registerEventReflector(manager, clusterMeta); err != nil {
 		return nil, err
 	}
+	// Before registerCustomResourceIngest, which attaches to this reflector's store.
+	registerCustomResourceDefinitionReflector(manager, clusterMeta)
 	manager.SetPermissionFilter(ingestPermissionFilter(runtimePerms))
 	registerCustomResourceIngest(manager, cfg.ClusterID)
 	return manager, nil
@@ -354,11 +357,23 @@ func restServerHost(cfg *rest.Config) string {
 	return cfg.Host
 }
 
-func registerSubsystemDomains(ctx context.Context, grants *permissions.Grants, gate *permissionGate, runtimePerms *permissions.Checker, registrations []domainRegistration) error {
-	preflight := preflightRequests(registrations, []permissions.Request{
+// subsystemPreflightRequests are the permission checks of the subsystem's own
+// readers, which no domain declares: the metrics poller's, and the
+// CustomResourceDefinition reflector's (it feeds the object catalog and the
+// dynamic custom-resource sources; no table lists definitions). Priming records
+// each decision, so permission revalidation notices when that access changes.
+func subsystemPreflightRequests() []permissions.Request {
+	definitions := apiextensions.Identity
+	return []permissions.Request{
 		{Group: metricsAPIGroup, Resource: "nodes", Verb: "list"},
 		{Group: metricsAPIGroup, Resource: "pods", Verb: "list"},
-	})
+		{Group: definitions.Group, Resource: definitions.Resource, Verb: "list"},
+		{Group: definitions.Group, Resource: definitions.Resource, Verb: "watch"},
+	}
+}
+
+func registerSubsystemDomains(ctx context.Context, grants *permissions.Grants, gate *permissionGate, runtimePerms *permissions.Checker, registrations []domainRegistration) error {
+	preflight := preflightRequests(registrations, subsystemPreflightRequests())
 	// The preflight budget bounds only priming. Reviews it leaves uncached are
 	// retried by the gate checks, so only caller cancellation aborts the build.
 	preflightCtx, cancel := context.WithTimeout(ctx, config.PermissionPreflightTimeout)

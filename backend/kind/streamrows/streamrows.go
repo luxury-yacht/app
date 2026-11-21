@@ -281,20 +281,6 @@ type ClusterStorageEntry struct {
 	AgeTimestamp       int64                                `json:"ageTimestamp,omitempty"`
 }
 
-// ClusterCRDEntry represents a CustomResourceDefinition row (cluster-crds).
-type ClusterCRDEntry struct {
-	Ref                     resourcemodel.ResourceRef            `json:"ref"`
-	Metadata                *resourcemodel.ResourceTableMetadata `json:"metadata,omitempty"`
-	Group                   string                               `json:"group"`
-	Scope                   string                               `json:"scope"`
-	Details                 string                               `json:"details"`
-	StorageVersion          string                               `json:"storageVersion,omitempty"`
-	ExtraServedVersionCount int                                  `json:"extraServedVersionCount,omitempty"`
-	Age                     string                               `json:"age"`
-	AgeTimestamp            int64                                `json:"ageTimestamp,omitempty"`
-	TypeAlias               string                               `json:"typeAlias,omitempty"`
-}
-
 // NamespaceCustomSummary is a CRD-backed namespaced custom resource row.
 type NamespaceCustomSummary struct {
 	CertManager     *CertManagerSummary     `json:"certManager,omitempty"`

@@ -12,6 +12,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
@@ -37,6 +38,7 @@ var reflectedBuiltinKinds = []schema.GroupVersionKind{
 	appsv1.SchemeGroupVersion.WithKind("ReplicaSet"),
 	batchv1.SchemeGroupVersion.WithKind("Job"),
 	batchv1.SchemeGroupVersion.WithKind("CronJob"),
+	apiextv1.SchemeGroupVersion.WithKind("CustomResourceDefinition"),
 }
 
 // newReflectorAPIServer serves every kind the subsystem reflects and allows

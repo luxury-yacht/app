@@ -18,7 +18,6 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -30,7 +29,6 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/admission"
-	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 	"github.com/luxury-yacht/app/backend/resources/clusterrole"
 	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
 	"github.com/luxury-yacht/app/backend/resources/configmap"
@@ -101,7 +99,6 @@ func TestSnapshotStreamRowParity(t *testing.T) {
 		parityClusterRBACCase(meta),
 		parityClusterStorageCase(meta),
 		parityClusterConfigCase(meta),
-		parityClusterCRDCase(meta),
 	}
 
 	for _, tc := range cases {
@@ -132,7 +129,6 @@ func TestSnapshotStreamRowParityCoversAllSupportedDomains(t *testing.T) {
 		"cluster-rbac":          {},
 		"cluster-storage":       {},
 		"cluster-config":        {},
-		"cluster-crds":          {},
 	}
 	excluded := map[string]string{
 		"namespace-helm":      "scope-level COMPLETE contract, not per-row projection",
@@ -767,39 +763,6 @@ func parityClusterConfigCase(meta ClusterMeta) parityCase {
 			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(ClusterConfigEntry)
 				return row.Ref.Kind + "/" + row.Ref.Name
-			})
-		},
-	}
-}
-
-// ---------- Cluster CRDs ----------
-
-func parityClusterCRDCase(meta ClusterMeta) parityCase {
-	return parityCase{
-		name: "cluster-crds/crd",
-		run: func(t *testing.T) {
-			crd := &apiextensionsv1.CustomResourceDefinition{
-				ObjectMeta: metav1.ObjectMeta{Name: "dbinstances.rds.services.k8s.aws"},
-				Spec: apiextensionsv1.CustomResourceDefinitionSpec{
-					Group: "rds.services.k8s.aws",
-					Scope: apiextensionsv1.NamespaceScoped,
-					Names: apiextensionsv1.CustomResourceDefinitionNames{Plural: "dbinstances", Kind: "DBInstance"},
-					Versions: []apiextensionsv1.CustomResourceDefinitionVersion{
-						{Name: "v1alpha1", Served: true, Storage: false},
-						{Name: "v1", Served: true, Storage: true},
-					},
-				},
-			}
-
-			builder := clusterCRDBuilderFor(meta, clusterCRDCollectIndexer(testsupport.NewClusterIndexer(t, crd)))
-			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "")
-			require.NoError(t, err)
-			payload := snap.Payload.(ClusterCRDSnapshot)
-
-			expected := []ClusterCRDEntry{apiextensions.BuildStreamSummary(meta, crd)}
-			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
-				row := r.(ClusterCRDEntry)
-				return row.Ref.Name
 			})
 		},
 	}

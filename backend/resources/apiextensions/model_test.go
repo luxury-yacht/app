@@ -64,7 +64,6 @@ func TestBuildResourceModelFactsStatusAndVersions(t *testing.T) {
 	require.Equal(t, []string{"wdg"}, facts.Names.ShortNames)
 	require.Equal(t, "Webhook", facts.ConversionStrategy)
 	require.Equal(t, "v1", facts.StorageVersion)
-	require.Equal(t, 1, facts.ExtraServedVersionCount)
 	require.Equal(t, "Versions: v1beta1,v1*,v2alpha1", CustomResourceDefinitionVersionDetails(facts))
 	require.False(t, facts.Versions[0].HasSchema)
 	require.True(t, facts.Versions[1].HasSchema)
@@ -87,13 +86,12 @@ func TestBuildFactsFallsBackToServedVersion(t *testing.T) {
 
 	facts := BuildFacts(crd)
 	require.Equal(t, "v1beta1", facts.StorageVersion)
-	require.Equal(t, 1, facts.ExtraServedVersionCount)
 }
 
-// TestBuildFactsVersionSummary covers the storage-version + extra-served-count
-// derivation (formerly the snapshot crdVersionSummary helper) that drives the
-// Version column in the CRDs view.
-func TestBuildFactsVersionSummary(t *testing.T) {
+// The storage version is the one the status presentation reports as the
+// CRD's state: the version flagged as storage, else the first served version,
+// else the first listed.
+func TestBuildFactsStorageVersion(t *testing.T) {
 	makeCRD := func(versions ...apiextensionsv1.CustomResourceDefinitionVersion) *apiextensionsv1.CustomResourceDefinition {
 		return &apiextensionsv1.CustomResourceDefinition{
 			Spec: apiextensionsv1.CustomResourceDefinitionSpec{Versions: versions},
@@ -107,22 +105,17 @@ func TestBuildFactsVersionSummary(t *testing.T) {
 		name        string
 		crd         *apiextensionsv1.CustomResourceDefinition
 		wantStorage string
-		wantExtra   int
 	}{
-		{"empty versions returns zero values", makeCRD(), "", 0},
-		{"single served+storage version returns version with no extras", makeCRD(v("v1", true, true)), "v1", 0},
-		{"multi-version with v1 as storage counts the other served versions", makeCRD(v("v1alpha1", true, false), v("v1beta1", true, false), v("v1", true, true)), "v1", 2},
-		{"storage version not served counts all served as extras", makeCRD(v("v1alpha1", false, true), v("v1", true, false)), "v1alpha1", 1},
-		{"non-served versions are ignored in the extras count", makeCRD(v("v1", true, true), v("v1alpha1", false, false)), "v1", 0},
-		{"falls back to first served version when no storage flag", makeCRD(v("v1alpha1", false, false), v("v1beta1", true, false), v("v1", true, false)), "v1beta1", 1},
-		{"falls back to first version when nothing is served", makeCRD(v("v1alpha1", false, false)), "v1alpha1", 0},
+		{"no versions", makeCRD(), ""},
+		{"the version flagged as storage", makeCRD(v("v1alpha1", true, false), v("v1beta1", true, false), v("v1", true, true)), "v1"},
+		{"a storage version that is not served", makeCRD(v("v1alpha1", false, true), v("v1", true, false)), "v1alpha1"},
+		{"the first served version when none is flagged as storage", makeCRD(v("v1alpha1", false, false), v("v1beta1", true, false), v("v1", true, false)), "v1beta1"},
+		{"the first version when nothing is served", makeCRD(v("v1alpha1", false, false)), "v1alpha1"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			facts := BuildFacts(tt.crd)
-			require.Equal(t, tt.wantStorage, facts.StorageVersion)
-			require.Equal(t, tt.wantExtra, facts.ExtraServedVersionCount)
+			require.Equal(t, tt.wantStorage, BuildFacts(tt.crd).StorageVersion)
 		})
 	}
 }

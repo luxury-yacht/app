@@ -10,7 +10,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	storagev1 "k8s.io/api/storage/v1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
 
@@ -252,84 +251,4 @@ func TestClusterStorageBuilderCapsLargeSnapshots(t *testing.T) {
 	require.True(t, snapshot.Stats.Truncated)
 	require.Equal(t, config.SnapshotClusterStorageEntryLimit+1, snapshot.Stats.TotalItems)
 	require.Contains(t, snapshot.Stats.Warnings[0], "persistent volumes")
-}
-
-func TestClusterCRDBuilder(t *testing.T) {
-	now := time.Now()
-	crd := &apiextensionsv1.CustomResourceDefinition{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "gadgets.acme.test",
-			ResourceVersion:   "55",
-			CreationTimestamp: metav1.NewTime(now.Add(-5 * time.Hour)),
-		},
-		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
-			Group: "acme.test",
-			Scope: apiextensionsv1.NamespaceScoped,
-			Names: apiextensionsv1.CustomResourceDefinitionNames{
-				Plural: "gadgets",
-				Kind:   "Gadget",
-			},
-			Versions: []apiextensionsv1.CustomResourceDefinitionVersion{
-				{Name: "v1alpha1", Served: true, Storage: false},
-				{Name: "v1beta1", Served: true, Storage: false},
-				{Name: "v1", Served: true, Storage: true},
-			},
-		},
-	}
-
-	builder := clusterCRDBuilderFor(ClusterMeta{}, clusterCRDCollectIndexer(testsupport.NewClusterIndexer(t, crd)))
-
-	snapshot, err := builder.Build(context.Background(), "")
-	require.NoError(t, err)
-	require.Equal(t, clusterCRDDomainName, snapshot.Domain)
-	require.Equal(t, uint64(55), snapshot.Version)
-
-	payload, ok := snapshot.Payload.(ClusterCRDSnapshot)
-	require.True(t, ok)
-	require.Len(t, payload.Rows, 1)
-
-	entry := payload.Rows[0]
-	require.Equal(t, "CustomResourceDefinition", entry.Ref.Kind)
-	require.Equal(t, crd.Name, entry.Ref.Name)
-	require.Equal(t, crd.Spec.Group, entry.Group)
-	require.Equal(t, string(crd.Spec.Scope), entry.Scope)
-	require.Contains(t, entry.Details, "v1*")
-	// Multi-version CRD: v1 is the storage version, v1alpha1 and v1beta1
-	// are additional served versions. Frontend renders this as "v1 (+2)".
-	require.Equal(t, "v1", entry.StorageVersion)
-	require.Equal(t, 2, entry.ExtraServedVersionCount)
-	require.NotEmpty(t, entry.Age)
-}
-
-func TestClusterCRDBuilderCapsLargeSnapshots(t *testing.T) {
-	crds := make([]*apiextensionsv1.CustomResourceDefinition, 0, config.SnapshotClusterCRDEntryLimit+1)
-	for i := 0; i < config.SnapshotClusterCRDEntryLimit+1; i++ {
-		crds = append(crds, &apiextensionsv1.CustomResourceDefinition{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:            "widgets-" + time.Unix(int64(i), 0).Format("150405") + ".acme.test",
-				ResourceVersion: "1",
-			},
-			Spec: apiextensionsv1.CustomResourceDefinitionSpec{
-				Group: "acme.test",
-				Scope: apiextensionsv1.NamespaceScoped,
-				Names: apiextensionsv1.CustomResourceDefinitionNames{
-					Plural: "widgets",
-					Kind:   "Widget",
-				},
-				Versions: []apiextensionsv1.CustomResourceDefinitionVersion{
-					{Name: "v1", Served: true, Storage: true},
-				},
-			},
-		})
-	}
-
-	builder := clusterCRDBuilderFor(ClusterMeta{}, clusterCRDCollectIndexer(testsupport.NewClusterIndexer(t, crds...)))
-
-	snapshot, err := builder.Build(context.Background(), "")
-	require.NoError(t, err)
-	payload := snapshot.Payload.(ClusterCRDSnapshot)
-	require.Len(t, payload.Rows, config.SnapshotClusterCRDEntryLimit)
-	require.True(t, snapshot.Stats.Truncated)
-	require.Equal(t, config.SnapshotClusterCRDEntryLimit+1, snapshot.Stats.TotalItems)
-	require.Contains(t, snapshot.Stats.Warnings[0], "CRDs")
 }

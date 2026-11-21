@@ -120,7 +120,6 @@ func TestEveryTypedTableDomainResolvesAvailabilityFromIngest(t *testing.T) {
 		{namespaceConfigDomainName, ingestAvailability(allowAll(namespaceConfigDomainName), namespaceConfigDomainName, ingestManager)},
 		{clusterRBACDomainName, ingestAvailability(allowAll(clusterRBACDomainName), clusterRBACDomainName, ingestManager)},
 		{clusterStorageDomainName, unconditionalIngestAvailability(clusterStorageDomainName, ingestManager)},
-		{clusterCRDDomainName, unconditionalIngestAvailability(clusterCRDDomainName, ingestManager)},
 		{clusterConfigDomainName, ingestAvailability(allowAll(clusterConfigDomainName), clusterConfigDomainName, ingestManager)},
 		// namespace-network's cut Stream-backed kinds are Ingress and NetworkPolicy (Service/
 		// EndpointSlice are Stream-less bespoke — see TestStreamlessKindsAreBespoke).
@@ -161,17 +160,18 @@ func TestEveryTypedTableDomainResolvesAvailabilityFromIngest(t *testing.T) {
 // TestStreamlessKindsAreBespoke pins the documented exception: the
 // kinds WITHOUT a Stream descriptor are Pod, the five workload kinds
 // (Deployment/StatefulSet/DaemonSet/Job/CronJob), the two network join kinds
-// (Service/EndpointSlice), Node, ReplicaSet, Namespace, and Event. Each carries a bespoke
+// (Service/EndpointSlice), Node, ReplicaSet, Namespace, Event, and CustomResourceDefinition. Each carries a bespoke
 // table — PodSummary / WorkloadSummary, the Service↔EndpointSlice-joined NetworkSummary, the
 // NodeSummary whose row joins per-node pod aggregates + metrics, the NamespaceSummary joined
 // with workload presence, or the two Events tables fed from one row — served by its own
-// domain (or, for ReplicaSet, no table) rather than the generic typed-table availability gate. This is the reason
+// domain (or, for ReplicaSet and CustomResourceDefinition, no table) rather than the generic typed-table availability gate. This is the reason
 // TestEveryTypedTableDomainResolvesAvailabilityFromIngest counts only Stream-backed cut
 // kinds.
 func TestStreamlessKindsAreBespoke(t *testing.T) {
 	expected := map[string]struct{}{
 		"Pod": {}, "Deployment": {}, "StatefulSet": {}, "DaemonSet": {}, "Job": {}, "CronJob": {},
 		"Service": {}, "EndpointSlice": {}, "Node": {}, "ReplicaSet": {}, "Namespace": {}, "Event": {},
+		"CustomResourceDefinition": {},
 	}
 	got := map[string]struct{}{}
 	for _, d := range kindregistry.All {
@@ -180,7 +180,7 @@ func TestStreamlessKindsAreBespoke(t *testing.T) {
 		}
 	}
 	require.Equal(t, expected, got,
-		"the Stream-less stream kinds must be exactly Pod, the five workload kinds, the two network join kinds, Node, ReplicaSet, Namespace, and Event")
+		"the Stream-less stream kinds must be exactly Pod, the five workload kinds, the two network join kinds, Node, ReplicaSet, Namespace, Event, and CustomResourceDefinition")
 }
 
 // TestIngestAvailabilityWithNoIngestManagerIsUnavailable proves the documented edge:
