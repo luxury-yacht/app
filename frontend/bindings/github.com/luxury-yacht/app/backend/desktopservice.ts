@@ -196,8 +196,8 @@ export function ExecuteApplicationMenuCommand(command: $models.ApplicationMenuCo
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.ExecuteApplicationMenuCommand", command);
 }
 
-export function ExplainKindField(target: resourcemodel$0.ResourceRef, fieldPath: string[] | null): $CancellablePromise<apiresources$0.FieldExplanation | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.ExplainKindField", target, fieldPath);
+export function ExplainKindField(target: resourcemodel$0.ResourceRef, fieldPath: string[] | null, revision: string): $CancellablePromise<apiresources$0.FieldExplanation | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.ExplainKindField", target, fieldPath, revision);
 }
 
 export function ExplainKindSchema(target: resourcemodel$0.ResourceRef): $CancellablePromise<apiresources$0.KindSchema | null> {

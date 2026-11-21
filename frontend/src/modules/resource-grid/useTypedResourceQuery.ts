@@ -106,7 +106,7 @@ export interface UseTypedResourceQueryResult<TRow, TPayload = unknown> {
    */
   anchorTo: (anchor: ResourceQueryAnchor) => void;
   /** How the last anchored request resolved (found+rank / filtered / not-found). */
-  anchorResult: ResourceQueryAnchorResult | null;
+  anchorResult: AnchorLanding | null;
   /**
    * Numbered page jump (1-based). Serves via the bounded startRank contract;
    * no-ops while totals are approximate (the UI hides the control then too).
@@ -217,8 +217,10 @@ const dispatchTypedQueryResult = <TPayload extends TypedQueryPayload>(
   callbacks.onPayload(payload);
 };
 
+type AnchorLanding = ResourceQueryAnchorResult & { target: ResourceQueryAnchor };
+
 interface AnchorLandingActions {
-  setAnchorResult: (result: ResourceQueryAnchorResult) => void;
+  setAnchorResult: (result: AnchorLanding) => void;
   disarmAnchor: () => void;
   adoptSelfCursor: () => void;
   clearAnchorIntent: () => void;
@@ -226,12 +228,13 @@ interface AnchorLandingActions {
 
 const applyAnchorLanding = (
   anchor: ResourceQueryAnchorResult | undefined,
+  target: ResourceQueryAnchor | null,
   actions: AnchorLandingActions
 ): void => {
-  if (!anchor) {
+  if (!anchor || !target) {
     return;
   }
-  actions.setAnchorResult(anchor);
+  actions.setAnchorResult({ ...anchor, target });
   actions.disarmAnchor();
   if (anchor.found) {
     actions.adoptSelfCursor();
@@ -308,7 +311,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
   // found/filtered/not-found truth for the view.
   const [anchorIntent, setAnchorIntent] = useState<ResourceQueryAnchor | null>(null);
   const [anchorArmed, setAnchorArmed] = useState(false);
-  const [anchorResult, setAnchorResult] = useState<ResourceQueryAnchorResult | null>(null);
+  const [anchorResult, setAnchorResult] = useState<AnchorLanding | null>(null);
   const anchorIntentRef = useRef(anchorIntent);
   anchorIntentRef.current = anchorIntent;
   // One-shot numbered-jump intent (0-based start rank). Unlike the anchor it
@@ -444,6 +447,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     }
   }, [queryResetIdentity, resetPage]);
 
+  const anchorForScope = anchorArmed ? anchorIntent : null;
   const scope = useMemo(() => {
     if (!enabled) {
       return null;
@@ -455,12 +459,12 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
       pageLimit,
       predicates,
       continueToken: requestTokenForScope,
-      anchor: anchorArmed ? anchorIntent : null,
+      anchor: anchorForScope,
       startRank: anchorArmed ? null : startRankIntent,
     });
   }, [
     anchorArmed,
-    anchorIntent,
+    anchorForScope,
     startRankIntent,
     baseSelector,
     clusterId,
@@ -477,7 +481,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
   pageLimitRef.current = pageLimit;
 
   const applyPayload = useCallback(
-    (incomingPayload: TPayload, pageIdentity: string) => {
+    (incomingPayload: TPayload, pageIdentity: string, target: ResourceQueryAnchor | null) => {
       const incomingRows = selectRowsRef.current(incomingPayload);
       const nextRows = resolveAppliedRows(
         incomingRows,
@@ -513,7 +517,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
         setStartRankIntent(null);
         setRequestToken(incomingPayload.self || null);
       }
-      applyAnchorLanding(incomingPayload.anchor, {
+      applyAnchorLanding(incomingPayload.anchor, target, {
         setAnchorResult,
         disarmAnchor: () => setAnchorArmed(false),
         adoptSelfCursor: () => setRequestToken(incomingPayload.self || null),
@@ -589,7 +593,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
               }
             },
             onPayload: (responsePayload) => {
-              applyPayload(responsePayload, scope);
+              applyPayload(responsePayload, scope, anchorForScope);
             },
           }),
         onError: (caught) => handleFailure(refreshFailureOf(caught)),
@@ -610,6 +614,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
       }
     };
   }, [
+    anchorForScope,
     applyPayload,
     domain,
     enabled,

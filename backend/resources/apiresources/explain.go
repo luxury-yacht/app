@@ -5,6 +5,7 @@ package apiresources
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -19,6 +20,7 @@ import (
 
 // KindSchema is the field tree `kubectl explain --recursive` prints for a kind.
 type KindSchema struct {
+	Revision    string        `json:"revision"`
 	Group       string        `json:"group"`
 	Version     string        `json:"version"`
 	Kind        string        `json:"kind"`
@@ -47,12 +49,17 @@ type FieldExplanation struct {
 
 // ExplainSchema returns the complete field tree of the kind served at gvr.
 func ExplainSchema(client openapi.Client, gvr schema.GroupVersionResource) (*KindSchema, error) {
-	output, err := renderExplain(client, gvr, nil, true)
+	document, err := loadExplainDocument(client, gvr)
+	if err != nil {
+		return nil, err
+	}
+	output, err := renderExplain(document, gvr, nil, true)
 	if err != nil {
 		return nil, err
 	}
 	sections := splitExplainOutput(output)
 	return &KindSchema{
+		Revision:    document.revision(),
 		Group:       sections.header["GROUP"],
 		Version:     sections.header["VERSION"],
 		Kind:        sections.header["KIND"],
@@ -62,9 +69,22 @@ func ExplainSchema(client openapi.Client, gvr schema.GroupVersionResource) (*Kin
 }
 
 // ExplainField returns the type and description of the field reached by
-// following fieldPath, one field name per level, under the kind served at gvr.
-func ExplainField(client openapi.Client, gvr schema.GroupVersionResource, fieldPath []string) (*FieldExplanation, error) {
-	output, err := renderExplain(client, gvr, fieldPath, false)
+// following fieldPath in the same schema revision as the caller's field tree.
+func ExplainField(client openapi.Client, gvr schema.GroupVersionResource, fieldPath []string, revision string) (*FieldExplanation, error) {
+	if revision == "" {
+		return nil, errorstatus.BadRequest(fmt.Errorf("schema revision is required to explain a field"))
+	}
+	document, err := loadExplainDocument(client, gvr)
+	if err != nil {
+		if errorstatus.Classify(err).Reason == errorstatus.ReasonNotFound {
+			return nil, errorstatus.Conflict(err)
+		}
+		return nil, err
+	}
+	if document.revision() != revision {
+		return nil, errorstatus.Conflict(fmt.Errorf("the OpenAPI schema for %s changed", gvr.GroupVersion()))
+	}
+	output, err := renderExplain(document, gvr, fieldPath, false)
 	if err != nil {
 		return nil, err
 	}
@@ -77,14 +97,11 @@ func ExplainField(client openapi.Client, gvr schema.GroupVersionResource, fieldP
 	}, nil
 }
 
-// renderExplain fetches the group version's OpenAPI document and renders the
-// kubectl explain text from it. The document is fetched here, not by the
-// renderer, so a failure to reach the cluster stays distinguishable from a
-// schema that simply does not describe the kind or field.
-func renderExplain(client openapi.Client, gvr schema.GroupVersionResource, fieldPath []string, recursive bool) (string, error) {
+// loadExplainDocument keeps OpenAPI fetch failures distinct from missing kinds or fields.
+func loadExplainDocument(client openapi.Client, gvr schema.GroupVersionResource) (fetchedDocument, error) {
 	paths, err := client.Paths()
 	if err != nil {
-		return "", fmt.Errorf("fetch OpenAPI index: %w", err)
+		return fetchedDocument{}, fmt.Errorf("fetch OpenAPI index: %w", err)
 	}
 	documentPath := "api/" + gvr.Version
 	if gvr.Group != "" {
@@ -92,19 +109,21 @@ func renderExplain(client openapi.Client, gvr schema.GroupVersionResource, field
 	}
 	groupVersion, ok := paths[documentPath]
 	if !ok {
-		return "", errorstatus.NotFound(fmt.Errorf("the cluster publishes no schema for %s", gvr.GroupVersion()))
+		return fetchedDocument{}, errorstatus.NotFound(fmt.Errorf("the cluster publishes no schema for %s", gvr.GroupVersion()))
 	}
 	document, err := groupVersion.Schema(runtime.ContentTypeJSON)
 	if err != nil {
-		return "", fmt.Errorf("fetch OpenAPI schema for %s: %w", gvr.GroupVersion(), err)
+		return fetchedDocument{}, fmt.Errorf("fetch OpenAPI schema for %s: %w", gvr.GroupVersion(), err)
 	}
 	if !json.Valid(document) {
-		return "", fmt.Errorf("OpenAPI schema for %s is not valid JSON", gvr.GroupVersion())
+		return fetchedDocument{}, fmt.Errorf("OpenAPI schema for %s is not valid JSON", gvr.GroupVersion())
 	}
+	return fetchedDocument{path: documentPath, document: document}, nil
+}
 
+func renderExplain(document fetchedDocument, gvr schema.GroupVersionResource, fieldPath []string, recursive bool) (string, error) {
 	var output bytes.Buffer
-	fetched := fetchedDocument{path: documentPath, document: document}
-	if err := explain.PrintModelDescription(fieldPath, &output, fetched, gvr, recursive, 0, "plaintext"); err != nil {
+	if err := explain.PrintModelDescription(fieldPath, &output, document, gvr, recursive, 0, "plaintext"); err != nil {
 		// The document is in hand and valid, so the renderer can only fail
 		// because the schema has no such kind or field.
 		return "", errorstatus.NotFound(err)
@@ -117,6 +136,8 @@ type fetchedDocument struct {
 	path     string
 	document []byte
 }
+
+func (d fetchedDocument) revision() string { return fmt.Sprintf("%x", sha256.Sum256(d.document)) }
 
 func (d fetchedDocument) Paths() (map[string]openapi.GroupVersion, error) {
 	return map[string]openapi.GroupVersion{d.path: d}, nil

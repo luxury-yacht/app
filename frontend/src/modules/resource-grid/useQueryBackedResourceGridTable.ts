@@ -8,6 +8,10 @@ import {
   matchesGridTableFocusRequest,
 } from '@shared/components/tables/hooks/gridTableFocusRequest';
 import {
+  peekPendingFocusRequest,
+  setPendingFocusRequest,
+} from '@shared/components/tables/hooks/useGridTableExternalFocus';
+import {
   isTablePageSize,
   TABLE_PAGE_SIZE_OPTIONS,
   type TablePageSize,
@@ -20,6 +24,7 @@ import TablePaginationControls, {
 import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
 import React, { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
+import { eventBus } from '@/core/events';
 import { useRefreshScopedDomain } from '@/core/refresh';
 import { useQueryStreamSignal } from '@/core/refresh/hooks/useQueryStreamSignal';
 import type { RefreshFailure } from '@/core/refresh/refreshFailure';
@@ -219,6 +224,7 @@ function useTypedQueryLifecycle<
   baseSelector,
   queryTableMode,
   selectRows,
+  keyExtractor,
   predicates,
   filterOptionOverrides,
   excludedQueryFacetKeys,
@@ -237,6 +243,7 @@ function useTypedQueryLifecycle<
   baseSelector: ScopeSelector;
   queryTableMode: Extract<ResourceGridTableMode, 'Query Backed Static' | 'Query Backed Dynamic'>;
   selectRows: (payload: TPayload) => TRow[];
+  keyExtractor: (row: TRow, index: number) => string;
   predicates?: Record<string, string | null | undefined>;
   filterOptionOverrides?: Partial<GridTableFilterOptions>;
   excludedQueryFacetKeys?: readonly string[];
@@ -345,8 +352,10 @@ function useTypedQueryLifecycle<
     enabled: queryEnabled,
     domain,
     viewId,
+    baseSelector,
     loaded,
     rows: data,
+    keyExtractor,
     anchorTo: query.anchorTo,
     anchorResult: query.anchorResult,
     onTargetNotListed: onFocusTargetNotListed,
@@ -364,12 +373,6 @@ function useTypedQueryLifecycle<
   };
 }
 
-// Field-based matching only for the anchor decision: the request's rowKey
-// branch needs the view's real keyExtractor, which the focus machinery inside
-// GridTable owns. A false negative here just fires a redundant jump onto the
-// same page; a false positive leaves today's behavior.
-const anchorDecisionKeyExtractor = () => '';
-
 // "Show in list" upgrade (plan P8): the existing gridtable:focus-request
 // machinery highlights and scrolls a row only when it is on the LOADED page.
 // When a pending request targets this table's cluster but matches no loaded
@@ -381,8 +384,10 @@ function useAnchorOnUnmatchedFocusRequest<TRow>({
   enabled = true,
   domain,
   viewId,
+  baseSelector,
   loaded,
   rows,
+  keyExtractor,
   anchorTo,
   anchorResult,
   onTargetNotListed,
@@ -391,13 +396,18 @@ function useAnchorOnUnmatchedFocusRequest<TRow>({
   enabled?: boolean;
   domain: RefreshDomain;
   viewId: string;
+  baseSelector: ScopeSelector;
   loaded: boolean;
   rows: TRow[];
+  keyExtractor: (row: TRow, index: number) => string;
   anchorTo: UseTypedResourceQueryResult<TRow>['anchorTo'];
   anchorResult: UseTypedResourceQueryResult<TRow>['anchorResult'];
   onTargetNotListed?: FocusTargetNotListedHandler;
 }): void {
-  const anchoredRequestRef = useRef<GridTableFocusRequest | null>(null);
+  const started = useRef<{
+    request: GridTableFocusRequest;
+    target: ReturnType<typeof focusRequestAnchor>;
+  } | null>(null);
   // Read at report time, so a new handler identity never re-reports a result.
   const handedOff = useEffectEvent(
     (request: GridTableFocusRequest) => onTargetNotListed?.(request) ?? false
@@ -407,32 +417,56 @@ function useAnchorOnUnmatchedFocusRequest<TRow>({
     if (!enabled || !clusterId || !loaded) {
       return;
     }
-    const request = pendingAnchorRequest(clusterId, viewId);
-    // One anchor jump per request, including a missing target.
-    if (!request || request === anchoredRequestRef.current) {
-      return;
-    }
-    const probe = { ...request, rowKey: undefined };
-    const onPage = rows.some((row, index) =>
-      matchesGridTableFocusRequest(row, index, anchorDecisionKeyExtractor, probe)
-    );
-    if (onPage) {
-      return;
-    }
-    anchoredRequestRef.current = request;
-    anchorTo(focusRequestAnchor(request));
-  }, [anchorTo, clusterId, enabled, loaded, rows, viewId]);
+    // The event can arrive before navigation commits a new namespace.
+    const namespace = baseSelector.kind === 'namespace' ? baseSelector.namespace : undefined;
+    const startPendingAnchor = () => {
+      const request = pendingAnchorRequest(clusterId, viewId, namespace);
+      // One anchor jump per request, including a missing target.
+      if (!request || request === started.current?.request) {
+        return;
+      }
+      const onPage = rows.some((row, index) =>
+        matchesGridTableFocusRequest(row, index, keyExtractor, request)
+      );
+      const supersedesInFlight = started.current && started.current.target !== anchorResult?.target;
+      if (onPage && !supersedesInFlight) {
+        return;
+      }
+      const target = focusRequestAnchor(request);
+      started.current = { request, target };
+      anchorTo(target);
+    };
+
+    const unsubscribe = eventBus.on('gridtable:focus-request', startPendingAnchor);
+    startPendingAnchor();
+    return unsubscribe;
+  }, [
+    anchorResult,
+    anchorTo,
+    baseSelector,
+    clusterId,
+    enabled,
+    keyExtractor,
+    loaded,
+    rows,
+    viewId,
+  ]);
 
   useEffect(() => {
     if (!anchorResult || anchorResult.found) {
       return;
     }
-    const request = anchoredRequestRef.current;
-    // The object exists but has no row here under any filters. A view that
-    // lists the object itself may take over.
-    if (request && anchorResult.reason === 'unlisted' && handedOff(request)) {
+    const current = started.current;
+    if (current?.target !== anchorResult.target || current.request !== peekPendingFocusRequest()) {
       return;
     }
+    const { request } = current;
+    // The object exists but has no row here under any filters. A view that
+    // lists the object itself may take over.
+    if (anchorResult.reason === 'unlisted' && handedOff(request)) {
+      return;
+    }
+    setPendingFocusRequest(null);
     // Loud, inline-adjacent truth (degraded states must be visible): the jump
     // landed on page 1 because the object is not in this view.
     reportMissingFocusTarget(domain, request, anchorResult.reason);
@@ -622,6 +656,7 @@ export function useQueryBackedNamespaceResourceGridTable<
     baseSelector: namespaceSelector,
     queryTableMode,
     selectRows,
+    keyExtractor: resolvedKeyExtractor,
     predicates,
     filterOptionOverrides,
     excludedQueryFacetKeys,
@@ -751,6 +786,7 @@ export function useQueryBackedClusterResourceGridTable<
     baseSelector,
     queryTableMode,
     selectRows,
+    keyExtractor: resolvedKeyExtractor,
     predicates,
     filterOptionOverrides,
     excludedQueryFacetKeys,

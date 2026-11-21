@@ -16,14 +16,16 @@ const hasVersion = (request: GridTableFocusRequest): request is AnchorableFocusR
 // still match a row on the current page using the normal GridTable behavior.
 export const pendingAnchorRequest = (
   clusterId: string | null | undefined,
-  viewId: string | undefined
+  viewId: string | undefined,
+  namespace?: string
 ): AnchorableFocusRequest | null => {
   const request = peekPendingFocusRequest();
   if (
     !request ||
     !viewId ||
     request.clusterId !== clusterId ||
-    request.destinationViewId !== viewId
+    request.destinationViewId !== viewId ||
+    (namespace !== undefined && request.namespace !== namespace)
   ) {
     return null;
   }

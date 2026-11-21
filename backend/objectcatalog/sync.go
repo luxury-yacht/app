@@ -784,6 +784,7 @@ func (run *catalogSync) publish(descriptors []Descriptor, collectErr error) {
 	s.cacheRebuilds.Add(1)
 	s.catalogIndex.rebuildCacheFromItems(run.newItems, descriptors)
 	s.mu.Unlock()
+	run.publishListedDefinitions(complete, denied)
 	s.publishSyncedAttentionSubsets(run.newItems)
 	// Notify after publishing the complete replacement, including rows retained
 	// for failed descriptors, so readers never observe the intermediate batches.

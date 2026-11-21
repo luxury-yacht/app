@@ -8,6 +8,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/stretchr/testify/require"
 	authorizationv1 "k8s.io/api/authorization/v1"
@@ -278,7 +279,7 @@ func TestAFailedFirstDiscoveryIsSignalled(t *testing.T) {
 	require.ErrorIs(t, inventory.DiscoveryFailure, denied)
 
 	// The definitions list arriving before any discovery succeeds is not news.
-	svc.apiResources.markCustomKnown()
+	svc.apiResources.markCustomWatchListed()
 	requireNoAPIResourcesUpdate(t, updates)
 
 	// Until a discovery succeeds there is nothing to show but the reason, so
@@ -517,6 +518,39 @@ func TestAPIResourceClassificationStaysUnknownForACRDStoreThatGaveUpListing(t *t
 	// The list finally arrives.
 	source.sink.(ingest.BundleReplacer).ReplaceBundles([]ingest.Bundle{exampleWidgetDefinition()})
 	require.True(t, svc.APIResources().CustomKnown)
+}
+
+func TestAPIResourceClassificationUsesListUntilACompleteWatchTakesOver(t *testing.T) {
+	svc := newTestWatchService()
+	svc.discoveryClient = multiVersionDiscovery()
+	_, err := svc.discoverResources(t.Context())
+	require.NoError(t, err)
+
+	listed := []Summary{{Ref: resourcemodel.ResourceRef{
+		ClusterID: svc.clusterID, Group: "apiextensions.k8s.io", Version: "v1",
+		Kind: "CustomResourceDefinition", Resource: "customresourcedefinitions", Name: "widgets.example.io",
+	}}}
+	svc.apiResources.applyDefinitionList(listed, true, false)
+	svc.apiResources.applyDefinitionList(nil, false, false)
+	inventory := svc.APIResources()
+	require.True(t, inventory.CustomKnown)
+	require.True(t, apiResourceByName(t, inventory.Resources, "example.io", "widgets").Custom)
+
+	svc.apiResources.applyDefinitionList(nil, false, true)
+	inventory = svc.APIResources()
+	require.False(t, inventory.CustomKnown)
+	require.True(t, inventory.CustomListDenied)
+	require.False(t, apiResourceByName(t, inventory.Resources, "example.io", "widgets").Custom)
+
+	// The reflector recovers with an empty list. A slower catalog LIST cannot
+	// bring a deleted definition back after the complete watch takes over.
+	hook := newCRDDiscoveryHook(newWatchNotifier(svc))
+	hook.ReplaceBundles(nil)
+	svc.apiResources.applyDefinitionList(listed, true, false)
+	inventory = svc.APIResources()
+	require.True(t, inventory.CustomKnown)
+	require.False(t, inventory.CustomListDenied)
+	require.False(t, apiResourceByName(t, inventory.Resources, "example.io", "widgets").Custom)
 }
 
 // partialDiscovery fails one group version and serves the rest, as an API

@@ -18,6 +18,7 @@ export interface FieldExplanation {
  * KindSchema is the field tree `kubectl explain --recursive` prints for a kind.
  */
 export interface KindSchema {
+    "revision": string;
     "group": string;
     "version": string;
     "kind": string;

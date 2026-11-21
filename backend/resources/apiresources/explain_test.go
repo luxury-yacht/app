@@ -2,6 +2,7 @@ package apiresources
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/internal/errorstatus"
@@ -74,7 +75,7 @@ func TestExplainSchemaOfACoreKindHasNoGroup(t *testing.T) {
 }
 
 func TestExplainFieldDescribesOneField(t *testing.T) {
-	explanation, err := ExplainField(openapitest.NewEmbeddedFileClient(), deploymentsGVR, []string{"spec", "strategy"})
+	explanation, err := explainCurrentField(t, openapitest.NewEmbeddedFileClient(), deploymentsGVR, []string{"spec", "strategy"})
 	require.NoError(t, err)
 
 	require.Equal(t, []string{"spec", "strategy"}, explanation.Path)
@@ -86,7 +87,7 @@ func TestExplainFieldDescribesOneField(t *testing.T) {
 }
 
 func TestExplainFieldWithoutAPathDescribesTheKind(t *testing.T) {
-	explanation, err := ExplainField(openapitest.NewEmbeddedFileClient(), deploymentsGVR, nil)
+	explanation, err := explainCurrentField(t, openapitest.NewEmbeddedFileClient(), deploymentsGVR, nil)
 	require.NoError(t, err)
 
 	require.Empty(t, explanation.Path)
@@ -108,7 +109,7 @@ func TestExplainReportsMissingSchemasAsNotFound(t *testing.T) {
 			return err
 		},
 		"field not in the schema": func() error {
-			_, err := ExplainField(client, deploymentsGVR, []string{"spec", "nope"})
+			_, err := explainCurrentField(t, client, deploymentsGVR, []string{"spec", "nope"})
 			return err
 		},
 	}
@@ -177,7 +178,7 @@ func widgetClient() openapi.Client {
 }
 
 func TestExplainFieldListsEnumValues(t *testing.T) {
-	explanation, err := ExplainField(widgetClient(), widgetsGVR, []string{"mode"})
+	explanation, err := explainCurrentField(t, widgetClient(), widgetsGVR, []string{"mode"})
 	require.NoError(t, err)
 
 	require.Equal(t, "string", explanation.Type)
@@ -203,11 +204,11 @@ func TestExplainSchemaStopsAtSelfReferentialFields(t *testing.T) {
 // kinds). That field and a same-spelled nested path are different fields and
 // must be explained separately.
 func TestExplainFieldTellsADottedNameFromANestedPath(t *testing.T) {
-	literal, err := ExplainField(widgetClient(), widgetsGVR, []string{"a.b"})
+	literal, err := explainCurrentField(t, widgetClient(), widgetsGVR, []string{"a.b"})
 	require.NoError(t, err)
 	require.Equal(t, "The field literally named a.b.", literal.Description)
 
-	nested, err := ExplainField(widgetClient(), widgetsGVR, []string{"a", "b"})
+	nested, err := explainCurrentField(t, widgetClient(), widgetsGVR, []string{"a", "b"})
 	require.NoError(t, err)
 	require.Equal(t, "The field b nested under a.", nested.Description)
 }
@@ -221,4 +222,34 @@ func TestExplainSchemaKeepsUnusualFieldNamesWhole(t *testing.T) {
 	require.Equal(t, "string", findField(t, kindSchema.Fields, "a.b").Type)
 	require.Equal(t, "string", findField(t, kindSchema.Fields, "a", "b").Type)
 	require.Equal(t, "string", findField(t, kindSchema.Fields, "display name").Type)
+}
+
+func explainCurrentField(t *testing.T, client openapi.Client, gvr schema.GroupVersionResource, path []string) (*FieldExplanation, error) {
+	t.Helper()
+	document, err := loadExplainDocument(client, gvr)
+	require.NoError(t, err)
+	return ExplainField(client, gvr, path, document.revision())
+}
+
+func TestExplainFieldRequiresTheTreesSchemaRevision(t *testing.T) {
+	old, err := ExplainSchema(widgetClient(), widgetsGVR)
+	require.NoError(t, err)
+	updated := fetchedDocument{
+		path:     "apis/example.io/v1",
+		document: []byte(strings.Replace(widgetDocument, `"mode":`, `"speed":`, 1)),
+	}
+	field, err := ExplainField(updated, widgetsGVR, []string{"mode"}, old.Revision)
+	require.Nil(t, field)
+	require.Equal(t, errorstatus.ReasonConflict, errorstatus.Classify(err).Reason)
+	_, err = ExplainField(fetchedDocument{}, widgetsGVR, []string{"mode"}, old.Revision)
+	require.Equal(t, errorstatus.ReasonConflict, errorstatus.Classify(err).Reason)
+	_, err = ExplainField(updated, widgetsGVR, []string{"speed"}, "")
+	require.Equal(t, errorstatus.ReasonBadRequest, errorstatus.Classify(err).Reason)
+
+	current, err := ExplainSchema(updated, widgetsGVR)
+	require.NoError(t, err)
+	require.NotEqual(t, old.Revision, current.Revision)
+	field, err = ExplainField(updated, widgetsGVR, []string{"speed"}, current.Revision)
+	require.NoError(t, err)
+	require.Equal(t, "How fast the widget runs.", field.Description)
 }

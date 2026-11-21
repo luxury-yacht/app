@@ -15,7 +15,6 @@ import (
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
-	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 )
@@ -76,16 +75,13 @@ type APIResourceSource interface {
 // ClusterAPIResourcesBuilder serves the API Resources table from the catalog's
 // discovered API surface.
 type ClusterAPIResourcesBuilder struct {
-	source            func() APIResourceSource
-	definitionsDenied func() bool
-	discoveryWait     time.Duration
+	source        func() APIResourceSource
+	discoveryWait time.Duration
 }
 
 // RegisterClusterAPIResourcesDomain registers the API Resources domain.
 // catalogService returns the cluster's catalog, or nil while none runs.
-// ingestManager says whether this identity may list CustomResourceDefinitions;
-// it is nil in unit tests.
-func RegisterClusterAPIResourcesDomain(reg *domain.Registry, catalogService func() *objectcatalog.Service, ingestManager *ingest.IngestManager) error {
+func RegisterClusterAPIResourcesDomain(reg *domain.Registry, catalogService func() *objectcatalog.Service) error {
 	if reg == nil {
 		return errors.New("domain registry is required")
 	}
@@ -99,9 +95,6 @@ func RegisterClusterAPIResourcesDomain(reg *domain.Registry, catalogService func
 				return service
 			}
 			return nil
-		},
-		definitionsDenied: func() bool {
-			return ingestManager != nil && ingestManager.PermissionSkippedFor(apiextensions.Identity.GVR())
 		},
 		discoveryWait: config.SnapshotAPIResourcesDiscoveryWait,
 	}
@@ -125,15 +118,14 @@ func (b *ClusterAPIResourcesBuilder) Build(ctx context.Context, scope string) (*
 		return nil, err
 	}
 
-	definitionsDenied := b.definitionsDenied()
 	// Whether a kind is custom is known only once the CustomResourceDefinition
 	// list has been read, which this identity may not be allowed to do.
-	typesKnown := inventory.CustomKnown && !definitionsDenied
+	typesKnown := inventory.CustomKnown
 	rows := make([]ClusterAPIResourceEntry, 0, len(inventory.Resources))
 	for _, resource := range inventory.Resources {
 		rows = append(rows, newClusterAPIResourceEntry(meta.ClusterID, resource, typesKnown))
 	}
-	issues := clusterAPIResourceIssues(inventory, definitionsDenied)
+	issues := clusterAPIResourceIssues(inventory)
 
 	adapter := clusterAPIResourcesQueryAdapter()
 	capabilities := clusterAPIResourcesQueryCapabilities()
@@ -176,10 +168,10 @@ func resolveDefinitionAnchor(result *ResourceQueryAnchorResult, anchor *Resource
 // clusterAPIResourceIssues reports what makes the served inventory less than
 // complete: an unknown custom/built-in classification, and group versions the
 // last discovery could not read.
-func clusterAPIResourceIssues(inventory objectcatalog.APIResourceInventory, definitionsDenied bool) []ResourceQueryIssue {
+func clusterAPIResourceIssues(inventory objectcatalog.APIResourceInventory) []ResourceQueryIssue {
 	var issues []ResourceQueryIssue
 	switch {
-	case definitionsDenied:
+	case inventory.CustomListDenied:
 		issues = append(issues, ResourceQueryIssue{
 			Kind:    apiextensions.Identity.Kind,
 			Message: "CustomResourceDefinitions cannot be listed, so custom kinds cannot be told apart from built-in kinds",

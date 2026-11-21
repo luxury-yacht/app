@@ -149,7 +149,7 @@ func (s *Service) registerCRDDiscoveryHook(notifier *watchNotifier) func() {
 	// whole list only when the store has really finished listing; otherwise the
 	// list arrives later as a relist, which marks the classification known itself.
 	if storeListed(source.PartitionReadinessFor(gvr)) {
-		s.apiResources.markCustomKnown()
+		s.apiResources.markCustomWatchListed()
 	}
 	return detach
 }
@@ -194,7 +194,7 @@ func (h *crdDiscoveryHook) UpsertBundle(bundle ingest.Bundle) {
 	previous, seen := h.seen[definition.UID]
 	h.seen[definition.UID] = definition
 	if !seen || definitionResource(previous) != definitionResource(definition) {
-		h.publishCustomResources()
+		h.publishCustomResources(false)
 	}
 	switch {
 	case !seen:
@@ -210,7 +210,7 @@ func (h *crdDiscoveryHook) DeleteBundle(bundle ingest.Bundle) {
 		return
 	}
 	delete(h.seen, definition.UID)
-	h.publishCustomResources()
+	h.publishCustomResources(false)
 	h.notifier.crdDiscoveryChanged()
 }
 
@@ -220,12 +220,12 @@ func definitionResource(definition apiextensions.Definition) schema.GroupResourc
 
 // publishCustomResources tells the API-resource store which resources the
 // seen definitions define, so the kinds it lists are flagged as custom.
-func (h *crdDiscoveryHook) publishCustomResources() {
+func (h *crdDiscoveryHook) publishCustomResources(listed bool) {
 	custom := make(map[schema.GroupResource]struct{}, len(h.seen))
 	for _, definition := range h.seen {
 		custom[definitionResource(definition)] = struct{}{}
 	}
-	h.notifier.service.apiResources.setCustomResources(custom)
+	h.notifier.service.apiResources.setWatchedCustomResources(custom, listed)
 }
 
 // ReplaceBundles diffs a relist's complete set against the last-seen
@@ -240,9 +240,8 @@ func (h *crdDiscoveryHook) ReplaceBundles(bundles []ingest.Bundle) {
 	}
 	previous := h.seen
 	h.seen = next
-	h.publishCustomResources()
 	// A relist is the store's complete list.
-	h.notifier.service.apiResources.markCustomKnown()
+	h.publishCustomResources(true)
 	for uid, old := range previous {
 		if current, kept := next[uid]; !kept || old.ChangesDiscovery(current) {
 			h.notifier.crdDiscoveryChanged()

@@ -37,12 +37,12 @@ func (g *ResourceGateway) ExplainKindSchema(target resourcemodel.ResourceRef) (*
 // ExplainKindField describes the field reached by following fieldPath, one
 // field name per level, under the kind target names; an empty path describes
 // the kind itself.
-func (g *ResourceGateway) ExplainKindField(target resourcemodel.ResourceRef, fieldPath []string) (*apiresources.FieldExplanation, error) {
+func (g *ResourceGateway) ExplainKindField(target resourcemodel.ResourceRef, fieldPath []string, revision string) (*apiresources.FieldExplanation, error) {
 	client, gvr, err := g.explainClient(target)
 	if err != nil {
 		return nil, err
 	}
-	return apiresources.ExplainField(client, gvr, fieldPath)
+	return apiresources.ExplainField(client, gvr, fieldPath, revision)
 }
 
 // explainClient validates the kind identity and returns the cluster's OpenAPI

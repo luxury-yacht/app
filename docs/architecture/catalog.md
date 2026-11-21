@@ -189,15 +189,11 @@ collects (Events, kinds that cannot be listed, the metrics API).
 - One `ServerGroupsAndResources` call per discovery feeds both the API
   resources and the catalog descriptors; the descriptors are the listable,
   non-excluded subset at preferred versions.
-- A resource is `Custom` when a CustomResourceDefinition visible to the
-  identity defines it. The CRD discovery hook supplies that set, so the flag
-  follows the CRD list even when it arrives after discovery.
-- `CustomKnown` says whether the CRD list has been read. Discovery publishes
-  before the hook registers, so until the hook has replayed a CRD store whose
-  initial list completed (every partition Ready), or has received a relist,
-  "not flagged custom" does not mean built-in. A store that only settled
-  (permission-skipped, or degraded past the sync deadline) has listed nothing
-  and does not count.
+- A resource is `Custom` when a visible CustomResourceDefinition defines it.
+  `CustomKnown` means the catalog has a complete CRD list. The catalog uses
+  successful LIST results until the CRD reflector has completed its own list
+  and can supply live changes. A WATCH denial still allows LIST-based
+  classification. An explicit LIST denial is reported as a permission issue.
 - A partial discovery (some group versions unreachable) keeps the last
   published resources of every group with a failed version, and lists those
   group versions in `FailedGroupVersions`; a later complete discovery clears
@@ -216,8 +212,8 @@ collects (Events, kinds that cannot be listed, the metrics API).
   state until the first discovery signals). Once an attempt has failed it
   answers the latest failure itself, typed, so a denied discovery reads as a
   permission error and any other is reported.
-- The domain is feed-independent and serves discovery without waiting on the
-  CRD reflector. Type classification stays unknown until the reflector has listed.
+- The domain is feed-independent and serves discovery while classification is
+  still pending.
 - The `cluster-api-resources` refresh domain
   (`backend/refresh/snapshot/cluster_api_resources.go`) serves the inventory as
   the API Resources table and the kind panel's details. It waits a bounded
@@ -241,16 +237,17 @@ collects (Events, kinds that cannot be listed, the metrics API).
   reads. This includes CRDs collected by LIST when WATCH is denied. The result
   is `unlisted` for a matching object and `not-found` for confirmed absence or
   a different UID. A pending or denied catalog lookup yields `unavailable`.
-- On `unlisted`, API Resources hands the request to Browse, where the
-  definition itself is listed: narrowed to the definition's kind and name so
-  its row is on the page, and re-addressed to Browse so API Resources does not
-  act on it again. Browse's search is a substring match, so other definitions
-  may be listed too; the request's row key focuses the one asked for. A
-  `not-found`, `filtered`, or `unavailable` target is reported in API Resources.
+- On `unlisted`, API Resources hands the current request to Browse. Browse
+  narrows its filters and uses the exact CRD identity, including the UID when
+  available, to open and focus the page containing the requested definition.
+  Leaving Browse cancels its pending focus. API Resources reports
+  `not-found`, `filtered`, or `unavailable` for its own anchor.
 - `kubectl explain` output for a kind comes from
   `backend/resources/apiresources`, read from the cluster's OpenAPI v3
   documents on demand (`ResourceGateway.ExplainKindSchema`,
-  `ExplainKindField`), never from the catalog.
+  `ExplainKindField`). A field read carries the tree's document revision. If
+  the document has changed, Explain reloads the tree and clears all cached
+  field descriptions together.
 
 ## Discovered resource families
 

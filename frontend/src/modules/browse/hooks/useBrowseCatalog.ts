@@ -30,6 +30,7 @@ import {
   useLiveQueryRead,
   useLiveScope,
 } from '@modules/resource-grid/useLiveQueryRead';
+import type { GridTableFocusRequest } from '@shared/components/tables/hooks/gridTableFocusRequest';
 import {
   peekPendingFocusRequest,
   setPendingFocusRequest,
@@ -125,18 +126,23 @@ interface BrowsePageAddress {
 }
 
 const settlePageFocus = (
-  request: AnchorableFocusRequest | undefined,
+  request: AnchorableFocusRequest,
   result: ResourceQueryAnchorResult | undefined
-): void => {
-  if (!request || !result || peekPendingFocusRequest() !== request) {
-    return;
+): GridTableFocusRequest | null => {
+  if (peekPendingFocusRequest() !== request) {
+    return null;
+  }
+  if (!result) {
+    return request;
   }
   if (result.found) {
-    setPendingFocusRequest({ ...request, requiresAnchor: false });
-    return;
+    const confirmed = { ...request, requiresAnchor: false };
+    setPendingFocusRequest(confirmed);
+    return confirmed;
   }
   setPendingFocusRequest(null);
   reportMissingFocusTarget('catalog', request, result.reason);
+  return null;
 };
 
 // A numbered jump adopts the backend's self cursor. Walking back to page one
@@ -370,6 +376,7 @@ export function useBrowseCatalog({
   const pageRequestInFlightRef = useRef(false);
   const userPageRequestInFlightRef = useRef(false);
   const pageRequestSeqRef = useRef(0);
+  const ownedFocusRef = useRef<GridTableFocusRequest | null>(null);
   // A change signalled while a page read was in flight; the current page is
   // read again once that read settles.
   const signalDuringReadRef = useRef(false);
@@ -559,7 +566,9 @@ export function useBrowseCatalog({
           readFirstPage();
           return 'landed';
         case 'page':
-          settlePageFocus(address.focus, outcome.payload.anchor);
+          if (address.focus) {
+            ownedFocusRef.current = settlePageFocus(address.focus, outcome.payload.anchor);
+          }
           applyPage(
             outcome.payload,
             address.focus ? 'jump' : direction,
@@ -588,12 +597,26 @@ export function useBrowseCatalog({
   }, []);
   useEffect(
     () => () => {
+      pageRequestSeqRef.current++;
+      pageRequestInFlightRef.current = false;
+      userPageRequestInFlightRef.current = false;
+      signalDuringReadRef.current = false;
+      requestedQueryRef.current = null;
+      const focus = ownedFocusRef.current;
+      if (
+        focus?.clusterId === clusterId &&
+        focus?.destinationViewId === focusViewId &&
+        focus === peekPendingFocusRequest()
+      ) {
+        setPendingFocusRequest(null);
+      }
+      ownedFocusRef.current = null;
       if (warmupRetryRef.current !== null) {
         window.clearTimeout(warmupRetryRef.current);
         warmupRetryRef.current = null;
       }
     },
-    []
+    [clusterId, focusViewId]
   );
 
   const requestPage = useCallback(
@@ -628,6 +651,7 @@ export function useBrowseCatalog({
         return;
       }
       const seq = ++pageRequestSeqRef.current;
+      ownedFocusRef.current = address.focus ?? ownedFocusRef.current;
       pageRequestInFlightRef.current = true;
       userPageRequestInFlightRef.current = !quiet;
       // Navigation shows the footer busy; a new query stays quiet (filtering

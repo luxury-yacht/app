@@ -142,7 +142,11 @@ describe('useTypedResourceQuery anchor lifecycle', () => {
     expect(anchoredRead.has('continue')).toBe(false);
     expect(reads().slice(-1)[0]?.get('continue')).toBe('c-self');
     expect(current().pageIndex).toBe(3);
-    expect(current().anchorResult).toEqual({ found: true, rank: 47 });
+    expect(current().anchorResult).toMatchObject({
+      found: true,
+      rank: 47,
+      target: { name: 'web-47' },
+    });
     expect(current().hasPrevious).toBe(true);
     expect(current().rows.map((row) => row.ref.name)).toEqual(['row-40', 'web-47']);
   });
@@ -189,7 +193,7 @@ describe('useTypedResourceQuery anchor lifecycle', () => {
 
     await anchorToWeb47();
 
-    expect(current().anchorResult).toEqual({ found: false, rank: -1, reason: 'filtered' });
+    expect(current().anchorResult).toMatchObject({ found: false, rank: -1, reason: 'filtered' });
     expect(current().pageIndex).toBe(1);
 
     app.snapshots.clearReads();

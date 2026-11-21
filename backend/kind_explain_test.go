@@ -58,13 +58,14 @@ var deploymentKindRef = resourcemodel.ResourceRef{
 // it is downloaded from the cluster once.
 func TestExplainKindReadsTheSchemaAndItsFieldsFromOneDownload(t *testing.T) {
 	fixture, downloads := explainGatewayFixture(t)
+	desktop := &DesktopService{resources: fixture.gateway}
 
-	kindSchema, err := fixture.gateway.ExplainKindSchema(deploymentKindRef)
+	kindSchema, err := desktop.ExplainKindSchema(deploymentKindRef)
 	require.NoError(t, err)
 	require.Equal(t, "Deployment", kindSchema.Kind)
 	require.NotEmpty(t, kindSchema.Fields)
 
-	explanation, err := fixture.gateway.ExplainKindField(deploymentKindRef, []string{"spec", "strategy"})
+	explanation, err := desktop.ExplainKindField(deploymentKindRef, []string{"spec", "strategy"}, kindSchema.Revision)
 	require.NoError(t, err)
 	require.Equal(t, "DeploymentStrategy", explanation.Type)
 	require.Equal(t, 1, *downloads)
@@ -81,7 +82,7 @@ func TestExplainKindRejectsIncompleteKindIdentity(t *testing.T) {
 			change(&target)
 			_, err := fixture.gateway.ExplainKindSchema(target)
 			require.Equal(t, errorstatus.ReasonBadRequest, errorstatus.Classify(err).Reason)
-			_, err = fixture.gateway.ExplainKindField(target, []string{"spec"})
+			_, err = fixture.gateway.ExplainKindField(target, []string{"spec"}, "revision")
 			require.Equal(t, errorstatus.ReasonBadRequest, errorstatus.Classify(err).Reason)
 		})
 	}

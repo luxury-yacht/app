@@ -54,6 +54,7 @@ const deploymentKind = (version = 'v1') => ({
 });
 
 const deploymentSchema = {
+  revision: 'original-revision',
   group: 'apps',
   version: 'v1',
   kind: 'Deployment',
@@ -236,7 +237,11 @@ describe('ApiResourcePanel', () => {
 
     await click(field('spec', 'strategy'));
     const fieldReads = app.backend.calls('ExplainKindField');
-    expect(fieldReads[fieldReads.length - 1]).toEqual([deploymentKind(), ['spec', 'strategy']]);
+    expect(fieldReads[fieldReads.length - 1]).toEqual([
+      deploymentKind(),
+      ['spec', 'strategy'],
+      deploymentSchema.revision,
+    ]);
     expect(field('spec', 'strategy').getAttribute('aria-current')).toBe('true');
     expect(panel().textContent).toContain('About spec > strategy.');
 
@@ -260,6 +265,36 @@ describe('ApiResourcePanel', () => {
       ['spec', 'replicas'],
       ['spec', 'selector'],
     ]);
+  });
+
+  it('replaces the tree and field descriptions when the served schema changes in place', async () => {
+    await start();
+    await openKindPanel();
+    await click(tab('Explain'));
+    await click(field('apiVersion'));
+    expect(panel().textContent).toContain('About apiVersion.');
+
+    app.backend.answer('ExplainKindSchema', () => ({
+      ...deploymentSchema,
+      revision: 'updated-revision',
+      fields: [
+        { name: 'apiVersion', type: 'string' },
+        { name: 'status', type: 'object' },
+      ],
+    }));
+    app.backend.answer('ExplainKindField', (_target, path, revision) => {
+      if (revision === deploymentSchema.revision) {
+        const message = 'The OpenAPI document changed';
+        throw Object.assign(new Error(message), { cause: makeErrorStatus('Conflict', message) });
+      }
+      return { path, description: 'New schema description.' };
+    });
+    await click(field('spec'));
+
+    expect(fieldPaths()).toEqual(['apiVersion', 'status']);
+    expect(panel().querySelector('[role="alert"]')).toBeNull();
+    await click(field('apiVersion'));
+    expect(panel().textContent).toContain('New schema description.');
   });
 
   it('says so when the cluster publishes no schema for the kind', async () => {

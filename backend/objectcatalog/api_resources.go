@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -141,6 +142,8 @@ type apiResourceStore struct {
 	// plus what is known about its completeness.
 	discovered  []APIResource
 	custom      map[schema.GroupResource]struct{}
+	watched     map[schema.GroupResource]struct{}
+	watchListed bool
 	published   APIResourceInventory
 	subscribers subsetSubscribers
 }
@@ -157,6 +160,8 @@ type APIResourceInventory struct {
 	// so a resource that is not flagged Custom really has no definition. Until
 	// then, and for an identity that cannot list definitions, Custom says nothing.
 	CustomKnown bool
+	// CustomListDenied records an actual LIST denial, independently of WATCH access.
+	CustomListDenied bool
 	// FailedGroupVersions are the group versions the last discovery could not
 	// read. Their groups' resources are the ones last successfully discovered.
 	FailedGroupVersions []string
@@ -238,23 +243,68 @@ func groupVersionNames(groupVersions []schema.GroupVersion) []string {
 	return names
 }
 
-// setCustomResources replaces the set of CRD-defined resources. CRD rows are
-// listed independently of discovery, so this may run before or after replace.
-func (s *apiResourceStore) setCustomResources(custom map[schema.GroupResource]struct{}) {
+// setWatchedCustomResources receives reflector updates and its complete relists.
+func (s *apiResourceStore) setWatchedCustomResources(custom map[schema.GroupResource]struct{}, listed bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.custom = custom
-	s.publishLocked(s.published)
+	s.watched = custom
+	if listed || s.watchListed {
+		s.useWatchedCustomResourcesLocked()
+	} else if !s.published.CustomKnown && !s.published.CustomListDenied {
+		// Before a complete list, keep the flags for definitions seen so far.
+		s.custom = custom
+		s.publishLocked(s.published)
+	}
 }
 
-// markCustomKnown records that the CustomResourceDefinition list has been read
-// and handed to setCustomResources.
-func (s *apiResourceStore) markCustomKnown() {
+// markCustomWatchListed adopts the replay from a reflector that already listed.
+func (s *apiResourceStore) markCustomWatchListed() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.useWatchedCustomResourcesLocked()
+}
+
+func (s *apiResourceStore) useWatchedCustomResourcesLocked() {
+	s.watchListed = true
+	s.publishCustomResourcesLocked(s.watched, false)
+}
+
+func (s *apiResourceStore) publishCustomResourcesLocked(custom map[schema.GroupResource]struct{}, denied bool) {
+	s.custom = custom
 	next := s.published
-	next.CustomKnown = true
+	next.CustomKnown = !denied
+	next.CustomListDenied = denied
 	s.publishLocked(next)
+}
+
+// applyDefinitionList uses the catalog's completed LIST or explicit denial
+// until a reflector can supply the live set. Transient errors retain the last answer.
+func (s *apiResourceStore) applyDefinitionList(rows []Summary, listed, denied bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.watchListed || (!listed && !denied) {
+		return
+	}
+	s.publishCustomResourcesLocked(definedResources(rows), denied)
+}
+
+func definedResources(rows []Summary) map[schema.GroupResource]struct{} {
+	custom := make(map[schema.GroupResource]struct{}, len(rows))
+	for _, row := range rows {
+		// Kubernetes names every CRD <plural>.<group>.
+		plural, group, ok := strings.Cut(row.Ref.Name, ".")
+		if ok && plural != "" && group != "" {
+			custom[schema.GroupResource{Group: group, Resource: plural}] = struct{}{}
+		}
+	}
+	return custom
+}
+
+func (run *catalogSync) publishListedDefinitions(complete, denied map[string]struct{}) {
+	gvr := apiextensions.Identity.GVR()
+	_, listed := complete[gvr.String()]
+	_, forbidden := denied[gvr.GroupResource().String()]
+	run.service.apiResources.applyDefinitionList(run.succeeded[gvr.String()], listed, forbidden)
 }
 
 // publishLocked flags the discovered resources and installs next, signalling

@@ -45,6 +45,7 @@ const describeFailure = (error: unknown, action: string, clusterId: string): str
 export function useKindExplain(target: KindReadTarget, enabled: boolean) {
   const { clusterId, group, version, kind, resource } = target;
   const [schema, setSchema] = useState<KindSchemaState>({ status: 'loading' });
+  const [schemaRefresh, setSchemaRefresh] = useState(0);
   const [selectedPath, setSelectedPath] = useState<readonly string[] | null>(null);
   // Explanations already read for this kind, keyed by fieldKey.
   const [explanations, setExplanations] = useState<Record<string, FieldExplanationState>>({});
@@ -62,7 +63,7 @@ export function useKindExplain(target: KindReadTarget, enabled: boolean) {
       return;
     }
     const kindTarget = { clusterId, group, version, kind, resource };
-    const kindKey = kindScope(kindTarget);
+    const kindKey = `${kindScope(kindTarget)}:${schemaRefresh}`;
     if (requestedKind.current === kindKey) {
       return;
     }
@@ -106,10 +107,14 @@ export function useKindExplain(target: KindReadTarget, enabled: boolean) {
           message: describeFailure(error, 'loadKindSchema', clusterId),
         });
       });
-  }, [enabled, clusterId, group, version, kind, resource]);
+  }, [enabled, clusterId, group, version, kind, resource, schemaRefresh]);
 
   const selectField = useCallback(
     (path: readonly string[]) => {
+      if (schema.status !== 'ready') {
+        return;
+      }
+      const { revision } = schema.schema;
       const key = fieldKey(path);
       setSelectedPath(path);
       if (requestedPaths.current.has(key)) {
@@ -130,9 +135,12 @@ export function useKindExplain(target: KindReadTarget, enabled: boolean) {
         adapter: 'rpc-read',
         label: 'Explain field',
         scope: `${kindScope(kindTarget)}:${key}`,
-        read: () => readKindField(kindTarget, path),
+        read: () => readKindField(kindTarget, path, revision),
       })
         .then((result) => {
+          if (generation.current !== current) {
+            return;
+          }
           if (result.status === 'executed' && result.data) {
             settle({ status: 'ready', explanation: result.data });
             return;
@@ -142,6 +150,16 @@ export function useKindExplain(target: KindReadTarget, enabled: boolean) {
           settle({ status: 'error', message: 'The field could not be explained' });
         })
         .catch((error: unknown) => {
+          if (generation.current !== current) {
+            return;
+          }
+          if (errorStatusOf(error)?.reason === 'Conflict') {
+            // Retire the entire tree and its field reads before reloading.
+            generation.current++;
+            setSchema({ status: 'loading' });
+            setSchemaRefresh((value) => value + 1);
+            return;
+          }
           requestedPaths.current.delete(key);
           settle({
             status: 'error',
@@ -149,7 +167,7 @@ export function useKindExplain(target: KindReadTarget, enabled: boolean) {
           });
         });
     },
-    [clusterId, group, version, kind, resource]
+    [clusterId, group, version, kind, resource, schema]
   );
 
   return {

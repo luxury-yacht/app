@@ -111,8 +111,11 @@ export const readKindSchema = (target: KindReadTarget) =>
   ExplainKindSchema(resourceRefForKind(target));
 
 /** `fieldPath` is the field's name under each ancestor, one segment per level. */
-export const readKindField = (target: KindReadTarget, fieldPath: readonly string[]) =>
-  ExplainKindField(resourceRefForKind(target), [...fieldPath]);
+export const readKindField = (
+  target: KindReadTarget,
+  fieldPath: readonly string[],
+  revision: string
+) => ExplainKindField(resourceRefForKind(target), [...fieldPath], revision);
 
 export const readNodeLogDiscovery = (target: ObjectReadTarget) =>
   DiscoverNodeLogs(resourceRefForTarget(target));

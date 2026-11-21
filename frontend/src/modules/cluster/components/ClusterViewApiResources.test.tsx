@@ -20,7 +20,7 @@ import {
   type ObjectIdentity,
   type TestCluster,
 } from '@/test-utils/appState/harness';
-import { statusResponse } from '@/test-utils/appState/transport';
+import { snapshotResponse, statusResponse } from '@/test-utils/appState/transport';
 import { makeErrorStatus } from '@/test-utils/errorStatusFixtures';
 import { requireValue } from '@/test-utils/requireValue';
 
@@ -233,6 +233,82 @@ describe('ClusterViewApiResources', () => {
       .map((record) => (record.error as Error).message);
     expect(reports).toHaveLength(1);
     expect(reports[0]).toContain('filters');
+  });
+
+  it('keeps the newer request in API Resources when the older request resolves as unlisted', async () => {
+    let release: (() => void) | undefined;
+    const older = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await start(() => kinds().slice(0, 1));
+    app.snapshots.respond((request) => {
+      if (request.domain !== 'cluster-api-resources') {
+        return undefined;
+      }
+      const query = new URLSearchParams(request.scope.split('?')[1]);
+      const name = query.get('anchor.name');
+      if (name === 'widgets.example.com') {
+        return older.then(() =>
+          snapshotResponse({
+            ...request,
+            version: 100,
+            payload: {
+              rows: kinds().slice(0, 1),
+              total: 1,
+              anchor: { found: false, reason: 'unlisted', rank: -1 },
+            },
+          })
+        );
+      }
+      if (name === certificatesDefinition.name) {
+        return snapshotResponse({
+          ...request,
+          version: 101,
+          payload: {
+            rows: kinds().slice(1),
+            total: 2,
+            anchor: { found: true, rank: 1 },
+            self: 'certificates-page',
+          },
+        });
+      }
+      if (query.get('continue') === 'certificates-page') {
+        return snapshotResponse({
+          ...request,
+          version: 102,
+          payload: { rows: kinds().slice(1), total: 2 },
+        });
+      }
+      return undefined;
+    });
+    const show = async (name: string) => {
+      await act(async () =>
+        requireValue(
+          navigateToView,
+          'mounted navigation hook'
+        )({
+          ...certificatesDefinition,
+          name,
+          clusterId: dev.clusterId,
+          clusterName: dev.clusterName,
+        })
+      );
+      await app.settle();
+    };
+
+    await view.goTo({ clusterView: 'overview' });
+    await show('widgets.example.com');
+    expect(
+      app.snapshots
+        .reads('cluster-api-resources')
+        .some(({ scope }) => scope.includes('anchor.name=widgets.example.com'))
+    ).toBe(true);
+    await show(certificatesDefinition.name);
+    await act(async () => requireValue(release, 'parked older anchor response')());
+    await app.settle();
+
+    expect(view.owners().viewState?.activeClusterTab).toBe('api-resources');
+    expect(rowOf('certificates').getAttribute('data-row-focused')).toBe('true');
   });
 
   // The first discovery can fail outright: the identity may not be allowed to

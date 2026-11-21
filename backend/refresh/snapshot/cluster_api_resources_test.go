@@ -24,6 +24,7 @@ type fakeAPIResourceSource struct {
 	updates chan objectcatalog.SubsetUpdate
 	// customUnknown models a catalog that has not read the CRD list yet.
 	customUnknown       bool
+	customListDenied    bool
 	failedGroupVersions []string
 	definitions         map[string]objectcatalog.Summary
 	definitionsPending  bool
@@ -44,7 +45,7 @@ func (f *fakeAPIResourceSource) APIResources() objectcatalog.APIResourceInventor
 	defer f.failureMu.Unlock()
 	return objectcatalog.APIResourceInventory{
 		Resources: f.resources, Revision: 7, Ready: f.ready.Load(),
-		CustomKnown: !f.customUnknown, FailedGroupVersions: f.failedGroupVersions,
+		CustomKnown: !f.customUnknown, CustomListDenied: f.customListDenied, FailedGroupVersions: f.failedGroupVersions,
 		DiscoveryFailure: f.discoveryFailure,
 	}
 }
@@ -76,9 +77,8 @@ func apiResourceTestSource() *fakeAPIResourceSource {
 
 func apiResourceTestBuilder(source *fakeAPIResourceSource) *ClusterAPIResourcesBuilder {
 	return &ClusterAPIResourcesBuilder{
-		source:            func() APIResourceSource { return source },
-		definitionsDenied: func() bool { return false },
-		discoveryWait:     10 * time.Millisecond,
+		source:        func() APIResourceSource { return source },
+		discoveryWait: 10 * time.Millisecond,
 	}
 }
 
@@ -176,21 +176,15 @@ func TestClusterAPIResourcesSelectsOneResource(t *testing.T) {
 // until the list has been read. It must say so instead of labelling everything
 // built-in, and must not offer a definition to open.
 func TestClusterAPIResourcesReportsUnknownTypesWithoutTheDefinitionList(t *testing.T) {
-	for name, configure := range map[string]func(*fakeAPIResourceSource, *ClusterAPIResourcesBuilder){
-		"definitions denied": func(_ *fakeAPIResourceSource, b *ClusterAPIResourcesBuilder) {
-			b.definitionsDenied = func() bool { return true }
-		},
-		"definitions not read yet": func(source *fakeAPIResourceSource, _ *ClusterAPIResourcesBuilder) {
-			source.customUnknown = true
-		},
-	} {
+	for name, denied := range map[string]bool{"definitions denied": true, "definitions not read yet": false} {
 		t.Run(name, func(t *testing.T) {
 			source := apiResourceTestSource()
 			for i := range source.resources {
 				source.resources[i].Custom = false
 			}
 			b := apiResourceTestBuilder(source)
-			configure(source, b)
+			source.customUnknown = true
+			source.customListDenied = denied
 
 			payload := apiResourceTestBuild(t, b, "?limit=100")
 

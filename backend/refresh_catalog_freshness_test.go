@@ -41,6 +41,9 @@ func TestAPIResourcesHandsOffAnUnestablishedCRDVisibleWithListOnly(t *testing.T)
 	kube.Discovery().(*fakediscovery.FakeDiscovery).Resources = []*metav1.APIResourceList{{
 		GroupVersion: identity.GVR().GroupVersion().String(),
 		APIResources: []metav1.APIResource{{Name: identity.Resource, Kind: identity.Kind, Verbs: []string{"list", "watch"}}},
+	}, {
+		GroupVersion: "example.com/v1",
+		APIResources: []metav1.APIResource{{Name: "gadgets", Kind: "Gadget", Namespaced: true, Verbs: []string{"get"}}},
 	}}
 	definition := &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{Name: "widgets.example.com", UID: "definition-a"},
@@ -50,7 +53,10 @@ func TestAPIResourcesHandsOffAnUnestablishedCRDVisibleWithListOnly(t *testing.T)
 			Versions: []apiextensionsv1.CustomResourceDefinitionVersion{{Name: "v1", Served: true, Storage: true}},
 		},
 	}
-	server := crdAPIServer(t, []string{identity.Resource}, definition)
+	served := definition.DeepCopy()
+	served.Name, served.UID = "gadgets.example.com", "definition-b"
+	served.Spec.Names.Plural, served.Spec.Names.Kind = "gadgets", "Gadget"
+	server := crdAPIServer(t, []string{identity.Resource}, definition, served)
 	server.Allow(listOnly)
 	clients.apiextensionsClient = server.APIExtensionsClient(t)
 	dynamicClient, err := dynamic.NewForConfig(server.Config())
@@ -73,7 +79,7 @@ func TestAPIResourcesHandsOffAnUnestablishedCRDVisibleWithListOnly(t *testing.T)
 	require.NoError(t, app.Refresh.startObjectCatalogForTarget(target))
 	catalog := app.Refresh.objectCatalogServiceForCluster(target.meta.ID)
 	require.Eventually(t, func() bool {
-		return len(catalog.Query(objectcatalog.QueryOptions{}).Items) == 1
+		return len(catalog.Query(objectcatalog.QueryOptions{}).Items) == 2
 	}, 3*time.Second, 10*time.Millisecond, "Browse must list the CRD without a watch")
 
 	scope := target.meta.ID + "|?limit=20&anchor.clusterId=" + target.meta.ID +
@@ -83,6 +89,14 @@ func TestAPIResourcesHandsOffAnUnestablishedCRDVisibleWithListOnly(t *testing.T)
 	payload := result.Payload.(snapshot.ClusterAPIResourcesSnapshot)
 	require.NotNil(t, payload.Anchor)
 	require.Equal(t, snapshot.ResourceQueryAnchorUnlisted, payload.Anchor.Reason)
+
+	result, err = subsystem.SnapshotService.Build(t.Context(), snapshot.ClusterAPIResourcesDomainName, target.meta.ID+"|?limit=20&facet.types=Custom")
+	require.NoError(t, err)
+	payload = result.Payload.(snapshot.ClusterAPIResourcesSnapshot)
+	require.Len(t, payload.Rows, 1)
+	require.Equal(t, "Custom", payload.Rows[0].Type)
+	require.NotNil(t, payload.Rows[0].Definition)
+	require.Equal(t, served.Name, payload.Rows[0].Definition.Name)
 }
 
 // Replace only Kubernetes clients: subsystem construction, ingest, catalog,

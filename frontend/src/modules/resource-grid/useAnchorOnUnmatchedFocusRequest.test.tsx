@@ -165,6 +165,7 @@ describe('useAnchorOnUnmatchedFocusRequest — destination scoping', () => {
   it('anchors the destination table on an object its first page does not show', async () => {
     startCluster();
     await mount();
+    await view.goTo({ namespace: 'default', view: 'pods' });
 
     await navigateToWeb5();
 
