@@ -97,13 +97,6 @@ func (g *Grants) CanListWatchInNamespace(ctx context.Context, group, resource, n
 	return watchErr == nil && watchAllowed
 }
 
-// CanInNamespace reports whether the current identity may perform verb on the
-// resource in the exact namespace ("" is cluster-wide), and records the
-// decision. An error means the check could not be made; nothing is recorded.
-func (g *Grants) CanInNamespace(ctx context.Context, group, resource, verb, namespace string) (bool, error) {
-	return g.checkResourceVerbInNamespace(ctx, group, resource, verb, namespace)
-}
-
 // Prime runs the requested checks concurrently, so later checks are served
 // from the checker's cache. Independent grants are kept even if another review
 // fails; caller cancellation stops the whole preflight.

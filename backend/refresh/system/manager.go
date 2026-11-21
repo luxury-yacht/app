@@ -555,22 +555,19 @@ func metricsSignalObserver(bell doorbell.Bell) func(metrics.Metadata) {
 // sync-deadline degrade is the backstop, so a transient permission blip never wrongly
 // excludes a kind with no retry.
 //
-// A built-in kind's reflector is admitted once per generation, so its decision
-// is made through grants: permission revalidation then rebuilds the generation
-// when that access changes, whether or not the connect-time preflight reached
-// the kind. A custom resource's source is admitted again on every catalog
-// collection (IngestManager.ReconcileDiscoveredResource), so its checks are not
-// recorded; recording them would add two reviews per custom resource to every
-// revalidation pass.
+// The CRD reflector has no domain permission gate of its own. Use the same
+// cluster-wide grants as preflight so revalidation can recover a skipped CRD
+// reflector even if preflight timed out. Other admission checks use the
+// checker's cache directly, keeping partition checks out of revalidation.
 func ingestPermissionFilter(checker *permissions.Checker, grants *permissions.Grants) func(group, resource, namespace string) bool {
-	admittedOnce := make(map[string]struct{}, len(kindregistry.All))
-	for _, d := range kindregistry.All {
-		admittedOnce[permissions.ResourceKey(d.Identity.Group, d.Identity.Resource)] = struct{}{}
-	}
+	definitions := apiextensions.Identity
 	allowed := func(group, resource, verb, namespace string) (bool, error) {
 		ctx := context.Background()
-		if _, recorded := admittedOnce[permissions.ResourceKey(group, resource)]; recorded {
-			return grants.CanInNamespace(ctx, group, resource, verb, namespace)
+		if namespace == "" && group == definitions.Group && resource == definitions.Resource {
+			if verb == "list" {
+				return grants.CanListResource(ctx, group, resource)
+			}
+			return grants.CanWatchResource(ctx, group, resource)
 		}
 		decision, err := checker.CanInNamespace(ctx, group, resource, verb, namespace)
 		return decision.Allowed, err

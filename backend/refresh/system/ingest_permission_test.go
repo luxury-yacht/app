@@ -3,6 +3,7 @@ package system
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -32,12 +33,11 @@ func TestIngestPermissionFilterConservative(t *testing.T) {
 		}, true},
 		{"both error -> run", func(string) (bool, error) { return false, errors.New("ssar boom") }, true},
 	}
-	// The contract is the same for a custom resource (checked directly) and a
-	// built-in kind (checked through the generation's recorded grants).
+	// Exercise both direct checks and the CRD reflector's tracked grants.
 	definitions := apiextensions.Identity
 	kinds := []struct{ name, group, resource string }{
 		{"custom resource", "g", "r"},
-		{"built-in kind", definitions.Group, definitions.Resource},
+		{"CRD reflector", definitions.Group, definitions.Resource},
 	}
 	for _, kind := range kinds {
 		for _, tc := range cases {
@@ -74,11 +74,9 @@ func TestIngestPermissionFilterChecksThePartNamespace(t *testing.T) {
 	}
 }
 
-// A built-in kind's reflector is admitted once per generation. Its decision
-// must be the one permission revalidation rechecks, even when the connect-time
-// preflight never reached the kind (it timed out): a reflector skipped for a
-// denied list has to come back when access is restored.
-func TestSkippedBuiltInReflectorIsRevalidatedWithoutAPreflight(t *testing.T) {
+// CRD admission records the decision when preflight did not complete, so
+// restored access can bring back a reflector skipped for a denied list.
+func TestSkippedCRDReflectorIsRevalidatedWithoutAPreflight(t *testing.T) {
 	denied := permissions.NewCheckerWithReview("test", time.Minute, func(context.Context, string, string, string, string) (bool, error) { return false, nil })
 	grants := permissions.NewGrants(denied)
 	definitions := apiextensions.Identity
@@ -91,6 +89,31 @@ func TestSkippedBuiltInReflectorIsRevalidatedWithoutAPreflight(t *testing.T) {
 	subsystem := &Subsystem{RuntimePerms: allowed, PermissionGrants: grants}
 	if !subsystem.permissionsChanged(context.Background()) {
 		t.Fatal("restored access to a skipped reflector's kind must request a rebuild")
+	}
+}
+
+func TestCRDReflectorAdmissionReusesPreflightGrants(t *testing.T) {
+	definitions := apiextensions.Identity
+	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _, namespace string) (bool, error) {
+		return namespace == "", nil
+	})
+	checker.SetScope([]string{"dev", "prod"}, scopedResourcePredicate())
+	grants := permissions.NewGrants(checker)
+	if err := grants.Prime(t.Context(), subsystemPreflightRequests()); err != nil {
+		t.Fatal(err)
+	}
+	if !ingestPermissionFilter(checker, grants)(definitions.Group, definitions.Resource, "") {
+		t.Fatal("CRD admission must use cluster-wide permissions on a namespace-scoped cluster")
+	}
+	got := 0
+	for grant := range grants.Snapshot() {
+		group, resource, _ := grant.Identity()
+		if group == definitions.Group && resource == definitions.Resource {
+			got++
+		}
+	}
+	if got != 2 {
+		t.Fatalf("recorded %d CRD decisions, want one for LIST and one for WATCH", got)
 	}
 }
 
@@ -110,14 +133,17 @@ func TestCustomResourceAdmissionIsNotHeldForRevalidation(t *testing.T) {
 	}
 }
 
-// Under a namespace scope a built-in kind has one reflector per namespace,
-// each admitted on its own namespace's access. Revalidation must recheck each
-// decision in the namespace it was made for: a namespace that was denied and
-// is later allowed requests a rebuild, and other namespaces' access does not.
-func TestScopedBuiltInReflectorIsRevalidatedAtItsOwnNamespace(t *testing.T) {
+// Scoped reflector admission checks each partition without adding reviews to
+// revalidation beyond those already required by the domain's policy.
+func TestScopedReflectorAdmissionDoesNotAddRevalidationReviews(t *testing.T) {
+	namespaces := []string{"dev", "prod"}
 	onlyDev := func(_ context.Context, _, _, _, namespace string) (bool, error) { return namespace == "dev", nil }
 	checker := permissions.NewCheckerWithReview("test", time.Minute, onlyDev)
+	checker.SetScope(namespaces, scopedResourcePredicate())
 	grants := permissions.NewGrants(checker)
+	if err := grants.Prime(t.Context(), []permissions.Request{{Resource: "configmaps", Verb: "list"}}); err != nil {
+		t.Fatal(err)
+	}
 	filter := ingestPermissionFilter(checker, grants)
 	if filter("", "configmaps", "prod") {
 		t.Fatal("prod is denied: its reflector must be skipped")
@@ -126,14 +152,17 @@ func TestScopedBuiltInReflectorIsRevalidatedAtItsOwnNamespace(t *testing.T) {
 		t.Fatal("dev is allowed: its reflector must run")
 	}
 
-	unchanged := &Subsystem{RuntimePerms: permissions.NewCheckerWithReview("test", time.Minute, onlyDev), PermissionGrants: grants}
+	var reviews atomic.Int64
+	cold := permissions.NewCheckerWithReview("test", time.Minute, func(ctx context.Context, group, resource, verb, namespace string) (bool, error) {
+		reviews.Add(1)
+		return onlyDev(ctx, group, resource, verb, namespace)
+	})
+	cold.SetScope(namespaces, scopedResourcePredicate())
+	unchanged := &Subsystem{RuntimePerms: cold, PermissionGrants: grants}
 	if unchanged.permissionsChanged(context.Background()) {
 		t.Fatal("the same access per namespace is not a change")
 	}
-
-	prodGranted := permissions.NewCheckerWithReview("test", time.Minute, func(context.Context, string, string, string, string) (bool, error) { return true, nil })
-	changed := &Subsystem{RuntimePerms: prodGranted, PermissionGrants: grants}
-	if !changed.permissionsChanged(context.Background()) {
-		t.Fatal("access granted in prod must request a rebuild")
+	if got := reviews.Load(); got != int64(len(namespaces)) {
+		t.Fatalf("revalidation performed %d reviews, want the domain's %d namespace LIST reviews", got, len(namespaces))
 	}
 }
