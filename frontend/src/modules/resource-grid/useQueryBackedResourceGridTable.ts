@@ -7,7 +7,6 @@ import {
   type GridTableFocusRequest,
   matchesGridTableFocusRequest,
 } from '@shared/components/tables/hooks/gridTableFocusRequest';
-import { peekPendingFocusRequest } from '@shared/components/tables/hooks/useGridTableExternalFocus';
 import {
   isTablePageSize,
   TABLE_PAGE_SIZE_OPTIONS,
@@ -19,7 +18,6 @@ import TablePaginationControls, {
   shouldRenderTablePaginationControls,
 } from '@shared/components/tables/TablePaginationControls';
 import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
-import { errorHandler } from '@utils/errorHandler';
 import React, { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
 import { useRefreshScopedDomain } from '@/core/refresh';
@@ -31,7 +29,7 @@ import {
   type ScopeSelector,
   selectorForNamespaceSelection,
 } from '@/core/refresh/scopeSelector';
-import type { RefreshDomain, ResourceQueryAnchorReason } from '@/core/refresh/types';
+import type { RefreshDomain } from '@/core/refresh/types';
 import { usePreference } from '@/core/settings/usePreference';
 import type { SortConfig } from '@/hooks/useTableSort';
 import { backendQuerySource } from './backendQuerySource';
@@ -49,6 +47,11 @@ import type {
   ResourceGridTableResult,
   ResourceGridTableRow,
 } from './resourceGridTableTypes';
+import {
+  focusRequestAnchor,
+  pendingAnchorRequest,
+  reportMissingFocusTarget,
+} from './resourceQueryFocus';
 import { useClusterResourceGridTable, useNamespaceResourceGridTable } from './useResourceGridTable';
 import type { ResourceInventorySourceState } from './useResourceInventoryTable';
 import {
@@ -404,8 +407,9 @@ function useAnchorOnUnmatchedFocusRequest<TRow>({
     if (!enabled || !clusterId || !loaded) {
       return;
     }
-    const request = pendingAnchorRequest(clusterId, viewId, anchoredRequestRef.current);
-    if (!request) {
+    const request = pendingAnchorRequest(clusterId, viewId);
+    // One anchor jump per request, including a missing target.
+    if (!request || request === anchoredRequestRef.current) {
       return;
     }
     const probe = { ...request, rowKey: undefined };
@@ -416,15 +420,7 @@ function useAnchorOnUnmatchedFocusRequest<TRow>({
       return;
     }
     anchoredRequestRef.current = request;
-    anchorTo({
-      clusterId: request.clusterId,
-      group: request.group ?? '',
-      version: request.version,
-      kind: request.kind,
-      namespace: request.namespace,
-      name: request.name,
-      uid: request.uid,
-    });
+    anchorTo(focusRequestAnchor(request));
   }, [anchorTo, clusterId, enabled, loaded, rows, viewId]);
 
   useEffect(() => {
@@ -439,70 +435,9 @@ function useAnchorOnUnmatchedFocusRequest<TRow>({
     }
     // Loud, inline-adjacent truth (degraded states must be visible): the jump
     // landed on page 1 because the object is not in this view.
-    errorHandler.handle(new Error(missingFocusTargetMessage(request, anchorResult.reason)), {
-      source: 'resource-grid-anchor',
-      domain,
-    });
+    reportMissingFocusTarget(domain, request, anchorResult.reason);
   }, [anchorResult, domain]);
 }
-
-type AnchorableFocusRequest = GridTableFocusRequest & { version: string };
-
-/**
- * The pending "show in list" request this table should answer with a backend
- * anchor jump, or null when it is not this table's to answer.
- */
-const pendingAnchorRequest = (
-  clusterId: string,
-  viewId: string,
-  alreadyAnchored: GridTableFocusRequest | null
-): AnchorableFocusRequest | null => {
-  const request = peekPendingFocusRequest();
-  if (request?.clusterId !== clusterId) {
-    return null;
-  }
-  // Only the navigation DESTINATION table reacts: the request is stamped with
-  // the destination viewId (useNavigateToView), so a same-cluster non-target
-  // table (an object-panel pods list, a different tab) can't consume it and
-  // fire a spurious anchor / false not-found. A request with no destination
-  // (no emitter produces one today) does not anchor.
-  if (request.destinationViewId !== viewId) {
-    return null;
-  }
-  // One jump per request (buffer identity): a not-found landing must not
-  // re-fire forever.
-  if (alreadyAnchored === request) {
-    return null;
-  }
-  // A backend anchor needs a full reference; version missing (no builtin
-  // backfill either) degrades to the current-page-only behavior.
-  return hasVersion(request) ? request : null;
-};
-
-const hasVersion = (request: GridTableFocusRequest): request is AnchorableFocusRequest =>
-  Boolean(request.version);
-
-// Why a "show in list" target has no row to land on, per the backend's reason.
-const MISSING_FOCUS_TARGET_REASONS: Record<ResourceQueryAnchorReason, string> = {
-  filtered: 'is not shown: the current filters exclude it',
-  'not-found': 'was not found — it may have been deleted',
-  unlisted: 'exists, but this view has no row for it',
-  unavailable: 'could not be verified in the object catalog',
-};
-
-const missingFocusTargetMessage = (
-  request: GridTableFocusRequest | null,
-  reason: ResourceQueryAnchorReason | undefined
-): string => {
-  let target = 'The requested object';
-  if (request) {
-    const namespacedName = request.namespace
-      ? `${request.namespace}/${request.name}`
-      : request.name;
-    target = `${request.kind} ${namespacedName}`;
-  }
-  return `${target} ${MISSING_FOCUS_TARGET_REASONS[reason ?? 'not-found']}`;
-};
 
 // Builds the shared result for both scopes: the pagination footer (query scope
 // only) plus the normalized controller source (typed query source when enabled,

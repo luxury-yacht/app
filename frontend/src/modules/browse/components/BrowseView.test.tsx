@@ -17,6 +17,7 @@
 import { OBJECT_ACTION_IDS, objectActionLabel } from '@shared/actions/objectActionContract';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requestContextRefresh } from '@/core/data-access';
 import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@/shared/components/tables/gridTableFilterState';
@@ -111,12 +112,25 @@ const catalogPage = (
     .sort(
       (left, right) =>
         direction *
-        `${left.ref[sortKey]}/${left.ref.name}`.localeCompare(
-          `${right.ref[sortKey]}/${right.ref.name}`
-        )
+        (left.ref[sortKey].localeCompare(right.ref[sortKey]) ||
+          left.ref.name.localeCompare(right.ref.name))
     );
   const limit = Number(query.get('limit') ?? 50);
-  const start = Number(query.get('continue') ?? 0);
+  const anchorName = query.get('anchor.name');
+  const anchorUid = query.get('anchor.uid');
+  const rank = anchorName
+    ? matching.findIndex(
+        ({ ref }) =>
+          ref.name === anchorName &&
+          ref.clusterId === query.get('anchor.clusterId') &&
+          ref.group === (query.get('anchor.group') ?? '') &&
+          ref.version === query.get('anchor.version') &&
+          ref.kind === query.get('anchor.kind') &&
+          (ref.namespace ?? '') === (query.get('anchor.namespace') ?? '') &&
+          (!anchorUid || ref.uid === anchorUid)
+      )
+    : -1;
+  const start = rank >= 0 ? Math.floor(rank / limit) * limit : Number(query.get('continue') ?? 0);
   const page = matching.slice(start, start + limit);
   return makeCatalogSnapshotPayload({
     clusterId: dev.clusterId,
@@ -124,6 +138,13 @@ const catalogPage = (
     items: page,
     total: matching.length,
     unfilteredTotal: inScope.length,
+    ...(anchorName
+      ? {
+          anchor: rank >= 0 ? { found: true, rank } : { found: false, rank, reason: 'not-found' },
+          pageStartRank: start,
+          self: String(start),
+        }
+      : {}),
     continue: start + limit < matching.length ? String(start + limit) : '',
     previous: start > 0 ? String(Math.max(0, start - limit)) : '',
     hasNext: start + limit < matching.length,
@@ -479,6 +500,7 @@ describe('BrowseView', () => {
           version: 'v1',
           kind: 'CustomResourceDefinition',
           name,
+          uid: definition(name).ref.uid,
         });
       });
       // API Resources answers that it has no such row, then Browse may load.
@@ -486,22 +508,38 @@ describe('BrowseView', () => {
       await app.settle();
     };
 
-    // Browse's search matches names that contain the text, so a definition
-    // with a longer name is listed too; the one asked for is the one focused.
-    it('is shown in Browse with its own row focused when it exists', async () => {
+    it('lands on the exact definition past the first page of Browse search matches', async () => {
+      await persistTables({ browse: { sort: { key: 'name', direction: 'desc' }, pageSize: 25 } });
       serveCatalog([
         node(),
         definition('widgets.example.com'),
-        definition('widgets.example.com.au'),
+        ...Array.from({ length: 26 }, (_, index) =>
+          definition(`widgets.example.com.au${String(index).padStart(2, '0')}`)
+        ),
       ]);
 
       await showInList('widgets.example.com', 'unlisted');
 
       expect(view.owners().viewState?.activeClusterTab).toBe('browse');
+      expect(rowOf('widgets.example.com').getAttribute('data-row-focused')).toBe('true');
+      expect(rowOf('widgets.example.com.au00').getAttribute('data-row-focused')).toBeNull();
       expect(lastPageQuery().getAll('kind')).toEqual(['CustomResourceDefinition']);
       expect(lastPageQuery().get('search')).toBe('widgets.example.com');
-      expect(rowOf('widgets.example.com').getAttribute('data-row-focused')).toBe('true');
-      expect(rowOf('widgets.example.com.au').getAttribute('data-row-focused')).toBeNull();
+      expect(lastPageQuery().get('sortDirection')).toBe('desc');
+      expect(lastPageQuery().get('limit')).toBe('25');
+      expect(lastPageQuery().get('anchor.uid')).toBe('cluster-widgets.example.com');
+
+      await act(async () => {
+        await requestContextRefresh({ reason: 'user', clusterId: dev.clusterId });
+      });
+      await app.settle();
+      expect(lastPageQuery().get('continue')).toBe('25');
+      expect(lastPageQuery().has('anchor.name')).toBe(false);
+      expect(rowNames()).toContain('widgets.example.com');
+
+      await clickLabelled('Previous page');
+      expect(lastPageQuery().get('continue')).toBe('0');
+      expect(rowNames()).not.toContain('widgets.example.com');
     });
 
     // A definition that is gone must not be answered with a different
@@ -520,16 +558,18 @@ describe('BrowseView', () => {
       expect(reports[0]).toContain('CustomResourceDefinition widgets.example.com');
     });
 
-    // The request is handed to Browse once. If Browse has no row for the
-    // definition either (it was deleted in between), opening API Resources
-    // again must show API Resources, not send the user back to Browse.
-    it('leaves API Resources reachable when Browse has no row for it either', async () => {
-      serveCatalog([node(), definition('gadgets.example.com')]);
+    it('does not focus a replacement definition when the original is deleted during the handoff', async () => {
+      const replacement = definition('widgets.example.com');
+      replacement.ref.uid = 'replacement';
+      serveCatalog([node(), replacement]);
 
       await showInList('widgets.example.com', 'unlisted');
 
       expect(view.owners().viewState?.activeClusterTab).toBe('browse');
-      expect(rowNames()).toEqual([]);
+      expect(rowOf('widgets.example.com').getAttribute('data-row-focused')).toBeNull();
+      expect(
+        app.errors.take((record) => record.context?.source === 'resource-grid-anchor')
+      ).toHaveLength(1);
 
       await view.goTo({ clusterView: 'api-resources' });
       await app.settle();

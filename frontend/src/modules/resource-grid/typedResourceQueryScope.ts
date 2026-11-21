@@ -5,6 +5,7 @@ import type {
   GridTableFilterOptions,
   GridTableFilterState,
 } from '@shared/components/tables/GridTable';
+import { appendAnchorParams } from '@/core/refresh/resourceQueryAnchor';
 import { buildRefreshScope, type ScopeSelector } from '@/core/refresh/scopeSelector';
 import type {
   RefreshDomain,
@@ -183,22 +184,6 @@ const appendPredicateParams = (
     if (value) {
       params.set(`predicate.${key}`, value);
     }
-  }
-};
-
-const appendAnchorParams = (params: URLSearchParams, anchor: ResourceQueryAnchor): void => {
-  params.set('anchor.clusterId', anchor.clusterId);
-  if (anchor.group) {
-    params.set('anchor.group', anchor.group);
-  }
-  params.set('anchor.version', anchor.version);
-  params.set('anchor.kind', anchor.kind);
-  if (anchor.namespace) {
-    params.set('anchor.namespace', anchor.namespace);
-  }
-  params.set('anchor.name', anchor.name);
-  if (anchor.uid) {
-    params.set('anchor.uid', anchor.uid);
   }
 };
 

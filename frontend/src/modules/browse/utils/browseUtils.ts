@@ -6,8 +6,9 @@
  */
 
 import { parseClusterScope } from '@/core/refresh/clusterScope';
+import { appendAnchorParams, readAnchorParams } from '@/core/refresh/resourceQueryAnchor';
 import { buildRefreshScope, CLUSTER_SELECTOR } from '@/core/refresh/scopeSelector';
-import type { CatalogItem } from '@/core/refresh/types';
+import type { CatalogItem, ResourceQueryAnchor } from '@/core/refresh/types';
 import { compareUtf16Strings } from '@/shared/utils/sort';
 import { structuralShareResourceRows } from '@/shared/utils/structuralShareResourceRows';
 
@@ -106,6 +107,7 @@ export interface BuildCatalogScopeParams {
   apiGroups?: string[];
   sort?: string;
   sortDirection?: string;
+  anchor?: ResourceQueryAnchor;
   continueToken?: string | null;
   /** Numbered page jump: 0-based start rank; mutually exclusive with continueToken. */
   startRank?: number | null;
@@ -173,6 +175,10 @@ const appendCatalogPageAddress = (
   query: URLSearchParams,
   params: BuildCatalogScopeParams
 ): void => {
+  if (params.anchor) {
+    appendAnchorParams(query, params.anchor);
+    return;
+  }
   const continueToken = params.continueToken?.trim();
   if (continueToken) {
     query.set('continue', continueToken);
@@ -259,6 +265,7 @@ const catalogScopeParameters = (
     apiGroups,
     sort,
     sortDirection,
+    anchor: readAnchorParams(params),
     continueToken,
     startRank,
     customOnly,

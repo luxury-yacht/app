@@ -111,13 +111,15 @@ export default function ClusterViewApiResources() {
   // The backend says when a definition exists (by its exact name) but defines
   // no kind the cluster serves, because it is not Established. It has no row
   // here, but it is still an object, and Browse lists objects: hand the
-  // request to Browse, narrowed to the definition's kind and name so its row
-  // is on the page, where the request's own row key focuses it. The request
-  // becomes Browse's: left addressed to this table, it would send the user
-  // back to Browse every time they opened API Resources.
+  // request to Browse. The filters narrow the list, and the catalog anchor
+  // finds the page containing the exact definition.
   const showDefinitionInBrowse = useCallback(
     (request: GridTableFocusRequest) => {
-      setPendingFocusRequest({ ...request, destinationViewId: BROWSE_VIEW_ID });
+      setPendingFocusRequest({
+        ...request,
+        destinationViewId: BROWSE_VIEW_ID,
+        requiresAnchor: true,
+      });
       requestGridTableFilters({
         clusterId: request.clusterId,
         destinationViewId: BROWSE_VIEW_ID,

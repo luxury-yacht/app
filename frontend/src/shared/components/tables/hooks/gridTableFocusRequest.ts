@@ -16,6 +16,8 @@ export interface GridTableFocusRequest {
    * consume it and fire a false not-found.
    */
   destinationViewId?: string;
+  /** Wait for the destination's backend anchor to confirm the object before focusing. */
+  requiresAnchor?: boolean;
   /**
    * Full-reference fields: kept so a query-backed table can turn an
    * unmatched request into a backend anchor jump (which requires a full

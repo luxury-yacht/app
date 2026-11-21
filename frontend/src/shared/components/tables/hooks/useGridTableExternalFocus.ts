@@ -62,6 +62,9 @@ function tryFocus<T>(
   setFocusedRowKey: React.Dispatch<React.SetStateAction<string | null>>,
   wrapperRef: RefObject<HTMLDivElement | null>
 ): boolean {
+  if (request.requiresAnchor) {
+    return false;
+  }
   for (let i = 0; i < tableData.length; i++) {
     if (matchesGridTableFocusRequest(tableData[i], i, keyExtractor, request)) {
       const key = keyExtractor(tableData[i], i);

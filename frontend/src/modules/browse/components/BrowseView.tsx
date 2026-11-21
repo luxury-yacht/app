@@ -285,6 +285,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
   } = useBrowseCatalog({
     enabled: persistence.hydrated,
     clusterId: selectedClusterId,
+    focusViewId: isClusterScoped ? resolvedViewId : undefined,
     pinnedNamespaces,
     clusterScopedOnly,
     filters: {
