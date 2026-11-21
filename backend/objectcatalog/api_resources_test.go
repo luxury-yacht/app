@@ -7,17 +7,21 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/capabilities"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/stretchr/testify/require"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	clienttesting "k8s.io/client-go/testing"
 )
@@ -618,6 +622,77 @@ func TestAPIResourceClassificationUsesListUntilACompleteWatchTakesOver(t *testin
 	require.True(t, inventory.CustomKnown)
 	require.False(t, inventory.CustomListDenied)
 	require.False(t, apiResourceByName(t, inventory.Resources, "example.io", "widgets").Custom)
+}
+
+func TestCatalogSyncPublishesCRDListPermissionOutcome(t *testing.T) {
+	crd := apiextensions.Identity
+	widget := schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"}
+	for _, tc := range []struct {
+		name        string
+		reviewError string
+		wantDenied  bool
+	}{
+		{name: "batch denial", wantDenied: true},
+		{name: "fallback denial after another kind's review fails", reviewError: widget.Resource, wantDenied: true},
+		{name: "failed CRD review", reviewError: crd.Resource},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			kube := kubefake.NewClientset()
+			allowCRD := false
+			kube.PrependReactor("create", "selfsubjectaccessreviews", func(action clienttesting.Action) (bool, runtime.Object, error) {
+				review := action.(clienttesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
+				resource := review.Spec.ResourceAttributes.Resource
+				if !allowCRD && resource == tc.reviewError {
+					review.Status.EvaluationError = "review unavailable"
+					return true, review, nil
+				}
+				review.Status.Allowed = allowCRD || resource != crd.Resource
+				review.Status.Denied = !review.Status.Allowed
+				return true, review, nil
+			})
+			definition := &unstructured.Unstructured{}
+			definition.SetGroupVersionKind(crd.GVK())
+			definition.SetName(widget.GroupResource().String())
+			dynamic := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+				crd.GVR(): crd.Kind + "List", widget: "WidgetList",
+			}, definition)
+			deps := common.Dependencies{KubernetesClient: kube, DynamicClient: dynamic}
+			svc := NewService(Dependencies{
+				Common: deps, ClusterID: "c1",
+				CapabilityFactory: func() *capabilities.Service {
+					return capabilities.NewService(capabilities.Dependencies{Common: deps})
+				},
+			}, nil)
+			svc.discoveryClient = &groupedDiscovery{
+				groups: []*metav1.APIGroup{apiGroup(crd.Group, crd.Version, crd.Version), apiGroup(widget.Group, widget.Version, widget.Version)},
+				lists: []*metav1.APIResourceList{
+					{GroupVersion: crd.GVR().GroupVersion().String(), APIResources: []metav1.APIResource{{Name: crd.Resource, Kind: crd.Kind, Verbs: []string{"list"}}}},
+					{GroupVersion: widget.GroupVersion().String(), APIResources: []metav1.APIResource{{Name: widget.Resource, Kind: "Widget", Namespaced: true, Verbs: []string{"list"}}}},
+				},
+			}
+
+			err := svc.sync(t.Context())
+			if tc.reviewError == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorAs(t, err, new(*PartialSyncError))
+			}
+			inventory := svc.APIResources()
+			require.True(t, inventory.Ready)
+			require.False(t, inventory.CustomKnown)
+			require.Equal(t, tc.wantDenied, inventory.CustomListDenied)
+			for _, action := range dynamic.Actions() {
+				require.False(t, action.Matches("list", crd.Resource), "CRD LIST must be skipped by the preflight")
+			}
+
+			allowCRD = true
+			require.NoError(t, svc.sync(t.Context()))
+			inventory = svc.APIResources()
+			require.True(t, inventory.CustomKnown)
+			require.False(t, inventory.CustomListDenied)
+			require.True(t, apiResourceByName(t, inventory.Resources, widget.Group, widget.Resource).Custom)
+		})
+	}
 }
 
 // partialDiscovery fails one group version and serves the rest, as an API

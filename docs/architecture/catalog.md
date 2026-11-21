@@ -193,7 +193,8 @@ collects (Events, kinds that cannot be listed, the metrics API).
   `CustomKnown` means the catalog has a complete CRD list. The catalog uses
   successful LIST results until the CRD reflector has completed its own list
   and can supply live changes. A WATCH denial still allows LIST-based
-  classification. An explicit LIST denial is reported as a permission issue.
+  classification. A definite LIST denial from permission preflight or the
+  LIST request is reported as a permission issue.
 - A removed definition keeps its Custom classification on published rows
   until a discovery started after the removal refreshes its group. Failed
   discovery retains the rows and their classification together.

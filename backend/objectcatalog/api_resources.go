@@ -2,6 +2,7 @@ package objectcatalog
 
 import (
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -158,7 +159,7 @@ type APIResourceInventory struct {
 	// so a resource that is not flagged Custom really has no definition. Until
 	// then, and for an identity that cannot list definitions, Custom says nothing.
 	CustomKnown bool
-	// CustomListDenied records an actual LIST denial, independently of WATCH access.
+	// CustomListDenied records a LIST permission denial, independently of WATCH access.
 	CustomListDenied bool
 	// FailedGroupVersions are the group versions the last discovery could not
 	// read. Their groups' resources are the ones last successfully discovered.
@@ -339,9 +340,17 @@ func definedResources(rows []Summary) map[schema.GroupResource]struct{} {
 
 func (run *catalogSync) publishListedDefinitions(complete, denied map[string]struct{}) {
 	gvr := apiextensions.Identity.GVR()
-	_, listed := complete[gvr.String()]
+	key := gvr.String()
+	_, listed := complete[key]
 	_, forbidden := denied[gvr.GroupResource().String()]
-	run.service.apiResources.applyDefinitionList(run.succeeded[gvr.String()], listed, forbidden)
+	_, allowed := run.allowedSet[key]
+	_, failed := run.failed[key]
+	// After collection, a discovered descriptor without admission or a failure
+	// was skipped on a definite preflight denial.
+	preflightDenied := !allowed && !failed && slices.ContainsFunc(run.descriptors, func(desc Descriptor) bool {
+		return desc.GVR() == gvr
+	})
+	run.service.apiResources.applyDefinitionList(run.succeeded[key], listed, forbidden || preflightDenied)
 }
 
 // publishLocked installs next, signalling
