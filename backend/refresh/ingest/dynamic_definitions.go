@@ -32,21 +32,6 @@ func (d *dynamicDefinitions) lookup(name string) (apiextensions.Definition, bool
 	return definition, ok
 }
 
-// HoldsCustomResourceDefinition reports whether the CRD reflector currently
-// holds a definition with exactly this name, established or not. It is false
-// when definitions are not watched or could not be listed, so a false answer
-// means "not known to exist", never "known to be deleted".
-func (m *IngestManager) HoldsCustomResourceDefinition(name string) bool {
-	m.mu.Lock()
-	definitions := m.definitions
-	m.mu.Unlock()
-	if definitions == nil {
-		return false
-	}
-	_, held := definitions.lookup(name)
-	return held
-}
-
 // SetCustomResourceDefinitions feeds the dynamic custom-resource sources from
 // the CRD ingest store. Call it before Start. Projectors belong to the cluster
 // generation and must not retain a catalog consumer. It reports false when no

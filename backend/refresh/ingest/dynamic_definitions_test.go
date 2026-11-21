@@ -307,26 +307,3 @@ func BenchmarkUnchangedCRDReconciliation(b *testing.B) {
 		mgr.ReconcileCustomResourceDefinition(apiextensions.BuildDefinition(definition), "v1", dynamicTestProjector)
 	}
 }
-
-// API Resources asks whether a definition exists, to tell one that defines no
-// served kind from one that is gone. The answer is by exact name: a definition
-// whose name merely starts with it is another definition. A definition counts
-// whether or not its kind is established.
-func TestHoldsCustomResourceDefinitionMatchesTheExactName(t *testing.T) {
-	disableWatchList(t)
-	definition := dynamicWidgetDefinition()
-	definition.Status.Conditions = nil
-	longer := dynamicWidgetDefinition()
-	longer.Name += ".au"
-	longer.UID = "longer-uid"
-	longer.Spec.Group += ".au"
-	mgr, crds, _ := definitionTestManager(t, definition, longer)
-
-	require.True(t, mgr.HoldsCustomResourceDefinition(definition.Name))
-	require.True(t, mgr.HoldsCustomResourceDefinition(longer.Name))
-	require.False(t, mgr.HoldsCustomResourceDefinition(definition.Name[:len(definition.Name)-1]))
-
-	require.NoError(t, crds.Delete(definition))
-	require.False(t, mgr.HoldsCustomResourceDefinition(definition.Name), "a deleted definition is not held, though a longer-named one remains")
-	require.True(t, mgr.HoldsCustomResourceDefinition(longer.Name))
-}

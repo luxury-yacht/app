@@ -25,6 +25,8 @@ type fakeAPIResourceSource struct {
 	// customUnknown models a catalog that has not read the CRD list yet.
 	customUnknown       bool
 	failedGroupVersions []string
+	definitions         map[string]objectcatalog.Summary
+	definitionsPending  bool
 	discoveryFailure    error
 	// failureMu guards discoveryFailure for tests that fail discovery while a
 	// build is waiting on it.
@@ -51,6 +53,11 @@ func (f *fakeAPIResourceSource) SubscribeAPIResources() (<-chan objectcatalog.Su
 	return f.updates, func() {}
 }
 
+func (f *fakeAPIResourceSource) LookupObject(_, _, _, name string) objectcatalog.ObjectLookup {
+	definition, found := f.definitions[name]
+	return objectcatalog.ObjectLookup{Summary: definition, Found: found, Absent: !found && !f.definitionsPending}
+}
+
 func apiResourceTestSource() *fakeAPIResourceSource {
 	verbs := []string{"create", "delete", "get", "list", "patch", "update", "watch"}
 	source := &fakeAPIResourceSource{
@@ -71,7 +78,6 @@ func apiResourceTestBuilder(source *fakeAPIResourceSource) *ClusterAPIResourcesB
 	return &ClusterAPIResourcesBuilder{
 		source:            func() APIResourceSource { return source },
 		definitionsDenied: func() bool { return false },
-		definitionExists:  func(string) bool { return false },
 		discoveryWait:     10 * time.Millisecond,
 	}
 }
@@ -280,8 +286,11 @@ func TestClusterAPIResourcesAnchorsACustomResourceDefinitionToItsKind(t *testing
 // gone ("not-found"). The check is the definition's exact name, so a
 // definition whose name merely starts the same is not mistaken for it.
 func TestClusterAPIResourcesTellsAnUnservedDefinitionFromAMissingOne(t *testing.T) {
-	b := apiResourceTestBuilder(apiResourceTestSource())
-	b.definitionExists = func(name string) bool { return name == "gadgets.example.io" }
+	source := apiResourceTestSource()
+	source.definitions = map[string]objectcatalog.Summary{
+		"gadgets.example.io": {Ref: resourcemodel.ResourceRef{UID: "current-definition"}},
+	}
+	b := apiResourceTestBuilder(source)
 
 	unserved := apiResourceTestBuild(t, b, "?limit=100"+definitionAnchor+"gadgets.example.io")
 	require.False(t, unserved.Anchor.Found)
@@ -291,9 +300,12 @@ func TestClusterAPIResourcesTellsAnUnservedDefinitionFromAMissingOne(t *testing.
 	require.False(t, missing.Anchor.Found)
 	require.Equal(t, ResourceQueryAnchorNotFound, missing.Anchor.Reason)
 
+	replaced := apiResourceTestBuild(t, b, "?limit=100&anchor.uid=previous-definition"+definitionAnchor+"gadgets.example.io")
+	require.Equal(t, ResourceQueryAnchorNotFound, replaced.Anchor.Reason)
+
 	// A kind the cluster serves but the request's filters hide is "filtered",
 	// whether or not its definition exists: clearing the filter shows it here.
-	b.definitionExists = func(string) bool { return true }
+	source.definitions["certificates.cert-manager.io"] = objectcatalog.Summary{}
 	filtered := apiResourceTestBuild(t, b, "?limit=100&facet.types=Built-in"+definitionAnchor+"certificates.cert-manager.io")
 	require.False(t, filtered.Anchor.Found)
 	require.Equal(t, ResourceQueryAnchorFiltered, filtered.Anchor.Reason)
@@ -303,6 +315,20 @@ func TestClusterAPIResourcesTellsAnUnservedDefinitionFromAMissingOne(t *testing.
 	other := apiResourceTestBuild(t, b, "?limit=100&anchor.clusterId=cluster-a&anchor.version=v1&anchor.kind=ConfigMap&anchor.namespace=default&anchor.name=gadgets.example.io")
 	require.False(t, other.Anchor.Found)
 	require.Equal(t, ResourceQueryAnchorNotFound, other.Anchor.Reason)
+}
+
+func TestClusterAPIResourcesCannotConfirmAnUnlistedDefinitionBeforeCatalogCollection(t *testing.T) {
+	source := apiResourceTestSource()
+	source.definitionsPending = true
+	b := apiResourceTestBuilder(source)
+
+	payload := apiResourceTestBuild(t, b, "?limit=100"+definitionAnchor+"gadgets.example.io")
+	require.False(t, payload.Anchor.Found)
+	require.Equal(t, ResourceQueryAnchorUnavailable, payload.Anchor.Reason)
+
+	source.definitionsPending = false
+	payload = apiResourceTestBuild(t, b, "?limit=100"+definitionAnchor+"gadgets.example.io")
+	require.Equal(t, ResourceQueryAnchorNotFound, payload.Anchor.Reason)
 }
 
 // Only a CustomResourceDefinition is listed here as a row; an object of any

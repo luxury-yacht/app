@@ -7,7 +7,9 @@ import (
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
+	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
+	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 	"github.com/stretchr/testify/require"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -17,10 +19,71 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 	fakediscovery "k8s.io/client-go/discovery/fake"
+	"k8s.io/client-go/dynamic"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	clienttesting "k8s.io/client-go/testing"
 )
+
+func TestAPIResourcesHandsOffAnUnestablishedCRDVisibleWithListOnly(t *testing.T) {
+	app, target := catalogLifecycleTestApp(t, system.TierForeground, false)
+	clients := app.ClusterRuntime.clusterClientsForID(target.meta.ID)
+	kube := clients.client.(*kubefake.Clientset)
+	identity := apiextensions.Identity
+	listOnly := func(attrs authorizationv1.ResourceAttributes) bool {
+		return attrs.Group == identity.Group && attrs.Resource == identity.Resource && attrs.Verb == "list"
+	}
+	kube.PrependReactor("create", "selfsubjectaccessreviews", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		review := action.(clienttesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
+		review.Status.Allowed = listOnly(*review.Spec.ResourceAttributes)
+		return true, review, nil
+	})
+	kube.Discovery().(*fakediscovery.FakeDiscovery).Resources = []*metav1.APIResourceList{{
+		GroupVersion: identity.GVR().GroupVersion().String(),
+		APIResources: []metav1.APIResource{{Name: identity.Resource, Kind: identity.Kind, Verbs: []string{"list", "watch"}}},
+	}}
+	definition := &apiextensionsv1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{Name: "widgets.example.com", UID: "definition-a"},
+		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
+			Group: "example.com", Names: apiextensionsv1.CustomResourceDefinitionNames{Plural: "widgets", Kind: "Widget"},
+			Scope:    apiextensionsv1.NamespaceScoped,
+			Versions: []apiextensionsv1.CustomResourceDefinitionVersion{{Name: "v1", Served: true, Storage: true}},
+		},
+	}
+	server := crdAPIServer(t, []string{identity.Resource}, definition)
+	server.Allow(listOnly)
+	clients.apiextensionsClient = server.APIExtensionsClient(t)
+	dynamicClient, err := dynamic.NewForConfig(server.Config())
+	require.NoError(t, err)
+	clients.dynamicClient = dynamicClient
+	subsystem, err := system.NewSubsystemWithServices(t.Context(), system.Config{
+		KubernetesClient: server.Client(t), APIExtensionsClient: clients.apiextensionsClient, DynamicClient: clients.dynamicClient,
+		ClusterID: target.meta.ID, ObjectDetailsProvider: app.Resources.objectDetailProvider(), NodeMaintenanceStore: app.NodeMaintenanceStore,
+		ObjectCatalogService: func() *objectcatalog.Service { return app.Refresh.objectCatalogServiceForCluster(target.meta.ID) },
+	})
+	require.NoError(t, err)
+	app.Refresh.setRefreshSubsystem(target.meta.ID, subsystem)
+	t.Cleanup(func() {
+		app.Refresh.stopObjectCatalogForCluster(target.meta.ID)
+		subsystem.ResourceStream.Stop()
+		subsystem.IngestManager.Stop()
+	})
+	subsystem.IngestManager.Start(t.Context())
+	require.True(t, subsystem.IngestManager.PermissionSkippedFor(identity.GVR()))
+	require.NoError(t, app.Refresh.startObjectCatalogForTarget(target))
+	catalog := app.Refresh.objectCatalogServiceForCluster(target.meta.ID)
+	require.Eventually(t, func() bool {
+		return len(catalog.Query(objectcatalog.QueryOptions{}).Items) == 1
+	}, 3*time.Second, 10*time.Millisecond, "Browse must list the CRD without a watch")
+
+	scope := target.meta.ID + "|?limit=20&anchor.clusterId=" + target.meta.ID +
+		"&anchor.group=apiextensions.k8s.io&anchor.version=v1&anchor.kind=CustomResourceDefinition&anchor.name=" + definition.Name
+	result, err := subsystem.SnapshotService.Build(t.Context(), snapshot.ClusterAPIResourcesDomainName, scope)
+	require.NoError(t, err)
+	payload := result.Payload.(snapshot.ClusterAPIResourcesSnapshot)
+	require.NotNil(t, payload.Anchor)
+	require.Equal(t, snapshot.ResourceQueryAnchorUnlisted, payload.Anchor.Reason)
+}
 
 // Replace only Kubernetes clients: subsystem construction, ingest, catalog,
 // response invalidation and the outbound catalog doorbell are the production path.

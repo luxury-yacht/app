@@ -487,6 +487,7 @@ const MISSING_FOCUS_TARGET_REASONS: Record<ResourceQueryAnchorReason, string> = 
   filtered: 'is not shown: the current filters exclude it',
   'not-found': 'was not found — it may have been deleted',
   unlisted: 'exists, but this view has no row for it',
+  unavailable: 'could not be verified in the object catalog',
 };
 
 const missingFocusTargetMessage = (

@@ -96,15 +96,17 @@ type ResourceQueryAnchor struct {
 // or identity mismatch), or "unlisted" (the object exists, but this table has
 // no row for it under any filters: a table that lists an object through
 // something else, as API Resources lists a definition through the kind it
-// defines, reports it when that something is absent). Rank is the anchor
+// defines, reports it when that something is absent), or "unavailable" (the
+// source has not confirmed the object's presence or absence). Rank is the anchor
 // row's 0-based position among the matching rows under THIS request's
 // sort+filters (-1 when not found).
 type ResourceQueryAnchorReason string
 
 const (
-	ResourceQueryAnchorFiltered ResourceQueryAnchorReason = "filtered"
-	ResourceQueryAnchorNotFound ResourceQueryAnchorReason = "not-found"
-	ResourceQueryAnchorUnlisted ResourceQueryAnchorReason = "unlisted"
+	ResourceQueryAnchorFiltered    ResourceQueryAnchorReason = "filtered"
+	ResourceQueryAnchorNotFound    ResourceQueryAnchorReason = "not-found"
+	ResourceQueryAnchorUnlisted    ResourceQueryAnchorReason = "unlisted"
+	ResourceQueryAnchorUnavailable ResourceQueryAnchorReason = "unavailable"
 )
 
 type ResourceQueryAnchorResult struct {

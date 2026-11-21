@@ -70,6 +70,7 @@ type ClusterAPIResourcesSnapshot struct {
 type APIResourceSource interface {
 	APIResources() objectcatalog.APIResourceInventory
 	SubscribeAPIResources() (<-chan objectcatalog.SubsetUpdate, func())
+	LookupObject(namespace, group, kind, name string) objectcatalog.ObjectLookup
 }
 
 // ClusterAPIResourcesBuilder serves the API Resources table from the catalog's
@@ -77,10 +78,7 @@ type APIResourceSource interface {
 type ClusterAPIResourcesBuilder struct {
 	source            func() APIResourceSource
 	definitionsDenied func() bool
-	// definitionExists reports whether a CustomResourceDefinition with exactly
-	// this name is known to exist; false also covers "cannot tell".
-	definitionExists func(name string) bool
-	discoveryWait    time.Duration
+	discoveryWait     time.Duration
 }
 
 // RegisterClusterAPIResourcesDomain registers the API Resources domain.
@@ -105,9 +103,6 @@ func RegisterClusterAPIResourcesDomain(reg *domain.Registry, catalogService func
 		definitionsDenied: func() bool {
 			return ingestManager != nil && ingestManager.PermissionSkippedFor(apiextensions.Identity.GVR())
 		},
-		definitionExists: func(name string) bool {
-			return ingestManager != nil && ingestManager.HoldsCustomResourceDefinition(name)
-		},
 		discoveryWait: config.SnapshotAPIResourcesDiscoveryWait,
 	}
 	return reg.Register(refresh.DomainConfig{Name: ClusterAPIResourcesDomainName, BuildSnapshot: builder.Build})
@@ -124,7 +119,8 @@ func (b *ClusterAPIResourcesBuilder) Build(ctx context.Context, scope string) (*
 	if base != "" {
 		return nil, fmt.Errorf("API resources scope must be cluster-wide")
 	}
-	inventory, err := b.discovered(ctx)
+	source := b.source()
+	inventory, err := b.discovered(ctx, source)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +140,7 @@ func (b *ClusterAPIResourcesBuilder) Build(ctx context.Context, scope string) (*
 	resolved := resolveTypedSnapshotPageViaStore(ClusterAPIResourcesDomainName, rows, query, adapter,
 		querypageSchemaFromAdapter(adapter, lowerTrimAll(capabilities.SortableFields)),
 		newTypedSnapshotPageConfig(capabilities, config.SnapshotClusterAPIResourcesEntryLimit, "API resources", adapter.Kind, issues))
-	b.markUnlistedDefinition(resolved.Envelope.Anchor, query.Request.Anchor)
+	resolveDefinitionAnchor(resolved.Envelope.Anchor, query.Request.Anchor, source)
 	return &refresh.Snapshot{
 		Domain:  ClusterAPIResourcesDomainName,
 		Scope:   scope,
@@ -158,18 +154,22 @@ func (b *ClusterAPIResourcesBuilder) Build(ctx context.Context, scope string) (*
 	}, nil
 }
 
-// markUnlistedDefinition refines a not-found anchor for a
-// CustomResourceDefinition. The table lists a definition as the kind it
-// defines, so a definition that exists but defines no served kind (it is not
-// Established) has no row under any filters: that is "unlisted", and the app
-// shows the definition itself in Browse. A definition that is not known to
-// exist stays "not-found". The lookup is the definition's exact name.
-func (b *ClusterAPIResourcesBuilder) markUnlistedDefinition(result *ResourceQueryAnchorResult, anchor *ResourceQueryAnchor) {
+// resolveDefinitionAnchor checks the same catalog publication that Browse uses,
+// including definitions collected by LIST when WATCH is denied.
+func resolveDefinitionAnchor(result *ResourceQueryAnchorResult, anchor *ResourceQueryAnchor, source APIResourceSource) {
 	if result == nil || anchor == nil || result.Found || result.Reason != ResourceQueryAnchorNotFound {
 		return
 	}
-	if anchor.Kind == apiextensions.Identity.Kind && b.definitionExists(strings.TrimSpace(anchor.Name)) {
+	identity := apiextensions.Identity
+	if anchor.Group != identity.Group || anchor.Version != identity.Version || anchor.Kind != identity.Kind || anchor.Namespace != "" {
+		return
+	}
+	lookup := source.LookupObject(anchor.Namespace, anchor.Group, anchor.Kind, anchor.Name)
+	switch {
+	case lookup.Found && (anchor.UID == "" || anchor.UID == lookup.Summary.Ref.UID):
 		result.Reason = ResourceQueryAnchorUnlisted
+	case !lookup.Found && !lookup.Absent:
+		result.Reason = ResourceQueryAnchorUnavailable
 	}
 }
 
@@ -233,8 +233,7 @@ func unreadGroups(failedGroupVersions []string) []string {
 // first discovery so a view opened right after connecting loads instead of
 // rendering an empty table. A first discovery that failed ends the wait with
 // its failure; only a discovery still pending reads as "not ready".
-func (b *ClusterAPIResourcesBuilder) discovered(ctx context.Context) (objectcatalog.APIResourceInventory, error) {
-	source := b.source()
+func (b *ClusterAPIResourcesBuilder) discovered(ctx context.Context, source APIResourceSource) (objectcatalog.APIResourceInventory, error) {
 	if source == nil {
 		return objectcatalog.APIResourceInventory{}, errorstatus.ClusterNotReady(errors.New("object catalog service unavailable"))
 	}

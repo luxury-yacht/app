@@ -216,10 +216,8 @@ collects (Events, kinds that cannot be listed, the metrics API).
   state until the first discovery signals). Once an attempt has failed it
   answers the latest failure itself, typed, so a denied discovery reads as a
   permission error and any other is reported.
-- The domain is feed-independent: it never waits on the CRD reflector. Until
-  that reflector has listed, classification is unknown and a definition
-  lookup answers "not known to exist", so "show in list" on an unserved
-  definition in that window is reported as not found.
+- The domain is feed-independent and serves discovery without waiting on the
+  CRD reflector. Type classification stays unknown until the reflector has listed.
 - The `cluster-api-resources` refresh domain
   (`backend/refresh/snapshot/cluster_api_resources.go`) serves the inventory as
   the API Resources table and the kind panel's details. It waits a bounded
@@ -238,16 +236,17 @@ collects (Events, kinds that cannot be listed, the metrics API).
   (`<plural>.<group>`), and an anchor for a CustomResourceDefinition resolves
   to that row, so "show in list" lands on it whether or not the classification
   has arrived. A definition whose kind the cluster does not serve (not
-  Established) has no row. The domain tells that case from a definition that
-  does not exist by looking the definition up by exact name in the CRD
-  reflector (`IngestManager.HoldsCustomResourceDefinition`): the anchor result
-  is `unlisted` for one that exists and `not-found` otherwise.
+  Established) has no row. For a CRD anchor miss, the domain checks the exact
+  object through `Service.LookupObject`, the same catalog publication Browse
+  reads. This includes CRDs collected by LIST when WATCH is denied. The result
+  is `unlisted` for a matching object and `not-found` for confirmed absence or
+  a different UID. A pending or denied catalog lookup yields `unavailable`.
 - On `unlisted`, API Resources hands the request to Browse, where the
   definition itself is listed: narrowed to the definition's kind and name so
   its row is on the page, and re-addressed to Browse so API Resources does not
   act on it again. Browse's search is a substring match, so other definitions
   may be listed too; the request's row key focuses the one asked for. A
-  `not-found` or `filtered` target is reported in API Resources.
+  `not-found`, `filtered`, or `unavailable` target is reported in API Resources.
 - `kubectl explain` output for a kind comes from
   `backend/resources/apiresources`, read from the cluster's OpenAPI v3
   documents on demand (`ResourceGateway.ExplainKindSchema`,

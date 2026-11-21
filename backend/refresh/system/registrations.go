@@ -58,8 +58,7 @@ type domainRegistration struct {
 	// an empty readiness set, so its builds never wait on feed sync. Such a
 	// domain may still consult a feed's current state without waiting for it,
 	// and must then treat "not listed yet" as "unknown": API Resources asks the
-	// CustomResourceDefinition reflector whether definitions are readable and
-	// whether one exists.
+	// CustomResourceDefinition reflector whether it was permission-skipped.
 	feedIndependent bool
 }
 
