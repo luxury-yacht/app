@@ -11,7 +11,7 @@
 
 import { act } from 'react';
 import { describe, expect, it } from 'vitest';
-import type { ClusterAPIResourceEntry } from '@/core/refresh/types';
+import type { ClusterAPIResourceEntry, ClusterAPIResourcesSnapshot } from '@/core/refresh/types';
 import { useNavigateToView } from '@/shared/hooks/useNavigateToView';
 import {
   installAppStateHarness,
@@ -75,11 +75,21 @@ const kinds = (): ClusterAPIResourceEntry[] => [
   },
 ];
 
-const start = async (rows: () => ClusterAPIResourceEntry[] = kinds) => {
+/**
+ * `anchor` is what the cluster answers a read that asks for a definition's row
+ * (a "show in list"); other reads carry no anchor and get none back.
+ */
+const start = async (
+  rows: () => ClusterAPIResourceEntry[] = kinds,
+  anchor?: ClusterAPIResourcesSnapshot['anchor']
+) => {
   dev = app.cluster({ name: 'dev', context: 'alpha' });
   app.namespaces(dev, ['payments']);
   app.startScreen(dev);
-  app.serveTable(dev, 'cluster-api-resources', { rows: rows() });
+  app.serveTable(dev, 'cluster-api-resources', ({ scope }) => ({
+    rows: rows(),
+    ...(anchor && scope.includes('anchor.name=') ? { anchor } : {}),
+  }));
   view = await app.mountApp(<NavigateProbe />);
   await view.goTo({ clusterView: 'api-resources' });
 };
@@ -192,6 +202,34 @@ describe('ClusterViewApiResources', () => {
     await app.settle();
 
     expect(rowOf('certificates').getAttribute('data-row-focused')).toBe('true');
+  });
+
+  // A definition's kind can be on the cluster but hidden by the table's own
+  // filters (Type = Built-in, say). That is this table's to explain: the user
+  // stays here and is told the filters hide it, not sent to Browse.
+  it('says the filters hide a definition’s kind instead of handing it to Browse', async () => {
+    await start(() => kinds().slice(0, 1), { found: false, rank: -1, reason: 'filtered' });
+    await view.goTo({ clusterView: 'overview' });
+
+    await act(async () => {
+      requireValue(
+        navigateToView,
+        'mounted navigation hook'
+      )({
+        ...certificatesDefinition,
+        clusterId: dev.clusterId,
+        clusterName: dev.clusterName,
+      });
+    });
+    await app.settle();
+    await app.settle();
+
+    expect(view.owners().viewState?.activeClusterTab).toBe('api-resources');
+    const reports = app.errors
+      .take((record) => record.context?.source === 'resource-grid-anchor')
+      .map((record) => (record.error as Error).message);
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toContain('filters');
   });
 
   // API Resources replaced the CRDs view. A favorite saved there still opens:

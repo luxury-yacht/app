@@ -296,3 +296,18 @@ func TestClusterAPIResourcesFailsAsNotReadyWhenDiscoveryNeverCompletes(t *testin
 	require.Error(t, err)
 	require.Equal(t, errorstatus.ReasonClusterNotReady, errorstatus.Classify(err).Reason)
 }
+
+// When no discovery has succeeded and the last one failed, the table is still
+// not ready (it retries), but the error says why discovery has not completed.
+func TestClusterAPIResourcesNotReadyErrorCarriesTheDiscoveryFailure(t *testing.T) {
+	source := apiResourceTestSource()
+	source.ready.Store(false)
+	source.discoveryError = "Unauthorized"
+
+	_, err := apiResourceTestBuilder(source).Build(
+		WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"}), "cluster-a|?limit=100")
+
+	require.Error(t, err)
+	require.Equal(t, errorstatus.ReasonClusterNotReady, errorstatus.Classify(err).Reason)
+	require.Contains(t, err.Error(), "Unauthorized")
+}

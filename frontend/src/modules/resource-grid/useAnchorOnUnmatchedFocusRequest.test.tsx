@@ -74,7 +74,14 @@ const anchoredReads = () => podReads().filter((read) => read.params.has('anchor.
  * The shop namespace has 61 pods; web-5 sorts onto page 2. The backend lands
  * an anchored read on web-5's page; every other pods read is answered too.
  */
-const startCluster = () => {
+const startCluster = (
+  anchored: () => PodSnapshotPayload = () =>
+    podsPage('shop', ['web-5'], {
+      anchor: { found: true, rank: 55 },
+      pageStartRank: 50,
+      self: 'web-5-page',
+    })
+) => {
   dev = app.cluster({ name: 'dev', context: 'alpha' });
   app.namespaces(dev, ['default', 'shop']);
   app.startScreen(dev);
@@ -91,11 +98,7 @@ const startCluster = () => {
     const { selector, query } = parseRefreshScope('pods', scope);
     const params = new URLSearchParams(query ?? '');
     if (params.has('anchor.name')) {
-      return podsPage('shop', ['web-5'], {
-        anchor: { found: true, rank: 55 },
-        pageStartRank: 50,
-        self: 'web-5-page',
-      });
+      return anchored();
     }
     if (params.get('continue') === 'web-5-page') {
       return podsPage('shop', ['web-5']);
@@ -207,5 +210,44 @@ describe('useAnchorOnUnmatchedFocusRequest — destination scoping', () => {
     expect(anchoredReads().map((read) => read.selector)).toEqual([
       { kind: 'namespace', namespace: 'shop' },
     ]);
+  });
+});
+
+// The destination table lists the kind, so an object it has no row for is
+// either hidden by the table's filters or gone. The user is told which,
+// because the two call for different actions (clear a filter, or stop looking).
+describe('useAnchorOnUnmatchedFocusRequest — a target with no row', () => {
+  const anchorReports = () =>
+    app.errors
+      .take((record) => record.context?.source === 'resource-grid-anchor')
+      .map((record) => (record.error as Error).message);
+
+  it('says the object was not found when the table does not list it', async () => {
+    startCluster(() =>
+      podsPage('shop', ['web-0'], { anchor: { found: false, rank: -1, reason: 'not-found' } })
+    );
+    await mount();
+
+    await navigateToWeb5();
+
+    expect(view.owners().viewState?.activeNamespaceTab).toBe('pods');
+    const reports = anchorReports();
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toContain('Pod shop/web-5');
+    expect(reports[0]).not.toContain('filters');
+  });
+
+  it('says the current filters hide the object when they do', async () => {
+    startCluster(() =>
+      podsPage('shop', ['web-0'], { anchor: { found: false, rank: -1, reason: 'filtered' } })
+    );
+    await mount();
+
+    await navigateToWeb5();
+
+    const reports = anchorReports();
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toContain('Pod shop/web-5');
+    expect(reports[0]).toContain('filters');
   });
 });

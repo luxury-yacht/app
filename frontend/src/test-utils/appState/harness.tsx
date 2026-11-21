@@ -283,13 +283,17 @@ export interface AppStateHarness {
   /**
    * Answers every read of a query table domain in `cluster` (any selector,
    * page, sort, or filter) with the typed-resource envelope and `payload`
-   * (rows default to none; totals count the rows). Returns a function that
+   * (rows default to none; totals count the rows). `payload` may be a function
+   * of the read, for an answer that depends on what was asked (an anchor
+   * result only for a read that carries an anchor). Returns a function that
    * stops answering.
    */
   serveTable<D extends keyof DomainPayloadMap>(
     cluster: TestCluster,
     domain: D,
-    payload?: Partial<DomainPayloadMap[D]>
+    payload?:
+      | Partial<DomainPayloadMap[D]>
+      | ((read: { scope: string }) => Partial<DomainPayloadMap[D]>)
   ): () => void;
   /** Persisted preferences the bootstrap hydrates. */
   preferences(settings: Partial<AppSettings>): void;
@@ -1272,7 +1276,8 @@ export const installAppStateHarness = (
         if (request.domain !== domain || !request.scope.startsWith(`${cluster.clusterId}|`)) {
           return undefined;
         }
-        const rows = (payload as { rows?: unknown[] }).rows ?? [];
+        const answer = typeof payload === 'function' ? payload(request) : payload;
+        const rows = (answer as { rows?: unknown[] }).rows ?? [];
         return {
           clusterId: cluster.clusterId,
           clusterName: cluster.clusterName,
@@ -1289,7 +1294,7 @@ export const installAppStateHarness = (
             kindVocabulary: [],
           },
           rows,
-          ...payload,
+          ...answer,
         };
       });
     },

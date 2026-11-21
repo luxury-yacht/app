@@ -467,6 +467,26 @@ describe('ApiResourcePanel', () => {
     expect(panel().textContent).toContain('Namespaced');
   });
 
+  // The core group has no name: discovery reports it as "", and a core kind's
+  // panel must recognise its own group in that.
+  it('does not call a core kind gone when discovery could not read the core group', async () => {
+    await start(() => ({
+      ...deployments(),
+      kind: 'Pod',
+      group: '',
+      apiVersion: 'v1',
+      resource: 'pods',
+      singular: 'pod',
+      shortNames: ['po'],
+    }));
+    stopServingKinds();
+    app.serveTable(dev, 'cluster-api-resources', { rows: [], unreadGroups: [''] });
+    await openKindPanel('pods');
+
+    expect(panel().textContent).not.toContain('no longer serves this kind');
+    expect(panel().textContent).toContain('could not be read');
+  });
+
   // An unread group in another part of the API says nothing about this kind:
   // discovery read the kind's own group and found no such kind.
   it('calls the kind gone when discovery read its group but not another', async () => {

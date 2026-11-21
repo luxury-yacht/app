@@ -456,11 +456,14 @@ describe('BrowseView', () => {
       });
 
     const showInList = async (name: string) => {
-      // The cluster serves no kind for it: API Resources has no row to land on.
-      app.serveTable(dev, 'cluster-api-resources', {
+      // The cluster serves no kind for it: API Resources has no row, and a
+      // read that asks for the definition's row is told so.
+      app.serveTable(dev, 'cluster-api-resources', ({ scope }) => ({
         rows: [],
-        anchor: { found: false, rank: -1 },
-      });
+        ...(scope.includes('anchor.name=')
+          ? { anchor: { found: false, rank: -1, reason: 'not-found' as const } }
+          : {}),
+      }));
       let navigateToView: ReturnType<typeof useNavigateToView>['navigateToView'] | undefined;
       const NavigateProbe = () => {
         navigateToView = useNavigateToView().navigateToView;
@@ -505,6 +508,12 @@ describe('BrowseView', () => {
 
       expect(view.owners().viewState?.activeClusterTab).toBe('browse');
       expect(rowNames()).toEqual([]);
+
+      // The request was handed to Browse once. Opening API Resources again
+      // must show API Resources, not send the user back to Browse.
+      await view.goTo({ clusterView: 'api-resources' });
+      await app.settle();
+      expect(view.owners().viewState?.activeClusterTab).toBe('api-resources');
     });
   });
 });

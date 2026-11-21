@@ -241,10 +241,13 @@ func TestAFailedDiscoveryIsReportedUntilTheNextSuccess(t *testing.T) {
 	require.Len(t, inventory.Resources, 7, "the last discovered kinds stay")
 	requireAPIResourcesUpdate(t, updates)
 
-	// The same failure again is not news.
+	// A retry that fails again is not news, whatever its error says: network
+	// errors carry a different local port on every attempt.
+	source.err = errors.New("read tcp 10.0.0.5:51234->10.0.0.1:443: connection reset by peer")
 	_, err = svc.discoverResources(context.Background())
 	require.Error(t, err)
 	requireNoAPIResourcesUpdate(t, updates)
+	require.Equal(t, "the server is currently unable to handle the request", svc.APIResources().DiscoveryError)
 
 	*source = working
 	_, err = svc.discoverResources(context.Background())

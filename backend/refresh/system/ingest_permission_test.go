@@ -32,16 +32,25 @@ func TestIngestPermissionFilterConservative(t *testing.T) {
 		}, true},
 		{"both error -> run", func(string) (bool, error) { return false, errors.New("ssar boom") }, true},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, verb, _ string) (bool, error) {
-				return tc.review(verb)
+	// The contract is the same for a custom resource (checked directly) and a
+	// built-in kind (checked through the generation's recorded grants).
+	definitions := apiextensions.Identity
+	kinds := []struct{ name, group, resource string }{
+		{"custom resource", "g", "r"},
+		{"built-in kind", definitions.Group, definitions.Resource},
+	}
+	for _, kind := range kinds {
+		for _, tc := range cases {
+			t.Run(kind.name+": "+tc.name, func(t *testing.T) {
+				checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, verb, _ string) (bool, error) {
+					return tc.review(verb)
+				})
+				got := ingestPermissionFilter(checker, permissions.NewGrants(checker))(kind.group, kind.resource, "")
+				if got != tc.wantRun {
+					t.Fatalf("ingestPermissionFilter run=%v, want %v", got, tc.wantRun)
+				}
 			})
-			got := ingestPermissionFilter(checker, permissions.NewGrants(checker))("g", "r", "")
-			if got != tc.wantRun {
-				t.Fatalf("ingestPermissionFilter run=%v, want %v", got, tc.wantRun)
-			}
-		})
+		}
 	}
 }
 
@@ -98,5 +107,33 @@ func TestCustomResourceAdmissionIsNotHeldForRevalidation(t *testing.T) {
 	}
 	if recorded := grants.Snapshot(); len(recorded) != 0 {
 		t.Fatalf("custom resource checks must not be recorded, got %d", len(recorded))
+	}
+}
+
+// Under a namespace scope a built-in kind has one reflector per namespace,
+// each admitted on its own namespace's access. Revalidation must recheck each
+// decision in the namespace it was made for: a namespace that was denied and
+// is later allowed requests a rebuild, and other namespaces' access does not.
+func TestScopedBuiltInReflectorIsRevalidatedAtItsOwnNamespace(t *testing.T) {
+	onlyDev := func(_ context.Context, _, _, _, namespace string) (bool, error) { return namespace == "dev", nil }
+	checker := permissions.NewCheckerWithReview("test", time.Minute, onlyDev)
+	grants := permissions.NewGrants(checker)
+	filter := ingestPermissionFilter(checker, grants)
+	if filter("", "configmaps", "prod") {
+		t.Fatal("prod is denied: its reflector must be skipped")
+	}
+	if !filter("", "configmaps", "dev") {
+		t.Fatal("dev is allowed: its reflector must run")
+	}
+
+	unchanged := &Subsystem{RuntimePerms: permissions.NewCheckerWithReview("test", time.Minute, onlyDev), PermissionGrants: grants}
+	if unchanged.permissionsChanged(context.Background()) {
+		t.Fatal("the same access per namespace is not a change")
+	}
+
+	prodGranted := permissions.NewCheckerWithReview("test", time.Minute, func(context.Context, string, string, string, string) (bool, error) { return true, nil })
+	changed := &Subsystem{RuntimePerms: prodGranted, PermissionGrants: grants}
+	if !changed.permissionsChanged(context.Background()) {
+		t.Fatal("access granted in prod must request a rebuild")
 	}
 }

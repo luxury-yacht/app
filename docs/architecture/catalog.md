@@ -203,10 +203,13 @@ collects (Events, kinds that cannot be listed, the metrics API).
   group versions in `FailedGroupVersions`; a later complete discovery clears
   them. Catalog descriptors still come from the reachable groups only.
 - A discovery that fails outright keeps the last published resources and
-  records its error in `DiscoveryError` until a discovery succeeds again. A
-  cancelled run (the cluster is disconnecting) records nothing.
+  records its error in `DiscoveryError` until a discovery succeeds again. The
+  first failure's error is kept: retries that fail with other text change
+  nothing. A cancelled run (the cluster is disconnecting) records nothing.
 - Subscribers (`SubscribeAPIResources`) are signalled only when the published
-  inventory changes, a failure and its recovery included.
+  inventory changes, and only from the first successful discovery on; after
+  it, a failure and its recovery are changes. Before it, the domain answers
+  not-ready, with the discovery error when there is one.
 - The `cluster-api-resources` refresh domain
   (`backend/refresh/snapshot/cluster_api_resources.go`) serves the inventory as
   the API Resources table and the kind panel's details. It waits a bounded
@@ -226,7 +229,9 @@ collects (Events, kinds that cannot be listed, the metrics API).
   has arrived. A definition whose kind the cluster does not serve (not
   Established) has no row; the definition is still an object, so API Resources
   hands that request to Browse, narrowed to the definition (its kind and
-  name). Browse then shows its row, or nothing when it really is gone.
+  name) and re-addressed to Browse so API Resources does not act on it again.
+  Browse then shows its row, or nothing when it really is gone. A kind the
+  table's own filters hide is not handed off; the table says so.
 - `kubectl explain` output for a kind comes from
   `backend/resources/apiresources`, read from the cluster's OpenAPI v3
   documents on demand (`ResourceGateway.ExplainKindSchema`,

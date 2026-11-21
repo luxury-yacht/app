@@ -17,6 +17,7 @@ import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
 import { requestGridTableFilters } from '@shared/components/tables/hooks/gridTableFilterRequest';
 import type { GridTableFocusRequest } from '@shared/components/tables/hooks/gridTableFocusRequest';
+import { setPendingFocusRequest } from '@shared/components/tables/hooks/useGridTableExternalFocus';
 import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import {
   buildRequiredCanonicalObjectRowKey,
@@ -110,9 +111,12 @@ export default function ClusterViewApiResources() {
   // A definition with no row defines no kind the cluster serves (it is not
   // Established), but it is still an object, and Browse lists objects. Hand the
   // request to Browse narrowed to that definition, so what Browse shows is the
-  // answer: its row, or nothing when the definition really is gone.
+  // answer: its row, or nothing when the definition really is gone. The
+  // request becomes Browse's: left addressed to this table, it would send the
+  // user back to Browse every time they opened API Resources.
   const showDefinitionInBrowse = useCallback(
     (request: GridTableFocusRequest) => {
+      setPendingFocusRequest({ ...request, destinationViewId: BROWSE_VIEW_ID });
       requestGridTableFilters({
         clusterId: request.clusterId,
         destinationViewId: BROWSE_VIEW_ID,

@@ -229,8 +229,13 @@ func (b *ClusterAPIResourcesBuilder) discovered(ctx context.Context) (objectcata
 	case <-ctx.Done():
 		return objectcatalog.APIResourceInventory{}, ctx.Err()
 	}
-	if inventory := source.APIResources(); inventory.Ready {
+	inventory := source.APIResources()
+	if inventory.Ready {
 		return inventory, nil
+	}
+	if inventory.DiscoveryError != "" {
+		// No discovery has succeeded yet, and the last one failed: say why.
+		return objectcatalog.APIResourceInventory{}, errorstatus.ClusterNotReady(fmt.Errorf("API discovery has not completed: %s", inventory.DiscoveryError))
 	}
 	return objectcatalog.APIResourceInventory{}, errorstatus.ClusterNotReady(errors.New("API discovery has not completed"))
 }
