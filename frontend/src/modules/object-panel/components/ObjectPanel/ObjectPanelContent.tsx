@@ -8,6 +8,7 @@
 
 import type { types } from '@core/backend-api/models';
 import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
+import { definedKindOf } from '@modules/object-panel/components/ObjectPanel/Explain/definedKind';
 import type { NodeLogSource } from '@modules/object-panel/components/ObjectPanel/NodeLogs/nodeLogsApi';
 import type {
   CapabilityReasons,
@@ -26,6 +27,9 @@ import React, { lazy, type ReactNode } from 'react';
 const DetailsTab = lazy(loadObjectPanelDetails);
 const EventsTab = lazy(
   () => import('@modules/object-panel/components/ObjectPanel/Events/EventsTab')
+);
+const ExplainTab = lazy(
+  () => import('@modules/object-panel/components/ObjectPanel/Explain/ExplainTab')
 );
 const ManifestTab = lazy(
   () => import('@modules/object-panel/components/ObjectPanel/Helm/ManifestTab')
@@ -244,6 +248,32 @@ const transientTabs = new Map<ViewType, React.ComponentType<ObjectPanelContentPr
           loadingName="details"
         >
           <DetailsTab {...detailTabProps} />
+        </PanelTabBoundary>
+      );
+    },
+  ],
+  [
+    'explain',
+    ({ objectData, detailTabProps, isPanelOpen }) => {
+      // The kind this object defines comes from its details; until they load
+      // there is nothing to explain yet.
+      const definedKind = definedKindOf(
+        objectData?.clusterId ?? '',
+        detailTabProps?.detailModel.activeDetail
+      );
+      if (!definedKind) {
+        return detailTabProps?.detailsLoading ? (
+          <LoadingSpinner message="Loading schema..." />
+        ) : null;
+      }
+      return (
+        <PanelTabBoundary
+          scope="panel-explain"
+          resetKeys={[definedKind.group, definedKind.version, definedKind.resource]}
+          tabName="Explain"
+          loadingName="schema"
+        >
+          <ExplainTab kind={definedKind} isActive={isPanelOpen} />
         </PanelTabBoundary>
       );
     },

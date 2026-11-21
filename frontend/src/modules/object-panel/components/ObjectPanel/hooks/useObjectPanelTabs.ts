@@ -50,6 +50,7 @@ interface TabContext {
 // manifest and values from the Helm path instead of the object.
 const TAB_GATES: Record<PanelTab['id'], (context: TabContext) => boolean> = {
   details: () => true,
+  explain: ({ facets }) => facets?.panel.explainTab ?? false,
   map: ({ objectData }) => hasCompleteObjectMapReference(objectData),
   pods: ({ facets }) => (facets?.panel.pods ?? 'none') !== 'none',
   jobs: ({ facets }) => facets?.panel.jobs ?? false,
@@ -64,6 +65,7 @@ const TAB_GATES: Record<PanelTab['id'], (context: TabContext) => boolean> = {
 
 const ORDERED_TABS: readonly PanelTab[] = [
   TABS.DETAILS,
+  TABS.EXPLAIN,
   TABS.MAP,
   TABS.PODS,
   TABS.JOBS,

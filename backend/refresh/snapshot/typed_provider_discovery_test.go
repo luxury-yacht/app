@@ -21,6 +21,7 @@ var typedCapabilityConformance = map[string]ResourceQueryCapabilities{
 	"cluster-crds":          clusterCRDQueryCapabilities(),
 	"cluster-events":        clusterEventsQueryCapabilities(),
 	"cluster-attention":     clusterAttentionQueryCapabilities(),
+	"cluster-api-resources": clusterAPIResourcesQueryCapabilities(),
 	"namespace-config":      namespaceConfigQueryCapabilities(),
 	"namespace-network":     namespaceNetworkQueryCapabilities(),
 	"namespace-storage":     namespaceStorageQueryCapabilities(),

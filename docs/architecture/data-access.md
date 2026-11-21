@@ -66,7 +66,7 @@ Composition and dependency directions are owned by
 | `ClusterAttentionService` | 6 | Attention ignore and restore rules |
 | `WorkspaceCoordinator` | 6 | Window selection, namespace scope, diagnostics, and search-path mutation |
 | `ClusterRuntimeManager` | 3 | Kubeconfig inventory, client diagnostics, and auth retry |
-| `ResourceGateway` | 17 | Resource reads, permissions, YAML, logs, and object actions |
+| `ResourceGateway` | 19 | Resource reads, permissions, YAML, logs, explain, and object actions |
 | `OperationsCoordinator` | 10 | Shell, port-forward, drain, and live-operation lifecycle |
 | `UpdateCoordinator` | 6 | Update checks, download, skip, and restart |
 | `AppLogService` | 5 | Process log reads, writes, and clear |

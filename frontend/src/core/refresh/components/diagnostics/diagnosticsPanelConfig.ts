@@ -52,13 +52,14 @@ const OVERVIEW_FEATURES = [PERMISSION_FEATURES.clusterOverview] as const;
 
 const CLUSTER_FEATURE_MAP: Record<ClusterViewType, readonly PermissionFeatureKey[]> = {
   attention: [],
+  // Custom kinds open, edit, and delete their CustomResourceDefinition.
+  'api-resources': [PERMISSION_FEATURES.clusterCRDs],
   identities: [PERMISSION_FEATURES.clusterIdentities],
   namespaces: [], // The view is backed by the permission-gated namespaces domain.
   nodes: [PERMISSION_FEATURES.clusterNodes, PERMISSION_FEATURES.nodeActions],
   rbac: [PERMISSION_FEATURES.clusterRBAC],
   storage: [PERMISSION_FEATURES.storageView, PERMISSION_FEATURES.storageActions],
   config: [PERMISSION_FEATURES.clusterConfig],
-  crds: [PERMISSION_FEATURES.clusterCRDs],
   custom: [PERMISSION_FEATURES.clusterCustom],
   karpenter: [PERMISSION_FEATURES.clusterCustom],
   'cert-manager': [PERMISSION_FEATURES.clusterCustom],

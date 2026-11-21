@@ -186,8 +186,8 @@ type failingPreferredDiscovery struct {
 	err error
 }
 
-func (f *failingPreferredDiscovery) ServerPreferredResources() ([]*metav1.APIResourceList, error) {
-	return nil, f.err
+func (f *failingPreferredDiscovery) ServerGroupsAndResources() ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
+	return nil, nil, f.err
 }
 
 func TestResourceResolverFallsBackToCRDWhenDiscoveryFails(t *testing.T) {

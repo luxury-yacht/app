@@ -28,9 +28,12 @@ Tab rendering and drag payloads: [tabs.md](tabs.md). Keyboard:
   code must not splice panel location state.
 - A shared cluster workspace holds each object or observed identity once across
   docked, native, and retained placements; every app view sees it. Identity
-  targets keep exact User/Group names and no object reference. Both target
-  types use the `obj:` panel ID prefix for layout preferences; identity IDs
-  encode cluster, subject kind, and name.
+  targets keep exact User/Group names and no object reference. Kind targets
+  (the API Resources kind panel) describe a kind, not an object: they carry
+  cluster, group, version, kind, and plural resource, and show only the
+  `details` and `explain` views. Every target type uses the `obj:` panel ID
+  prefix for layout preferences; identity IDs encode cluster, subject kind, and
+  name, and kind IDs encode cluster, group, and plural resource.
 - Every object target is built by `buildObjectPanelRef`, which gives a
   registered kind its registry spelling. Object panel IDs ignore the kind's
   case, and the directory refuses a known panel ID whose object reference

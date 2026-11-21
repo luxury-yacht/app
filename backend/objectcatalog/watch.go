@@ -169,6 +169,9 @@ func (h *crdDiscoveryHook) UpsertBundle(bundle ingest.Bundle) {
 	}
 	previous, seen := h.seen[definition.UID]
 	h.seen[definition.UID] = definition
+	if !seen || definitionResource(previous) != definitionResource(definition) {
+		h.publishCustomResources()
+	}
 	switch {
 	case !seen:
 		h.notifier.crdAdded(definition)
@@ -183,7 +186,22 @@ func (h *crdDiscoveryHook) DeleteBundle(bundle ingest.Bundle) {
 		return
 	}
 	delete(h.seen, definition.UID)
+	h.publishCustomResources()
 	h.notifier.crdDiscoveryChanged()
+}
+
+func definitionResource(definition apiextensions.Definition) schema.GroupResource {
+	return schema.GroupResource{Group: definition.Group, Resource: definition.Names.Plural}
+}
+
+// publishCustomResources tells the API-resource store which resources the
+// seen definitions define, so the kinds it lists are flagged as custom.
+func (h *crdDiscoveryHook) publishCustomResources() {
+	custom := make(map[schema.GroupResource]struct{}, len(h.seen))
+	for _, definition := range h.seen {
+		custom[definitionResource(definition)] = struct{}{}
+	}
+	h.notifier.service.apiResources.setCustomResources(custom)
 }
 
 // ReplaceBundles diffs a relist's complete set against the last-seen
@@ -198,6 +216,7 @@ func (h *crdDiscoveryHook) ReplaceBundles(bundles []ingest.Bundle) {
 	}
 	previous := h.seen
 	h.seen = next
+	h.publishCustomResources()
 	for uid, old := range previous {
 		if current, kept := next[uid]; !kept || old.ChangesDiscovery(current) {
 			h.notifier.crdDiscoveryChanged()

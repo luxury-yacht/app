@@ -35,6 +35,7 @@ const SYNTHETIC_KIND_FACETS = [
       debugContainer: false,
       eventsTab: false,
       yamlTab: false,
+      explainTab: false,
     },
     metricsDomain: 'none',
     listDomain: 'namespace-helm',

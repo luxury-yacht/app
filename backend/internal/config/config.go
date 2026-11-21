@@ -88,6 +88,13 @@ const (
 	// SnapshotClusterCRDEntryLimit caps cluster CRD snapshot rows.
 	SnapshotClusterCRDEntryLimit = 1000
 
+	// SnapshotClusterAPIResourcesEntryLimit caps API Resources snapshot rows.
+	SnapshotClusterAPIResourcesEntryLimit = 1000
+
+	// SnapshotAPIResourcesDiscoveryWait bounds how long an API Resources
+	// request waits for the cluster's first API discovery before failing.
+	SnapshotAPIResourcesDiscoveryWait = 10 * time.Second
+
 	// SnapshotClusterAttentionEntryLimit caps cluster attention snapshot rows.
 	SnapshotClusterAttentionEntryLimit = 1000
 

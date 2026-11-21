@@ -16,7 +16,7 @@ import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { useObjectPanelState } from '@modules/object-panel/contexts/ObjectPanelStateContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { getObjectPanelScopes, type ObjectPanelScopes } from '@modules/object-panel/objectPanelRef';
-import { isIdentityPanelRef, panelTargetFromSnapshot } from '@modules/object-panel/panelTarget';
+import { isNonObjectPanelRef, panelTargetFromSnapshot } from '@modules/object-panel/panelTarget';
 import { act, type ReactElement, type ReactNode, useEffect, useSyncExternalStore } from 'react';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, vi } from 'vitest';
@@ -179,7 +179,15 @@ export interface AppOwners {
  */
 export type OpenPanelTarget =
   | (ObjectIdentity & { clusterId: string; clusterName?: string })
-  | { targetType: 'identity'; clusterId: string; kind: string; name: string };
+  | { targetType: 'identity'; clusterId: string; kind: string; name: string }
+  | {
+      targetType: 'api-resource';
+      clusterId: string;
+      group: string;
+      version: string;
+      kind: string;
+      resource: string;
+    };
 
 /**
  * A sidebar entry: a cluster view (`'overview'` is the cluster Overview), a
@@ -1029,7 +1037,7 @@ export const installAppStateHarness = (
       container,
       openPanels: () =>
         Array.from(owners().objectPanels.openPanels.values()).map((target) =>
-          isIdentityPanelRef(target)
+          isNonObjectPanelRef(target)
             ? { ...target }
             : {
                 clusterId: target.clusterId,

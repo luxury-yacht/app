@@ -113,6 +113,8 @@ func TestRowsKeepTodaysKindDecisions(t *testing.T) {
 		hidesOwnTabs := row.Kind == "Event"
 		require.Equal(t, !hidesOwnTabs, row.Panel.EventsTab, row.Kind)
 		require.Equal(t, !hidesOwnTabs, row.Panel.YAMLTab, row.Kind)
+		// Only a CustomResourceDefinition defines a kind whose schema its panel explains.
+		require.Equal(t, row.Kind == "CustomResourceDefinition", row.Panel.ExplainTab, row.Kind)
 		require.Equal(t, row.Kind == "Namespace", row.Actions.RemoveNamespaceFinalizer, row.Kind)
 	}
 

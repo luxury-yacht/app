@@ -8,13 +8,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/resources/common"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/discovery"
 	disk "k8s.io/client-go/discovery/cached/disk"
@@ -31,7 +28,12 @@ func (s *Service) discoverResources(ctx context.Context) ([]Descriptor, error) {
 	if s.discoveryInvalidate != nil && s.discoveryStale.Swap(false) {
 		s.discoveryInvalidate()
 	}
-	return discoverFromClient(ctx, s.discoveryClient)
+	result, err := discoverFromClient(ctx, s.discoveryClient)
+	if err != nil {
+		return nil, err
+	}
+	s.apiResources.replace(result.apiResources)
+	return result.descriptors, nil
 }
 
 // ensureDiscovery builds the per-cluster discovery client once (disk-cached when possible),
@@ -110,96 +112,86 @@ func discoverResourceDescriptors(ctx context.Context, deps common.Dependencies, 
 			applog.Debug(logger, fmt.Sprintf("catalog discovery client fallback: %v", err), componentName)
 		}
 	}
-	return discoverFromClient(ctx, discoveryClient)
+	result, err := discoverFromClient(ctx, discoveryClient)
+	if err != nil {
+		return nil, err
+	}
+	return result.descriptors, nil
 }
 
-// discoverFromClient runs aggregated discovery via discoveryClient and extracts the catalog
-// descriptors, falling back from ServerPreferredResources to ServerGroupsAndResources when a
-// fake/older client returns nothing from the former.
-func discoverFromClient(ctx context.Context, discoveryClient discovery.DiscoveryInterface) ([]Descriptor, error) {
+// discoveryResult is one discovery pass: the full API surface, and the subset
+// of it whose objects the catalog collects.
+type discoveryResult struct {
+	apiResources []APIResource
+	descriptors  []Descriptor
+}
+
+// discoverFromClient runs one aggregated discovery via discoveryClient and
+// derives both the cluster's API resources and the catalog descriptors from it.
+func discoverFromClient(ctx context.Context, discoveryClient discovery.DiscoveryInterface) (discoveryResult, error) {
 	select {
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return discoveryResult{}, ctx.Err()
 	default:
 	}
 	if discoveryClient == nil {
-		return nil, errors.New("discovery client not available")
+		return discoveryResult{}, errors.New("discovery client not available")
 	}
 
-	resourceLists, err := discoveryClient.ServerPreferredResources()
+	// A partial failure (some groups unreachable) still returns the reachable
+	// groups' lists alongside the error; only a discovery with no lists fails.
+	groups, resourceLists, err := discoveryClient.ServerGroupsAndResources()
 	if err != nil && len(resourceLists) == 0 {
-		return nil, err
-	}
-	if len(resourceLists) == 0 {
-		if _, lists, altErr := discoveryClient.ServerGroupsAndResources(); altErr == nil && len(lists) > 0 {
-			resourceLists = lists
-		}
+		return discoveryResult{}, err
 	}
 
 	select {
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return discoveryResult{}, ctx.Err()
 	default:
 	}
 
-	return ExtractDescriptors(resourceLists), nil
+	apiResources := buildAPIResources(groups, resourceLists)
+	return discoveryResult{apiResources: apiResources, descriptors: catalogDescriptors(apiResources)}, nil
 }
 
-// ExtractDescriptors converts API resource discovery results into catalog descriptors.
-func ExtractDescriptors(resourceLists []*metav1.APIResourceList) []Descriptor {
-	excludedKinds := sets.New[string](
+// Kinds the catalog never collects objects for.
+var (
+	catalogExcludedKinds = sets.New[string](
 		"Event",
 		"ComponentStatus", // Deprecated since Kubernetes v1.19; avoid hitting the legacy endpoint.
 	)
 	// Metrics API resources don't have UIDs (they're computed on-the-fly, not stored in etcd).
 	// Exclude the entire metrics.k8s.io group to avoid pagination issues in the browse view.
-	excludedGroups := sets.New[string](
+	catalogExcludedGroups = sets.New[string](
 		"metrics.k8s.io",
 	)
-	result := make([]Descriptor, 0)
+)
 
-	for _, list := range resourceLists {
-		groupVersion, parseErr := schema.ParseGroupVersion(list.GroupVersion)
-		if parseErr != nil {
+// catalogDescriptors selects the API resources whose objects the catalog
+// collects: listable kinds, at their preferred version, outside the excluded
+// kinds and groups.
+func catalogDescriptors(apiResources []APIResource) []Descriptor {
+	result := make([]Descriptor, 0, len(apiResources))
+	for _, apiResource := range apiResources {
+		if catalogExcludedGroups.Has(apiResource.Group) || catalogExcludedKinds.Has(apiResource.Kind) {
 			continue
 		}
-
-		// Skip excluded API groups entirely.
-		if excludedGroups.Has(groupVersion.Group) {
+		if !containsVerb(apiResource.Verbs, "list") {
 			continue
 		}
-
-		for _, apiResource := range list.APIResources {
-			descriptor, ok := descriptorFromAPIResource(groupVersion, apiResource, excludedKinds)
-			if ok {
-				result = append(result, descriptor)
-			}
+		scope := ScopeCluster
+		if apiResource.Namespaced {
+			scope = ScopeNamespace
 		}
+		result = append(result, Descriptor{
+			Group:      apiResource.Group,
+			Version:    apiResource.Version,
+			Resource:   apiResource.Resource,
+			Kind:       apiResource.Kind,
+			Scope:      scope,
+			Namespaced: apiResource.Namespaced,
+		})
 	}
-
 	return result
-}
-
-func descriptorFromAPIResource(groupVersion schema.GroupVersion, apiResource metav1.APIResource, excludedKinds sets.Set[string]) (Descriptor, bool) {
-	if strings.Contains(apiResource.Name, "/") {
-		return Descriptor{}, false
-	}
-	if apiResource.Kind == "" || excludedKinds.Has(apiResource.Kind) {
-		return Descriptor{}, false
-	}
-	if !containsVerb(apiResource.Verbs, "list") {
-		return Descriptor{}, false
-	}
-	scope := ScopeCluster
-	if apiResource.Namespaced {
-		scope = ScopeNamespace
-	}
-	return Descriptor{
-		Group:      groupVersion.Group,
-		Version:    groupVersion.Version,
-		Resource:   apiResource.Name,
-		Kind:       apiResource.Kind,
-		Scope:      scope,
-		Namespaced: apiResource.Namespaced,
-	}, true
 }

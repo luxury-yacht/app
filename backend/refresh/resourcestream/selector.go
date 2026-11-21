@@ -23,6 +23,7 @@ var streamDomains = map[string]struct{}{
 	domainClusterOverview:      {},
 	domainClusterAttention:     {},
 	domainClusterIdentities:    {},
+	domainClusterAPIResources:  {},
 	domainPods:                 {},
 	domainObjectEvents:         {},
 	domainObjectDetails:        {},

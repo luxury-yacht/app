@@ -5,9 +5,9 @@
  * Each view handles its own data, loading state, and error handling.
  */
 
+import ClusterViewApiResources from '@modules/cluster/components/ClusterViewApiResources';
 import ClusterViewAttention from '@modules/cluster/components/ClusterViewAttention';
 import ClusterViewConfig from '@modules/cluster/components/ClusterViewConfig';
-import ClusterViewCRDs from '@modules/cluster/components/ClusterViewCRDs';
 import ClusterViewCustom, {
   ClusterViewCertManager,
   ClusterViewExternalSecrets,
@@ -32,8 +32,6 @@ interface ClusterResourcesViewsProps {
 
   configError?: RefreshFailure | null;
 
-  crdsError?: RefreshFailure | null;
-
   customLoading?: boolean;
   customError?: RefreshFailure | null;
   customLoaded?: boolean;
@@ -51,7 +49,6 @@ interface ClusterResourcesViewsProps {
 function ClusterResourcesViews({
   nodesError = null,
   configError = null,
-  crdsError = null,
   customLoading = false,
   customError = null,
   customLoaded = false,
@@ -71,6 +68,8 @@ function ClusterResourcesViews({
     switch (activeTab) {
       case 'attention':
         return <ClusterViewAttention />;
+      case 'api-resources':
+        return <ClusterViewApiResources />;
       case 'identities':
         return <ClusterViewIdentities />;
       case 'namespaces':
@@ -79,8 +78,6 @@ function ClusterResourcesViews({
         return <ClusterViewNodes error={nodesError} />;
       case 'config':
         return <ClusterViewConfig error={configError} />;
-      case 'crds':
-        return <ClusterViewCRDs error={crdsError} />;
       case 'cert-manager':
         return <ClusterViewCertManager />;
       case 'external-secrets':

@@ -10,6 +10,8 @@ import type { capabilities, types } from '@core/backend-api/models';
 import { parseApiVersion } from '@shared/constants/builtinGroupVersions';
 import {
   DiscoverNodeLogs,
+  ExplainKindField,
+  ExplainKindSchema,
   FetchContainerLogs,
   FetchNodeLogs,
   FindCatalogObjectByUID,
@@ -87,6 +89,29 @@ export const readContainerLogsScopeContainers = (clusterId: string, scope: strin
 
 export const readContainerLogs = (clusterId: string, request: types.ContainerLogsFetchRequest) =>
   FetchContainerLogs(clusterId, request);
+
+/** A kind the cluster serves (not an object): the identity `kubectl explain` takes. */
+export interface KindReadTarget {
+  clusterId: string;
+  group: string;
+  version: string;
+  kind: string;
+  resource: string;
+}
+
+const resourceRefForKind = (target: KindReadTarget) => ({
+  clusterId: target.clusterId,
+  group: target.group,
+  version: target.version,
+  kind: target.kind,
+  resource: target.resource,
+});
+
+export const readKindSchema = (target: KindReadTarget) =>
+  ExplainKindSchema(resourceRefForKind(target));
+
+export const readKindField = (target: KindReadTarget, fieldPath: string) =>
+  ExplainKindField(resourceRefForKind(target), fieldPath);
 
 export const readNodeLogDiscovery = (target: ObjectReadTarget) =>
   DiscoverNodeLogs(resourceRefForTarget(target));

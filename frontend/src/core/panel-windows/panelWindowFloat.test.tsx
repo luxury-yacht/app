@@ -64,7 +64,9 @@ const windowFrozen = (view: MountedApp) =>
   view.container.querySelector('.panel-lifecycle-surface')?.hasAttribute('inert');
 
 const configMapPanelOpen = (view: MountedApp) =>
-  view.openPanels().some((ref) => ref.kind === 'ConfigMap' && ref.name === 'app-config');
+  view
+    .openPanels()
+    .some((ref) => ref.kind === 'ConfigMap' && 'name' in ref && ref.name === 'app-config');
 
 describe('undocking a panel group into a native window', () => {
   it('moves the group out and unfreezes the window once the new window is ready', async () => {

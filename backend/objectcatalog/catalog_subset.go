@@ -31,8 +31,52 @@ type catalogSubset[T objectRefer] struct {
 	items       map[string]T
 	revision    uint64
 	synced      bool
-	subscribers map[int]chan SubsetUpdate
-	nextSubID   int
+	subscribers subsetSubscribers
+}
+
+// subsetSubscribers is the coalescing subscriber set shared by the catalog's
+// change-signal stores. It has no lock of its own: the owning store calls it
+// with its write lock held. The zero value is ready to use.
+type subsetSubscribers struct {
+	channels map[int]chan SubsetUpdate
+	nextID   int
+}
+
+// add registers a subscriber and, when current is set, queues it as the first update.
+func (s *subsetSubscribers) add(current *SubsetUpdate) (<-chan SubsetUpdate, int) {
+	ch := make(chan SubsetUpdate, 1)
+	id := s.nextID
+	s.nextID++
+	if s.channels == nil {
+		s.channels = make(map[int]chan SubsetUpdate)
+	}
+	s.channels[id] = ch
+	if current != nil {
+		ch <- *current
+	}
+	return ch, id
+}
+
+func (s *subsetSubscribers) remove(id int) {
+	if subscriber, exists := s.channels[id]; exists {
+		delete(s.channels, id)
+		close(subscriber)
+	}
+}
+
+// publish replaces each subscriber's pending update, so a slow reader sees only
+// the latest revision.
+func (s *subsetSubscribers) publish(update SubsetUpdate) {
+	for _, subscriber := range s.channels {
+		select {
+		case <-subscriber:
+		default:
+		}
+		select {
+		case subscriber <- update:
+		default:
+		}
+	}
 }
 
 // snapshot returns a deterministic copy of the subset.
@@ -54,25 +98,17 @@ func (c *catalogSubset[T]) snapshot() []T {
 // subscribe registers a coalescing subscriber. Once the catalog has synced it immediately
 // sends the current revision; before that the first update arrives with the first sync.
 func (c *catalogSubset[T]) subscribe() (<-chan SubsetUpdate, func()) {
-	ch := make(chan SubsetUpdate, 1)
 	c.mu.Lock()
-	id := c.nextSubID
-	c.nextSubID++
-	if c.subscribers == nil {
-		c.subscribers = make(map[int]chan SubsetUpdate)
-	}
-	c.subscribers[id] = ch
+	var current *SubsetUpdate
 	if c.synced {
-		ch <- SubsetUpdate{Revision: c.revision}
+		current = &SubsetUpdate{Revision: c.revision}
 	}
+	ch, id := c.subscribers.add(current)
 	c.mu.Unlock()
 
 	unsubscribe := func() {
 		c.mu.Lock()
-		if subscriber, exists := c.subscribers[id]; exists {
-			delete(c.subscribers, id)
-			close(subscriber)
-		}
+		c.subscribers.remove(id)
 		c.mu.Unlock()
 	}
 	return ch, unsubscribe
@@ -157,17 +193,7 @@ func (c *catalogSubset[T]) publishLocked() {
 		return
 	}
 	c.revision++
-	update := SubsetUpdate{Revision: c.revision}
-	for _, subscriber := range c.subscribers {
-		select {
-		case <-subscriber:
-		default:
-		}
-		select {
-		case subscriber <- update:
-		default:
-		}
-	}
+	c.subscribers.publish(SubsetUpdate{Revision: c.revision})
 }
 
 func catalogSubsetKey(item objectRefer) string {

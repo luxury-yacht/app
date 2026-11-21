@@ -68,6 +68,25 @@
       "coverageContract": "snapshot-table-payload",
       "coverageStatus": "enforced"
     },
+    "cluster-api-resources": {
+      "behaviorClass": "snapshot-table",
+      "scopeContract": {
+        "selectors": ["cluster"],
+        "query": "typed-table",
+        "valid": ["", "?limit=50&sort=name&sortDirection=asc"],
+        "invalid": ["cluster", "namespace:default"]
+      },
+      "singleCluster": true,
+      "payloadOwner": "backend/refresh/snapshot.ClusterAPIResourcesBuilder",
+      "refreshPayloadType": "ClusterAPIResourcesSnapshot",
+      "cachePolicy": "snapshot-cache",
+      "streamSemantics": [
+        "snapshot-replace",
+        "change-signal"
+      ],
+      "coverageContract": "snapshot-table-payload",
+      "coverageStatus": "enforced"
+    },
     "cluster-attention": {
       "behaviorClass": "snapshot-table",
       "scopeContract": {
@@ -691,6 +710,27 @@
         "timing": {
           "interval": 10000,
           "timeout": 10
+        }
+      }
+    },
+    {
+      "domain": "cluster-api-resources",
+      "category": "cluster",
+      "sourceClocks": [
+        "catalog"
+      ],
+      "backend": {
+        "registration": "direct",
+        "permission": "exempt",
+        "resourceStream": false
+      },
+      "frontend": {
+        "orchestrator": "doorbell-snapshot",
+        "registrationOrder": 31,
+        "diagnosticsStream": "resources",
+        "timing": {
+          "interval": 15000,
+          "timeout": 15
         }
       }
     },

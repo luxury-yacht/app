@@ -90,8 +90,8 @@ type preferredDiscovery struct {
 	resources []*metav1.APIResourceList
 }
 
-func (p *preferredDiscovery) ServerPreferredResources() ([]*metav1.APIResourceList, error) {
-	return p.resources, nil
+func (p *preferredDiscovery) ServerGroupsAndResources() ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
+	return groupsForLists(p.resources), p.resources, nil
 }
 
 type discoveryOverrideClient struct {
@@ -767,9 +767,9 @@ type hookedPreferredDiscovery struct {
 	onDiscover func()
 }
 
-func (h *hookedPreferredDiscovery) ServerPreferredResources() ([]*metav1.APIResourceList, error) {
+func (h *hookedPreferredDiscovery) ServerGroupsAndResources() ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
 	h.onDiscover()
-	return h.preferredDiscovery.ServerPreferredResources()
+	return h.preferredDiscovery.ServerGroupsAndResources()
 }
 
 // failingDiscovery makes every sync fail at the discovery step, so retry-scheduling
@@ -778,8 +778,8 @@ type failingDiscovery struct {
 	*fakediscovery.FakeDiscovery
 }
 
-func (f *failingDiscovery) ServerPreferredResources() ([]*metav1.APIResourceList, error) {
-	return nil, errors.New("discovery unavailable")
+func (f *failingDiscovery) ServerGroupsAndResources() ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
+	return nil, nil, errors.New("discovery unavailable")
 }
 
 // blockingIngestSource parks AddCatalogSink until released, standing in for a

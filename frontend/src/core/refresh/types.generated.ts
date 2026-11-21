@@ -477,6 +477,49 @@ export interface CertmanagerPrivateKey {
   rotationPolicy?: string;
 }
 
+export interface ClusterAPIResourceEntry {
+  clusterId: string;
+  kind: string;
+  group: string;
+  version: string;
+  apiVersion: string;
+  versions: Array<string> | null;
+  resource: string;
+  singular?: string;
+  scope: string;
+  shortNames: Array<string> | null;
+  verbs: Array<string> | null;
+  categories: Array<string> | null;
+  type: string;
+  definition?: ResourceRef;
+}
+
+export interface ClusterAPIResourcesSnapshot {
+  clusterId: string;
+  clusterName: string;
+  provider: ResourceQueryProvider;
+  table: string;
+  queryIdentity?: string;
+  continue?: string;
+  previous?: string;
+  self?: string;
+  cursorInvalid?: boolean;
+  anchor?: ResourceQueryAnchorResult;
+  pageStartRank?: number;
+  total: number;
+  unfilteredTotal: number;
+  totalIsExact: boolean;
+  kinds?: Array<string>;
+  namespaces?: Array<string>;
+  facetValues?: Array<ResourceQueryFacetValues>;
+  facetsExact: boolean;
+  completeness?: ResourceQueryCompleteness;
+  issues?: Array<ResourceQueryIssue>;
+  dynamic?: ResourceQueryDynamicRef;
+  capabilities: ResourceQueryCapabilities;
+  rows: Array<ClusterAPIResourceEntry> | null;
+}
+
 export interface ClusterAttentionFinding {
   ref: CanonicalResourceRef;
   metadata?: ResourceTableMetadata;
@@ -2350,6 +2393,7 @@ export const REFRESH_DOMAINS = [
   'namespace-metrics',
   'cluster-overview',
   'cluster-identities',
+  'cluster-api-resources',
   'cluster-attention',
   'catalog',
   'catalog-diff',
@@ -2508,6 +2552,21 @@ export const REFRESH_DOMAIN_POLICIES = [
       timing: { interval: 10000, timeout: 10 },
       priority: null,
       registrationOrder: 30,
+    },
+    scope: { selectors: ['cluster'], query: 'typed-table' },
+  },
+  {
+    domain: 'cluster-api-resources',
+    category: 'cluster',
+    cachePolicy: 'snapshot-cache',
+    sourceClocks: ['catalog'],
+    backend: { registration: 'direct', permission: 'exempt', resourceStream: false, bypassSingleflight: false },
+    frontend: {
+      orchestrator: 'doorbell-snapshot',
+      diagnosticsStream: 'resources',
+      timing: { interval: 15000, timeout: 15 },
+      priority: null,
+      registrationOrder: 31,
     },
     scope: { selectors: ['cluster'], query: 'typed-table' },
   },
@@ -3150,6 +3209,7 @@ export interface BackendDomainPayloadMap {
   'namespace-metrics': NamespaceMetricsSnapshotPayload;
   'cluster-overview': ClusterOverviewSnapshotPayload;
   'cluster-identities': ClusterIdentitiesSnapshot;
+  'cluster-api-resources': ClusterAPIResourcesSnapshot;
   'cluster-attention': ClusterAttentionSnapshot;
   catalog: CatalogSnapshotPayload;
   'catalog-diff': CatalogSnapshotPayload;

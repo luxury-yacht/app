@@ -13,8 +13,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestExtractDescriptorsFiltersUnsupportedDiscoveryResources(t *testing.T) {
-	descriptors := ExtractDescriptors([]*metav1.APIResourceList{
+func TestCatalogDescriptorsFilterUnsupportedDiscoveryResources(t *testing.T) {
+	lists := []*metav1.APIResourceList{
 		{
 			GroupVersion: "apps/v1",
 			APIResources: []metav1.APIResource{
@@ -38,9 +38,10 @@ func TestExtractDescriptorsFiltersUnsupportedDiscoveryResources(t *testing.T) {
 				{Name: "nodes", Kind: "NodeMetrics", Verbs: []string{"list"}},
 			},
 		},
-	})
+	}
+	descriptors := catalogDescriptors(buildAPIResources(groupsForLists(lists), lists))
 
-	require.Equal(t, []Descriptor{
+	require.ElementsMatch(t, []Descriptor{
 		{Group: "apps", Version: "v1", Resource: "gizmos", Kind: "Gizmo", Scope: ScopeNamespace, Namespaced: true},
 		{Group: "", Version: "v1", Resource: "configmaps", Kind: "ConfigMap", Scope: ScopeNamespace, Namespaced: true},
 	}, descriptors)

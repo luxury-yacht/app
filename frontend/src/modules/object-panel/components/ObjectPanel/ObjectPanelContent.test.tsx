@@ -25,6 +25,14 @@ const hoistedRefs = vi.hoisted(() => ({
   nodeLogsError: { current: null as Error | null },
   podsTabProps: { current: null as unknown },
   metricsTabProps: { current: null as unknown },
+  explainTabProps: { current: null as unknown },
+}));
+
+vi.mock('@modules/object-panel/components/ObjectPanel/Explain/ExplainTab', () => ({
+  default: (props: unknown) => {
+    hoistedRefs.explainTabProps.current = props;
+    return <div data-testid="explain-tab" />;
+  },
 }));
 
 vi.mock('@modules/object-panel/components/ObjectPanel/Details/DetailsTab', () => ({
@@ -482,6 +490,46 @@ describe('ObjectPanelContent', () => {
       scope: baseProps.helmScope,
       isActive: true,
       panelId: baseProps.panelId,
+    });
+  });
+
+  // A CustomResourceDefinition's Explain tab explains the custom kind it
+  // defines (not CustomResourceDefinition itself), read from its details.
+  it('explains the kind a CustomResourceDefinition defines', async () => {
+    const definition = {
+      kind: 'CustomResourceDefinition',
+      group: 'apiextensions.k8s.io',
+      version: 'v1',
+      name: 'certificates.cert-manager.io',
+      clusterId: 'cluster-1',
+    };
+    const detailTabProps = requireValue(baseProps.detailTabProps, 'expected detail tab props');
+    await renderContent({
+      activeTab: 'explain',
+      objectData: definition,
+      detailTabProps: {
+        ...detailTabProps,
+        objectData: definition,
+        detailModel: buildObjectDetailModel(
+          definition,
+          objectDetailOf('customresourcedefinition', {
+            group: 'cert-manager.io',
+            versions: [{ name: 'v1', served: true, storage: true }],
+            names: { plural: 'certificates', kind: 'Certificate' },
+          })
+        ),
+      },
+    });
+
+    expect(hoistedRefs.explainTabProps.current).toMatchObject({
+      isActive: true,
+      kind: {
+        clusterId: 'cluster-1',
+        group: 'cert-manager.io',
+        version: 'v1',
+        kind: 'Certificate',
+        resource: 'certificates',
+      },
     });
   });
 

@@ -26,7 +26,7 @@ func TestDesktopServiceCommandsDelegateToTheirDeclaredOwners(t *testing.T) {
 		},
 		"WorkspaceCommands":      {field: "workspace", count: 6},
 		"ClusterRuntimeCommands": {field: "clusterRuntime", count: 3},
-		"ResourceCommands":       {field: "resources", count: 17},
+		"ResourceCommands":       {field: "resources", count: 19},
 		"OperationsCommands":     {field: "operations", count: 11},
 		"UpdateCommands":         {field: "updates", count: 6},
 		"AppLogCommands":         {field: "logs", count: 5},
@@ -64,8 +64,8 @@ func TestDesktopServiceCommandsDelegateToTheirDeclaredOwners(t *testing.T) {
 			require.Equal(t, owner.field+"."+method, delegations[method], method)
 		}
 	}
-	require.Len(t, seen, 127)
-	require.Len(t, delegations, 127)
+	require.Len(t, seen, 129)
+	require.Len(t, delegations, 129)
 }
 
 func desktopCommandInterfaces(

@@ -18,6 +18,8 @@ export const TABS = {
   // Live metrics-server samples, kept while the panel is open (docs/architecture/resource-metrics.md).
   METRICS: { id: 'metrics', label: 'Metrics' },
   YAML: { id: 'yaml', label: 'YAML' },
+  // The schema of a kind, as `kubectl explain` prints it.
+  EXPLAIN: { id: 'explain', label: 'Explain' },
   MAP: { id: 'map', label: 'Map' },
   SHELL: { id: 'shell', label: 'Shell' },
 } as const;

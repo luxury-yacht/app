@@ -149,6 +149,27 @@ describe('useObjectPanelTabs', () => {
 
   // A custom resource whose kind name matches a built-in kind (here a Volcano Job)
   // is not that kind: it gets none of the built-in kind's tabs.
+  // A CustomResourceDefinition defines a kind; its panel explains that kind's schema.
+  it('offers Explain for a CustomResourceDefinition and for no other kind', async () => {
+    await start();
+    await view.show(
+      <TabsProbe
+        objectData={inCluster({
+          group: 'apiextensions.k8s.io',
+          version: 'v1',
+          kind: 'CustomResourceDefinition',
+          namespace: '',
+          name: 'certificates.cert-manager.io',
+        })}
+      />
+    );
+    // Explain follows Details; the probe's capabilities add the generic tabs after it.
+    expect(shownLabels.slice(0, 2)).toEqual(['Details', 'Explain']);
+
+    await view.show(<TabsProbe objectData={inCluster(deployment)} />);
+    expect(shownLabels).not.toContain('Explain');
+  });
+
   it('gives a custom resource named like a built-in kind no Pods tab', async () => {
     await start();
     await view.show(

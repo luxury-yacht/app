@@ -354,6 +354,10 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 			return snapshot.RegisterCatalogDiffDomain(deps.registry, catalogConfig)
 		}), func() bool { return deps.cfg.ObjectCatalogService != nil }),
 
+		snapshot.ClusterAPIResourcesDomainName: withSkipUnless(feedIndependentRegistration(snapshot.ClusterAPIResourcesDomainName, func() error {
+			return snapshot.RegisterClusterAPIResourcesDomain(deps.registry, deps.cfg.ObjectCatalogService, deps.ingestManager)
+		}), func() bool { return deps.cfg.ObjectCatalogService != nil }),
+
 		"nodes": listWatchRegistration(listWatchDomainConfig{
 			name:          "nodes",
 			issueResource: "core/nodes,pods",

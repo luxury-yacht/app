@@ -50,7 +50,8 @@ describe('getViewForKind', () => {
     ['rbac.authorization.k8s.io', 'ClusterRole', 'rbac'],
     ['', 'PersistentVolume', 'storage'],
     ['', 'Namespace', 'namespaces'],
-    ['apiextensions.k8s.io', 'CustomResourceDefinition', 'crds'],
+    // A CustomResourceDefinition is listed as the custom kind it defines.
+    ['apiextensions.k8s.io', 'CustomResourceDefinition', 'api-resources'],
     // cluster_config.go lists storage classes, ingress classes, and webhooks.
     ['storage.k8s.io', 'StorageClass', 'config'],
     ['networking.k8s.io', 'IngressClass', 'config'],

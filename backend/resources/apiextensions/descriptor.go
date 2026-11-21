@@ -11,4 +11,5 @@ var Descriptor = kindspec.Descriptor{
 	Display:         kindspec.Display{ShortName: "crd"},
 	DetailCacheable: true,
 	Stream:          &StreamDescriptor,
+	Panel:           kindspec.ObjectPanel{ExplainDefinedKind: true},
 }

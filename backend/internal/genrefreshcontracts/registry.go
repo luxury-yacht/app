@@ -160,6 +160,8 @@ var contractTypes = []typeSpec{
 	{name: "ClusterIdentity", typeOf: typeOf[snapshot.ClusterIdentity]()},
 	{name: "ClusterIdentityBinding", typeOf: typeOf[snapshot.ClusterIdentityBinding]()},
 	{name: "ClusterIdentitiesSnapshot", typeOf: typeOf[snapshot.ClusterIdentitiesSnapshot]()},
+	{name: "ClusterAPIResourceEntry", typeOf: typeOf[snapshot.ClusterAPIResourceEntry]()},
+	{name: "ClusterAPIResourcesSnapshot", typeOf: typeOf[snapshot.ClusterAPIResourcesSnapshot]()},
 	{name: "ClusterRBACEntry", typeOf: typeOf[streamrows.ClusterRBACEntry]()},
 	{name: "ClusterRBACSnapshotPayload", typeOf: typeOf[snapshot.ClusterRBACSnapshot]()},
 	{name: "ClusterStorageEntry", typeOf: typeOf[streamrows.ClusterStorageEntry]()},

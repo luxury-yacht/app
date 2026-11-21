@@ -19,7 +19,7 @@ describe('permission feature contract', () => {
       ...getScopedFeaturesForView('cluster', 'rbac', 'browse'),
       ...getScopedFeaturesForView('cluster', 'storage', 'browse'),
       ...getScopedFeaturesForView('cluster', 'config', 'browse'),
-      ...getScopedFeaturesForView('cluster', 'crds', 'browse'),
+      ...getScopedFeaturesForView('cluster', 'api-resources', 'browse'),
       ...getScopedFeaturesForView('cluster', 'custom', 'browse'),
       ...getScopedFeaturesForView('cluster', 'events', 'browse'),
       ...getScopedFeaturesForView('namespace', null, 'map'),

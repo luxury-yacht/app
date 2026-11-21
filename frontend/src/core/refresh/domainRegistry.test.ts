@@ -43,6 +43,7 @@ describe('refresh domain registry', () => {
       'namespace-quotas',
       'namespace-helm',
       'cluster-identities',
+      'cluster-api-resources',
     ]);
   });
 

@@ -109,6 +109,9 @@ type Service struct {
 
 	finalizerBlockers catalogSubset[FinalizerBlocker]
 	reportedStatuses  catalogSubset[ReportedStatus]
+	// apiResources is the full discovered API surface, replaced on each
+	// successful discovery independently of the collected object rows.
+	apiResources apiResourceStore
 }
 
 // NewService constructs a catalog service with the provided dependencies and options.

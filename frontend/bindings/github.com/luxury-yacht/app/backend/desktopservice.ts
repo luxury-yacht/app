@@ -31,6 +31,9 @@ import * as snapshot$0 from "./refresh/snapshot/models.js";
 import * as resourcemodel$0 from "./resourcemodel/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as apiresources$0 from "./resources/apiresources/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as panelwindow$0 from "../internal/panelwindow/models.js";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -191,6 +194,14 @@ export function DownloadApplicationUpdate(version: string): $CancellablePromise<
 
 export function ExecuteApplicationMenuCommand(command: $models.ApplicationMenuCommand): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.ExecuteApplicationMenuCommand", command);
+}
+
+export function ExplainKindField(target: resourcemodel$0.ResourceRef, fieldPath: string): $CancellablePromise<apiresources$0.FieldExplanation | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.ExplainKindField", target, fieldPath);
+}
+
+export function ExplainKindSchema(target: resourcemodel$0.ResourceRef): $CancellablePromise<apiresources$0.KindSchema | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.DesktopService.ExplainKindSchema", target);
 }
 
 export function ExportFavorites(): $CancellablePromise<$models.DataManagementResult> {

@@ -1,0 +1,111 @@
+/*
+ * frontend/src/modules/object-panel/components/ObjectPanel/Explain/ExplainTab.css
+ *
+ * The Explain tab: a kind's field tree and the selected field's description.
+ */
+
+.explain-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  min-height: 0;
+  padding: var(--spacing-md);
+}
+
+.explain-notice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-md);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-normal);
+}
+
+/* As tall as its fields, shrinking to scroll when they outgrow the panel. */
+.explain-tree {
+  flex: 0 1 auto;
+  min-height: 6rem;
+  overflow: auto;
+  padding: var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background-color: var(--color-bg-secondary);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
+}
+
+.explain-tree-list {
+  margin: 0;
+  padding-left: var(--spacing-lg);
+  list-style: none;
+}
+
+.explain-tree > .explain-tree-list {
+  padding-left: 0;
+}
+
+.explain-tree-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-sm);
+  width: 100%;
+  padding: 1px var(--spacing-xs);
+  border: none;
+  /* Reserved for the selected field's accent bar. */
+  border-left: 2px solid transparent;
+  border-radius: var(--border-radius-sm);
+  background: none;
+  font: inherit;
+  color: var(--color-text);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.explain-tree-row:hover {
+  background-color: var(--color-bg);
+}
+
+/* The selected field carries an accent bar on its border: the shared focus
+   rule owns a focused element's outline and box-shadow, and the selected field
+   is usually the focused one. */
+.explain-tree-row[aria-current="true"] {
+  background-color: var(--color-bg);
+  border-left-color: var(--color-accent);
+}
+
+.explain-tree-caret {
+  display: inline-block;
+  width: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.explain-type {
+  color: var(--color-text-secondary);
+}
+
+.explain-required {
+  color: var(--color-warning);
+}
+
+.explain-selected {
+  flex: 0 0 auto;
+}
+
+.explain-selected-path {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
+  color: var(--color-text);
+}
+
+.explain-enum,
+.explain-description {
+  margin: 0 0 var(--spacing-sm);
+  color: var(--color-text);
+  font-size: var(--font-size-normal);
+  white-space: pre-wrap;
+}

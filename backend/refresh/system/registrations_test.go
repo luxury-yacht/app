@@ -539,6 +539,9 @@ func TestRefreshDomainSourceClocksAuthored(t *testing.T) {
 				expected = []string{"metric"}
 			case "cluster-attention":
 				expected = []string{"attention"}
+			case "cluster-api-resources":
+				// Rung by the catalog when the discovered API surface changes.
+				expected = []string{"catalog"}
 			}
 			require.ElementsMatchf(t, expected, entry.SourceClocks, "domain %s doorbell-snapshot source clock", entry.Domain)
 			continue
@@ -894,7 +897,7 @@ func TestEveryDomainDeclaresItsFeedReadiness(t *testing.T) {
 	readiness := domainReadinessResources(registrations)
 
 	feedIndependent := []string{
-		"catalog", "catalog-diff", "namespace-metrics", "object-details",
+		"catalog", "catalog-diff", "cluster-api-resources", "namespace-metrics", "object-details",
 		"object-helm-manifest", "object-helm-values", "object-maintenance", "object-yaml",
 	}
 	for _, registration := range registrations {

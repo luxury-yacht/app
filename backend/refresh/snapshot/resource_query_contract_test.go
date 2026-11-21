@@ -260,12 +260,14 @@ func TestResourceQueryRequestParsesMatchNone(t *testing.T) {
 // (no kind filtering at all).
 func TestTypedResourceProvidersPublishKindVocabulary(t *testing.T) {
 	expected := map[string][]string{
-		"cluster-config":        {"StorageClass", "IngressClass", "GatewayClass", "MutatingWebhookConfiguration", "ValidatingWebhookConfiguration"},
-		"cluster-storage":       {"PersistentVolume"},
-		"cluster-rbac":          {"ClusterRole", "ClusterRoleBinding"},
-		"cluster-crds":          {"CustomResourceDefinition"},
-		"cluster-events":        nil,
-		"cluster-attention":     nil,
+		"cluster-config":    {"StorageClass", "IngressClass", "GatewayClass", "MutatingWebhookConfiguration", "ValidatingWebhookConfiguration"},
+		"cluster-storage":   {"PersistentVolume"},
+		"cluster-rbac":      {"ClusterRole", "ClusterRoleBinding"},
+		"cluster-crds":      {"CustomResourceDefinition"},
+		"cluster-events":    nil,
+		"cluster-attention": nil,
+		// Rows are kinds, an open set; the view filters by Type and Scope instead.
+		"cluster-api-resources": nil,
 		"namespace-config":      {"ConfigMap", "Secret"},
 		"namespace-network":     {"Service", "Ingress", "EndpointSlice", "NetworkPolicy", "Gateway", "HTTPRoute", "GRPCRoute", "TLSRoute", "ListenerSet", "ReferenceGrant", "BackendTLSPolicy"},
 		"namespace-storage":     {"PersistentVolumeClaim"},

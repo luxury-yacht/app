@@ -177,6 +177,33 @@ and the catalog does not subscribe to their rows.
   production subsystem, still completes first collection and publishes its
   readable rows. Custom-resource permission tests alone do not prove startup.
 
+## API resources
+
+Each discovery pass also publishes the cluster's full API surface
+(`Service.APIResources`, `backend/objectcatalog/api_resources.go`): one entry
+per group and plural resource, described by its preferred version, with every
+served version, short names, verbs, and categories. It is wider than the
+catalog descriptors: it includes kinds whose objects the catalog never
+collects (Events, kinds that cannot be listed, the metrics API).
+
+- One `ServerGroupsAndResources` call per discovery feeds both the API
+  resources and the catalog descriptors; the descriptors are the listable,
+  non-excluded subset at preferred versions.
+- A resource is `Custom` when a CustomResourceDefinition visible to the
+  identity defines it. The CRD discovery hook supplies that set, so the flag
+  follows the CRD list even when it arrives after discovery.
+- Subscribers (`SubscribeAPIResources`) are signalled only when the published
+  list changes; a failed discovery keeps the last list.
+- The `cluster-api-resources` refresh domain
+  (`backend/refresh/snapshot/cluster_api_resources.go`) serves the list as the
+  API Resources table and the kind panel's details. It waits a bounded time
+  for the first discovery, and reports an issue instead of a Type when
+  CustomResourceDefinitions cannot be listed.
+- `kubectl explain` output for a kind comes from
+  `backend/resources/apiresources`, read from the cluster's OpenAPI v3
+  documents on demand (`ResourceGateway.ExplainKindSchema`,
+  `ExplainKindField`), never from the catalog.
+
 ## Discovered resource families
 
 `DiscoveredResourceFamilies` reads discovered API identities before LIST

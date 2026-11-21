@@ -110,7 +110,6 @@ export function ClusterResourcesManager({ activeTab }: Readonly<ClusterResourceM
   // contributes only the permission-derived denial messages.
   const nodesErrorMessage = permissionToMessage(nodesListPermission) || null;
   const configErrorMessage = configPermissionMessage || null;
-  const crdsErrorMessage = permissionToMessage(crdListPermission) || null;
   const customErrorMessage = permissionToMessage(crdListPermission) || null;
   const eventsErrorMessage = permissionToMessage(eventsListPermission) || null;
   const rbacErrorMessage = permissionToMessage(rbacListPermission) || null;
@@ -126,7 +125,6 @@ export function ClusterResourcesManager({ activeTab }: Readonly<ClusterResourceM
       // view. Custom is catalog-backed and takes loading/loaded.
       nodesError={nodesErrorMessage}
       configError={configErrorMessage}
-      crdsError={crdsErrorMessage}
       customLoading={false}
       customError={customErrorMessage}
       customLoaded={Boolean(customErrorMessage)}

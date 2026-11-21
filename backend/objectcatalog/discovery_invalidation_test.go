@@ -29,8 +29,8 @@ type stubDiscovery struct {
 	lists []*metav1.APIResourceList
 }
 
-func (s *stubDiscovery) ServerPreferredResources() ([]*metav1.APIResourceList, error) {
-	return s.lists, nil
+func (s *stubDiscovery) ServerGroupsAndResources() ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
+	return groupsForLists(s.lists), s.lists, nil
 }
 
 func podOnlyResourceLists() []*metav1.APIResourceList {

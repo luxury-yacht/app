@@ -1,7 +1,7 @@
 import {
   buildPanelTarget,
-  type IdentityPanelRef,
-  isIdentityPanelRef,
+  isNonObjectPanelRef,
+  type NonObjectPanelRef,
   type PanelTarget,
   panelTargetFromSnapshot,
   panelTargetId,
@@ -47,7 +47,8 @@ export { objectPanelId } from '@modules/object-panel/objectPanelRef';
  * panel commits to another native renderer.
  */
 const evictPanelScopes = (ref: PanelTarget): void => {
-  if (isIdentityPanelRef(ref)) {
+  // Identity and kind panels own no per-object refresh scopes.
+  if (isNonObjectPanelRef(ref)) {
     return;
   }
   getObjectPanelScopeEvictions(ref).forEach(({ domain, scope }) => {
@@ -131,7 +132,7 @@ interface ObjectPanelStateContextType {
   // If the object is already open, activates the existing tab.
   // Returns the panelId for the object.
   onRowClick: (
-    data: KubernetesObjectReference | IdentityPanelRef,
+    data: KubernetesObjectReference | NonObjectPanelRef,
     options?: { pendingNativeOpen?: boolean }
   ) => string;
 
@@ -168,7 +169,7 @@ interface ObjectPanelStateContextType {
     activeView: ViewType;
   } | null;
   upsertOwnedPanel: (
-    objectRef: KubernetesObjectReference | IdentityPanelRef,
+    objectRef: KubernetesObjectReference | NonObjectPanelRef,
     activeView: ViewType
   ) => string;
   removeOwnedPanel: (clusterId: string, panelId: string) => void;
@@ -366,10 +367,10 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
 
   const onRowClick = useCallback(
     (
-      data: KubernetesObjectReference | IdentityPanelRef,
+      data: KubernetesObjectReference | NonObjectPanelRef,
       options?: { pendingNativeOpen?: boolean }
     ): string => {
-      const enriched = isIdentityPanelRef(data) ? data : hydrateClusterMeta(data);
+      const enriched = isNonObjectPanelRef(data) ? data : hydrateClusterMeta(data);
       const panelRef = buildPanelTarget(enriched);
       const panelId = panelTargetId(panelRef);
 
@@ -484,7 +485,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
   }, []);
 
   const upsertOwnedPanel = useCallback(
-    (data: KubernetesObjectReference | IdentityPanelRef, activeView: ViewType): string => {
+    (data: KubernetesObjectReference | NonObjectPanelRef, activeView: ViewType): string => {
       const panelRef = buildPanelTarget(data);
       const panelId = panelTargetId(panelRef);
       setObjectPanelStateByCluster((previous) => {

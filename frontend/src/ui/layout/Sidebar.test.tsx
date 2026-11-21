@@ -204,7 +204,7 @@ describe('Sidebar', () => {
     );
     expect(
       Array.from(clusterItems.querySelectorAll<HTMLElement>(':scope > button'), describeTarget)
-    ).toEqual(['overview:', 'attention', 'browse', 'events', 'identities']);
+    ).toEqual(['overview:', 'attention', 'api-resources', 'browse', 'events', 'identities']);
     expect(requireEntry('[data-sidebar-target-kind="overview"]').getAttribute('aria-current')).toBe(
       'page'
     );
@@ -216,7 +216,7 @@ describe('Sidebar', () => {
         ?.contains(clusterView('nodes'))
     ).toBe(true);
     expect(expanded(clusterGroup('extensions'))).toBe(false);
-    expect(clusterView('crds')).toBeNull();
+    expect(clusterView('custom')).toBeNull();
 
     const defaultNamespace = namespaceToggle('default');
     expect(expanded(defaultNamespace)).toBe(false);
