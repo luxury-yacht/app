@@ -58,7 +58,7 @@ func (f *fakeAPIResourceSource) SubscribeAPIResources() (<-chan objectcatalog.Su
 
 func (f *fakeAPIResourceSource) LookupObject(_, _, _, name string) objectcatalog.ObjectLookup {
 	definition, found := f.definitions[name]
-	return objectcatalog.ObjectLookup{Summary: definition, Found: found, Absent: !found && !f.definitionsPending}
+	return objectcatalog.ObjectLookup{Summary: definition, Found: found, Confirmed: found && !f.definitionsPending, Absent: !found && !f.definitionsPending}
 }
 
 func apiResourceTestSource() *fakeAPIResourceSource {
@@ -165,6 +165,7 @@ func TestClusterAPIResourcesFiltersByTypeScopeAndSearch(t *testing.T) {
 func TestAPIResourcesAnchorChecksUIDEvenWhenTheNameHasARow(t *testing.T) {
 	source := apiResourceTestSource()
 	name := "certificates.cert-manager.io"
+	source.resources[3].DefinitionUID = "replacement"
 	source.definitions = map[string]objectcatalog.Summary{name: {Ref: resourcemodel.ResourceRef{UID: "replacement"}}}
 	builder := apiResourceTestBuilder(source)
 	for _, filters := range []string{"", "&facet.types=Built-in"} {
@@ -174,6 +175,58 @@ func TestAPIResourcesAnchorChecksUIDEvenWhenTheNameHasARow(t *testing.T) {
 	}
 	matched := apiResourceTestBuild(t, builder, "?limit=100&anchor.uid=replacement"+definitionAnchor+name)
 	require.True(t, matched.Anchor.Found)
+}
+
+func TestAPIResourcesAnchorCannotVerifyRetainedDefinitions(t *testing.T) {
+	source := apiResourceTestSource()
+	name := "certificates.cert-manager.io"
+	source.definitions = map[string]objectcatalog.Summary{name: {Ref: resourcemodel.ResourceRef{UID: "retained"}}}
+	source.definitionsPending = true
+	builder := apiResourceTestBuilder(source)
+	for _, uid := range []string{"retained", "replacement"} {
+		payload := apiResourceTestBuild(t, builder, "?limit=100&anchor.uid="+uid+definitionAnchor+name)
+		require.False(t, payload.Anchor.Found)
+		require.Equal(t, ResourceQueryAnchorUnavailable, payload.Anchor.Reason)
+	}
+	source.definitionsPending = false
+	source.resources[3].DefinitionUID = "replacement"
+	source.definitions[name] = objectcatalog.Summary{Ref: resourcemodel.ResourceRef{UID: "replacement"}}
+	payload := apiResourceTestBuild(t, builder, "?limit=100&anchor.uid=replacement"+definitionAnchor+name)
+	require.True(t, payload.Anchor.Found)
+}
+
+func TestAPIResourcesAnchorDoesNotLandOnTheOldKindOfARecreatedDefinition(t *testing.T) {
+	source := apiResourceTestSource()
+	name := "certificates.cert-manager.io"
+	source.resources[3].DefinitionUID = "original"
+	source.definitions = map[string]objectcatalog.Summary{name: {Ref: resourcemodel.ResourceRef{UID: "replacement"}}}
+	builder := apiResourceTestBuilder(source)
+	for _, query := range []string{"", "&anchor.uid=replacement"} {
+		result := apiResourceTestBuild(t, builder, "?limit=100"+query+definitionAnchor+name)
+		require.False(t, result.Anchor.Found)
+		require.Equal(t, ResourceQueryAnchorUnlisted, result.Anchor.Reason)
+	}
+	delete(source.definitions, name)
+	result := apiResourceTestBuild(t, builder, "?limit=100"+definitionAnchor+name)
+	require.False(t, result.Anchor.Found)
+	require.Equal(t, ResourceQueryAnchorNotFound, result.Anchor.Reason)
+}
+
+func TestAPIResourcesFindsCustomKindsByScopeAndVersion(t *testing.T) {
+	source := apiResourceTestSource()
+	source.resources[3].Versions = []string{"v1", "v1beta1"}
+	source.resources[3].DefinitionSearch = []string{"v1alpha2", "Versions: v1alpha2,v1beta1,v1"}
+	source.resources[3].DefinitionMetadata = &resourcemodel.ResourceTableMetadata{Labels: map[string]string{"owner": "platform-team"}}
+	source.resources[3].DefinitionUID = "current-definition"
+	builder := apiResourceTestBuilder(source)
+	for _, search := range []string{"Namespaced", "v1beta1", "v1alpha2"} {
+		payload := apiResourceTestBuild(t, builder, "?limit=100&facet.types=Custom&search="+search)
+		require.Equal(t, []string{"Certificate"}, apiResourceRowKinds(payload.Rows))
+		require.Equal(t, "current-definition", payload.Rows[0].Definition.UID)
+	}
+	scope := "?limit=100&facet.types=Custom&search=platform-team"
+	require.Empty(t, apiResourceTestBuild(t, builder, scope).Rows)
+	require.Equal(t, []string{"Certificate"}, apiResourceRowKinds(apiResourceTestBuild(t, builder, scope+"&includeMetadata=true").Rows))
 }
 
 func TestPendingRemovalHasCustomTypeWithoutAnObjectLink(t *testing.T) {
@@ -278,7 +331,9 @@ const definitionAnchor = "&anchor.clusterId=cluster-a&anchor.group=apiextensions
 // "Show in list" on a CustomResourceDefinition lands on the row of the custom
 // kind it defines, on whichever page that row is.
 func TestClusterAPIResourcesAnchorsACustomResourceDefinitionToItsKind(t *testing.T) {
-	b := apiResourceTestBuilder(apiResourceTestSource())
+	source := apiResourceTestSource()
+	source.definitions = map[string]objectcatalog.Summary{"certificates.cert-manager.io": {}}
+	b := apiResourceTestBuilder(source)
 
 	// Sorted by kind descending, two per page, Certificate is alone on the third
 	// page: Pod, Node | HorizontalPodAutoscaler, ClusterIssuer | Certificate.
@@ -337,7 +392,11 @@ func TestClusterAPIResourcesTellsAnUnservedDefinitionFromAMissingOne(t *testing.
 func TestClusterAPIResourcesCannotConfirmAnUnlistedDefinitionBeforeCatalogCollection(t *testing.T) {
 	source := apiResourceTestSource()
 	source.definitionsPending = true
+	source.customUnknown = true
 	b := apiResourceTestBuilder(source)
+
+	knownKind := apiResourceTestBuild(t, b, "?limit=100"+definitionAnchor+"certificates.cert-manager.io")
+	require.True(t, knownKind.Anchor.Found)
 
 	payload := apiResourceTestBuild(t, b, "?limit=100"+definitionAnchor+"gadgets.example.io")
 	require.False(t, payload.Anchor.Found)

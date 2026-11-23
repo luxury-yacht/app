@@ -380,7 +380,7 @@ func TestEvaluateDescriptorsBatchKeepsStableDescriptorIndexesAcrossNamespaceFano
 	}
 
 	allowed, namespaceDecisions, err := svc.evaluateDescriptorsBatch(context.Background(), capSvc, descriptors)
-	require.NoError(t, err)
+	require.ErrorContains(t, err, "dev authorizer unavailable")
 	require.Equal(t, map[int]map[string]bool{0: {"dev": true}, 1: {"prod": false}}, namespaceDecisions)
 	require.True(t, allowed[0], "a later namespace answer must stay associated with deployments")
 	require.False(t, allowed[1], "a definitive denial must stay associated with statefulsets")
@@ -388,7 +388,11 @@ func TestEvaluateDescriptorsBatchKeepsStableDescriptorIndexesAcrossNamespaceFano
 
 	for index, desc := range descriptors {
 		singleAllowed, _, singleErr := svc.evaluateDescriptor(context.Background(), capSvc, desc)
-		require.NoError(t, singleErr, "an answered namespace must override its sibling's evaluation error")
+		if desc.Resource == "statefulsets" {
+			require.ErrorContains(t, singleErr, "dev authorizer unavailable")
+		} else {
+			require.NoError(t, singleErr)
+		}
 		require.Equal(t, allowed[index], singleAllowed, "batch and fallback preflight must make the same collection decision")
 	}
 }

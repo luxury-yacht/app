@@ -205,7 +205,10 @@ describe('ClusterViewApiResources', () => {
   // CustomResourceDefinitions have been read: rows have no Type and no
   // definition yet. Showing a definition in its list must still find its kind.
   it("focuses a definition's kind before kinds are known to be custom", async () => {
-    await start(() => kinds().map(({ definition: _definition, ...row }) => ({ ...row, type: '' })));
+    await start(
+      () => kinds().map(({ definition: _definition, ...row }) => ({ ...row, type: '' })),
+      { found: true, rank: 1 }
+    );
     await view.goTo({ clusterView: 'overview' });
 
     await act(async () => {

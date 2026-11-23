@@ -32,10 +32,12 @@ func (idx *catalogIndex) publishChange(change catalogChange) {
 	if change.previous != nil {
 		idx.queryEngineStore.Delete(catalogEngineUID(*change.previous))
 		idx.countFacets(*change.previous, -1)
+		idx.countHPATarget(*change.previous, -1)
 	}
 	if change.next != nil {
 		idx.queryEngineStore.Upsert(*change.next)
 		idx.countFacets(*change.next, 1)
+		idx.countHPATarget(*change.next, 1)
 	}
 }
 

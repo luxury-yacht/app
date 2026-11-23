@@ -74,11 +74,10 @@ func descriptorPreflightReviews(desc Descriptor, namespaces []string) []capabili
 	return reviews
 }
 
-// Namespace grants are any-of. A definitive answer, including denial, takes
-// precedence over a sibling namespace's error in both batch and fallback checks.
+// An allowed namespace admits collection. With no grant, a failed review
+// leaves that namespace unknown even if another namespace was denied.
 type descriptorEvaluation struct {
 	allowed    bool
-	answered   bool
 	firstErr   error
 	namespaces map[string]bool
 }
@@ -94,7 +93,6 @@ func (e *descriptorEvaluation) record(result capabilities.CheckResult, namespace
 		}
 		return
 	}
-	e.answered = true
 	e.allowed = e.allowed || result.Allowed
 	if namespace != "" {
 		if e.namespaces == nil {
@@ -105,8 +103,8 @@ func (e *descriptorEvaluation) record(result capabilities.CheckResult, namespace
 }
 
 func (e descriptorEvaluation) result() (bool, error) {
-	if e.answered {
-		return e.allowed, nil
+	if e.allowed {
+		return true, nil
 	}
 	return false, e.firstErr
 }
@@ -439,8 +437,6 @@ func (s *Service) sync(ctx context.Context) error {
 	start := s.now()
 	s.syncInProgress.Store(true)
 	defer s.syncInProgress.Store(false)
-	s.resetDeniedResources()
-
 	run := newCatalogSync(s, start)
 	empty, err := run.discover(ctx)
 	if err != nil {
@@ -526,6 +522,7 @@ func (run *catalogSync) retainUnreadDescriptors(failed []schema.GroupVersion) {
 
 func (run *catalogSync) publishEmpty() {
 	s := run.service
+	s.resetDeniedResources()
 	s.mu.Lock()
 	s.catalogIndex.reset()
 	s.mu.Unlock()
@@ -669,9 +666,12 @@ func catalogStaticIngestGVRs(descriptors []Descriptor) []schema.GroupVersionReso
 }
 
 func (run *catalogSync) failBeforeCollection(err error) error {
-	elapsed := run.service.now().Sub(run.start)
-	run.service.updateHealth(false, true, err, 0)
-	run.service.recordTelemetry(run.prevItemCount, run.prevResourceCount, elapsed, err)
+	s := run.service
+	if !errors.Is(err, context.Canceled) {
+		s.updateHealth(false, true, err, 0)
+		s.broadcastStreaming(false)
+	}
+	s.recordTelemetry(run.prevItemCount, run.prevResourceCount, s.now().Sub(run.start), err)
 	return err
 }
 
@@ -812,7 +812,6 @@ func (run *catalogSync) logCollected(desc Descriptor, count int) {
 func (run *catalogSync) finish(runErr error) error {
 	descriptorCache := run.applyCollectionResults()
 	collectErr := run.collectionError(runErr)
-	enrichCatalogActionFacts(run.newItems, run.allowedSet, run.failed, run.staleDescriptors)
 	run.publish(descriptorCache, collectErr)
 	run.recordCompletion(collectErr)
 	return collectErr
@@ -851,8 +850,10 @@ func (run *catalogSync) applyListDecisions() {
 			run.listDenials[gr] = denied
 		}
 	}
+	run.service.resetDeniedResources()
 	for _, desc := range run.descriptors {
-		if len(run.listDenials[desc.GVR().GroupResource()]) > 0 {
+		gvr := desc.GVR()
+		if run.preflightDenied(gvr.String()) || len(run.deniedNamespaces[gvr.String()]) > 0 || len(run.listDenials[gvr.GroupResource()]) > 0 {
 			run.service.recordDeniedResource(deniedResourceName(desc))
 		}
 	}
@@ -952,6 +953,17 @@ func (run *catalogSync) preflightDenied(gvr string) bool {
 	return !allowed && !failed
 }
 
+func (run *catalogSync) lookupDescriptors() map[schema.GroupKind]catalogLookupDescriptor {
+	descriptors := make(map[schema.GroupKind]catalogLookupDescriptor, len(run.descriptors))
+	for _, desc := range run.descriptors {
+		descriptors[schema.GroupKind{Group: desc.Group, Kind: desc.Kind}] = catalogLookupDescriptor{
+			descriptor:      desc,
+			preflightDenied: run.preflightDenied(desc.GVR().String()),
+		}
+	}
+	return descriptors
+}
+
 // completeResources are the resources this sync listed completely: collected
 // without an incomplete read. A scoped denial is checked before completeness.
 func (run *catalogSync) completeResources() map[string]struct{} {
@@ -968,12 +980,14 @@ func (run *catalogSync) publish(descriptors []Descriptor, collectErr error) {
 	s := run.service
 	s.pruneMissing(run.newLastSeen)
 	complete := run.completeResources()
+	lookupDescriptors := run.lookupDescriptors()
 	// Collection owns these maps until the complete replacement is ready. Swap
 	// rows, identities, list outcome and query state together under the
 	// reader's lock.
 	s.mu.Lock()
 	s.items, s.lastSeen = run.newItems, run.newLastSeen
 	s.catalogIndex.replaceResources(run.allowedSet)
+	s.catalogIndex.lookupDescriptors = lookupDescriptors
 	s.catalogIndex.completeResources = complete
 	s.catalogIndex.completeNamespaces = run.completedScopes
 	s.catalogIndex.deniedNamespaces = run.deniedNamespaces

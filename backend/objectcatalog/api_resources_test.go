@@ -412,6 +412,44 @@ func TestAPIResourcesFlagKindsDefinedByCRDs(t *testing.T) {
 	}))
 }
 
+func TestAPIResourcesWaitsForDiscoveryBeforeLinkingAReplacementDefinition(t *testing.T) {
+	svc := newTestWatchService()
+	source := multiVersionDiscovery()
+	svc.discoveryClient = source
+	_, err := svc.discoverResources(t.Context())
+	require.NoError(t, err)
+
+	hook := newCRDDiscoveryHook(newWatchNotifier(svc))
+	original := establishedWidgetDefinition()
+	original.Spec.Group = "example.io"
+	original.UID = "original"
+	hook.UpsertBundle(crdBundle(original))
+	require.Equal(t, "original", apiResourceByName(t, svc.APIResources().Resources, "example.io", "widgets").DefinitionUID)
+	hook.DeleteBundle(crdBundle(original))
+
+	replacement := original.DeepCopy()
+	replacement.UID = "replacement"
+	replacement.Spec.Names.Kind = "ReplacementWidget"
+	replacement.Status.AcceptedNames.Kind = "ReplacementWidget"
+	hook.UpsertBundle(crdBundle(replacement))
+	stale := apiResourceByName(t, svc.APIResources().Resources, "example.io", "widgets")
+	require.True(t, stale.Custom)
+	require.False(t, stale.DefinitionPresent)
+
+	for _, list := range source.lists {
+		for i, resource := range list.APIResources {
+			if resource.Name == "widgets" {
+				list.APIResources[i].Kind = "ReplacementWidget"
+			}
+		}
+	}
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	current := apiResourceByName(t, svc.APIResources().Resources, "example.io", "widgets")
+	require.Equal(t, "ReplacementWidget", current.Kind)
+	require.Equal(t, "replacement", current.DefinitionUID)
+}
+
 // A relist updates the CRD set, while discovery confirms removals.
 func TestAPIResourcesFollowARelistedCRDSet(t *testing.T) {
 	svc := newTestWatchService()
@@ -814,20 +852,40 @@ func TestBrowseKeepsLastKnownObjectsThroughPartialDiscovery(t *testing.T) {
 	require.Error(t, svc.sync(t.Context()))
 	require.Equal(t, HealthStateDegraded, svc.Health().Status)
 	require.Equal(t, before.Items, svc.Query(QueryOptions{Kinds: []string{"Widget"}}).Items)
-	require.True(t, svc.LookupObject("default", widget.Group, "Widget", "saved").Found)
+	retained := svc.LookupObject("default", widget.Group, "Widget", "saved")
+	require.True(t, retained.Found)
+	require.False(t, retained.Confirmed)
 	require.False(t, svc.LookupObject("default", widget.Group, "Widget", "missing").Absent)
 
 	// An explicit authorization denial still takes effect during the outage.
 	allow = false
 	require.Error(t, svc.sync(t.Context()))
 	require.Empty(t, svc.Query(QueryOptions{Kinds: []string{"Widget"}}).Items)
+	require.Equal(t, widget.GroupResource().String(), svc.LookupObject("default", widget.Group, "Widget", "saved").Denied)
 
 	allow = true
 	source.err = nil
 	source.lists = []*metav1.APIResourceList{core, widgets}
 	require.NoError(t, svc.sync(t.Context()))
 	require.Len(t, svc.Query(QueryOptions{Kinds: []string{"Widget"}}).Items, 1)
+	require.True(t, svc.LookupObject("default", widget.Group, "Widget", "saved").Confirmed)
 
+	failure, cancelFailure := svc.SubscribeStreaming()
+	defer cancelFailure()
+	<-failure
+	source.err = errors.New("discovery unavailable")
+	require.Error(t, svc.sync(t.Context()))
+	require.ErrorIs(t, svc.APIResources().DiscoveryFailure, source.err)
+	known := svc.LookupObject("default", widget.Group, "Widget", "saved")
+	require.True(t, known.Found)
+	require.False(t, known.Confirmed)
+	select {
+	case update := <-failure:
+		require.False(t, update.Ready, "a failed discovery must notify Browse of lost coverage")
+	default:
+		t.Fatal("expected a catalog update after discovery failed")
+	}
+	source.err = nil
 	source.lists = []*metav1.APIResourceList{core}
 	updates, cancel := svc.SubscribeStreaming()
 	defer cancel()
@@ -843,6 +901,75 @@ func TestBrowseKeepsLastKnownObjectsThroughPartialDiscovery(t *testing.T) {
 	}
 }
 
+func TestBrowseWorkloadActionsFollowPublishedHPACoverageAndWatchChanges(t *testing.T) {
+	deployment := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
+	hpa := schema.GroupVersionResource{Group: "autoscaling", Version: "v2", Resource: "horizontalpodautoscalers"}
+	const namespace = "apps"
+	workload := &unstructured.Unstructured{}
+	workload.SetGroupVersionKind(deployment.GroupVersion().WithKind("Deployment"))
+	workload.SetNamespace(namespace)
+	workload.SetName("web")
+	workload.SetUID("web")
+	autoscaler := &unstructured.Unstructured{Object: map[string]any{
+		"spec": map[string]any{"scaleTargetRef": map[string]any{
+			"apiVersion": "apps/v1", "kind": "Deployment", "name": "web",
+		}},
+	}}
+	autoscaler.SetGroupVersionKind(hpa.GroupVersion().WithKind("HorizontalPodAutoscaler"))
+	autoscaler.SetNamespace(namespace)
+	autoscaler.SetName("web")
+	autoscaler.SetUID("web-hpa")
+	dynamic := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
+		runtime.NewScheme(), map[schema.GroupVersionResource]string{deployment: "DeploymentList", hpa: "HorizontalPodAutoscalerList"},
+		workload,
+	)
+	kube := kubefake.NewClientset()
+	hpaDenied := true
+	dynamic.PrependReactor("list", hpa.Resource, func(action clienttesting.Action) (bool, runtime.Object, error) {
+		if hpaDenied && action.GetNamespace() == namespace {
+			return true, nil, apierrors.NewForbidden(hpa.GroupResource(), "", errors.New("grant withdrawn"))
+		}
+		return false, nil, nil
+	})
+	svc := NewService(Dependencies{
+		ClusterID: "c1", AllowedNamespaces: []string{namespace, "another"},
+		Common: common.Dependencies{KubernetesClient: kube, DynamicClient: dynamic},
+	}, nil)
+	svc.discoveryClient = &stubDiscovery{lists: []*metav1.APIResourceList{
+		{GroupVersion: deployment.GroupVersion().String(), APIResources: []metav1.APIResource{
+			{Name: deployment.Resource, Kind: "Deployment", Namespaced: true, Verbs: []string{"list"}},
+		}},
+		{GroupVersion: hpa.GroupVersion().String(), APIResources: []metav1.APIResource{
+			{Name: hpa.Resource, Kind: "HorizontalPodAutoscaler", Namespaced: true, Verbs: []string{"list"}},
+		}},
+	}}
+	browseWorkload := func() Summary {
+		items := svc.Query(QueryOptions{Kinds: []string{"Deployment"}}).Items
+		require.Len(t, items, 1)
+		return items[0]
+	}
+	require.NoError(t, svc.sync(t.Context()))
+	unknown := browseWorkload()
+	require.True(t, unknown.ActionFacts == nil || unknown.ActionFacts.HPAManaged == nil)
+
+	hpaDenied = false
+	require.NoError(t, svc.sync(t.Context()))
+	unmanaged := browseWorkload()
+	require.NotNil(t, unmanaged.ActionFacts.HPAManaged)
+	require.False(t, *unmanaged.ActionFacts.HPAManaged)
+
+	desc := Descriptor{Group: hpa.Group, Version: hpa.Version, Resource: hpa.Resource, Kind: "HorizontalPodAutoscaler", Namespaced: true, Scope: ScopeNamespace}
+	row := summaryFromObject("c1", desc, autoscaler)
+	svc.applyIngestCatalogSummary(hpa, row, false)
+	managed := browseWorkload()
+	require.NotNil(t, managed.ActionFacts.HPAManaged)
+	require.True(t, *managed.ActionFacts.HPAManaged)
+	require.False(t, *unmanaged.ActionFacts.HPAManaged, "a published result must not change with a later watch update")
+	svc.applyIngestCatalogSummary(hpa, row, true)
+	require.False(t, *browseWorkload().ActionFacts.HPAManaged)
+	require.True(t, *managed.ActionFacts.HPAManaged)
+}
+
 func TestPartialDiscoveryDropsDeniedNamespaceFromBrowse(t *testing.T) {
 	widget := widgetDesc()
 	reads := []*metav1.APIResourceList{
@@ -854,8 +981,13 @@ func TestPartialDiscoveryDropsDeniedNamespaceFromBrowse(t *testing.T) {
 	source := &groupedDiscovery{groups: groupsForLists(reads), lists: reads}
 	kube := kubefake.NewClientset()
 	revoked := false
+	reviewUnavailable := false
 	kube.PrependReactor("create", "selfsubjectaccessreviews", func(action clienttesting.Action) (bool, runtime.Object, error) {
 		review := action.(clienttesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
+		if reviewUnavailable && review.Spec.ResourceAttributes.Namespace == "visible" {
+			review.Status.EvaluationError = "permission endpoint unavailable"
+			return true, review, nil
+		}
 		review.Status.Allowed = !revoked || review.Spec.ResourceAttributes.Namespace != "revoked"
 		review.Status.Denied = !review.Status.Allowed
 		return true, review, nil
@@ -883,6 +1015,16 @@ func TestPartialDiscoveryDropsDeniedNamespaceFromBrowse(t *testing.T) {
 	require.Equal(t, []Summary{visible}, svc.Query(QueryOptions{}).Items)
 	require.Equal(t, "widgets.example.com", svc.LookupObject("revoked", widget.Group, widget.Kind, "old").Denied)
 
+	source.lists, source.err = reads, nil
+	reviewUnavailable = true
+	require.ErrorAs(t, svc.sync(t.Context()), new(*PartialSyncError))
+	require.Equal(t, []Summary{visible}, svc.Query(QueryOptions{}).Items)
+	held := svc.LookupObject("visible", widget.Group, widget.Kind, "keep")
+	require.True(t, held.Found)
+	require.False(t, held.Confirmed)
+	require.Equal(t, "widgets.example.com", svc.LookupObject("revoked", widget.Group, widget.Kind, "old").Denied)
+
+	reviewUnavailable = false
 	revoked = false
 	source.lists, source.err = reads, nil
 	require.NoError(t, svc.sync(t.Context()))

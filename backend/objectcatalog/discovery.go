@@ -27,6 +27,12 @@ func (s *Service) discoverResources(ctx context.Context) (discoveryResult, error
 		// A cancelled run (the cluster is disconnecting) says nothing about the
 		// cluster's API; any other failure leaves the inventory out of date.
 		if ctx.Err() == nil {
+			// Keep the rows but withdraw their coverage before notifying readers
+			// that discovery failed.
+			s.mu.Lock()
+			s.catalogIndex.completeResources = nil
+			s.catalogIndex.completeNamespaces = nil
+			s.mu.Unlock()
 			s.apiResources.failed(err)
 		}
 		return discoveryResult{}, err
@@ -133,10 +139,10 @@ func discoverFromClient(ctx context.Context, discoveryClient discovery.Discovery
 		return discoveryResult{}, errors.New("discovery client not available")
 	}
 
-	// A partial failure (some groups unreachable) still returns the reachable
-	// groups' lists alongside the error; only a discovery with no lists fails.
+	// A partial failure identifies the unreachable groups and returns lists for
+	// reachable ones. An unscoped error cannot establish which lists to trust.
 	groups, resourceLists, err := discoveryClient.ServerGroupsAndResources()
-	if err != nil && len(resourceLists) == 0 {
+	if _, partial := discovery.GroupDiscoveryFailedErrorGroups(err); err != nil && (!partial || len(resourceLists) == 0) {
 		return discoveryResult{}, err
 	}
 

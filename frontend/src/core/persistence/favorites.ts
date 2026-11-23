@@ -157,7 +157,7 @@ const migrateRetiredViewFavorite = (favorite: Favorite): Favorite => {
       kinds: ALL_MULTISELECT_FILTER,
       namespaces: ALL_MULTISELECT_FILTER,
       clusters: ALL_MULTISELECT_FILTER,
-      includeMetadata: false,
+      includeMetadata: favorite.filters.includeMetadata,
       // The API Resources Type filter's value for kinds a CRD defines.
       queryFacets: { types: { mode: 'some', values: ['Custom'] } },
     },

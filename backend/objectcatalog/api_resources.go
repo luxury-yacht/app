@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,9 +31,12 @@ type APIResource struct {
 	Categories []string `json:"categories,omitempty"`
 	// Custom retains the type of a CRD-backed kind until discovery removes it.
 	Custom bool `json:"custom"`
-	// DefinitionPresent reports whether the current CRD source can still see
-	// that definition. Only a present definition can be opened as an object.
-	DefinitionPresent bool `json:"definitionPresent"`
+	// DefinitionPresent reports whether the current CRD defines the kind and
+	// scope this row describes, so the row can open it as an object.
+	DefinitionPresent  bool                                 `json:"definitionPresent"`
+	DefinitionUID      string                               `json:"-"`
+	DefinitionSearch   []string                             `json:"-"`
+	DefinitionMetadata *resourcemodel.ResourceTableMetadata `json:"-"`
 }
 
 // buildAPIResources folds a groups-and-resources discovery document into one
@@ -328,10 +332,18 @@ func withCustomResources(resources []APIResource, current, atDiscoveryStart crdD
 	classified := make([]APIResource, len(resources))
 	for i, resource := range resources {
 		key := resource.groupResource()
-		_, defined := current[key]
+		definition, defined := current[key]
 		_, definedAtStart := atDiscoveryStart[key]
 		resource.Custom = defined || definedAtStart || (retainPublished && resource.Custom)
-		resource.DefinitionPresent = defined
+		// A same-name replacement can declare a different kind before discovery
+		// stops advertising the old API. Keep the old row without linking it.
+		resource.DefinitionPresent = defined && (definition == nil || matchesDiscoveryKind(*definition, resource))
+		resource.DefinitionUID, resource.DefinitionSearch, resource.DefinitionMetadata = "", nil, nil
+		if resource.DefinitionPresent && definition != nil {
+			resource.DefinitionUID = string(definition.UID)
+			resource.DefinitionSearch = definition.VersionSearchTerms()
+			resource.DefinitionMetadata = definition.Metadata
+		}
 		classified[i] = resource
 	}
 	return classified
@@ -460,7 +472,13 @@ func listedCustomResources(rows []Summary) crdDefinitions {
 		plural, group, ok := strings.Cut(row.Ref.Name, ".")
 		if ok && plural != "" && group != "" {
 			key := schema.GroupResource{Group: group, Resource: plural}
-			custom[key] = row.crdDefinition
+			var definition *apiextensions.Definition
+			if row.crdDefinition != nil {
+				value := *row.crdDefinition
+				value.Metadata = row.Metadata
+				definition = &value
+			}
+			custom[key] = definition
 		}
 	}
 	return custom

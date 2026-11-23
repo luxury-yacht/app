@@ -3,6 +3,7 @@ package apiextensions
 import (
 	"slices"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -20,9 +21,22 @@ type Definition struct {
 	Names         apiextensionsv1.CustomResourceDefinitionNames
 	AcceptedNames apiextensionsv1.CustomResourceDefinitionNames
 	Versions      []DefinitionVersion
+	Metadata      *resourcemodel.ResourceTableMetadata
 	// Established reports the Established condition: the API is being served.
 	Established bool
 	Terminating bool
+}
+
+// VersionSearchTerms keeps the legacy CRD table's version summary (including a
+// storage version that is no longer served) searchable in API Resources.
+func (d Definition) VersionSearchTerms() []string {
+	versions := make([]VersionFacts, 0, len(d.Versions))
+	terms := make([]string, 0, len(d.Versions)+1)
+	for _, version := range d.Versions {
+		terms = append(terms, version.Name)
+		versions = append(versions, VersionFacts{Name: version.Name, Served: version.Served, Storage: version.Storage})
+	}
+	return append(terms, CustomResourceDefinitionVersionDetails(Facts{Versions: versions}))
 }
 
 // DefinitionVersion is one version a definition declares.

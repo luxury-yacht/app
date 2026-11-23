@@ -30,6 +30,8 @@ func seedAnchorService(t *testing.T, n int) *Service {
 		svc.items[catalogKey(podDesc, "default", name)] = Summary{Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: name, UID: fmt.Sprintf("uid-%03d", i)}, Scope: ScopeNamespace}
 	}
 	svc.resources = map[string]Descriptor{podDesc.GVR().String(): podDesc}
+	svc.completeResources = map[string]struct{}{podDesc.GVR().String(): {}}
+	svc.catalogIndex.rebuildCacheFromItems(svc.items, []Descriptor{podDesc})
 	svc.mu.Unlock()
 	return svc
 }
@@ -103,6 +105,18 @@ func TestCatalogQueryAnchorUIDMismatchIsNotFound(t *testing.T) {
 	})
 	if result.AnchorOutcome == nil || !result.AnchorOutcome.Found || result.AnchorOutcome.Rank != 3 {
 		t.Fatalf("uid-less anchor outcome = %+v, want found rank 3", result.AnchorOutcome)
+	}
+}
+
+func TestCatalogQueryDoesNotLandOnAnUnverifiedUID(t *testing.T) {
+	svc := seedAnchorService(t, 10)
+	svc.completeResources = nil
+	result := svc.Query(QueryOptions{
+		Limit:  5,
+		Anchor: &QueryAnchor{Version: "v1", Kind: "Pod", Namespace: "default", Name: "pod-003", UID: "uid-003"},
+	})
+	if result.AnchorOutcome == nil || result.AnchorOutcome.Found || !result.AnchorUnavailable {
+		t.Fatalf("an unverified row must not confirm the UID, got %+v", result.AnchorOutcome)
 	}
 }
 

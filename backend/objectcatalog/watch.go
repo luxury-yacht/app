@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"sync"
 	"time"
 
@@ -165,14 +166,14 @@ func newCRDDiscoveryHook(notifier *watchNotifier) *crdDiscoveryHook {
 }
 
 func (h *crdDiscoveryHook) UpsertBundle(bundle ingest.Bundle) {
-	definition, ok := bundle.Aggregate.(apiextensions.Definition)
+	definition, ok := definitionFromBundle(bundle)
 	if !ok {
 		return
 	}
 	previous, seen := h.seen[definition.UID]
 	h.seen[definition.UID] = definition
 	changed := seen && previous.ChangesDiscovery(definition)
-	if !seen || changed {
+	if !seen || !reflect.DeepEqual(previous, definition) {
 		h.publishCustomResources(false)
 	}
 	switch {
@@ -181,6 +182,14 @@ func (h *crdDiscoveryHook) UpsertBundle(bundle ingest.Bundle) {
 	case changed:
 		h.notifier.crdDiscoveryChanged()
 	}
+}
+
+func definitionFromBundle(bundle ingest.Bundle) (apiextensions.Definition, bool) {
+	definition, ok := bundle.Aggregate.(apiextensions.Definition)
+	if summary, ok := bundle.Catalog.(Summary); ok {
+		definition.Metadata = summary.Metadata
+	}
+	return definition, ok
 }
 
 func (h *crdDiscoveryHook) DeleteBundle(bundle ingest.Bundle) {
@@ -213,7 +222,7 @@ func (h *crdDiscoveryHook) publishCustomResources(listed bool) {
 func (h *crdDiscoveryHook) ReplaceBundles(bundles []ingest.Bundle) {
 	next := make(map[types.UID]apiextensions.Definition, len(bundles))
 	for _, bundle := range bundles {
-		if definition, ok := bundle.Aggregate.(apiextensions.Definition); ok {
+		if definition, ok := definitionFromBundle(bundle); ok {
 			next[definition.UID] = definition
 		}
 	}

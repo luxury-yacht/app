@@ -115,6 +115,7 @@ func TestExplainKindRejectsIncompleteKindIdentity(t *testing.T) {
 	for name, change := range map[string]func(*resourcemodel.ResourceRef){
 		"no version":  func(ref *resourcemodel.ResourceRef) { ref.Version = "" },
 		"no resource": func(ref *resourcemodel.ResourceRef) { ref.Resource = "" },
+		"no kind":     func(ref *resourcemodel.ResourceRef) { ref.Kind = "" },
 	} {
 		t.Run(name, func(t *testing.T) {
 			target := deploymentKindRef
@@ -125,6 +126,22 @@ func TestExplainKindRejectsIncompleteKindIdentity(t *testing.T) {
 			require.Equal(t, errorstatus.ReasonBadRequest, errorstatus.Classify(err).Reason)
 		})
 	}
+}
+
+func TestExplainKindRejectsAReplacementKindAtTheSameResourcePath(t *testing.T) {
+	fixture := explainGatewayFixture()
+	target := deploymentKindRef
+	target.Kind = "RetiredDeployment"
+
+	explanation, err := fixture.gateway.ExplainKindSchema(target)
+	require.Equal(t, errorstatus.ReasonConflict, errorstatus.Classify(err).Reason)
+	require.Nil(t, explanation)
+
+	current, err := fixture.gateway.ExplainKindSchema(deploymentKindRef)
+	require.NoError(t, err)
+	field, err := fixture.gateway.ExplainKindField(target, []string{"spec"}, current.Revision)
+	require.Equal(t, errorstatus.ReasonConflict, errorstatus.Classify(err).Reason)
+	require.Nil(t, field)
 }
 
 // A kind whose group publishes no schema is an answer, not a failure.

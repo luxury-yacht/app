@@ -119,6 +119,12 @@ and the catalog does not subscribe to their rows.
   its partition, including when it returns no rows. A 403 discards all pages
   from that partition and blocks updates from an earlier watch until a fresh
   LIST succeeds. Dynamic sources do not gate global ingest readiness.
+- Lookup retains the last-known row for display and reports a separate
+  confirmation from the latest scope read. A preflight denial stays available
+  to lookup even when the kind is excluded from collection. A denial in one
+  namespace leaves a sibling namespace's failed review unresolved. Browse
+  derives HPA ownership from the published coverage and autoscaler targets in
+  the workload's namespace.
 - A namespace without WATCH can still contribute LIST-authorized rows; ingest
   partition readiness includes permission-skipped namespaces with no reflector.
   Unavailable watches surface as query issues and snapshot warnings (Browse,
@@ -255,11 +261,14 @@ collects (Events, kinds that cannot be listed, the metrics API).
   to that row, so "show in list" lands on it whether or not the classification
   has arrived. A definition whose kind the cluster does not serve (not
   Established) has no row. The domain checks the exact object through
-  `Service.LookupObject`, the catalog publication Browse reads. A supplied UID
-  must match before a row can be focused or reported filtered, even when
-  already on screen. The result is `unlisted` for a matching object with no
-  kind row and `not-found` for confirmed absence or a different UID. A pending
-  or denied catalog lookup yields `unavailable` when identity must be verified.
+  `Service.LookupObject`, the catalog publication Browse reads. Navigation
+  checks the catalog even when the name already appears on screen. When a UID
+  is supplied it must match a confirmed definition. A confirmed definition
+  without a row linked to that UID yields `unlisted`, including when discovery
+  still shows the kind from a previous definition. Confirmed absence or a
+  different UID yields `not-found`. A pending or denied lookup yields
+  `unavailable` when identity must be verified, including when an unread
+  partition retains an older row.
   Anchor queries bypass the snapshot cache so a retry sees the current catalog
   even when discovery has not changed.
 - On `unlisted`, API Resources hands the current request to Browse. Browse
@@ -269,6 +278,10 @@ collects (Events, kinds that cannot be listed, the metrics API).
   view, including during table startup. Leaving Browse also cancels its
   pending filter handoff. API Resources reports
   `not-found`, `filtered`, or `unavailable` for its own anchor.
+- API Resources search includes API scope and versions. For a visible CRD,
+  migration from the CRDs table also preserves searches on the definition's
+  version summary and optional metadata, even when the storage version
+  differs from the preferred served version.
 - `kubectl explain` output for a kind comes from
   `backend/resources/apiresources`, read from the cluster's OpenAPI v3
   documents on demand (`ResourceGateway.ExplainKindSchema`,

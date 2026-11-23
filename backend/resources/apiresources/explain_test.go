@@ -136,6 +136,24 @@ func TestExplainKeepsFetchFailuresDistinctFromMissingSchemas(t *testing.T) {
 	require.NotEqual(t, errorstatus.ReasonNotFound, errorstatus.Classify(err).Reason)
 }
 
+func TestExplainRejectsDocumentsTheRendererCannotInterpret(t *testing.T) {
+	client := fetchedDocument{path: "apis/example.io/v1", document: []byte(`[]`)}
+	_, err := ExplainSchema(client, widgetsGVR)
+	require.Error(t, err)
+	require.NotEqual(t, errorstatus.ReasonNotFound, errorstatus.Classify(err).Reason)
+}
+
+func TestExplainKeepsIndentationInSchemaDescriptions(t *testing.T) {
+	client := fetchedDocument{
+		path: "apis/example.io/v1",
+		document: []byte(strings.Replace(widgetDocument,
+			`Widget is a test kind.`, `Widget is a test kind.\n\n    apiVersion: example.io/v1\n    kind: Widget`, 1)),
+	}
+	result, err := ExplainSchema(client, widgetsGVR)
+	require.NoError(t, err)
+	require.Contains(t, result.Description, "\n    apiVersion: example.io/v1\n    kind: Widget")
+}
+
 // widgetDocument is a minimal OpenAPI v3 document for example.io/v1 widgets
 // with the two shapes client-go's embedded documents lack: an enum field and a
 // schema that refers to itself.
@@ -228,7 +246,11 @@ func explainCurrentField(t *testing.T, client openapi.Client, gvr schema.GroupVe
 	t.Helper()
 	document, err := loadExplainDocument(client, gvr)
 	require.NoError(t, err)
-	return ExplainField(client, gvr, path, document.revision())
+	kind := "Widget"
+	if gvr == deploymentsGVR {
+		kind = "Deployment"
+	}
+	return ExplainField(client, gvr, kind, path, document.revision())
 }
 
 func TestExplainFieldRequiresTheTreesSchemaRevision(t *testing.T) {
@@ -238,18 +260,18 @@ func TestExplainFieldRequiresTheTreesSchemaRevision(t *testing.T) {
 		path:     "apis/example.io/v1",
 		document: []byte(strings.Replace(widgetDocument, `"mode":`, `"speed":`, 1)),
 	}
-	field, err := ExplainField(updated, widgetsGVR, []string{"mode"}, old.Revision)
+	field, err := ExplainField(updated, widgetsGVR, "Widget", []string{"mode"}, old.Revision)
 	require.Nil(t, field)
 	require.Equal(t, errorstatus.ReasonConflict, errorstatus.Classify(err).Reason)
-	_, err = ExplainField(fetchedDocument{}, widgetsGVR, []string{"mode"}, old.Revision)
+	_, err = ExplainField(fetchedDocument{}, widgetsGVR, "Widget", []string{"mode"}, old.Revision)
 	require.Equal(t, errorstatus.ReasonConflict, errorstatus.Classify(err).Reason)
-	_, err = ExplainField(updated, widgetsGVR, []string{"speed"}, "")
+	_, err = ExplainField(updated, widgetsGVR, "Widget", []string{"speed"}, "")
 	require.Equal(t, errorstatus.ReasonBadRequest, errorstatus.Classify(err).Reason)
 
 	current, err := ExplainSchema(updated, widgetsGVR)
 	require.NoError(t, err)
 	require.NotEqual(t, old.Revision, current.Revision)
-	field, err = ExplainField(updated, widgetsGVR, []string{"speed"}, current.Revision)
+	field, err = ExplainField(updated, widgetsGVR, "Widget", []string{"speed"}, current.Revision)
 	require.NoError(t, err)
 	require.Equal(t, "How fast the widget runs.", field.Description)
 }

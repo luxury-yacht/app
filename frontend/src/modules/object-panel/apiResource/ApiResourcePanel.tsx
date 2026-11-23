@@ -9,17 +9,17 @@ import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import { DockablePanel, type DockPosition, useDockablePanelContext } from '@ui/dockable';
 import { getGroupForPanel, getGroupTabs } from '@ui/dockable/tabGroupState';
 import type { GroupKey } from '@ui/dockable/tabGroupTypes';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import type { KindReadTarget } from '@/core/data-access';
 import { PanelLifecycleClusterSurface } from '@/core/panel-windows/panelLifecycleGuards';
 import type { RefreshFailure } from '@/core/refresh/refreshFailure';
 import type { ClusterAPIResourceEntry } from '@/core/refresh/types';
 import { getPreference } from '@/core/settings/appPreferences';
 import { TABS } from '../components/ObjectPanel/constants';
-import ExplainTab from '../components/ObjectPanel/Explain/ExplainTab';
 import { ObjectPanelHeader } from '../components/ObjectPanel/ObjectPanelHeader';
 import { ObjectPanelTabs } from '../components/ObjectPanel/ObjectPanelTabs';
 import { resolveObjectPanelOpenTarget } from '../components/ObjectPanel/objectPanelOpenTarget';
+import { PanelTabBoundary } from '../components/ObjectPanel/PanelTabBoundary';
 import type { ViewType } from '../components/ObjectPanel/types';
 import { useObjectPanelActiveTab, useObjectPanelState } from '../contexts/ObjectPanelStateContext';
 import { type ApiResourcePanelRef, isApiResourcePanelView } from '../panelTarget';
@@ -34,6 +34,7 @@ import '../components/ObjectPanel/ObjectPanel.css';
 import '../components/ObjectPanel/Details/DetailsTab.css';
 
 const tabs = [TABS.DETAILS, TABS.EXPLAIN];
+const ExplainTab = lazy(() => import('../components/ObjectPanel/Explain/ExplainTab'));
 
 /** What an answer with no row for the kind means. */
 const kindAbsence = (answered: boolean, groupUnread: boolean): KindAbsence => {
@@ -110,7 +111,14 @@ function ApiResourcePanelContent({
     return <ApiResourceUnavailable absence={absence} error={error} />;
   }
   return activeTab === 'explain' ? (
-    <ExplainTab kind={explainTarget} isActive={enabled} />
+    <PanelTabBoundary
+      scope="api-resource-explain"
+      resetKeys={[explainTarget.clusterId, explainTarget.version, explainTarget.kind]}
+      tabName="Explain"
+      loadingName="schema"
+    >
+      <ExplainTab kind={explainTarget} isActive={enabled} />
+    </PanelTabBoundary>
   ) : (
     <ApiResourceDetails details={details} />
   );

@@ -349,6 +349,7 @@ func catalogEngineNamespaceFilterValues(namespaces []string) []string {
 // row selection, totals, and facet reads.
 func (s *Service) queryViaEngine(opts QueryOptions) (QueryResult, bool) {
 	s.mu.RLock()
+	defer s.mu.RUnlock()
 	store := s.catalogIndex.queryEngineStore
 	descriptors := append([]Descriptor(nil), s.catalogIndex.cachedDescriptors...)
 	cachedKinds := append([]KindInfo(nil), s.catalogIndex.cachedKinds...)
@@ -358,10 +359,8 @@ func (s *Service) queryViaEngine(opts QueryOptions) (QueryResult, bool) {
 	// reset). queryViaEngineFromSnapshot serves that case on the same engine from the
 	// items-map snapshot, so the catalog has ONE query implementation.
 	if store == nil || store.Len() == 0 {
-		s.mu.RUnlock()
 		return s.queryViaEngineFromSnapshot(opts, descriptors)
 	}
-	defer s.mu.RUnlock()
 	// Maintained-store path: facets resolve from the publish-time cached kinds/namespaces
 	// lists (catalogEngineFacets).
 	rows := store.Snapshot()
@@ -377,9 +376,9 @@ func (s *Service) queryViaEngine(opts QueryOptions) (QueryResult, bool) {
 // match sets the maintained-store path uses — a deliberate, distinct facet contract for
 // the snapshot path (see catalogEngineSnapshotFacets).
 func (s *Service) queryViaEngineFromSnapshot(opts QueryOptions, descriptors []Descriptor) (QueryResult, bool) {
-	rows := s.Snapshot()
+	rows := s.catalogIndex.snapshot()
 	if len(descriptors) == 0 {
-		descriptors = s.Descriptors()
+		descriptors = s.catalogIndex.descriptors()
 	}
 	store := catalogQueryStoreFromRows(rows)
 	resolveFacets := func(metadataExact bool) ([]KindInfo, []string) {
@@ -421,7 +420,8 @@ func (s *Service) queryViaEngineWithStore(
 		Filters:   filters,
 		MatchNone: opts.MatchNone,
 	}
-	page, anchorOutcome, err := catalogEnginePage(store, engineQuery, opts, rows)
+	anchorUnavailable := s.anchorUnavailable(opts.Anchor)
+	page, anchorOutcome, err := catalogEnginePage(store, engineQuery, opts, rows, anchorUnavailable)
 	if err != nil {
 		// The only remaining engine error is an unknown sort key; sortKey is
 		// normalized above, so this is defensive.
@@ -433,25 +433,35 @@ func (s *Service) queryViaEngineWithStore(
 	metadataExact := page.Total <= catalogQueryExactMetadataThreshold
 
 	kinds, namespaces := resolveFacets(metadataExact)
+	s.catalogIndex.enrichPageActionFacts(page.Rows, s.scopeNamespaces())
 
 	return QueryResult{
-		Items:           page.Rows,
-		ContinueToken:   page.NextCursor,
-		PreviousToken:   page.PrevCursor,
-		SelfToken:       page.SelfCursor,
-		CursorInvalid:   page.CursorInvalid,
-		TotalItems:      page.Total,
-		UnfilteredTotal: unfilteredTotal,
-		TotalIsExact:    metadataExact && unfilteredExact,
-		ResourceCount:   countMatchingDescriptorsWithOptions(descriptors, newKindMatcher(opts.Kinds), opts),
-		Kinds:           kinds,
-		Namespaces:      namespaces,
-		Groups:          groups,
-		ResourceScopes:  resourceScopes,
-		FacetsExact:     metadataExact,
-		AnchorOutcome:   anchorOutcome,
-		PageStartRank:   page.PageStartRank,
+		Items:             page.Rows,
+		ContinueToken:     page.NextCursor,
+		PreviousToken:     page.PrevCursor,
+		SelfToken:         page.SelfCursor,
+		CursorInvalid:     page.CursorInvalid,
+		TotalItems:        page.Total,
+		UnfilteredTotal:   unfilteredTotal,
+		TotalIsExact:      metadataExact && unfilteredExact,
+		ResourceCount:     countMatchingDescriptorsWithOptions(descriptors, newKindMatcher(opts.Kinds), opts),
+		Kinds:             kinds,
+		Namespaces:        namespaces,
+		Groups:            groups,
+		ResourceScopes:    resourceScopes,
+		FacetsExact:       metadataExact,
+		AnchorOutcome:     anchorOutcome,
+		AnchorUnavailable: anchorUnavailable,
+		PageStartRank:     page.PageStartRank,
 	}
+}
+
+func (s *Service) anchorUnavailable(anchor *QueryAnchor) bool {
+	if anchor == nil {
+		return false
+	}
+	desc, listed := s.catalogIndex.descriptorForGroupKind(anchor.Group, anchor.Kind)
+	return !listed || !s.catalogIndex.scopeConfirmed(desc, anchor.Namespace, s.scopeNamespaces())
 }
 
 // catalogEnginePage serves the page the options ask for: a numbered page, the
@@ -462,6 +472,7 @@ func catalogEnginePage(
 	engineQuery querypage.Query,
 	opts QueryOptions,
 	rows []Summary,
+	anchorUnavailable bool,
 ) (querypage.Page[Summary], *querypage.AnchorOutcome, error) {
 	switch {
 	case opts.StartRank != nil && opts.Anchor == nil:
@@ -476,8 +487,10 @@ func catalogEnginePage(
 		// authoritative; an unresolved key (absent, or UID identity mismatch)
 		// walks the engine's not-found path — first page + reason.
 		key := ""
-		if summary, ok := findAnchorSummary(rows, opts.Anchor); ok {
-			key = catalogEngineUID(summary)
+		if !anchorUnavailable {
+			if summary, ok := findAnchorSummary(rows, opts.Anchor); ok {
+				key = catalogEngineUID(summary)
+			}
 		}
 		page, outcome, err := store.QueryAround(engineQuery, key)
 		return page, &outcome, err

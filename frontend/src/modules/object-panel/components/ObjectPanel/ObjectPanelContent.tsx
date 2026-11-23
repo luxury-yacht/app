@@ -10,6 +10,7 @@ import type { types } from '@core/backend-api/models';
 import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
 import { definedKindOf } from '@modules/object-panel/components/ObjectPanel/Explain/definedKind';
 import type { NodeLogSource } from '@modules/object-panel/components/ObjectPanel/NodeLogs/nodeLogsApi';
+import { PanelTabBoundary } from '@modules/object-panel/components/ObjectPanel/PanelTabBoundary';
 import type {
   CapabilityReasons,
   CapabilityState,
@@ -18,7 +19,6 @@ import type {
   ViewType,
 } from '@modules/object-panel/components/ObjectPanel/types';
 import { loadObjectPanelDetails } from '@modules/object-panel/objectPanelDetailsLazyModule';
-import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { lookupKindFacets } from '@shared/kinds/kindFacets';
@@ -55,45 +55,6 @@ const PodsTab = lazy(() =>
 );
 const ShellTab = lazy(() => import('@modules/object-panel/components/ObjectPanel/Shell/ShellTab'));
 const YamlTab = lazy(() => import('@modules/object-panel/components/ObjectPanel/Yaml/YamlTab'));
-
-const createTabErrorFallback = (tabName: string) => (_error: Error, reset: () => void) => (
-  <TabErrorFallback tabName={tabName} reset={reset} />
-);
-
-// Tab implementations share recovery/loading policy while retaining their own reset keys.
-const PanelTabBoundary = ({
-  scope,
-  resetKeys,
-  tabName,
-  loadingName,
-  children,
-}: {
-  scope: string;
-  resetKeys?: string[];
-  tabName: string;
-  loadingName: string;
-  children: ReactNode;
-}) => (
-  <ErrorBoundary scope={scope} resetKeys={resetKeys} fallback={createTabErrorFallback(tabName)}>
-    <React.Suspense fallback={<LoadingSpinner message={`Loading ${loadingName}...`} />}>
-      {children}
-    </React.Suspense>
-  </ErrorBoundary>
-);
-
-const TabErrorFallback = ({ tabName, reset }: { tabName: string; reset: () => void }) => (
-  <div className="object-panel-tab-content">
-    <div className="object-panel-tab-error">
-      <h4>
-        Failed to load <ErrorSurface kind="reported" message={tabName} />
-      </h4>
-      <p>An error occurred while rendering this tab.</p>
-      <button type="button" className="button generic" onClick={reset}>
-        Retry
-      </button>
-    </div>
-  </div>
-);
 
 // Retained tabs mount on first view and then stay mounted, hidden from input and assistive tech
 // while another tab is shown, so their state survives tab switches.
@@ -262,9 +223,7 @@ const transientTabs = new Map<ViewType, React.ComponentType<ObjectPanelContentPr
         detailTabProps?.detailModel.activeDetail
       );
       if (!definedKind) {
-        return detailTabProps?.detailsLoading ? (
-          <LoadingSpinner message="Loading schema..." />
-        ) : null;
+        return <ExplainPrerequisite details={detailTabProps} />;
       }
       return (
         <PanelTabBoundary
@@ -409,6 +368,31 @@ const transientTabs = new Map<ViewType, React.ComponentType<ObjectPanelContentPr
     },
   ],
 ]);
+
+function ExplainPrerequisite({
+  details,
+}: Readonly<{ details: ObjectPanelContentProps['detailTabProps'] }>) {
+  if (details?.detailsLoading) {
+    return <LoadingSpinner message="Loading schema..." />;
+  }
+  if (details?.detailsError) {
+    return (
+      <div className="object-panel-tab-content">
+        <div className="error-message" role="alert">
+          <ErrorSurface kind="reported" message={details.detailsError} />
+        </div>
+      </div>
+    );
+  }
+  const message = details?.detailModel.activeDetail
+    ? 'This definition has no served API version to explain.'
+    : 'Custom resource definition details are unavailable.';
+  return (
+    <div className="object-panel-tab-content explain-notice">
+      <p>{message}</p>
+    </div>
+  );
+}
 
 export function ObjectPanelContent(props: Readonly<ObjectPanelContentProps>) {
   const {

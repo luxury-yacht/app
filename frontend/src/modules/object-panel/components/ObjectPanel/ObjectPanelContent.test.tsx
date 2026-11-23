@@ -537,6 +537,30 @@ describe('ObjectPanelContent', () => {
     });
   });
 
+  it('shows the details failure when Explain cannot identify the defined kind', async () => {
+    const definition = {
+      kind: 'CustomResourceDefinition',
+      group: 'apiextensions.k8s.io',
+      version: 'v1',
+      name: 'certificates.cert-manager.io',
+      clusterId: 'cluster-1',
+    };
+    const detailTabProps = requireValue(baseProps.detailTabProps, 'expected detail tab props');
+    await renderContent({
+      activeTab: 'explain',
+      objectData: definition,
+      detailTabProps: {
+        ...detailTabProps,
+        objectData: definition,
+        detailModel: buildObjectDetailModel(definition, null),
+        detailsLoading: false,
+        detailsError: 'CRD request was forbidden',
+      },
+    });
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('forbidden');
+  });
+
   it('renders pods tab when active', async () => {
     await renderContent({ activeTab: 'pods' });
     expect(hoistedRefs.podsTabProps.current).toMatchObject({

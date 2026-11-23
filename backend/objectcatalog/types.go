@@ -342,6 +342,8 @@ type QueryResult struct {
 	// carried no anchor); the snapshot layer maps it onto the wire contract's
 	// found/filtered/not-found result.
 	AnchorOutcome *querypage.AnchorOutcome
+	// AnchorUnavailable means the target partition could not verify the object.
+	AnchorUnavailable bool
 	// PageStartRank is the 0-based rank of the served page's first row among
 	// matching rows; -1 when not computed (cursor-addressed pages).
 	PageStartRank int

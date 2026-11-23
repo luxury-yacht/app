@@ -70,7 +70,7 @@ func ExplainSchema(client openapi.Client, gvr schema.GroupVersionResource) (*Kin
 
 // ExplainField returns the type and description of the field reached by
 // following fieldPath in the same schema revision as the caller's field tree.
-func ExplainField(client openapi.Client, gvr schema.GroupVersionResource, fieldPath []string, revision string) (*FieldExplanation, error) {
+func ExplainField(client openapi.Client, gvr schema.GroupVersionResource, expectedKind string, fieldPath []string, revision string) (*FieldExplanation, error) {
 	if revision == "" {
 		return nil, errorstatus.BadRequest(fmt.Errorf("schema revision is required to explain a field"))
 	}
@@ -89,6 +89,9 @@ func ExplainField(client openapi.Client, gvr schema.GroupVersionResource, fieldP
 		return nil, err
 	}
 	sections := splitExplainOutput(output)
+	if kind := sections.header["KIND"]; kind != expectedKind {
+		return nil, errorstatus.Conflict(fmt.Errorf("%s now serves kind %s instead of %s", gvr, kind, expectedKind))
+	}
 	return &FieldExplanation{
 		Path:        append([]string{}, fieldPath...),
 		Type:        sections.fieldType,
@@ -115,8 +118,8 @@ func loadExplainDocument(client openapi.Client, gvr schema.GroupVersionResource)
 	if err != nil {
 		return fetchedDocument{}, fmt.Errorf("fetch OpenAPI schema for %s: %w", gvr.GroupVersion(), err)
 	}
-	if !json.Valid(document) {
-		return fetchedDocument{}, fmt.Errorf("OpenAPI schema for %s is not valid JSON", gvr.GroupVersion())
+	if !json.Valid(document) || !bytes.HasPrefix(bytes.TrimSpace(document), []byte("{")) {
+		return fetchedDocument{}, fmt.Errorf("OpenAPI schema for %s is not a JSON object", gvr.GroupVersion())
 	}
 	return fetchedDocument{path: documentPath, document: document}, nil
 }
@@ -124,11 +127,26 @@ func loadExplainDocument(client openapi.Client, gvr schema.GroupVersionResource)
 func renderExplain(document fetchedDocument, gvr schema.GroupVersionResource, fieldPath []string, recursive bool) (string, error) {
 	var output bytes.Buffer
 	if err := explain.PrintModelDescription(fieldPath, &output, document, gvr, recursive, 0, "plaintext"); err != nil {
-		// The document is in hand and valid, so the renderer can only fail
-		// because the schema has no such kind or field.
-		return "", errorstatus.NotFound(err)
+		if missingExplainTarget(err) {
+			return "", errorstatus.NotFound(err)
+		}
+		return "", fmt.Errorf("render OpenAPI schema for %s: %w", gvr, err)
 	}
 	return output.String(), nil
+}
+
+func missingExplainTarget(err error) bool {
+	// Kubectl unwraps its template's missing-target messages but does not
+	// export their error type. Other renderer failures remain errors.
+	message := err.Error()
+	switch {
+	case strings.HasPrefix(message, "error: GVR "), strings.HasPrefix(message, "error: GVK "):
+		return strings.HasSuffix(message, " not found in OpenAPI schema")
+	case strings.HasPrefix(message, `error: field "`):
+		return strings.HasSuffix(message, `" does not exist`)
+	default:
+		return false
+	}
 }
 
 // fetchedDocument serves one already-fetched OpenAPI document to the renderer.
@@ -184,12 +202,12 @@ func splitExplainOutput(output string) explainSections {
 			continue
 		}
 		if section == sectionDescription {
-			description = append(description, strings.TrimSpace(line))
+			description = append(description, strings.TrimPrefix(line, "    "))
 			continue
 		}
 		sections.readSectionLine(section, line)
 	}
-	sections.description = strings.TrimSpace(strings.Join(description, "\n"))
+	sections.description = strings.Trim(strings.Join(description, "\n"), "\n")
 	return sections
 }
 
@@ -211,7 +229,7 @@ func (s *explainSections) readSectionLine(section, line string) {
 			s.header[match[1]] = match[2]
 		}
 	case sectionEnum:
-		if value := strings.TrimSpace(line); value != "" {
+		if value := strings.TrimPrefix(line, "    "); value != "" {
 			s.enum = append(s.enum, value)
 		}
 	case sectionFields:

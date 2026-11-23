@@ -45,6 +45,9 @@ func (s *Service) FindExactMatch(namespace, group, version, kind, name string) (
 type ObjectLookup struct {
 	Summary Summary
 	Found   bool
+	// Confirmed distinguishes a row verified by the current publication from
+	// last-known data kept for an unread partition.
+	Confirmed bool
 	// Absent is true only when the catalog has completely listed the object's
 	// resource, so not finding the object means the cluster does not have it.
 	Absent bool
@@ -63,22 +66,31 @@ func (s *Service) LookupObject(namespace, group, kind, name string) ObjectLookup
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	idx := &s.catalogIndex
-	desc, listed := idx.descriptorForGroupKind(strings.TrimSpace(group), strings.TrimSpace(kind))
-	if !listed {
-		return ObjectLookup{}
-	}
+	return s.catalogIndex.lookupObject(namespace, group, kind, name, s.scopeNamespaces())
+}
+
+func (idx *catalogIndex) lookupObject(namespace, group, kind, name string, scope []string) ObjectLookup {
+	group, kind = strings.TrimSpace(group), strings.TrimSpace(kind)
 	namespace = normalizeLookupNamespace(namespace)
+	desc, listed := idx.descriptorForGroupKind(group, kind)
+	if !listed {
+		entry, known := idx.lookupDescriptors[schema.GroupKind{Group: group, Kind: kind}]
+		if !known {
+			return ObjectLookup{}
+		}
+		desc = entry.descriptor
+		if entry.preflightDenied && (!desc.Namespaced || len(scope) == 0) {
+			return ObjectLookup{Denied: deniedResourceName(desc)}
+		}
+	}
 	if idx.listDenied(desc, namespace) {
 		return ObjectLookup{Denied: deniedResourceName(desc)}
 	}
+	confirmed := idx.scopeConfirmed(desc, namespace, scope)
 	if summary, found := idx.findExact(namespace, desc.Group, desc.Version, desc.Kind, strings.TrimSpace(name)); found {
-		return ObjectLookup{Summary: summary, Found: true}
+		return ObjectLookup{Summary: summary, Found: true, Confirmed: confirmed}
 	}
-	gvr := desc.GVR().String()
-	_, complete := idx.completeResources[gvr]
-	confirmed := complete || namespaceSetContains(idx.completeNamespaces[gvr], namespace)
-	return ObjectLookup{Absent: confirmed && idx.cachesAreReady()}
+	return ObjectLookup{Absent: confirmed}
 }
 
 // FindByUID resolves a single catalog item by UID within this cluster's

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -47,8 +48,10 @@ type ClusterAPIResourceEntry struct {
 	Categories []string `json:"categories"`
 	// Type is "Built-in" or "Custom"; empty when the identity cannot list
 	// CustomResourceDefinitions, so the two cannot be told apart.
-	Type       string                     `json:"type"`
-	Definition *resourcemodel.ResourceRef `json:"definition,omitempty"`
+	Type               string                     `json:"type"`
+	Definition         *resourcemodel.ResourceRef `json:"definition,omitempty"`
+	definitionSearch   []string
+	definitionMetadata *resourcemodel.ResourceTableMetadata
 }
 
 // ClusterAPIResourcesSnapshot is the API Resources table payload.
@@ -128,7 +131,7 @@ func (b *ClusterAPIResourcesBuilder) Build(ctx context.Context, scope string) (*
 	issues := clusterAPIResourceIssues(inventory)
 
 	adapter := clusterAPIResourcesQueryAdapter()
-	miss, allowNameMatch := definitionAnchorOutcome(source, query.Request.Anchor)
+	miss, allowNameMatch := definitionAnchorOutcome(source, query.Request.Anchor, rows)
 	if !allowNameMatch {
 		adapter.AnchorKey = nil
 	}
@@ -152,9 +155,9 @@ func (b *ClusterAPIResourcesBuilder) Build(ctx context.Context, scope string) (*
 	}, nil
 }
 
-// A kind row keys by group/resource. When navigation supplies a concrete
-// definition UID, validate that object before a name match can land or filter.
-func definitionAnchorOutcome(source APIResourceSource, anchor *ResourceQueryAnchor) (miss ResourceQueryAnchorReason, allowNameMatch bool) {
+// A kind row keys by group/resource. When the object is confirmed, the row
+// must link to that same definition before its name can land or filter.
+func definitionAnchorOutcome(source APIResourceSource, anchor *ResourceQueryAnchor, rows []ClusterAPIResourceEntry) (miss ResourceQueryAnchorReason, allowNameMatch bool) {
 	if anchor == nil {
 		return ResourceQueryAnchorNotFound, true
 	}
@@ -164,12 +167,15 @@ func definitionAnchorOutcome(source APIResourceSource, anchor *ResourceQueryAnch
 	}
 	lookup := source.LookupObject(anchor.Namespace, anchor.Group, anchor.Kind, anchor.Name)
 	switch {
-	case lookup.Found && (anchor.UID == "" || anchor.UID == lookup.Summary.Ref.UID):
-		return ResourceQueryAnchorUnlisted, true
-	case !lookup.Found && !lookup.Absent:
+	case lookup.Confirmed && (anchor.UID == "" || anchor.UID == lookup.Summary.Ref.UID):
+		linked := slices.ContainsFunc(rows, func(row ClusterAPIResourceEntry) bool {
+			return row.Definition != nil && row.Definition.Name == anchor.Name && row.Definition.UID == lookup.Summary.Ref.UID
+		})
+		return ResourceQueryAnchorUnlisted, linked
+	case !lookup.Confirmed && !lookup.Absent:
 		return ResourceQueryAnchorUnavailable, anchor.UID == ""
 	default:
-		return ResourceQueryAnchorNotFound, anchor.UID == ""
+		return ResourceQueryAnchorNotFound, false
 	}
 }
 
@@ -310,8 +316,11 @@ func newClusterAPIResourceEntry(clusterID string, resource objectcatalog.APIReso
 			Kind:      apiextensions.Identity.Kind,
 			Resource:  apiextensions.Identity.Resource,
 			Name:      apiResourceName(resource.Group, resource.Resource),
+			UID:       resource.DefinitionUID,
 		})
 		entry.Definition = &definition
+		entry.definitionSearch = resource.DefinitionSearch
+		entry.definitionMetadata = resource.DefinitionMetadata
 	default:
 		entry.Type = apiResourceTypeBuiltIn
 	}
@@ -341,7 +350,7 @@ func clusterAPIResourcesQueryCapabilities() ResourceQueryCapabilities {
 	return newTypedResourceCapabilities(
 		[]string{"kind", "name", "shortNames", "apiVersion", "scope", "type"},
 		[]string{},
-		[]string{"kind", "name", "group", "shortNames"},
+		[]string{"kind", "name", "group", "shortNames", "scope", "apiVersion", "versions"},
 		nil,
 		typedTableFacetDescriptors(adapter.Facets)...,
 	)
@@ -376,7 +385,17 @@ func clusterAPIResourcesQueryAdapter() typedTableQueryAdapter[ClusterAPIResource
 		// The fully qualified name is one element so a search for it, as kubectl
 		// prints it or as a definition is named, matches.
 		SearchText: func(row ClusterAPIResourceEntry) []string {
-			return append([]string{row.Kind, apiResourceName(row.Group, row.Resource), row.Group}, row.ShortNames...)
+			fields := []string{row.Kind, apiResourceName(row.Group, row.Resource), row.Group, row.Scope, row.APIVersion}
+			fields = append(fields, row.ShortNames...)
+			fields = append(fields, row.Versions...)
+			if row.Definition != nil {
+				fields = append(fields, apiextensions.Identity.Kind, "CRD")
+				fields = append(fields, row.definitionSearch...)
+			}
+			return fields
+		},
+		MetadataText: func(row ClusterAPIResourceEntry) []string {
+			return tableMetadataSearchText(row.definitionMetadata)
 		},
 		// The kind panel selects its one row by fully qualified resource name.
 		Predicate: func(row ClusterAPIResourceEntry, field, value string) bool {

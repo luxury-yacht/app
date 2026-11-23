@@ -147,7 +147,7 @@ describe('favorites persistence', () => {
       view: 'api-resources',
       filters: {
         search: 'cert-manager',
-        includeMetadata: false,
+        includeMetadata: true,
         queryFacets: { types: { mode: 'some', values: ['Custom'] } },
       },
       tableState: { sortColumn: '', sortDirection: 'asc', columnVisibility: {} },

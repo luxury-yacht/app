@@ -55,10 +55,8 @@ type domainRegistration struct {
 	skipRuntimePolicy bool
 	// feedIndependent marks a domain whose rows come from no object feed (the
 	// catalog service, live GETs, metrics, the maintenance store). It declares
-	// an empty readiness set, so its builds never wait on feed sync. Such a
-	// domain may still consult a feed's current state without waiting for it,
-	// and must then treat "not listed yet" as "unknown": API Resources asks the
-	// CustomResourceDefinition reflector whether it was permission-skipped.
+	// an empty readiness set, so its builds never wait on feed sync. API
+	// Resources reads CRD classification and LIST denials from the catalog.
 	feedIndependent bool
 }
 

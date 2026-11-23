@@ -27,14 +27,21 @@ import (
 // Explain across all clusters. A document can be a few megabytes.
 const explainDocumentCacheSize = 4
 
-// ExplainKindSchema returns the field tree of the kind target names. The target
-// is a kind, not an object: cluster, group, version, and plural resource.
+// ExplainKindSchema returns the field tree for the target's cluster, group,
+// version, kind, and plural resource.
 func (g *ResourceGateway) ExplainKindSchema(target resourcemodel.ResourceRef) (*apiresources.KindSchema, error) {
 	client, gvr, err := g.explainClient(target)
 	if err != nil {
 		return nil, err
 	}
-	return apiresources.ExplainSchema(client, gvr)
+	result, err := apiresources.ExplainSchema(client, gvr)
+	if err != nil {
+		return nil, err
+	}
+	if expected := strings.TrimSpace(target.Kind); result.Kind != expected {
+		return nil, errorstatus.Conflict(fmt.Errorf("%s now serves kind %s instead of %s", gvr, result.Kind, expected))
+	}
+	return result, nil
 }
 
 // ExplainKindField describes the field reached by following fieldPath, one
@@ -45,7 +52,7 @@ func (g *ResourceGateway) ExplainKindField(target resourcemodel.ResourceRef, fie
 	if err != nil {
 		return nil, err
 	}
-	return apiresources.ExplainField(client, gvr, fieldPath, revision)
+	return apiresources.ExplainField(client, gvr, strings.TrimSpace(target.Kind), fieldPath, revision)
 }
 
 // explainClient validates the kind identity and returns the cluster's OpenAPI
@@ -56,8 +63,8 @@ func (g *ResourceGateway) explainClient(target resourcemodel.ResourceRef) (opena
 		Version:  strings.TrimSpace(target.Version),
 		Resource: strings.TrimSpace(target.Resource),
 	}
-	if gvr.Version == "" || gvr.Resource == "" {
-		return nil, gvr, errorstatus.BadRequest(fmt.Errorf("version and resource are required to explain a kind"))
+	if gvr.Version == "" || gvr.Resource == "" || strings.TrimSpace(target.Kind) == "" {
+		return nil, gvr, errorstatus.BadRequest(fmt.Errorf("version, kind, and resource are required to explain a kind"))
 	}
 	deps, _, err := g.resolveClusterDependencies(target.ClusterID)
 	if err != nil {
