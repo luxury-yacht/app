@@ -1,5 +1,5 @@
 /**
- * frontend/src/modules/object-panel/components/ObjectPanel/Explain/explainDescription.test.ts
+ * frontend/src/modules/object-panel/components/ObjectPanel/Explain/explainDescriptionParser.test.ts
  *
  * Schema descriptions are plain text written for terminals and Go comments.
  * The Explain tab reflows prose to the panel, so the parser must tell a hard
@@ -11,7 +11,7 @@ import {
   type DescriptionBlock,
   parseExplainDescription,
   splitInlineText,
-} from './explainDescription';
+} from './explainDescriptionParser';
 
 // Keys only keep rendering stable; the structure is what a reader sees.
 const structure = (text: string) =>

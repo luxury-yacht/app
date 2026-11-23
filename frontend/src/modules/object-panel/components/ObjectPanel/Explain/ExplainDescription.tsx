@@ -2,7 +2,7 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Explain/ExplainDescription.tsx
  *
  * A schema description reflowed to the panel: paragraphs, lists and examples
- * from explainDescription.ts, with `code` spans and links that open in the
+ * from the description parser, with `code` spans and links that open in the
  * browser.
  */
 
@@ -12,7 +12,7 @@ import {
   type DescriptionBlock,
   parseExplainDescription,
   splitInlineText,
-} from './explainDescription';
+} from './explainDescriptionParser';
 
 export function ExplainInlineText({ text }: Readonly<{ text: string }>) {
   return (

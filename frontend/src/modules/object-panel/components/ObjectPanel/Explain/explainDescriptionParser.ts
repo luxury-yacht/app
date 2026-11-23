@@ -1,5 +1,5 @@
 /**
- * frontend/src/modules/object-panel/components/ObjectPanel/Explain/explainDescription.ts
+ * frontend/src/modules/object-panel/components/ObjectPanel/Explain/explainDescriptionParser.ts
  *
  * Reads a schema description for display. Descriptions are plain text, often
  * hard-wrapped in Go comments: a line break inside prose is a wrap, a blank
