@@ -190,10 +190,15 @@ const field = (...segments: string[]) =>
     `expected the ${segments.join(' > ')} field`
   );
 
+/** The kind's own row, the parent of its top-level fields. */
+const kindRow = () => field();
+
+// The fields listed under the kind, in tree order.
 const fieldPaths = () =>
-  Array.from(panel().querySelectorAll<HTMLButtonElement>('button[data-explain-path]')).map(
-    (button) => (JSON.parse(button.dataset.explainPath ?? '[]') as string[]).join(' > ')
-  );
+  Array.from(panel().querySelectorAll<HTMLButtonElement>('button[data-explain-path]'))
+    .map((button) => JSON.parse(button.dataset.explainPath ?? '[]') as string[])
+    .filter((path) => path.length > 0)
+    .map((path) => path.join(' > '));
 
 describe('ApiResourcePanel', () => {
   it('shows what discovery reports about the kind and offers only Details and Explain', async () => {
@@ -249,6 +254,41 @@ describe('ApiResourcePanel', () => {
     // Selecting an open field again closes it and keeps it selected.
     await click(field('spec'));
     expect(fieldPaths()).toEqual(['apiVersion', 'spec']);
+  });
+
+  it('lists the kind above its fields and describes the kind again when it is selected', async () => {
+    await start();
+    await openKindPanel();
+    await click(tab('Explain'));
+
+    expect(panel().querySelector('button[data-explain-path]')).toBe(kindRow());
+    expect(kindRow().textContent).toContain('Deployment');
+    expect(kindRow().getAttribute('aria-current')).toBe('true');
+
+    await click(field('spec'));
+    await click(field('spec', 'strategy'));
+    expect(kindRow().getAttribute('aria-current')).toBeNull();
+
+    await click(kindRow());
+    expect(kindRow().getAttribute('aria-current')).toBe('true');
+    expect(field('spec', 'strategy').getAttribute('aria-current')).toBeNull();
+    expect(panel().textContent).toContain(
+      'Deployment enables declarative updates for Pods and ReplicaSets.'
+    );
+    expect(panel().textContent).not.toContain('About spec > strategy.');
+    // The kind's description comes with its schema, and its fields stay open.
+    expect(app.backend.calls('ExplainKindField').map(([, path]) => path)).toEqual([
+      ['spec'],
+      ['spec', 'strategy'],
+    ]);
+    expect(fieldPaths()).toEqual([
+      'apiVersion',
+      'spec',
+      'spec > replicas',
+      'spec > selector',
+      'spec > strategy',
+      'spec > strategy > type',
+    ]);
   });
 
   it('does not ask the cluster again for a field it has already explained', async () => {

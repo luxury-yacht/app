@@ -67,8 +67,6 @@
   width: 100%;
   padding: 1px var(--spacing-xs);
   border: none;
-  /* Reserved for the selected field's accent bar. */
-  border-left: 2px solid transparent;
   border-radius: var(--border-radius-sm);
   background: none;
   font: inherit;
@@ -82,12 +80,8 @@
   background-color: var(--color-bg);
 }
 
-/* The selected field carries an accent bar on its border: the shared focus
-   rule owns a focused element's outline and box-shadow, and the selected field
-   is usually the focused one. */
 .explain-tree-row[aria-current="true"] {
   background-color: var(--color-bg);
-  border-left-color: var(--color-accent);
 }
 
 .explain-tree-caret {
@@ -124,4 +118,13 @@
   color: var(--color-text);
   font-size: var(--font-size-normal);
   white-space: pre-wrap;
+}
+
+/* The explanation below the tree is content to copy. App.css turns selection
+   off on every descendant, so each one opts back in. */
+.explain-selected,
+.explain-selected *,
+.explain-description {
+  user-select: text;
+  -webkit-user-select: text;
 }

@@ -12,7 +12,7 @@ import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { type ReactNode, useCallback, useState } from 'react';
 import type { KindReadTarget } from '@/core/data-access';
-import { type FieldExplanationState, fieldKey, useKindExplain } from './useKindExplain';
+import { type FieldExplanationState, fieldKey, KIND_PATH, useKindExplain } from './useKindExplain';
 import './ExplainTab.css';
 
 interface ExplainTabProps {
@@ -22,11 +22,11 @@ interface ExplainTabProps {
 }
 
 // Fields are identified by their path segments (see fieldKey): `expanded` and
-// `selectedKey` hold field keys, never dotted strings.
+// `selectedKey` hold field keys, never dotted strings. The kind is the empty path.
 interface FieldTreeState {
   expanded: ReadonlySet<string>;
-  selectedKey: string | null;
-  onSelect: (path: readonly string[], hasChildren: boolean) => void;
+  selectedKey: string;
+  onSelect: (path: readonly string[], toggles: boolean) => void;
 }
 
 interface FieldTreeProps extends FieldTreeState {
@@ -34,16 +34,47 @@ interface FieldTreeProps extends FieldTreeState {
   parentPath: readonly string[];
 }
 
-// The kind itself: the parent of its top-level fields.
-const KIND_PATH: readonly string[] = [];
-
-// The caret of a field with nested fields; a leaf field has none.
-const caretFor = (hasChildren: boolean, open: boolean) => {
-  if (!hasChildren) {
+// The caret of a row that opens and closes; any other row has none.
+const caretFor = (toggles: boolean, open: boolean) => {
+  if (!toggles) {
     return '';
   }
   return open ? '▾' : '▸';
 };
+
+/** The selectable row of the kind or one of its fields. */
+function TreeRowButton({
+  path,
+  toggles,
+  open,
+  selectedKey,
+  onSelect,
+  children,
+}: Readonly<
+  Omit<FieldTreeState, 'expanded'> & {
+    path: readonly string[];
+    toggles: boolean;
+    open: boolean;
+    children: ReactNode;
+  }
+>) {
+  const key = fieldKey(path);
+  return (
+    <button
+      type="button"
+      className="explain-tree-row"
+      data-explain-path={key}
+      aria-current={selectedKey === key ? 'true' : undefined}
+      aria-expanded={toggles ? open : undefined}
+      onClick={() => onSelect(path, toggles)}
+    >
+      <span className="explain-tree-caret" aria-hidden="true">
+        {caretFor(toggles, open)}
+      </span>
+      {children}
+    </button>
+  );
+}
 
 /** One field's row and, while it is open, the fields nested under it. */
 function FieldRow({
@@ -53,25 +84,14 @@ function FieldRow({
 }: Readonly<FieldTreeState & { field: apiresources.SchemaField; path: readonly string[] }>) {
   const children = field.fields ?? [];
   const hasChildren = children.length > 0;
-  const key = fieldKey(path);
-  const open = hasChildren && tree.expanded.has(key);
+  const open = hasChildren && tree.expanded.has(fieldKey(path));
   return (
     <li>
-      <button
-        type="button"
-        className="explain-tree-row"
-        data-explain-path={key}
-        aria-current={tree.selectedKey === key ? 'true' : undefined}
-        aria-expanded={hasChildren ? open : undefined}
-        onClick={() => tree.onSelect(path, hasChildren)}
-      >
-        <span className="explain-tree-caret" aria-hidden="true">
-          {caretFor(hasChildren, open)}
-        </span>
+      <TreeRowButton {...tree} path={path} toggles={hasChildren} open={open}>
         <span>{field.name}</span>
         <span className="explain-type">{`<${field.type}>`}</span>
         {field.required ? <span className="explain-required">required</span> : null}
-      </button>
+      </TreeRowButton>
       {open ? <FieldTree fields={children} parentPath={path} {...tree} /> : null}
     </li>
   );
@@ -132,9 +152,9 @@ export default function ExplainTab({ kind, isActive = true }: Readonly<ExplainTa
   );
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const handleSelect = useCallback(
-    (path: readonly string[], hasChildren: boolean) => {
+    (path: readonly string[], toggles: boolean) => {
       selectField(path);
-      if (!hasChildren) {
+      if (!toggles) {
         return;
       }
       const key = fieldKey(path);
@@ -184,6 +204,7 @@ export default function ExplainTab({ kind, isActive = true }: Readonly<ExplainTa
 
   const { group, version, fields, description } = schema.schema;
   const apiVersion = group ? `${group}/${version}` : version;
+  const selectedKey = fieldKey(selectedPath);
   return (
     <div className="object-panel-tab-content explain-tab">
       <div className="explain-toolbar">
@@ -195,15 +216,29 @@ export default function ExplainTab({ kind, isActive = true }: Readonly<ExplainTa
         </button>
       </div>
       <div className="explain-tree">
-        <FieldTree
-          fields={fields ?? []}
-          parentPath={KIND_PATH}
-          expanded={expanded}
-          selectedKey={selectedPath === null ? null : fieldKey(selectedPath)}
-          onSelect={handleSelect}
-        />
+        <ul className="explain-tree-list">
+          <li>
+            {/* The kind's fields are always listed: closing it would empty the tree. */}
+            <TreeRowButton
+              path={KIND_PATH}
+              toggles={false}
+              open
+              selectedKey={selectedKey}
+              onSelect={handleSelect}
+            >
+              <span>{kind.kind}</span>
+            </TreeRowButton>
+            <FieldTree
+              fields={fields ?? []}
+              parentPath={KIND_PATH}
+              expanded={expanded}
+              selectedKey={selectedKey}
+              onSelect={handleSelect}
+            />
+          </li>
+        </ul>
       </div>
-      {selectedPath === null ? (
+      {selectedPath.length === 0 ? (
         <p className="explain-description">{description}</p>
       ) : (
         <SelectedField path={selectedPath} state={selectedExplanation} />

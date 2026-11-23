@@ -35,6 +35,9 @@ export type FieldExplanationState =
  */
 export const fieldKey = (path: readonly string[]): string => JSON.stringify(path);
 
+/** The kind itself: the parent of its top-level fields. */
+export const KIND_PATH: readonly string[] = [];
+
 const kindScope = (target: KindReadTarget) =>
   `${target.clusterId}:${target.group}/${target.version}/${target.resource}/${target.kind}`;
 
@@ -46,7 +49,7 @@ export function useKindExplain(target: KindReadTarget, enabled: boolean) {
   const { clusterId, group, version, kind, resource } = target;
   const [schema, setSchema] = useState<KindSchemaState>({ status: 'loading' });
   const [schemaRefresh, setSchemaRefresh] = useState(0);
-  const [selectedPath, setSelectedPath] = useState<readonly string[] | null>(null);
+  const [selectedPath, setSelectedPath] = useState<readonly string[]>(KIND_PATH);
   // Explanations already read for this kind, keyed by fieldKey.
   const [explanations, setExplanations] = useState<Record<string, FieldExplanationState>>({});
   const requestedPaths = useRef(new Set<string>());
@@ -71,7 +74,7 @@ export function useKindExplain(target: KindReadTarget, enabled: boolean) {
     const current = ++generation.current;
     requestedPaths.current = new Set();
     setSchema({ status: 'loading' });
-    setSelectedPath(null);
+    setSelectedPath(KIND_PATH);
     setExplanations({});
     requestData({
       resource: 'kind-explain',
@@ -124,7 +127,8 @@ export function useKindExplain(target: KindReadTarget, enabled: boolean) {
       const { revision } = schema.schema;
       const key = fieldKey(path);
       setSelectedPath(path);
-      if (requestedPaths.current.has(key)) {
+      // The kind's own description comes with its schema.
+      if (path.length === 0 || requestedPaths.current.has(key)) {
         return;
       }
       requestedPaths.current.add(key);
@@ -178,8 +182,7 @@ export function useKindExplain(target: KindReadTarget, enabled: boolean) {
     schema,
     retrySchema,
     selectedPath,
-    selectedExplanation:
-      selectedPath === null ? null : (explanations[fieldKey(selectedPath)] ?? null),
+    selectedExplanation: explanations[fieldKey(selectedPath)] ?? null,
     selectField,
   };
 }
