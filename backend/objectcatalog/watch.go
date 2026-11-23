@@ -213,7 +213,12 @@ func (h *crdDiscoveryHook) publishCustomResources(listed bool) {
 	for _, definition := range h.seen {
 		custom[definitionResource(definition)] = &definition
 	}
-	h.notifier.service.apiResources.setWatchedCustomResources(custom, listed)
+	s := h.notifier.service
+	if s.apiResources.setWatchedCustomResources(custom, listed) {
+		// A first complete replay can settle Custom Resources even with zero
+		// definitions. Signal readers without waiting on a catalog lock here.
+		s.broadcastStreaming(false)
+	}
 }
 
 // ReplaceBundles diffs a complete replay or relist against the last-seen

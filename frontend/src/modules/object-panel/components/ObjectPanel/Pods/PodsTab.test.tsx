@@ -381,9 +381,8 @@ describe('PodsTab', () => {
     }
   );
 
-  it('navigates a Deployment-kind owner in a custom API group to the Custom view', async () => {
+  it('navigates a Deployment-kind owner in a custom API group to namespace Browse', async () => {
     startCluster();
-    // The namespace Custom view reads the namespace's custom resources from the catalog.
     answerReads((request) =>
       request.domain === 'catalog' ? makeCatalogSnapshotPayload(clusterFields()) : undefined
     );
@@ -405,16 +404,15 @@ describe('PodsTab', () => {
       stopListening();
     }
 
-    // Not the built-in Workloads table, which cannot list an operators.example.io
-    // Deployment: the Custom view is asked to focus the owner by its complete identity.
+    // Browse receives the owner's complete identity, including its API group.
     expect(focusRequests).toEqual([
       expect.objectContaining({
         ...customOwner('Deployment'),
         clusterId: dev.clusterId,
-        destinationViewId: 'namespace-custom',
+        destinationViewId: 'namespace-browse',
       }),
     ]);
-    expect(view.owners().viewState?.activeNamespaceTab).toBe('custom');
+    expect(view.owners().viewState?.activeNamespaceTab).toBe('browse');
     expect(view.owners().namespace.selectedNamespace).toBe('team-a');
   });
 

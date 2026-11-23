@@ -46,7 +46,9 @@ func TestCatalogFacetPathsPreserveTheirNamespaceUniverses(t *testing.T) {
 		},
 		{
 			name: "custom-only restricts both universes", exact: true,
-			opts:           QueryOptions{CustomOnly: true},
+			opts: QueryOptions{CustomOnly: true, customResources: map[string]struct{}{
+				catalogSummaryResourceIdentity(rows[2]): {},
+			}},
 			wantMaintained: []KindInfo{{Kind: "Widget", Namespaced: true}}, wantSnapshot: []KindInfo{{Kind: "Widget", Namespaced: true}},
 			wantMaintainedNS: []string{"team-c"}, wantSnapshotNS: []string{"team-c"},
 		},

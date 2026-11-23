@@ -36,6 +36,12 @@ Typed refresh rows are enrichments, not competing identity systems.
   commits, so prior rows cannot enter the destination's replay cache.
   Custom-resource hydration decorates only current membership by full identity
   and UID, keeping details through background reads and transient failures.
+- The generic Custom Resources tables join catalog objects with the cluster's
+  visible, established CRDs by served group, version, resource, kind and
+  scope. Rows, counts, filters and exports use that membership. When LIST
+  access to CRDs is denied, the table reports the missing classification and
+  Browse still shows readable objects. Dedicated family views use the
+  discovery-backed family boundary.
 
 ## Lifecycle
 

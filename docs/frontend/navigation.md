@@ -104,9 +104,8 @@ same slot.
   - its resource family's view;
   - the view whose `listDomain` (`core/navigation/viewRegistry.ts`) is the
     kind's list domain, a kind facet generated from the backend registry;
-  - Browse, for a built-in kind no view lists (such as ReplicaSets);
-  - the Custom view, for any other custom resource, even one that reuses a
-    built-in kind name.
+  - Browse, for any kind without a dedicated view, in the object's cluster
+    or namespace scope.
   A backend test checks that each list domain's table lists the kind, and a
   type check requires a view for every list domain.
 

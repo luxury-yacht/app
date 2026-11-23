@@ -40,10 +40,6 @@ import (
 )
 
 // oracleKind is one entry in the small fixed GVK vocabulary the generator draws from.
-// The built-in flag is informational only — the catalog classifies built-in vs custom
-// from its own builtin identity set (catalogQueryBuiltinKeys); these GVKs are chosen so
-// that classification is exercised (core/apps groups are built-in; example.com is not),
-// matching the vocabulary the existing pagination test relies on.
 type oracleKind struct {
 	kind     string
 	group    string
@@ -53,9 +49,7 @@ type oracleKind struct {
 }
 
 // oracleKinds is a small fixed set of valid GVKs: built-in namespaced + cluster-scoped
-// kinds and custom (CRD) namespaced + cluster-scoped kinds. Group "" and "apps" are
-// built-in (BuiltinResources); "example.com" is custom — the same split the
-// equivalence/pagination test uses, so custom-only filtering is genuinely exercised.
+// kinds and custom (CRD) namespaced + cluster-scoped kinds.
 var oracleKinds = []oracleKind{
 	{"Pod", "", "v1", "pods", ScopeNamespace},
 	{"Service", "", "v1", "services", ScopeNamespace},
@@ -166,7 +160,7 @@ func oracleFilterAndSort(universe []Summary, opts QueryOptions) []Summary {
 	kindMatcher := newKindMatcher(opts.Kinds)
 	namespaceMatcher := newNamespaceMatcher(opts.Namespaces)
 	searchMatcher := newSearchMatcher(opts.Search)
-	customMatcher := newCustomOnlyMatcher(opts.CustomOnly)
+	customMatcher := newCustomOnlyMatcher(opts)
 
 	matched := make([]Summary, 0, len(universe))
 	for _, item := range universe {
@@ -187,8 +181,8 @@ func oracleFilterAndSort(universe []Summary, opts QueryOptions) []Summary {
 // oracleUnfilteredCount is the in-scope count before the kind/namespace/search filters
 // (custom-only still honored) — the oracle for QueryResult.UnfilteredTotal
 // (catalogEngineUnfilteredTotal / unfilteredScopeTotal).
-func oracleUnfilteredCount(universe []Summary, customOnly bool) int {
-	customMatcher := newCustomOnlyMatcher(customOnly)
+func oracleUnfilteredCount(universe []Summary, opts QueryOptions) int {
+	customMatcher := newCustomOnlyMatcher(opts)
 	count := 0
 	for _, item := range universe {
 		if customMatcher(item) {
@@ -334,7 +328,7 @@ func TestCatalogQueryMatchesBruteForceOracle(t *testing.T) {
 							for i, item := range expected {
 								expectedUIDs[i] = catalogEngineUID(item)
 							}
-							wantUnfiltered := oracleUnfilteredCount(universe, false)
+							wantUnfiltered := oracleUnfilteredCount(universe, opts)
 
 							// Engine: page-walk to exhaustion.
 							gotUIDs, gotTotal, gotUnfiltered := walkEngine(t, svc, opts, label)

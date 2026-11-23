@@ -41,7 +41,7 @@ const (
 	catalogEngineFacetResourceScope  = "resourcescope"
 	catalogEngineFacetAPIGroup       = "apigroup"
 	catalogEngineFacetScopeNamespace = "scopenamespace"
-	catalogEngineFacetCustom         = "custom"
+	catalogEngineFacetResource       = "resourceidentity"
 	catalogEngineFacetFamily         = "family"
 )
 
@@ -111,14 +111,9 @@ func newCatalogQueryStoreSchema() querypage.Schema[Summary] {
 			catalogEngineFacetScopeNamespace: func(s Summary) string {
 				return catalogQueryNamespaceIndexKey(s.Ref.Namespace, s.Scope)
 			},
-			// custom = "true" for non-built-in (discovered/CRD) rows, "false" otherwise,
-			// reusing the catalog's builtin check (catalogQueryBuiltinKeys).
-			catalogEngineFacetCustom: func(s Summary) string {
-				if catalogSummaryIsCustom(s) {
-					return "true"
-				}
-				return "false"
-			},
+			// Custom queries select CRD-backed identities without rewriting indexed
+			// rows when a definition appears, disappears or becomes unreadable.
+			catalogEngineFacetResource: catalogSummaryResourceIdentity,
 		},
 		// Search matches the same fields as newSearchMatcher: name + namespace + kind.
 		// Join with NUL so a single case-insensitive Contains can never match across a
@@ -167,11 +162,12 @@ func catalogEngineAPIDisplay(s Summary) string {
 	return group + "/" + s.Ref.Version
 }
 
-// catalogSummaryIsCustom reports whether a summary is a non-built-in (discovered/CRD)
-// kind, reusing the catalog's builtin identity set.
-func catalogSummaryIsCustom(s Summary) bool {
-	_, builtin := catalogQueryBuiltinKeys[identityKey(s.Ref.Group, s.Ref.Version, s.Ref.Kind)]
-	return !builtin
+func catalogSummaryResourceIdentity(s Summary) string {
+	return catalogResourceIdentity(s.Ref.Group, s.Ref.Version, s.Ref.Resource, s.Ref.Kind, s.Scope)
+}
+
+func catalogResourceIdentity(group, version, resource, kind string, scope Scope) string {
+	return strings.Join([]string{group, version, resource, kind, string(scope)}, catalogEngineFieldSep)
 }
 
 // catalogEngineEmptyAgeSentinel sorts AFTER every inverted real timestamp, so an
@@ -350,6 +346,9 @@ func catalogEngineNamespaceFilterValues(namespaces []string) []string {
 func (s *Service) queryViaEngine(opts QueryOptions) (QueryResult, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	if opts.CustomOnly {
+		opts.customResources, opts.customDefinitions = s.apiResources.customQueryResources()
+	}
 	store := s.catalogIndex.queryEngineStore
 	descriptors := append([]Descriptor(nil), s.catalogIndex.cachedDescriptors...)
 	cachedKinds := append([]KindInfo(nil), s.catalogIndex.cachedKinds...)
@@ -436,6 +435,7 @@ func (s *Service) queryViaEngineWithStore(
 	s.catalogIndex.enrichPageActionFacts(page.Rows, s.scopeNamespaces())
 
 	return QueryResult{
+		CustomDefinitions: opts.customDefinitions,
 		Items:             page.Rows,
 		ContinueToken:     page.NextCursor,
 		PreviousToken:     page.PrevCursor,
@@ -532,8 +532,8 @@ func findAnchorSummary(rows []Summary, anchor *QueryAnchor) (Summary, bool) {
 
 // catalogEngineFilters builds the querypage facet filters for a query: the kind
 // filter is expanded to the matching canonical identities, namespace/API-group/
-// resource-scope filters map to their facet buckets, and CustomOnly remains part
-// of the structural custom="true" boundary.
+// resource-scope filters map to their facet buckets, and CustomOnly uses the
+// CRD identities in the structural boundary.
 func (s *Service) catalogEngineFilters(rows []Summary, opts QueryOptions) map[string][]string {
 	filters := catalogEngineStructuralFilters(opts)
 	if kinds := normalizeQueryValues(opts.Kinds); len(kinds) > 0 {
@@ -575,7 +575,14 @@ func catalogEngineStructuralFilters(opts QueryOptions) map[string][]string {
 		filters[catalogEngineFacetScopeNamespace] = values
 	}
 	if opts.CustomOnly {
-		filters[catalogEngineFacetCustom] = []string{"true"}
+		identities := make([]string, 0, len(opts.customResources))
+		for identity := range opts.customResources {
+			identities = append(identities, identity)
+		}
+		if len(identities) == 0 {
+			identities = []string{catalogEngineNoMatchFacetValue}
+		}
+		filters[catalogEngineFacetResource] = identities
 	}
 	return filters
 }
@@ -632,7 +639,7 @@ func catalogEngineFacets(rows []Summary, opts QueryOptions, cachedKinds []KindIn
 	}
 
 	namespaces := cachedNamespaces
-	if opts.ResourceFamily != "" || (len(cachedNamespaces) == 0 && len(facets.namespaces) > 0) {
+	if opts.CustomOnly || opts.ResourceFamily != "" || (len(cachedNamespaces) == 0 && len(facets.namespaces) > 0) {
 		namespaces = snapshotSortedKeys(facets.namespaces)
 	}
 
@@ -652,7 +659,7 @@ func newCatalogFacetFilters(opts QueryOptions) catalogFacetFilters {
 	filters := catalogFacetFilters{
 		resourceFamily:   opts.ResourceFamily,
 		namespaceMatcher: newNamespaceMatcher(opts.Namespaces),
-		customMatcher:    newCustomOnlyMatcher(opts.CustomOnly),
+		customMatcher:    newCustomOnlyMatcher(opts),
 		groups:           make(map[string]struct{}, len(opts.Groups)),
 		resourceScopes:   make(map[string]struct{}, len(opts.ResourceScopes)),
 	}

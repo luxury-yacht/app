@@ -46,7 +46,7 @@ export function useCatalogBackedCustomResourceRows({
     clusterId,
     pinnedNamespaces,
     clusterScopedOnly,
-    customOnly: true,
+    customOnly: !resourceFamily,
     resourceFamily,
     filters: {
       search: persistence.filters.search ?? '',

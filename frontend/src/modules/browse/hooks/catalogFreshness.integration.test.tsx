@@ -197,7 +197,7 @@ it.each([
   );
   expect(query.getAll('namespace')).toEqual(['argocd']);
   expect(query.get('resourceFamily')).toBe(tab === 'argocd' ? 'argocd' : null);
-  expect(query.get('customOnly')).toBe(tab === 'browse' ? null : 'true');
+  expect(query.get('customOnly')).toBe(tab === 'custom' ? 'true' : null);
 
   const created = item(dev, resourceType, 'new-secret', 'before');
   backendRows.set(dev.clusterId, [original, created]);

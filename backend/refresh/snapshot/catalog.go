@@ -180,7 +180,8 @@ func buildCatalogSnapshot(
 	degraded := health.Status == objectcatalog.HealthStateError ||
 		health.Status == objectcatalog.HealthStateDegraded ||
 		health.Stale ||
-		health.ConsecutiveFailures > 3
+		health.ConsecutiveFailures > 3 ||
+		result.CustomDefinitions != ""
 	issues := catalogSnapshotIssues(result, health)
 
 	if forceFinal {
@@ -230,6 +231,16 @@ func buildCatalogSnapshot(
 
 func catalogSnapshotIssues(result objectcatalog.QueryResult, health objectcatalog.HealthStatus) []ResourceQueryIssue {
 	issues := make([]ResourceQueryIssue, 0, 4)
+	switch result.CustomDefinitions {
+	case objectcatalog.CustomDefinitionsPending:
+		issues = append(issues, ResourceQueryIssue{
+			Kind: "CustomResourceDefinition", Message: "The catalog is waiting for the cluster's custom resource definitions.",
+		})
+	case objectcatalog.CustomDefinitionsDenied:
+		issues = append(issues, ResourceQueryIssue{
+			Kind: "CustomResourceDefinition", Message: "Your role cannot list custom resource definitions. Browse still shows objects from permitted scopes.",
+		})
+	}
 	if result.CursorInvalid {
 		issues = append(issues, ResourceQueryIssue{
 			Kind:    "Catalog cursor",

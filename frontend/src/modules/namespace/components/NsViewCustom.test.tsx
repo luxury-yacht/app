@@ -80,7 +80,7 @@ const serveCustomResources = (objects: CustomObject[], families: Record<string, 
       return undefined;
     }
     const query = new URLSearchParams(scope.slice(scope.indexOf('|') + 1));
-    if (query.get('customOnly') !== 'true') {
+    if (query.get('customOnly') !== 'true' && !query.get('resourceFamily')) {
       return undefined;
     }
     const namespaces = query.getAll('namespace');

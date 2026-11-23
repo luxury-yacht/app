@@ -287,7 +287,7 @@ type QueryOptions struct {
 	SortDirection   string   // backend-owned sort direction; empty uses ascending
 	Limit           int      // maximum number of items to return
 	Continue        string   // token for continuing a paginated query
-	CustomOnly      bool     // restricts results to non-built-in discovered resources
+	CustomOnly      bool     // restricts results to resources backed by a visible CRD
 	MatchNone       bool     // explicit empty multiselect: no catalog item can match
 	// Anchor asks for the page CONTAINING this object instead of a
 	// cursor-addressed page (mutually exclusive with Continue — the snapshot
@@ -297,7 +297,20 @@ type QueryOptions struct {
 	// rows (numbered page jumps); the engine clamps past-the-end starts.
 	// Mutually exclusive with Continue and Anchor (snapshot layer validates).
 	StartRank *int
+
+	// Captured once by the catalog so rows, totals and filters share the same
+	// view of the cluster's definitions.
+	customResources   map[string]struct{}
+	customDefinitions CustomDefinitionStatus
 }
+
+// CustomDefinitionStatus describes the definition coverage of a custom-only query.
+type CustomDefinitionStatus string
+
+const (
+	CustomDefinitionsPending CustomDefinitionStatus = "pending"
+	CustomDefinitionsDenied  CustomDefinitionStatus = "denied"
+)
 
 // QueryAnchor identifies an anchored query's jump target. The catalog resolves
 // it to a summary by exact group/version/namespace/name and case-insensitive
@@ -322,12 +335,13 @@ type KindInfo struct {
 
 // QueryResult summarises the outcome of a catalog query.
 type QueryResult struct {
-	Items         []Summary // items returned by the query
-	ContinueToken string    // token for continuing a paginated query
-	PreviousToken string    // token for fetching the previous page
-	SelfToken     string    // token addressing THIS page (counted serves only; page-stable refetch)
-	CursorInvalid bool      // indicates the supplied cursor was malformed or incompatible
-	TotalItems    int       // total number of items matching the query
+	CustomDefinitions CustomDefinitionStatus
+	Items             []Summary // items returned by the query
+	ContinueToken     string    // token for continuing a paginated query
+	PreviousToken     string    // token for fetching the previous page
+	SelfToken         string    // token addressing THIS page (counted serves only; page-stable refetch)
+	CursorInvalid     bool      // indicates the supplied cursor was malformed or incompatible
+	TotalItems        int       // total number of items matching the query
 	// UnfilteredTotal is the structurally scoped item count before user filters (the "of M"
 	// in "showing N of M items due to filters"); equals TotalItems when no filter is active.
 	UnfilteredTotal int        // in-scope count before the query's filters

@@ -412,25 +412,63 @@ func groupVersionNames(groupVersions []schema.GroupVersion) []string {
 }
 
 // setWatchedCustomResources receives reflector updates and its complete relists.
-func (s *apiResourceStore) setWatchedCustomResources(custom crdDefinitions, listed bool) {
+func (s *apiResourceStore) setWatchedCustomResources(custom crdDefinitions, listed bool) (firstCompleteList bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.published.CustomListDenied {
-		return
+		return false
 	}
 	if listed || s.watchListed {
+		firstCompleteList = !s.published.CustomKnown
 		s.watchListed = true
 		s.publishCustomResourcesLocked(custom, false)
 	} else if !s.published.CustomKnown {
 		// Before a complete list, keep the flags for definitions seen so far.
 		s.publishClassificationLocked(s.published, custom)
 	}
+	return firstCompleteList
 }
 
 func (s *apiResourceStore) definitionListDenied() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.published.CustomListDenied
+}
+
+// customQueryResources captures membership and readiness together. Definitions
+// are replaced wholesale. Build the query keys outside the store lock.
+func (s *apiResourceStore) customQueryResources() (map[string]struct{}, CustomDefinitionStatus) {
+	s.mu.RLock()
+	definitions := s.custom
+	known, denied := s.published.CustomKnown, s.published.CustomListDenied
+	s.mu.RUnlock()
+	if denied {
+		return nil, CustomDefinitionsDenied
+	}
+	keys := make(map[string]struct{}, len(definitions))
+	for _, definition := range definitions {
+		addCustomQueryResources(keys, definition)
+	}
+	if !known {
+		return keys, CustomDefinitionsPending
+	}
+	return keys, ""
+}
+
+func addCustomQueryResources(keys map[string]struct{}, definition *apiextensions.Definition) {
+	if definition == nil || !definition.Established {
+		return
+	}
+	names := definition.DiscoveryNames()
+	scope := ScopeCluster
+	if definition.Scope == apiextensionsv1.NamespaceScoped {
+		scope = ScopeNamespace
+	}
+	for _, version := range definition.Versions {
+		if version.Served {
+			keys[catalogResourceIdentity(definition.Group, version.Name, names.Plural, names.Kind, scope)] = struct{}{}
+		}
+	}
 }
 
 func (s *apiResourceStore) publishCustomResourcesLocked(custom crdDefinitions, denied bool) bool {
