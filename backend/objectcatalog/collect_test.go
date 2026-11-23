@@ -646,7 +646,7 @@ func TestEnrichCatalogActionFactsMarksHPAManagedWorkloads(t *testing.T) {
 		},
 	}
 
-	enrichCatalogActionFacts(items, allowed, nil)
+	enrichCatalogActionFacts(items, allowed, nil, nil)
 
 	if items["managed"].ActionFacts == nil || items["managed"].ActionFacts.HPAManaged == nil || !*items["managed"].ActionFacts.HPAManaged {
 		t.Fatalf("expected managed deployment to be marked HPA-managed, got %#v", items["managed"].ActionFacts)

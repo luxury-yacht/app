@@ -61,9 +61,9 @@ func TestCatalogDiscoveryInvalidatesAfterCRDChange(t *testing.T) {
 	ctx := context.Background()
 
 	// Periodic discover, no CRD change → no invalidation (the cache is reused).
-	descs, err := svc.discoverResources(ctx)
+	result, err := svc.discoverResources(ctx)
 	require.NoError(t, err)
-	require.NotEmpty(t, descs)
+	require.NotEmpty(t, result.descriptors)
 	require.Equal(t, 0, invalidations)
 
 	// A CRD change marks discovery stale → the next discover invalidates once.

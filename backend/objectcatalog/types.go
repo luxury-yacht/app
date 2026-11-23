@@ -17,6 +17,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -65,6 +66,7 @@ type Summary struct {
 	deletionTime      int64
 	reportedStatuses  reportedStatusValues
 	reportsStatus     bool
+	crdDefinition     *apiextensions.Definition
 	Scope             Scope        `json:"scope"`                  // resource scope
 	LabelsDigest      string       `json:"labelsDigest,omitempty"` // optional digest of resource labels
 	ActionFacts       *ActionFacts `json:"actionFacts,omitempty"`  // optional facts needed to present object actions correctly

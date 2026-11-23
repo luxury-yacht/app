@@ -92,6 +92,7 @@ type Service struct {
 	ingestStopped   bool
 	syncMu          sync.Mutex  // serializes full syncs from the run loop and watch recovery path
 	syncInProgress  atomic.Bool // true while sync() is running; prevents watch flush races
+	catalogRetry    chan struct{}
 
 	startOnce sync.Once
 	doneCh    chan struct{}
@@ -129,6 +130,7 @@ func NewService(deps Dependencies, opts *Options) *Service {
 		identity:          newResourceIdentityResolver(deps.Common, deps.Logger),
 		health:            healthStatus{State: HealthStateUnknown},
 		doneCh:            make(chan struct{}),
+		catalogRetry:      make(chan struct{}, 1),
 		now:               nowFn,
 		streamSubscribers: make(map[int]chan StreamingUpdate),
 	}

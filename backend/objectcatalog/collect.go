@@ -17,9 +17,11 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/internal/timeutil"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 	"github.com/luxury-yacht/app/backend/resources/argocd"
 	"github.com/luxury-yacht/app/backend/resources/karpenter"
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	unstructuredv1 "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -323,8 +325,25 @@ func summaryFromObject(clusterID string, desc Descriptor, item metav1.Object) Su
 		summary.LabelsDigest = digest
 	}
 	summary.ActionFacts = buildSummaryActionFacts(desc, item)
+	if desc.GVR() == apiextensions.Identity.GVR() {
+		summary.crdDefinition = catalogCRDDefinition(item)
+	}
 
 	return summary
+}
+
+func catalogCRDDefinition(item metav1.Object) *apiextensions.Definition {
+	switch crd := item.(type) {
+	case *apiextensionsv1.CustomResourceDefinition:
+		definition := apiextensions.BuildDefinition(crd)
+		return &definition
+	case *unstructuredv1.Unstructured:
+		definition, err := apiextensions.DefinitionFromUnstructured(crd)
+		if err == nil {
+			return &definition
+		}
+	}
+	return nil
 }
 
 // reportedObjectStatuses reads the statuses an object reports for Attention, and whether

@@ -196,15 +196,20 @@ collects (Events, kinds that cannot be listed, the metrics API).
   successful LIST results until the CRD reflector has completed its own list
   and can supply live changes. A subscription to a synced reflector publishes
   its complete CRD set in one replay under the store lock. A WATCH denial
-  still allows LIST-based classification. A definite LIST denial from
-  permission preflight or the LIST request is reported as a permission issue.
+  still allows LIST-based classification. A complete LIST that sees an API
+  change invalidates cached discovery and brings the next catalog sync
+  forward. A definite LIST denial from permission preflight or the LIST
+  request is reported as a permission issue.
 - A removed definition keeps its Custom classification on published rows
-  until a discovery started after the removal refreshes its group. Failed
-  discovery retains the rows and their classification together.
+  until complete discovery confirms its API has disappeared. Discovery
+  keeps reading from the server on the catalog's retry cadence while
+  Kubernetes still advertises the kind.
 - A partial discovery (some group versions unreachable) keeps the last
   published resources of every group with a failed version, and lists those
-  group versions in `FailedGroupVersions`; a later complete discovery clears
-  them. Catalog descriptors still come from the reachable groups only.
+  group versions in `FailedGroupVersions`. Browse continues collecting
+  reachable kinds and keeps previous rows for unread descriptors that pass
+  permission preflight. A missing object for an unread descriptor remains
+  unconfirmed. Browse reports degraded health until a complete sync.
 - A discovery that fails outright keeps the last published resources and
   records its error in `DiscoveryFailure` until a discovery succeeds again.
   The first failure's error is kept: retries that fail with other text change

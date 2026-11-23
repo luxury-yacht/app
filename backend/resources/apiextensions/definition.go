@@ -4,6 +4,8 @@ import (
 	"slices"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -24,9 +26,9 @@ type Definition struct {
 
 // DefinitionVersion is one version a definition declares.
 type DefinitionVersion struct {
-	Name    string
-	Served  bool
-	Storage bool
+	Name    string `json:"name"`
+	Served  bool   `json:"served"`
+	Storage bool   `json:"storage"`
 }
 
 // BuildDefinition reduces a CRD to its Definition.
@@ -39,17 +41,51 @@ func BuildDefinition(crd *apiextensionsv1.CustomResourceDefinition) Definition {
 		Names:         crd.Spec.Names,
 		AcceptedNames: crd.Status.AcceptedNames,
 		Versions:      make([]DefinitionVersion, 0, len(crd.Spec.Versions)),
+		Established:   definitionEstablished(crd.Status.Conditions),
 	}
 	for _, version := range crd.Spec.Versions {
 		definition.Versions = append(definition.Versions, DefinitionVersion{Name: version.Name, Served: version.Served, Storage: version.Storage})
 	}
-	for _, condition := range crd.Status.Conditions {
+	return definition
+}
+
+// DefinitionFromUnstructured projects a LIST result without converting each
+// version's OpenAPI schema or other fields that do not affect discovery.
+func DefinitionFromUnstructured(crd *unstructured.Unstructured) (Definition, error) {
+	var fields struct {
+		Spec struct {
+			Group    string                                        `json:"group"`
+			Scope    apiextensionsv1.ResourceScope                 `json:"scope"`
+			Names    apiextensionsv1.CustomResourceDefinitionNames `json:"names"`
+			Versions []DefinitionVersion                           `json:"versions"`
+		} `json:"spec"`
+		Status struct {
+			AcceptedNames apiextensionsv1.CustomResourceDefinitionNames       `json:"acceptedNames"`
+			Conditions    []apiextensionsv1.CustomResourceDefinitionCondition `json:"conditions"`
+		} `json:"status"`
+	}
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(crd.Object, &fields); err != nil {
+		return Definition{}, err
+	}
+	return Definition{
+		Name:          crd.GetName(),
+		UID:           crd.GetUID(),
+		Group:         fields.Spec.Group,
+		Scope:         fields.Spec.Scope,
+		Names:         fields.Spec.Names,
+		AcceptedNames: fields.Status.AcceptedNames,
+		Versions:      fields.Spec.Versions,
+		Established:   definitionEstablished(fields.Status.Conditions),
+	}, nil
+}
+
+func definitionEstablished(conditions []apiextensionsv1.CustomResourceDefinitionCondition) bool {
+	for _, condition := range conditions {
 		if condition.Type == apiextensionsv1.Established {
-			definition.Established = condition.Status == apiextensionsv1.ConditionTrue
-			break
+			return condition.Status == apiextensionsv1.ConditionTrue
 		}
 	}
-	return definition
+	return false
 }
 
 // ChangesDiscovery reports whether two definitions differ in anything API

@@ -244,8 +244,12 @@ func removeDescriptorEntries(items map[string]Summary, seen map[string]time.Time
 
 // descriptorKeyFromItemKey extracts the GVR portion from an item key.
 func descriptorKeyFromItemKey(key string) string {
-	if idx := strings.Index(key, "/"); idx >= 0 {
-		return key[:idx]
+	// GroupVersionResource.String itself contains a slash. Strip the
+	// namespace and name from the right to keep the whole descriptor key.
+	if name := strings.LastIndexByte(key, '/'); name >= 0 {
+		if namespace := strings.LastIndexByte(key[:name], '/'); namespace >= 0 {
+			return key[:namespace]
+		}
 	}
 	return key
 }

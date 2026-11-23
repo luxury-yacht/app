@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -388,6 +389,12 @@ func TestAPIResourcesFlagKindsDefinedByCRDs(t *testing.T) {
 	requireNoAPIResourcesUpdate(t, updates)
 	require.True(t, custom("example.io", "widgets"))
 
+	// The apiserver can still advertise widgets after the deletion event.
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	require.True(t, custom("example.io", "widgets"))
+	requireNoAPIResourcesUpdate(t, updates)
+
 	// The first discovery without widgets removes the row directly.
 	withoutWidgets := multiVersionDiscovery()
 	for _, list := range withoutWidgets.lists {
@@ -404,7 +411,7 @@ func TestAPIResourcesFlagKindsDefinedByCRDs(t *testing.T) {
 	}))
 }
 
-// A relist updates the CRD set, and discovery publishes any removed flags.
+// A relist updates the CRD set, while discovery confirms removals.
 func TestAPIResourcesFollowARelistedCRDSet(t *testing.T) {
 	svc := newTestWatchService()
 	svc.discoveryClient = multiVersionDiscovery()
@@ -430,12 +437,12 @@ func TestAPIResourcesFollowARelistedCRDSet(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, apiResourceByName(t, svc.APIResources().Resources, "example.io", "widgets").Custom)
 
-	// A complete discovery can publish a kind that is now served by another API.
+	// A complete answer can still advertise the recently removed CRD.
 	svc.discoveryClient = multiVersionDiscovery()
 	_, err = svc.discoverResources(t.Context())
 	require.NoError(t, err)
 	resources = svc.APIResources().Resources
-	require.False(t, apiResourceByName(t, resources, "example.io", "widgets").Custom)
+	require.True(t, apiResourceByName(t, resources, "example.io", "widgets").Custom)
 	require.True(t, apiResourceByName(t, resources, "example.io", "relics").Custom)
 }
 
@@ -459,7 +466,7 @@ func TestAPIResourcesKeepClassificationWhenAReadOverlapsADeletion(t *testing.T) 
 	discovery.onRead = nil
 	_, err = svc.discoverResources(t.Context())
 	require.NoError(t, err)
-	require.False(t, apiResourceByName(t, svc.APIResources().Resources, "example.io", "widgets").Custom)
+	require.True(t, apiResourceByName(t, svc.APIResources().Resources, "example.io", "widgets").Custom)
 }
 
 // crdListSource is an ingest source whose CustomResourceDefinition store the
@@ -607,7 +614,7 @@ func TestAPIResourceClassificationUsesListUntilACompleteWatchTakesOver(t *testin
 	_, err = svc.discoverResources(t.Context())
 	require.NoError(t, err)
 	require.Equal(t, 1, invalidations)
-	require.False(t, apiResourceByName(t, svc.APIResources().Resources, "example.io", "widgets").Custom)
+	require.True(t, apiResourceByName(t, svc.APIResources().Resources, "example.io", "widgets").Custom)
 
 	svc.apiResources.applyDefinitionList(listed, true, false)
 	svc.apiResources.applyDefinitionList(nil, false, true)
@@ -768,6 +775,140 @@ func TestAFirstPartialDiscoveryReportsTheUnreachableGroup(t *testing.T) {
 	require.True(t, inventory.Ready)
 	require.Len(t, inventory.Resources, 6)
 	require.Equal(t, []string{"metrics.k8s.io/v1beta1"}, inventory.FailedGroupVersions)
+}
+
+func TestBrowseKeepsLastKnownObjectsThroughPartialDiscovery(t *testing.T) {
+	widget := widgetDesc().GVR()
+	widgets := &metav1.APIResourceList{GroupVersion: widget.GroupVersion().String(), APIResources: []metav1.APIResource{
+		{Name: widget.Resource, Kind: "Widget", Namespaced: true, Verbs: []string{"list"}},
+	}}
+	core := &metav1.APIResourceList{GroupVersion: "v1", APIResources: []metav1.APIResource{
+		{Name: "events", Kind: "Event", Namespaced: true, Verbs: []string{"list"}},
+	}}
+	source := &groupedDiscovery{groups: groupsForLists([]*metav1.APIResourceList{core, widgets}), lists: []*metav1.APIResourceList{core, widgets}}
+	kube := kubefake.NewClientset()
+	allow := true
+	kube.PrependReactor("create", "selfsubjectaccessreviews", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		review := action.(clienttesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
+		review.Status.Allowed = allow
+		review.Status.Denied = !allow
+		return true, review, nil
+	})
+	dynamic := widgetDynamicClient(widgetObject("default", "saved", "1"))
+	deps := common.Dependencies{KubernetesClient: kube, DynamicClient: dynamic}
+	svc := NewService(Dependencies{
+		ClusterID: "c1", Common: deps,
+		CapabilityFactory: func() *capabilities.Service { return capabilities.NewService(capabilities.Dependencies{Common: deps}) },
+	}, nil)
+	svc.discoveryClient = source
+
+	require.NoError(t, svc.sync(t.Context()))
+	before := svc.Query(QueryOptions{Kinds: []string{"Widget"}})
+	require.Len(t, before.Items, 1)
+	// A partial response has no catalog kinds at all. A vanished kind cannot
+	// be inferred from it, even though the core discovery response is healthy.
+	source.lists = []*metav1.APIResourceList{core}
+	source.err = &discovery.ErrGroupDiscoveryFailed{Groups: map[schema.GroupVersion]error{widget.GroupVersion(): context.DeadlineExceeded}}
+	require.Error(t, svc.sync(t.Context()))
+	require.Equal(t, HealthStateDegraded, svc.Health().Status)
+	require.Equal(t, before.Items, svc.Query(QueryOptions{Kinds: []string{"Widget"}}).Items)
+	require.True(t, svc.LookupObject("default", widget.Group, "Widget", "saved").Found)
+	require.False(t, svc.LookupObject("default", widget.Group, "Widget", "missing").Absent)
+
+	// An explicit authorization denial still takes effect during the outage.
+	allow = false
+	require.Error(t, svc.sync(t.Context()))
+	require.Empty(t, svc.Query(QueryOptions{Kinds: []string{"Widget"}}).Items)
+
+	allow = true
+	source.err = nil
+	source.lists = []*metav1.APIResourceList{core, widgets}
+	require.NoError(t, svc.sync(t.Context()))
+	require.Len(t, svc.Query(QueryOptions{Kinds: []string{"Widget"}}).Items, 1)
+
+	source.lists = []*metav1.APIResourceList{core}
+	updates, cancel := svc.SubscribeStreaming()
+	defer cancel()
+	<-updates // Current publication.
+	require.NoError(t, svc.sync(t.Context()))
+	require.Empty(t, svc.Query(QueryOptions{Kinds: []string{"Widget"}}).Items)
+	require.Equal(t, HealthStateOK, svc.Health().Status)
+	select {
+	case update := <-updates:
+		require.True(t, update.Ready)
+	default:
+		t.Fatal("a complete discovery that empties Browse must publish a ready update")
+	}
+}
+
+func TestCatalogRefreshesDiscoveryAfterAListOnlyCRDIsEstablished(t *testing.T) {
+	crd := apiextensions.Identity
+	widget := widgetDesc().GVR()
+	definition := establishedWidgetDefinition()
+	unestablished := definition.DeepCopy()
+	unestablished.Status.Conditions = nil
+	objects, err := runtime.DefaultUnstructuredConverter.ToUnstructured(unestablished)
+	require.NoError(t, err)
+	obj := &unstructured.Unstructured{Object: objects}
+	obj.SetGroupVersionKind(crd.GVK())
+	dynamic := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+		crd.GVR(): crd.Kind + "List", widget: "WidgetList",
+	}, obj, widgetObject("default", "newly-discovered", "1"))
+	definitions := &metav1.APIResourceList{GroupVersion: crd.GVR().GroupVersion().String(), APIResources: []metav1.APIResource{
+		{Name: crd.Resource, Kind: crd.Kind, Verbs: []string{"list"}},
+	}}
+	widgets := &metav1.APIResourceList{GroupVersion: widget.GroupVersion().String(), APIResources: []metav1.APIResource{
+		{Name: widget.Resource, Kind: "Widget", Namespaced: true, Verbs: []string{"list"}},
+	}}
+	source := &stubDiscovery{lists: []*metav1.APIResourceList{definitions}}
+	svc := NewService(Dependencies{ClusterID: "c1", Common: common.Dependencies{
+		KubernetesClient: kubefake.NewClientset(), DynamicClient: dynamic,
+	}}, &Options{
+		ResyncInterval: time.Hour, FailedSyncRetryInterval: 25 * time.Millisecond,
+	})
+	svc.discoveryClient = source
+	var freshReads atomic.Int32
+	svc.discoveryInvalidate = func() {
+		switch freshReads.Add(1) {
+		case 1:
+			source.lists = []*metav1.APIResourceList{definitions, widgets}
+		case 3:
+			// One fresh response after deletion still advertises the API.
+			source.lists = []*metav1.APIResourceList{definitions}
+		}
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { done <- svc.Run(ctx) }()
+	t.Cleanup(func() { cancel(); <-done })
+
+	require.Eventually(t, func() bool {
+		return svc.LookupObject("", crd.Group, crd.Kind, definition.Name).Found
+	}, time.Second, 5*time.Millisecond, "the initial LIST observes an unestablished definition")
+	require.Zero(t, freshReads.Load())
+
+	objects, err = runtime.DefaultUnstructuredConverter.ToUnstructured(definition)
+	require.NoError(t, err)
+	established := &unstructured.Unstructured{Object: objects}
+	established.SetGroupVersionKind(crd.GVK())
+	definitionsClient := dynamic.Resource(crd.GVR())
+	_, err = definitionsClient.Update(ctx, established, metav1.UpdateOptions{})
+	require.NoError(t, err)
+	require.NoError(t, svc.sync(ctx))
+
+	require.Eventually(t, func() bool {
+		return svc.LookupObject("default", widget.Group, "Widget", "newly-discovered").Found
+	}, time.Second, 5*time.Millisecond, "a complete CRD LIST schedules fresh discovery before the normal resync")
+	require.True(t, apiResourceByName(t, svc.APIResources().Resources, widget.Group, widget.Resource).Custom)
+
+	require.NoError(t, definitionsClient.Delete(ctx, definition.Name, metav1.DeleteOptions{}))
+	require.NoError(t, svc.sync(ctx))
+	require.Eventually(t, func() bool {
+		return !slices.ContainsFunc(svc.APIResources().Resources, func(resource APIResource) bool {
+			return resource.groupResource() == widget.GroupResource()
+		})
+	}, time.Second, 5*time.Millisecond, "a still-advertised kind keeps retrying until a complete response confirms deletion")
 }
 
 // The same contract through the production owners: a real ingest manager that

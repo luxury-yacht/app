@@ -109,8 +109,12 @@ func (n *watchNotifier) runRecoverySync(ctx context.Context) {
 	if !n.takeFullSyncRequest() {
 		return
 	}
-	if err := n.service.sync(ctx); err != nil && !errors.Is(err, context.Canceled) {
+	err := n.service.sync(ctx)
+	if err != nil && !errors.Is(err, context.Canceled) {
 		n.service.logWarn(fmt.Sprintf("catalog recovery sync failed: %v", err))
+	}
+	if err != nil || n.service.apiResources.hasPendingRemoval() {
+		n.service.requestCatalogRetry()
 	}
 }
 

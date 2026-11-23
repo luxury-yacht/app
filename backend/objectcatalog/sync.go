@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -339,6 +340,15 @@ func (s *Service) startWatchNotifier(ctx context.Context, notifier *watchNotifie
 	return func() { <-watchDone }
 }
 
+// requestCatalogRetry brings forward the next periodic sync. Direct recovery
+// and periodic collection share this retry loop and its backoff.
+func (s *Service) requestCatalogRetry() {
+	select {
+	case s.catalogRetry <- struct{}{}:
+	default:
+	}
+}
+
 func (s *Service) runResyncLoop(ctx context.Context, initialSyncErr error) error {
 	if s.opts.ResyncInterval <= 0 {
 		<-ctx.Done()
@@ -353,26 +363,34 @@ func (s *Service) runResyncLoop(ctx context.Context, initialSyncErr error) error
 	interval := nextCatalogResyncInterval(
 		initialSyncErr == nil, 0, s.opts.FailedSyncRetryInterval, resyncInterval,
 	)
+	retry := nextCatalogResyncInterval(false, 0, s.opts.FailedSyncRetryInterval, resyncInterval)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
+		var next time.Duration
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-s.catalogRetry:
+			next = min(retry, interval)
 		case <-ticker.C:
-			err := s.sync(ctx)
-			if err != nil && !errors.Is(err, context.Canceled) {
-				s.logWarn(fmt.Sprintf("catalog resync failed: %v", err))
-			}
-			if next := nextCatalogResyncInterval(
-				err == nil, interval, s.opts.FailedSyncRetryInterval, resyncInterval,
-			); next != interval {
-				interval = next
-				ticker.Reset(interval)
-			}
+			next = s.resyncAndChooseNextInterval(ctx, interval, resyncInterval)
+		}
+		if next != interval {
+			interval = next
+			ticker.Reset(interval)
 		}
 	}
+}
+
+func (s *Service) resyncAndChooseNextInterval(ctx context.Context, current, full time.Duration) time.Duration {
+	err := s.sync(ctx)
+	if err != nil && !errors.Is(err, context.Canceled) {
+		s.logWarn(fmt.Sprintf("catalog resync failed: %v", err))
+	}
+	reconciled := err == nil && !s.apiResources.hasPendingRemoval()
+	return nextCatalogResyncInterval(reconciled, current, s.opts.FailedSyncRetryInterval, full)
 }
 
 func (s *Service) fullResyncInterval() time.Duration {
@@ -394,6 +412,8 @@ type catalogSync struct {
 	previousItems     map[string]Summary
 	previousLastSeen  map[string]time.Time
 	descriptors       []Descriptor
+	staleDescriptors  map[string]struct{}
+	discoveryFailure  error
 	aggregator        *streamingAggregator
 	capabilityService *capabilities.Service
 	resultsMu         sync.Mutex
@@ -441,16 +461,49 @@ func newCatalogSync(s *Service, start time.Time) *catalogSync {
 }
 
 func (run *catalogSync) discover(ctx context.Context) (bool, error) {
-	descriptors, err := run.service.discoverResources(ctx)
+	result, err := run.service.discoverResources(ctx)
 	if err != nil {
 		return false, err
 	}
-	run.descriptors = descriptors
+	run.descriptors = result.descriptors
+	run.discoveryFailure = result.partialFailure
+	run.retainUnreadDescriptors(result.failedGroupVersions)
 	if run.service.identity != nil {
-		run.service.identity.replaceDiscovered(descriptors)
+		run.service.identity.replaceDiscovered(run.descriptors)
 	}
-	run.service.logInfo(fmt.Sprintf("catalog discovered %d descriptor(s)", len(descriptors)))
-	return len(descriptors) == 0, nil
+	run.service.logInfo(fmt.Sprintf("catalog discovered %d descriptor(s)", len(run.descriptors)))
+	return len(run.descriptors) == 0 && run.discoveryFailure == nil, nil
+}
+
+// Match the API Resources inventory's preferred identity through a partial
+// response. In particular, a reachable sibling version cannot replace one
+// whose preferred version may still exist.
+func (run *catalogSync) retainUnreadDescriptors(failed []schema.GroupVersion) {
+	if len(failed) == 0 {
+		return
+	}
+	groups := failedAPIGroups(failed)
+	discovered := make(map[schema.GroupResource]Descriptor, len(run.descriptors))
+	for _, desc := range run.descriptors {
+		discovered[desc.GVR().GroupResource()] = desc
+	}
+	var stale []Descriptor
+	kept := make(map[schema.GroupResource]struct{})
+	run.staleDescriptors = make(map[string]struct{})
+	for _, desc := range run.service.Descriptors() {
+		gr := desc.GVR().GroupResource()
+		if _, unavailable := groups[desc.Group]; !unavailable || discovered[gr] == desc {
+			continue
+		}
+		kept[gr] = struct{}{}
+		run.staleDescriptors[desc.GVR().String()] = struct{}{}
+		stale = append(stale, desc)
+	}
+	run.descriptors = slices.DeleteFunc(run.descriptors, func(desc Descriptor) bool {
+		_, retained := kept[desc.GVR().GroupResource()]
+		return retained
+	})
+	run.descriptors = append(run.descriptors, stale...)
 }
 
 func (run *catalogSync) publishEmpty() {
@@ -463,6 +516,7 @@ func (run *catalogSync) publishEmpty() {
 	elapsed := s.now().Sub(run.start)
 	s.updateHealth(true, false, nil, 0)
 	s.recordTelemetry(0, 0, elapsed, nil)
+	s.broadcastStreaming(true)
 }
 
 func (run *catalogSync) prepare(ctx context.Context) {
@@ -532,6 +586,10 @@ func (run *catalogSync) evaluateCapabilities(ctx context.Context) {
 // have settled.
 func (run *catalogSync) waitForCaches(ctx context.Context) error {
 	ingestGVRs := catalogStaticIngestGVRs(run.descriptors)
+	ingestGVRs = slices.DeleteFunc(ingestGVRs, func(gvr schema.GroupVersionResource) bool {
+		_, stale := run.staleDescriptors[gvr.String()]
+		return stale
+	})
 	if run.sourcesSettled(ingestGVRs) {
 		return nil
 	}
@@ -632,6 +690,9 @@ func (run *catalogSync) collectDescriptor(ctx context.Context, index int, desc D
 	} else if !run.isAllowed(desc) {
 		return nil
 	}
+	if _, stale := run.staleDescriptors[desc.GVR().String()]; stale {
+		return nil
+	}
 
 	summaries, err := run.service.collectResource(
 		ctx, desc, run.service.scopeNamespaces(), run.aggregator,
@@ -681,7 +742,7 @@ func (run *catalogSync) finish(runErr error) error {
 	descriptorCache := run.applyCollectionResults()
 	collectErr := run.collectionError(runErr)
 	run.restoreFailedDescriptors()
-	enrichCatalogActionFacts(run.newItems, run.allowedSet, run.failed)
+	enrichCatalogActionFacts(run.newItems, run.allowedSet, run.failed, run.staleDescriptors)
 	run.publish(descriptorCache, collectErr)
 	run.recordCompletion(collectErr)
 	return collectErr
@@ -723,6 +784,9 @@ func (run *catalogSync) collectionError(runErr error) error {
 		if runErr != nil {
 			run.service.logWarn(fmt.Sprintf("catalog collection failed: %v", runErr))
 		}
+		if runErr == nil {
+			return run.discoveryFailure
+		}
 		return runErr
 	}
 	failedKeys := make([]string, 0, len(run.failed))
@@ -735,7 +799,15 @@ func (run *catalogSync) collectionError(runErr error) error {
 	}
 	sort.Strings(failedKeys)
 	run.service.logWarn(fmt.Sprintf("catalog collection incomplete; retained previous data for %d descriptor(s)", len(run.failed)))
-	return &PartialSyncError{FailedDescriptors: failedKeys, Err: errors.Join(joined...)}
+	return &PartialSyncError{FailedDescriptors: failedKeys, Err: errors.Join(append(joined, run.discoveryFailure)...)}
+}
+
+// A discovered descriptor skipped without a collection or review error was
+// explicitly denied by permission preflight.
+func (run *catalogSync) preflightDenied(gvr string) bool {
+	_, allowed := run.allowedSet[gvr]
+	_, failed := run.failed[gvr]
+	return !allowed && !failed
 }
 
 func (run *catalogSync) restoreFailedDescriptors() {
@@ -745,8 +817,21 @@ func (run *catalogSync) restoreFailedDescriptors() {
 	for gvr := range run.failed {
 		restoreDescriptorEntries(run.newItems, run.newLastSeen, run.previousItems, run.previousLastSeen, gvr)
 	}
+	denied := make(map[string]struct{})
+	for _, desc := range run.descriptors {
+		if key := desc.GVR().String(); run.preflightDenied(key) {
+			denied[key] = struct{}{}
+		}
+	}
+	run.restoreMissingRows(denied)
+}
+
+func (run *catalogSync) restoreMissingRows(denied map[string]struct{}) {
 	for key, summary := range run.previousItems {
 		if _, exists := run.newItems[key]; exists {
+			continue
+		}
+		if _, forbidden := denied[descriptorKeyFromItemKey(key)]; forbidden {
 			continue
 		}
 		run.newItems[key] = summary
@@ -784,6 +869,7 @@ func (run *catalogSync) publish(descriptors []Descriptor, collectErr error) {
 	s.cacheRebuilds.Add(1)
 	s.catalogIndex.rebuildCacheFromItems(run.newItems, descriptors)
 	s.mu.Unlock()
+	s.updateHealth(collectErr == nil, run.discoveryFailure != nil || len(run.failed) > 0, collectErr, len(run.failed))
 	run.publishListedDefinitions(complete, denied)
 	s.publishSyncedAttentionSubsets(run.newItems)
 	// Notify after publishing the complete replacement, including rows retained
@@ -801,9 +887,6 @@ func (run *catalogSync) recordCompletion(collectErr error) {
 			s.logDebug(fmt.Sprintf("catalog streaming first batch latency: %s", latency))
 		}
 		s.logInfo(fmt.Sprintf("catalog sync completed: %d objects, %d resources, took %s", len(run.newItems), len(run.allowedSet), elapsed))
-		s.updateHealth(true, false, nil, 0)
-	} else {
-		s.updateHealth(false, len(run.failed) > 0, collectErr, len(run.failed))
 	}
 	s.recordTelemetry(len(run.newItems), len(run.allowedSet), elapsed, collectErr)
 }

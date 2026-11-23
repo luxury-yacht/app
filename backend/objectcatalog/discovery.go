@@ -17,7 +17,7 @@ import (
 
 // discoverResources runs under syncMu and reuses discovery only until the
 // cache expires, a CRD changes, or a failed read needs another attempt.
-func (s *Service) discoverResources(ctx context.Context) ([]Descriptor, error) {
+func (s *Service) discoverResources(ctx context.Context) (discoveryResult, error) {
 	s.ensureDiscovery()
 	customAtStart, pendingRemoval := s.apiResources.customForDiscovery()
 	s.refreshDiscoveryCache(pendingRemoval)
@@ -29,13 +29,13 @@ func (s *Service) discoverResources(ctx context.Context) ([]Descriptor, error) {
 		if ctx.Err() == nil {
 			s.apiResources.failed(err)
 		}
-		return nil, err
+		return discoveryResult{}, err
 	}
-	if len(result.failedGroupVersions) != 0 {
+	if result.partialFailure != nil {
 		s.markDiscoveryStale()
 	}
 	s.apiResources.replace(result.apiResources, result.failedGroupVersions, customAtStart)
-	return result.descriptors, nil
+	return result, nil
 }
 
 func (s *Service) refreshDiscoveryCache(pendingRemoval bool) {
@@ -118,6 +118,7 @@ type discoveryResult struct {
 	// failedGroupVersions are the group versions the server could not answer
 	// for; apiResources and descriptors cover only the ones it could.
 	failedGroupVersions []schema.GroupVersion
+	partialFailure      error
 }
 
 // discoverFromClient runs one aggregated discovery via discoveryClient and
@@ -150,6 +151,7 @@ func discoverFromClient(ctx context.Context, discoveryClient discovery.Discovery
 		apiResources:        apiResources,
 		descriptors:         catalogDescriptors(apiResources),
 		failedGroupVersions: failedGroupVersions(err),
+		partialFailure:      err,
 	}, nil
 }
 
