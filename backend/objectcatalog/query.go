@@ -39,14 +39,6 @@ const QuerySortRelevance = "relevance"
 
 var catalogQueryExactMetadataThreshold = 100000
 
-var catalogQueryBuiltinKeys = func() map[resourceIdentityKey]struct{} {
-	keys := make(map[resourceIdentityKey]struct{}, len(builtinResourceCatalog))
-	for _, desc := range builtinResourceCatalog {
-		keys[identityKey(desc.Group, desc.Version, desc.Kind)] = struct{}{}
-	}
-	return keys
-}()
-
 // Query filters catalog entries and returns a paginated result. It serves through the
 // querypage engine (queryViaEngine via the Querier); the engine path always
 // returns a result, so there is no legacy fallback.
@@ -282,13 +274,14 @@ func newSearchMatcher(term string) searchMatcher {
 	}
 }
 
-func newCustomOnlyMatcher(enabled bool) customOnlyMatcher {
-	if !enabled {
+func newCustomOnlyMatcher(opts QueryOptions) customOnlyMatcher {
+	if !opts.CustomOnly {
 		return func(Summary) bool { return true }
 	}
+	inScope := newNamespaceMatcher(opts.ScopeNamespaces)
 	return func(item Summary) bool {
-		_, builtin := catalogQueryBuiltinKeys[identityKey(item.Ref.Group, item.Ref.Version, item.Ref.Kind)]
-		return !builtin
+		_, custom := opts.customResources[catalogSummaryResourceIdentity(item)]
+		return custom && (opts.Scope == "" || item.Scope == opts.Scope) && inScope(item.Ref.Namespace, item.Scope)
 	}
 }
 
@@ -307,20 +300,25 @@ func countMatchingDescriptorsWithOptions(descriptors []Descriptor, matcher kindM
 }
 
 type descriptorQueryMatcher struct {
-	resourceFamily string
-	kindMatcher    kindMatcher
-	customOnly     bool
-	filterGroups   bool
-	filterScopes   bool
-	groups         map[string]struct{}
-	resourceScopes map[string]struct{}
+	resourceFamily  string
+	kindMatcher     kindMatcher
+	customResources map[string]struct{}
+	customOnly      bool
+	customScope     Scope
+	filterGroups    bool
+	filterScopes    bool
+	groups          map[string]struct{}
+	resourceScopes  map[string]struct{}
 }
 
 func newDescriptorQueryMatcher(matcher kindMatcher, opts QueryOptions) descriptorQueryMatcher {
 	result := descriptorQueryMatcher{
-		resourceFamily: opts.ResourceFamily,
-		kindMatcher:    matcher, customOnly: opts.CustomOnly,
-		filterGroups: len(opts.Groups) > 0, filterScopes: len(opts.ResourceScopes) > 0,
+		resourceFamily:  opts.ResourceFamily,
+		kindMatcher:     matcher,
+		customOnly:      opts.CustomOnly,
+		customResources: opts.customResources,
+		customScope:     opts.Scope,
+		filterGroups:    len(opts.Groups) > 0, filterScopes: len(opts.ResourceScopes) > 0,
 		groups: make(map[string]struct{}, len(opts.Groups)), resourceScopes: make(map[string]struct{}, len(opts.ResourceScopes)),
 	}
 	for _, group := range normalizeCatalogAPIGroups(opts.Groups) {
@@ -336,7 +334,7 @@ func (m descriptorQueryMatcher) matches(desc Descriptor) bool {
 	if m.resourceFamily != "" && resourcekind.FamilyForResource(desc.Group, desc.Kind, desc.Namespaced) != m.resourceFamily {
 		return false
 	}
-	if m.customOnly && descriptorIsBuiltin(desc) {
+	if m.customOnly && !m.matchesCustomResource(desc) {
 		return false
 	}
 	if m.kindMatcher != nil && !m.kindMatcher(desc.Kind, desc.Group, desc.Version, desc.Resource) {
@@ -348,9 +346,9 @@ func (m descriptorQueryMatcher) matches(desc Descriptor) bool {
 	return !m.filterScopes || stringSetContains(m.resourceScopes, strings.ToLower(string(desc.Scope)))
 }
 
-func descriptorIsBuiltin(desc Descriptor) bool {
-	_, builtin := catalogQueryBuiltinKeys[identityKey(desc.Group, desc.Version, desc.Kind)]
-	return builtin
+func (m descriptorQueryMatcher) matchesCustomResource(desc Descriptor) bool {
+	_, custom := m.customResources[catalogResourceIdentity(desc.Group, desc.Version, desc.Resource, desc.Kind, desc.Scope)]
+	return custom && (m.customScope == "" || m.customScope == desc.Scope)
 }
 
 func stringSetContains(values map[string]struct{}, value string) bool {

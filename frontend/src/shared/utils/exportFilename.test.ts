@@ -4,8 +4,8 @@ import { buildExportFilename } from './exportFilename';
 describe('buildExportFilename', () => {
   it('wraps the base name with the app prefix, a local timestamp and the extension', () => {
     const exportedAt = new Date(2026, 5, 10, 14, 22, 33); // 2026-06-10 14:22:33 local
-    expect(buildExportFilename('cluster-crds', exportedAt, 'csv')).toBe(
-      'luxury-yacht-cluster-crds-20260610142233.csv'
+    expect(buildExportFilename('cluster-rbac', exportedAt, 'csv')).toBe(
+      'luxury-yacht-cluster-rbac-20260610142233.csv'
     );
     expect(buildExportFilename('pod-api-logs', exportedAt, 'log')).toBe(
       'luxury-yacht-pod-api-logs-20260610142233.log'

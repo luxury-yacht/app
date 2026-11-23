@@ -11,7 +11,9 @@ import (
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
+	"github.com/luxury-yacht/app/backend/resources/apiresources"
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"k8s.io/client-go/openapi"
 )
 
 // resourceRetryTelemetry is the retry-only telemetry seam used by resource
@@ -157,6 +159,9 @@ type ResourceGateway struct {
 	responseCache *responseCache
 	ssrrCachesMu  sync.Mutex
 	ssrrCaches    map[string]*capabilities.SSRRCache
+
+	// openAPIClientFn returns a cluster's OpenAPI v3 client; tests replace it.
+	openAPIClientFn func(common.Dependencies) (openapi.Client, error)
 }
 
 func newResourceGateway(dependencies resourceGatewayDependencies) *ResourceGateway {
@@ -176,6 +181,7 @@ func newResourceGateway(dependencies resourceGatewayDependencies) *ResourceGatew
 	if refreshProjection == nil {
 		refreshProjection = newRefreshResourceProjection()
 	}
+	explainDocuments := apiresources.NewDocumentCache(explainDocumentCacheSize)
 	return &ResourceGateway{
 		resolveClusterDependenciesFn:       dependencies.resolveClusterDependencies,
 		resourceDependenciesForClusterIDFn: dependencies.resourceDependenciesForClusterID,
@@ -189,7 +195,10 @@ func newResourceGateway(dependencies resourceGatewayDependencies) *ResourceGatew
 		nodeMaintenanceStore:               dependencies.nodeMaintenanceStore,
 		operations:                         dependencies.operations,
 		responseCache:                      newDefaultResponseCache(),
-		ssrrCaches:                         make(map[string]*capabilities.SSRRCache),
+		openAPIClientFn: func(deps common.Dependencies) (openapi.Client, error) {
+			return clusterOpenAPIClient(deps, explainDocuments)
+		},
+		ssrrCaches: make(map[string]*capabilities.SSRRCache),
 	}
 }
 

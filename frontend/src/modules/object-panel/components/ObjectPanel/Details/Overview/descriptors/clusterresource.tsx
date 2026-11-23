@@ -152,8 +152,8 @@ export const crdDescriptor: OverviewDescriptor<CustomResourceDefinitionDetails> 
       },
     ],
   },
-  // details (table-summary string), conversionStrategy, and conditions are not surfaced here.
-  coveredElsewhere: ['details', 'conversionStrategy', 'conditions'],
+  // Explain selects and labels the schema using preferredVersion.
+  coveredElsewhere: ['details', 'conversionStrategy', 'conditions', 'preferredVersion'],
 };
 
 export const ingressClassDescriptor: OverviewDescriptor<IngressClassDetails> = {

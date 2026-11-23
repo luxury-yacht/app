@@ -7,7 +7,6 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/resourcekind"
 	admissionpkg "github.com/luxury-yacht/app/backend/resources/admission"
-	apiextensionspkg "github.com/luxury-yacht/app/backend/resources/apiextensions"
 	"github.com/luxury-yacht/app/backend/resources/backendtlspolicy"
 	"github.com/luxury-yacht/app/backend/resources/clusterrole"
 	"github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
@@ -463,12 +462,6 @@ var policySpecs = []policySpec{
 			fromIdentity(admissionpkg.ValidatingIdentity),
 			fromIdentity(admissionpkg.MutatingIdentity),
 		},
-	},
-	{
-		Domain:  "cluster-crds",
-		Mode:    ModeAll,
-		Runtime: []Resource{fromIdentity(apiextensionspkg.Identity)},
-		Stream:  []Resource{fromIdentity(apiextensionspkg.Identity)},
 	},
 	{
 		Domain:  "cluster-events",

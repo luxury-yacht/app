@@ -34,13 +34,6 @@ func canonicalObjectRowSpecs() []canonicalObjectRowSpec {
 		},
 		{name: "catalog", typeOf: typeOf[objectcatalog.Summary]()},
 		{name: "cluster-config", typeOf: typeOf[streamrows.ClusterConfigEntry]()},
-		{
-			name:   "cluster-crds",
-			typeOf: typeOf[streamrows.ClusterCRDEntry](),
-			semanticJSONFields: map[string]string{
-				"group": "API group described by the CRD object",
-			},
-		},
 		{name: "cluster-rbac", typeOf: typeOf[streamrows.ClusterRBACEntry]()},
 		{name: "cluster-storage", typeOf: typeOf[streamrows.ClusterStorageEntry]()},
 		{name: "cluster-events", typeOf: typeOf[snapshot.ClusterEventEntry]()},

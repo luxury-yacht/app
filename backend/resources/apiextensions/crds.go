@@ -15,6 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/version"
 )
 
 // CustomResourceDefinition returns a detailed view for a single CRD.
@@ -45,6 +46,7 @@ func (s *Service) buildCRDDetails(crd *apiextensionsv1.CustomResourceDefinition)
 	details.Group = facts.Group
 	details.Scope = facts.Scope
 	details.Versions = crdVersionsFromFacts(facts.Versions)
+	details.PreferredVersion = preferredServedVersion(facts.Versions)
 	details.Names = crdNamesFromFacts(facts.Names)
 	details.ConversionStrategy = facts.ConversionStrategy
 	details.Conditions = crdConditionsFromFacts(facts.Conditions)
@@ -54,6 +56,17 @@ func (s *Service) buildCRDDetails(crd *apiextensionsv1.CustomResourceDefinition)
 	}
 
 	return details
+}
+
+// preferredServedVersion uses the same ordering as Kubernetes CRD discovery.
+func preferredServedVersion(versions []VersionFacts) string {
+	preferred := ""
+	for _, candidate := range versions {
+		if candidate.Served && (preferred == "" || version.CompareKubeAwareVersionStrings(candidate.Name, preferred) > 0) {
+			preferred = candidate.Name
+		}
+	}
+	return preferred
 }
 
 func crdVersionsFromFacts(facts []VersionFacts) []CRDVersion {

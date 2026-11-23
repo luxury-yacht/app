@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"sync"
 	"time"
 
@@ -109,8 +110,12 @@ func (n *watchNotifier) runRecoverySync(ctx context.Context) {
 	if !n.takeFullSyncRequest() {
 		return
 	}
-	if err := n.service.sync(ctx); err != nil && !errors.Is(err, context.Canceled) {
+	err := n.service.sync(ctx)
+	if err != nil && !errors.Is(err, context.Canceled) {
 		n.service.logWarn(fmt.Sprintf("catalog recovery sync failed: %v", err))
+	}
+	if err != nil || n.service.apiResources.discoveryPending() {
+		n.service.requestCatalogRetry()
 	}
 }
 
@@ -126,9 +131,7 @@ func registerWatchHandlers(notifier *watchNotifier, svc *Service) {
 	}
 }
 
-// markDiscoveryStale latches that the discovery document changed (a CRD was added or
-// removed), so the next discoverResources invalidates the disk-cached discovery before
-// re-discovering.
+// markDiscoveryStale asks the next discovery pass to fetch a fresh result.
 func (s *Service) markDiscoveryStale() {
 	s.discoveryStale.Store(true)
 }
@@ -147,7 +150,7 @@ func (s *Service) registerCRDDiscoveryHook(notifier *watchNotifier) func() {
 
 // crdDiscoveryHook marks discovery stale when a CustomResourceDefinition
 // changes what API discovery serves, so the next discover invalidates the
-// disk-cached discovery document and a new CRD's kind is not hidden behind it.
+// cached discovery document and a new CRD's kind is not hidden behind it.
 // Bundle sinks see no previous row, so the hook remembers the last definition
 // it saw for each UID. Only the CRD store's write lock calls it, so seen needs
 // no lock of its own.
@@ -163,18 +166,30 @@ func newCRDDiscoveryHook(notifier *watchNotifier) *crdDiscoveryHook {
 }
 
 func (h *crdDiscoveryHook) UpsertBundle(bundle ingest.Bundle) {
-	definition, ok := bundle.Aggregate.(apiextensions.Definition)
+	definition, ok := definitionFromBundle(bundle)
 	if !ok {
 		return
 	}
 	previous, seen := h.seen[definition.UID]
 	h.seen[definition.UID] = definition
+	changed := seen && previous.ChangesDiscovery(definition)
+	if !seen || !reflect.DeepEqual(previous, definition) {
+		h.publishCustomResources(false)
+	}
 	switch {
 	case !seen:
 		h.notifier.crdAdded(definition)
-	case previous.ChangesDiscovery(definition):
+	case changed:
 		h.notifier.crdDiscoveryChanged()
 	}
+}
+
+func definitionFromBundle(bundle ingest.Bundle) (apiextensions.Definition, bool) {
+	definition, ok := bundle.Aggregate.(apiextensions.Definition)
+	if summary, ok := bundle.Catalog.(Summary); ok {
+		definition.Metadata = summary.Metadata
+	}
+	return definition, ok
 }
 
 func (h *crdDiscoveryHook) DeleteBundle(bundle ingest.Bundle) {
@@ -183,21 +198,42 @@ func (h *crdDiscoveryHook) DeleteBundle(bundle ingest.Bundle) {
 		return
 	}
 	delete(h.seen, definition.UID)
+	h.publishCustomResources(false)
 	h.notifier.crdDiscoveryChanged()
 }
 
-// ReplaceBundles diffs a relist's complete set against the last-seen
+func definitionResource(definition apiextensions.Definition) schema.GroupResource {
+	return schema.GroupResource{Group: definition.Group, Resource: definition.Names.Plural}
+}
+
+// publishCustomResources tells the API-resource store which resources the
+// seen definitions define, so the kinds it lists are flagged as custom.
+func (h *crdDiscoveryHook) publishCustomResources(listed bool) {
+	custom := make(crdDefinitions, len(h.seen))
+	for _, definition := range h.seen {
+		custom[definitionResource(definition)] = &definition
+	}
+	s := h.notifier.service
+	if s.apiResources.setWatchedCustomResources(custom, listed) {
+		// A first complete replay can settle Custom Resources even with zero
+		// definitions. Signal readers without waiting on a catalog lock here.
+		s.broadcastStreaming(false)
+	}
+}
+
+// ReplaceBundles diffs a complete replay or relist against the last-seen
 // definitions: a vanished or changed definition requests one full
 // collection, and a new one is handled as an add.
 func (h *crdDiscoveryHook) ReplaceBundles(bundles []ingest.Bundle) {
 	next := make(map[types.UID]apiextensions.Definition, len(bundles))
 	for _, bundle := range bundles {
-		if definition, ok := bundle.Aggregate.(apiextensions.Definition); ok {
+		if definition, ok := definitionFromBundle(bundle); ok {
 			next[definition.UID] = definition
 		}
 	}
 	previous := h.seen
 	h.seen = next
+	h.publishCustomResources(true)
 	for uid, old := range previous {
 		if current, kept := next[uid]; !kept || old.ChangesDiscovery(current) {
 			h.notifier.crdDiscoveryChanged()
@@ -220,7 +256,7 @@ func (n *watchNotifier) crdAdded(definition apiextensions.Definition) {
 		return
 	}
 	gr := schema.GroupResource{Group: definition.Group, Resource: definition.Names.Plural}
-	if _, desc := n.service.resolveGRToDescriptor(gr); desc != nil {
+	if _, desc := n.service.resolveGRToDescriptor(gr); desc != nil && !n.service.apiResources.discoveryPending() {
 		return
 	}
 	n.requestFullSync()

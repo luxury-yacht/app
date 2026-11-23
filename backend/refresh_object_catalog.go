@@ -205,6 +205,13 @@ func (a *RefreshCoordinator) startObjectCatalogForTarget(target catalogTarget) e
 			defer cancelCatalogUpdates()
 			runCatalogDoorbellBridge(ctx, catalogUpdates, subsystem.ResourceStream)
 		}()
+		apiResourceUpdates, cancelAPIResourceUpdates := svc.SubscribeAPIResources()
+		bridges.Add(1)
+		go func() {
+			defer bridges.Done()
+			defer cancelAPIResourceUpdates()
+			runAPIResourcesDoorbellBridge(ctx, apiResourceUpdates, subsystem.ResourceStream)
+		}()
 	}
 	if index := subsystem.AttentionIndex; index != nil {
 		startCatalogSubsetBridge(ctx, &bridges, svc.SubscribeFinalizerBlockers, svc.FinalizerBlockers, index.ReplaceFinalizerBlockers)
@@ -299,6 +306,30 @@ func runCatalogDoorbellBridge(ctx context.Context, updates <-chan objectcatalog.
 				Source:  doorbell.SourceCatalog,
 				Target:  doorbell.Subscribed(),
 				Version: fmt.Sprintf("%d", sequence),
+			})
+		}
+	}
+}
+
+// runAPIResourcesDoorbellBridge rings the API Resources domain each time the
+// catalog publishes a changed API surface, so the table refetches its page.
+func runAPIResourcesDoorbellBridge(ctx context.Context, updates <-chan objectcatalog.SubsetUpdate, bell doorbell.Bell) {
+	if bell == nil {
+		return
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case update, ok := <-updates:
+			if !ok {
+				return
+			}
+			bell.Ring(doorbell.Change{
+				Domain:  snapshot.ClusterAPIResourcesDomainName,
+				Source:  doorbell.SourceCatalog,
+				Target:  doorbell.Subscribed(),
+				Version: fmt.Sprintf("%d", update.Revision),
 			})
 		}
 	}

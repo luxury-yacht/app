@@ -301,7 +301,9 @@ describe('refresh domain contract', () => {
                 ? ['metric']
                 : entry.domain === 'cluster-attention'
                   ? ['attention']
-                  : ['object']
+                  : entry.domain === 'cluster-api-resources'
+                    ? ['catalog']
+                    : ['object']
           );
           expect(entry.frontend.diagnosticsStream).toBe('resources');
           break;
@@ -494,6 +496,7 @@ describe('refresh domain contract', () => {
             'cluster-overview',
             'cluster-attention',
             'cluster-identities',
+            'cluster-api-resources',
           ]).toContain(entry.domain);
           expect(inventory.behaviorClass).toBe(
             DOORBELL_BEHAVIOR_CLASSES[entry.domain] ?? 'snapshot-table'

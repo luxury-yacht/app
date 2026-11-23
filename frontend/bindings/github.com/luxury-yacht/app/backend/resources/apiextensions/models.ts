@@ -49,6 +49,7 @@ export interface CustomResourceDefinitionDetails {
     "scope": string;
     "details": string;
     "versions": CRDVersion[] | null;
+    "preferredVersion"?: string;
     "names": CRDNames;
     "conversionStrategy"?: string;
     "conditions"?: CRDCondition[] | null;

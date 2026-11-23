@@ -5,8 +5,7 @@
  * alt+click navigation (useNavigateToView). In order:
  * - its resource family's view (Karpenter, Argo CD, and so on);
  * - the view whose refresh domain is the kind's list domain (its kind facet);
- * - Browse, for a built-in kind that no view lists;
- * - the Custom view, for any other custom resource.
+ * - Browse, for a kind without a dedicated view.
  */
 
 import { resourceFamilyForObject } from '@core/navigation/resourceFamilies';
@@ -14,7 +13,6 @@ import {
   CLUSTER_VIEW_DESCRIPTORS,
   NAMESPACE_VIEW_DESCRIPTORS,
 } from '@core/navigation/viewRegistry';
-import { isBuiltinResource } from '@shared/constants/builtinGroupVersions';
 import { lookupKindMetadata } from '@shared/kinds/kindFacets';
 import type { ClusterViewType, NamespaceViewType, ViewType } from '@/types/navigation/views';
 
@@ -52,9 +50,6 @@ export function getViewForKind(
   const listView = listViewFor(group, kind);
   if (listView) {
     return listView;
-  }
-  if (!isBuiltinResource(group, kind)) {
-    return { viewType, tab: 'custom' };
   }
   // The cluster Browse table's view id is "browse" (BrowseView.tsx).
   return namespaced

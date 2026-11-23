@@ -75,6 +75,36 @@ func TestCatalogListRetryGetsANewRequestBudget(t *testing.T) {
 	require.Equal(t, int32(2), requests.Load())
 }
 
+func TestCatalogDenialOnLaterPageDoesNotPublishEarlierPages(t *testing.T) {
+	var countBeforeDenial atomic.Int32
+	var service atomic.Pointer[Service]
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("continue") == "" {
+			writeCatalogListPage(w, "Widget", "default", "first", "second")
+			return
+		}
+		countBeforeDenial.Store(int32(service.Load().Query(QueryOptions{}).TotalItems))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(metav1.Status{
+			TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Status"},
+			Status:   metav1.StatusFailure, Reason: metav1.StatusReasonForbidden, Code: http.StatusForbidden,
+		})
+	}))
+	defer server.Close()
+	client, err := dynamic.NewForConfig(&rest.Config{Host: server.URL})
+	require.NoError(t, err)
+	svc := NewService(Dependencies{ClusterID: "c1", Common: common.Dependencies{DynamicClient: client}}, nil)
+	svc.discoveryClient = &stubDiscovery{lists: []*metav1.APIResourceList{{
+		GroupVersion: "example.com/v1", APIResources: []metav1.APIResource{{Name: "widgets", Kind: "Widget", Namespaced: true, Verbs: []string{"list"}}},
+	}}}
+	service.Store(svc)
+	require.NoError(t, svc.sync(t.Context()))
+	require.Zero(t, countBeforeDenial.Load())
+	require.Empty(t, svc.Query(QueryOptions{}).Items)
+	require.Equal(t, "widgets.example.com", svc.LookupObject("default", "example.com", "Widget", "first").Denied)
+}
+
 // One hung kind must retain its old rows while an independent successful kind
 // publishes fresh rows. Both requests run through real HTTP cancellation.
 func TestCatalogListTimeoutDoesNotCancelSiblingKinds(t *testing.T) {

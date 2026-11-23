@@ -32,7 +32,6 @@ describe('refresh domain registry', () => {
       'cluster-rbac',
       'cluster-storage',
       'cluster-config',
-      'cluster-crds',
       'namespace-events',
       'namespace-workloads',
       'namespace-config',
@@ -43,6 +42,7 @@ describe('refresh domain registry', () => {
       'namespace-quotas',
       'namespace-helm',
       'cluster-identities',
+      'cluster-api-resources',
     ]);
   });
 

@@ -11,7 +11,6 @@ import (
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
-	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resourcekind"
 )
 
@@ -181,7 +180,8 @@ func buildCatalogSnapshot(
 	degraded := health.Status == objectcatalog.HealthStateError ||
 		health.Status == objectcatalog.HealthStateDegraded ||
 		health.Stale ||
-		health.ConsecutiveFailures > 3
+		health.ConsecutiveFailures > 3 ||
+		result.CustomDefinitions != ""
 	issues := catalogSnapshotIssues(result, health)
 
 	if forceFinal {
@@ -206,7 +206,7 @@ func buildCatalogSnapshot(
 		Previous:        result.PreviousToken,
 		Self:            result.SelfToken,
 		CursorInvalid:   result.CursorInvalid,
-		Anchor:          catalogAnchorResult(result.AnchorOutcome),
+		Anchor:          catalogAnchorResult(result),
 		PageStartRank:   pageStartRankPtr(result.PageStartRank),
 		Total:           result.TotalItems,
 		UnfilteredTotal: result.UnfilteredTotal,
@@ -231,6 +231,16 @@ func buildCatalogSnapshot(
 
 func catalogSnapshotIssues(result objectcatalog.QueryResult, health objectcatalog.HealthStatus) []ResourceQueryIssue {
 	issues := make([]ResourceQueryIssue, 0, 4)
+	switch result.CustomDefinitions {
+	case objectcatalog.CustomDefinitionsPending:
+		issues = append(issues, ResourceQueryIssue{
+			Kind: "CustomResourceDefinition", Message: "The catalog is waiting for the cluster's custom resource definitions.",
+		})
+	case objectcatalog.CustomDefinitionsDenied:
+		issues = append(issues, ResourceQueryIssue{
+			Kind: "CustomResourceDefinition", Message: "Your role cannot list custom resource definitions. Browse still shows objects from permitted scopes.",
+		})
+	}
 	if result.CursorInvalid {
 		issues = append(issues, ResourceQueryIssue{
 			Kind:    "Catalog cursor",
@@ -273,8 +283,8 @@ func catalogHealthIssues(health objectcatalog.HealthStatus) []ResourceQueryIssue
 	if len(health.DeniedResources) > 0 {
 		issues = append(issues, ResourceQueryIssue{
 			Kind: "Catalog permissions",
-			Message: "Your role cannot list " + limitedCatalogResourceNames(health.DeniedResources) +
-				"; objects of those types are not shown.",
+			Message: "Your role cannot list every requested scope for " + limitedCatalogResourceNames(health.DeniedResources) +
+				". Browse shows objects from permitted scopes.",
 		})
 	}
 	if len(health.WatchUnavailable) > 0 {
@@ -305,11 +315,14 @@ func keysetCatalogBatchIndex(hasPrevious bool) int {
 // catalogAnchorResult maps the catalog engine's anchor outcome onto the wire
 // contract (nil when the request carried no anchor), reusing the typed path's
 // found/filtered/not-found mapping.
-func catalogAnchorResult(outcome *querypage.AnchorOutcome) *ResourceQueryAnchorResult {
-	if outcome == nil {
+func catalogAnchorResult(result objectcatalog.QueryResult) *ResourceQueryAnchorResult {
+	if result.AnchorUnavailable {
+		return &ResourceQueryAnchorResult{Rank: -1, Reason: ResourceQueryAnchorUnavailable}
+	}
+	if result.AnchorOutcome == nil {
 		return nil
 	}
-	return anchorResultFromOutcome(*outcome)
+	return anchorResultFromOutcome(*result.AnchorOutcome)
 }
 
 func buildCatalogNamespaceGroups(

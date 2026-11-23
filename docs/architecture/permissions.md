@@ -57,6 +57,13 @@ failure behavior, and diagnostics.
 - Revalidation compares both allowed and denied decisions against the exact
   scopes used to build the generation. Denied decisions share the normal cache
   so restored grants are detected.
+- The CustomResourceDefinition reflector records admission in the same
+  cluster-wide LIST and WATCH grants as preflight. If preflight times out,
+  revalidation can still recover a CRD reflector skipped at startup when
+  access is restored. Other reflector admission checks use the checker's
+  cache at the exact partition scope. Domain grants drive revalidation for
+  other built-in kinds. Discovery-backed custom sources recheck admission
+  during catalog reconciliation.
 - Revocation and restoration delegate replacement to `RefreshCoordinator`; the
   revalidator never stops a still-routed subsystem. A failed replacement leaves
   the old generation serving and revalidating.

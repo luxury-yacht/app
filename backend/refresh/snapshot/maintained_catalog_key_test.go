@@ -14,7 +14,6 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
-	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
@@ -23,7 +22,6 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcekind"
 	admission "github.com/luxury-yacht/app/backend/resources/admission"
-	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 	backendtlspolicypkg "github.com/luxury-yacht/app/backend/resources/backendtlspolicy"
 	clusterrole "github.com/luxury-yacht/app/backend/resources/clusterrole"
 	clusterrolebinding "github.com/luxury-yacht/app/backend/resources/clusterrolebinding"
@@ -196,10 +194,6 @@ func TestKeyFromCatalogMatchesAdapterKeyForEveryMaintainedKind(t *testing.T) {
 			func(t *testing.T, meta ClusterMeta, obj metav1.Object) string {
 				return descriptorTableKey(t, meta, clusterStorageDomainName, "persistentvolumes", obj, clusterStorageTableQueryAdapter().Key)
 			}},
-		{"CustomResourceDefinition", apiextensions.Identity, &apiextv1.CustomResourceDefinition{ObjectMeta: cl("widgets.example.com")},
-			func(t *testing.T, meta ClusterMeta, obj metav1.Object) string {
-				return descriptorTableKey(t, meta, clusterCRDDomainName, "customresourcedefinitions", obj, clusterCRDTableQueryAdapter().Key)
-			}},
 		{"ClusterRole", clusterrole.Identity, &rbacv1.ClusterRole{ObjectMeta: cl("cr1")},
 			func(t *testing.T, meta ClusterMeta, obj metav1.Object) string {
 				return descriptorTableKey(t, meta, clusterRBACDomainName, "clusterroles", obj, clusterRBACTableQueryAdapter().Key)
@@ -297,9 +291,11 @@ func TestKeyFromCatalogMatchesAdapterKeyForEveryMaintainedKind(t *testing.T) {
 		covered[tc.name] = true
 	}
 	for _, d := range kindregistry.All {
-		// ReplicaSets have no table, and the namespaces table is built at serve
-		// from the namespace store, so neither feeds a maintained store.
-		if d.Identity.Kind == "Pod" || d.Identity.Kind == "ReplicaSet" || d.Identity.Kind == "Namespace" {
+		// ReplicaSets and CustomResourceDefinitions have no table, and the
+		// namespaces table is built at serve from the namespace store, so none
+		// of them feeds a maintained store.
+		switch d.Identity.Kind {
+		case "Pod", "ReplicaSet", "Namespace", "CustomResourceDefinition":
 			continue
 		}
 		require.Truef(t, covered[d.Identity.Kind],

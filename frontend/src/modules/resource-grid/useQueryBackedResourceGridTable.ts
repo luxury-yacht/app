@@ -7,7 +7,10 @@ import {
   type GridTableFocusRequest,
   matchesGridTableFocusRequest,
 } from '@shared/components/tables/hooks/gridTableFocusRequest';
-import { peekPendingFocusRequest } from '@shared/components/tables/hooks/useGridTableExternalFocus';
+import {
+  peekPendingFocusRequest,
+  setPendingFocusRequest,
+} from '@shared/components/tables/hooks/useGridTableExternalFocus';
 import {
   isTablePageSize,
   TABLE_PAGE_SIZE_OPTIONS,
@@ -19,9 +22,9 @@ import TablePaginationControls, {
   shouldRenderTablePaginationControls,
 } from '@shared/components/tables/TablePaginationControls';
 import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
-import { errorHandler } from '@utils/errorHandler';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { useScopedRefreshDomainLifecycle } from '@/core/data-access';
+import { eventBus } from '@/core/events';
 import { useRefreshScopedDomain } from '@/core/refresh';
 import { useQueryStreamSignal } from '@/core/refresh/hooks/useQueryStreamSignal';
 import type { RefreshFailure } from '@/core/refresh/refreshFailure';
@@ -49,6 +52,11 @@ import type {
   ResourceGridTableResult,
   ResourceGridTableRow,
 } from './resourceGridTableTypes';
+import {
+  focusRequestAnchor,
+  pendingAnchorRequest,
+  reportMissingFocusTarget,
+} from './resourceQueryFocus';
 import { useClusterResourceGridTable, useNamespaceResourceGridTable } from './useResourceGridTable';
 import type { ResourceInventorySourceState } from './useResourceInventoryTable';
 import {
@@ -216,6 +224,7 @@ function useTypedQueryLifecycle<
   baseSelector,
   queryTableMode,
   selectRows,
+  keyExtractor,
   predicates,
   filterOptionOverrides,
   excludedQueryFacetKeys,
@@ -224,6 +233,7 @@ function useTypedQueryLifecycle<
   defaultSort,
   persistence,
   liveScope,
+  onFocusTargetNotListed,
 }: {
   clusterId?: string | null;
   enabled: boolean;
@@ -233,6 +243,7 @@ function useTypedQueryLifecycle<
   baseSelector: ScopeSelector;
   queryTableMode: Extract<ResourceGridTableMode, 'Query Backed Static' | 'Query Backed Dynamic'>;
   selectRows: (payload: TPayload) => TRow[];
+  keyExtractor: (row: TRow, index: number) => string;
   predicates?: Record<string, string | null | undefined>;
   filterOptionOverrides?: Partial<GridTableFilterOptions>;
   excludedQueryFacetKeys?: readonly string[];
@@ -241,6 +252,7 @@ function useTypedQueryLifecycle<
   defaultSort: SortConfig;
   persistence: UseGridTablePersistenceResult;
   liveScope: string;
+  onFocusTargetNotListed?: FocusTargetNotListedHandler;
 }): TypedQueryLifecycle<TPayload, TRow> {
   const { tableState, handleTableStateChange } = useQueryBackedTableState(defaultSort);
   const [tableStateReady, setTableStateReady] = useState(false);
@@ -340,10 +352,13 @@ function useTypedQueryLifecycle<
     enabled: queryEnabled,
     domain,
     viewId,
+    baseSelector,
     loaded,
     rows: data,
+    keyExtractor,
     anchorTo: query.anchorTo,
     anchorResult: query.anchorResult,
+    onTargetNotListed: onFocusTargetNotListed,
   });
 
   return {
@@ -358,12 +373,6 @@ function useTypedQueryLifecycle<
   };
 }
 
-// Field-based matching only for the anchor decision: the request's rowKey
-// branch needs the view's real keyExtractor, which the focus machinery inside
-// GridTable owns. A false negative here just fires a redundant jump onto the
-// same page; a false positive leaves today's behavior.
-const anchorDecisionKeyExtractor = () => '';
-
 // "Show in list" upgrade (plan P8): the existing gridtable:focus-request
 // machinery highlights and scrolls a row only when it is on the LOADED page.
 // When a pending request targets this table's cluster but matches no loaded
@@ -375,94 +384,116 @@ function useAnchorOnUnmatchedFocusRequest<TRow>({
   enabled = true,
   domain,
   viewId,
+  baseSelector,
   loaded,
   rows,
+  keyExtractor,
   anchorTo,
   anchorResult,
+  onTargetNotListed,
 }: {
   clusterId?: string | null;
   enabled?: boolean;
   domain: RefreshDomain;
   viewId: string;
+  baseSelector: ScopeSelector;
   loaded: boolean;
   rows: TRow[];
+  keyExtractor: (row: TRow, index: number) => string;
   anchorTo: UseTypedResourceQueryResult<TRow>['anchorTo'];
   anchorResult: UseTypedResourceQueryResult<TRow>['anchorResult'];
+  onTargetNotListed?: FocusTargetNotListedHandler;
 }): void {
-  const anchoredRequestRef = useRef<GridTableFocusRequest | null>(null);
+  const started = useRef<{
+    request: GridTableFocusRequest;
+    target: ReturnType<typeof focusRequestAnchor>;
+  } | null>(null);
+  // Read at report time, so a new handler identity never re-reports a result.
+  const handedOff = useEffectEvent(
+    (request: GridTableFocusRequest) => onTargetNotListed?.(request) ?? false
+  );
+  const namespace = baseSelector.kind === 'namespace' ? baseSelector.namespace : undefined;
+  useRequiredAnchorLifetime(clusterId, viewId, namespace);
 
   useEffect(() => {
     if (!enabled || !clusterId || !loaded) {
       return;
     }
-    const request = peekPendingFocusRequest();
-    if (request?.clusterId !== clusterId) {
-      return;
-    }
-    // Only the navigation DESTINATION table reacts: the request is stamped with
-    // the destination viewId (useNavigateToView), so a same-cluster non-target
-    // table (an object-panel pods list, a different tab) can't consume it and
-    // fire a spurious anchor / false not-found. A request with no destination
-    // (no emitter produces one today) does not anchor.
-    if (request.destinationViewId !== viewId) {
-      return;
-    }
-    // One jump per request (buffer identity): a not-found landing must not
-    // re-fire forever.
-    if (anchoredRequestRef.current === request) {
-      return;
-    }
-    // A backend anchor needs a full reference; version missing (no builtin
-    // backfill either) degrades to the current-page-only behavior.
-    if (!request.version) {
-      return;
-    }
-    const probe = { ...request, rowKey: undefined };
-    const onPage = rows.some((row, index) =>
-      matchesGridTableFocusRequest(row, index, anchorDecisionKeyExtractor, probe)
-    );
-    if (onPage) {
-      return;
-    }
-    anchoredRequestRef.current = request;
-    anchorTo({
-      clusterId: request.clusterId,
-      group: request.group ?? '',
-      version: request.version,
-      kind: request.kind,
-      namespace: request.namespace,
-      name: request.name,
-      uid: request.uid,
-    });
-  }, [anchorTo, clusterId, enabled, loaded, rows, viewId]);
+    const startPendingAnchor = () => {
+      const request = pendingAnchorRequest(clusterId, viewId, namespace);
+      // One anchor jump per request, including a missing target.
+      if (!request || request === started.current?.request) {
+        return;
+      }
+      const onPage = rows.some((row, index) =>
+        matchesGridTableFocusRequest(row, index, keyExtractor, request)
+      );
+      const supersedesInFlight = started.current && started.current.target !== anchorResult?.target;
+      if (onPage && !supersedesInFlight && !request.requiresAnchor) {
+        return;
+      }
+      const target = focusRequestAnchor(request);
+      started.current = { request, target };
+      anchorTo(target);
+    };
+
+    const unsubscribe = eventBus.on('gridtable:focus-request', startPendingAnchor);
+    startPendingAnchor();
+    return unsubscribe;
+  }, [anchorResult, anchorTo, clusterId, enabled, keyExtractor, loaded, namespace, rows, viewId]);
 
   useEffect(() => {
-    if (!anchorResult || anchorResult.found) {
+    if (!anchorResult) {
       return;
     }
-    const request = anchoredRequestRef.current;
-    let target: string;
-
-    if (request) {
-      const namespacedName = request.namespace
-        ? `${request.namespace}/${request.name}`
-        : request.name;
-      target = `${request.kind} ${namespacedName}`;
-    } else {
-      target = 'The requested object';
+    const current = started.current;
+    if (current?.target !== anchorResult.target || current.request !== peekPendingFocusRequest()) {
+      return;
     }
-
+    const { request } = current;
+    if (anchorResult.found && request.requiresAnchor) {
+      setPendingFocusRequest(null);
+      eventBus.emit('gridtable:focus-request', { ...request, requiresAnchor: false });
+      return;
+    }
+    // The object exists but has no row here under any filters. A view that
+    // lists the object itself may take over.
+    if (anchorResult.found || (anchorResult.reason === 'unlisted' && handedOff(request))) {
+      return;
+    }
+    setPendingFocusRequest(null);
     // Loud, inline-adjacent truth (degraded states must be visible): the jump
     // landed on page 1 because the object is not in this view.
-    errorHandler.handle(
-      new Error(
-        anchorResult.reason === 'filtered'
-          ? `${target} is not shown: the current filters exclude it`
-          : `${target} was not found — it may have been deleted`
-      ),
-      { source: 'resource-grid-anchor', domain }
-    );
+    reportMissingFocusTarget(domain, request, anchorResult.reason);
   }, [anchorResult, domain]);
+}
+
+function useRequiredAnchorLifetime(
+  clusterId: string | null | undefined,
+  viewId: string,
+  namespace: string | undefined
+): void {
+  const owned = useRef<GridTableFocusRequest | null>(null);
+  useEffect(() => {
+    // Own the request even while the destination is still loading its first page.
+    const claim = () => {
+      const request = pendingAnchorRequest(clusterId, viewId, namespace);
+      owned.current = request?.requiresAnchor ? request : null;
+    };
+    claim();
+    const unsubscribe = eventBus.on('gridtable:focus-request', claim);
+    return () => {
+      unsubscribe();
+      const abandoned = owned.current;
+      owned.current = null;
+      // StrictMode immediately reclaims the same request on effect replay.
+      queueMicrotask(() => {
+        if (abandoned && owned.current !== abandoned && peekPendingFocusRequest() === abandoned) {
+          setPendingFocusRequest(null);
+        }
+      });
+    };
+  }, [clusterId, viewId, namespace]);
 }
 
 // Builds the shared result for both scopes: the pagination footer (query scope
@@ -648,6 +679,7 @@ export function useQueryBackedNamespaceResourceGridTable<
     baseSelector: namespaceSelector,
     queryTableMode,
     selectRows,
+    keyExtractor: resolvedKeyExtractor,
     predicates,
     filterOptionOverrides,
     excludedQueryFacetKeys,
@@ -708,7 +740,17 @@ export interface QueryBackedClusterGridParams<
    * (requestGridTableFilters); the first query already carries them.
    */
   acceptsFilterRequests?: boolean;
+  /**
+   * Called when "show in list" targets an object that exists but that this
+   * table has no row for under any filters (the backend's `unlisted` anchor
+   * reason). Return true when the request was handed to a view that lists the
+   * object; the table then reports nothing. An object that was not found, or
+   * that the current filters hide, is always reported here.
+   */
+  onFocusTargetNotListed?: FocusTargetNotListedHandler;
 }
+
+type FocusTargetNotListedHandler = (request: GridTableFocusRequest) => boolean;
 
 export function useQueryBackedClusterResourceGridTable<
   TPayload extends TypedQueryPayload,
@@ -730,6 +772,7 @@ export function useQueryBackedClusterResourceGridTable<
   defaultSortDirection = 'asc',
   supportsCustomMetadataColumns,
   acceptsFilterRequests = false,
+  onFocusTargetNotListed,
   ...tableParams
 }: QueryBackedClusterGridParams<TPayload, TRow>): QueryBackedNamespaceGridResult<TRow, TPayload> {
   const defaultSort = useMemo(
@@ -766,6 +809,7 @@ export function useQueryBackedClusterResourceGridTable<
     baseSelector,
     queryTableMode,
     selectRows,
+    keyExtractor: resolvedKeyExtractor,
     predicates,
     filterOptionOverrides,
     excludedQueryFacetKeys,
@@ -773,6 +817,7 @@ export function useQueryBackedClusterResourceGridTable<
     defaultSort,
     persistence,
     liveScope,
+    onFocusTargetNotListed,
   });
   const table = useClusterResourceGridTable<TRow>({
     ...tableParams,

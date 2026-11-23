@@ -10,6 +10,7 @@ export {
 } from "./models.js";
 
 export type {
+    APIResourceReference,
     ApplicationQuitPreflightRequestedEvent,
     ClusterPanelCloseEvent,
     ClusterTabTransferEvent,

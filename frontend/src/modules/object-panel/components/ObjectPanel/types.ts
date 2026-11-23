@@ -88,6 +88,7 @@ export type ViewType =
   | 'events'
   | 'metrics'
   | 'yaml'
+  | 'explain'
   | 'map'
   | 'manifest'
   | 'values';

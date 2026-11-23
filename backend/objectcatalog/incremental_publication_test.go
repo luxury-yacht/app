@@ -62,6 +62,7 @@ func TestIncrementalCatalogPublication(t *testing.T) {
 func TestIncrementalQueriesMatchFullPublication(t *testing.T) {
 	rows := generateOracleObjects(rand.New(rand.NewSource(42)), 80)
 	svc := NewService(Dependencies{ClusterID: "cluster-a"}, nil)
+	seedQueryTestDefinitions(svc)
 	for _, row := range rows {
 		desc := Descriptor{Group: row.Ref.Group, Version: row.Ref.Version, Kind: row.Ref.Kind, Resource: row.Ref.Resource, Namespaced: row.Scope == ScopeNamespace, Scope: row.Scope}
 		registerDesc(svc, desc)
@@ -79,6 +80,7 @@ func TestIncrementalQueriesMatchFullPublication(t *testing.T) {
 			svc.applyIngestCatalogSummary(gvr, row, i%3 == 1)
 		}
 		want := newEquivalenceService(t, svc.Snapshot())
+		seedQueryTestDefinitions(want)
 		want.clusterID = svc.clusterID
 		want.cachedDescriptors = svc.Descriptors()
 		for _, query := range []QueryOptions{

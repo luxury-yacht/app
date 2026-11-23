@@ -5,6 +5,20 @@
 // @ts-ignore: Unused imports
 import * as json$0 from "../../../../../encoding/json/models.js";
 
+/**
+ * APIResourceReference identifies a kind the cluster serves, not an API object.
+ * Cluster, group (empty for the core group) and plural resource are its
+ * identity, the same fields its panel ID encodes. Kind is the label shown
+ * until the panel has read the kind's details. It carries no version: the
+ * panel reads the kind at whichever version the cluster currently prefers.
+ */
+export interface APIResourceReference {
+    "clusterId": string;
+    "group": string;
+    "kind": string;
+    "resource": string;
+}
+
 export interface ApplicationQuitPreflightRequestedEvent {
     "switchingWorkspace"?: boolean;
     "transactionId": string;
@@ -254,6 +268,7 @@ export enum TabKind {
 
     TabKindObject = "object",
     TabKindIdentity = "identity",
+    TabKindAPIResource = "api-resource",
 };
 
 export interface TabSnapshot {
@@ -261,6 +276,7 @@ export interface TabSnapshot {
     "panelId": string;
     "objectRef"?: ObjectReference;
     "identityRef"?: IdentityReference;
+    "apiResourceRef"?: APIResourceReference;
     "activeView": string;
 }
 

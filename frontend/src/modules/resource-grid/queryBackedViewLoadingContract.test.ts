@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest';
 
 const QUERY_BACKED_VIEW_FILES = [
   'src/modules/cluster/components/ClusterViewConfig.tsx',
-  'src/modules/cluster/components/ClusterViewCRDs.tsx',
   'src/modules/cluster/components/ClusterViewEvents.tsx',
   'src/modules/cluster/components/ClusterViewNodes.tsx',
   'src/modules/cluster/components/ClusterViewRBAC.tsx',

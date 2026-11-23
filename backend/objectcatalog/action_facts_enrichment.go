@@ -6,62 +6,42 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-func enrichCatalogActionFacts(items map[string]Summary, allowed map[string]Descriptor, failed map[string]error) {
-	hpaCoverageKnown := catalogHPACoverageKnown(allowed, failed)
-	managedTargets := catalogManagedTargets(items, hpaCoverageKnown)
+func (idx *catalogIndex) countHPATarget(row Summary, delta int) {
+	if row.ActionFacts == nil || row.ActionFacts.ScaleTarget == nil {
+		return
+	}
+	target := row.ActionFacts.ScaleTarget
+	adjustCatalogCount(idx.hpaTargets, hpapkg.TargetKey(target.Namespace, target.Group, target.Kind, target.Name), delta)
+}
 
-	for key, item := range items {
-		if enriched, changed := enrichScalableWorkloadActionFacts(item, hpaCoverageKnown, managedTargets); changed {
-			items[key] = enriched
+// Enrich only the returned page. Watch updates publish their target counts in
+// the same lock as their rows, and facts already handed to readers stay immutable.
+func (idx *catalogIndex) enrichPageActionFacts(rows []Summary, scope []string) {
+	_, hpa := idx.resourceForGroupResource(hpapkg.Identity.Group, hpapkg.Identity.Resource)
+	for i, row := range rows {
+		if isCatalogScalableWorkload(row) {
+			rows[i] = idx.withHPAOwnership(row, hpa, scope)
 		}
 	}
 }
 
-func catalogManagedTargets(items map[string]Summary, coverageKnown bool) map[string]struct{} {
-	managedTargets := make(map[string]struct{})
-	if !coverageKnown {
-		return managedTargets
+func (idx *catalogIndex) withHPAOwnership(row Summary, hpa *Descriptor, scope []string) Summary {
+	var managed *bool
+	if hpa != nil && idx.scopeConfirmed(*hpa, row.Ref.Namespace, scope) {
+		target := hpapkg.TargetKey(row.Ref.Namespace, row.Ref.Group, row.Ref.Kind, row.Ref.Name)
+		value := idx.hpaTargets[target] > 0
+		managed = &value
 	}
-	for _, item := range items {
-		if item.ActionFacts == nil || item.ActionFacts.ScaleTarget == nil {
-			continue
-		}
-		target := item.ActionFacts.ScaleTarget
-		managedTargets[hpapkg.TargetKey(target.Namespace, target.Group, target.Kind, target.Name)] = struct{}{}
+	if row.ActionFacts == nil && managed == nil {
+		return row
 	}
-	return managedTargets
-}
-
-func enrichScalableWorkloadActionFacts(item Summary, coverageKnown bool, managedTargets map[string]struct{}) (Summary, bool) {
-	if !isCatalogScalableWorkload(item) {
-		return item, false
+	var facts ActionFacts
+	if row.ActionFacts != nil {
+		facts = *row.ActionFacts
 	}
-	if !coverageKnown {
-		if item.ActionFacts == nil {
-			return item, false
-		}
-		item.ActionFacts.HPAManaged = nil
-		return item, true
-	}
-	_, managed := managedTargets[hpapkg.TargetKey(item.Ref.Namespace, item.Ref.Group, item.Ref.Kind, item.Ref.Name)]
-	if item.ActionFacts == nil {
-		item.ActionFacts = &ActionFacts{}
-	}
-	item.ActionFacts.HPAManaged = &managed
-	return item, true
-}
-
-func catalogHPACoverageKnown(allowed map[string]Descriptor, failed map[string]error) bool {
-	for gvr, desc := range allowed {
-		if desc.Group != "autoscaling" || desc.Resource != "horizontalpodautoscalers" {
-			continue
-		}
-		if _, failed := failed[gvr]; failed {
-			continue
-		}
-		return true
-	}
-	return false
+	facts.HPAManaged = managed
+	row.ActionFacts = &facts
+	return row
 }
 
 // catalogScalableWorkloadKinds is the set of scalable-workload kinds from the single

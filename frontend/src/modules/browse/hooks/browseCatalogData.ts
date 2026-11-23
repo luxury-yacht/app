@@ -7,7 +7,11 @@ import {
   reconcileByUID,
 } from '@modules/browse/utils/browseUtils';
 import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
-import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
+import type {
+  CatalogItem,
+  CatalogSnapshotPayload,
+  ResourceQueryAnchor,
+} from '@/core/refresh/types';
 import { compareUtf16Strings } from '@/shared/utils/sort';
 
 export interface BrowseFilters {
@@ -168,7 +172,8 @@ export const buildBrowseCatalogPageScope = (
     'clusterId' | 'filters' | 'sort' | 'pageLimit' | 'pinnedNamespaces'
   > & { customOnly?: boolean },
   continueToken: string,
-  startRank?: number
+  startRank?: number,
+  anchor?: ResourceQueryAnchor
 ): string => {
   const sortScope = catalogSortScope(input.sort);
   const pageScope = buildCatalogScope({
@@ -182,6 +187,7 @@ export const buildBrowseCatalogPageScope = (
     namespaces: plan.namespacesToQuery,
     sort: sortScope.sort,
     sortDirection: sortScope.sortDirection,
+    anchor,
     continueToken,
     startRank,
     customOnly: input.customOnly ?? false,

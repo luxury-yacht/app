@@ -174,7 +174,6 @@ beforeEach(() => {
   resetAllScopedDomainStates('cluster-rbac');
   resetAllScopedDomainStates('cluster-storage');
   resetAllScopedDomainStates('cluster-config');
-  resetAllScopedDomainStates('cluster-crds');
   resetAllScopedDomainStates('catalog');
   resetAllScopedDomainStates('pods');
   resetAllScopedDomainStates('namespaces');
@@ -197,7 +196,6 @@ afterEach(() => {
   resetAllScopedDomainStates('cluster-rbac');
   resetAllScopedDomainStates('cluster-storage');
   resetAllScopedDomainStates('cluster-config');
-  resetAllScopedDomainStates('cluster-crds');
   resetAllScopedDomainStates('catalog');
   resetAllScopedDomainStates('pods');
   resetAllScopedDomainStates('namespaces');

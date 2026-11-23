@@ -638,15 +638,16 @@ func TestEnrichCatalogActionFactsMarksHPAManagedWorkloads(t *testing.T) {
 		"managed":               {Ref: resourcemodel.ResourceRef{Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "default", Name: "web"}, ActionFacts: &ActionFacts{HPAManaged: &falseValue}},
 		"unmanaged":             {Ref: resourcemodel.ResourceRef{Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "default", Name: "api"}},
 	}
-	allowed := map[string]Descriptor{
-		"autoscaling/v2/horizontalpodautoscalers": {
-			Group:    "autoscaling",
-			Version:  "v2",
-			Resource: "horizontalpodautoscalers",
-		},
+	desc := Descriptor{Group: "autoscaling", Version: "v2", Resource: "horizontalpodautoscalers", Namespaced: true}
+	idx := newCatalogIndex()
+	idx.setResource(desc.GVR().String(), desc)
+	idx.completeResources = map[string]struct{}{desc.GVR().String(): {}}
+	idx.rebuildCacheFromItems(items, []Descriptor{desc})
+	for key, row := range items {
+		if isCatalogScalableWorkload(row) {
+			items[key] = idx.withHPAOwnership(row, &desc, nil)
+		}
 	}
-
-	enrichCatalogActionFacts(items, allowed, nil)
 
 	if items["managed"].ActionFacts == nil || items["managed"].ActionFacts.HPAManaged == nil || !*items["managed"].ActionFacts.HPAManaged {
 		t.Fatalf("expected managed deployment to be marked HPA-managed, got %#v", items["managed"].ActionFacts)

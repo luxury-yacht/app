@@ -1,7 +1,8 @@
 import {
+  type ApiResourcePanelRef,
   buildPanelTarget,
   type IdentityPanelRef,
-  isIdentityPanelRef,
+  isNonObjectPanelRef,
   type PanelTarget,
   panelTargetFromSnapshot,
   panelTargetId,
@@ -167,7 +168,7 @@ export function useObjectPanel() {
       if (!activateObjectCluster(restored.clusterId)) {
         return;
       }
-      onRowClick(isIdentityPanelRef(restored) ? restored : { ...enriched, ...tab.objectRef }, {
+      onRowClick(isNonObjectPanelRef(restored) ? restored : { ...enriched, ...tab.objectRef }, {
         pendingNativeOpen: shouldAutoFloat,
       });
       // Set the requested initial tab in the same React batch as the open so
@@ -258,6 +259,14 @@ export function useObjectPanel() {
     [openTarget]
   );
 
+  // Opens the panel that describes a kind (not an object of that kind).
+  const openWithApiResource = useCallback(
+    (ref: ApiResourcePanelRef, options?: OpenWithObjectOptions) => {
+      openTarget(buildPanelTarget(ref), options);
+    },
+    [openTarget]
+  );
+
   const close = useCallback(() => {
     if (currentPanelId && objectData?.clusterId) {
       // Close just this panel.
@@ -284,6 +293,7 @@ export function useObjectPanel() {
     // Open or activate a tab for an object.
     openWithObject,
     openWithIdentity,
+    openWithApiResource,
     // Close the current panel (or all panels if outside ObjectPanel tree).
     close,
   };

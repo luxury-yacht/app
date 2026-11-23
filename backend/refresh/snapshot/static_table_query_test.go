@@ -168,15 +168,6 @@ func TestMigratedClusterStaticTableAdaptersQueryAndPage(t *testing.T) {
 		assertMigratedPage(t, page)
 	})
 
-	t.Run("crds", func(t *testing.T) {
-		page := applyTypedTableQuery([]ClusterCRDEntry{
-			{Ref: resourcemodel.ResourceRef{Kind: "Widget", Name: "alpha-a.example.com"}, Group: "example.com"},
-			{Ref: resourcemodel.ResourceRef{Kind: "Widget", Name: "alpha-b.example.com"}, Group: "example.com"},
-			{Ref: resourcemodel.ResourceRef{Kind: "Gadget", Name: "charlie.example.com"}, Group: "example.com"},
-		}, query, clusterCRDTableQueryAdapter())
-		assertMigratedPage(t, page)
-	})
-
 	t.Run("nodes", func(t *testing.T) {
 		page := applyTypedTableQuery([]NodeSummary{
 			{Ref: resourcemodel.ResourceRef{Kind: "Node", Name: "alpha-a"}, CPUUsageMilli: ptr.To[int64](100)},
@@ -313,17 +304,6 @@ func TestStaticTableQuerySortsFrontendColumnKeys(t *testing.T) {
 			Limit:         10,
 		},
 	}
-
-	t.Run("cluster crd version column", func(t *testing.T) {
-		query.Request.SortField = "version"
-		page := applyTypedTableQuery([]ClusterCRDEntry{
-			{Ref: resourcemodel.ResourceRef{Name: "widgets.example.com"}, StorageVersion: "v2"},
-			{Ref: resourcemodel.ResourceRef{Name: "gadgets.example.com"}, StorageVersion: "v1"},
-		}, query, clusterCRDTableQueryAdapter())
-		requirePageNames(t, page.Rows, []string{"gadgets.example.com", "widgets.example.com"}, func(row ClusterCRDEntry) string {
-			return row.Ref.Name
-		})
-	})
 
 	t.Run("cluster storage access modes column", func(t *testing.T) {
 		query.Request.SortField = "accessModes"
@@ -705,13 +685,6 @@ func BenchmarkMigratedStaticTableQueries(b *testing.B) {
 			rows[i] = ClusterRBACEntry{Ref: resourcemodel.ResourceRef{Kind: kinds[i%len(kinds)], Name: benchmarkName("cluster-rbac", i)}, Details: "bench access"}
 		}
 		benchmarkTypedTableQuery(b, query, rows, clusterRBACTableQueryAdapter())
-	})
-	b.Run("cluster-crds", func(b *testing.B) {
-		rows := make([]ClusterCRDEntry, 10000)
-		for i := range rows {
-			rows[i] = ClusterCRDEntry{Ref: resourcemodel.ResourceRef{Kind: "CustomResourceDefinition", Name: benchmarkName("widgets", i) + ".bench.example.com"}, Group: "bench.example.com", Scope: "Namespaced", Details: "bench resources", StorageVersion: "v1"}
-		}
-		benchmarkTypedTableQuery(b, query, rows, clusterCRDTableQueryAdapter())
 	})
 }
 

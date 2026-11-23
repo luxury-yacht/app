@@ -17,6 +17,7 @@ type CustomResourceDefinitionDetails struct {
 	Scope              string            `json:"scope"`
 	Details            string            `json:"details"`
 	Versions           []CRDVersion      `json:"versions"`
+	PreferredVersion   string            `json:"preferredVersion,omitempty"`
 	Names              CRDNames          `json:"names"`
 	ConversionStrategy string            `json:"conversionStrategy,omitempty"`
 	Conditions         []CRDCondition    `json:"conditions,omitempty"`

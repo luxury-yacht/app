@@ -72,12 +72,16 @@ function navigationTarget(objectRef: KubernetesObjectReference) {
     return null;
   }
   const destination = getViewForKind(focus.kind, focus.group, focus.namespace);
+  const destinationViewId =
+    destination.destinationViewId ?? `${destination.viewType}-${destination.tab}`;
   return {
     destination,
     request: {
       ...focus,
-      destinationViewId:
-        destination.destinationViewId ?? `${destination.viewType}-${destination.tab}`,
+      destinationViewId,
+      ...(destination.tab === 'browse' || destinationViewId === 'cluster-api-resources'
+        ? { requiresAnchor: true }
+        : {}),
     },
   };
 }

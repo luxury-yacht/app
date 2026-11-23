@@ -53,9 +53,10 @@ type domainRegistration struct {
 	// domain serves synthesized names) — the permission gate must always
 	// match the data source's actual scope.
 	skipRuntimePolicy bool
-	// feedIndependent marks a domain whose payload reads no object feed (the
+	// feedIndependent marks a domain whose rows come from no object feed (the
 	// catalog service, live GETs, metrics, the maintenance store). It declares
-	// an empty readiness set, so its builds never wait on feed sync.
+	// an empty readiness set, so its builds never wait on feed sync. API
+	// Resources reads CRD classification and LIST denials from the catalog.
 	feedIndependent bool
 }
 
@@ -354,6 +355,10 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 			return snapshot.RegisterCatalogDiffDomain(deps.registry, catalogConfig)
 		}), func() bool { return deps.cfg.ObjectCatalogService != nil }),
 
+		snapshot.ClusterAPIResourcesDomainName: withSkipUnless(feedIndependentRegistration(snapshot.ClusterAPIResourcesDomainName, func() error {
+			return snapshot.RegisterClusterAPIResourcesDomain(deps.registry, deps.cfg.ObjectCatalogService)
+		}), func() bool { return deps.cfg.ObjectCatalogService != nil }),
+
 		"nodes": listWatchRegistration(listWatchDomainConfig{
 			name:          "nodes",
 			issueResource: "core/nodes,pods",
@@ -394,25 +399,6 @@ func domainRegistrations(ctx context.Context, deps registrationDeps) []domainReg
 				return snapshot.RegisterClusterConfigDomain(
 					deps.registry,
 					allowed,
-					clusterMeta,
-					deps.ingestManager,
-					deps.bell,
-				)
-			},
-		}),
-
-		"cluster-crds": listWatchRegistration(listWatchDomainConfig{
-			name:          "cluster-crds",
-			issueResource: "apiextensions.k8s.io/customresourcedefinitions",
-			logGroup:      "apiextensions.k8s.io",
-			logResource:   "customresourcedefinitions",
-			deniedReason:  "apiextensions.k8s.io/customresourcedefinitions",
-			checks: []listWatchCheck{
-				{group: "apiextensions.k8s.io", resource: "customresourcedefinitions"},
-			},
-			registerListWatch: func() error {
-				return snapshot.RegisterClusterCRDDomain(
-					deps.registry,
 					clusterMeta,
 					deps.ingestManager,
 					deps.bell,

@@ -1,8 +1,9 @@
 package ingest
 
 import (
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"slices"
+
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type catalogSubscription struct{ Sink }
@@ -42,9 +43,9 @@ func (m *IngestManager) SubscribeCatalogSink(gvr schema.GroupVersionResource, si
 }
 
 // SubscribeBundleSink registers a bundle sink after the store may already hold
-// rows: it replays every current bundle as an upsert under the store lock, then
-// delivers each later change. The replay stands in for a restore seed. The
-// returned func detaches the sink.
+// rows. It replays a synced store as one complete set to a BundleReplacer;
+// other replays are upserts. Replay and live changes are ordered by the store
+// lock. The returned func detaches the sink.
 func (s *ProjectingStore) SubscribeBundleSink(sink BundleSink) func() {
 	if sink == nil {
 		return func() {
@@ -58,16 +59,25 @@ func (s *ProjectingStore) SubscribeBundleSink(sink BundleSink) func() {
 	}
 	s.mu.Lock()
 	s.bundleSinks = append(s.bundleSinks, observer)
-	for _, row := range s.rows {
-		if bundle, ok := row.(Bundle); ok {
-			sink.UpsertBundle(bundle)
-		}
-	}
+	s.replayBundleSinkLocked(observer)
 	s.mu.Unlock()
 	return func() {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		s.bundleSinks = slices.DeleteFunc(s.bundleSinks, func(candidate BundleSink) bool { return candidate == observer })
+	}
+}
+
+func (s *ProjectingStore) replayBundleSinkLocked(sink BundleSink) {
+	if bulk, ok := sink.(BundleReplacer); ok && s.synced {
+		_, _, bundles := replaceRows(s.rows)
+		bulk.ReplaceBundles(bundles)
+		return
+	}
+	for _, row := range s.rows {
+		if bundle, ok := row.(Bundle); ok {
+			sink.UpsertBundle(bundle)
+		}
 	}
 }
 

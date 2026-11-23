@@ -59,6 +59,43 @@ const workspace = () => {
 };
 
 describe('useNavigateToView', () => {
+  it('opens namespace Browse for a native kind with no dedicated list view', async () => {
+    await start();
+    await navigate({
+      clusterId: dev.clusterId,
+      group: 'apps',
+      version: 'v1',
+      kind: 'ControllerRevision',
+      namespace: 'team-b',
+      name: 'controller-history',
+    });
+    expect(workspace()).toMatchObject({ view: 'namespace', namespaceTab: 'browse' });
+    expect(peekPendingFocusRequest()).toMatchObject({
+      clusterId: dev.clusterId,
+      destinationViewId: 'namespace-browse',
+      name: 'controller-history',
+    });
+  });
+
+  it('asks API Resources to resolve a CRD by name before focusing a cached kind row', async () => {
+    await start();
+
+    await navigate({
+      clusterId: dev.clusterId,
+      group: 'apiextensions.k8s.io',
+      version: 'v1',
+      kind: 'CustomResourceDefinition',
+      name: 'widgets.example.io',
+    });
+
+    expect(workspace()).toMatchObject({ view: 'cluster', clusterTab: 'api-resources' });
+    expect(peekPendingFocusRequest()).toMatchObject({
+      name: 'widgets.example.io',
+      destinationViewId: 'cluster-api-resources',
+      requiresAnchor: true,
+    });
+  });
+
   it('opens a cluster-scoped family object’s cluster view and aims focus at its table', async () => {
     await start();
     const before = view.owners().namespace.selectedNamespace;

@@ -42,7 +42,6 @@ const (
 	domainClusterRBAC     = "cluster-rbac"
 	domainClusterStorage  = "cluster-storage"
 	domainClusterConfig   = "cluster-config"
-	domainClusterCRDs     = "cluster-crds"
 	domainNodes           = "nodes"
 	domainCatalog         = "catalog"
 	domainClusterEvents   = "cluster-events"
@@ -74,6 +73,10 @@ const (
 	domainClusterOverview   = "cluster-overview"
 	domainClusterAttention  = "cluster-attention"
 	domainClusterIdentities = "cluster-identities"
+	// domainClusterAPIResources is the API Resources doorbell domain:
+	// signal-only, no projected rows — rung when the catalog publishes a
+	// changed API surface, so the table refetches its page.
+	domainClusterAPIResources = "cluster-api-resources"
 )
 
 type subscription struct {

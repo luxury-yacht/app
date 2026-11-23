@@ -55,5 +55,23 @@ export const parseClusterViewType = (
 ): ClusterViewType | undefined =>
   raw && clusterViewTypeSet.has(raw) ? (raw as ClusterViewType) : undefined;
 
+// Cluster views that were retired, and the view that now lists what each one
+// listed. Favorites and saved workspaces written by an earlier build may still
+// name them.
+const RETIRED_CLUSTER_VIEWS: Readonly<Record<string, ClusterViewType>> = {
+  // The CRDs table became the custom kinds of API Resources.
+  crds: 'api-resources',
+};
+
+/**
+ * parseClusterViewType for a value read from storage (a favorite, a saved
+ * workspace): a retired view id resolves to its replacement. Live values never
+ * name a retired view, so they keep the strict parser.
+ */
+export const parsePersistedClusterViewType = (
+  raw: string | null | undefined
+): ClusterViewType | undefined =>
+  parseClusterViewType(raw ? (RETIRED_CLUSTER_VIEWS[raw] ?? raw) : raw);
+
 export const parseGlobalViewType = (raw: string | null | undefined): GlobalViewType | undefined =>
   raw && globalViewTypeSet.has(raw) ? (raw as GlobalViewType) : undefined;

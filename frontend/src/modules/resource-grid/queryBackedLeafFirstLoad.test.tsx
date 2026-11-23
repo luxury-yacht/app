@@ -83,12 +83,6 @@ const CLUSTER_ROLE = {
   kind: 'ClusterRole',
   resource: 'clusterroles',
 };
-const CRD = {
-  group: 'apiextensions.k8s.io',
-  version: 'v1',
-  kind: 'CustomResourceDefinition',
-  resource: 'customresourcedefinitions',
-};
 
 const eventRow = (name: string, namespace = '') => ({
   ref: ref(EVENT, name, namespace),
@@ -295,21 +289,6 @@ const CLUSTER_VIEWS: LeafView[] = [
     sort: 'name asc',
     row: (name) => ({ ref: ref(CLUSTER_ROLE, name), details: '2 rules', age: '2h' }),
     sortable: ['age', 'kind', 'name'],
-  },
-  {
-    label: 'CRDs',
-    view: 'crds',
-    extension: true,
-    domain: 'cluster-crds',
-    sort: 'name asc',
-    row: (name) => ({
-      ref: ref(CRD, `${name}.example.com`),
-      group: 'example.com',
-      scope: 'Namespaced',
-      details: 'v1',
-      age: '2h',
-    }),
-    sortable: ['age', 'group', 'kind', 'name', 'scope', 'version'],
   },
   {
     label: 'events',

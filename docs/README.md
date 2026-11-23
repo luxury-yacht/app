@@ -30,6 +30,7 @@ be read in full.
 | How is cluster data isolated? | [architecture/multi-cluster.md](architecture/multi-cluster.md) |
 | How does a per-cluster namespace scope ("accessible namespaces") change data paths? | [architecture/namespace-scope.md](architecture/namespace-scope.md) |
 | How does the cluster Identities view derive User/Group subjects? | [architecture/cluster-identities.md](architecture/cluster-identities.md) |
+| Where do the API Resources table and Explain get their data? | [architecture/catalog.md](architecture/catalog.md#api-resources) |
 | When should retained data paint, refresh, stream, poll, or create background work? | [architecture/data-freshness.md](architecture/data-freshness.md) |
 | How do refresh domains, snapshots, streams, and scopes work? | [architecture/refresh-system.md](architecture/refresh-system.md) |
 | How does the backend store, ingest, and serve table data (store, ingest, governor, delivery)? | [architecture/data-layer.md](architecture/data-layer.md) |

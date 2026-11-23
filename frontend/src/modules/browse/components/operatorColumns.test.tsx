@@ -56,10 +56,10 @@ describe('operator table relationships', () => {
         viewType: 'namespace',
         tab: 'cert-manager',
       });
-      // The same kind in another group is some other custom resource.
+      // A kind in another group does not belong to this resource family.
       expect(getViewForKind('Certificate', 'other.io', 'team-a')).toEqual({
         viewType: 'namespace',
-        tab: 'custom',
+        tab: 'browse',
       });
       await act(async () =>
         root.render(

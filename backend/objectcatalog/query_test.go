@@ -11,8 +11,10 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/stretchr/testify/require"
 )
 
 type fakeCatalogQueryStore struct {
@@ -510,6 +512,7 @@ func TestQueryFiltersAndPagination(t *testing.T) {
 
 func TestQueryCustomOnlyExcludesBuiltins(t *testing.T) {
 	svc := NewService(Dependencies{Common: common.Dependencies{}, ClusterID: "cluster-a"}, nil)
+	seedQueryTestDefinitions(svc)
 
 	podDesc := Descriptor{
 
@@ -554,6 +557,40 @@ func TestQueryCustomOnlyExcludesBuiltins(t *testing.T) {
 	if !reflect.DeepEqual(result.Kinds, []KindInfo{{Kind: "Widget", Namespaced: true}}) {
 		t.Fatalf("unexpected custom-only facets: %+v", result.Kinds)
 	}
+}
+
+func TestCustomResourcesUseCRDMembershipForRowsAndFilters(t *testing.T) {
+	native := Summary{Ref: resourcemodel.ResourceRef{Group: "apps", Version: "v1", Resource: "controllerrevisions", Kind: "ControllerRevision", Namespace: "system", Name: "native", UID: "native"}, Scope: ScopeNamespace}
+	custom := Summary{Ref: resourcemodel.ResourceRef{Group: "example.com", Version: "v1", Resource: "widgets", Kind: "Widget", Namespace: "default", Name: "custom", UID: "custom"}, Scope: ScopeNamespace}
+	unrelated := custom
+	unrelated.Ref.Resource, unrelated.Ref.Name, unrelated.Ref.UID = "otherwidgets", "other", "other"
+	svc := newEquivalenceService(t, []Summary{native, custom, unrelated})
+	hook := newCRDDiscoveryHook(newWatchNotifier(svc))
+	opts := QueryOptions{Scope: ScopeNamespace, CustomOnly: true, Limit: 1}
+	pending := svc.Query(opts)
+	require.Empty(t, pending.Items, "a missing definition list cannot classify these resources")
+	require.Equal(t, CustomDefinitionsPending, pending.CustomDefinitions)
+
+	definition := crdBundle(establishedWidgetDefinition())
+	hook.ReplaceBundles([]ingest.Bundle{definition})
+	page := svc.Query(opts)
+	require.Equal(t, []Summary{custom}, page.Items)
+	require.Equal(t, 1, page.TotalItems)
+	require.Equal(t, 1, page.UnfilteredTotal)
+	require.Equal(t, 1, page.ResourceCount)
+	require.Empty(t, page.ContinueToken)
+	require.Equal(t, []KindInfo{{Kind: "Widget", Namespaced: true}}, page.Kinds)
+	require.Equal(t, []string{"default"}, page.Namespaces)
+	require.Equal(t, []string{"example.com"}, page.Groups)
+
+	hook.DeleteBundle(definition)
+	require.Empty(t, svc.Query(opts).Items, "a retained object cannot keep a deleted definition's classification active")
+	hook.UpsertBundle(definition)
+	svc.apiResources.applyDefinitionList(nil, false, true)
+	denied := svc.Query(opts)
+	require.Empty(t, denied.Items, "revoked access cannot keep the last classification active")
+	require.Equal(t, CustomDefinitionsDenied, denied.CustomDefinitions)
+	require.Equal(t, 3, svc.Query(QueryOptions{Scope: ScopeNamespace}).TotalItems, "Browse retains readable objects")
 }
 
 func TestQueryKeysetCursorContinuesAcrossLiveInsertBeforeAnchor(t *testing.T) {

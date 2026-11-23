@@ -896,3 +896,43 @@ func TestCatalogNamespaceGroupsServesConfiguredScope(t *testing.T) {
 		t.Fatalf("expected sorted configured scope [dev prod], got %#v", got)
 	}
 }
+
+// The API Resources table refetches only on this signal, so a published change
+// to the cluster's kinds must reach a subscriber of that domain, stamped with
+// the catalog's revision.
+func TestAPIResourcesDoorbellBridgeSignalsTheTableDomain(t *testing.T) {
+	manager := resourcestream.NewManager(nil, nil, snapshot.ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"}, nil)
+	selector, err := resourcestream.ParseStreamSelector("cluster-a", snapshot.ClusterAPIResourcesDomainName, "")
+	require.NoError(t, err)
+	sub, err := manager.SubscribeSelector(selector)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	updates := make(chan objectcatalog.SubsetUpdate, 1)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		runAPIResourcesDoorbellBridge(ctx, updates, manager)
+	}()
+
+	updates <- objectcatalog.SubsetUpdate{Revision: 4}
+
+	select {
+	case update := <-sub.Updates:
+		require.Equal(t, snapshot.ClusterAPIResourcesDomainName, update.Domain)
+		require.Equal(t, resourcestream.SourceCatalog, update.Source)
+		require.Equal(t, resourcestream.SignalChanged, update.Signal)
+		require.Equal(t, "4", update.Version)
+		require.Equal(t, "cluster-a", update.ClusterID)
+	case <-time.After(time.Second):
+		t.Fatal("expected an API resources doorbell update")
+	}
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("API resources doorbell bridge did not stop")
+	}
+}

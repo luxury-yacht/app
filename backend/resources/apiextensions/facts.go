@@ -11,14 +11,13 @@ import "github.com/luxury-yacht/app/backend/resourcemodel"
 
 // Facts is the canonical CustomResourceDefinition model facts.
 type Facts struct {
-	Group                   string                         `json:"group,omitempty"`
-	Scope                   string                         `json:"scope,omitempty"`
-	Names                   NamesFacts                     `json:"names"`
-	Versions                []VersionFacts                 `json:"versions,omitempty"`
-	Conditions              []resourcemodel.ConditionFacts `json:"conditions,omitempty"`
-	ConversionStrategy      string                         `json:"conversionStrategy,omitempty"`
-	StorageVersion          string                         `json:"storageVersion,omitempty"`
-	ExtraServedVersionCount int                            `json:"extraServedVersionCount,omitempty"`
+	Group              string                         `json:"group,omitempty"`
+	Scope              string                         `json:"scope,omitempty"`
+	Names              NamesFacts                     `json:"names"`
+	Versions           []VersionFacts                 `json:"versions,omitempty"`
+	Conditions         []resourcemodel.ConditionFacts `json:"conditions,omitempty"`
+	ConversionStrategy string                         `json:"conversionStrategy,omitempty"`
+	StorageVersion     string                         `json:"storageVersion,omitempty"`
 }
 
 // NamesFacts is the CRD names specification facts.

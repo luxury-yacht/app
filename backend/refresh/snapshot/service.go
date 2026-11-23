@@ -570,6 +570,11 @@ func (s *Service) shouldCacheSnapshot(snap *refresh.Snapshot) bool {
 	if payload, ok := snap.Payload.(NamespaceSnapshot); ok && payload.WorkloadReadiness != NamespaceWorkloadReady {
 		return false
 	}
+	// API Resources anchors can depend on the object catalog's LIST publication,
+	// which advances independently of discovery's cache invalidation signal.
+	if payload, ok := snap.Payload.(ClusterAPIResourcesSnapshot); ok && payload.Anchor != nil {
+		return false
+	}
 	return true
 }
 

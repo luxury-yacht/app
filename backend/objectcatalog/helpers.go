@@ -215,58 +215,16 @@ func clampQueryLimit(limit int) int {
 	return limit
 }
 
-// removeDisallowedEntries removes items from maps that are not in the allowed set.
-func removeDisallowedEntries(items map[string]Summary, seen map[string]time.Time, allowed map[string]Descriptor) {
-	if len(items) == 0 {
-		return
-	}
-	for key := range items {
-		if _, ok := allowed[descriptorKeyFromItemKey(key)]; !ok {
-			delete(items, key)
-			delete(seen, key)
-		}
-	}
-}
-
-// removeDescriptorEntries removes all entries for a specific GVR.
-func removeDescriptorEntries(items map[string]Summary, seen map[string]time.Time, gvr string) {
-	if gvr == "" {
-		return
-	}
-	prefix := gvr + "/"
-	for key := range items {
-		if strings.HasPrefix(key, prefix) {
-			delete(items, key)
-			delete(seen, key)
-		}
-	}
-}
-
 // descriptorKeyFromItemKey extracts the GVR portion from an item key.
 func descriptorKeyFromItemKey(key string) string {
-	if idx := strings.Index(key, "/"); idx >= 0 {
-		return key[:idx]
+	// GroupVersionResource.String itself contains a slash. Strip the
+	// namespace and name from the right to keep the whole descriptor key.
+	if name := strings.LastIndexByte(key, '/'); name >= 0 {
+		if namespace := strings.LastIndexByte(key[:name], '/'); namespace >= 0 {
+			return key[:namespace]
+		}
 	}
 	return key
-}
-
-// restoreDescriptorEntries restores entries from previous state for a specific GVR.
-func restoreDescriptorEntries(items map[string]Summary, seen map[string]time.Time, previousItems map[string]Summary, previousSeen map[string]time.Time, gvr string) {
-	if previousItems == nil {
-		return
-	}
-	prefix := gvr + "/"
-	for key, summary := range previousItems {
-		if !strings.HasPrefix(key, prefix) {
-			continue
-		}
-		items[key] = summary
-		if previousSeen != nil {
-			if ts, ok := previousSeen[key]; ok {
-				seen[key] = ts
-			}
-		}
-	}
 }
 
 // cloneSummaryMap creates a shallow copy of a summary map.

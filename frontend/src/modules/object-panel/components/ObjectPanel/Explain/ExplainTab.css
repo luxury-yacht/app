@@ -1,0 +1,240 @@
+/*
+ * frontend/src/modules/object-panel/components/ObjectPanel/Explain/ExplainTab.css
+ *
+ * The Explain tab: a kind's field tree and, below it, what the selected kind
+ * or field is.
+ */
+
+.explain-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  min-height: 0;
+  padding: var(--spacing-md);
+}
+
+.explain-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-normal);
+}
+
+.explain-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
+.explain-api-version {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-normal);
+}
+
+/* As tall as its fields, up to half the tab; the explanation gets the rest. */
+.explain-tree {
+  flex: 0 1 auto;
+  min-height: 6rem;
+  max-height: 50%;
+  overflow: auto;
+  padding: var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background-color: var(--color-bg-secondary);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
+}
+
+.explain-tree-list {
+  margin: 0;
+  padding-left: var(--spacing-lg);
+  list-style: none;
+}
+
+.explain-tree > .explain-tree-list {
+  padding-left: 0;
+}
+
+/* A row wider than the tree scrolls it sideways, highlight and all. */
+.explain-tree-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-sm);
+  width: max-content;
+  min-width: 100%;
+  padding: 1px var(--spacing-xs);
+  border: none;
+  border-radius: var(--border-radius-sm);
+  background: none;
+  font: inherit;
+  color: var(--color-text);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.explain-tree-row:hover {
+  background-color: var(--color-bg);
+}
+
+.explain-tree-row[aria-current="true"] {
+  background-color: var(--color-bg);
+}
+
+/* Never shrinks, so a long name cannot shift its row's indent. */
+.explain-tree-caret {
+  display: inline-block;
+  flex: none;
+  width: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.explain-type {
+  color: var(--color-text-secondary);
+}
+
+.explain-required {
+  padding: 0 var(--spacing-xs);
+  border: 1px solid var(--color-warning-border);
+  border-radius: var(--border-radius-sm);
+  color: var(--color-warning);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
+}
+
+.explain-selected {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  color: var(--color-text);
+  font-size: var(--font-size-normal);
+  line-height: 1.45;
+}
+
+.explain-selected-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
+}
+
+.explain-path {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem;
+}
+
+.explain-path-separator {
+  color: var(--color-text-tertiary);
+}
+
+.explain-path-step {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-object-panel-link);
+  font: inherit;
+  cursor: pointer;
+}
+
+.explain-path-step:hover {
+  color: var(--color-object-panel-link-hover);
+  text-decoration: underline;
+}
+
+.explain-path-current {
+  font-weight: var(--font-weight-bold);
+}
+
+.explain-paragraph,
+.explain-empty {
+  margin: 0 0 var(--spacing-sm);
+}
+
+.explain-empty {
+  color: var(--color-text-secondary);
+}
+
+.explain-list {
+  margin: 0 0 var(--spacing-sm);
+  padding-left: var(--spacing-lg);
+}
+
+.explain-list li + li {
+  margin-top: 0.15rem;
+}
+
+.explain-example {
+  margin: 0 0 var(--spacing-sm);
+  padding: var(--spacing-sm);
+  overflow-x: auto;
+  border-radius: var(--border-radius-sm);
+  background-color: var(--color-bg-secondary);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
+}
+
+.explain-selected code {
+  padding: 0 0.2rem;
+  border-radius: var(--border-radius-sm);
+  background-color: var(--color-bg-secondary);
+  font-size: var(--font-size-mono);
+}
+
+.explain-link {
+  color: var(--color-object-panel-link);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.explain-link:hover {
+  color: var(--color-object-panel-link-hover);
+  text-decoration: underline;
+}
+
+.explain-label {
+  margin: var(--spacing-md) 0 var(--spacing-xs);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+/* Each allowed value beside what it means. */
+.explain-enum {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.2rem var(--spacing-sm);
+  margin: 0 0 var(--spacing-md);
+  padding: var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+}
+
+.explain-enum dt,
+.explain-enum dd {
+  margin: 0;
+}
+
+.explain-enum dd {
+  color: var(--color-text-secondary);
+}
+
+/* The explanation below the tree is content to copy. App.css turns selection
+   off on every descendant, so each one opts back in. */
+.explain-selected,
+.explain-selected * {
+  user-select: text;
+  -webkit-user-select: text;
+}

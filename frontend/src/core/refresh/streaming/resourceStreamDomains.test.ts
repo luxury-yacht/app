@@ -32,7 +32,6 @@ const EXPECTED_DOMAINS: ResourceDomain[] = [
   'cluster-rbac',
   'cluster-storage',
   'cluster-config',
-  'cluster-crds',
   'nodes',
 ];
 
@@ -40,7 +39,6 @@ const CLUSTER_SCOPED_DOMAINS = new Set<ResourceDomain>([
   'cluster-rbac',
   'cluster-storage',
   'cluster-config',
-  'cluster-crds',
   'nodes',
 ]);
 
@@ -56,6 +54,7 @@ const EXPECTED_DOORBELL_DOMAINS: DoorbellDomain[] = [
   'object-details',
   'cluster-attention',
   'cluster-identities',
+  'cluster-api-resources',
 ];
 
 describe('resource stream domain descriptors', () => {

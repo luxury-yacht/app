@@ -92,6 +92,10 @@ const doorbellDomainDescriptors = [
   {
     domain: 'cluster-identities',
   },
+  // Rung when the catalog publishes a changed set of kinds.
+  {
+    domain: 'cluster-api-resources',
+  },
 ] satisfies ResourceStreamDomainDescriptor[];
 
 export const DOORBELL_STREAM_DOMAINS = doorbellDomainDescriptors.map(

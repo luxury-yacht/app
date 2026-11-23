@@ -3,7 +3,12 @@ import {
   DEFAULT_NAVIGATION_STATE,
   type NavigationTabState,
 } from '@/core/contexts/ViewStateContext';
-import { parseClusterViewType, parseNamespaceViewType, VIEW_TYPES } from '@/types/navigation/views';
+import {
+  parseClusterViewType,
+  parseNamespaceViewType,
+  parsePersistedClusterViewType,
+  VIEW_TYPES,
+} from '@/types/navigation/views';
 
 export interface ClusterViewState {
   clusterId: string;
@@ -38,8 +43,10 @@ export function readSavedClusterViewState(value: unknown, clusterId: string): Cl
       activeNamespaceView:
         parseNamespaceViewType(stringField(navigation.activeNamespaceView)) ??
         DEFAULT_NAVIGATION_STATE.activeNamespaceView,
+      // A workspace saved on a view that was since retired reopens on the view
+      // that replaced it.
       activeClusterView:
-        parseClusterViewType(stringField(navigation.activeClusterView)) ??
+        parsePersistedClusterViewType(stringField(navigation.activeClusterView)) ??
         DEFAULT_NAVIGATION_STATE.activeClusterView,
     },
     namespace: stringField(value.namespace),

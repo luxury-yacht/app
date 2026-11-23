@@ -39,6 +39,8 @@ export {
   DiscoverNodeLogs,
   DownloadApplicationUpdate,
   ExecuteApplicationMenuCommand,
+  ExplainKindField,
+  ExplainKindSchema,
   ExportFavorites,
   ExportSettings,
   FailClusterTabTransfer,

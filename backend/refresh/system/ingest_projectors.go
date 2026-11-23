@@ -32,7 +32,8 @@ import (
 func registerIngestProjectors(mgr *ingest.IngestManager, clusterID string) {
 	for _, d := range kindregistry.All {
 		// A bespoke-reflector kind (Stream == nil: Pod, the workload kinds,
-		// ReplicaSet, Service, EndpointSlice, Node, Namespace, Event) carries its own
+		// ReplicaSet, Service, EndpointSlice, Node, Namespace, Event,
+		// CustomResourceDefinition) carries its own
 		// ProjectFunc that builds every bundle half, so the generic Catalog/ObjectMap
 		// projectors here do not apply: the manager has no generic StreamRow entry
 		// to attach them to. The system wires each bespoke reflector separately.
@@ -188,6 +189,17 @@ func registerNetworkReflectors(mgr *ingest.IngestManager, meta snapshot.ClusterM
 	}
 	mgr.RegisterReflector(snapshot.ServiceGVR, snapshot.ServiceGVK, snapshot.NewServiceIngestProjector(meta), false)
 	mgr.RegisterReflector(snapshot.EndpointSliceGVR, snapshot.EndpointSliceGVK, snapshot.NewEndpointSliceIngestProjector(meta), false)
+}
+
+// registerCustomResourceDefinitionReflector wires the bespoke
+// CustomResourceDefinition reflector onto the manager. Definitions have no
+// table, so the bundle carries the Definition aggregate (API discovery's
+// staleness hook and the dynamic custom-resource sources read it) and the
+// catalog Summary. A cluster connection without an apiextensions client has no
+// definitions to watch; the manager then builds no entry, and every reader
+// already treats the missing store as "definitions unavailable".
+func registerCustomResourceDefinitionReflector(mgr *ingest.IngestManager, meta snapshot.ClusterMeta) {
+	mgr.RegisterReflector(snapshot.CustomResourceDefinitionGVR, snapshot.CustomResourceDefinitionGVK, snapshot.NewCustomResourceDefinitionIngestProjector(meta), false)
 }
 
 // registerCustomResourceIngest feeds the dynamic custom-resource sources from

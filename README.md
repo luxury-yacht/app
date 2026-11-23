@@ -34,6 +34,8 @@ Here are some of the features of Luxury Yacht that you might not find in other a
 
 - **View Pods by Owners.** Expand workloads and nodes to see their associated pods in an embedded table.
 
+- **API Resources view.** Shows every object kind available in the cluster. The details view for a kind includes an Explain tab which shows the full schema, with descriptions, for the selected object kind.
+
 - **Flexible Layouts.** Organize your info however you like. Open multiple windows. Dock panels to the right, bottom, or float them as a resizable window. Open multiple object tabs in each panel. Drag tabs between panels, or drag out to create a new window.
 
 - **Workspaces.** Save your app windows and layouts as a workspace to easily configure the app for the views you use most often.

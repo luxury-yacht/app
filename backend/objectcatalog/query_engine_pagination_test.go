@@ -12,10 +12,22 @@
 package objectcatalog
 
 import (
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"sort"
 	"testing"
 )
+
+func seedQueryTestDefinitions(svc *Service) {
+	widget := establishedWidgetDefinition()
+	clusterWidget := widget.DeepCopy()
+	clusterWidget.Name, clusterWidget.UID = "clusterwidgets.example.com", "cluster-widget"
+	clusterWidget.Spec.Names.Kind, clusterWidget.Spec.Names.Plural = "ClusterWidget", "clusterwidgets"
+	clusterWidget.Spec.Scope = apiextensionsv1.ClusterScoped
+	hook := newCRDDiscoveryHook(newWatchNotifier(svc))
+	hook.ReplaceBundles([]ingest.Bundle{crdBundle(widget), crdBundle(clusterWidget)})
+}
 
 // equivalenceSummaries returns a varied catalog: several kinds and groups (built-in
 // and custom/CRD), multiple namespaces, cluster-scoped objects, and ties on every
@@ -113,6 +125,7 @@ func equalStrings(a, b []string) bool {
 // and facet sets stable across every page.
 func TestCatalogQueryPaginationComplete(t *testing.T) {
 	svc := newEquivalenceService(t, equivalenceSummaries())
+	seedQueryTestDefinitions(svc)
 
 	sorts := []struct {
 		field string

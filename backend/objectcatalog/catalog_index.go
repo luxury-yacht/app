@@ -7,11 +7,13 @@
 package objectcatalog
 
 import (
+	"slices"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type catalogIndex struct {
@@ -29,13 +31,21 @@ type catalogIndex struct {
 	cachedDescriptors []Descriptor
 	cachesReady       bool
 	// completeResources (GVR strings) are the resources the published sync
-	// listed completely, and deniedResources (resource[.group]) the ones it
-	// found forbidden. They are published with the rows, so a reader judges a
-	// miss against the same publication it read the rows from.
-	completeResources map[string]struct{}
-	deniedResources   map[string]struct{}
-	kindCounts        map[KindInfo]int
-	namespaceCounts   map[string]int
+	// listed completely. Publish it and the LIST denials with the rows so
+	// readers judge a miss against the same publication.
+	completeResources  map[string]struct{}
+	completeNamespaces map[string]map[string]struct{}
+	// Discovery keeps lookup identity even when an unread or denied resource
+	// is excluded from collection and its incremental watch updates.
+	lookupDescriptors map[schema.GroupKind]catalogLookupDescriptor
+	// Definitive per-namespace LIST denials from preflight also gate live
+	// updates from a reflector admitted before access was revoked.
+	deniedNamespaces map[string]map[string]struct{}
+	// Actual LIST denials remain in force until a fresh authorized LIST.
+	listDenials     map[schema.GroupResource]map[string]struct{}
+	kindCounts      map[KindInfo]int
+	namespaceCounts map[string]int
+	hpaTargets      map[string]int
 
 	// queryEngineStore is the shared querypage engine view of the catalog. It is the
 	// authoritative query state: replaced at full publication and updated in place
@@ -44,6 +54,11 @@ type catalogIndex struct {
 	queryEngineStore *querypage.Store[Summary]
 
 	lastFirstBatchLatency time.Duration
+}
+
+type catalogLookupDescriptor struct {
+	descriptor      Descriptor
+	preflightDenied bool
 }
 
 type catalogObjectIdentity struct {
@@ -56,11 +71,12 @@ type catalogObjectIdentity struct {
 
 func newCatalogIndex() catalogIndex {
 	return catalogIndex{
-		items:     make(map[string]Summary),
-		lastSeen:  make(map[string]time.Time),
-		resources: make(map[string]Descriptor),
-		exact:     make(map[catalogObjectIdentity]string),
-		uid:       make(map[string]string),
+		items:      make(map[string]Summary),
+		lastSeen:   make(map[string]time.Time),
+		resources:  make(map[string]Descriptor),
+		exact:      make(map[catalogObjectIdentity]string),
+		uid:        make(map[string]string),
+		hpaTargets: make(map[string]int),
 	}
 }
 
@@ -162,11 +178,31 @@ func (idx *catalogIndex) resourceForGroupResource(group, resource string) (strin
 	return "", nil
 }
 
-// replaceListOutcome publishes which resources a sync listed completely and
-// which it found forbidden. Call it under the same lock as the rows.
-func (idx *catalogIndex) replaceListOutcome(complete, denied map[string]struct{}) {
-	idx.completeResources = complete
-	idx.deniedResources = denied
+func (idx *catalogIndex) listDenied(desc Descriptor, namespace string) bool {
+	_, denied := idx.deniedNamespaces[desc.GVR().String()][namespace]
+	return denied || namespaceSetContains(idx.listDenials[desc.GVR().GroupResource()], namespace)
+}
+
+func (idx *catalogIndex) scopeConfirmed(desc Descriptor, namespace string, scope []string) bool {
+	if !idx.cachesReady || idx.listDenied(desc, namespace) {
+		return false
+	}
+	if desc.Namespaced && len(scope) > 0 && !slices.Contains(scope, namespace) {
+		return false
+	}
+	if desc.Namespaced != (namespace != "") {
+		return false
+	}
+	gvr := desc.GVR().String()
+	_, complete := idx.completeResources[gvr]
+	return complete || namespaceSetContains(idx.completeNamespaces[gvr], namespace)
+}
+
+// In a set of LIST or WATCH targets, the empty target covers the whole resource.
+func namespaceSetContains(scopes map[string]struct{}, namespace string) bool {
+	_, all := scopes[""]
+	_, scoped := scopes[namespace]
+	return all || scoped
 }
 
 // descriptorForGroupKind returns the listed resource for a group and kind. The
@@ -258,8 +294,10 @@ func (idx *catalogIndex) publishRows(
 	idx.queryEngineStore = catalogQueryStoreFromRows(rows)
 	idx.kindCounts = make(map[KindInfo]int)
 	idx.namespaceCounts = make(map[string]int)
+	idx.hpaTargets = make(map[string]int)
 	for _, row := range rows {
 		idx.countFacets(row, 1)
+		idx.countHPATarget(row, 1)
 	}
 	idx.cachedKinds = snapshotSortedKindInfos(kindSet)
 	idx.cachedNamespaces = snapshotSortedKeys(namespaceSet)

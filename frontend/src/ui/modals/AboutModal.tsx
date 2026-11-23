@@ -19,6 +19,7 @@ import {
 } from '@core/backend-api';
 import type { backend } from '@core/backend-api/models';
 import { openURL } from '@core/desktop-runtime';
+import { ExternalLink } from '@shared/components/ExternalLink';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { InfoIcon } from '@shared/components/icons/SharedIcons';
 import ModalHeader from '@shared/components/modals/ModalHeader';
@@ -61,28 +62,6 @@ const progressPercentFor = (update: backend.UpdateInfo): number | null => {
     ? progress
     : null;
 };
-
-/** Desktop links open in the user's browser, never in the app window. */
-const ExternalLink: React.FC<{
-  href: string;
-  className?: string;
-  children: React.ReactNode;
-  testId?: string;
-}> = ({ href, className, children, testId }) => (
-  <a
-    href={href}
-    className={className}
-    data-testid={testId}
-    onClick={(event) => {
-      event.preventDefault();
-      void openURL(href).catch((error) =>
-        reportOperationalError(error, { source: 'AboutModal', action: 'openExternalLink' })
-      );
-    }}
-  >
-    {children}
-  </a>
-);
 
 const performUpdateAction = async (
   action: UpdateAction,
@@ -246,6 +225,7 @@ const ApplicationUpdateSection: React.FC<ApplicationUpdateSectionProps> = ({
           />
           {presentation.releaseNotesURL ? (
             <ExternalLink
+              source="AboutModal"
               href={presentation.releaseNotesURL}
               className="about-release-link"
               testId="about-release-notes-link"
@@ -351,12 +331,17 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
         ) : null}
 
         <p className="about-links">
-          <ExternalLink href={HOMEPAGE_URL}>luxury-yacht.app</ExternalLink>
+          <ExternalLink source="AboutModal" href={HOMEPAGE_URL}>
+            luxury-yacht.app
+          </ExternalLink>
           <span className="about-links-separator" aria-hidden="true">
             ·
           </span>
           <span>
-            Built with <ExternalLink href={WAILS_URL}>Wails</ExternalLink>
+            Built with{' '}
+            <ExternalLink source="AboutModal" href={WAILS_URL}>
+              Wails
+            </ExternalLink>
           </span>
         </p>
       </div>
@@ -365,8 +350,10 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
         <p className="about-license">
           Licensed under the GNU General Public License, version 3 (GPLv3), and distributed WITHOUT
           ANY WARRANTY, explicit or implied. See the{' '}
-          <ExternalLink href={LICENSE_URL}>GNU General Public License</ExternalLink> for more
-          details.
+          <ExternalLink source="AboutModal" href={LICENSE_URL}>
+            GNU General Public License
+          </ExternalLink>{' '}
+          for more details.
         </p>
         <p className="about-copyright">Copyright © 2025-2026 Luxury Yacht</p>
       </div>

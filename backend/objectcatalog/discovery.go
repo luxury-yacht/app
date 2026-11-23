@@ -2,39 +2,63 @@ package objectcatalog
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/resources/common"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/discovery"
-	disk "k8s.io/client-go/discovery/cached/disk"
+	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/rest"
 )
 
-// discoverResources re-discovers the cluster's resource kinds through the catalog's
-// per-cluster discovery client, which is disk-cached + ETag-revalidating in production. The
-// cache is invalidated first iff a CRD change marked discovery stale since the last
-// discover, so periodic re-discovers stay served from the cache while a newly-created or
-// deleted CRD forces a fresh fetch.
-func (s *Service) discoverResources(ctx context.Context) ([]Descriptor, error) {
+// discoverResources runs under syncMu and reuses discovery only until the
+// cache expires, a CRD changes, or a failed read needs another attempt.
+func (s *Service) discoverResources(ctx context.Context) (discoveryResult, error) {
 	s.ensureDiscovery()
-	if s.discoveryInvalidate != nil && s.discoveryStale.Swap(false) {
-		s.discoveryInvalidate()
+	customAtStart, revision, pending := s.apiResources.customForDiscovery()
+	s.refreshDiscoveryCache(pending)
+	result, err := discoverFromClient(ctx, s.discoveryClient)
+	if err != nil {
+		s.markDiscoveryStale()
+		// A cancelled run (the cluster is disconnecting) says nothing about the
+		// cluster's API; any other failure leaves the inventory out of date.
+		if ctx.Err() == nil {
+			// Keep the rows but withdraw their coverage before notifying readers
+			// that discovery failed.
+			s.mu.Lock()
+			s.catalogIndex.completeResources = nil
+			s.catalogIndex.completeNamespaces = nil
+			s.mu.Unlock()
+			s.apiResources.failed(err)
+		}
+		return discoveryResult{}, err
 	}
-	return discoverFromClient(ctx, s.discoveryClient)
+	if result.partialFailure != nil {
+		s.markDiscoveryStale()
+	}
+	s.apiResources.replace(result.apiResources, result.failedGroupVersions, customAtStart, revision)
+	return result, nil
 }
 
-// ensureDiscovery builds the per-cluster discovery client once (disk-cached when possible),
+func (s *Service) refreshDiscoveryCache(pending bool) {
+	if s.discoveryInvalidate == nil {
+		return
+	}
+	now := s.now()
+	expires := s.discoveryExpiresAt
+	if s.discoveryStale.Swap(false) || pending || (!expires.IsZero() && !now.Before(expires)) {
+		s.discoveryInvalidate()
+	} else if !expires.IsZero() {
+		return
+	}
+	s.discoveryExpiresAt = now.Add(config.ObjectCatalogDiscoveryCacheTTL)
+}
+
+// ensureDiscovery builds the per-cluster discovery client once,
 // unless one was already set — pre-injected by a test or built by a prior call. Safe to call
 // on every discover.
 func (s *Service) ensureDiscovery() {
@@ -46,10 +70,8 @@ func (s *Service) ensureDiscovery() {
 	})
 }
 
-// buildDiscoveryClient returns a disk-cached, ETag-revalidating, aggregated-discovery client
-// (with its Invalidate hook) when a REST config and a writable cache dir are available, and
-// falls back to a plain discovery client (no caching, nil invalidate) otherwise — so an
-// unavailable or read-only cache never loses discovery.
+// buildDiscoveryClient uses the memory client because it preserves the
+// aggregated discovery response's stale group versions.
 func (s *Service) buildDiscoveryClient() (discovery.DiscoveryInterface, func()) {
 	cfg := s.deps.Common.RestConfig
 	if cfg == nil {
@@ -60,37 +82,14 @@ func (s *Service) buildDiscoveryClient() (discovery.DiscoveryInterface, func()) 
 	}
 	cfgCopy := rest.CopyConfig(cfg)
 	cfgCopy.Timeout = config.ObjectCatalogDiscoveryRequestTimeout
-	if groupsDir, httpDir, err := s.discoveryCacheDirs(); err == nil {
-		if cached, cerr := disk.NewCachedDiscoveryClientForConfig(cfgCopy, groupsDir, httpDir, config.ObjectCatalogDiscoveryCacheTTL); cerr == nil {
-			return cached, cached.Invalidate
-		} else {
-			applog.Debug(s.deps.Logger, fmt.Sprintf("catalog cached discovery unavailable, using plain client: %v", cerr), componentName)
-		}
-	}
 	if dc, derr := discovery.NewDiscoveryClientForConfig(cfgCopy); derr == nil {
-		return dc, nil
+		cached := memory.NewMemCacheClient(dc)
+		return cached, cached.Invalidate
 	}
 	if s.deps.Common.KubernetesClient != nil {
 		return s.deps.Common.KubernetesClient.Discovery(), nil
 	}
 	return nil, nil
-}
-
-// discoveryCacheDirs returns the per-cluster on-disk discovery-cache directories (the group/
-// resource documents and the HTTP-response/ETag cache), under the user cache dir and keyed by
-// a hash of the clusterID so an arbitrary identifier is filesystem-safe.
-func (s *Service) discoveryCacheDirs() (groupsDir, httpDir string, err error) {
-	cacheDir, err := os.UserCacheDir()
-	if err != nil {
-		return "", "", err
-	}
-	base := filepath.Join(cacheDir, "luxury-yacht", "discovery", hashClusterIDForDiscovery(s.clusterID))
-	return filepath.Join(base, "groups"), filepath.Join(base, "http"), nil
-}
-
-func hashClusterIDForDiscovery(id string) string {
-	sum := sha256.Sum256([]byte(id))
-	return hex.EncodeToString(sum[:8])
 }
 
 // discoverResourceDescriptors discovers via a plain (uncached) client built from deps — the
@@ -110,96 +109,126 @@ func discoverResourceDescriptors(ctx context.Context, deps common.Dependencies, 
 			applog.Debug(logger, fmt.Sprintf("catalog discovery client fallback: %v", err), componentName)
 		}
 	}
-	return discoverFromClient(ctx, discoveryClient)
+	result, err := discoverFromClient(ctx, discoveryClient)
+	if err != nil {
+		return nil, err
+	}
+	return result.descriptors, nil
 }
 
-// discoverFromClient runs aggregated discovery via discoveryClient and extracts the catalog
-// descriptors, falling back from ServerPreferredResources to ServerGroupsAndResources when a
-// fake/older client returns nothing from the former.
-func discoverFromClient(ctx context.Context, discoveryClient discovery.DiscoveryInterface) ([]Descriptor, error) {
+// discoveryResult is one discovery pass: the full API surface, and the subset
+// of it whose objects the catalog collects.
+type discoveryResult struct {
+	apiResources []APIResource
+	descriptors  []Descriptor
+	// failedGroupVersions are the group versions the server could not answer
+	// for; apiResources and descriptors cover only the ones it could.
+	failedGroupVersions []schema.GroupVersion
+	partialFailure      error
+}
+
+// discoverFromClient runs one aggregated discovery via discoveryClient and
+// derives both the cluster's API resources and the catalog descriptors from it.
+func discoverFromClient(ctx context.Context, discoveryClient discovery.DiscoveryInterface) (discoveryResult, error) {
 	select {
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return discoveryResult{}, ctx.Err()
 	default:
 	}
 	if discoveryClient == nil {
-		return nil, errors.New("discovery client not available")
+		return discoveryResult{}, errors.New("discovery client not available")
 	}
 
-	resourceLists, err := discoveryClient.ServerPreferredResources()
-	if err != nil && len(resourceLists) == 0 {
-		return nil, err
-	}
-	if len(resourceLists) == 0 {
-		if _, lists, altErr := discoveryClient.ServerGroupsAndResources(); altErr == nil && len(lists) > 0 {
-			resourceLists = lists
-		}
+	// A partial failure identifies the unreachable groups and returns lists for
+	// reachable ones. An unscoped error cannot establish which lists to trust.
+	groups, resourceLists, err := discoveryClient.ServerGroupsAndResources()
+	if _, partial := discovery.GroupDiscoveryFailedErrorGroups(err); err != nil && (!partial || len(resourceLists) == 0) {
+		return discoveryResult{}, err
 	}
 
 	select {
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return discoveryResult{}, ctx.Err()
 	default:
 	}
 
-	return ExtractDescriptors(resourceLists), nil
+	apiResources := buildAPIResources(groups, resourceLists)
+	listsByVersion := resourceListsByVersion(resourceLists)
+	err = filterDiscoveryFailures(err, func(gv schema.GroupVersion) bool {
+		// The legacy memory cache attaches an error to a successful empty
+		// list. Actual failed requests return no list for that version.
+		list := listsByVersion[gv]
+		return list != nil && len(list.APIResources) == 0
+	})
+	return discoveryResult{
+		apiResources:        apiResources,
+		descriptors:         catalogDescriptors(apiResources),
+		failedGroupVersions: failedGroupVersions(err),
+		partialFailure:      err,
+	}, nil
 }
 
-// ExtractDescriptors converts API resource discovery results into catalog descriptors.
-func ExtractDescriptors(resourceLists []*metav1.APIResourceList) []Descriptor {
-	excludedKinds := sets.New[string](
+func filterDiscoveryFailures(err error, exclude func(schema.GroupVersion) bool) error {
+	groups, ok := discovery.GroupDiscoveryFailedErrorGroups(err)
+	if !ok {
+		return err
+	}
+	remaining := make(map[schema.GroupVersion]error, len(groups))
+	for gv, cause := range groups {
+		if !exclude(gv) {
+			remaining[gv] = cause
+		}
+	}
+	if len(remaining) == 0 {
+		return nil
+	}
+	return &discovery.ErrGroupDiscoveryFailed{Groups: remaining}
+}
+
+// failedGroupVersions names the group versions a partial discovery error says
+// it could not read.
+func failedGroupVersions(err error) []schema.GroupVersion {
+	groups, _ := discovery.GroupDiscoveryFailedErrorGroups(err)
+	failed := make([]schema.GroupVersion, 0, len(groups))
+	for groupVersion := range groups {
+		failed = append(failed, groupVersion)
+	}
+	return failed
+}
+
+// Kinds the catalog never collects objects for.
+var (
+	catalogExcludedKinds = sets.New[string](
 		"Event",
 		"ComponentStatus", // Deprecated since Kubernetes v1.19; avoid hitting the legacy endpoint.
 	)
 	// Metrics API resources don't have UIDs (they're computed on-the-fly, not stored in etcd).
 	// Exclude the entire metrics.k8s.io group to avoid pagination issues in the browse view.
-	excludedGroups := sets.New[string](
+	catalogExcludedGroups = sets.New[string](
 		"metrics.k8s.io",
 	)
-	result := make([]Descriptor, 0)
+)
 
-	for _, list := range resourceLists {
-		groupVersion, parseErr := schema.ParseGroupVersion(list.GroupVersion)
-		if parseErr != nil {
+// catalogDescriptors selects the API resources whose objects the catalog
+// collects: listable kinds, at their preferred version, outside the excluded
+// kinds and groups.
+func catalogDescriptors(apiResources []APIResource) []Descriptor {
+	result := make([]Descriptor, 0, len(apiResources))
+	for _, apiResource := range apiResources {
+		if catalogExcludedGroups.Has(apiResource.Group) || catalogExcludedKinds.Has(apiResource.Kind) {
 			continue
 		}
-
-		// Skip excluded API groups entirely.
-		if excludedGroups.Has(groupVersion.Group) {
+		if !containsVerb(apiResource.Verbs, "list") {
 			continue
 		}
-
-		for _, apiResource := range list.APIResources {
-			descriptor, ok := descriptorFromAPIResource(groupVersion, apiResource, excludedKinds)
-			if ok {
-				result = append(result, descriptor)
-			}
-		}
+		result = append(result, Descriptor{
+			Group:      apiResource.Group,
+			Version:    apiResource.Version,
+			Resource:   apiResource.Resource,
+			Kind:       apiResource.Kind,
+			Scope:      resourceScope(apiResource),
+			Namespaced: apiResource.Namespaced,
+		})
 	}
-
 	return result
-}
-
-func descriptorFromAPIResource(groupVersion schema.GroupVersion, apiResource metav1.APIResource, excludedKinds sets.Set[string]) (Descriptor, bool) {
-	if strings.Contains(apiResource.Name, "/") {
-		return Descriptor{}, false
-	}
-	if apiResource.Kind == "" || excludedKinds.Has(apiResource.Kind) {
-		return Descriptor{}, false
-	}
-	if !containsVerb(apiResource.Verbs, "list") {
-		return Descriptor{}, false
-	}
-	scope := ScopeCluster
-	if apiResource.Namespaced {
-		scope = ScopeNamespace
-	}
-	return Descriptor{
-		Group:      groupVersion.Group,
-		Version:    groupVersion.Version,
-		Resource:   apiResource.Name,
-		Kind:       apiResource.Kind,
-		Scope:      scope,
-		Namespaced: apiResource.Namespaced,
-	}, true
 }

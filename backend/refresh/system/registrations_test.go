@@ -539,6 +539,9 @@ func TestRefreshDomainSourceClocksAuthored(t *testing.T) {
 				expected = []string{"metric"}
 			case "cluster-attention":
 				expected = []string{"attention"}
+			case "cluster-api-resources":
+				// Rung by the catalog when the discovered API surface changes.
+				expected = []string{"catalog"}
 			}
 			require.ElementsMatchf(t, expected, entry.SourceClocks, "domain %s doorbell-snapshot source clock", entry.Domain)
 			continue
@@ -886,15 +889,15 @@ func TestDomainReadinessResourcesUnionsDeclaredContracts(t *testing.T) {
 // Every domain declares which object feeds it waits on. A domain left out
 // would fall back to the whole-feed gate, which waits on every kind (so one
 // slow watch delays it) yet skips on-demand dynamic reflectors (so its first
-// build could serve one of those unsynced as empty). Domains whose payload
-// reads no object feed (catalog service, live GETs, metrics, maintenance)
+// build could serve one of those unsynced as empty). Domains whose rows come
+// from no object feed (catalog service, live GETs, metrics, maintenance)
 // declare an empty set and build without waiting.
 func TestEveryDomainDeclaresItsFeedReadiness(t *testing.T) {
 	registrations := domainRegistrations(context.Background(), registrationDeps{cfg: Config{}})
 	readiness := domainReadinessResources(registrations)
 
 	feedIndependent := []string{
-		"catalog", "catalog-diff", "namespace-metrics", "object-details",
+		"catalog", "catalog-diff", "cluster-api-resources", "namespace-metrics", "object-details",
 		"object-helm-manifest", "object-helm-values", "object-maintenance", "object-yaml",
 	}
 	for _, registration := range registrations {

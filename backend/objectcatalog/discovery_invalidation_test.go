@@ -2,23 +2,32 @@ package objectcatalog
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/ingest/ingesttest"
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 	"github.com/luxury-yacht/app/backend/resources/common"
+	apidiscovery "k8s.io/api/apidiscovery/v2"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	fakediscovery "k8s.io/client-go/discovery/fake"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	clienttesting "k8s.io/client-go/testing"
 
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/rest"
 )
 
 // stubDiscovery is a minimal DiscoveryInterface returning a fixed resource list, so the
@@ -29,8 +38,8 @@ type stubDiscovery struct {
 	lists []*metav1.APIResourceList
 }
 
-func (s *stubDiscovery) ServerPreferredResources() ([]*metav1.APIResourceList, error) {
-	return s.lists, nil
+func (s *stubDiscovery) ServerGroupsAndResources() ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
+	return groupsForLists(s.lists), s.lists, nil
 }
 
 func podOnlyResourceLists() []*metav1.APIResourceList {
@@ -40,22 +49,22 @@ func podOnlyResourceLists() []*metav1.APIResourceList {
 	}}
 }
 
-// TestCatalogDiscoveryInvalidatesAfterCRDChange pins the disk-cache invalidation contract:
+// TestCatalogDiscoveryInvalidatesAfterCRDChange pins the cache invalidation contract:
 // a periodic discover serves from the cache (no Invalidate), but once a CRD change has
 // marked discovery stale the next discover Invalidate()s the cache exactly once, so a
 // newly-created CRD is never hidden behind a stale discovery document.
 func TestCatalogDiscoveryInvalidatesAfterCRDChange(t *testing.T) {
 	invalidations := 0
-	svc := &Service{clusterID: "c1"}
+	svc := NewService(Dependencies{ClusterID: "c1"}, nil)
 	svc.discoveryClient = &stubDiscovery{lists: podOnlyResourceLists()}
 	svc.discoveryInvalidate = func() { invalidations++ }
 
 	ctx := context.Background()
 
 	// Periodic discover, no CRD change → no invalidation (the cache is reused).
-	descs, err := svc.discoverResources(ctx)
+	result, err := svc.discoverResources(ctx)
 	require.NoError(t, err)
-	require.NotEmpty(t, descs)
+	require.NotEmpty(t, result.descriptors)
 	require.Equal(t, 0, invalidations)
 
 	// A CRD change marks discovery stale → the next discover invalidates once.
@@ -76,10 +85,300 @@ func TestCatalogDiscoveryInvalidatesAfterCRDChange(t *testing.T) {
 	require.Equal(t, 2, invalidations)
 }
 
+func TestCatalogDiscoveryPreservesStaleGroupsAndRevalidates(t *testing.T) {
+	var external atomic.Pointer[[]apidiscovery.APIGroupDiscovery]
+	setExternal := func(groups ...apidiscovery.APIGroupDiscovery) { external.Store(&groups) }
+	setExternal(discoveredAPIGroup("example.com", "widgets", "Widget", apidiscovery.DiscoveryFreshnessCurrent))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var groups []apidiscovery.APIGroupDiscovery
+		switch r.URL.Path {
+		case "/api":
+			groups = []apidiscovery.APIGroupDiscovery{discoveredAPIGroup("", "pods", "Pod", apidiscovery.DiscoveryFreshnessCurrent)}
+		case "/apis":
+			groups = *external.Load()
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", discovery.AcceptV2)
+		_ = json.NewEncoder(w).Encode(apidiscovery.APIGroupDiscoveryList{
+			TypeMeta: metav1.TypeMeta{APIVersion: apidiscovery.SchemeGroupVersion.String(), Kind: "APIGroupDiscoveryList"},
+			Items:    groups,
+		})
+	}))
+	t.Cleanup(server.Close)
+	now := time.Now()
+	svc := NewService(Dependencies{
+		ClusterID: "discovery-test",
+		Common:    common.Dependencies{RestConfig: &rest.Config{Host: server.URL}},
+		Now:       func() time.Time { return now },
+	}, nil)
+
+	_, err := svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	widget := apiResourceByName(t, svc.APIResources().Resources, "example.com", "widgets")
+
+	setExternal(discoveredAPIGroup("example.com", "widgets", "Widget", apidiscovery.DiscoveryFreshnessStale))
+	svc.markDiscoveryStale()
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	inventory := svc.APIResources()
+	require.Equal(t, []string{"example.com/v1"}, inventory.FailedGroupVersions)
+	require.Equal(t, widget, apiResourceByName(t, inventory.Resources, "example.com", "widgets"))
+
+	setExternal(discoveredAPIGroup("example.com", "widgets", "Widget", apidiscovery.DiscoveryFreshnessCurrent))
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	require.Empty(t, svc.APIResources().FailedGroupVersions, "the next sync must be able to detect recovery")
+
+	// A new aggregated API publishes no CRD event. It must still be picked up.
+	setExternal(discoveredAPIGroup("new.example.com", "gadgets", "Gadget", apidiscovery.DiscoveryFreshnessCurrent))
+	now = now.Add(config.ObjectCatalogDiscoveryCacheTTL)
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	require.Len(t, svc.APIResources().Resources, 2)
+	require.Equal(t, "Gadget", apiResourceByName(t, svc.APIResources().Resources, "new.example.com", "gadgets").Kind)
+}
+
+func TestLegacyDiscoveryAcceptsAnEmptyResourceList(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		var body any
+		switch r.URL.Path {
+		case "/api":
+			body = metav1.APIVersions{Versions: []string{"v1"}}
+		case "/apis":
+			body = metav1.APIGroupList{Groups: []metav1.APIGroup{*apiGroup("example.com", "v1", "v1")}}
+		case "/api/v1":
+			body = podOnlyResourceLists()[0]
+		case "/apis/example.com/v1":
+			body = metav1.APIResourceList{GroupVersion: "example.com/v1", APIResources: []metav1.APIResource{}}
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(body)
+	}))
+	t.Cleanup(server.Close)
+	svc := NewService(Dependencies{ClusterID: "c1", Common: common.Dependencies{RestConfig: &rest.Config{Host: server.URL}}}, nil)
+	result, err := svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	require.NoError(t, result.partialFailure)
+	require.Empty(t, svc.APIResources().FailedGroupVersions)
+}
+
+func TestAPIDiscoveryFailureForAnExcludedGroupDoesNotDegradeBrowse(t *testing.T) {
+	svc := NewService(Dependencies{ClusterID: "c1"}, nil)
+	svc.discoveryClient = &groupedDiscovery{
+		lists: []*metav1.APIResourceList{{GroupVersion: "v1"}},
+		err: &discovery.ErrGroupDiscoveryFailed{Groups: map[schema.GroupVersion]error{
+			{Group: "metrics.k8s.io", Version: "v1beta1"}: context.DeadlineExceeded,
+		}},
+	}
+	require.NoError(t, svc.sync(t.Context()))
+	require.Equal(t, HealthStateOK, svc.Health().Status)
+	require.Equal(t, []string{"metrics.k8s.io/v1beta1"}, svc.APIResources().FailedGroupVersions)
+}
+
+func TestDiscoveryKeepsRecheckingAWatchVersionChange(t *testing.T) {
+	v1 := &metav1.APIResourceList{GroupVersion: "example.com/v1", APIResources: []metav1.APIResource{
+		{Name: "widgets", Kind: "Widget", Namespaced: true, Verbs: []string{"list"}},
+	}}
+	source := &stubDiscovery{lists: []*metav1.APIResourceList{v1}}
+	svc := NewService(Dependencies{ClusterID: "c1"}, nil)
+	svc.discoveryClient = source
+	freshReads := 0
+	svc.discoveryInvalidate = func() {
+		freshReads++
+		switch freshReads {
+		case 2:
+			v2 := v1.DeepCopy()
+			v2.GroupVersion = "example.com/v2"
+			source.lists = []*metav1.APIResourceList{v2}
+		case 4:
+			source.lists = podOnlyResourceLists()
+		}
+	}
+	_, err := svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	hook := newCRDDiscoveryHook(newWatchNotifier(svc))
+	definition := establishedWidgetDefinition()
+	hook.ReplaceBundles([]ingest.Bundle{crdBundle(definition)})
+	require.False(t, svc.apiResources.discoveryPending())
+	replacement := definition.DeepCopy()
+	replacement.Spec.Versions[0].Name = "v2"
+	hook.UpsertBundle(crdBundle(replacement))
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	require.True(t, svc.apiResources.discoveryPending(), "a complete but older response cannot confirm the change")
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, []string{"v2"}, apiResourceByName(t, svc.APIResources().Resources, "example.com", "widgets").Versions)
+	require.False(t, svc.apiResources.discoveryPending())
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, 2, freshReads)
+
+	// A definition can keep its storage version and stop serving it.
+	unserved := replacement.DeepCopy()
+	unserved.Spec.Versions[0].Served = false
+	hook.UpsertBundle(crdBundle(unserved))
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	require.True(t, svc.apiResources.discoveryPending())
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	require.False(t, svc.apiResources.discoveryPending())
+	require.Equal(t, 4, freshReads)
+}
+
+func TestDiscoveryKeepsAWithdrawnKindCustomBeforeItsFirstPublication(t *testing.T) {
+	definition := establishedWidgetDefinition()
+	builtin := podOnlyResourceLists()
+	widget := &metav1.APIResourceList{GroupVersion: "example.com/v1", APIResources: []metav1.APIResource{
+		{Name: "widgets", Kind: "Widget", Namespaced: true, Verbs: []string{"list"}},
+	}}
+	source := &stubDiscovery{lists: builtin}
+	svc := NewService(Dependencies{ClusterID: "c1"}, nil)
+	svc.discoveryClient = source
+	svc.discoveryInvalidate = func() {}
+	hook := newCRDDiscoveryHook(newWatchNotifier(svc))
+	hook.ReplaceBundles(nil)
+
+	_, err := svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	hook.UpsertBundle(crdBundle(definition))
+	hook.DeleteBundle(crdBundle(definition))
+	source.lists = append(podOnlyResourceLists(), widget)
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	row := apiResourceByName(t, svc.APIResources().Resources, "example.com", "widgets")
+	require.True(t, row.Custom, "lagging discovery must not classify the withdrawn kind as built-in")
+	require.False(t, row.DefinitionPresent)
+	require.True(t, svc.apiResources.discoveryPending())
+
+	source.lists = builtin
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	require.Len(t, svc.APIResources().Resources, 1)
+	require.False(t, svc.apiResources.discoveryPending())
+}
+
+func TestDiscoveryConfirmsCRDAliasRemovalAndTermination(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		update func(*apiextensionsv1.CustomResourceDefinition)
+		serve  func(*metav1.APIResource)
+	}{
+		{
+			name: "last short name and category removed",
+			update: func(crd *apiextensionsv1.CustomResourceDefinition) {
+				crd.Status.AcceptedNames.ShortNames = nil
+				crd.Status.AcceptedNames.Categories = nil
+			},
+			serve: func(resource *metav1.APIResource) {
+				resource.ShortNames = nil
+				resource.Categories = nil
+			},
+		},
+		{
+			name: "terminating resource still served",
+			update: func(crd *apiextensionsv1.CustomResourceDefinition) {
+				crd.Status.Conditions = append(crd.Status.Conditions, apiextensionsv1.CustomResourceDefinitionCondition{
+					Type: apiextensionsv1.Terminating, Status: apiextensionsv1.ConditionTrue,
+				})
+			},
+			serve: func(resource *metav1.APIResource) { resource.Verbs = []string{"get", "list"} },
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			definition := establishedWidgetDefinition()
+			definition.Status.AcceptedNames = definition.Spec.Names
+			definition.Status.AcceptedNames.ShortNames = []string{"wd"}
+			definition.Status.AcceptedNames.Categories = []string{"all"}
+			v1 := &metav1.APIResourceList{GroupVersion: "example.com/v1", APIResources: []metav1.APIResource{{
+				Name: "widgets", Kind: "Widget", Namespaced: true, ShortNames: []string{"wd"}, Categories: []string{"all"},
+				Verbs: []string{"get", "list", "update", "create", "patch"},
+			}}}
+			source := &stubDiscovery{lists: []*metav1.APIResourceList{v1}}
+			svc := NewService(Dependencies{ClusterID: "c1"}, nil)
+			svc.discoveryClient = source
+			invalidations := 0
+			svc.discoveryInvalidate = func() { invalidations++ }
+			hook := newCRDDiscoveryHook(newWatchNotifier(svc))
+			hook.ReplaceBundles([]ingest.Bundle{crdBundle(definition)})
+			_, err := svc.discoverResources(t.Context())
+			require.NoError(t, err)
+			require.False(t, svc.apiResources.discoveryPending())
+			before := invalidations
+
+			updated := definition.DeepCopy()
+			tc.update(updated)
+			hook.UpsertBundle(crdBundle(updated))
+			_, err = svc.discoverResources(t.Context())
+			require.NoError(t, err)
+			require.True(t, svc.apiResources.discoveryPending(), "the stale response must leave discovery pending")
+			require.Equal(t, before+1, invalidations)
+
+			tc.serve(&v1.APIResources[0])
+			_, err = svc.discoverResources(t.Context())
+			require.NoError(t, err)
+			row := apiResourceByName(t, svc.APIResources().Resources, "example.com", "widgets")
+			require.Equal(t, []string(v1.APIResources[0].Verbs), row.Verbs)
+			require.Equal(t, v1.APIResources[0].ShortNames, row.ShortNames)
+			require.Equal(t, v1.APIResources[0].Categories, row.Categories)
+			require.False(t, svc.apiResources.discoveryPending())
+			require.Equal(t, before+2, invalidations)
+		})
+	}
+}
+
+func discoveredAPIGroup(group, resource, kind string, freshness apidiscovery.DiscoveryFreshness) apidiscovery.APIGroupDiscovery {
+	return apidiscovery.APIGroupDiscovery{
+		ObjectMeta: metav1.ObjectMeta{Name: group},
+		Versions: []apidiscovery.APIVersionDiscovery{{
+			Version: "v1", Freshness: freshness,
+			Resources: []apidiscovery.APIResourceDiscovery{{
+				Resource:     resource,
+				ResponseKind: &metav1.GroupVersionKind{Group: group, Version: "v1", Kind: kind},
+				Scope:        apidiscovery.ScopeNamespace,
+				Verbs:        []string{"list"},
+			}},
+		}},
+	}
+}
+
+func TestCatalogDiscoveryFallsBackToTheExistingClusterClient(t *testing.T) {
+	kube := kubefake.NewClientset()
+	kube.Discovery().(*fakediscovery.FakeDiscovery).Resources = podOnlyResourceLists()
+	svc := NewService(Dependencies{
+		ClusterID: "fallback-discovery",
+		Common:    common.Dependencies{KubernetesClient: kube, RestConfig: &rest.Config{Host: "%%"}},
+	}, nil)
+	_, err := svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, "Pod", apiResourceByName(t, svc.APIResources().Resources, "", "pods").Kind)
+}
+
 // crdBundle is the CRD's ingest bundle half the discovery hook reads, as the
 // CRD reflector projects it.
 func crdBundle(crd *apiextensionsv1.CustomResourceDefinition) ingest.Bundle {
-	return ingest.Bundle{Aggregate: apiextensions.StreamDescriptor.AggregateRow(crd)}
+	return ingest.Bundle{Aggregate: apiextensions.BuildDefinition(crd)}
+}
+
+// definitionIngest is an API server serving CustomResourceDefinitions and an
+// ingest manager watching them, as the refresh system wires the CRD reflector:
+// each definition's bundle carries the Definition the discovery hook reads.
+// (The system's projector also adds the catalog Summary, which the hook ignores.)
+func definitionIngest(t *testing.T) (*ingesttest.APIServer, *ingest.IngestManager) {
+	t.Helper()
+	gvk := apiextensionsv1.SchemeGroupVersion.WithKind(apiextensions.Identity.Kind)
+	server := ingesttest.NewAPIServer(t, gvk)
+	definitions := ingest.NewIngestManager(streamrows.ClusterMeta{ClusterID: "c1"}, server.Client(t), server.APIExtensionsClient(t), nil)
+	require.True(t, definitions.RegisterReflector(apiextensions.Identity.GVR(), gvk, func(obj interface{}) (interface{}, error) {
+		return crdBundle(obj.(*apiextensionsv1.CustomResourceDefinition)), nil
+	}, false))
+	return server, definitions
 }
 
 func establishedWidgetDefinition() *apiextensionsv1.CustomResourceDefinition {
@@ -184,8 +483,7 @@ func TestNewCRDAppearsWithoutWaitingForPeriodicCatalogRefresh(t *testing.T) {
 		review.Status.Allowed = true
 		return true, review, nil
 	})
-	server := ingesttest.NewAPIServer(t)
-	definitions := ingest.NewIngestManager(streamrows.ClusterMeta{ClusterID: "c1"}, server.Client(t), server.APIExtensionsClient(t), nil)
+	server, definitions := definitionIngest(t)
 	definitions.Start(ctx)
 	t.Cleanup(definitions.Stop)
 	require.Eventually(t, definitions.HasSynced, 5*time.Second, time.Millisecond)

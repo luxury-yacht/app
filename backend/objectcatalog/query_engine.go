@@ -41,7 +41,7 @@ const (
 	catalogEngineFacetResourceScope  = "resourcescope"
 	catalogEngineFacetAPIGroup       = "apigroup"
 	catalogEngineFacetScopeNamespace = "scopenamespace"
-	catalogEngineFacetCustom         = "custom"
+	catalogEngineFacetResource       = "resourceidentity"
 	catalogEngineFacetFamily         = "family"
 )
 
@@ -111,14 +111,9 @@ func newCatalogQueryStoreSchema() querypage.Schema[Summary] {
 			catalogEngineFacetScopeNamespace: func(s Summary) string {
 				return catalogQueryNamespaceIndexKey(s.Ref.Namespace, s.Scope)
 			},
-			// custom = "true" for non-built-in (discovered/CRD) rows, "false" otherwise,
-			// reusing the catalog's builtin check (catalogQueryBuiltinKeys).
-			catalogEngineFacetCustom: func(s Summary) string {
-				if catalogSummaryIsCustom(s) {
-					return "true"
-				}
-				return "false"
-			},
+			// Custom queries select CRD-backed identities without rewriting indexed
+			// rows when a definition appears, disappears or becomes unreadable.
+			catalogEngineFacetResource: catalogSummaryResourceIdentity,
 		},
 		// Search matches the same fields as newSearchMatcher: name + namespace + kind.
 		// Join with NUL so a single case-insensitive Contains can never match across a
@@ -167,11 +162,12 @@ func catalogEngineAPIDisplay(s Summary) string {
 	return group + "/" + s.Ref.Version
 }
 
-// catalogSummaryIsCustom reports whether a summary is a non-built-in (discovered/CRD)
-// kind, reusing the catalog's builtin identity set.
-func catalogSummaryIsCustom(s Summary) bool {
-	_, builtin := catalogQueryBuiltinKeys[identityKey(s.Ref.Group, s.Ref.Version, s.Ref.Kind)]
-	return !builtin
+func catalogSummaryResourceIdentity(s Summary) string {
+	return catalogResourceIdentity(s.Ref.Group, s.Ref.Version, s.Ref.Resource, s.Ref.Kind, s.Scope)
+}
+
+func catalogResourceIdentity(group, version, resource, kind string, scope Scope) string {
+	return strings.Join([]string{group, version, resource, kind, string(scope)}, catalogEngineFieldSep)
 }
 
 // catalogEngineEmptyAgeSentinel sorts AFTER every inverted real timestamp, so an
@@ -349,6 +345,10 @@ func catalogEngineNamespaceFilterValues(namespaces []string) []string {
 // row selection, totals, and facet reads.
 func (s *Service) queryViaEngine(opts QueryOptions) (QueryResult, bool) {
 	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if opts.CustomOnly {
+		opts.customResources, opts.customDefinitions = s.apiResources.customQueryResources()
+	}
 	store := s.catalogIndex.queryEngineStore
 	descriptors := append([]Descriptor(nil), s.catalogIndex.cachedDescriptors...)
 	cachedKinds := append([]KindInfo(nil), s.catalogIndex.cachedKinds...)
@@ -358,10 +358,8 @@ func (s *Service) queryViaEngine(opts QueryOptions) (QueryResult, bool) {
 	// reset). queryViaEngineFromSnapshot serves that case on the same engine from the
 	// items-map snapshot, so the catalog has ONE query implementation.
 	if store == nil || store.Len() == 0 {
-		s.mu.RUnlock()
 		return s.queryViaEngineFromSnapshot(opts, descriptors)
 	}
-	defer s.mu.RUnlock()
 	// Maintained-store path: facets resolve from the publish-time cached kinds/namespaces
 	// lists (catalogEngineFacets).
 	rows := store.Snapshot()
@@ -377,9 +375,9 @@ func (s *Service) queryViaEngine(opts QueryOptions) (QueryResult, bool) {
 // match sets the maintained-store path uses — a deliberate, distinct facet contract for
 // the snapshot path (see catalogEngineSnapshotFacets).
 func (s *Service) queryViaEngineFromSnapshot(opts QueryOptions, descriptors []Descriptor) (QueryResult, bool) {
-	rows := s.Snapshot()
+	rows := s.catalogIndex.snapshot()
 	if len(descriptors) == 0 {
-		descriptors = s.Descriptors()
+		descriptors = s.catalogIndex.descriptors()
 	}
 	store := catalogQueryStoreFromRows(rows)
 	resolveFacets := func(metadataExact bool) ([]KindInfo, []string) {
@@ -421,7 +419,8 @@ func (s *Service) queryViaEngineWithStore(
 		Filters:   filters,
 		MatchNone: opts.MatchNone,
 	}
-	page, anchorOutcome, err := catalogEnginePage(store, engineQuery, opts, rows)
+	anchorUnavailable := s.anchorUnavailable(opts.Anchor)
+	page, anchorOutcome, err := catalogEnginePage(store, engineQuery, opts, rows, anchorUnavailable)
 	if err != nil {
 		// The only remaining engine error is an unknown sort key; sortKey is
 		// normalized above, so this is defensive.
@@ -433,25 +432,36 @@ func (s *Service) queryViaEngineWithStore(
 	metadataExact := page.Total <= catalogQueryExactMetadataThreshold
 
 	kinds, namespaces := resolveFacets(metadataExact)
+	s.catalogIndex.enrichPageActionFacts(page.Rows, s.scopeNamespaces())
 
 	return QueryResult{
-		Items:           page.Rows,
-		ContinueToken:   page.NextCursor,
-		PreviousToken:   page.PrevCursor,
-		SelfToken:       page.SelfCursor,
-		CursorInvalid:   page.CursorInvalid,
-		TotalItems:      page.Total,
-		UnfilteredTotal: unfilteredTotal,
-		TotalIsExact:    metadataExact && unfilteredExact,
-		ResourceCount:   countMatchingDescriptorsWithOptions(descriptors, newKindMatcher(opts.Kinds), opts),
-		Kinds:           kinds,
-		Namespaces:      namespaces,
-		Groups:          groups,
-		ResourceScopes:  resourceScopes,
-		FacetsExact:     metadataExact,
-		AnchorOutcome:   anchorOutcome,
-		PageStartRank:   page.PageStartRank,
+		CustomDefinitions: opts.customDefinitions,
+		Items:             page.Rows,
+		ContinueToken:     page.NextCursor,
+		PreviousToken:     page.PrevCursor,
+		SelfToken:         page.SelfCursor,
+		CursorInvalid:     page.CursorInvalid,
+		TotalItems:        page.Total,
+		UnfilteredTotal:   unfilteredTotal,
+		TotalIsExact:      metadataExact && unfilteredExact,
+		ResourceCount:     countMatchingDescriptorsWithOptions(descriptors, newKindMatcher(opts.Kinds), opts),
+		Kinds:             kinds,
+		Namespaces:        namespaces,
+		Groups:            groups,
+		ResourceScopes:    resourceScopes,
+		FacetsExact:       metadataExact,
+		AnchorOutcome:     anchorOutcome,
+		AnchorUnavailable: anchorUnavailable,
+		PageStartRank:     page.PageStartRank,
 	}
+}
+
+func (s *Service) anchorUnavailable(anchor *QueryAnchor) bool {
+	if anchor == nil {
+		return false
+	}
+	desc, listed := s.catalogIndex.descriptorForGroupKind(anchor.Group, anchor.Kind)
+	return !listed || !s.catalogIndex.scopeConfirmed(desc, anchor.Namespace, s.scopeNamespaces())
 }
 
 // catalogEnginePage serves the page the options ask for: a numbered page, the
@@ -462,6 +472,7 @@ func catalogEnginePage(
 	engineQuery querypage.Query,
 	opts QueryOptions,
 	rows []Summary,
+	anchorUnavailable bool,
 ) (querypage.Page[Summary], *querypage.AnchorOutcome, error) {
 	switch {
 	case opts.StartRank != nil && opts.Anchor == nil:
@@ -476,8 +487,10 @@ func catalogEnginePage(
 		// authoritative; an unresolved key (absent, or UID identity mismatch)
 		// walks the engine's not-found path — first page + reason.
 		key := ""
-		if summary, ok := findAnchorSummary(rows, opts.Anchor); ok {
-			key = catalogEngineUID(summary)
+		if !anchorUnavailable {
+			if summary, ok := findAnchorSummary(rows, opts.Anchor); ok {
+				key = catalogEngineUID(summary)
+			}
 		}
 		page, outcome, err := store.QueryAround(engineQuery, key)
 		return page, &outcome, err
@@ -519,8 +532,8 @@ func findAnchorSummary(rows []Summary, anchor *QueryAnchor) (Summary, bool) {
 
 // catalogEngineFilters builds the querypage facet filters for a query: the kind
 // filter is expanded to the matching canonical identities, namespace/API-group/
-// resource-scope filters map to their facet buckets, and CustomOnly remains part
-// of the structural custom="true" boundary.
+// resource-scope filters map to their facet buckets, and CustomOnly uses the
+// CRD identities in the structural boundary.
 func (s *Service) catalogEngineFilters(rows []Summary, opts QueryOptions) map[string][]string {
 	filters := catalogEngineStructuralFilters(opts)
 	if kinds := normalizeQueryValues(opts.Kinds); len(kinds) > 0 {
@@ -562,7 +575,14 @@ func catalogEngineStructuralFilters(opts QueryOptions) map[string][]string {
 		filters[catalogEngineFacetScopeNamespace] = values
 	}
 	if opts.CustomOnly {
-		filters[catalogEngineFacetCustom] = []string{"true"}
+		identities := make([]string, 0, len(opts.customResources))
+		for identity := range opts.customResources {
+			identities = append(identities, identity)
+		}
+		if len(identities) == 0 {
+			identities = []string{catalogEngineNoMatchFacetValue}
+		}
+		filters[catalogEngineFacetResource] = identities
 	}
 	return filters
 }
@@ -619,7 +639,7 @@ func catalogEngineFacets(rows []Summary, opts QueryOptions, cachedKinds []KindIn
 	}
 
 	namespaces := cachedNamespaces
-	if opts.ResourceFamily != "" || (len(cachedNamespaces) == 0 && len(facets.namespaces) > 0) {
+	if opts.CustomOnly || opts.ResourceFamily != "" || (len(cachedNamespaces) == 0 && len(facets.namespaces) > 0) {
 		namespaces = snapshotSortedKeys(facets.namespaces)
 	}
 
@@ -639,7 +659,7 @@ func newCatalogFacetFilters(opts QueryOptions) catalogFacetFilters {
 	filters := catalogFacetFilters{
 		resourceFamily:   opts.ResourceFamily,
 		namespaceMatcher: newNamespaceMatcher(opts.Namespaces),
-		customMatcher:    newCustomOnlyMatcher(opts.CustomOnly),
+		customMatcher:    newCustomOnlyMatcher(opts),
 		groups:           make(map[string]struct{}, len(opts.Groups)),
 		resourceScopes:   make(map[string]struct{}, len(opts.ResourceScopes)),
 	}

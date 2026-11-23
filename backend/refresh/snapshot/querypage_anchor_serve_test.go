@@ -347,7 +347,6 @@ func TestClusterAdapterAnchorKeyMatchesKey(t *testing.T) {
 		{"cluster-config", clusterConfigTableQueryAdapter().AnchorKey, clusterConfigTableQueryAdapter().Key(ClusterConfigEntry{Ref: testCanonicalRowRef("StorageClass", "", "gp3")}), "StorageClass", "gp3"},
 		{"cluster-storage", clusterStorageTableQueryAdapter().AnchorKey, clusterStorageTableQueryAdapter().Key(ClusterStorageEntry{Ref: resourcemodel.ResourceRef{Kind: "PersistentVolume", Name: "pv-1"}}), "PersistentVolume", "pv-1"},
 		{"cluster-rbac", clusterRBACTableQueryAdapter().AnchorKey, clusterRBACTableQueryAdapter().Key(ClusterRBACEntry{Ref: resourcemodel.ResourceRef{Kind: "ClusterRole", Name: "admin"}}), "ClusterRole", "admin"},
-		{"cluster-crds", clusterCRDTableQueryAdapter().AnchorKey, clusterCRDTableQueryAdapter().Key(ClusterCRDEntry{Ref: resourcemodel.ResourceRef{Name: "crd-1"}}), "CustomResourceDefinition", "crd-1"},
 	}
 	for _, tc := range cases {
 		if tc.anchorKey == nil {

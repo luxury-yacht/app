@@ -9,6 +9,7 @@ package apiextensions
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -88,5 +89,29 @@ func TestCustomResourceDefinition(t *testing.T) {
 	}
 	if len(details.Conditions) != 1 || details.Conditions[0].Kind != string(apiextensionsv1.Established) {
 		t.Fatalf("expected CRD conditions to be copied, got %#v", details.Conditions)
+	}
+}
+
+func TestCRDDetailsPublishThePreferredServedVersion(t *testing.T) {
+	crd := &apiextensionsv1.CustomResourceDefinition{Spec: apiextensionsv1.CustomResourceDefinitionSpec{
+		Versions: []apiextensionsv1.CustomResourceDefinitionVersion{
+			{Name: "v1beta1", Storage: true, Served: true},
+			{Name: "v2", Served: false},
+			{Name: "v1", Served: true},
+		},
+	}}
+	var svc Service
+	data, err := json.Marshal(svc.buildCRDDetails(crd))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var details struct {
+		PreferredVersion string `json:"preferredVersion"`
+	}
+	if err := json.Unmarshal(data, &details); err != nil {
+		t.Fatal(err)
+	}
+	if details.PreferredVersion != "v1" {
+		t.Fatalf("preferred version = %q, want served stable v1", details.PreferredVersion)
 	}
 }

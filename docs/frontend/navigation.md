@@ -70,7 +70,7 @@ same slot.
 
 | Scope | Direct links | Resources (in order) | Extensions |
 | --- | --- | --- | --- |
-| Cluster | Overview, Attention, Browse, Events, Identities | Config, Namespaces, Nodes, RBAC, Storage | CRDs, Custom Resources, then Cert Manager, External Secrets, Karpenter |
+| Cluster | Overview, Attention, API Resources, Browse, Events, Identities | Config, Namespaces, Nodes, RBAC, Storage | Custom Resources, then Cert Manager, External Secrets, Karpenter |
 | Namespace | Browse, Events, Map | Workloads, Pods, Autoscaling, Config, Network, Quotas, RBAC, Storage | Custom Resources, Argo CD, Cert Manager, External Secrets, Helm, Prometheus Operator |
 
 - Identities is an observed-subject view, not a resource category, so it stays
@@ -104,9 +104,8 @@ same slot.
   - its resource family's view;
   - the view whose `listDomain` (`core/navigation/viewRegistry.ts`) is the
     kind's list domain, a kind facet generated from the backend registry;
-  - Browse, for a built-in kind no view lists (such as ReplicaSets);
-  - the Custom view, for any other custom resource, even one that reuses a
-    built-in kind name.
+  - Browse, for any kind without a dedicated view, in the object's cluster
+    or namespace scope.
   A backend test checks that each list domain's table lists the kind, and a
   type check requires a view for every list domain.
 

@@ -16,7 +16,7 @@ import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { useObjectPanelState } from '@modules/object-panel/contexts/ObjectPanelStateContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { getObjectPanelScopes, type ObjectPanelScopes } from '@modules/object-panel/objectPanelRef';
-import { isIdentityPanelRef, panelTargetFromSnapshot } from '@modules/object-panel/panelTarget';
+import { isNonObjectPanelRef, panelTargetFromSnapshot } from '@modules/object-panel/panelTarget';
 import { act, type ReactElement, type ReactNode, useEffect, useSyncExternalStore } from 'react';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, vi } from 'vitest';
@@ -179,7 +179,14 @@ export interface AppOwners {
  */
 export type OpenPanelTarget =
   | (ObjectIdentity & { clusterId: string; clusterName?: string })
-  | { targetType: 'identity'; clusterId: string; kind: string; name: string };
+  | { targetType: 'identity'; clusterId: string; kind: string; name: string }
+  | {
+      targetType: 'api-resource';
+      clusterId: string;
+      group: string;
+      kind: string;
+      resource: string;
+    };
 
 /**
  * A sidebar entry: a cluster view (`'overview'` is the cluster Overview), a
@@ -276,13 +283,17 @@ export interface AppStateHarness {
   /**
    * Answers every read of a query table domain in `cluster` (any selector,
    * page, sort, or filter) with the typed-resource envelope and `payload`
-   * (rows default to none; totals count the rows). Returns a function that
+   * (rows default to none; totals count the rows). `payload` may be a function
+   * of the read, for an answer that depends on what was asked (an anchor
+   * result only for a read that carries an anchor). Returns a function that
    * stops answering.
    */
   serveTable<D extends keyof DomainPayloadMap>(
     cluster: TestCluster,
     domain: D,
-    payload?: Partial<DomainPayloadMap[D]>
+    payload?:
+      | Partial<DomainPayloadMap[D]>
+      | ((read: { scope: string }) => Partial<DomainPayloadMap[D]>)
   ): () => void;
   /** Persisted preferences the bootstrap hydrates. */
   preferences(settings: Partial<AppSettings>): void;
@@ -1029,7 +1040,7 @@ export const installAppStateHarness = (
       container,
       openPanels: () =>
         Array.from(owners().objectPanels.openPanels.values()).map((target) =>
-          isIdentityPanelRef(target)
+          isNonObjectPanelRef(target)
             ? { ...target }
             : {
                 clusterId: target.clusterId,
@@ -1265,7 +1276,8 @@ export const installAppStateHarness = (
         if (request.domain !== domain || !request.scope.startsWith(`${cluster.clusterId}|`)) {
           return undefined;
         }
-        const rows = (payload as { rows?: unknown[] }).rows ?? [];
+        const answer = typeof payload === 'function' ? payload(request) : payload;
+        const rows = (answer as { rows?: unknown[] }).rows ?? [];
         return {
           clusterId: cluster.clusterId,
           clusterName: cluster.clusterName,
@@ -1282,7 +1294,7 @@ export const installAppStateHarness = (
             kindVocabulary: [],
           },
           rows,
-          ...payload,
+          ...answer,
         };
       });
     },

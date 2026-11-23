@@ -67,7 +67,10 @@ const open = (ref: Parameters<ReturnType<typeof useObjectPanelState>['onRowClick
   return panelId;
 };
 
-const openNames = () => Array.from(current().openPanels.values()).map((target) => target.name);
+const openNames = () =>
+  Array.from(current().openPanels.values()).map((target) =>
+    'name' in target ? target.name : target.resource
+  );
 
 const closeClusterTab = async (cluster: TestCluster) => {
   await act(async () => {

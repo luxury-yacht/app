@@ -69,6 +69,16 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
   {
     scope: 'cluster',
     sidebarGroup: 'primary',
+    id: 'api-resources',
+    // CustomResourceDefinitions are listed here, as the custom kinds they define.
+    listDomain: 'cluster-api-resources',
+    label: 'API Resources',
+    description: 'View every kind the cluster serves, built-in and custom, with its schema',
+    keywords: ['api', 'resources', 'kinds', 'crds', 'definitions', 'explain', 'schema'],
+  },
+  {
+    scope: 'cluster',
+    sidebarGroup: 'primary',
     id: 'browse',
     label: 'Browse',
     description: 'Inspect the inventory of all catalogued Kubernetes objects',
@@ -135,15 +145,6 @@ export const CLUSTER_VIEW_DESCRIPTORS = [
     label: 'Storage',
     description: 'View persistent volumes and storage classes',
     keywords: ['storage', 'cluster', 'volumes', 'pvs', 'persistent', 'classes'],
-  },
-  {
-    scope: 'cluster',
-    sidebarGroup: 'extensions',
-    id: 'crds',
-    listDomain: 'cluster-crds',
-    label: 'CRDs',
-    description: 'View custom resource definitions',
-    keywords: ['crds', 'cluster', 'custom', 'resources', 'definitions'],
   },
   {
     scope: 'cluster',

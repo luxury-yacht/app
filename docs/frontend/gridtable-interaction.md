@@ -178,7 +178,7 @@ virtualization, and native table accessibility. Apply the
   API Version column when one kind name spans several API versions. Long names
   truncate, with the full name on hover.
 - A view that lists kinds too consequential to remove several at a time does not
-  opt in: Browse, CRDs, Namespaces, and Helm.
+  opt in: Browse, API Resources, Namespaces, and Helm.
 - Nodes add Drain, which takes one set of options for every selected node and
   starts one job per node, so the drains run at the same time. Every node delete
   warns about workload pods, however drained the node looks: nothing the app can

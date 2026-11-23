@@ -17,19 +17,25 @@
 import { OBJECT_ACTION_IDS, objectActionLabel } from '@shared/actions/objectActionContract';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { requestContextRefresh } from '@/core/data-access';
 import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@/shared/components/tables/gridTableFilterState';
+import { requestGridTableFilters } from '@/shared/components/tables/hooks/gridTableFilterRequest';
+import { buildGridTableFocusRequest } from '@/shared/components/tables/hooks/gridTableFocusRequest';
+import { setPendingFocusRequest } from '@/shared/components/tables/hooks/useGridTableExternalFocus';
 import {
   buildGridTableStorageKey,
   computeClusterHash,
   type GridTablePersistedState,
 } from '@/shared/components/tables/persistence/gridTablePersistence';
+import { useNavigateToView } from '@/shared/hooks/useNavigateToView';
 import {
   installAppStateHarness,
   type MountedApp,
   type TestCluster,
 } from '@/test-utils/appState/harness';
+import { snapshotResponse } from '@/test-utils/appState/transport';
 import { requireValue } from '@/test-utils/requireValue';
 
 const app = installAppStateHarness();
@@ -110,12 +116,26 @@ const catalogPage = (
     .sort(
       (left, right) =>
         direction *
-        `${left.ref[sortKey]}/${left.ref.name}`.localeCompare(
-          `${right.ref[sortKey]}/${right.ref.name}`
-        )
+        (left.ref[sortKey].localeCompare(right.ref[sortKey]) ||
+          left.ref.name.localeCompare(right.ref.name))
     );
   const limit = Number(query.get('limit') ?? 50);
-  const start = Number(query.get('continue') ?? 0);
+  const anchorName = query.get('anchor.name');
+  const anchorUid = query.get('anchor.uid');
+  const anchor = anchorName
+    ? inScope.find(
+        ({ ref }) =>
+          ref.name === anchorName &&
+          ref.clusterId === query.get('anchor.clusterId') &&
+          ref.group === (query.get('anchor.group') ?? '') &&
+          ref.version === query.get('anchor.version') &&
+          ref.kind === query.get('anchor.kind') &&
+          (ref.namespace ?? '') === (query.get('anchor.namespace') ?? '') &&
+          (!anchorUid || ref.uid === anchorUid)
+      )
+    : undefined;
+  const rank = anchor ? matching.indexOf(anchor) : -1;
+  const start = rank >= 0 ? Math.floor(rank / limit) * limit : Number(query.get('continue') ?? 0);
   const page = matching.slice(start, start + limit);
   return makeCatalogSnapshotPayload({
     clusterId: dev.clusterId,
@@ -123,6 +143,16 @@ const catalogPage = (
     items: page,
     total: matching.length,
     unfilteredTotal: inScope.length,
+    ...(anchorName
+      ? {
+          anchor:
+            rank >= 0
+              ? { found: true, rank }
+              : { found: false, rank, reason: anchor ? 'filtered' : 'not-found' },
+          pageStartRank: start,
+          self: String(start),
+        }
+      : {}),
     continue: start + limit < matching.length ? String(start + limit) : '',
     previous: start > 0 ? String(Math.max(0, start - limit)) : '',
     hasNext: start + limit < matching.length,
@@ -216,6 +246,15 @@ const openRowMenu = async (name: string) => {
 
 const node = () => catalogItem({ kind: 'Node', name: 'worker-a' });
 const pod = (name: string, namespace: string) => catalogItem({ kind: 'Pod', name, namespace });
+const mountWithNavigation = async () => {
+  let navigateToView: ReturnType<typeof useNavigateToView>['navigateToView'] | undefined;
+  const NavigateProbe = () => {
+    navigateToView = useNavigateToView().navigateToView;
+    return null;
+  };
+  view = await app.mountApp(<NavigateProbe />);
+  return requireValue(navigateToView, 'mounted navigation hook');
+};
 
 beforeEach(() => {
   dev = app.cluster({ name: 'dev', context: 'alpha' });
@@ -249,6 +288,64 @@ describe('BrowseView', () => {
     expect(rowNames()).toEqual(['api']);
     expect(lastPageQuery().getAll('scopeNamespace')).toEqual(['team-a']);
     expect(columnKeys()).not.toContain('namespace');
+  });
+
+  it.each([
+    { scope: 'cluster', namespace: undefined, alreadyOpen: false },
+    { scope: 'namespace', namespace: 'team-a', alreadyOpen: false },
+    { scope: 'cluster', namespace: undefined, alreadyOpen: true },
+    { scope: 'namespace', namespace: 'team-a', alreadyOpen: true },
+  ])(
+    'focuses an off-page $scope object when Browse is already open: $alreadyOpen',
+    async ({ scope, namespace, alreadyOpen }) => {
+      const viewId = namespace ? 'namespace-browse' : 'browse';
+      await persistTables({ [viewId]: { sort: { key: 'name', direction: 'asc' }, pageSize: 25 } });
+      const widget = (name: string) =>
+        catalogItem({ kind: 'Widget', name, group: 'example.com', namespace });
+      const target = widget('widget-target');
+      serveCatalog([
+        ...Array.from({ length: 51 }, (_, index) => widget(`widget-${index}`)),
+        target,
+      ]);
+      const navigateToView = await mountWithNavigation();
+      if (alreadyOpen) {
+        await view.goTo(namespace ? { namespace, view: 'browse' } : { clusterView: 'browse' });
+        expect(rowNames()).not.toContain(target.ref.name);
+      }
+
+      await act(async () => navigateToView({ ...target.ref }));
+      await app.settle();
+
+      const query = lastPageQuery();
+      expect(Object.fromEntries(query.entries())).toMatchObject({
+        'anchor.name': target.ref.name,
+        'anchor.group': target.ref.group,
+        'anchor.version': target.ref.version,
+        'anchor.uid': target.ref.uid,
+        resourceScope: scope,
+      });
+      expect(query.get('anchor.namespace')).toBe(namespace ?? null);
+      expect(rowOf(target.ref.name).getAttribute('data-row-focused')).toBe('true');
+    }
+  );
+
+  it('reports a Browse target hidden by the current filters and keeps those filters', async () => {
+    const widget = catalogItem({ kind: 'Widget', name: 'hidden-widget', group: 'example.com' });
+    await persistTables({
+      browse: { filters: { ...DEFAULT_GRID_TABLE_FILTER_STATE, search: 'worker' } },
+    });
+    serveCatalog([widget, node()]);
+    const navigateToView = await mountWithNavigation();
+
+    await view.goTo({ clusterView: 'browse' });
+    await act(async () => navigateToView({ ...widget.ref }));
+    await app.settle();
+
+    expect(lastPageQuery().get('search')).toBe('worker');
+    expect(rowNames()).toEqual(['worker-a']);
+    const reports = app.errors.take((record) => record.context?.source === 'resource-grid-anchor');
+    expect(reports).toHaveLength(1);
+    expect((reports[0].error as Error).message).toContain('current filters');
   });
 
   it('lists every namespace’s objects under All Namespaces, with a Namespace column that opens the namespace', async () => {
@@ -438,4 +535,193 @@ describe('BrowseView', () => {
       expect(lastPageQuery().getAll('apiGroup')).toEqual(['apps']);
     }
   );
+
+  // API Resources lists the kinds CustomResourceDefinitions define. A
+  // definition whose kind the cluster does not serve (it never became
+  // Established) has no row there, but the definition still exists and Browse
+  // lists it. The cluster says which case it is, by the definition's exact
+  // name: "show in list" on one that exists ends in Browse, with that
+  // definition's row focused; one that does not exist is reported as not found.
+  describe('a definition API Resources has no row for', () => {
+    const definition = (name: string) =>
+      catalogItem({
+        kind: 'CustomResourceDefinition',
+        name,
+        group: 'apiextensions.k8s.io',
+        resource: 'customresourcedefinitions',
+      });
+
+    /** `reason` is the cluster's answer to the read that asks for the definition's row. */
+    const showInList = async (
+      name: string,
+      reason: 'unlisted' | 'not-found',
+      from: 'overview' | 'api-resources' = 'overview'
+    ) => {
+      app.serveTable(dev, 'cluster-api-resources', ({ scope }) => ({
+        rows: [],
+        ...(scope.includes('anchor.name=') ? { anchor: { found: false, rank: -1, reason } } : {}),
+      }));
+      const navigateToView = await mountWithNavigation();
+      await view.goTo({ clusterView: from });
+      await act(async () => {
+        navigateToView({
+          clusterId: dev.clusterId,
+          clusterName: dev.clusterName,
+          group: 'apiextensions.k8s.io',
+          version: 'v1',
+          kind: 'CustomResourceDefinition',
+          name,
+          uid: definition(name).ref.uid,
+        });
+      });
+      // API Resources answers that it has no such row, then Browse may load.
+      await app.settle();
+      await app.settle();
+    };
+
+    it('opens Browse from an already open API Resources table', async () => {
+      serveCatalog([definition('widgets.example.com')]);
+
+      await showInList('widgets.example.com', 'unlisted', 'api-resources');
+
+      expect(view.owners().viewState?.activeClusterTab).toBe('browse');
+      expect(rowOf('widgets.example.com').getAttribute('data-row-focused')).toBe('true');
+    });
+
+    it('drops the focus handoff when Browse is left before its anchor settles', async () => {
+      const name = 'widgets.example.com';
+      serveCatalog([definition(name)]);
+      let release: (() => void) | undefined;
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      app.snapshots.respond((request) => {
+        if (request.domain === 'catalog' && request.scope.includes('anchor.name=')) {
+          return pending.then(() =>
+            snapshotResponse({
+              ...request,
+              version: 100,
+              payload: catalogPage([], request.scope, {}),
+            })
+          );
+        }
+        return undefined;
+      });
+
+      await showInList(name, 'unlisted');
+      expect(lastPageQuery().get('anchor.name')).toBe(name);
+      await view.goTo({ clusterView: 'overview' });
+      await act(async () => requireValue(release, 'parked Browse response')());
+      await app.settle();
+
+      expect(
+        app.errors.take((record) => record.context?.source === 'resource-grid-anchor')
+      ).toEqual([]);
+      const previousReads = pageQueries().filter((query) => query.has('anchor.name')).length;
+      await view.goTo({ clusterView: 'browse' });
+      expect(pageQueries().filter((query) => query.has('anchor.name'))).toHaveLength(previousReads);
+      expect(rowOf(name).getAttribute('data-row-focused')).toBeNull();
+    });
+
+    it('discards the focus and filters if Browse is left before table preferences load', async () => {
+      const name = 'widgets.example.com';
+      const target = definition(name);
+      serveCatalog([node(), target]);
+      const hydrate = app.backend.hold('GetGridTablePersistence');
+      view = await app.mountApp();
+      const focus = requireValue(
+        buildGridTableFocusRequest({ ...target.ref }),
+        'expected CRD focus'
+      );
+      setPendingFocusRequest({ ...focus, destinationViewId: 'browse', requiresAnchor: true });
+      requestGridTableFilters({
+        clusterId: dev.clusterId,
+        destinationViewId: 'browse',
+        filters: {
+          ...DEFAULT_GRID_TABLE_FILTER_STATE,
+          search: name,
+          kinds: { mode: 'some', values: [focus.kind] },
+        },
+      });
+
+      await view.goTo({ clusterView: 'browse' });
+      expect(app.backend.calls('GetGridTablePersistence')).not.toEqual([]);
+      expect(pageQueries()).toEqual([]);
+      await view.goTo({ clusterView: 'overview' });
+      await act(async () => hydrate());
+
+      await view.goTo({ clusterView: 'browse' });
+      expect(pageQueries().some((query) => query.has('anchor.name'))).toBe(false);
+      expect(rowNames()).toEqual(expect.arrayContaining(['worker-a', name]));
+      expect(rowOf(name).getAttribute('data-row-focused')).toBeNull();
+    });
+
+    it('lands on the exact definition past the first page of Browse search matches', async () => {
+      await persistTables({ browse: { sort: { key: 'name', direction: 'desc' }, pageSize: 25 } });
+      serveCatalog([
+        node(),
+        definition('widgets.example.com'),
+        ...Array.from({ length: 26 }, (_, index) =>
+          definition(`widgets.example.com.au${String(index).padStart(2, '0')}`)
+        ),
+      ]);
+
+      await showInList('widgets.example.com', 'unlisted');
+
+      expect(view.owners().viewState?.activeClusterTab).toBe('browse');
+      expect(rowOf('widgets.example.com').getAttribute('data-row-focused')).toBe('true');
+      expect(rowOf('widgets.example.com.au00').getAttribute('data-row-focused')).toBeNull();
+      expect(lastPageQuery().getAll('kind')).toEqual(['CustomResourceDefinition']);
+      expect(lastPageQuery().get('search')).toBe('widgets.example.com');
+      expect(lastPageQuery().get('sortDirection')).toBe('desc');
+      expect(lastPageQuery().get('limit')).toBe('25');
+      expect(lastPageQuery().get('anchor.uid')).toBe('cluster-widgets.example.com');
+
+      await act(async () => {
+        await requestContextRefresh({ reason: 'user', clusterId: dev.clusterId });
+      });
+      await app.settle();
+      expect(lastPageQuery().get('continue')).toBe('25');
+      expect(lastPageQuery().has('anchor.name')).toBe(false);
+      expect(rowNames()).toContain('widgets.example.com');
+
+      await clickLabelled('Previous page');
+      expect(lastPageQuery().get('continue')).toBe('0');
+      expect(rowNames()).not.toContain('widgets.example.com');
+    });
+
+    // A definition that is gone must not be answered with a different
+    // definition whose name starts the same: the user stays in API Resources
+    // and is told it was not found.
+    it('is reported as not found, without going to Browse, when it does not exist', async () => {
+      serveCatalog([node(), definition('widgets.example.com.au')]);
+
+      await showInList('widgets.example.com', 'not-found');
+
+      expect(view.owners().viewState?.activeClusterTab).toBe('api-resources');
+      const reports = app.errors
+        .take((record) => record.context?.source === 'resource-grid-anchor')
+        .map((record) => (record.error as Error).message);
+      expect(reports).toHaveLength(1);
+      expect(reports[0]).toContain('CustomResourceDefinition widgets.example.com');
+    });
+
+    it('does not focus a replacement definition when the original is deleted during the handoff', async () => {
+      const replacement = definition('widgets.example.com');
+      replacement.ref.uid = 'replacement';
+      serveCatalog([node(), replacement]);
+
+      await showInList('widgets.example.com', 'unlisted');
+
+      expect(view.owners().viewState?.activeClusterTab).toBe('browse');
+      expect(rowOf('widgets.example.com').getAttribute('data-row-focused')).toBeNull();
+      expect(
+        app.errors.take((record) => record.context?.source === 'resource-grid-anchor')
+      ).toHaveLength(1);
+
+      await view.goTo({ clusterView: 'api-resources' });
+      await app.settle();
+      expect(view.owners().viewState?.activeClusterTab).toBe('api-resources');
+    });
+  });
 });

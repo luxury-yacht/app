@@ -138,8 +138,12 @@ paths (see [Boundaries](#boundaries-deliberately-not-this-path)).
   maintained store, catalog, object-map, and response cache). Cross-kind-join
   and bespoke kinds (pods, workloads, network, nodes, namespaces, events) use
   `RegisterReflector` plus serve-time re-aggregation (metrics overlay, pod
-  aggregates, HPA, Service↔EndpointSlice). `backend/feed_contract_test.go`
-  keeps the shared typed-informer factory out of production code.
+  aggregates, HPA, Service↔EndpointSlice). ReplicaSets and
+  CustomResourceDefinitions have no table and register the same way; their
+  bundles keep only the halves their readers need (a ReplicaSet's controlling
+  owner, a CRD's `apiextensions.Definition`, plus the catalog Summary).
+  `backend/feed_contract_test.go` keeps the shared typed-informer factory out
+  of production code.
 - **Readiness is per resource.** Domains declare the resources they read;
   the snapshot service waits on those owned stores (`ingestHub`,
   `backend/refresh/system/ingest_hub.go`). The hub's `HasSynced` reports every
@@ -166,7 +170,8 @@ paths (see [Boundaries](#boundaries-deliberately-not-this-path)).
   Review tell: a `New*IngestProjector` signature gaining another kind's
   lister/store without one of these shapes.
 - **Runtime-discovered sources share ingest ownership.** The owned CRD
-  reflector supplies definitions: its sink publishes each CRD's
+  reflector supplies definitions (no table lists them; API Resources lists the
+  kinds they define, see `catalog.md`): its sink publishes each CRD's
   `apiextensions.Definition` into a copy-on-write table synchronously (under the
   CRD store lock), and queues lifecycle work on an ordered worker; a relist is
   diffed against the previous table so a vanished definition is retired by its

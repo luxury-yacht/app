@@ -36,6 +36,12 @@ Typed refresh rows are enrichments, not competing identity systems.
   commits, so prior rows cannot enter the destination's replay cache.
   Custom-resource hydration decorates only current membership by full identity
   and UID, keeping details through background reads and transient failures.
+- The generic Custom Resources tables join catalog objects with the cluster's
+  visible, established CRDs by served group, version, resource, kind and
+  scope. Rows, counts, filters and exports use that membership. When LIST
+  access to CRDs is denied, the table reports the missing classification and
+  Browse still shows readable objects. Dedicated family views use the
+  discovery-backed family boundary.
 
 ## Lifecycle
 
@@ -114,8 +120,17 @@ and the catalog does not subscribe to their rows.
   `ResourceFetchCallTimeout` per request, renewed per page and retry. The
   multi-namespace collection has no overall deadline; caller cancellation
   still stops it.
-- A failed kind keeps prior rows and reports partial health without canceling
-  other kinds. Dynamic sources do not gate global ingest readiness.
+- An incomplete LIST keeps prior rows for unread partitions and reports partial
+  health without canceling other kinds or namespaces. A completed LIST replaces
+  its partition, including when it returns no rows. A 403 discards all pages
+  from that partition and blocks updates from an earlier watch until a fresh
+  LIST succeeds. Dynamic sources do not gate global ingest readiness.
+- Lookup retains the last-known row for display and reports a separate
+  confirmation from the latest scope read. A preflight denial stays available
+  to lookup even when the kind is excluded from collection. A denial in one
+  namespace leaves a sibling namespace's failed review unresolved. Browse
+  derives HPA ownership from the published coverage and autoscaler targets in
+  the workload's namespace.
 - A namespace without WATCH can still contribute LIST-authorized rows; ingest
   partition readiness includes permission-skipped namespaces with no reflector.
   Unavailable watches surface as query issues and snapshot warnings (Browse,
@@ -125,7 +140,7 @@ and the catalog does not subscribe to their rows.
   replacement's state. Synced namespace baselines replace only their partitions;
   pending and LIST-only partitions are preserved.
 - CRD arrival, deletion, or a change to served versions, scope, names, UID, or
-  establishment invalidates discovery and requests collection through the
+  establishment or termination invalidates discovery and requests collection through the
   full-resync boundary (its recovery and atomic publication). A CRD Add waits
   for Established (that update supplies the request). Routine metadata,
   schema, and status-reason updates change only the CRD's own row. The hook is
@@ -176,6 +191,119 @@ and the catalog does not subscribe to their rows.
 - Restricted-identity changes: a namespace-only identity, through the
   production subsystem, still completes first collection and publishes its
   readable rows. Custom-resource permission tests alone do not prove startup.
+
+## API resources
+
+Each discovery pass also publishes the cluster's full API surface
+(`Service.APIResources`, `backend/objectcatalog/api_resources.go`): one entry
+per group and plural resource, described by its preferred version, with every
+served version, short names, verbs, and categories. It is wider than the
+catalog descriptors: it includes kinds whose objects the catalog never
+collects (Events, kinds that cannot be listed, the metrics API).
+
+- One `ServerGroupsAndResources` call per discovery feeds both the API
+  resources and the catalog descriptors; the descriptors are the listable,
+  non-excluded subset at preferred versions. The per-cluster memory cache
+  preserves aggregated discovery failures. A CRD change, a failed discovery,
+  or cache expiry forces a fresh server read on the next sync.
+- A resource is `Custom` when a visible CustomResourceDefinition defines it.
+  `CustomKnown` means the catalog has a complete CRD list. The catalog uses
+  successful LIST results until the CRD reflector has completed its own list
+  and can supply live changes. A subscription to a synced reflector publishes
+  its complete CRD set in one replay under the store lock. A WATCH denial
+  still allows LIST-based classification. LIST and WATCH record the API
+  changes they observe. Catalog retries use uncached discovery until a
+  complete response confirms the expected kind, served versions, names, and
+  termination-related verbs. A
+  definite LIST denial from preflight or the request clears classification,
+  even after an earlier WATCH sync. A fresh authorized LIST reopens
+  classification before a complete watch can resume ownership.
+- A removed definition keeps its Custom classification while discovery still
+  advertises the same kind, including when an outdated discovery response is the
+  first to advertise it. Its definition link is removed immediately, so the row
+  opens kind details while discovery catches up.
+- A partial discovery (some group versions unreachable) keeps the last
+  published resources of every group with a failed version, and lists those
+  group versions in `FailedGroupVersions`. Browse continues collecting
+  reachable kinds and keeps previous rows for unread descriptors. A definite
+  namespace LIST denial removes that partition's retained rows and blocks
+  updates from an earlier watch. A missing object for an unread descriptor
+  remains unconfirmed. Successful empty discovery responses are authoritative.
+  Browse degrades only for failures that can affect the kinds it collects.
+- A discovery that fails outright keeps the last published resources and
+  records its error in `DiscoveryFailure` until a discovery succeeds again.
+  The first failure's error is kept: retries that fail with other text change
+  nothing. A cancelled run (the cluster is disconnecting) records nothing.
+- Subscribers (`SubscribeAPIResources`) are signalled only when the published
+  inventory changes: a failure and its recovery are changes, before the first
+  successful discovery too. Nothing else is signalled before it.
+- Before the first successful discovery the domain has no rows. While
+  discovery is pending it waits up to `SnapshotAPIResourcesDiscoveryWait` and
+  then answers not-ready, which the app does not report as an error (a read
+  that outlasts the startup window shows the table's generic unavailable
+  state until the first discovery signals). Once an attempt has failed it
+  answers the latest failure itself, typed, so a denied discovery reads as a
+  permission error and any other is reported.
+- The domain is feed-independent and serves discovery while classification is
+  still pending.
+- The `cluster-api-resources` refresh domain
+  (`backend/refresh/snapshot/cluster_api_resources.go`) serves the inventory as
+  the API Resources table and the kind panel's details. It waits a bounded
+  time for the first discovery. A row has no Type and no definition while the
+  classification is unknown (CRDs not yet read, or not listable by this
+  identity), and the payload is partial, with an issue, then and while any
+  group version is unreadable or the last discovery failed outright.
+- The payload states what discovery could not read as data: `unreadGroups`
+  (the core group is `""`) and `discoveryFailed`. The kind panel reads one row
+  by resource name; an empty answer means the kind is gone only when discovery
+  read the kind's group. Otherwise the panel keeps the row it holds, or says
+  the group could not be read. A row shown while its group is unread (held, or
+  retained by the backend) carries a notice that it may be out of date. A
+  failed kind-panel request also leaves its last details visible with the
+  failure attached.
+- A CustomResourceDefinition is listed there as the custom kind it defines:
+  every row is keyed as the definition that defines its kind or would
+  (`<plural>.<group>`), and an anchor for a CustomResourceDefinition resolves
+  to that row, so "show in list" lands on it whether or not the classification
+  has arrived. A definition whose kind the cluster does not serve (not
+  Established) has no row. The domain checks the exact object through
+  `Service.LookupObject`, the catalog publication Browse reads. Navigation
+  checks the catalog even when the name already appears on screen. When a UID
+  is supplied it must match a confirmed definition. A confirmed definition
+  without a row linked to that UID yields `unlisted`, including when discovery
+  still shows the kind from a previous definition. Confirmed absence or a
+  different UID yields `not-found`. A pending or denied lookup yields
+  `unavailable` when identity must be verified, including when an unread
+  partition retains an older row.
+  Anchor queries bypass the snapshot cache so a retry sees the current catalog
+  even when discovery has not changed.
+- On `unlisted`, API Resources hands the current request to Browse. Browse
+  narrows its filters and uses the exact CRD identity, including the UID when
+  available, to open and focus the page containing the requested definition.
+  Leaving API Resources or Browse cancels the pending focus owned by that
+  view, including during table startup. Leaving Browse also cancels its
+  pending filter handoff. API Resources reports
+  `not-found`, `filtered`, or `unavailable` for its own anchor.
+- API Resources search includes API scope and versions. For a visible CRD,
+  migration from the CRDs table also preserves searches on the definition's
+  version summary and optional metadata, even when the storage version
+  differs from the preferred served version.
+- `kubectl explain` output for a kind comes from
+  `backend/resources/apiresources`, read from the cluster's OpenAPI v3
+  documents on demand (`ResourceGateway.ExplainKindSchema`,
+  `ExplainKindField`). Schema requests use the cluster's current credentials.
+  A conditional GET reuses cached bytes only after the server confirms the
+  document with a 304. CRD Explain picks the highest served version using
+  Kubernetes discovery's version ordering. The tab labels the API version
+  returned with the schema. A field read carries the tree's document revision.
+  If the document has changed, Explain reloads the tree and clears all cached
+  field descriptions together. The open tab can refresh an already loaded
+  schema or retry a missing schema or failed request.
+- Descriptions arrive as the schema wrote them, not wrapped at kubectl's 76
+  terminal columns: spaces in description strings render as no-break spaces,
+  which kubectl's word wrapper never breaks at. A missing description is empty
+  rather than kubectl's `<empty>`. The generated "Possible enum values" list
+  moves out of a field's description onto its `enum` values.
 
 ## Discovered resource families
 

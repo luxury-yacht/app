@@ -119,6 +119,9 @@ type ObjectPanel struct {
 	HideEvents bool
 	// HideYAML hides the YAML tab.
 	HideYAML bool
+	// ExplainDefinedKind shows an Explain tab with the schema of the kind this
+	// object defines (a CustomResourceDefinition's custom kind).
+	ExplainDefinedKind bool
 }
 
 // Display is how the UI names a kind. Every registered kind declares a short name.

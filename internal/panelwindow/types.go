@@ -10,9 +10,22 @@ const GroupSchemaVersion = 1
 type TabKind string
 
 const (
-	TabKindObject   TabKind = "object"
-	TabKindIdentity TabKind = "identity"
+	TabKindObject      TabKind = "object"
+	TabKindIdentity    TabKind = "identity"
+	TabKindAPIResource TabKind = "api-resource"
 )
+
+// APIResourceReference identifies a kind the cluster serves, not an API object.
+// Cluster, group (empty for the core group) and plural resource are its
+// identity, the same fields its panel ID encodes. Kind is the label shown
+// until the panel has read the kind's details. It carries no version: the
+// panel reads the kind at whichever version the cluster currently prefers.
+type APIResourceReference struct {
+	ClusterID string `json:"clusterId"`
+	Group     string `json:"group"`
+	Kind      string `json:"kind"`
+	Resource  string `json:"resource"`
+}
 
 // IdentityReference identifies an observed RBAC subject, not an API object.
 type IdentityReference struct {
@@ -44,28 +57,37 @@ func ValidateObjectReference(ref ObjectReference) error {
 }
 
 type TabSnapshot struct {
-	Kind        TabKind           `json:"kind"`
-	PanelID     string            `json:"panelId"`
-	ObjectRef   ObjectReference   `json:"objectRef,omitempty,omitzero"`
-	IdentityRef IdentityReference `json:"identityRef,omitempty,omitzero"`
-	ActiveView  string            `json:"activeView"`
+	Kind           TabKind              `json:"kind"`
+	PanelID        string               `json:"panelId"`
+	ObjectRef      ObjectReference      `json:"objectRef,omitempty,omitzero"`
+	IdentityRef    IdentityReference    `json:"identityRef,omitempty,omitzero"`
+	APIResourceRef APIResourceReference `json:"apiResourceRef,omitempty,omitzero"`
+	ActiveView     string               `json:"activeView"`
 }
 
 func (tab TabSnapshot) ClusterID() string {
-	if tab.Kind == TabKindIdentity {
+	switch tab.Kind {
+	case TabKindIdentity:
 		return tab.IdentityRef.ClusterID
+	case TabKindAPIResource:
+		return tab.APIResourceRef.ClusterID
+	default:
+		return tab.ObjectRef.ClusterID
 	}
-	return tab.ObjectRef.ClusterID
 }
 
 type panelIdentity struct {
-	kind    TabKind
-	object  ObjectReference
-	subject IdentityReference
+	kind        TabKind
+	object      ObjectReference
+	subject     IdentityReference
+	apiResource APIResourceReference
 }
 
 func (tab TabSnapshot) identity() panelIdentity {
-	return panelIdentity{tab.Kind, tab.ObjectRef, tab.IdentityRef}
+	// A kind panel's Kind is a label, not identity.
+	apiResource := tab.APIResourceRef
+	apiResource.Kind = ""
+	return panelIdentity{tab.Kind, tab.ObjectRef, tab.IdentityRef, apiResource}
 }
 
 // SameIdentity reports whether two tabs show the same panel and target,
@@ -77,19 +99,39 @@ func (tab TabSnapshot) SameIdentity(other TabSnapshot) bool {
 func validateTabReference(tab TabSnapshot) error {
 	switch tab.Kind {
 	case TabKindObject:
-		if tab.IdentityRef != (IdentityReference{}) {
-			return fmt.Errorf("object panel contains a subject reference")
+		if tab.IdentityRef != (IdentityReference{}) || tab.APIResourceRef != (APIResourceReference{}) {
+			return fmt.Errorf("object panel contains a subject or kind reference")
 		}
 		return ValidateObjectReference(tab.ObjectRef)
 	case TabKindIdentity:
 		ref := tab.IdentityRef
-		if tab.ObjectRef != (ObjectReference{}) || strings.TrimSpace(ref.ClusterID) == "" || ref.Name == "" || (ref.Kind != "User" && ref.Kind != "Group") || tab.ActiveView != "details" {
+		if tab.ObjectRef != (ObjectReference{}) || tab.APIResourceRef != (APIResourceReference{}) || strings.TrimSpace(ref.ClusterID) == "" || ref.Name == "" || (ref.Kind != "User" && ref.Kind != "Group") || tab.ActiveView != "details" {
 			return fmt.Errorf("invalid identity panel reference or view")
 		}
 		return nil
+	case TabKindAPIResource:
+		return validateAPIResourceTab(tab)
 	default:
 		return fmt.Errorf("unsupported panel kind %q", tab.Kind)
 	}
+}
+
+// validateAPIResourceTab accepts a kind panel: a complete kind identity (the
+// core group is empty), no object or subject, showing one of its two views.
+func validateAPIResourceTab(tab TabSnapshot) error {
+	if tab.ObjectRef != (ObjectReference{}) || tab.IdentityRef != (IdentityReference{}) {
+		return fmt.Errorf("kind panel contains an object or subject reference")
+	}
+	ref := tab.APIResourceRef
+	if strings.TrimSpace(ref.ClusterID) == "" ||
+		strings.TrimSpace(ref.Kind) == "" ||
+		strings.TrimSpace(ref.Resource) == "" {
+		return fmt.Errorf("incomplete kind identity")
+	}
+	if tab.ActiveView != "details" && tab.ActiveView != "explain" {
+		return fmt.Errorf("unsupported kind panel view %q", tab.ActiveView)
+	}
+	return nil
 }
 
 type WindowBounds struct {

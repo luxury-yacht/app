@@ -101,7 +101,6 @@ func TestStreamSummaryDomainKindsDoNotDrift(t *testing.T) {
 	// intentionally outside the registry-derived domain set guarded here.
 	want := map[string][]string{
 		"cluster-config":        {"GatewayClass", "IngressClass", "MutatingWebhookConfiguration", "StorageClass", "ValidatingWebhookConfiguration"},
-		"cluster-crds":          {"CustomResourceDefinition"},
 		"cluster-rbac":          {"ClusterRole", "ClusterRoleBinding"},
 		"cluster-storage":       {"PersistentVolume"},
 		"namespace-autoscaling": {"HorizontalPodAutoscaler"},

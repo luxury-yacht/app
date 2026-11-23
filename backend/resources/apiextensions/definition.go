@@ -3,7 +3,10 @@ package apiextensions
 import (
 	"slices"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -18,15 +21,29 @@ type Definition struct {
 	Names         apiextensionsv1.CustomResourceDefinitionNames
 	AcceptedNames apiextensionsv1.CustomResourceDefinitionNames
 	Versions      []DefinitionVersion
+	Metadata      *resourcemodel.ResourceTableMetadata
 	// Established reports the Established condition: the API is being served.
 	Established bool
+	Terminating bool
+}
+
+// VersionSearchTerms keeps the legacy CRD table's version summary (including a
+// storage version that is no longer served) searchable in API Resources.
+func (d Definition) VersionSearchTerms() []string {
+	versions := make([]VersionFacts, 0, len(d.Versions))
+	terms := make([]string, 0, len(d.Versions)+1)
+	for _, version := range d.Versions {
+		terms = append(terms, version.Name)
+		versions = append(versions, VersionFacts{Name: version.Name, Served: version.Served, Storage: version.Storage})
+	}
+	return append(terms, CustomResourceDefinitionVersionDetails(Facts{Versions: versions}))
 }
 
 // DefinitionVersion is one version a definition declares.
 type DefinitionVersion struct {
-	Name    string
-	Served  bool
-	Storage bool
+	Name    string `json:"name"`
+	Served  bool   `json:"served"`
+	Storage bool   `json:"storage"`
 }
 
 // BuildDefinition reduces a CRD to its Definition.
@@ -39,26 +56,72 @@ func BuildDefinition(crd *apiextensionsv1.CustomResourceDefinition) Definition {
 		Names:         crd.Spec.Names,
 		AcceptedNames: crd.Status.AcceptedNames,
 		Versions:      make([]DefinitionVersion, 0, len(crd.Spec.Versions)),
+		Established:   definitionConditionTrue(crd.Status.Conditions, apiextensionsv1.Established),
+		Terminating:   definitionConditionTrue(crd.Status.Conditions, apiextensionsv1.Terminating),
 	}
 	for _, version := range crd.Spec.Versions {
 		definition.Versions = append(definition.Versions, DefinitionVersion{Name: version.Name, Served: version.Served, Storage: version.Storage})
 	}
-	for _, condition := range crd.Status.Conditions {
-		if condition.Type == apiextensionsv1.Established {
-			definition.Established = condition.Status == apiextensionsv1.ConditionTrue
-			break
+	return definition
+}
+
+// DefinitionFromUnstructured projects a LIST result without converting each
+// version's OpenAPI schema or other fields that do not affect discovery.
+func DefinitionFromUnstructured(crd *unstructured.Unstructured) (Definition, error) {
+	var fields struct {
+		Spec struct {
+			Group    string                                        `json:"group"`
+			Scope    apiextensionsv1.ResourceScope                 `json:"scope"`
+			Names    apiextensionsv1.CustomResourceDefinitionNames `json:"names"`
+			Versions []DefinitionVersion                           `json:"versions"`
+		} `json:"spec"`
+		Status struct {
+			AcceptedNames apiextensionsv1.CustomResourceDefinitionNames       `json:"acceptedNames"`
+			Conditions    []apiextensionsv1.CustomResourceDefinitionCondition `json:"conditions"`
+		} `json:"status"`
+	}
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(crd.Object, &fields); err != nil {
+		return Definition{}, err
+	}
+	return Definition{
+		Name:          crd.GetName(),
+		UID:           crd.GetUID(),
+		Group:         fields.Spec.Group,
+		Scope:         fields.Spec.Scope,
+		Names:         fields.Spec.Names,
+		AcceptedNames: fields.Status.AcceptedNames,
+		Versions:      fields.Spec.Versions,
+		Established:   definitionConditionTrue(fields.Status.Conditions, apiextensionsv1.Established),
+		Terminating:   definitionConditionTrue(fields.Status.Conditions, apiextensionsv1.Terminating),
+	}, nil
+}
+
+func definitionConditionTrue(conditions []apiextensionsv1.CustomResourceDefinitionCondition, kind apiextensionsv1.CustomResourceDefinitionConditionType) bool {
+	for _, condition := range conditions {
+		if condition.Type == kind {
+			return condition.Status == apiextensionsv1.ConditionTrue
 		}
 	}
-	return definition
+	return false
 }
 
 // ChangesDiscovery reports whether two definitions differ in anything API
 // discovery serves: identity, group, scope, names, served versions, or
-// establishment. Status reasons, schemas, and unserved versions do not.
+// establishment or termination. Status reasons, schemas, and unserved versions do not.
 func (d Definition) ChangesDiscovery(other Definition) bool {
 	return d.UID != other.UID || d.Group != other.Group || d.Scope != other.Scope ||
 		!namesEqual(d.Names, other.Names) || !namesEqual(d.AcceptedNames, other.AcceptedNames) ||
-		!slices.Equal(d.ServedVersions(), other.ServedVersions()) || d.Established != other.Established
+		!slices.Equal(d.ServedVersions(), other.ServedVersions()) ||
+		d.Established != other.Established || d.Terminating != other.Terminating
+}
+
+// DiscoveryNames returns the names accepted by the API server, or the spec
+// names until acceptance is reported.
+func (d Definition) DiscoveryNames() apiextensionsv1.CustomResourceDefinitionNames {
+	if d.AcceptedNames.Kind != "" {
+		return d.AcceptedNames
+	}
+	return d.Names
 }
 
 // ServedVersions lists the served version names in sorted order.

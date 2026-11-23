@@ -68,14 +68,12 @@ type Service struct {
 	identity   *resourceIdentityResolver
 
 	// discoveryClient is the per-cluster discovery client the catalog re-discovers through.
-	// In production it is a disk-cached, ETag-revalidating, aggregated-discovery client
-	// (built once via ensureDiscovery → buildDiscoveryClient); tests pre-inject it.
-	// discoveryInvalidate is its cache-invalidation hook (nil for a plain, uncached client),
-	// and discoveryStale latches when a CRD change requires the cache to be invalidated on
-	// the next discover so a newly-created CRD is never hidden behind a stale document.
+	// The production client caches aggregate discovery in memory for one bounded
+	// interval. syncMu owns the expiry, and the CRD watch can request an earlier read.
 	discoveryOnce       sync.Once
 	discoveryClient     discovery.DiscoveryInterface
 	discoveryInvalidate func()
+	discoveryExpiresAt  time.Time
 	discoveryStale      atomic.Bool
 
 	// suspendPublication lets source registration replay every kind before query
@@ -94,6 +92,7 @@ type Service struct {
 	ingestStopped   bool
 	syncMu          sync.Mutex  // serializes full syncs from the run loop and watch recovery path
 	syncInProgress  atomic.Bool // true while sync() is running; prevents watch flush races
+	catalogRetry    chan struct{}
 
 	startOnce sync.Once
 	doneCh    chan struct{}
@@ -109,6 +108,9 @@ type Service struct {
 
 	finalizerBlockers catalogSubset[FinalizerBlocker]
 	reportedStatuses  catalogSubset[ReportedStatus]
+	// apiResources is the full discovered API surface, replaced on each
+	// successful discovery independently of the collected object rows.
+	apiResources apiResourceStore
 }
 
 // NewService constructs a catalog service with the provided dependencies and options.
@@ -128,6 +130,7 @@ func NewService(deps Dependencies, opts *Options) *Service {
 		identity:          newResourceIdentityResolver(deps.Common, deps.Logger),
 		health:            healthStatus{State: HealthStateUnknown},
 		doneCh:            make(chan struct{}),
+		catalogRetry:      make(chan struct{}, 1),
 		now:               nowFn,
 		streamSubscribers: make(map[int]chan StreamingUpdate),
 	}

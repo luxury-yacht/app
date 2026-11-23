@@ -81,7 +81,7 @@ export type NamespaceQuotaPressure = '' | 'warning' | 'critical';
 
 export type AttentionSeverity = 'info' | 'warning' | 'error';
 
-export type ResourceQueryAnchorReason = 'filtered' | 'not-found';
+export type ResourceQueryAnchorReason = 'filtered' | 'not-found' | 'unlisted' | 'unavailable';
 
 export type ResourceSource = 'kubernetes' | 'synthetic';
 
@@ -477,6 +477,51 @@ export interface CertmanagerPrivateKey {
   rotationPolicy?: string;
 }
 
+export interface ClusterAPIResourceEntry {
+  clusterId: string;
+  kind: string;
+  group: string;
+  version: string;
+  apiVersion: string;
+  versions: Array<string> | null;
+  resource: string;
+  singular?: string;
+  scope: string;
+  shortNames: Array<string> | null;
+  verbs: Array<string> | null;
+  categories: Array<string> | null;
+  type: string;
+  definition?: ResourceRef;
+}
+
+export interface ClusterAPIResourcesSnapshot {
+  clusterId: string;
+  clusterName: string;
+  provider: ResourceQueryProvider;
+  table: string;
+  queryIdentity?: string;
+  continue?: string;
+  previous?: string;
+  self?: string;
+  cursorInvalid?: boolean;
+  anchor?: ResourceQueryAnchorResult;
+  pageStartRank?: number;
+  total: number;
+  unfilteredTotal: number;
+  totalIsExact: boolean;
+  kinds?: Array<string>;
+  namespaces?: Array<string>;
+  facetValues?: Array<ResourceQueryFacetValues>;
+  facetsExact: boolean;
+  completeness?: ResourceQueryCompleteness;
+  issues?: Array<ResourceQueryIssue>;
+  dynamic?: ResourceQueryDynamicRef;
+  capabilities: ResourceQueryCapabilities;
+  rows: Array<ClusterAPIResourceEntry> | null;
+  unreadGroups?: Array<string>;
+  discoveryFailed?: boolean;
+}
+
 export interface ClusterAttentionFinding {
   ref: CanonicalResourceRef;
   metadata?: ResourceTableMetadata;
@@ -515,45 +560,6 @@ export interface ClusterAttentionSnapshot {
   ignoreRules: AttentionIgnoreRules;
   findingTypes: Array<AttentionFindingTypeDefinition> | null;
   rows: Array<ClusterAttentionFinding> | null;
-}
-
-export interface ClusterCRDEntry {
-  ref: CanonicalResourceRef;
-  metadata?: ResourceTableMetadata;
-  group: string;
-  scope: string;
-  details: string;
-  storageVersion?: string;
-  extraServedVersionCount?: number;
-  age: string;
-  ageTimestamp?: number;
-  typeAlias?: string;
-}
-
-export interface ClusterCRDSnapshotPayload {
-  clusterId: string;
-  clusterName: string;
-  provider: ResourceQueryProvider;
-  table: string;
-  queryIdentity?: string;
-  continue?: string;
-  previous?: string;
-  self?: string;
-  cursorInvalid?: boolean;
-  anchor?: ResourceQueryAnchorResult;
-  pageStartRank?: number;
-  total: number;
-  unfilteredTotal: number;
-  totalIsExact: boolean;
-  kinds?: Array<string>;
-  namespaces?: Array<string>;
-  facetValues?: Array<ResourceQueryFacetValues>;
-  facetsExact: boolean;
-  completeness?: ResourceQueryCompleteness;
-  issues?: Array<ResourceQueryIssue>;
-  dynamic?: ResourceQueryDynamicRef;
-  capabilities: ResourceQueryCapabilities;
-  rows: Array<ClusterCRDEntry> | null;
 }
 
 export interface ClusterConfigEntry {
@@ -2350,12 +2356,12 @@ export const REFRESH_DOMAINS = [
   'namespace-metrics',
   'cluster-overview',
   'cluster-identities',
+  'cluster-api-resources',
   'cluster-attention',
   'catalog',
   'catalog-diff',
   'nodes',
   'cluster-config',
-  'cluster-crds',
   'cluster-events',
   'cluster-rbac',
   'cluster-storage',
@@ -2507,6 +2513,21 @@ export const REFRESH_DOMAIN_POLICIES = [
       diagnosticsStream: 'resources',
       timing: { interval: 10000, timeout: 10 },
       priority: null,
+      registrationOrder: 29,
+    },
+    scope: { selectors: ['cluster'], query: 'typed-table' },
+  },
+  {
+    domain: 'cluster-api-resources',
+    category: 'cluster',
+    cachePolicy: 'snapshot-cache',
+    sourceClocks: ['catalog'],
+    backend: { registration: 'direct', permission: 'exempt', resourceStream: false, bypassSingleflight: false },
+    frontend: {
+      orchestrator: 'doorbell-snapshot',
+      diagnosticsStream: 'resources',
+      timing: { interval: 15000, timeout: 15 },
+      priority: null,
       registrationOrder: 30,
     },
     scope: { selectors: ['cluster'], query: 'typed-table' },
@@ -2587,21 +2608,6 @@ export const REFRESH_DOMAIN_POLICIES = [
     scope: { selectors: ['cluster'], query: 'typed-table' },
   },
   {
-    domain: 'cluster-crds',
-    category: 'cluster',
-    cachePolicy: 'snapshot-cache',
-    sourceClocks: ['object'],
-    backend: { registration: 'listWatch', permission: 'runtime', resourceStream: true, bypassSingleflight: false },
-    frontend: {
-      orchestrator: 'resource-stream',
-      diagnosticsStream: 'resources',
-      timing: { interval: 15000, timeout: 60 },
-      priority: null,
-      registrationOrder: 20,
-    },
-    scope: { selectors: ['cluster'], query: 'typed-table' },
-  },
-  {
     domain: 'cluster-events',
     category: 'cluster',
     cachePolicy: 'snapshot-cache',
@@ -2657,7 +2663,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       diagnosticsStream: 'resources',
       timing: { interval: 5000, timeout: 10 },
       priority: 5,
-      registrationOrder: 22,
+      registrationOrder: 21,
     },
     scope: { selectors: ['namespace', 'all-namespaces'], query: 'typed-table' },
   },
@@ -2672,7 +2678,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       diagnosticsStream: 'resources',
       timing: { interval: 5000, timeout: 10 },
       priority: null,
-      registrationOrder: 27,
+      registrationOrder: 26,
     },
     scope: { selectors: ['namespace', 'all-namespaces'], query: 'typed-table' },
   },
@@ -2687,7 +2693,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       diagnosticsStream: 'resources',
       timing: { interval: 5000, timeout: 10 },
       priority: null,
-      registrationOrder: 23,
+      registrationOrder: 22,
     },
     scope: { selectors: ['namespace', 'all-namespaces'], query: 'typed-table' },
   },
@@ -2702,7 +2708,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       diagnosticsStream: 'resources',
       timing: { interval: 3000, timeout: 10 },
       priority: null,
-      registrationOrder: 21,
+      registrationOrder: 20,
     },
     scope: { selectors: ['namespace', 'all-namespaces'], query: 'typed-table' },
   },
@@ -2717,7 +2723,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       diagnosticsStream: 'resources',
       timing: { interval: 10000, timeout: 10 },
       priority: null,
-      registrationOrder: 29,
+      registrationOrder: 28,
     },
     scope: { selectors: ['namespace', 'all-namespaces'], query: 'typed-table' },
   },
@@ -2732,7 +2738,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       diagnosticsStream: 'resources',
       timing: { interval: 5000, timeout: 10 },
       priority: null,
-      registrationOrder: 24,
+      registrationOrder: 23,
     },
     scope: { selectors: ['namespace', 'all-namespaces'], query: 'typed-table' },
   },
@@ -2747,7 +2753,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       diagnosticsStream: 'resources',
       timing: { interval: 10000, timeout: 10 },
       priority: null,
-      registrationOrder: 28,
+      registrationOrder: 27,
     },
     scope: { selectors: ['namespace', 'all-namespaces'], query: 'typed-table' },
   },
@@ -2762,7 +2768,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       diagnosticsStream: 'resources',
       timing: { interval: 10000, timeout: 10 },
       priority: null,
-      registrationOrder: 25,
+      registrationOrder: 24,
     },
     scope: { selectors: ['namespace', 'all-namespaces'], query: 'typed-table' },
   },
@@ -2777,7 +2783,7 @@ export const REFRESH_DOMAIN_POLICIES = [
       diagnosticsStream: 'resources',
       timing: { interval: 10000, timeout: 10 },
       priority: null,
-      registrationOrder: 26,
+      registrationOrder: 25,
     },
     scope: { selectors: ['namespace', 'all-namespaces'], query: 'typed-table' },
   },
@@ -3150,12 +3156,12 @@ export interface BackendDomainPayloadMap {
   'namespace-metrics': NamespaceMetricsSnapshotPayload;
   'cluster-overview': ClusterOverviewSnapshotPayload;
   'cluster-identities': ClusterIdentitiesSnapshot;
+  'cluster-api-resources': ClusterAPIResourcesSnapshot;
   'cluster-attention': ClusterAttentionSnapshot;
   catalog: CatalogSnapshotPayload;
   'catalog-diff': CatalogSnapshotPayload;
   nodes: ClusterNodeSnapshotPayload;
   'cluster-config': ClusterConfigSnapshotPayload;
-  'cluster-crds': ClusterCRDSnapshotPayload;
   'cluster-events': ClusterEventsSnapshotPayload;
   'cluster-rbac': ClusterRBACSnapshotPayload;
   'cluster-storage': ClusterStorageSnapshotPayload;

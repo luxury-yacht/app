@@ -90,7 +90,7 @@ const catalogItem = (identity: ObjectIdentity): CatalogItem => ({
 const isCustomCatalogRead = ({ domain, scope }: { domain: string; scope: string }) =>
   domain === 'catalog' &&
   scope.startsWith(`${dev.clusterId}|`) &&
-  scope.includes('customOnly=true');
+  (scope.includes('customOnly=true') || scope.includes('resourceFamily='));
 
 /** The catalog's answer to a custom-resource query listing `items`. */
 const catalogPage = (
@@ -218,6 +218,53 @@ beforeEach(() => {
 });
 
 describe('ClusterViewCustom', () => {
+  it('keeps the CRD-only boundary on every page of a Custom Resources export', async () => {
+    app.backend.answer('SaveCsvFile', (filename) => ({ path: `/tmp/${filename}`, bytes: 1 }));
+    app.snapshots.answer(({ domain, scope }) => {
+      if (domain !== 'catalog' || !scope.startsWith(`${dev.clusterId}|`)) {
+        return undefined;
+      }
+      const query = new URLSearchParams(scope.split('|')[1]);
+      if (query.get('resourceScope') !== 'cluster') {
+        return undefined;
+      }
+      if (query.get('limit') !== '10000') {
+        return catalogPage([catalogItem(widget)]);
+      }
+      return query.has('continue')
+        ? catalogPage([catalogItem(dbCluster)])
+        : catalogPage([catalogItem(widget)], { continue: 'export-next', total: 2 });
+    });
+    await start();
+
+    await act(async () =>
+      requireValue(
+        view.container.querySelector<HTMLButtonElement>(
+          'button[aria-label="Download all matching rows"]'
+        ),
+        'expected the export control'
+      ).click()
+    );
+    await act(async () =>
+      requireValue(
+        [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+          (item) => item.textContent?.trim() === 'Save to File'
+        ),
+        'expected the file export action'
+      ).click()
+    );
+    await app.settle();
+
+    const exportPages = app.snapshots
+      .reads('catalog')
+      .map(({ scope }) => new URLSearchParams(scope.split('|')[1]))
+      .filter((query) => query.get('limit') === '10000');
+    expect(exportPages.map((query) => query.get('customOnly'))).toEqual(['true', 'true']);
+    const [[, csv]] = app.backend.calls('SaveCsvFile');
+    expect(csv).toContain(widget.name);
+    expect(csv).toContain(dbCluster.name);
+  });
+
   it('lists cluster-scoped custom resources from the catalog, sorted as displayed, with hydrated status', async () => {
     serveCatalog(() => [catalogItem(widget)]);
     await start();
@@ -473,6 +520,7 @@ describe('ClusterViewCustom', () => {
     await start('karpenter');
 
     expect(lastCatalogScope()).toContain('resourceFamily=karpenter');
+    expect(lastCatalogScope()).not.toContain('customOnly=true');
     expect(cellOf('workers', 'instanceType').textContent).toBe('m5.large');
   });
 

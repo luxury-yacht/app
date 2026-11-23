@@ -3,8 +3,7 @@
  *
  * Where Alt+click on an object goes, by its API group, kind, and scope: the
  * built-in view that lists it (each view's refresh domain declares its kinds in
- * backend/refresh/snapshot), its resource family's view, the Custom view for any
- * other custom resource, or Browse for a built-in kind that no view lists.
+ * backend/refresh/snapshot), its resource family's view, or Browse for other kinds.
  */
 
 import type {
@@ -50,7 +49,8 @@ describe('getViewForKind', () => {
     ['rbac.authorization.k8s.io', 'ClusterRole', 'rbac'],
     ['', 'PersistentVolume', 'storage'],
     ['', 'Namespace', 'namespaces'],
-    ['apiextensions.k8s.io', 'CustomResourceDefinition', 'crds'],
+    // A CustomResourceDefinition is listed as the custom kind it defines.
+    ['apiextensions.k8s.io', 'CustomResourceDefinition', 'api-resources'],
     // cluster_config.go lists storage classes, ingress classes, and webhooks.
     ['storage.k8s.io', 'StorageClass', 'config'],
     ['networking.k8s.io', 'IngressClass', 'config'],
@@ -59,18 +59,19 @@ describe('getViewForKind', () => {
     expect(getViewForKind(kind, group, '')).toEqual({ viewType: 'cluster', tab });
   });
 
-  it('sends a custom resource to its Custom view, even when it shares a built-in kind name', () => {
+  it('sends kinds with no dedicated view to the matching Browse scope', () => {
     expect(getViewForKind('Deployment', 'operators.example.io', 'team-a')).toEqual({
       viewType: 'namespace',
-      tab: 'custom',
+      tab: 'browse',
     });
     expect(getViewForKind('VerticalPodAutoscaler', 'autoscaling.k8s.io', 'team-a')).toEqual({
       viewType: 'namespace',
-      tab: 'custom',
+      tab: 'browse',
     });
     expect(getViewForKind('Widget', 'example.com', '')).toEqual({
       viewType: 'cluster',
-      tab: 'custom',
+      tab: 'browse',
+      destinationViewId: 'browse',
     });
   });
 
@@ -110,7 +111,8 @@ describe('getViewForKind', () => {
     });
     expect(getViewForKind('NodePool', 'unrelated.io', '')).toEqual({
       viewType: 'cluster',
-      tab: 'custom',
+      tab: 'browse',
+      destinationViewId: 'browse',
     });
   });
 
@@ -122,12 +124,12 @@ describe('getViewForKind', () => {
       });
       expect(getViewForKind(kind, 'other.io', 'team-a')).toEqual({
         viewType: 'namespace',
-        tab: 'custom',
+        tab: 'browse',
       });
     }
     expect(getViewForKind('Workflow', 'argoproj.io', 'team-a')).toEqual({
       viewType: 'namespace',
-      tab: 'custom',
+      tab: 'browse',
     });
   });
 });

@@ -17,6 +17,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -65,6 +66,7 @@ type Summary struct {
 	deletionTime      int64
 	reportedStatuses  reportedStatusValues
 	reportsStatus     bool
+	crdDefinition     *apiextensions.Definition
 	Scope             Scope        `json:"scope"`                  // resource scope
 	LabelsDigest      string       `json:"labelsDigest,omitempty"` // optional digest of resource labels
 	ActionFacts       *ActionFacts `json:"actionFacts,omitempty"`  // optional facts needed to present object actions correctly
@@ -228,8 +230,8 @@ type IngestSource interface {
 	IsDynamicCatalogGeneration(schema.GroupResource, uint64) bool
 	CatalogRows(gvr schema.GroupVersionResource) []interface{}
 	SubscribeCatalogSink(gvr schema.GroupVersionResource, sink ingest.Sink) func()
-	// SubscribeBundleSink replays the source's current bundles to sink, then
-	// delivers each change; the returned func detaches it.
+	// SubscribeBundleSink replays a synced source as a complete set to a
+	// BundleReplacer, and delivers other replays as upserts. The returned func detaches it.
 	SubscribeBundleSink(gvr schema.GroupVersionResource, sink ingest.BundleSink) func()
 	// Threshold admission applies only when discovery has no visible CRD definition.
 	RegisterDynamicCatalogReflector(gvr schema.GroupVersionResource, gvk schema.GroupVersionKind, project ingest.CatalogProjector, namespaced bool) bool
@@ -285,7 +287,7 @@ type QueryOptions struct {
 	SortDirection   string   // backend-owned sort direction; empty uses ascending
 	Limit           int      // maximum number of items to return
 	Continue        string   // token for continuing a paginated query
-	CustomOnly      bool     // restricts results to non-built-in discovered resources
+	CustomOnly      bool     // restricts results to resources backed by a visible CRD
 	MatchNone       bool     // explicit empty multiselect: no catalog item can match
 	// Anchor asks for the page CONTAINING this object instead of a
 	// cursor-addressed page (mutually exclusive with Continue — the snapshot
@@ -295,7 +297,20 @@ type QueryOptions struct {
 	// rows (numbered page jumps); the engine clamps past-the-end starts.
 	// Mutually exclusive with Continue and Anchor (snapshot layer validates).
 	StartRank *int
+
+	// Captured once by the catalog so rows, totals and filters share the same
+	// view of the cluster's definitions.
+	customResources   map[string]struct{}
+	customDefinitions CustomDefinitionStatus
 }
+
+// CustomDefinitionStatus describes the definition coverage of a custom-only query.
+type CustomDefinitionStatus string
+
+const (
+	CustomDefinitionsPending CustomDefinitionStatus = "pending"
+	CustomDefinitionsDenied  CustomDefinitionStatus = "denied"
+)
 
 // QueryAnchor identifies an anchored query's jump target. The catalog resolves
 // it to a summary by exact group/version/namespace/name and case-insensitive
@@ -320,12 +335,13 @@ type KindInfo struct {
 
 // QueryResult summarises the outcome of a catalog query.
 type QueryResult struct {
-	Items         []Summary // items returned by the query
-	ContinueToken string    // token for continuing a paginated query
-	PreviousToken string    // token for fetching the previous page
-	SelfToken     string    // token addressing THIS page (counted serves only; page-stable refetch)
-	CursorInvalid bool      // indicates the supplied cursor was malformed or incompatible
-	TotalItems    int       // total number of items matching the query
+	CustomDefinitions CustomDefinitionStatus
+	Items             []Summary // items returned by the query
+	ContinueToken     string    // token for continuing a paginated query
+	PreviousToken     string    // token for fetching the previous page
+	SelfToken         string    // token addressing THIS page (counted serves only; page-stable refetch)
+	CursorInvalid     bool      // indicates the supplied cursor was malformed or incompatible
+	TotalItems        int       // total number of items matching the query
 	// UnfilteredTotal is the structurally scoped item count before user filters (the "of M"
 	// in "showing N of M items due to filters"); equals TotalItems when no filter is active.
 	UnfilteredTotal int        // in-scope count before the query's filters
@@ -340,6 +356,8 @@ type QueryResult struct {
 	// carried no anchor); the snapshot layer maps it onto the wire contract's
 	// found/filtered/not-found result.
 	AnchorOutcome *querypage.AnchorOutcome
+	// AnchorUnavailable means the target partition could not verify the object.
+	AnchorUnavailable bool
 	// PageStartRank is the 0-based rank of the served page's first row among
 	// matching rows; -1 when not computed (cursor-addressed pages).
 	PageStartRank int

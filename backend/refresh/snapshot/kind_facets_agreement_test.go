@@ -9,6 +9,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/kindspec"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
+	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 	"github.com/luxury-yacht/app/backend/resources/nodes"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -135,7 +136,6 @@ func TestMetricsFacetNamesTheDomainThatServesTheKind(t *testing.T) {
 // the single kind of a domain that publishes none.
 var listDomainKinds = map[string]func() []string{
 	clusterConfigDomainName:        func() []string { return clusterConfigQueryCapabilities().KindVocabulary },
-	clusterCRDDomainName:           func() []string { return clusterCRDQueryCapabilities().KindVocabulary },
 	clusterRBACDomainName:          func() []string { return clusterRBACQueryCapabilities().KindVocabulary },
 	clusterStorageDomainName:       func() []string { return clusterStorageQueryCapabilities().KindVocabulary },
 	namespaceAutoscalingDomainName: func() []string { return namespaceAutoscalingQueryCapabilities().KindVocabulary },
@@ -150,6 +150,19 @@ var listDomainKinds = map[string]func() []string{
 	nodeDomainName:            func() []string { return []string{nodes.Identity.Kind} },
 	"namespaces":              func() []string { return []string{"Namespace"} },
 	namespaceEventsDomainName: func() []string { return []string{"Event"} },
+	// API Resources rows are kinds, not objects. The one object it can show in
+	// its list is a CustomResourceDefinition, as the kind it defines: the only
+	// kind its anchor resolves.
+	ClusterAPIResourcesDomainName: func() []string {
+		anchor := clusterAPIResourcesQueryAdapter().AnchorKey
+		kinds := []string{}
+		for _, kind := range []string{apiextensions.Identity.Kind, "Deployment"} {
+			if anchor(kind, "", "widgets.example.com") != "" {
+				kinds = append(kinds, kind)
+			}
+		}
+		return kinds
+	},
 }
 
 // Navigation sends an object to the view that lists its kind's list domain, so

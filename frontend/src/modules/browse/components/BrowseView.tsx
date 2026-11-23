@@ -243,6 +243,9 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
     enabled: !isNamespaceScoped,
     shareNamespaceFilter: scope === 'all-namespaces',
+    // A view that cannot list an object hands it here, narrowed to that object
+    // (API Resources does, for a definition whose kind the cluster does not serve).
+    filterRequestClusterId: selectedClusterId ?? undefined,
   });
 
   const namespacePersistence = useNamespaceGridTablePersistence<BrowseTableRow>({
@@ -282,6 +285,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
   } = useBrowseCatalog({
     enabled: persistence.hydrated,
     clusterId: selectedClusterId,
+    focusViewId: resolvedViewId,
     pinnedNamespaces,
     clusterScopedOnly,
     filters: {

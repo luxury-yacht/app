@@ -7,6 +7,7 @@ export * as snapshot from '@bindings/github.com/luxury-yacht/app/backend/refresh
 export * as resourcemodel from '@bindings/github.com/luxury-yacht/app/backend/resourcemodel/models';
 export * as admission from '@bindings/github.com/luxury-yacht/app/backend/resources/admission/models';
 export * as apiextensions from '@bindings/github.com/luxury-yacht/app/backend/resources/apiextensions/models';
+export * as apiresources from '@bindings/github.com/luxury-yacht/app/backend/resources/apiresources/models';
 export * as backendtlspolicy from '@bindings/github.com/luxury-yacht/app/backend/resources/backendtlspolicy/models';
 export * as clusterrole from '@bindings/github.com/luxury-yacht/app/backend/resources/clusterrole/models';
 export * as clusterrolebinding from '@bindings/github.com/luxury-yacht/app/backend/resources/clusterrolebinding/models';

@@ -45,6 +45,7 @@ export interface KindFacetsSchema {
     readonly debugContainer: boolean;
     readonly eventsTab: boolean;
     readonly yamlTab: boolean;
+    readonly explainTab: boolean;
   };
   readonly metricsDomain: KindMetricsDomain;
   readonly listDomain: RefreshDomain | 'none';
@@ -108,6 +109,7 @@ type Panel struct {
 	DebugContainer bool   `json:"debugContainer"`
 	EventsTab      bool   `json:"eventsTab"`
 	YAMLTab        bool   `json:"yamlTab"`
+	ExplainTab     bool   `json:"explainTab"`
 }
 
 // Actions is the kind's object-action eligibility.
@@ -234,6 +236,7 @@ func panelOf(descriptor kindspec.Descriptor) (Panel, error) {
 		DebugContainer: descriptor.Panel.DebugContainer,
 		EventsTab:      !descriptor.Panel.HideEvents,
 		YAMLTab:        !descriptor.Panel.HideYAML,
+		ExplainTab:     descriptor.Panel.ExplainDefinedKind,
 	}, nil
 }
 

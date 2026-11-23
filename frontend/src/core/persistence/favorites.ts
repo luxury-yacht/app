@@ -121,18 +121,58 @@ const fromBackendTableSnapshot = (
   };
 };
 
-const fromBackendFavorite = (favorite: backend.Favorite): Favorite => ({
-  id: favorite.id,
-  name: favorite.name,
-  clusterSelection: favorite.clusterSelection,
-  clusterId: favorite.clusterId,
-  clusterName: favorite.clusterName,
-  viewType: favorite.viewType,
-  view: favorite.view,
-  namespace: favorite.namespace,
-  ...fromBackendTableSnapshot(favorite),
-  order: favorite.order,
-});
+const fromBackendFavorite = (favorite: backend.Favorite): Favorite =>
+  migrateRetiredViewFavorite({
+    id: favorite.id,
+    name: favorite.name,
+    clusterSelection: favorite.clusterSelection,
+    clusterId: favorite.clusterId,
+    clusterName: favorite.clusterName,
+    viewType: favorite.viewType,
+    view: favorite.view,
+    namespace: favorite.namespace,
+    ...fromBackendTableSnapshot(favorite),
+    order: favorite.order,
+  });
+
+/**
+ * A favorite saved on the cluster CRDs view, which API Resources replaced. It
+ * listed custom resource definitions, so it becomes an API Resources favorite
+ * filtered to custom kinds, keeping its search. Its column settings name the
+ * old table's columns, so they reset; its sort is kept only on a column that
+ * means the same in both tables. The stored favorite is rewritten when the
+ * user next saves it.
+ */
+const migrateRetiredViewFavorite = (favorite: Favorite): Favorite => {
+  if (favorite.viewType !== 'cluster' || favorite.view !== 'crds') {
+    return favorite;
+  }
+  const { sortColumn, sortDirection } = favorite.tableState;
+  const keepsSort = CRDS_SORTS_API_RESOURCES_SHARES.has(sortColumn);
+  return {
+    ...favorite,
+    view: 'api-resources',
+    filters: {
+      search: favorite.filters.search,
+      kinds: ALL_MULTISELECT_FILTER,
+      namespaces: ALL_MULTISELECT_FILTER,
+      clusters: ALL_MULTISELECT_FILTER,
+      includeMetadata: favorite.filters.includeMetadata,
+      // The API Resources Type filter's value for kinds a CRD defines.
+      queryFacets: { types: { mode: 'some', values: ['Custom'] } },
+    },
+    tableState: {
+      sortColumn: keepsSort ? sortColumn : '',
+      sortDirection: keepsSort ? sortDirection : 'asc',
+      columnVisibility: {},
+    },
+  };
+};
+
+// CRDs sort columns that order API Resources rows the same way. Kind is not
+// one: the CRDs Kind column read CustomResourceDefinition on every row, where
+// the API Resources Kind column is the kind a definition defines.
+const CRDS_SORTS_API_RESOURCES_SHARES: ReadonlySet<string> = new Set(['name', 'scope']);
 
 const toBackendSelection = (
   selection: MultiSelectFilterSelection

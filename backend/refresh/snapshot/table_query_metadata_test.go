@@ -56,9 +56,6 @@ func TestTableQueriesSearchRowMetadataOnlyWhenRequested(t *testing.T) {
 	t.Run("cluster rbac", func(t *testing.T) {
 		requireMetadataSearch(t, clusterRBACTableQueryAdapter(), ClusterRBACEntry{Ref: ref("ClusterRole", ""), Metadata: meta})
 	})
-	t.Run("crds", func(t *testing.T) {
-		requireMetadataSearch(t, clusterCRDTableQueryAdapter(), ClusterCRDEntry{Ref: ref("CustomResourceDefinition", ""), Metadata: meta})
-	})
 	t.Run("attention", func(t *testing.T) {
 		requireMetadataSearch(t, attentionTableQueryAdapter(), AttentionFinding{Ref: ref("Pod", "team-a"), Namespace: "team-a", Metadata: meta})
 	})

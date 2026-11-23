@@ -21,7 +21,6 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/stretchr/testify/require"
 	authorizationv1 "k8s.io/api/authorization/v1"
@@ -90,8 +89,8 @@ type preferredDiscovery struct {
 	resources []*metav1.APIResourceList
 }
 
-func (p *preferredDiscovery) ServerPreferredResources() ([]*metav1.APIResourceList, error) {
-	return p.resources, nil
+func (p *preferredDiscovery) ServerGroupsAndResources() ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
+	return groupsForLists(p.resources), p.resources, nil
 }
 
 type discoveryOverrideClient struct {
@@ -202,7 +201,7 @@ func TestSyncCancellationDoesNotPublishSuccess(t *testing.T) {
 func TestEvaluateDescriptorNilService(t *testing.T) {
 	svc := NewService(Dependencies{Common: common.Dependencies{}}, nil)
 	desc := Descriptor{Kind: "Deployment"}
-	allowed, err := svc.evaluateDescriptor(context.Background(), nil, desc)
+	allowed, _, err := svc.evaluateDescriptor(context.Background(), nil, desc)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -246,7 +245,7 @@ func TestEvaluateDescriptorRespectsCapabilityResults(t *testing.T) {
 	capSvc := factory()
 
 	deployDesc := Descriptor{Resource: "deployments", Group: "apps", Version: "v1"}
-	allowed, err := svc.evaluateDescriptor(context.Background(), capSvc, deployDesc)
+	allowed, _, err := svc.evaluateDescriptor(context.Background(), capSvc, deployDesc)
 	if err != nil {
 		t.Fatalf("unexpected error evaluating deployments: %v", err)
 	}
@@ -255,7 +254,7 @@ func TestEvaluateDescriptorRespectsCapabilityResults(t *testing.T) {
 	}
 
 	statefulDesc := Descriptor{Resource: "statefulsets", Group: "apps", Version: "v1"}
-	allowed, err = svc.evaluateDescriptor(context.Background(), capSvc, statefulDesc)
+	allowed, _, err = svc.evaluateDescriptor(context.Background(), capSvc, statefulDesc)
 	if err != nil {
 		t.Fatalf("unexpected error evaluating statefulsets: %v", err)
 	}
@@ -263,7 +262,7 @@ func TestEvaluateDescriptorRespectsCapabilityResults(t *testing.T) {
 		t.Fatalf("expected statefulsets to be denied")
 	}
 
-	batchAllowed, batchErrors, err := svc.evaluateDescriptorsBatch(context.Background(), capSvc, []Descriptor{deployDesc, statefulDesc})
+	batchAllowed, namespaceDecisions, err := svc.evaluateDescriptorsBatch(context.Background(), capSvc, []Descriptor{deployDesc, statefulDesc})
 	if err != nil {
 		t.Fatalf("batch evaluation failed: %v", err)
 	}
@@ -273,8 +272,8 @@ func TestEvaluateDescriptorRespectsCapabilityResults(t *testing.T) {
 	if batchAllowed[1] {
 		t.Fatalf("expected statefulsets to be denied in batch preflight")
 	}
-	if len(batchErrors) != 0 {
-		t.Fatalf("expected no errors in batch evaluation, got %+v", batchErrors)
+	if len(namespaceDecisions) != 0 {
+		t.Fatalf("expected no namespace decisions in batch evaluation, got %+v", namespaceDecisions)
 	}
 }
 
@@ -300,7 +299,7 @@ func TestEvaluateDescriptorPropagatesErrors(t *testing.T) {
 
 	svc := NewService(Dependencies{CapabilityFactory: factory}, nil)
 	capSvc := factory()
-	allowed, err := svc.evaluateDescriptor(context.Background(), capSvc, Descriptor{
+	allowed, _, err := svc.evaluateDescriptor(context.Background(), capSvc, Descriptor{
 		Resource: "deployments",
 		Group:    "apps", Version: "v1",
 	})
@@ -311,32 +310,32 @@ func TestEvaluateDescriptorPropagatesErrors(t *testing.T) {
 		t.Fatalf("expected descriptor to be denied when SAR errors")
 	}
 
-	_, batchErrors, batchErr := svc.evaluateDescriptorsBatch(context.Background(), capSvc, []Descriptor{
+	_, namespaceDecisions, batchErr := svc.evaluateDescriptorsBatch(context.Background(), capSvc, []Descriptor{
 		{Resource: "deployments", Group: "apps", Version: "v1"},
 	})
 	if batchErr == nil {
 		t.Fatalf("expected batch evaluation to return error when SAR fails")
 	}
-	if len(batchErrors) != 0 {
-		t.Fatalf("expected no partial error map when batch evaluation fails, got %+v", batchErrors)
+	if len(namespaceDecisions) != 0 {
+		t.Fatalf("expected no namespace decisions when batch evaluation fails, got %+v", namespaceDecisions)
 	}
 }
 
 func TestEvaluateDescriptorsBatchEmptyAndNilServiceContracts(t *testing.T) {
 	svc := NewService(Dependencies{}, nil)
 
-	allowed, batchErrors, err := svc.evaluateDescriptorsBatch(context.Background(), nil, nil)
+	allowed, namespaceDecisions, err := svc.evaluateDescriptorsBatch(context.Background(), nil, nil)
 	require.NoError(t, err)
 	require.Empty(t, allowed)
-	require.Nil(t, batchErrors)
+	require.Nil(t, namespaceDecisions)
 
 	descriptors := []Descriptor{
 		{Resource: "deployments"},
 		{Resource: "nodes"},
 	}
-	allowed, batchErrors, err = svc.evaluateDescriptorsBatch(context.Background(), nil, descriptors)
+	allowed, namespaceDecisions, err = svc.evaluateDescriptorsBatch(context.Background(), nil, descriptors)
 	require.NoError(t, err)
-	require.Nil(t, batchErrors)
+	require.Nil(t, namespaceDecisions)
 	require.Equal(t, map[int]bool{0: true, 1: true}, allowed)
 }
 
@@ -380,16 +379,20 @@ func TestEvaluateDescriptorsBatchKeepsStableDescriptorIndexesAcrossNamespaceFano
 		{Resource: "nodes", Version: "v1"},
 	}
 
-	allowed, batchErrors, err := svc.evaluateDescriptorsBatch(context.Background(), capSvc, descriptors)
-	require.NoError(t, err)
-	require.Empty(t, batchErrors)
+	allowed, namespaceDecisions, err := svc.evaluateDescriptorsBatch(context.Background(), capSvc, descriptors)
+	require.ErrorContains(t, err, "dev authorizer unavailable")
+	require.Equal(t, map[int]map[string]bool{0: {"dev": true}, 1: {"prod": false}}, namespaceDecisions)
 	require.True(t, allowed[0], "a later namespace answer must stay associated with deployments")
 	require.False(t, allowed[1], "a definitive denial must stay associated with statefulsets")
 	require.True(t, allowed[2], "the cluster-scoped answer must stay associated with nodes")
 
 	for index, desc := range descriptors {
-		singleAllowed, singleErr := svc.evaluateDescriptor(context.Background(), capSvc, desc)
-		require.NoError(t, singleErr, "an answered namespace must override its sibling's evaluation error")
+		singleAllowed, _, singleErr := svc.evaluateDescriptor(context.Background(), capSvc, desc)
+		if desc.Resource == "statefulsets" {
+			require.ErrorContains(t, singleErr, "dev authorizer unavailable")
+		} else {
+			require.NoError(t, singleErr)
+		}
 		require.Equal(t, allowed[index], singleAllowed, "batch and fallback preflight must make the same collection decision")
 	}
 }
@@ -418,9 +421,9 @@ func TestEvaluateDescriptorsBatchReturnsAllowedPartialResultsWithWorkerFailure(t
 		{Resource: "secrets", Version: "v1", Namespaced: true},
 	}
 
-	allowed, batchErrors, err := svc.evaluateDescriptorsBatch(context.Background(), capSvc, descriptors)
+	allowed, namespaceDecisions, err := svc.evaluateDescriptorsBatch(context.Background(), capSvc, descriptors)
 	require.ErrorContains(t, err, "secrets")
-	require.Nil(t, batchErrors)
+	require.Equal(t, map[int]map[string]bool{0: {"dev": true, "prod": true}}, namespaceDecisions)
 	require.True(t, allowed[0], "successful descriptor results must survive a sibling failure")
 	require.False(t, allowed[1])
 }
@@ -471,9 +474,9 @@ func TestEvaluateDescriptorsBatchCancellationAndPermissionClientRecovery(t *test
 		_, _, err := svc.evaluateDescriptorsBatch(context.Background(), capSvc, []Descriptor{desc})
 		require.ErrorContains(t, err, "permission client unavailable")
 
-		allowed, batchErrors, err := svc.evaluateDescriptorsBatch(context.Background(), capSvc, []Descriptor{desc})
+		allowed, namespaceDecisions, err := svc.evaluateDescriptorsBatch(context.Background(), capSvc, []Descriptor{desc})
 		require.NoError(t, err)
-		require.Empty(t, batchErrors)
+		require.Empty(t, namespaceDecisions)
 		require.True(t, allowed[0])
 		require.Equal(t, 2, ensureCalls)
 	})
@@ -542,34 +545,6 @@ func TestSortResourceDescriptorsUsesEveryStableTieBreaker(t *testing.T) {
 			require.Equal(t, test.want, got)
 		})
 	}
-}
-
-func TestCatalogSyncRestoreFailedDescriptorsPreservesPriorTimestamps(t *testing.T) {
-	failedDesc := Descriptor{Group: "apps", Version: "v1", Resource: "deployments"}
-	otherDesc := Descriptor{Version: "v1", Resource: "nodes"}
-	failedKey := catalogKey(failedDesc, "default", "api")
-	otherKey := catalogKey(otherDesc, "", "node-a")
-	untimedKey := catalogKey(otherDesc, "", "node-b")
-	timestamp := time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)
-	run := &catalogSync{
-		failed:      map[string]error{failedDesc.GVR().String(): errors.New("list failed")},
-		newItems:    map[string]Summary{otherKey: {Ref: resourcemodel.ResourceRef{Name: "current"}}},
-		newLastSeen: map[string]time.Time{},
-		previousItems: map[string]Summary{
-			failedKey:  {Ref: resourcemodel.ResourceRef{Name: "api"}},
-			otherKey:   {Ref: resourcemodel.ResourceRef{Name: "previous"}},
-			untimedKey: {Ref: resourcemodel.ResourceRef{Name: "node-b"}},
-		},
-		previousLastSeen: map[string]time.Time{failedKey: timestamp, otherKey: timestamp},
-	}
-
-	run.restoreFailedDescriptors()
-	require.Equal(t, "api", run.newItems[failedKey].Ref.Name)
-	require.Equal(t, timestamp, run.newLastSeen[failedKey])
-	require.Equal(t, "current", run.newItems[otherKey].Ref.Name)
-	require.Equal(t, "node-b", run.newItems[untimedKey].Ref.Name)
-	_, hasUntimedTimestamp := run.newLastSeen[untimedKey]
-	require.False(t, hasUntimedTimestamp)
 }
 
 func TestSyncRetainsDataOnPartialFailure(t *testing.T) {
@@ -664,6 +639,9 @@ func TestSyncRetainsDataOnPartialFailure(t *testing.T) {
 	}
 
 	shouldFailStateful = true
+	statefulKey := catalogKey(Descriptor{Group: "apps", Version: "v1", Resource: "statefulsets", Namespaced: true}, "default", "stateful-alpha")
+	before := svc.lastSeen[statefulKey]
+	require.Equal(t, current, before)
 	current = current.Add(30 * time.Second)
 	err := svc.sync(ctx)
 	if err == nil {
@@ -679,6 +657,7 @@ func TestSyncRetainsDataOnPartialFailure(t *testing.T) {
 	if svc.Count() != 2 {
 		t.Fatalf("expected catalog to retain previous entries, got %d", svc.Count())
 	}
+	require.Equal(t, before, svc.lastSeen[statefulKey])
 	health := svc.Health()
 	if health.Status != HealthStateDegraded {
 		t.Fatalf("expected degraded health status, got %s", health.Status)
@@ -767,9 +746,9 @@ type hookedPreferredDiscovery struct {
 	onDiscover func()
 }
 
-func (h *hookedPreferredDiscovery) ServerPreferredResources() ([]*metav1.APIResourceList, error) {
+func (h *hookedPreferredDiscovery) ServerGroupsAndResources() ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
 	h.onDiscover()
-	return h.preferredDiscovery.ServerPreferredResources()
+	return h.preferredDiscovery.ServerGroupsAndResources()
 }
 
 // failingDiscovery makes every sync fail at the discovery step, so retry-scheduling
@@ -778,8 +757,8 @@ type failingDiscovery struct {
 	*fakediscovery.FakeDiscovery
 }
 
-func (f *failingDiscovery) ServerPreferredResources() ([]*metav1.APIResourceList, error) {
-	return nil, errors.New("discovery unavailable")
+func (f *failingDiscovery) ServerGroupsAndResources() ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
+	return nil, nil, errors.New("discovery unavailable")
 }
 
 // blockingIngestSource parks AddCatalogSink until released, standing in for a
@@ -1096,10 +1075,9 @@ func TestCatalogPreflightEvaluatesNamespacedKindsPerScopeNamespace(t *testing.T)
 		Resource: "nodes", Version: "v1", Namespaced: false,
 	}
 
-	batchAllowed, batchErrors, err := svc.evaluateDescriptorsBatch(context.Background(), capSvc, []Descriptor{deployDesc, nodesDesc})
-	if err != nil || len(batchErrors) != 0 {
-		t.Fatalf("batch evaluation failed: err=%v batchErrors=%+v", err, batchErrors)
-	}
+	batchAllowed, namespaceDecisions, err := svc.evaluateDescriptorsBatch(context.Background(), capSvc, []Descriptor{deployDesc, nodesDesc})
+	require.NoError(t, err)
+	require.Equal(t, map[int]map[string]bool{0: {"prod": true, "dev": false}}, namespaceDecisions)
 	if !batchAllowed[0] {
 		t.Fatal("namespaced kind allowed in one scope namespace must pass the preflight")
 	}
@@ -1107,7 +1085,7 @@ func TestCatalogPreflightEvaluatesNamespacedKindsPerScopeNamespace(t *testing.T)
 		t.Fatal("cluster-scoped kind keeps the cluster-wide ask and stays denied")
 	}
 
-	single, err := svc.evaluateDescriptor(context.Background(), capSvc, deployDesc)
+	single, _, err := svc.evaluateDescriptor(context.Background(), capSvc, deployDesc)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1198,6 +1176,7 @@ func TestCatalogReplacementStaysPrivateUntilPublication(t *testing.T) {
 			run := newCatalogSync(svc, svc.now())
 			run.descriptors = []Descriptor{desc}
 			run.prepare(t.Context())
+			run.allow(0, desc)
 			next := summaryFromObject("c1", desc, widgetObject("default", "new", "2"))
 			run.succeeded[desc.GVR().String()] = []Summary{next}
 			descriptors := run.applyCollectionResults()

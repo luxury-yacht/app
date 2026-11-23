@@ -111,6 +111,87 @@ describe('favorites persistence', () => {
     expect(hydratedFavorites[0]?.tableState).toEqual(favorite.tableState);
   });
 
+  // The CRDs view was folded into API Resources. A favorite saved on it listed
+  // custom resource definitions, so it reopens API Resources showing custom
+  // kinds, keeping its search. Its sort and column choices described the old
+  // table's columns; a sort on a column the new table lacks is dropped.
+  it('loads a favorite saved on the retired CRDs view as an API Resources favorite of custom kinds', async () => {
+    mockApp.GetFavorites.mockResolvedValue([
+      makeFavorite({
+        id: 'fav-crds',
+        viewType: 'cluster',
+        view: 'crds',
+        namespace: '',
+        filters: {
+          search: 'cert-manager',
+          kinds: { mode: 'all' },
+          namespaces: { mode: 'all' },
+          clusters: { mode: 'all' },
+          includeMetadata: true,
+        },
+        tableState: {
+          sortColumn: 'age',
+          sortDirection: 'desc',
+          columnVisibility: { version: false },
+          columnOrder: ['name', 'group', 'age'],
+        },
+      }),
+      makeFavorite({ id: 'fav-nodes', viewType: 'cluster', view: 'nodes', namespace: '' }),
+    ]);
+
+    const [migrated, untouched] = await hydrateFavorites();
+
+    expect(migrated).toMatchObject({
+      id: 'fav-crds',
+      viewType: 'cluster',
+      view: 'api-resources',
+      filters: {
+        search: 'cert-manager',
+        includeMetadata: true,
+        queryFacets: { types: { mode: 'some', values: ['Custom'] } },
+      },
+      tableState: { sortColumn: '', sortDirection: 'asc', columnVisibility: {} },
+    });
+    expect(migrated?.tableState.columnOrder).toBeUndefined();
+    expect(untouched).toMatchObject({ view: 'nodes', tableState: { sortColumn: 'name' } });
+  });
+
+  // Name and Scope mean the same in both tables, so a CRDs favorite sorted by
+  // one of them opens API Resources in the order the user saved.
+  it('keeps a retired CRDs favorite sorted by a column API Resources also has', async () => {
+    mockApp.GetFavorites.mockResolvedValue([
+      makeFavorite({
+        id: 'fav-by-scope',
+        viewType: 'cluster',
+        view: 'crds',
+        namespace: '',
+        tableState: { sortColumn: 'scope', sortDirection: 'desc', columnVisibility: {} },
+      }),
+      // The old Kind column read CustomResourceDefinition on every row, so that
+      // sort ordered nothing; it must not start ordering by the defined kind.
+      makeFavorite({
+        id: 'fav-by-kind',
+        viewType: 'cluster',
+        view: 'crds',
+        namespace: '',
+        tableState: { sortColumn: 'kind', sortDirection: 'desc', columnVisibility: {} },
+      }),
+      makeFavorite({
+        id: 'fav-by-name',
+        viewType: 'cluster',
+        view: 'crds',
+        namespace: '',
+        tableState: { sortColumn: 'name', sortDirection: 'desc', columnVisibility: {} },
+      }),
+    ]);
+
+    const [byScope, byKind, byName] = await hydrateFavorites();
+
+    expect(byName?.tableState).toMatchObject({ sortColumn: 'name', sortDirection: 'desc' });
+    expect(byScope?.tableState).toMatchObject({ sortColumn: 'scope', sortDirection: 'desc' });
+    expect(byKind?.tableState).toMatchObject({ sortColumn: '', sortDirection: 'asc' });
+  });
+
   // Test 2: second hydrateFavorites call returns cached data without re-fetching
   it('second hydrateFavorites call returns cached data without re-fetching', async () => {
     const favs = [makeFavorite()];

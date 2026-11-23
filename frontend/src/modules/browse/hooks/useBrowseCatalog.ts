@@ -13,6 +13,12 @@ import {
   type QueryPageRequestResult,
 } from '@modules/resource-grid/queryPageRequest';
 import {
+  type AnchorableFocusRequest,
+  focusRequestAnchor,
+  pendingAnchorRequest,
+  reportMissingFocusTarget,
+} from '@modules/resource-grid/resourceQueryFocus';
+import {
   type CursorPageDirection,
   queryPageStartRank,
   useCursorPageSession,
@@ -24,6 +30,12 @@ import {
   useLiveQueryRead,
   useLiveScope,
 } from '@modules/resource-grid/useLiveQueryRead';
+import { takeGridTableFilterRequest } from '@shared/components/tables/hooks/gridTableFilterRequest';
+import type { GridTableFocusRequest } from '@shared/components/tables/hooks/gridTableFocusRequest';
+import {
+  peekPendingFocusRequest,
+  setPendingFocusRequest,
+} from '@shared/components/tables/hooks/useGridTableExternalFocus';
 import {
   TABLE_PAGE_SIZE_OPTIONS,
   type TablePageSize,
@@ -31,14 +43,19 @@ import {
 import { useStableSelectedValue } from '@shared/hooks/useStableSelectedValue';
 import { errorHandler } from '@utils/errorHandler';
 import type { MutableRefObject } from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { type DataRequestReason, requestRefreshDomainState } from '@/core/data-access';
+import { eventBus } from '@/core/events';
 import { useCatalogDiagnostics } from '@/core/refresh/diagnostics/useCatalogDiagnostics';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { type RefreshFailure, refreshFailureOf } from '@/core/refresh/refreshFailure';
 import { buildClusterRefreshScope } from '@/core/refresh/scopeSelector';
-import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
+import type {
+  CatalogItem,
+  CatalogSnapshotPayload,
+  ResourceQueryAnchorResult,
+} from '@/core/refresh/types';
 import { usePreference } from '@/core/settings/usePreference';
 import {
   applyCatalogBaseline,
@@ -104,6 +121,35 @@ const classifyPageResult = (result: QueryPageRequestResult): PageReadOutcome => 
 // Page one of the current query, or a cursor page of it.
 type BrowsePageDirection = 'first' | CursorPageDirection;
 
+interface BrowsePageAddress {
+  token?: string | null;
+  startRank?: number;
+  focus?: AnchorableFocusRequest;
+}
+
+const hasBrowsePageAddress = (direction: BrowsePageDirection, address: BrowsePageAddress) =>
+  direction === 'first' || Boolean(address.token) || typeof address.startRank === 'number';
+
+const settlePageFocus = (
+  request: AnchorableFocusRequest,
+  result: ResourceQueryAnchorResult | undefined
+): GridTableFocusRequest | null => {
+  if (peekPendingFocusRequest() !== request) {
+    return null;
+  }
+  if (!result) {
+    return request;
+  }
+  if (result.found) {
+    const confirmed = { ...request, requiresAnchor: false };
+    setPendingFocusRequest(confirmed);
+    return confirmed;
+  }
+  setPendingFocusRequest(null);
+  reportMissingFocusTarget('catalog', request, result.reason);
+  return null;
+};
+
 // A numbered jump adopts the backend's self cursor. Walking back to page one
 // reads the query's first page instead of retaining a cursor request.
 const currentCatalogPageToken = (
@@ -151,6 +197,8 @@ export interface UseBrowseCatalogOptions {
   enabled?: boolean;
   /** Cluster ID to filter items by */
   clusterId: string | null | undefined;
+  /** Table that receives an exact focus handoff, if this view supports one. */
+  focusViewId?: string;
   /** Namespaces to pin (empty for cluster scope, single item for namespace scope) */
   pinnedNamespaces: string[];
   /** When true, only show cluster-scoped objects (not namespace-scoped) */
@@ -276,6 +324,7 @@ export interface BrowseCatalogQueryDescriptor {
 export function useBrowseCatalog({
   enabled = true,
   clusterId,
+  focusViewId,
   pinnedNamespaces,
   clusterScopedOnly = false,
   customOnly = false,
@@ -332,6 +381,9 @@ export function useBrowseCatalog({
   const pageRequestInFlightRef = useRef(false);
   const userPageRequestInFlightRef = useRef(false);
   const pageRequestSeqRef = useRef(0);
+  const ownedFocusRef = useRef<GridTableFocusRequest | null>(null);
+  const lastStartedFocusRef = useRef<AnchorableFocusRequest | null>(null);
+  const focusNamespace = pinnedNamespaces.length === 1 ? pinnedNamespaces[0] : undefined;
   // A change signalled while a page read was in flight; the current page is
   // read again once that read settles.
   const signalDuringReadRef = useRef(false);
@@ -498,7 +550,7 @@ export function useBrowseCatalog({
     (
       result: QueryPageRequestResult,
       direction: BrowsePageDirection,
-      token: string | null,
+      address: BrowsePageAddress,
       scopeIdentity: string,
       readFirstPage: () => void
     ): 'landed' | 'warmup' => {
@@ -521,7 +573,15 @@ export function useBrowseCatalog({
           readFirstPage();
           return 'landed';
         case 'page':
-          applyPage(outcome.payload, direction, token, scopeIdentity);
+          if (address.focus) {
+            ownedFocusRef.current = settlePageFocus(address.focus, outcome.payload.anchor);
+          }
+          applyPage(
+            outcome.payload,
+            address.focus ? 'jump' : direction,
+            address.token ?? null,
+            scopeIdentity
+          );
           return 'landed';
       }
     },
@@ -542,30 +602,31 @@ export function useBrowseCatalog({
       }
     }, QUERY_WARMUP_RETRY_MS);
   }, []);
-  useEffect(
-    () => () => {
-      if (warmupRetryRef.current !== null) {
-        window.clearTimeout(warmupRetryRef.current);
-        warmupRetryRef.current = null;
-      }
-    },
-    []
-  );
+
+  const settlePageRequest = useCallback((seq: number) => {
+    // A superseded request must not clear its successor's gates.
+    if (pageRequestSeqRef.current !== seq) {
+      return;
+    }
+    pageRequestInFlightRef.current = false;
+    userPageRequestInFlightRef.current = false;
+    setIsRequestingMore(false);
+    if (signalDuringReadRef.current) {
+      signalDuringReadRef.current = false;
+      reReadCurrentPageRef.current('stream-signal');
+    }
+  }, []);
 
   const requestPage = useCallback(
     (
-      // A page address: a keyset token (next/previous/current) or a 0-based
-      // startRank (numbered 'jump' — served by the bounded offset contract).
-      // Page one ('first') needs neither.
-      address: { token?: string | null; startRank?: number },
+      address: BrowsePageAddress,
       direction: BrowsePageDirection,
       reason: DataRequestReason = 'user'
     ) => {
-      const token = address.token ?? null;
-      const hasStartRank = typeof address.startRank === 'number';
-      if (direction !== 'first' && !token && !hasStartRank) {
+      if (!hasBrowsePageAddress(direction, address)) {
         return;
       }
+      const token = address.token ?? null;
       // Doorbell-driven re-reads are QUIET: they must not flip the user-facing
       // busy flag (which disables prev/next and spins the footer) — on a
       // churning cluster doorbells ring continuously, and a busy window per
@@ -587,6 +648,10 @@ export function useBrowseCatalog({
         return;
       }
       const seq = ++pageRequestSeqRef.current;
+      if (address.focus) {
+        ownedFocusRef.current = address.focus;
+        lastStartedFocusRef.current = address.focus;
+      }
       pageRequestInFlightRef.current = true;
       userPageRequestInFlightRef.current = !quiet;
       // Navigation shows the footer busy; a new query stays quiet (filtering
@@ -604,7 +669,8 @@ export function useBrowseCatalog({
           customOnly,
         },
         token ?? '',
-        address.startRank
+        address.startRank,
+        address.focus && focusRequestAnchor(address.focus)
       );
       const queryAtRequest = catalogScopeRef.current;
       void executeQueryPageRequest(
@@ -614,7 +680,7 @@ export function useBrowseCatalog({
             pageRequestSeqRef.current === seq && catalogScopeRef.current === queryAtRequest,
           acceptsError: () => catalogScopeRef.current === queryAtRequest,
           onResult: (result) => {
-            const outcome = applyPageResult(result, direction, token, plan.scopeIdentityKey, () =>
+            const outcome = applyPageResult(result, direction, address, plan.scopeIdentityKey, () =>
               reReadCurrentPageRef.current('user')
             );
             if (outcome === 'landed') {
@@ -632,19 +698,7 @@ export function useBrowseCatalog({
             });
             setQueryError(refreshFailureOf(error));
           },
-          onSettled: () => {
-            // A superseded request must not clear its successor's gates.
-            if (pageRequestSeqRef.current !== seq) {
-              return;
-            }
-            pageRequestInFlightRef.current = false;
-            userPageRequestInFlightRef.current = false;
-            setIsRequestingMore(false);
-            if (signalDuringReadRef.current) {
-              signalDuringReadRef.current = false;
-              reReadCurrentPageRef.current('stream-signal');
-            }
-          },
+          onSettled: () => settlePageRequest(seq),
         }
       );
     },
@@ -657,12 +711,18 @@ export function useBrowseCatalog({
       pinnedNamespaces,
       clusterId,
       customOnly,
+      settlePageRequest,
       warmUp,
     ]
   );
 
   const reReadCurrentPage = useCallback(
     (reason: DataRequestReason) => {
+      const focus = pendingAnchorRequest(clusterId, focusViewId, focusNamespace);
+      if (focus?.requiresAnchor && !queryPending) {
+        requestPage({ focus }, 'first', reason);
+        return;
+      }
       const currentPageToken = currentPageTokenRef.current;
       if (currentPageToken) {
         requestPage({ token: currentPageToken }, 'current', reason);
@@ -670,9 +730,62 @@ export function useBrowseCatalog({
         requestPage({}, 'first', reason);
       }
     },
-    [requestPage]
+    [clusterId, focusNamespace, focusViewId, queryPending, requestPage]
   );
   reReadCurrentPageRef.current = reReadCurrentPage;
+
+  const startFocusInActiveQuery = useEffectEvent(() => {
+    if (!enabled || !liveReady || queryPending || requestedQueryRef.current !== catalogScope) {
+      return;
+    }
+    const focus = pendingAnchorRequest(clusterId, focusViewId, focusNamespace);
+    if (focus?.requiresAnchor && focus !== lastStartedFocusRef.current) {
+      requestPage({ focus }, 'first');
+    }
+  });
+
+  useEffect(() => {
+    // Claim intent while preferences, the namespace, or the query are loading.
+    const claimFocus = () => {
+      const focus = pendingAnchorRequest(clusterId, focusViewId, focusNamespace);
+      if (focus?.requiresAnchor) {
+        ownedFocusRef.current = focus;
+      }
+    };
+    claimFocus();
+    const unsubscribeFilters = eventBus.on('gridtable:filter-request', claimFocus);
+    const unsubscribeFocus = eventBus.on('gridtable:focus-request', (request) => {
+      if (request.requiresAnchor && request === peekPendingFocusRequest()) {
+        claimFocus();
+        startFocusInActiveQuery();
+      }
+    });
+    return () => {
+      unsubscribeFilters();
+      unsubscribeFocus();
+      pageRequestSeqRef.current++;
+      pageRequestInFlightRef.current = false;
+      userPageRequestInFlightRef.current = false;
+      signalDuringReadRef.current = false;
+      requestedQueryRef.current = null;
+      lastStartedFocusRef.current = null;
+      const focus = ownedFocusRef.current;
+      ownedFocusRef.current = null;
+      if (focus && focusViewId) {
+        // A StrictMode effect replay immediately reclaims the same request.
+        queueMicrotask(() => {
+          if (ownedFocusRef.current !== focus && peekPendingFocusRequest() === focus) {
+            setPendingFocusRequest(null);
+            takeGridTableFilterRequest(focus.clusterId, focusViewId);
+          }
+        });
+      }
+      if (warmupRetryRef.current !== null) {
+        window.clearTimeout(warmupRetryRef.current);
+        warmupRetryRef.current = null;
+      }
+    };
+  }, [clusterId, focusNamespace, focusViewId]);
 
   const metadata = useLiveQueryRead({
     domain: 'catalog',
@@ -718,6 +831,14 @@ export function useBrowseCatalog({
 
     reReadCurrentPageRef.current('user');
   }, [catalogScope, enabled, liveReady, plan.scopeIdentityKey, resetPage]);
+
+  // Returning to the same search while debounce was pending need not load
+  // a first page, but it may have delayed an exact focus request.
+  useEffect(() => {
+    if (!queryPending) {
+      startFocusInActiveQuery();
+    }
+  }, [queryPending]);
 
   const handleLoadMore = useCallback(() => {
     requestPage({ token: continueToken }, 'next');

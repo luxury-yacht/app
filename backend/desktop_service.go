@@ -12,6 +12,7 @@ import (
 	"github.com/luxury-yacht/app/backend/panelmetrics"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	"github.com/luxury-yacht/app/backend/resources/apiresources"
 	"github.com/luxury-yacht/app/internal/panelwindow"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -106,6 +107,8 @@ type ResourceCommands interface {
 	ApplyObjectYaml(string, ObjectYAMLMutationRequest) (*ObjectYAMLMutationResponse, error)
 	CheckObjectYamlOwnership(string, ObjectYAMLMutationRequest) (*ObjectYAMLOwnershipCheckResponse, error)
 	DiscoverNodeLogs(resourcemodel.ResourceRef) NodeLogDiscoveryResponse
+	ExplainKindField(resourcemodel.ResourceRef, []string, string) (*apiresources.FieldExplanation, error)
+	ExplainKindSchema(resourcemodel.ResourceRef) (*apiresources.KindSchema, error)
 	FetchContainerLogs(string, ContainerLogsFetchRequest) (ContainerLogsFetchResponse, error)
 	FetchNodeLogs(resourcemodel.ResourceRef, NodeLogFetchRequest) (NodeLogFetchResponse, error)
 	FindCatalogObjectByUID(string, string) (*objectcatalog.Summary, error)
@@ -474,6 +477,14 @@ func (s *DesktopService) CheckObjectYamlOwnership(clusterID string, request Obje
 
 func (s *DesktopService) DiscoverNodeLogs(target resourcemodel.ResourceRef) NodeLogDiscoveryResponse {
 	return s.resources.DiscoverNodeLogs(target)
+}
+
+func (s *DesktopService) ExplainKindField(target resourcemodel.ResourceRef, fieldPath []string, revision string) (*apiresources.FieldExplanation, error) {
+	return s.resources.ExplainKindField(target, fieldPath, revision)
+}
+
+func (s *DesktopService) ExplainKindSchema(target resourcemodel.ResourceRef) (*apiresources.KindSchema, error) {
+	return s.resources.ExplainKindSchema(target)
 }
 
 func (s *DesktopService) FetchContainerLogs(clusterID string, request ContainerLogsFetchRequest) (ContainerLogsFetchResponse, error) {

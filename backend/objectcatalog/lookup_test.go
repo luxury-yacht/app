@@ -186,8 +186,8 @@ type failingPreferredDiscovery struct {
 	err error
 }
 
-func (f *failingPreferredDiscovery) ServerPreferredResources() ([]*metav1.APIResourceList, error) {
-	return nil, f.err
+func (f *failingPreferredDiscovery) ServerGroupsAndResources() ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
+	return nil, nil, f.err
 }
 
 func TestResourceResolverFallsBackToCRDWhenDiscoveryFails(t *testing.T) {
@@ -313,7 +313,7 @@ func TestLookupObjectJudgesAbsenceFromThePublishedSyncAlone(t *testing.T) {
 	}
 	secrets := Descriptor{Version: "v1", Kind: "Secret", Resource: "secrets", Namespaced: true, Scope: ScopeNamespace}
 	run := lookupSync(svc, map[Descriptor][]Summary{issuers: nil, secrets: nil}, lookupCertificates)
-	svc.recordDeniedResource("secrets")
+	run.listDenials = map[schema.GroupResource]map[string]struct{}{secrets.GVR().GroupResource(): {"": {}}}
 
 	// recordCompletion has not run, so catalog health is not stale yet.
 	run.publish([]Descriptor{lookupCertificates, issuers, secrets}, errors.New("one descriptor failed"))
