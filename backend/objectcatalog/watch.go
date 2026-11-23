@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
-	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -143,30 +142,7 @@ func (s *Service) registerCRDDiscoveryHook(notifier *watchNotifier) func() {
 			// No ingest source means no hook was registered, so there is nothing to detach.
 		}
 	}
-	gvr := apiextensions.Identity.GVR()
-	detach := source.SubscribeBundleSink(gvr, newCRDDiscoveryHook(notifier))
-	// The subscription replayed every definition the store holds. That is the
-	// whole list only when the store has really finished listing; otherwise the
-	// list arrives later as a relist, which marks the classification known itself.
-	if storeListed(source.PartitionReadinessFor(gvr)) {
-		s.apiResources.markCustomWatchListed()
-	}
-	return detach
-}
-
-// storeListed reports that every partition of a store has completed its
-// initial list. A store that settled without listing (permission-skipped, or
-// degraded past the sync deadline) has not: its emptiness says nothing.
-func storeListed(partitions []ingest.PartitionReadiness) bool {
-	if len(partitions) == 0 {
-		return false
-	}
-	for _, partition := range partitions {
-		if partition.State != refresh.ResourceReadinessReady {
-			return false
-		}
-	}
-	return true
+	return source.SubscribeBundleSink(apiextensions.Identity.GVR(), newCRDDiscoveryHook(notifier))
 }
 
 // crdDiscoveryHook marks discovery stale when a CustomResourceDefinition
@@ -228,7 +204,7 @@ func (h *crdDiscoveryHook) publishCustomResources(listed bool) {
 	h.notifier.service.apiResources.setWatchedCustomResources(custom, listed)
 }
 
-// ReplaceBundles diffs a relist's complete set against the last-seen
+// ReplaceBundles diffs a complete replay or relist against the last-seen
 // definitions: a vanished or changed definition requests one full
 // collection, and a new one is handled as an add.
 func (h *crdDiscoveryHook) ReplaceBundles(bundles []ingest.Bundle) {
@@ -240,7 +216,6 @@ func (h *crdDiscoveryHook) ReplaceBundles(bundles []ingest.Bundle) {
 	}
 	previous := h.seen
 	h.seen = next
-	// A relist is the store's complete list.
 	h.publishCustomResources(true)
 	for uid, old := range previous {
 		if current, kept := next[uid]; !kept || old.ChangesDiscovery(current) {

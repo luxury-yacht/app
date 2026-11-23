@@ -30,6 +30,7 @@ import {
   useLiveQueryRead,
   useLiveScope,
 } from '@modules/resource-grid/useLiveQueryRead';
+import { takeGridTableFilterRequest } from '@shared/components/tables/hooks/gridTableFilterRequest';
 import type { GridTableFocusRequest } from '@shared/components/tables/hooks/gridTableFocusRequest';
 import {
   peekPendingFocusRequest,
@@ -44,6 +45,7 @@ import { errorHandler } from '@utils/errorHandler';
 import type { MutableRefObject } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type DataRequestReason, requestRefreshDomainState } from '@/core/data-access';
+import { eventBus } from '@/core/events';
 import { useCatalogDiagnostics } from '@/core/refresh/diagnostics/useCatalogDiagnostics';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
@@ -595,29 +597,40 @@ export function useBrowseCatalog({
       }
     }, QUERY_WARMUP_RETRY_MS);
   }, []);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    // The view owns the handoff even while preferences or the query are loading.
+    const claimFocus = () => {
+      const focus = pendingAnchorRequest(clusterId, focusViewId);
+      if (focus?.requiresAnchor) {
+        ownedFocusRef.current = focus;
+      }
+    };
+    claimFocus();
+    const unsubscribe = eventBus.on('gridtable:filter-request', claimFocus);
+    return () => {
+      unsubscribe();
       pageRequestSeqRef.current++;
       pageRequestInFlightRef.current = false;
       userPageRequestInFlightRef.current = false;
       signalDuringReadRef.current = false;
       requestedQueryRef.current = null;
       const focus = ownedFocusRef.current;
-      if (
-        focus?.clusterId === clusterId &&
-        focus?.destinationViewId === focusViewId &&
-        focus === peekPendingFocusRequest()
-      ) {
-        setPendingFocusRequest(null);
-      }
       ownedFocusRef.current = null;
+      if (focus && focusViewId) {
+        // A StrictMode effect replay immediately reclaims this same handoff.
+        queueMicrotask(() => {
+          if (ownedFocusRef.current !== focus && peekPendingFocusRequest() === focus) {
+            setPendingFocusRequest(null);
+            takeGridTableFilterRequest(focus.clusterId, focusViewId);
+          }
+        });
+      }
       if (warmupRetryRef.current !== null) {
         window.clearTimeout(warmupRetryRef.current);
         warmupRetryRef.current = null;
       }
-    },
-    [clusterId, focusViewId]
-  );
+    };
+  }, [clusterId, focusViewId]);
 
   const requestPage = useCallback(
     (

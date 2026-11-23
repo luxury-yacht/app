@@ -228,8 +228,8 @@ type IngestSource interface {
 	IsDynamicCatalogGeneration(schema.GroupResource, uint64) bool
 	CatalogRows(gvr schema.GroupVersionResource) []interface{}
 	SubscribeCatalogSink(gvr schema.GroupVersionResource, sink ingest.Sink) func()
-	// SubscribeBundleSink replays the source's current bundles to sink, then
-	// delivers each change; the returned func detaches it.
+	// SubscribeBundleSink replays a synced source as a complete set to a
+	// BundleReplacer, and delivers other replays as upserts. The returned func detaches it.
 	SubscribeBundleSink(gvr schema.GroupVersionResource, sink ingest.BundleSink) func()
 	// Threshold admission applies only when discovery has no visible CRD definition.
 	RegisterDynamicCatalogReflector(gvr schema.GroupVersionResource, gvk schema.GroupVersionKind, project ingest.CatalogProjector, namespaced bool) bool

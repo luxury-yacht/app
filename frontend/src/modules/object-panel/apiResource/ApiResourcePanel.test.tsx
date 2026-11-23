@@ -329,6 +329,36 @@ describe('ApiResourcePanel', () => {
     ]);
   });
 
+  it.each(['NotFound', 'InternalError'] as const)(
+    'retries the schema in the open Explain tab after %s',
+    async (reason) => {
+      await start();
+      app.backend.answer('ExplainKindSchema', () => {
+        throw Object.assign(new Error('schema unavailable'), {
+          cause: makeErrorStatus(reason, 'schema unavailable'),
+        });
+      });
+      await openKindPanel();
+      await click(tab('Explain'));
+      expect(fieldPaths()).toEqual([]);
+      expect(app.errors.take((record) => record.context?.action === 'loadKindSchema')).toHaveLength(
+        reason === 'InternalError' ? 1 : 0
+      );
+
+      app.backend.answer('ExplainKindSchema', () => deploymentSchema);
+      const retry = Array.from(panel().querySelectorAll('button')).find(
+        (button) => button.textContent?.trim() === 'Retry'
+      );
+      await click(requireValue(retry, 'expected the schema retry control'));
+
+      expect(app.backend.calls('ExplainKindSchema')).toEqual([
+        [deploymentKind()],
+        [deploymentKind()],
+      ]);
+      expect(fieldPaths()).toContain('spec');
+    }
+  );
+
   it('keeps the Explain view when the panel moves to another window', async () => {
     await start();
     await openKindPanel();

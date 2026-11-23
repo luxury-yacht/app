@@ -14,8 +14,10 @@
 
 .explain-notice {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
+  gap: var(--spacing-sm);
   padding: var(--spacing-md);
   color: var(--color-text-secondary);
   font-size: var(--font-size-normal);

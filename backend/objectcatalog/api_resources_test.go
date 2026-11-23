@@ -288,7 +288,7 @@ func TestAFailedFirstDiscoveryIsSignalled(t *testing.T) {
 	require.ErrorIs(t, inventory.DiscoveryFailure, denied)
 
 	// The definitions list arriving before any discovery succeeds is not news.
-	svc.apiResources.markCustomWatchListed()
+	newCRDDiscoveryHook(newWatchNotifier(svc)).ReplaceBundles(nil)
 	requireNoAPIResourcesUpdate(t, updates)
 
 	// Until a discovery succeeds there is nothing to show but the reason, so
@@ -489,10 +489,13 @@ func (s *crdListSource) PartitionReadinessFor(schema.GroupVersionResource) []ing
 	return []ingest.PartitionReadiness{{State: refresh.ResourceReadinessPending}}
 }
 
-// SubscribeBundleSink replays the store's current rows as upserts, as the
-// ingest store does.
+// SubscribeBundleSink mirrors the ingest store's complete or incremental replay.
 func (s *crdListSource) SubscribeBundleSink(_ schema.GroupVersionResource, sink ingest.BundleSink) func() {
 	s.sink = sink
+	if bulk, ok := sink.(ingest.BundleReplacer); ok && s.listed {
+		bulk.ReplaceBundles(s.replayed)
+		return func() {}
+	}
 	for _, bundle := range s.replayed {
 		sink.UpsertBundle(bundle)
 	}
@@ -800,6 +803,7 @@ func TestCatalogClassifiesCustomKindsFromTheRealCRDStore(t *testing.T) {
 
 	require.Eventually(t, func() bool { return svc.APIResources().CustomKnown }, 5*time.Second, time.Millisecond)
 	inventory := svc.APIResources()
+	require.EqualValues(t, 2, inventory.Revision, "discovery should be followed by a single publication of the complete CRD classification")
 	require.True(t, apiResourceByName(t, inventory.Resources, "example.com", "widgets").Custom)
 	require.False(t, apiResourceByName(t, inventory.Resources, "", "pods").Custom)
 }

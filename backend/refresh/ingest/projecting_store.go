@@ -120,8 +120,8 @@ type RelistBoundary interface {
 	EndRelist(partition string)
 }
 
-// BundleReplacer is an optional BundleSink extension for relist/Replace delivery.
-// The rows argument is the complete Bundle set for this store's source after the relist.
+// BundleReplacer receives a store's complete Bundle set on full relists and on
+// subscription to an already synced store.
 type BundleReplacer interface {
 	ReplaceBundles(rows []Bundle)
 }

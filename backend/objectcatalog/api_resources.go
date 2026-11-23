@@ -290,13 +290,6 @@ func (s *apiResourceStore) setWatchedCustomResources(custom map[schema.GroupReso
 	}
 }
 
-// markCustomWatchListed adopts the replay from a reflector that already listed.
-func (s *apiResourceStore) markCustomWatchListed() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.useWatchedCustomResourcesLocked()
-}
-
 func (s *apiResourceStore) useWatchedCustomResourcesLocked() {
 	s.watchListed = true
 	s.publishCustomResourcesLocked(s.watched, false)

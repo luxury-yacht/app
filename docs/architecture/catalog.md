@@ -192,9 +192,10 @@ collects (Events, kinds that cannot be listed, the metrics API).
 - A resource is `Custom` when a visible CustomResourceDefinition defines it.
   `CustomKnown` means the catalog has a complete CRD list. The catalog uses
   successful LIST results until the CRD reflector has completed its own list
-  and can supply live changes. A WATCH denial still allows LIST-based
-  classification. A definite LIST denial from permission preflight or the
-  LIST request is reported as a permission issue.
+  and can supply live changes. A subscription to a synced reflector publishes
+  its complete CRD set in one replay under the store lock. A WATCH denial
+  still allows LIST-based classification. A definite LIST denial from
+  permission preflight or the LIST request is reported as a permission issue.
 - A removed definition keeps its Custom classification on published rows
   until a discovery started after the removal refreshes its group. Failed
   discovery retains the rows and their classification together.
@@ -244,7 +245,8 @@ collects (Events, kinds that cannot be listed, the metrics API).
 - On `unlisted`, API Resources hands the current request to Browse. Browse
   narrows its filters and uses the exact CRD identity, including the UID when
   available, to open and focus the page containing the requested definition.
-  Leaving Browse cancels its pending focus. API Resources reports
+  Leaving Browse cancels its pending focus and filter handoff, including
+  during table startup. API Resources reports
   `not-found`, `filtered`, or `unavailable` for its own anchor.
 - `kubectl explain` output for a kind comes from
   `backend/resources/apiresources`, read from the cluster's OpenAPI v3
@@ -253,7 +255,8 @@ collects (Events, kinds that cannot be listed, the metrics API).
   Kubernetes discovery's version ordering. The tab labels the API version
   returned with the schema. A field read carries the tree's document revision.
   If the document has changed, Explain reloads the tree and clears all cached
-  field descriptions together.
+  field descriptions together. Missing schemas and failed reads can be retried
+  from the open tab.
 
 ## Discovered resource families
 

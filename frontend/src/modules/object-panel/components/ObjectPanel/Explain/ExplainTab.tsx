@@ -126,7 +126,10 @@ function SelectedField({
 }
 
 export default function ExplainTab({ kind, isActive = true }: Readonly<ExplainTabProps>) {
-  const { schema, selectedPath, selectedExplanation, selectField } = useKindExplain(kind, isActive);
+  const { schema, retrySchema, selectedPath, selectedExplanation, selectField } = useKindExplain(
+    kind,
+    isActive
+  );
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const handleSelect = useCallback(
     (path: readonly string[], hasChildren: boolean) => {
@@ -162,19 +165,19 @@ export default function ExplainTab({ kind, isActive = true }: Readonly<ExplainTa
       </div>
     );
   }
-  if (schema.status === 'missing') {
+  if (schema.status === 'missing' || schema.status === 'error') {
     return (
       <div className="object-panel-tab-content explain-notice">
-        <p>No schema is published for this kind.</p>
-      </div>
-    );
-  }
-  if (schema.status === 'error') {
-    return (
-      <div className="object-panel-tab-content explain-notice">
-        <div className="error-message" role="alert">
-          Error loading schema: <ErrorSurface kind="reported" message={schema.message} />
-        </div>
+        {schema.status === 'error' ? (
+          <div className="error-message" role="alert">
+            Error loading schema: <ErrorSurface kind="reported" message={schema.message} />
+          </div>
+        ) : (
+          <p>No schema is published for this kind.</p>
+        )}
+        <button type="button" className="button generic small" onClick={retrySchema}>
+          Retry
+        </button>
       </div>
     );
   }

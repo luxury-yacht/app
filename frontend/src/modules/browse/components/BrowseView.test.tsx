@@ -21,6 +21,9 @@ import { requestContextRefresh } from '@/core/data-access';
 import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@/shared/components/tables/gridTableFilterState';
+import { requestGridTableFilters } from '@/shared/components/tables/hooks/gridTableFilterRequest';
+import { buildGridTableFocusRequest } from '@/shared/components/tables/hooks/gridTableFocusRequest';
+import { setPendingFocusRequest } from '@/shared/components/tables/hooks/useGridTableExternalFocus';
 import {
   buildGridTableStorageKey,
   computeClusterHash,
@@ -554,6 +557,39 @@ describe('BrowseView', () => {
       const previousReads = pageQueries().filter((query) => query.has('anchor.name')).length;
       await view.goTo({ clusterView: 'browse' });
       expect(pageQueries().filter((query) => query.has('anchor.name'))).toHaveLength(previousReads);
+      expect(rowOf(name).getAttribute('data-row-focused')).toBeNull();
+    });
+
+    it('discards the focus and filters if Browse is left before table preferences load', async () => {
+      const name = 'widgets.example.com';
+      const target = definition(name);
+      serveCatalog([node(), target]);
+      const hydrate = app.backend.hold('GetGridTablePersistence');
+      view = await app.mountApp();
+      const focus = requireValue(
+        buildGridTableFocusRequest({ ...target.ref }),
+        'expected CRD focus'
+      );
+      setPendingFocusRequest({ ...focus, destinationViewId: 'browse', requiresAnchor: true });
+      requestGridTableFilters({
+        clusterId: dev.clusterId,
+        destinationViewId: 'browse',
+        filters: {
+          ...DEFAULT_GRID_TABLE_FILTER_STATE,
+          search: name,
+          kinds: { mode: 'some', values: [focus.kind] },
+        },
+      });
+
+      await view.goTo({ clusterView: 'browse' });
+      expect(app.backend.calls('GetGridTablePersistence')).not.toEqual([]);
+      expect(pageQueries()).toEqual([]);
+      await view.goTo({ clusterView: 'overview' });
+      await act(async () => hydrate());
+
+      await view.goTo({ clusterView: 'browse' });
+      expect(pageQueries().some((query) => query.has('anchor.name'))).toBe(false);
+      expect(rowNames()).toEqual(expect.arrayContaining(['worker-a', name]));
       expect(rowOf(name).getAttribute('data-row-focused')).toBeNull();
     });
 

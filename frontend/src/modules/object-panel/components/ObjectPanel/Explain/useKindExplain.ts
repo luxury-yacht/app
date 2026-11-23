@@ -109,6 +109,13 @@ export function useKindExplain(target: KindReadTarget, enabled: boolean) {
       });
   }, [enabled, clusterId, group, version, kind, resource, schemaRefresh]);
 
+  const retrySchema = useCallback(() => {
+    // Retire the previous tree and its field reads before reloading.
+    generation.current++;
+    setSchema({ status: 'loading' });
+    setSchemaRefresh((value) => value + 1);
+  }, []);
+
   const selectField = useCallback(
     (path: readonly string[]) => {
       if (schema.status !== 'ready') {
@@ -154,10 +161,7 @@ export function useKindExplain(target: KindReadTarget, enabled: boolean) {
             return;
           }
           if (errorStatusOf(error)?.reason === 'Conflict') {
-            // Retire the entire tree and its field reads before reloading.
-            generation.current++;
-            setSchema({ status: 'loading' });
-            setSchemaRefresh((value) => value + 1);
+            retrySchema();
             return;
           }
           requestedPaths.current.delete(key);
@@ -167,11 +171,12 @@ export function useKindExplain(target: KindReadTarget, enabled: boolean) {
           });
         });
     },
-    [clusterId, group, version, kind, resource, schema]
+    [clusterId, group, version, kind, resource, schema, retrySchema]
   );
 
   return {
     schema,
+    retrySchema,
     selectedPath,
     selectedExplanation:
       selectedPath === null ? null : (explanations[fieldKey(selectedPath)] ?? null),
