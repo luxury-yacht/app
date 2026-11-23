@@ -43,7 +43,7 @@ import {
 import { useStableSelectedValue } from '@shared/hooks/useStableSelectedValue';
 import { errorHandler } from '@utils/errorHandler';
 import type { MutableRefObject } from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { type DataRequestReason, requestRefreshDomainState } from '@/core/data-access';
 import { eventBus } from '@/core/events';
 import { useCatalogDiagnostics } from '@/core/refresh/diagnostics/useCatalogDiagnostics';
@@ -126,6 +126,9 @@ interface BrowsePageAddress {
   startRank?: number;
   focus?: AnchorableFocusRequest;
 }
+
+const hasBrowsePageAddress = (direction: BrowsePageDirection, address: BrowsePageAddress) =>
+  direction === 'first' || Boolean(address.token) || typeof address.startRank === 'number';
 
 const settlePageFocus = (
   request: AnchorableFocusRequest,
@@ -379,6 +382,8 @@ export function useBrowseCatalog({
   const userPageRequestInFlightRef = useRef(false);
   const pageRequestSeqRef = useRef(0);
   const ownedFocusRef = useRef<GridTableFocusRequest | null>(null);
+  const lastStartedFocusRef = useRef<AnchorableFocusRequest | null>(null);
+  const focusNamespace = pinnedNamespaces.length === 1 ? pinnedNamespaces[0] : undefined;
   // A change signalled while a page read was in flight; the current page is
   // read again once that read settles.
   const signalDuringReadRef = useRef(false);
@@ -597,40 +602,20 @@ export function useBrowseCatalog({
       }
     }, QUERY_WARMUP_RETRY_MS);
   }, []);
-  useEffect(() => {
-    // The view owns the handoff even while preferences or the query are loading.
-    const claimFocus = () => {
-      const focus = pendingAnchorRequest(clusterId, focusViewId);
-      if (focus?.requiresAnchor) {
-        ownedFocusRef.current = focus;
-      }
-    };
-    claimFocus();
-    const unsubscribe = eventBus.on('gridtable:filter-request', claimFocus);
-    return () => {
-      unsubscribe();
-      pageRequestSeqRef.current++;
-      pageRequestInFlightRef.current = false;
-      userPageRequestInFlightRef.current = false;
+
+  const settlePageRequest = useCallback((seq: number) => {
+    // A superseded request must not clear its successor's gates.
+    if (pageRequestSeqRef.current !== seq) {
+      return;
+    }
+    pageRequestInFlightRef.current = false;
+    userPageRequestInFlightRef.current = false;
+    setIsRequestingMore(false);
+    if (signalDuringReadRef.current) {
       signalDuringReadRef.current = false;
-      requestedQueryRef.current = null;
-      const focus = ownedFocusRef.current;
-      ownedFocusRef.current = null;
-      if (focus && focusViewId) {
-        // A StrictMode effect replay immediately reclaims this same handoff.
-        queueMicrotask(() => {
-          if (ownedFocusRef.current !== focus && peekPendingFocusRequest() === focus) {
-            setPendingFocusRequest(null);
-            takeGridTableFilterRequest(focus.clusterId, focusViewId);
-          }
-        });
-      }
-      if (warmupRetryRef.current !== null) {
-        window.clearTimeout(warmupRetryRef.current);
-        warmupRetryRef.current = null;
-      }
-    };
-  }, [clusterId, focusViewId]);
+      reReadCurrentPageRef.current('stream-signal');
+    }
+  }, []);
 
   const requestPage = useCallback(
     (
@@ -638,11 +623,10 @@ export function useBrowseCatalog({
       direction: BrowsePageDirection,
       reason: DataRequestReason = 'user'
     ) => {
-      const token = address.token ?? null;
-      const hasStartRank = typeof address.startRank === 'number';
-      if (direction !== 'first' && !token && !hasStartRank) {
+      if (!hasBrowsePageAddress(direction, address)) {
         return;
       }
+      const token = address.token ?? null;
       // Doorbell-driven re-reads are QUIET: they must not flip the user-facing
       // busy flag (which disables prev/next and spins the footer) — on a
       // churning cluster doorbells ring continuously, and a busy window per
@@ -664,7 +648,10 @@ export function useBrowseCatalog({
         return;
       }
       const seq = ++pageRequestSeqRef.current;
-      ownedFocusRef.current = address.focus ?? ownedFocusRef.current;
+      if (address.focus) {
+        ownedFocusRef.current = address.focus;
+        lastStartedFocusRef.current = address.focus;
+      }
       pageRequestInFlightRef.current = true;
       userPageRequestInFlightRef.current = !quiet;
       // Navigation shows the footer busy; a new query stays quiet (filtering
@@ -711,19 +698,7 @@ export function useBrowseCatalog({
             });
             setQueryError(refreshFailureOf(error));
           },
-          onSettled: () => {
-            // A superseded request must not clear its successor's gates.
-            if (pageRequestSeqRef.current !== seq) {
-              return;
-            }
-            pageRequestInFlightRef.current = false;
-            userPageRequestInFlightRef.current = false;
-            setIsRequestingMore(false);
-            if (signalDuringReadRef.current) {
-              signalDuringReadRef.current = false;
-              reReadCurrentPageRef.current('stream-signal');
-            }
-          },
+          onSettled: () => settlePageRequest(seq),
         }
       );
     },
@@ -736,13 +711,14 @@ export function useBrowseCatalog({
       pinnedNamespaces,
       clusterId,
       customOnly,
+      settlePageRequest,
       warmUp,
     ]
   );
 
   const reReadCurrentPage = useCallback(
     (reason: DataRequestReason) => {
-      const focus = pendingAnchorRequest(clusterId, focusViewId);
+      const focus = pendingAnchorRequest(clusterId, focusViewId, focusNamespace);
       if (focus?.requiresAnchor && !queryPending) {
         requestPage({ focus }, 'first', reason);
         return;
@@ -754,9 +730,62 @@ export function useBrowseCatalog({
         requestPage({}, 'first', reason);
       }
     },
-    [clusterId, focusViewId, queryPending, requestPage]
+    [clusterId, focusNamespace, focusViewId, queryPending, requestPage]
   );
   reReadCurrentPageRef.current = reReadCurrentPage;
+
+  const startFocusInActiveQuery = useEffectEvent(() => {
+    if (!enabled || !liveReady || queryPending || requestedQueryRef.current !== catalogScope) {
+      return;
+    }
+    const focus = pendingAnchorRequest(clusterId, focusViewId, focusNamespace);
+    if (focus?.requiresAnchor && focus !== lastStartedFocusRef.current) {
+      requestPage({ focus }, 'first');
+    }
+  });
+
+  useEffect(() => {
+    // Claim intent while preferences, the namespace, or the query are loading.
+    const claimFocus = () => {
+      const focus = pendingAnchorRequest(clusterId, focusViewId, focusNamespace);
+      if (focus?.requiresAnchor) {
+        ownedFocusRef.current = focus;
+      }
+    };
+    claimFocus();
+    const unsubscribeFilters = eventBus.on('gridtable:filter-request', claimFocus);
+    const unsubscribeFocus = eventBus.on('gridtable:focus-request', (request) => {
+      if (request.requiresAnchor && request === peekPendingFocusRequest()) {
+        claimFocus();
+        startFocusInActiveQuery();
+      }
+    });
+    return () => {
+      unsubscribeFilters();
+      unsubscribeFocus();
+      pageRequestSeqRef.current++;
+      pageRequestInFlightRef.current = false;
+      userPageRequestInFlightRef.current = false;
+      signalDuringReadRef.current = false;
+      requestedQueryRef.current = null;
+      lastStartedFocusRef.current = null;
+      const focus = ownedFocusRef.current;
+      ownedFocusRef.current = null;
+      if (focus && focusViewId) {
+        // A StrictMode effect replay immediately reclaims the same request.
+        queueMicrotask(() => {
+          if (ownedFocusRef.current !== focus && peekPendingFocusRequest() === focus) {
+            setPendingFocusRequest(null);
+            takeGridTableFilterRequest(focus.clusterId, focusViewId);
+          }
+        });
+      }
+      if (warmupRetryRef.current !== null) {
+        window.clearTimeout(warmupRetryRef.current);
+        warmupRetryRef.current = null;
+      }
+    };
+  }, [clusterId, focusNamespace, focusViewId]);
 
   const metadata = useLiveQueryRead({
     domain: 'catalog',
@@ -802,6 +831,14 @@ export function useBrowseCatalog({
 
     reReadCurrentPageRef.current('user');
   }, [catalogScope, enabled, liveReady, plan.scopeIdentityKey, resetPage]);
+
+  // Returning to the same search while debounce was pending need not load
+  // a first page, but it may have delayed an exact focus request.
+  useEffect(() => {
+    if (!queryPending) {
+      startFocusInActiveQuery();
+    }
+  }, [queryPending]);
 
   const handleLoadMore = useCallback(() => {
     requestPage({ token: continueToken }, 'next');

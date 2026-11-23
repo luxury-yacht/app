@@ -205,6 +205,35 @@ func TestExplainFieldListsEnumValues(t *testing.T) {
 	require.Equal(t, "How fast the widget runs.", explanation.Description)
 }
 
+func TestExplainFieldPreservesEnumValuesAcrossRendering(t *testing.T) {
+	client := widgetClientWith(t, "mode", map[string]any{
+		"type":        "string",
+		"enum":        []string{"", `""`, "line one\nline two", "DESCRIPTION:\nmore", " leading ", "Fast"},
+		"description": "The mode remains described.",
+	})
+	explanation, err := explainCurrentField(t, client, widgetsGVR, []string{"mode"})
+	require.NoError(t, err)
+	require.Equal(t, []EnumValue{
+		{Value: `""`},
+		{Value: `"\"\""`},
+		{Value: `"line one\nline two"`},
+		{Value: `"DESCRIPTION:\nmore"`},
+		{Value: `" leading "`},
+		{Value: "Fast"},
+	}, explanation.Enum)
+	require.Equal(t, "The mode remains described.", explanation.Description)
+}
+
+func TestExplainFieldPreservesIntegerEnumPrecision(t *testing.T) {
+	client := widgetClientWith(t, "count", map[string]any{
+		"type": "integer",
+		"enum": []json.Number{"9007199254740992", "9007199254740993"},
+	})
+	explanation, err := explainCurrentField(t, client, widgetsGVR, []string{"count"})
+	require.NoError(t, err)
+	require.Equal(t, []EnumValue{{Value: "9007199254740992"}, {Value: "9007199254740993"}}, explanation.Enum)
+}
+
 // widgetClientWith serves the widget document with one property replaced.
 func widgetClientWith(t *testing.T, name string, property map[string]any) openapi.Client {
 	t.Helper()

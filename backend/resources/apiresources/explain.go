@@ -48,8 +48,8 @@ type FieldExplanation struct {
 	Enum        []EnumValue `json:"enum,omitempty"`
 }
 
-// EnumValue is one value a field allows and, when the schema says, what it
-// means.
+// EnumValue displays one value a field allows, with JSON quoting when needed
+// to distinguish strings from other values, and its meaning when documented.
 type EnumValue struct {
 	Value       string `json:"value"`
 	Description string `json:"description,omitempty"`
@@ -109,11 +109,26 @@ func ExplainField(client openapi.Client, gvr schema.GroupVersionResource, expect
 		description, meanings := splitEnumMeanings(sections.description)
 		explanation.Description = description
 		explanation.Enum = make([]EnumValue, 0, len(sections.enum))
-		for _, value := range sections.enum {
-			explanation.Enum = append(explanation.Enum, EnumValue{Value: value, Description: meanings[value]})
+		for _, literal := range sections.enum {
+			explanation.Enum = append(explanation.Enum, displayEnumValue(literal, meanings))
 		}
 	}
 	return explanation, nil
+}
+
+func displayEnumValue(literal string, meanings map[string]string) EnumValue {
+	if !strings.HasPrefix(literal, `"`) {
+		return EnumValue{Value: literal, Description: meanings[literal]}
+	}
+	var value string
+	if err := json.Unmarshal([]byte(literal), &value); err != nil {
+		return EnumValue{Value: literal}
+	}
+	display := literal
+	if value != "" && literal == `"`+value+`"` && strings.TrimSpace(value) == value && !json.Valid([]byte(value)) {
+		display = value
+	}
+	return EnumValue{Value: display, Description: meanings[value]}
 }
 
 const enumMeaningsHeading = "Possible enum values:"
@@ -177,12 +192,12 @@ func loadExplainDocument(client openapi.Client, gvr schema.GroupVersionResource)
 const noBreakSpace = "\u00a0"
 
 func renderExplain(document fetchedDocument, gvr schema.GroupVersionResource, fieldPath []string, recursive bool) (string, error) {
-	unwrapped, err := document.withUnbreakableDescriptions()
+	prepared, err := document.forPlaintextRender()
 	if err != nil {
 		return "", fmt.Errorf("render OpenAPI schema for %s: %w", gvr, err)
 	}
 	var output bytes.Buffer
-	if err := explain.PrintModelDescription(fieldPath, &output, unwrapped, gvr, recursive, 0, "plaintext"); err != nil {
+	if err := explain.PrintModelDescription(fieldPath, &output, prepared, gvr, recursive, 0, "plaintext"); err != nil {
 		if missingExplainTarget(err) {
 			return "", errorstatus.NotFound(err)
 		}
@@ -213,17 +228,18 @@ type fetchedDocument struct {
 
 func (d fetchedDocument) revision() string { return fmt.Sprintf("%x", sha256.Sum256(d.document)) }
 
-// withUnbreakableDescriptions returns a copy for rendering whose description
-// strings use noBreakSpace for spaces. Numbers decode as json.Number so the
-// copy keeps them exactly.
-func (d fetchedDocument) withUnbreakableDescriptions() (fetchedDocument, error) {
+// forPlaintextRender protects descriptions and enum literals from terminal
+// formatting. Numbers decode as json.Number to retain their original precision.
+func (d fetchedDocument) forPlaintextRender() (fetchedDocument, error) {
 	decoder := json.NewDecoder(bytes.NewReader(d.document))
 	decoder.UseNumber()
 	var parsed any
 	if err := decoder.Decode(&parsed); err != nil {
 		return fetchedDocument{}, err
 	}
-	protectDescriptionSpaces(parsed)
+	if err := protectExplainValues(parsed); err != nil {
+		return fetchedDocument{}, err
+	}
 	document, err := json.Marshal(parsed)
 	if err != nil {
 		return fetchedDocument{}, err
@@ -231,21 +247,48 @@ func (d fetchedDocument) withUnbreakableDescriptions() (fetchedDocument, error) 
 	return fetchedDocument{path: d.path, document: document}, nil
 }
 
-func protectDescriptionSpaces(node any) {
+func protectExplainValues(node any) error {
 	switch value := node.(type) {
 	case map[string]any:
 		for key, child := range value {
-			if text, ok := child.(string); ok && key == "description" {
-				value[key] = strings.ReplaceAll(text, " ", noBreakSpace)
-				continue
+			prepared, err := protectExplainProperty(key, child)
+			if err != nil {
+				return err
 			}
-			protectDescriptionSpaces(child)
+			value[key] = prepared
 		}
 	case []any:
 		for _, child := range value {
-			protectDescriptionSpaces(child)
+			if err := protectExplainValues(child); err != nil {
+				return err
+			}
 		}
 	}
+	return nil
+}
+
+func protectExplainProperty(key string, value any) (any, error) {
+	if text, ok := value.(string); ok && key == "description" {
+		return strings.ReplaceAll(text, " ", noBreakSpace), nil
+	}
+	if values, ok := value.([]any); ok && key == "enum" {
+		return encodeExplainEnum(values)
+	}
+	return value, protectExplainValues(value)
+}
+
+// Kubectl resolves the field path and prints each enum entry on its own line.
+// Give it JSON literals as strings so it preserves each value and its type.
+func encodeExplainEnum(values []any) ([]string, error) {
+	encoded := make([]string, len(values))
+	for index, value := range values {
+		literal, err := json.Marshal(value)
+		if err != nil {
+			return nil, err
+		}
+		encoded[index] = string(literal)
+	}
+	return encoded, nil
 }
 
 func (d fetchedDocument) Paths() (map[string]openapi.GroupVersion, error) {

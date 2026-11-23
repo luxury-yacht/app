@@ -122,8 +122,8 @@ const catalogPage = (
   const limit = Number(query.get('limit') ?? 50);
   const anchorName = query.get('anchor.name');
   const anchorUid = query.get('anchor.uid');
-  const rank = anchorName
-    ? matching.findIndex(
+  const anchor = anchorName
+    ? inScope.find(
         ({ ref }) =>
           ref.name === anchorName &&
           ref.clusterId === query.get('anchor.clusterId') &&
@@ -133,7 +133,8 @@ const catalogPage = (
           (ref.namespace ?? '') === (query.get('anchor.namespace') ?? '') &&
           (!anchorUid || ref.uid === anchorUid)
       )
-    : -1;
+    : undefined;
+  const rank = anchor ? matching.indexOf(anchor) : -1;
   const start = rank >= 0 ? Math.floor(rank / limit) * limit : Number(query.get('continue') ?? 0);
   const page = matching.slice(start, start + limit);
   return makeCatalogSnapshotPayload({
@@ -144,7 +145,10 @@ const catalogPage = (
     unfilteredTotal: inScope.length,
     ...(anchorName
       ? {
-          anchor: rank >= 0 ? { found: true, rank } : { found: false, rank, reason: 'not-found' },
+          anchor:
+            rank >= 0
+              ? { found: true, rank }
+              : { found: false, rank, reason: anchor ? 'filtered' : 'not-found' },
           pageStartRank: start,
           self: String(start),
         }
@@ -242,6 +246,15 @@ const openRowMenu = async (name: string) => {
 
 const node = () => catalogItem({ kind: 'Node', name: 'worker-a' });
 const pod = (name: string, namespace: string) => catalogItem({ kind: 'Pod', name, namespace });
+const mountWithNavigation = async () => {
+  let navigateToView: ReturnType<typeof useNavigateToView>['navigateToView'] | undefined;
+  const NavigateProbe = () => {
+    navigateToView = useNavigateToView().navigateToView;
+    return null;
+  };
+  view = await app.mountApp(<NavigateProbe />);
+  return requireValue(navigateToView, 'mounted navigation hook');
+};
 
 beforeEach(() => {
   dev = app.cluster({ name: 'dev', context: 'alpha' });
@@ -275,6 +288,64 @@ describe('BrowseView', () => {
     expect(rowNames()).toEqual(['api']);
     expect(lastPageQuery().getAll('scopeNamespace')).toEqual(['team-a']);
     expect(columnKeys()).not.toContain('namespace');
+  });
+
+  it.each([
+    { scope: 'cluster', namespace: undefined, alreadyOpen: false },
+    { scope: 'namespace', namespace: 'team-a', alreadyOpen: false },
+    { scope: 'cluster', namespace: undefined, alreadyOpen: true },
+    { scope: 'namespace', namespace: 'team-a', alreadyOpen: true },
+  ])(
+    'focuses an off-page $scope object when Browse is already open: $alreadyOpen',
+    async ({ scope, namespace, alreadyOpen }) => {
+      const viewId = namespace ? 'namespace-browse' : 'browse';
+      await persistTables({ [viewId]: { sort: { key: 'name', direction: 'asc' }, pageSize: 25 } });
+      const widget = (name: string) =>
+        catalogItem({ kind: 'Widget', name, group: 'example.com', namespace });
+      const target = widget('widget-target');
+      serveCatalog([
+        ...Array.from({ length: 51 }, (_, index) => widget(`widget-${index}`)),
+        target,
+      ]);
+      const navigateToView = await mountWithNavigation();
+      if (alreadyOpen) {
+        await view.goTo(namespace ? { namespace, view: 'browse' } : { clusterView: 'browse' });
+        expect(rowNames()).not.toContain(target.ref.name);
+      }
+
+      await act(async () => navigateToView({ ...target.ref }));
+      await app.settle();
+
+      const query = lastPageQuery();
+      expect(Object.fromEntries(query.entries())).toMatchObject({
+        'anchor.name': target.ref.name,
+        'anchor.group': target.ref.group,
+        'anchor.version': target.ref.version,
+        'anchor.uid': target.ref.uid,
+        resourceScope: scope,
+      });
+      expect(query.get('anchor.namespace')).toBe(namespace ?? null);
+      expect(rowOf(target.ref.name).getAttribute('data-row-focused')).toBe('true');
+    }
+  );
+
+  it('reports a Browse target hidden by the current filters and keeps those filters', async () => {
+    const widget = catalogItem({ kind: 'Widget', name: 'hidden-widget', group: 'example.com' });
+    await persistTables({
+      browse: { filters: { ...DEFAULT_GRID_TABLE_FILTER_STATE, search: 'worker' } },
+    });
+    serveCatalog([widget, node()]);
+    const navigateToView = await mountWithNavigation();
+
+    await view.goTo({ clusterView: 'browse' });
+    await act(async () => navigateToView({ ...widget.ref }));
+    await app.settle();
+
+    expect(lastPageQuery().get('search')).toBe('worker');
+    expect(rowNames()).toEqual(['worker-a']);
+    const reports = app.errors.take((record) => record.context?.source === 'resource-grid-anchor');
+    expect(reports).toHaveLength(1);
+    expect((reports[0].error as Error).message).toContain('current filters');
   });
 
   it('lists every namespace’s objects under All Namespaces, with a Namespace column that opens the namespace', async () => {
@@ -490,18 +561,10 @@ describe('BrowseView', () => {
         rows: [],
         ...(scope.includes('anchor.name=') ? { anchor: { found: false, rank: -1, reason } } : {}),
       }));
-      let navigateToView: ReturnType<typeof useNavigateToView>['navigateToView'] | undefined;
-      const NavigateProbe = () => {
-        navigateToView = useNavigateToView().navigateToView;
-        return null;
-      };
-      view = await app.mountApp(<NavigateProbe />);
+      const navigateToView = await mountWithNavigation();
       await view.goTo({ clusterView: from });
       await act(async () => {
-        requireValue(
-          navigateToView,
-          'mounted navigation hook'
-        )({
+        navigateToView({
           clusterId: dev.clusterId,
           clusterName: dev.clusterName,
           group: 'apiextensions.k8s.io',

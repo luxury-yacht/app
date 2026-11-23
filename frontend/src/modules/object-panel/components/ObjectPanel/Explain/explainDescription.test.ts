@@ -55,9 +55,30 @@ describe('parseExplainDescription', () => {
     expect(parseExplainDescription('')).toEqual([]);
     expect(parseExplainDescription('\n\n')).toEqual([]);
   });
+
+  it('keeps a nested YAML sequence in its indented example', () => {
+    expect(
+      structure(
+        'Example:\n\n    containers:\n      - name: app\n        image: example/app\n\n- A prose item'
+      )
+    ).toEqual([
+      { kind: 'paragraph', text: 'Example:' },
+      { kind: 'preformatted', text: 'containers:\n  - name: app\n    image: example/app' },
+      { kind: 'list', items: ['A prose item'] },
+    ]);
+  });
 });
 
 describe('splitInlineText', () => {
+  it('keeps balanced link parentheses and leaves a long unmatched suffix in prose', () => {
+    const link = 'https://example.io/a_(b)';
+    const suffix = `${')'.repeat(4096)}. Next.`;
+    expect(splitInlineText(link + suffix)).toEqual([
+      { kind: 'link', key: 0, text: link },
+      { kind: 'text', key: link.length, text: suffix },
+    ]);
+  });
+
   it('finds code spans and links, leaving sentence punctuation outside the link', () => {
     expect(
       splitInlineText(

@@ -61,15 +61,16 @@ const appendLine = (
   line: string,
   index: number
 ) => {
+  const indented = INDENTED.test(line);
+  if (indented && current?.kind === 'preformatted') {
+    current.text = `${current.text}\n${line}`;
+    return;
+  }
   if (appendToList(blocks, current, line, index)) {
     return;
   }
-  if (INDENTED.test(line)) {
-    if (current?.kind === 'preformatted') {
-      current.text = `${current.text}\n${line}`;
-    } else {
-      blocks.push({ kind: 'preformatted', key: index, text: line });
-    }
+  if (indented) {
+    blocks.push({ kind: 'preformatted', key: index, text: line });
     return;
   }
   if (current?.kind === 'paragraph') {
@@ -107,20 +108,33 @@ export const parseExplainDescription = (text: string): DescriptionBlock[] => {
 const INLINE = /`([^`]+)`|https?:\/\/[^\s<>"'`]+/g;
 const TRAILING_PUNCTUATION = '.,;:!?';
 
-const count = (text: string, char: string) => text.split(char).length - 1;
+const unmatchedClosingParens = (text: string): number => {
+  let balance = 0;
+  for (const char of text) {
+    if (char === ')') {
+      balance += 1;
+    } else if (char === '(') {
+      balance -= 1;
+    }
+  }
+  return balance;
+};
 
 // Sentence punctuation after a link is not part of it; nor is a closing
 // parenthesis the link did not open.
 const trimLink = (url: string): string => {
-  let link = url;
-  for (;;) {
-    const last = link.slice(-1);
-    const unbalanced = last === ')' && count(link, ')') > count(link, '(');
-    if (!TRAILING_PUNCTUATION.includes(last) && !unbalanced) {
-      return link;
+  let end = url.length;
+  let excess = unmatchedClosingParens(url);
+  while (end > 0) {
+    const last = url.charAt(end - 1);
+    if (last === ')' && excess > 0) {
+      excess -= 1;
+    } else if (!TRAILING_PUNCTUATION.includes(last)) {
+      break;
     }
-    link = link.slice(0, -1);
+    end -= 1;
   }
+  return url.slice(0, end);
 };
 
 /** Splits text into plain runs, `code` spans and http(s) links. */

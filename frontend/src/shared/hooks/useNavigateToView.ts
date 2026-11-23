@@ -79,7 +79,9 @@ function navigationTarget(objectRef: KubernetesObjectReference) {
     request: {
       ...focus,
       destinationViewId,
-      ...(destinationViewId === 'cluster-api-resources' ? { requiresAnchor: true } : {}),
+      ...(destination.tab === 'browse' || destinationViewId === 'cluster-api-resources'
+        ? { requiresAnchor: true }
+        : {}),
     },
   };
 }
