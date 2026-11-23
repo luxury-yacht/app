@@ -1,6 +1,7 @@
 package apiresources
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -200,7 +201,63 @@ func TestExplainFieldListsEnumValues(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, "string", explanation.Type)
-	require.Equal(t, []string{"Fast", "Slow"}, explanation.Enum)
+	require.Equal(t, []EnumValue{{Value: "Fast"}, {Value: "Slow"}}, explanation.Enum)
+	require.Equal(t, "How fast the widget runs.", explanation.Description)
+}
+
+// widgetClientWith serves the widget document with one property replaced.
+func widgetClientWith(t *testing.T, name string, property map[string]any) openapi.Client {
+	t.Helper()
+	var document map[string]any
+	require.NoError(t, json.Unmarshal([]byte(widgetDocument), &document))
+	schemas := document["components"].(map[string]any)["schemas"].(map[string]any)
+	schemas["io.example.v1.Widget"].(map[string]any)["properties"].(map[string]any)[name] = property
+	updated, err := json.Marshal(document)
+	require.NoError(t, err)
+	return fetchedDocument{path: "apis/example.io/v1", document: updated}
+}
+
+// kubectl wraps descriptions at 76 columns for a terminal. The tab fits text
+// to the panel, so descriptions arrive as the schema wrote them: line breaks
+// only where the author put them.
+func TestExplainKeepsDescriptionsAsWritten(t *testing.T) {
+	written := "Notes about the widget, long enough to run well past the seventy-six columns a terminal wraps at. See https://example.io/docs/widgets/notes-and-other-long-paths for more.\n\n" +
+		"A second paragraph with a list:\n - the first item, which is also long enough to be wrapped by a terminal at seventy-six columns\n - the second item"
+	client := widgetClientWith(t, "notes", map[string]any{"type": "string", "description": written})
+
+	explanation, err := explainCurrentField(t, client, widgetsGVR, []string{"notes"})
+	require.NoError(t, err)
+	require.Equal(t, written, explanation.Description)
+}
+
+// A field the schema does not describe has no description, not kubectl's
+// "<empty>" placeholder.
+func TestExplainLeavesUndescribedFieldsWithoutADescription(t *testing.T) {
+	client := widgetClientWith(t, "blank", map[string]any{"type": "string"})
+
+	explanation, err := explainCurrentField(t, client, widgetsGVR, []string{"blank"})
+	require.NoError(t, err)
+	require.Empty(t, explanation.Description)
+}
+
+// Kubernetes appends what each enum value means to the field's description.
+// The meanings belong to the values, so they are listed with them once.
+func TestExplainFieldDescribesEachEnumValue(t *testing.T) {
+	client := widgetClientWith(t, "mode", map[string]any{
+		"type": "string",
+		"enum": []string{"Fast", "Slow", "Off"},
+		"description": "How fast the widget runs.\n\nPossible enum values:\n" +
+			" - `\"Fast\"` runs at full speed, which is the default and the reason anyone buys a widget at all.\n" +
+			" - `\"Slow\"` saves power.",
+	})
+
+	explanation, err := explainCurrentField(t, client, widgetsGVR, []string{"mode"})
+	require.NoError(t, err)
+	require.Equal(t, []EnumValue{
+		{Value: "Fast", Description: "runs at full speed, which is the default and the reason anyone buys a widget at all."},
+		{Value: "Slow", Description: "saves power."},
+		{Value: "Off"},
+	}, explanation.Enum)
 	require.Equal(t, "How fast the widget runs.", explanation.Description)
 }
 

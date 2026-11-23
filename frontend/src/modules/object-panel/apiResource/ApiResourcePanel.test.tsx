@@ -8,8 +8,9 @@
  * backend (test-utils/appState).
  */
 
+import { Browser } from '@wailsio/runtime';
 import { act } from 'react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { buildRefreshScope, CLUSTER_SELECTOR } from '@/core/refresh/scopeSelector';
 import type { ClusterAPIResourceEntry } from '@/core/refresh/types';
 import {
@@ -193,6 +194,15 @@ const field = (...segments: string[]) =>
 /** The kind's own row, the parent of its top-level fields. */
 const kindRow = () => field();
 
+/** A step of the selected field's path, shown above its explanation. */
+const pathStep = (label: string) =>
+  requireValue(
+    Array.from(
+      panel().querySelectorAll<HTMLButtonElement>('nav[aria-label="Field path"] button')
+    ).find((button) => button.textContent === label),
+    `expected the ${label} step of the field path`
+  );
+
 // The fields listed under the kind, in tree order.
 const fieldPaths = () =>
   Array.from(panel().querySelectorAll<HTMLButtonElement>('button[data-explain-path]'))
@@ -289,6 +299,83 @@ describe('ApiResourcePanel', () => {
       'spec > strategy',
       'spec > strategy > type',
     ]);
+  });
+
+  it('moves up the selected field’s path from its explanation', async () => {
+    await start();
+    await openKindPanel();
+    await click(tab('Explain'));
+    await click(field('spec'));
+    await click(field('spec', 'strategy'));
+
+    await click(pathStep('spec'));
+    expect(field('spec').getAttribute('aria-current')).toBe('true');
+    expect(panel().textContent).toContain('About spec.');
+
+    await click(pathStep('Deployment'));
+    expect(kindRow().getAttribute('aria-current')).toBe('true');
+    expect(panel().textContent).toContain(
+      'Deployment enables declarative updates for Pods and ReplicaSets.'
+    );
+    // Moving up selects; it does not close the fields that were open.
+    expect(fieldPaths()).toContain('spec > strategy > type');
+  });
+
+  it('lists each value a field allows with what it means', async () => {
+    await start();
+    app.backend.answer('ExplainKindField', (_target, path) => ({
+      path,
+      type: 'string',
+      description: 'Type of deployment.',
+      enum: [
+        { value: 'Recreate', description: 'Kill all existing pods before creating new ones.' },
+        { value: 'RollingUpdate', description: 'Replace pods gradually.' },
+        { value: 'Paused' },
+      ],
+    }));
+    await openKindPanel();
+    await click(tab('Explain'));
+    await click(field('spec'));
+    await click(field('spec', 'strategy'));
+    await click(field('spec', 'strategy', 'type'));
+
+    const allowed = requireValue(
+      panel().querySelector('dl[aria-label="Allowed values"]'),
+      'expected the allowed values'
+    );
+    expect(
+      Array.from(allowed.querySelectorAll('dt')).map((term) => [
+        term.textContent,
+        term.nextElementSibling?.textContent,
+      ])
+    ).toEqual([
+      ['Recreate', 'Kill all existing pods before creating new ones.'],
+      ['RollingUpdate', 'Replace pods gradually.'],
+      ['Paused', ''],
+    ]);
+  });
+
+  it('opens a link in a field’s description in the browser', async () => {
+    const url = 'https://kubernetes.io/docs/concepts/workloads/controllers/deployment/';
+    await start();
+    app.backend.answer('ExplainKindField', (_target, path) => ({
+      path,
+      description: `More info: ${url}.`,
+    }));
+    vi.mocked(Browser.OpenURL).mockClear().mockResolvedValue(undefined);
+    await openKindPanel();
+    await click(tab('Explain'));
+    await click(field('spec'));
+
+    await click(
+      requireValue(
+        Array.from(panel().querySelectorAll<HTMLAnchorElement>('a')).find(
+          (link) => link.getAttribute('href') === url
+        ),
+        'expected the link to the documentation'
+      )
+    );
+    expect(vi.mocked(Browser.OpenURL)).toHaveBeenCalledWith(url);
   });
 
   it('does not ask the cluster again for a field it has already explained', async () => {

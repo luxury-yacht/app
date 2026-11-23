@@ -1,0 +1,141 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Explain/explainDescription.ts
+ *
+ * Reads a schema description for display. Descriptions are plain text, often
+ * hard-wrapped in Go comments: a line break inside prose is a wrap, a blank
+ * line ends a paragraph, a line starting with `-` or `*` starts a list item,
+ * and an indented line outside a list belongs to an example shown as written.
+ * Keys are positions in the source text, so they stay stable for a given text.
+ */
+
+export interface DescriptionListItem {
+  key: number;
+  text: string;
+}
+
+export type DescriptionBlock =
+  | { kind: 'paragraph'; key: number; text: string }
+  | { kind: 'list'; key: number; items: DescriptionListItem[] }
+  | { kind: 'preformatted'; key: number; text: string };
+
+export interface InlinePart {
+  kind: 'text' | 'code' | 'link';
+  key: number;
+  text: string;
+}
+
+const BULLET = /^\s*[-*]\s+(.*)$/;
+const INDENTED = /^(?: {2,}|\t)/;
+
+const appendToList = (
+  blocks: DescriptionBlock[],
+  current: DescriptionBlock | undefined,
+  line: string,
+  index: number
+) => {
+  const bullet = BULLET.exec(line);
+  if (bullet) {
+    const item = { key: index, text: bullet[1].trim() };
+    if (current?.kind === 'list') {
+      current.items.push(item);
+    } else {
+      blocks.push({ kind: 'list', key: index, items: [item] });
+    }
+    return true;
+  }
+  if (current?.kind !== 'list') {
+    return false;
+  }
+  // Inside a list, any other line continues the item above it.
+  const item = current.items[current.items.length - 1];
+  item.text = `${item.text} ${line.trim()}`;
+  return true;
+};
+
+const appendLine = (
+  blocks: DescriptionBlock[],
+  current: DescriptionBlock | undefined,
+  line: string,
+  index: number
+) => {
+  if (appendToList(blocks, current, line, index)) {
+    return;
+  }
+  if (INDENTED.test(line)) {
+    if (current?.kind === 'preformatted') {
+      current.text = `${current.text}\n${line}`;
+    } else {
+      blocks.push({ kind: 'preformatted', key: index, text: line });
+    }
+    return;
+  }
+  if (current?.kind === 'paragraph') {
+    current.text = `${current.text} ${line.trim()}`;
+  } else {
+    blocks.push({ kind: 'paragraph', key: index, text: line.trim() });
+  }
+};
+
+// An example keeps its own indentation, less what all of its lines share.
+const dedent = (block: DescriptionBlock): DescriptionBlock => {
+  if (block.kind !== 'preformatted') {
+    return block;
+  }
+  const lines = block.text.split('\n');
+  const shared = Math.min(...lines.map((line) => line.length - line.trimStart().length));
+  return { ...block, text: lines.map((line) => line.slice(shared)).join('\n') };
+};
+
+export const parseExplainDescription = (text: string): DescriptionBlock[] => {
+  const blocks: DescriptionBlock[] = [];
+  // Whether the next line may continue the last block; a blank line ends it.
+  let continues = false;
+  text.split('\n').forEach((line, index) => {
+    if (line.trim() === '') {
+      continues = false;
+      return;
+    }
+    appendLine(blocks, continues ? blocks[blocks.length - 1] : undefined, line, index);
+    continues = true;
+  });
+  return blocks.map(dedent);
+};
+
+const INLINE = /`([^`]+)`|https?:\/\/[^\s<>"'`]+/g;
+const TRAILING_PUNCTUATION = '.,;:!?';
+
+const count = (text: string, char: string) => text.split(char).length - 1;
+
+// Sentence punctuation after a link is not part of it; nor is a closing
+// parenthesis the link did not open.
+const trimLink = (url: string): string => {
+  let link = url;
+  for (;;) {
+    const last = link.slice(-1);
+    const unbalanced = last === ')' && count(link, ')') > count(link, '(');
+    if (!TRAILING_PUNCTUATION.includes(last) && !unbalanced) {
+      return link;
+    }
+    link = link.slice(0, -1);
+  }
+};
+
+/** Splits text into plain runs, `code` spans and http(s) links. */
+export const splitInlineText = (text: string): InlinePart[] => {
+  const parts: InlinePart[] = [];
+  let index = 0;
+  for (const match of text.matchAll(INLINE)) {
+    const start = match.index;
+    const code = match[1];
+    const value = code ?? trimLink(match[0]);
+    if (start > index) {
+      parts.push({ kind: 'text', key: index, text: text.slice(index, start) });
+    }
+    parts.push({ kind: code === undefined ? 'link' : 'code', key: start, text: value });
+    index = code === undefined ? start + value.length : start + match[0].length;
+  }
+  if (index < text.length) {
+    parts.push({ kind: 'text', key: index, text: text.slice(index) });
+  }
+  return parts;
+};

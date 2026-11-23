@@ -18,6 +18,6 @@
 
 - **API Resources.** A new cluster view, above Browse, lists every kind the cluster serves, built-in and custom, like `kubectl api-resources`.
   - Shows each kind's name, short names, API version, and scope, with filters for built-in or custom and for scope. Search also matches short names and API groups.
-  - Opening a kind shows its details and a new Explain tab: the kind's fields as a tree, with the `kubectl explain` description of the field you select.
+  - Opening a kind shows its details and a new Explain tab: the kind's fields as a tree, with the `kubectl explain` description of the field you select, its allowed values, and its path to step back up through.
   - Custom kinds open their CustomResourceDefinition, which gains the same Explain tab.
   - The separate CRDs view is removed; custom resource definitions are now listed here.

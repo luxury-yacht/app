@@ -299,6 +299,11 @@ collects (Events, kinds that cannot be listed, the metrics API).
   If the document has changed, Explain reloads the tree and clears all cached
   field descriptions together. The open tab can refresh an already loaded
   schema or retry a missing schema or failed request.
+- Descriptions arrive as the schema wrote them, not wrapped at kubectl's 76
+  terminal columns: spaces in description strings render as no-break spaces,
+  which kubectl's word wrapper never breaks at. A missing description is empty
+  rather than kubectl's `<empty>`. The generated "Possible enum values" list
+  moves out of a field's description onto its `enum` values.
 
 ## Discovered resource families
 

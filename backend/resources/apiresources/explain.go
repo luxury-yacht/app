@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/internal/errorstatus"
@@ -41,10 +42,17 @@ type SchemaField struct {
 // level, because a field name may itself contain a dot. An empty Path
 // describes the kind itself.
 type FieldExplanation struct {
-	Path        []string `json:"path"`
-	Type        string   `json:"type,omitempty"`
-	Description string   `json:"description"`
-	Enum        []string `json:"enum,omitempty"`
+	Path        []string    `json:"path"`
+	Type        string      `json:"type,omitempty"`
+	Description string      `json:"description"`
+	Enum        []EnumValue `json:"enum,omitempty"`
+}
+
+// EnumValue is one value a field allows and, when the schema says, what it
+// means.
+type EnumValue struct {
+	Value       string `json:"value"`
+	Description string `json:"description,omitempty"`
 }
 
 // ExplainSchema returns the complete field tree of the kind served at gvr.
@@ -92,12 +100,50 @@ func ExplainField(client openapi.Client, gvr schema.GroupVersionResource, expect
 	if kind := sections.header["KIND"]; kind != expectedKind {
 		return nil, errorstatus.Conflict(fmt.Errorf("%s now serves kind %s instead of %s", gvr, kind, expectedKind))
 	}
-	return &FieldExplanation{
+	explanation := &FieldExplanation{
 		Path:        append([]string{}, fieldPath...),
 		Type:        sections.fieldType,
 		Description: sections.description,
-		Enum:        sections.enum,
-	}, nil
+	}
+	if len(sections.enum) > 0 {
+		description, meanings := splitEnumMeanings(sections.description)
+		explanation.Description = description
+		explanation.Enum = make([]EnumValue, 0, len(sections.enum))
+		for _, value := range sections.enum {
+			explanation.Enum = append(explanation.Enum, EnumValue{Value: value, Description: meanings[value]})
+		}
+	}
+	return explanation, nil
+}
+
+const enumMeaningsHeading = "Possible enum values:"
+
+// enumMeaningPattern matches one line of the list Kubernetes' API generator
+// appends to an enum field's description: " - `"Value"` what it means".
+var enumMeaningPattern = regexp.MustCompile("^ - `\"(.*?)\"`(?: (.*))?$")
+
+// splitEnumMeanings takes the generated "Possible enum values:" list out of a
+// description and returns what it says each value means.
+func splitEnumMeanings(description string) (string, map[string]string) {
+	lines := strings.Split(description, "\n")
+	start := slices.Index(lines, enumMeaningsHeading)
+	if start < 0 || (start > 0 && lines[start-1] != "") {
+		return description, nil
+	}
+	meanings := make(map[string]string)
+	end := start + 1
+	for ; end < len(lines); end++ {
+		match := enumMeaningPattern.FindStringSubmatch(lines[end])
+		if match == nil {
+			break
+		}
+		meanings[match[1]] = match[2]
+	}
+	if len(meanings) == 0 {
+		return description, nil
+	}
+	remaining := append(slices.Clone(lines[:start]), lines[end:]...)
+	return strings.Trim(strings.Join(remaining, "\n"), "\n"), meanings
 }
 
 // loadExplainDocument keeps OpenAPI fetch failures distinct from missing kinds or fields.
@@ -124,9 +170,19 @@ func loadExplainDocument(client openapi.Client, gvr schema.GroupVersionResource)
 	return fetchedDocument{path: documentPath, document: document}, nil
 }
 
+// noBreakSpace stands in for every space in schema descriptions while kubectl
+// renders them. Its plaintext template wraps descriptions at 76 columns for a
+// terminal, and its word wrapper never breaks a line at U+00A0, so the text
+// comes back with line breaks only where the schema has them.
+const noBreakSpace = "\u00a0"
+
 func renderExplain(document fetchedDocument, gvr schema.GroupVersionResource, fieldPath []string, recursive bool) (string, error) {
+	unwrapped, err := document.withUnbreakableDescriptions()
+	if err != nil {
+		return "", fmt.Errorf("render OpenAPI schema for %s: %w", gvr, err)
+	}
 	var output bytes.Buffer
-	if err := explain.PrintModelDescription(fieldPath, &output, document, gvr, recursive, 0, "plaintext"); err != nil {
+	if err := explain.PrintModelDescription(fieldPath, &output, unwrapped, gvr, recursive, 0, "plaintext"); err != nil {
 		if missingExplainTarget(err) {
 			return "", errorstatus.NotFound(err)
 		}
@@ -156,6 +212,41 @@ type fetchedDocument struct {
 }
 
 func (d fetchedDocument) revision() string { return fmt.Sprintf("%x", sha256.Sum256(d.document)) }
+
+// withUnbreakableDescriptions returns a copy for rendering whose description
+// strings use noBreakSpace for spaces. Numbers decode as json.Number so the
+// copy keeps them exactly.
+func (d fetchedDocument) withUnbreakableDescriptions() (fetchedDocument, error) {
+	decoder := json.NewDecoder(bytes.NewReader(d.document))
+	decoder.UseNumber()
+	var parsed any
+	if err := decoder.Decode(&parsed); err != nil {
+		return fetchedDocument{}, err
+	}
+	protectDescriptionSpaces(parsed)
+	document, err := json.Marshal(parsed)
+	if err != nil {
+		return fetchedDocument{}, err
+	}
+	return fetchedDocument{path: d.path, document: document}, nil
+}
+
+func protectDescriptionSpaces(node any) {
+	switch value := node.(type) {
+	case map[string]any:
+		for key, child := range value {
+			if text, ok := child.(string); ok && key == "description" {
+				value[key] = strings.ReplaceAll(text, " ", noBreakSpace)
+				continue
+			}
+			protectDescriptionSpaces(child)
+		}
+	case []any:
+		for _, child := range value {
+			protectDescriptionSpaces(child)
+		}
+	}
+}
 
 func (d fetchedDocument) Paths() (map[string]openapi.GroupVersion, error) {
 	return map[string]openapi.GroupVersion{d.path: d}, nil
@@ -207,7 +298,11 @@ func splitExplainOutput(output string) explainSections {
 		}
 		sections.readSectionLine(section, line)
 	}
-	sections.description = strings.Trim(strings.Join(description, "\n"), "\n")
+	sections.description = strings.ReplaceAll(strings.Trim(strings.Join(description, "\n"), "\n"), noBreakSpace, " ")
+	// kubectl prints this placeholder for a schema without a description.
+	if sections.description == "<empty>" {
+		sections.description = ""
+	}
 	return sections
 }
 

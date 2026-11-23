@@ -2,16 +2,19 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Explain/ExplainTab.tsx
  *
  * `kubectl explain` for a kind: the kind's schema as a collapsible field tree,
- * with the selected field's type and description below it. Shown by the kind
- * panel and, for a CustomResourceDefinition, for the kind it defines.
+ * with the selected field's path, type, description and allowed values below
+ * it. Shown by the kind panel and, for a CustomResourceDefinition, for the kind
+ * it defines.
  */
 
 import type { apiresources } from '@core/backend-api/models';
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
-import { type ReactNode, useCallback, useState } from 'react';
+import { revealVertically } from '@shared/components/tables/GridTable.utils';
+import { Fragment, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import type { KindReadTarget } from '@/core/data-access';
+import ExplainDescription, { ExplainInlineText } from './ExplainDescription';
 import { type FieldExplanationState, fieldKey, KIND_PATH, useKindExplain } from './useKindExplain';
 import './ExplainTab.css';
 
@@ -59,12 +62,21 @@ function TreeRowButton({
   }
 >) {
   const key = fieldKey(path);
+  const selected = selectedKey === key;
+  const row = useRef<HTMLButtonElement>(null);
+  // A selection made outside the tree (the field path) may be scrolled away.
+  useEffect(() => {
+    if (selected && row.current) {
+      revealVertically(row.current);
+    }
+  }, [selected]);
   return (
     <button
+      ref={row}
       type="button"
       className="explain-tree-row"
       data-explain-path={key}
-      aria-current={selectedKey === key ? 'true' : undefined}
+      aria-current={selected ? 'true' : undefined}
       aria-expanded={toggles ? open : undefined}
       onClick={() => onSelect(path, toggles)}
     >
@@ -108,39 +120,134 @@ function FieldTree({ fields, parentPath, ...tree }: Readonly<FieldTreeProps>) {
   );
 }
 
-function SelectedField({
+const findSchemaField = (
+  fields: apiresources.SchemaField[],
+  path: readonly string[]
+): apiresources.SchemaField | undefined => {
+  let level = fields;
+  let found: apiresources.SchemaField | undefined;
+  for (const name of path) {
+    found = level.find((field) => field.name === name);
+    level = found?.fields ?? [];
+  }
+  return found;
+};
+
+/** The selected field's path from the kind; each ancestor selects itself. */
+function FieldPath({
+  kindName,
   path,
-  state,
-}: Readonly<{ path: readonly string[]; state: FieldExplanationState | null }>) {
-  let body: ReactNode = null;
+  onSelect,
+}: Readonly<{
+  kindName: string;
+  path: readonly string[];
+  onSelect: (path: readonly string[]) => void;
+}>) {
+  const steps = [
+    { label: kindName, path: KIND_PATH },
+    ...path.map((name, depth) => ({ label: name, path: path.slice(0, depth + 1) })),
+  ];
+  return (
+    <nav className="explain-path" aria-label="Field path">
+      {steps.map((step) => (
+        <Fragment key={fieldKey(step.path)}>
+          {step.path.length > 0 ? (
+            <span className="explain-path-separator" aria-hidden="true">
+              ›
+            </span>
+          ) : null}
+          {step.path.length === path.length ? (
+            <span className="explain-path-current" aria-current="location">
+              {step.label}
+            </span>
+          ) : (
+            <button type="button" className="explain-path-step" onClick={() => onSelect(step.path)}>
+              {step.label}
+            </button>
+          )}
+        </Fragment>
+      ))}
+    </nav>
+  );
+}
+
+function AllowedValues({ values }: Readonly<{ values: apiresources.EnumValue[] }>) {
+  if (values.length === 0) {
+    return null;
+  }
+  return (
+    <>
+      <p className="explain-label" aria-hidden="true">
+        Allowed values
+      </p>
+      <dl className="explain-enum" aria-label="Allowed values">
+        {values.map(({ value, description }) => (
+          <Fragment key={value}>
+            <dt>
+              <code>{value}</code>
+            </dt>
+            <dd>{description ? <ExplainInlineText text={description} /> : null}</dd>
+          </Fragment>
+        ))}
+      </dl>
+    </>
+  );
+}
+
+function FieldExplanationBody({ state }: Readonly<{ state: FieldExplanationState | null }>) {
   if (state?.status === 'error') {
-    body = (
+    return (
       <div className="error-message" role="alert">
         <ErrorSurface kind="reported" message={state.message} />
       </div>
     );
-  } else if (state?.status === 'ready') {
-    const { explanation } = state;
-    body = (
-      <>
-        {explanation.enum?.length ? (
-          <p className="explain-enum">
-            <span className="explain-type">One of</span> {explanation.enum.join(', ')}
-          </p>
-        ) : null}
-        <p className="explain-description">{explanation.description || 'No description.'}</p>
-      </>
-    );
+  }
+  if (state?.status !== 'ready') {
+    return null;
   }
   return (
+    <>
+      <ExplainDescription text={state.explanation.description} />
+      <AllowedValues values={state.explanation.enum ?? []} />
+    </>
+  );
+}
+
+interface ExplanationProps {
+  kindName: string;
+  apiVersion: string;
+  kindDescription: string;
+  fields: apiresources.SchemaField[];
+  path: readonly string[];
+  state: FieldExplanationState | null;
+  onSelect: (path: readonly string[]) => void;
+}
+
+/** What the selected kind or field is, below the tree. */
+function Explanation({
+  kindName,
+  apiVersion,
+  kindDescription,
+  fields,
+  path,
+  state,
+  onSelect,
+}: Readonly<ExplanationProps>) {
+  const field = path.length === 0 ? undefined : findSchemaField(fields, path);
+  // A field shows its type; the kind, its API version.
+  const typeLabel = field ? `<${field.type}>` : apiVersion;
+  return (
     <div className="explain-selected">
-      <div className="explain-selected-path">
-        <span>{path.join('.')}</span>
-        {state?.status === 'ready' && state.explanation.type ? (
-          <span className="explain-type">{`<${state.explanation.type}>`}</span>
-        ) : null}
+      <div className="explain-selected-header">
+        <FieldPath kindName={kindName} path={path} onSelect={onSelect} />
+        <span className="explain-type">{typeLabel}</span>
+        {field?.required ? <span className="explain-required">required</span> : null}
       </div>
-      {body}
+      {path.length === 0 ? (
+        <ExplainDescription text={kindDescription} />
+      ) : (
+        <FieldExplanationBody state={state} />
+      )}
     </div>
   );
 }
@@ -238,11 +345,15 @@ export default function ExplainTab({ kind, isActive = true }: Readonly<ExplainTa
           </li>
         </ul>
       </div>
-      {selectedPath.length === 0 ? (
-        <p className="explain-description">{description}</p>
-      ) : (
-        <SelectedField path={selectedPath} state={selectedExplanation} />
-      )}
+      <Explanation
+        kindName={kind.kind}
+        apiVersion={apiVersion}
+        kindDescription={description}
+        fields={fields ?? []}
+        path={selectedPath}
+        state={selectedExplanation}
+        onSelect={selectField}
+      />
     </div>
   );
 }
