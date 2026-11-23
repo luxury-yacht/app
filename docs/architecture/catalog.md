@@ -114,8 +114,11 @@ and the catalog does not subscribe to their rows.
   `ResourceFetchCallTimeout` per request, renewed per page and retry. The
   multi-namespace collection has no overall deadline; caller cancellation
   still stops it.
-- A failed kind keeps prior rows and reports partial health without canceling
-  other kinds. Dynamic sources do not gate global ingest readiness.
+- An incomplete LIST keeps prior rows for unread partitions and reports partial
+  health without canceling other kinds or namespaces. A completed LIST replaces
+  its partition, including when it returns no rows. A 403 discards all pages
+  from that partition and blocks updates from an earlier watch until a fresh
+  LIST succeeds. Dynamic sources do not gate global ingest readiness.
 - A namespace without WATCH can still contribute LIST-authorized rows; ingest
   partition readiness includes permission-skipped namespaces with no reflector.
   Unavailable watches surface as query issues and snapshot warnings (Browse,
@@ -125,7 +128,7 @@ and the catalog does not subscribe to their rows.
   replacement's state. Synced namespace baselines replace only their partitions;
   pending and LIST-only partitions are preserved.
 - CRD arrival, deletion, or a change to served versions, scope, names, UID, or
-  establishment invalidates discovery and requests collection through the
+  establishment or termination invalidates discovery and requests collection through the
   full-resync boundary (its recovery and atomic publication). A CRD Add waits
   for Established (that update supplies the request). Routine metadata,
   schema, and status-reason updates change only the CRD's own row. The hook is
@@ -198,14 +201,15 @@ collects (Events, kinds that cannot be listed, the metrics API).
   its complete CRD set in one replay under the store lock. A WATCH denial
   still allows LIST-based classification. LIST and WATCH record the API
   changes they observe. Catalog retries use uncached discovery until a
-  complete response confirms the expected kind and served versions. A
+  complete response confirms the expected kind, served versions, names, and
+  termination-related verbs. A
   definite LIST denial from preflight or the request clears classification,
   even after an earlier WATCH sync. A fresh authorized LIST reopens
   classification before a complete watch can resume ownership.
-- A removed definition keeps its Custom classification on published rows
-  while discovery still advertises the same kind. Its definition link is
-  removed immediately, so the row opens kind details while discovery catches
-  up.
+- A removed definition keeps its Custom classification while discovery still
+  advertises the same kind, including when an outdated discovery response is the
+  first to advertise it. Its definition link is removed immediately, so the row
+  opens kind details while discovery catches up.
 - A partial discovery (some group versions unreachable) keeps the last
   published resources of every group with a failed version, and lists those
   group versions in `FailedGroupVersions`. Browse continues collecting
@@ -261,8 +265,9 @@ collects (Events, kinds that cannot be listed, the metrics API).
 - On `unlisted`, API Resources hands the current request to Browse. Browse
   narrows its filters and uses the exact CRD identity, including the UID when
   available, to open and focus the page containing the requested definition.
-  Leaving Browse cancels its pending focus and filter handoff, including
-  during table startup. API Resources reports
+  Leaving API Resources or Browse cancels the pending focus owned by that
+  view, including during table startup. Leaving Browse also cancels its
+  pending filter handoff. API Resources reports
   `not-found`, `filtered`, or `unavailable` for its own anchor.
 - `kubectl explain` output for a kind comes from
   `backend/resources/apiresources`, read from the cluster's OpenAPI v3

@@ -889,6 +889,95 @@ func TestPartialDiscoveryDropsDeniedNamespaceFromBrowse(t *testing.T) {
 	require.Len(t, svc.Query(QueryOptions{}).Items, 2)
 }
 
+func TestCatalogListDenialRemovesRowsDespiteAnotherKindFailing(t *testing.T) {
+	widget := widgetDesc()
+	crd := apiextensions.Identity
+	gadget := widget.GVR().GroupVersion().WithResource("gadgets")
+	resources := []*metav1.APIResourceList{
+		{GroupVersion: crd.GVR().GroupVersion().String(), APIResources: []metav1.APIResource{
+			{Name: crd.Resource, Kind: crd.Kind, Verbs: []string{"list"}},
+		}},
+		{GroupVersion: widget.GVR().GroupVersion().String(), APIResources: []metav1.APIResource{
+			{Name: widget.Resource, Kind: widget.Kind, Namespaced: true, Verbs: []string{"list"}},
+			{Name: gadget.Resource, Kind: "Gadget", Namespaced: true, Verbs: []string{"list"}},
+		}},
+	}
+	definition := &unstructured.Unstructured{}
+	definition.SetGroupVersionKind(crd.GVK())
+	definition.SetName(widget.GVR().GroupResource().String())
+	definition.SetUID("definition-uid")
+	revoked := widgetObject("revoked", "hidden", "1")
+	visible := widgetObject("visible", "keep", "1")
+	deleted := widgetObject("visible", "deleted", "1")
+	dynamic := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+		widget.GVR(): "WidgetList", gadget: "GadgetList", crd.GVR(): crd.Kind + "List",
+	}, definition, revoked, visible, deleted)
+	kube := kubefake.NewClientset()
+	kube.PrependReactor("create", "selfsubjectaccessreviews", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		review := action.(clienttesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
+		review.Status.Allowed = true
+		return true, review, nil
+	})
+	deps := common.Dependencies{KubernetesClient: kube, DynamicClient: dynamic}
+	svc := NewService(Dependencies{
+		ClusterID: "c1", Common: deps, AllowedNamespaces: []string{"revoked", "visible"},
+		CapabilityFactory: func() *capabilities.Service { return capabilities.NewService(capabilities.Dependencies{Common: deps}) },
+	}, nil)
+	svc.discoveryClient = &stubDiscovery{lists: resources}
+	require.NoError(t, svc.sync(t.Context()))
+	require.Len(t, svc.Query(QueryOptions{}).Items, 4)
+	require.NoError(t, dynamic.Resource(widget.GVR()).Namespace("visible").Delete(t.Context(), deleted.GetName(), metav1.DeleteOptions{}))
+
+	denied := true
+	widgetListUnavailable := false
+	dynamic.PrependReactor("list", "*", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		switch action.GetResource() {
+		case gadget:
+			return true, nil, errors.New("unrelated Gadget LIST failure")
+		case widget.GVR():
+			if widgetListUnavailable && action.GetNamespace() == "revoked" {
+				return true, nil, errors.New("revoked partition temporarily unreachable")
+			}
+			if denied && action.GetNamespace() == "revoked" {
+				return true, nil, apierrors.NewForbidden(widget.GVR().GroupResource(), "", errors.New("grant withdrawn"))
+			}
+		case crd.GVR():
+			if denied {
+				return true, nil, apierrors.NewForbidden(crd.GVR().GroupResource(), "", errors.New("grant withdrawn"))
+			}
+		}
+		return false, nil, nil
+	})
+	require.ErrorAs(t, svc.sync(t.Context()), new(*PartialSyncError))
+	kept := summaryFromObject("c1", widget, visible)
+	require.Equal(t, []Summary{kept}, svc.Query(QueryOptions{}).Items)
+	require.True(t, svc.LookupObject("visible", widget.Group, widget.Kind, deleted.GetName()).Absent)
+	require.Equal(t, widget.GVR().GroupResource().String(), svc.LookupObject("revoked", widget.Group, widget.Kind, revoked.GetName()).Denied)
+	require.Equal(t, crd.GVR().GroupResource().String(), svc.LookupObject("", crd.Group, crd.Kind, definition.GetName()).Denied)
+	require.True(t, svc.APIResources().CustomListDenied)
+
+	oldWatchRow := summaryFromObject("c1", widget, revoked)
+	svc.applyIngestCatalogSummary(widget.GVR(), oldWatchRow, false)
+	svc.replaceIngestCatalogSummariesLocked(widget.GVR(), []Summary{kept, oldWatchRow})
+	require.Equal(t, []Summary{kept}, svc.Query(QueryOptions{}).Items)
+
+	widgetListUnavailable = true
+	fresh := widgetObject("visible", "fresh", "2")
+	_, err := dynamic.Resource(widget.GVR()).Namespace("visible").Create(t.Context(), fresh, metav1.CreateOptions{})
+	require.NoError(t, err)
+	require.NoError(t, dynamic.Resource(widget.GVR()).Namespace("visible").Delete(t.Context(), visible.GetName(), metav1.DeleteOptions{}))
+	require.ErrorAs(t, svc.sync(t.Context()), new(*PartialSyncError))
+	svc.applyIngestCatalogSummary(widget.GVR(), oldWatchRow, false)
+	require.Equal(t, []Summary{summaryFromObject("c1", widget, fresh)}, svc.Query(QueryOptions{}).Items,
+		"a successful partition replaces its rows even when the revoked partition's recovery read fails")
+	require.True(t, svc.LookupObject("visible", widget.Group, widget.Kind, visible.GetName()).Absent)
+
+	widgetListUnavailable, denied = false, false
+	require.ErrorAs(t, svc.sync(t.Context()), new(*PartialSyncError))
+	require.Len(t, svc.Query(QueryOptions{}).Items, 3, "authorized LISTs recover independently of the failed kind")
+	require.True(t, svc.APIResources().CustomKnown)
+}
+
 func TestCatalogRefreshesDiscoveryAfterAListOnlyCRDIsEstablished(t *testing.T) {
 	crd := apiextensions.Identity
 	widget := widgetDesc().GVR()

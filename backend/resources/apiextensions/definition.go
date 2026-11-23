@@ -22,6 +22,7 @@ type Definition struct {
 	Versions      []DefinitionVersion
 	// Established reports the Established condition: the API is being served.
 	Established bool
+	Terminating bool
 }
 
 // DefinitionVersion is one version a definition declares.
@@ -41,7 +42,8 @@ func BuildDefinition(crd *apiextensionsv1.CustomResourceDefinition) Definition {
 		Names:         crd.Spec.Names,
 		AcceptedNames: crd.Status.AcceptedNames,
 		Versions:      make([]DefinitionVersion, 0, len(crd.Spec.Versions)),
-		Established:   definitionEstablished(crd.Status.Conditions),
+		Established:   definitionConditionTrue(crd.Status.Conditions, apiextensionsv1.Established),
+		Terminating:   definitionConditionTrue(crd.Status.Conditions, apiextensionsv1.Terminating),
 	}
 	for _, version := range crd.Spec.Versions {
 		definition.Versions = append(definition.Versions, DefinitionVersion{Name: version.Name, Served: version.Served, Storage: version.Storage})
@@ -75,13 +77,14 @@ func DefinitionFromUnstructured(crd *unstructured.Unstructured) (Definition, err
 		Names:         fields.Spec.Names,
 		AcceptedNames: fields.Status.AcceptedNames,
 		Versions:      fields.Spec.Versions,
-		Established:   definitionEstablished(fields.Status.Conditions),
+		Established:   definitionConditionTrue(fields.Status.Conditions, apiextensionsv1.Established),
+		Terminating:   definitionConditionTrue(fields.Status.Conditions, apiextensionsv1.Terminating),
 	}, nil
 }
 
-func definitionEstablished(conditions []apiextensionsv1.CustomResourceDefinitionCondition) bool {
+func definitionConditionTrue(conditions []apiextensionsv1.CustomResourceDefinitionCondition, kind apiextensionsv1.CustomResourceDefinitionConditionType) bool {
 	for _, condition := range conditions {
-		if condition.Type == apiextensionsv1.Established {
+		if condition.Type == kind {
 			return condition.Status == apiextensionsv1.ConditionTrue
 		}
 	}
@@ -90,11 +93,21 @@ func definitionEstablished(conditions []apiextensionsv1.CustomResourceDefinition
 
 // ChangesDiscovery reports whether two definitions differ in anything API
 // discovery serves: identity, group, scope, names, served versions, or
-// establishment. Status reasons, schemas, and unserved versions do not.
+// establishment or termination. Status reasons, schemas, and unserved versions do not.
 func (d Definition) ChangesDiscovery(other Definition) bool {
 	return d.UID != other.UID || d.Group != other.Group || d.Scope != other.Scope ||
 		!namesEqual(d.Names, other.Names) || !namesEqual(d.AcceptedNames, other.AcceptedNames) ||
-		!slices.Equal(d.ServedVersions(), other.ServedVersions()) || d.Established != other.Established
+		!slices.Equal(d.ServedVersions(), other.ServedVersions()) ||
+		d.Established != other.Established || d.Terminating != other.Terminating
+}
+
+// DiscoveryNames returns the names accepted by the API server, or the spec
+// names until acceptance is reported.
+func (d Definition) DiscoveryNames() apiextensionsv1.CustomResourceDefinitionNames {
+	if d.AcceptedNames.Kind != "" {
+		return d.AcceptedNames
+	}
+	return d.Names
 }
 
 // ServedVersions lists the served version names in sorted order.

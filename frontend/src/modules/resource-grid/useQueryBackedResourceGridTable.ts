@@ -412,13 +412,13 @@ function useAnchorOnUnmatchedFocusRequest<TRow>({
   const handedOff = useEffectEvent(
     (request: GridTableFocusRequest) => onTargetNotListed?.(request) ?? false
   );
+  const namespace = baseSelector.kind === 'namespace' ? baseSelector.namespace : undefined;
+  useRequiredAnchorLifetime(clusterId, viewId, namespace);
 
   useEffect(() => {
     if (!enabled || !clusterId || !loaded) {
       return;
     }
-    // The event can arrive before navigation commits a new namespace.
-    const namespace = baseSelector.kind === 'namespace' ? baseSelector.namespace : undefined;
     const startPendingAnchor = () => {
       const request = pendingAnchorRequest(clusterId, viewId, namespace);
       // One anchor jump per request, including a missing target.
@@ -440,17 +440,7 @@ function useAnchorOnUnmatchedFocusRequest<TRow>({
     const unsubscribe = eventBus.on('gridtable:focus-request', startPendingAnchor);
     startPendingAnchor();
     return unsubscribe;
-  }, [
-    anchorResult,
-    anchorTo,
-    baseSelector,
-    clusterId,
-    enabled,
-    keyExtractor,
-    loaded,
-    rows,
-    viewId,
-  ]);
+  }, [anchorResult, anchorTo, clusterId, enabled, keyExtractor, loaded, namespace, rows, viewId]);
 
   useEffect(() => {
     if (!anchorResult) {
@@ -476,6 +466,34 @@ function useAnchorOnUnmatchedFocusRequest<TRow>({
     // landed on page 1 because the object is not in this view.
     reportMissingFocusTarget(domain, request, anchorResult.reason);
   }, [anchorResult, domain]);
+}
+
+function useRequiredAnchorLifetime(
+  clusterId: string | null | undefined,
+  viewId: string,
+  namespace: string | undefined
+): void {
+  const owned = useRef<GridTableFocusRequest | null>(null);
+  useEffect(() => {
+    // Own the request even while the destination is still loading its first page.
+    const claim = () => {
+      const request = pendingAnchorRequest(clusterId, viewId, namespace);
+      owned.current = request?.requiresAnchor ? request : null;
+    };
+    claim();
+    const unsubscribe = eventBus.on('gridtable:focus-request', claim);
+    return () => {
+      unsubscribe();
+      const abandoned = owned.current;
+      owned.current = null;
+      // StrictMode immediately reclaims the same request on effect replay.
+      queueMicrotask(() => {
+        if (abandoned && owned.current !== abandoned && peekPendingFocusRequest() === abandoned) {
+          setPendingFocusRequest(null);
+        }
+      });
+    };
+  }, [clusterId, viewId, namespace]);
 }
 
 // Builds the shared result for both scopes: the pagination footer (query scope

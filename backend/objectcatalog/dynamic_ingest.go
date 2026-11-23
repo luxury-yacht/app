@@ -9,7 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-func (s *Service) collectViaDynamicIngest(ctx context.Context, desc Descriptor, namespaces []string, agg *streamingAggregator) ([]Summary, bool, error) {
+func (s *Service) collectViaDynamicIngest(ctx context.Context, desc Descriptor, namespaces []string, collection *catalogCollection) ([]Summary, bool, error) {
 	if s.deps.IngestSource == nil {
 		return nil, false, nil
 	}
@@ -17,7 +17,7 @@ func (s *Service) collectViaDynamicIngest(ctx context.Context, desc Descriptor, 
 	if !ok {
 		return nil, false, nil
 	}
-	return s.collectIngestPartitions(ctx, desc, namespaces, ingestPartitions{rows: source.Rows, ready: source.ReadyNamespaces}, agg)
+	return s.collectIngestPartitions(ctx, desc, namespaces, ingestPartitions{rows: source.Rows, ready: source.ReadyNamespaces}, collection)
 }
 
 // ingestPartitions is one read of an ingest source's catalog rows and the
@@ -45,11 +45,13 @@ func (p ingestPartitions) watched(namespace string) bool {
 	return slices.Contains(p.ready, "") || slices.Contains(p.ready, namespace)
 }
 
-func (p ingestPartitions) pending(targets []string) []string {
+func (p ingestPartitions) pending(targets []string, collection *catalogCollection) []string {
 	pending := make([]string, 0, len(targets))
 	for _, namespace := range targets {
-		if !p.watched(namespace) {
+		if !p.watched(namespace) || collection.needsList(namespace) {
 			pending = append(pending, namespace)
+		} else {
+			collection.recordWatch(namespace)
 		}
 	}
 	return pending
@@ -59,20 +61,20 @@ func (p ingestPartitions) pending(targets []string) []string {
 // and LISTs every other requested target: a not-yet-watched or LIST-only
 // partition must be collected, not interpreted as empty. Each API page has its
 // own budget, independent of reflector retries.
-func (s *Service) collectIngestPartitions(ctx context.Context, desc Descriptor, namespaces []string, partitions ingestPartitions, agg *streamingAggregator) ([]Summary, bool, error) {
-	pending := partitions.pending(listTargets(desc, namespaces))
+func (s *Service) collectIngestPartitions(ctx context.Context, desc Descriptor, namespaces []string, partitions ingestPartitions, collection *catalogCollection) ([]Summary, bool, error) {
+	pending := partitions.pending(listTargets(desc, namespaces), collection)
 	rows := s.watchedCatalogSummaries(partitions, desc, namespaces)
-	if len(pending) > 0 {
-		listed, err := s.listResourceTargets(ctx, desc, pending, nil)
-		if err != nil {
-			return nil, true, err
-		}
-		if slices.Contains(pending, "") {
-			rows = nil
-		}
-		rows = append(rows, listed...)
+	if slices.Contains(pending, "") {
+		rows = nil
+	} else {
+		rows = slices.DeleteFunc(rows, func(row Summary) bool { return collection.needsList(row.Ref.Namespace) })
 	}
-	return emitSummaries(agg, rows, nil, true)
+	if len(pending) == 0 {
+		return emitSummaries(collection.aggregator(), rows, nil, true)
+	}
+	collection.aggregator().emit(rows)
+	listed, err := s.listResourceTargets(ctx, desc, pending, collection)
+	return append(rows, listed...), true, err
 }
 
 func (s *Service) watchedCatalogSummaries(partitions ingestPartitions, desc Descriptor, namespaces []string) []Summary {

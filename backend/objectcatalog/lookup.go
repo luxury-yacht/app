@@ -68,18 +68,17 @@ func (s *Service) LookupObject(namespace, group, kind, name string) ObjectLookup
 	if !listed {
 		return ObjectLookup{}
 	}
-	if summary, found := idx.findExact(normalizeLookupNamespace(namespace), desc.Group, desc.Version, desc.Kind, strings.TrimSpace(name)); found {
+	namespace = normalizeLookupNamespace(namespace)
+	if idx.listDenied(desc, namespace) {
+		return ObjectLookup{Denied: deniedResourceName(desc)}
+	}
+	if summary, found := idx.findExact(namespace, desc.Group, desc.Version, desc.Kind, strings.TrimSpace(name)); found {
 		return ObjectLookup{Summary: summary, Found: true}
 	}
-	resource := deniedResourceName(desc)
-	if _, denied := idx.deniedNamespaces[desc.GVR().String()][normalizeLookupNamespace(namespace)]; denied {
-		return ObjectLookup{Denied: resource}
-	}
-	if _, denied := idx.deniedResources[resource]; denied {
-		return ObjectLookup{Denied: resource}
-	}
-	_, complete := idx.completeResources[desc.GVR().String()]
-	return ObjectLookup{Absent: complete && idx.cachesAreReady()}
+	gvr := desc.GVR().String()
+	_, complete := idx.completeResources[gvr]
+	confirmed := complete || namespaceSetContains(idx.completeNamespaces[gvr], namespace)
+	return ObjectLookup{Absent: confirmed && idx.cachesAreReady()}
 }
 
 // FindByUID resolves a single catalog item by UID within this cluster's

@@ -68,7 +68,7 @@ func collectedIngestGVRs() map[schema.GroupVersionResource]struct{} {
 // after that, partitions without a synced watch (skipped by the permission
 // filter, or degraded) are collected with LIST, like a dynamic source's.
 // Summaries for a namespaced kind are filtered to the requested namespaces.
-func (s *Service) collectViaIngest(ctx context.Context, desc Descriptor, namespaces []string, agg *streamingAggregator) ([]Summary, bool, error) {
+func (s *Service) collectViaIngest(ctx context.Context, desc Descriptor, namespaces []string, collection *catalogCollection) ([]Summary, bool, error) {
 	source := s.deps.IngestSource
 	if source == nil {
 		return nil, false, nil
@@ -81,7 +81,7 @@ func (s *Service) collectViaIngest(ctx context.Context, desc Descriptor, namespa
 	if !source.HasSyncedFor(gvr) {
 		return nil, true, fmt.Errorf("catalog ingest store for %s is not synced", gvr)
 	}
-	return s.collectIngestPartitions(ctx, desc, namespaces, staticIngestPartitions(source, gvr), agg)
+	return s.collectIngestPartitions(ctx, desc, namespaces, staticIngestPartitions(source, gvr), collection)
 }
 
 // catalogSummaries keeps only catalog projections in the requested namespace set.
@@ -143,7 +143,7 @@ func (s *Service) publishIngestSummary(desc Descriptor, summary Summary, deleted
 	key := catalogKey(desc, summary.Ref.Namespace, summary.Ref.Name)
 
 	s.mu.Lock()
-	if _, forbidden := s.catalogIndex.deniedNamespaces[desc.GVR().String()][summary.Ref.Namespace]; forbidden {
+	if s.catalogIndex.listDenied(desc, summary.Ref.Namespace) {
 		s.mu.Unlock()
 		return
 	}
@@ -177,7 +177,6 @@ func (s *Service) replaceIngestCatalogSummariesLocked(gvr schema.GroupVersionRes
 	now := s.now()
 
 	s.mu.Lock()
-	denied := s.catalogIndex.deniedNamespaces[desc.GVR().String()]
 	changes := make([]catalogChange, 0, len(rows))
 	for key, existing := range s.catalogIndex.items {
 		if !summaryMatchesDescriptor(existing, desc) {
@@ -187,7 +186,7 @@ func (s *Service) replaceIngestCatalogSummariesLocked(gvr schema.GroupVersionRes
 		changes = append(changes, change)
 	}
 	for _, summary := range rows {
-		if _, forbidden := denied[summary.Ref.Namespace]; forbidden {
+		if s.catalogIndex.listDenied(desc, summary.Ref.Namespace) {
 			continue
 		}
 		key := catalogKey(desc, summary.Ref.Namespace, summary.Ref.Name)

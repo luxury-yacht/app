@@ -142,9 +142,9 @@ func cloneStrings(values []string) []string {
 type crdDefinitions map[schema.GroupResource]*apiextensions.Definition
 
 type definitionExpectation struct {
-	// A nil definition expects the kind to stop being served.
 	definition *apiextensions.Definition
 	revision   uint64
+	withdrawn  bool
 }
 
 type apiResourceStore struct {
@@ -220,6 +220,12 @@ func (s *apiResourceStore) replace(discovered []APIResource, failed []schema.Gro
 	// until the resource disappears from a complete response for its group.
 	fresh := withCustomResources(discovered, s.custom, customAtStart, false)
 	retainCustomFlags(next.Resources, fresh)
+	for i := range fresh {
+		expected, pending := s.pendingDefinitions[fresh[i].groupResource()]
+		if pending && expected.withdrawn && matchesDiscoveryKind(*expected.definition, fresh[i]) {
+			fresh[i].Custom = true
+		}
+	}
 	next.Resources = retainFailedGroups(next.Resources, fresh, failed)
 	next.Ready = true
 	next.FailedGroupVersions = groupVersionNames(failed)
@@ -248,32 +254,43 @@ func (s *apiResourceStore) confirmDefinitionsLocked(discovered []APIResource, fa
 }
 
 func (e definitionExpectation) matches(resource APIResource) bool {
-	if e.definition == nil {
-		return resource.Kind == ""
+	if e.withdrawn {
+		return !matchesDiscoveryKind(*e.definition, resource)
 	}
 	return definitionMatchesDiscovery(*e.definition, resource)
 }
 
 func definitionMatchesDiscovery(definition apiextensions.Definition, resource APIResource) bool {
-	names := definition.AcceptedNames
-	if names.Kind == "" {
-		names = definition.Names
-	}
+	names := definition.DiscoveryNames()
 	versions := slices.Clone(resource.Versions)
 	sort.Strings(versions)
-	return names.Kind == resource.Kind && slices.Equal(definition.ServedVersions(), versions) &&
-		(definition.Scope == apiextensionsv1.NamespaceScoped) == resource.Namespaced &&
+	return matchesDiscoveryKind(definition, resource) && slices.Equal(definition.ServedVersions(), versions) &&
 		(names.Singular == "" || names.Singular == resource.Singular) &&
 		sameDiscoveryNames(names.ShortNames, resource.ShortNames) &&
-		sameDiscoveryNames(names.Categories, resource.Categories)
+		sameDiscoveryNames(names.Categories, resource.Categories) &&
+		matchesCRDWriteVerbs(definition, resource.Verbs)
+}
+
+func matchesDiscoveryKind(definition apiextensions.Definition, resource APIResource) bool {
+	return resource.Kind != "" && definition.DiscoveryNames().Kind == resource.Kind &&
+		(definition.Scope == apiextensionsv1.NamespaceScoped) == resource.Namespaced
+}
+
+func matchesCRDWriteVerbs(definition apiextensions.Definition, verbs []string) bool {
+	// Accepted names identify the established API. Kubernetes advertises these
+	// three write verbs for CRDs until the Terminating condition becomes true.
+	if definition.AcceptedNames.Kind == "" && !definition.Terminating {
+		return true
+	}
+	for _, verb := range [...]string{"create", "patch", "update"} {
+		if slices.Contains(verbs, verb) == definition.Terminating {
+			return false
+		}
+	}
+	return true
 }
 
 func sameDiscoveryNames(expected, actual []string) bool {
-	// Test and partially populated CRDs may omit accepted names. Compare
-	// declared values without depending on how an API server orders them.
-	if expected == nil {
-		return true
-	}
 	sorted := slices.Clone(actual)
 	sort.Strings(sorted)
 	declared := slices.Clone(expected)
@@ -466,11 +483,8 @@ func (s *apiResourceStore) observeDefinitionWithdrawalsLocked(current crdDefinit
 		if before == nil || !before.Established {
 			continue
 		}
-		if after, exists := current[key]; !exists {
-			delete(s.pendingDefinitions, key)
-			s.definitionRevision++
-		} else if after != nil && !after.Established {
-			s.expectDiscoveryLocked(key, nil)
+		if after := current[key]; after == nil || !after.Established {
+			s.expectDiscoveryLocked(key, before, true)
 		}
 	}
 }
@@ -482,25 +496,22 @@ func (s *apiResourceStore) expectDefinitionLocked(key schema.GroupResource, befo
 		}) {
 		return
 	}
-	s.expectDiscoveryLocked(key, after)
+	s.expectDiscoveryLocked(key, after, len(after.ServedVersions()) == 0)
 }
 
-func (s *apiResourceStore) expectDiscoveryLocked(key schema.GroupResource, definition *apiextensions.Definition) {
-	if definition != nil && len(definition.ServedVersions()) == 0 {
-		definition = nil
-	}
+func (s *apiResourceStore) expectDiscoveryLocked(key schema.GroupResource, definition *apiextensions.Definition, withdrawn bool) {
 	if s.pendingDefinitions == nil {
 		s.pendingDefinitions = make(map[schema.GroupResource]definitionExpectation)
 	}
 	s.definitionRevision++
-	s.pendingDefinitions[key] = definitionExpectation{definition: definition, revision: s.definitionRevision}
+	s.pendingDefinitions[key] = definitionExpectation{definition: definition, revision: s.definitionRevision, withdrawn: withdrawn}
 }
 
-func (run *catalogSync) publishListedDefinitions(complete, denied map[string]struct{}) {
+func (run *catalogSync) publishListedDefinitions(complete map[string]struct{}) {
 	gvr := apiextensions.Identity.GVR()
 	key := gvr.String()
 	_, listed := complete[key]
-	_, forbidden := denied[gvr.GroupResource().String()]
+	forbidden := namespaceSetContains(run.listDenials[gvr.GroupResource()], "")
 	preflightDenied := run.preflightDenied(key) && slices.ContainsFunc(run.descriptors, func(desc Descriptor) bool {
 		return desc.GVR() == gvr
 	})

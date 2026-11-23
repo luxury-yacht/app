@@ -5,6 +5,7 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 	"unsafe"
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
@@ -13,8 +14,14 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/helm"
 	"github.com/stretchr/testify/require"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	fakediscovery "k8s.io/client-go/discovery/fake"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
+	clienttesting "k8s.io/client-go/testing"
 )
 
 const helmReleaseMapScope = "cluster-a|default:helm.sh/v3:HelmRelease:shop"
@@ -295,29 +302,35 @@ metadata:
 	})
 
 	t.Run("catalog denied the resource", func(t *testing.T) {
-		builder := newObjectMapTestBuilder(t, fake.NewSimpleClientset())
-		catalog := seedCatalogService(t, []objectcatalog.Summary{stored})
-		seedCatalogDescriptors(t, catalog, objectcatalog.Descriptor{
-			Group: "cert-manager.io", Version: "v1", Kind: "Certificate", Resource: "certificates",
-			Namespaced: true, Scope: objectcatalog.ScopeNamespace,
+		kube := fake.NewSimpleClientset()
+		gvr := certificates.GVR()
+		kube.Discovery().(*fakediscovery.FakeDiscovery).Resources = []*metav1.APIResourceList{{
+			GroupVersion: gvr.GroupVersion().String(),
+			APIResources: []metav1.APIResource{{Name: gvr.Resource, Kind: certificates.Kind, Namespaced: true, Verbs: []string{"list"}}},
+		}}
+		dynamic := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{gvr: "CertificateList"})
+		dynamic.PrependReactor("list", gvr.Resource, func(clienttesting.Action) (bool, runtime.Object, error) {
+			return true, nil, apierrors.NewForbidden(gvr.GroupResource(), "", errors.New("grant withdrawn"))
 		})
-		denyCatalogResource(t, catalog, "certificates.cert-manager.io")
+		catalog := objectcatalog.NewService(objectcatalog.Dependencies{
+			ClusterID: "cluster-a", Common: common.Dependencies{KubernetesClient: kube, DynamicClient: dynamic},
+		}, &objectcatalog.Options{ResyncInterval: time.Hour})
+		ctx, cancel := context.WithCancel(t.Context())
+		go func() { _ = catalog.Run(ctx) }()
+		t.Cleanup(func() { cancel(); catalog.Wait() })
+		require.Eventually(t, func() bool {
+			return catalog.LookupObject("default", gvr.Group, certificates.Kind, "web-tls").Denied != ""
+		}, time.Second, time.Millisecond)
+
+		builder := newObjectMapTestBuilder(t, fake.NewSimpleClientset())
 		builder.catalogService = func() *objectcatalog.Service { return catalog }
 		withHelmRelease(builder, manifest, certificates)
 
 		payload := buildHelmReleaseMap(t, helmMapContext(), builder)
 
-		require.ElementsMatch(t, []string{"Certificate/web-tls"}, nodeKindNames(payload))
+		require.Empty(t, payload.Nodes)
 		require.Equal(t, []string{"skipped certificates.cert-manager.io: insufficient permissions"}, payload.Warnings)
 	})
-}
-
-// denyCatalogResource publishes a sync that found listing the resource
-// forbidden, so the resource is denied rather than completely listed.
-func denyCatalogResource(t *testing.T, svc *objectcatalog.Service, resource string) {
-	t.Helper()
-	setCatalogField(t, svc, "deniedResources", map[string]struct{}{resource: {}})
-	setCatalogField(t, svc, "completeResources", map[string]struct{}{})
 }
 
 // A manifest object whose API the cluster no longer serves cannot be looked

@@ -415,8 +415,6 @@ type catalogSync struct {
 	prevItemCount     int
 	newItems          map[string]Summary
 	newLastSeen       map[string]time.Time
-	previousItems     map[string]Summary
-	previousLastSeen  map[string]time.Time
 	descriptors       []Descriptor
 	staleDescriptors  map[string]struct{}
 	discoveryFailure  error
@@ -428,6 +426,10 @@ type catalogSync struct {
 	allowedIndices    map[int]Descriptor
 	allowedSet        map[string]Descriptor
 	deniedNamespaces  map[string]map[string]struct{}
+	listDenials       map[schema.GroupResource]map[string]struct{}
+	collections       map[string]*catalogCollection
+	partialRows       map[string][]Summary
+	completedScopes   map[string]map[string]struct{}
 	batchEvaluated    bool
 }
 
@@ -463,14 +465,14 @@ func newCatalogSync(s *Service, start time.Time) *catalogSync {
 	for gvr, namespaces := range s.catalogIndex.deniedNamespaces {
 		denied[gvr] = maps.Clone(namespaces)
 	}
+	listDenials := maps.Clone(s.catalogIndex.listDenials)
 	s.mu.RUnlock()
 	newItems := cloneSummaryMap(currentItems)
 	return &catalogSync{
 		service: s, start: start, prevResourceCount: prevResourceCount,
 		prevItemCount: len(newItems), newItems: newItems,
-		newLastSeen: cloneTimeMap(currentLastSeen), previousItems: currentItems,
-		previousLastSeen: currentLastSeen,
-		deniedNamespaces: denied,
+		newLastSeen: cloneTimeMap(currentLastSeen), deniedNamespaces: denied,
+		listDenials: listDenials,
 	}
 }
 
@@ -546,6 +548,8 @@ func (run *catalogSync) prepare(ctx context.Context) {
 		run.capabilityService = factory()
 	}
 	run.succeeded = make(map[string][]Summary, len(run.descriptors))
+	run.collections = make(map[string]*catalogCollection)
+	run.partialRows = make(map[string][]Summary)
 	run.failed = make(map[string]error)
 	run.allowedIndices = make(map[int]Descriptor)
 	run.allowedSet = make(map[string]Descriptor)
@@ -704,19 +708,25 @@ func (run *catalogSync) collectDescriptor(ctx context.Context, index int, desc D
 }
 
 func (run *catalogSync) collectAdmittedDescriptor(ctx context.Context, desc Descriptor) error {
+	gvr := desc.GVR()
+	collection := &catalogCollection{stream: run.aggregator, previousDenials: run.listDenials[gvr.GroupResource()]}
 	summaries, err := run.service.collectResource(
-		ctx, desc, run.readableNamespaces(desc), run.aggregator,
+		ctx, desc, run.readableNamespaces(desc), collection,
 	)
+	if err == nil {
+		run.logCollected(desc, len(summaries))
+	}
+	run.resultsMu.Lock()
+	defer run.resultsMu.Unlock()
+	run.collections[gvr.String()] = collection
 	if err != nil {
 		// Cancellation and bounded initial-read timeouts are incomplete reads too:
-		// retain the descriptor's last publication and report partial health.
-		run.recordFailure(desc, err)
+		// retain only unread partitions and report partial health.
+		run.failed[gvr.String()] = err
+		run.partialRows[gvr.String()] = summaries
 		return err
 	}
-	run.logCollected(desc, len(summaries))
-	run.resultsMu.Lock()
-	run.succeeded[desc.GVR().String()] = summaries
-	run.resultsMu.Unlock()
+	run.succeeded[gvr.String()] = summaries
 	return nil
 }
 
@@ -802,45 +812,103 @@ func (run *catalogSync) logCollected(desc Descriptor, count int) {
 func (run *catalogSync) finish(runErr error) error {
 	descriptorCache := run.applyCollectionResults()
 	collectErr := run.collectionError(runErr)
-	run.restoreFailedDescriptors()
-	run.removeDeniedNamespaceRows()
 	enrichCatalogActionFacts(run.newItems, run.allowedSet, run.failed, run.staleDescriptors)
 	run.publish(descriptorCache, collectErr)
 	run.recordCompletion(collectErr)
 	return collectErr
 }
 
-func (run *catalogSync) removeDeniedNamespaceRows() {
-	if len(run.deniedNamespaces) == 0 {
-		return
+func (run *catalogSync) applyCollectionResults() []Descriptor {
+	run.applyListDecisions()
+	run.completedScopes = make(map[string]map[string]struct{}, len(run.partialRows))
+	for gvr := range run.partialRows {
+		run.completedScopes[gvr] = run.collections[gvr].completedScopes()
 	}
-	for key, item := range run.newItems {
-		if _, forbidden := run.deniedNamespaces[descriptorKeyFromItemKey(key)][item.Ref.Namespace]; forbidden {
+	allowedDescriptors := run.orderedAllowedDescriptors()
+	s := run.service
+	s.logInfo(fmt.Sprintf("catalog RBAC allowed %d/%d descriptor(s)", len(allowedDescriptors), len(run.descriptors)))
+	run.removeReplacedRows()
+	now := s.now()
+	for gvr, summaries := range run.succeeded {
+		run.addCollectedRows(gvr, summaries, now)
+	}
+	for gvr, summaries := range run.partialRows {
+		run.addCollectedRows(gvr, summaries, now)
+	}
+	return allowedDescriptors
+}
+
+func (run *catalogSync) applyListDecisions() {
+	if run.listDenials == nil {
+		run.listDenials = make(map[schema.GroupResource]map[string]struct{})
+	}
+	for gvr, collection := range run.collections {
+		gr := run.allowedSet[gvr].GVR().GroupResource()
+		denied := mergedListDenials(run.listDenials[gr], collection.listDecisions)
+		if len(denied) == 0 {
+			delete(run.listDenials, gr)
+		} else {
+			run.listDenials[gr] = denied
+		}
+	}
+	for _, desc := range run.descriptors {
+		if len(run.listDenials[desc.GVR().GroupResource()]) > 0 {
+			run.service.recordDeniedResource(deniedResourceName(desc))
+		}
+	}
+}
+
+func mergedListDenials(previous map[string]struct{}, decisions map[string]bool) map[string]struct{} {
+	if len(decisions) == 0 {
+		return previous
+	}
+	if allowed, checkedAll := decisions[""]; checkedAll {
+		if allowed {
+			return nil
+		}
+		return map[string]struct{}{"": {}}
+	}
+	denied := make(map[string]struct{}, len(previous))
+	maps.Copy(denied, previous)
+	for namespace, allowed := range decisions {
+		if allowed {
+			delete(denied, namespace)
+		} else {
+			denied[namespace] = struct{}{}
+		}
+	}
+	return denied
+}
+
+func (run *catalogSync) removeReplacedRows() {
+	for key, row := range run.newItems {
+		gvr := descriptorKeyFromItemKey(key)
+		_, allowed := run.allowedSet[gvr]
+		_, failed := run.failed[gvr]
+		_, replaced := run.succeeded[gvr]
+		if (!allowed && !failed) || replaced || namespaceSetContains(run.completedScopes[gvr], row.Ref.Namespace) || run.rowDenied(gvr, row) {
 			delete(run.newItems, key)
 			delete(run.newLastSeen, key)
 		}
 	}
 }
 
-func (run *catalogSync) applyCollectionResults() []Descriptor {
-	allowedDescriptors := run.orderedAllowedDescriptors()
-	s := run.service
-	s.logInfo(fmt.Sprintf("catalog RBAC allowed %d/%d descriptor(s)", len(allowedDescriptors), len(run.descriptors)))
-	removeDisallowedEntries(run.newItems, run.newLastSeen, run.allowedSet)
-	now := s.now()
-	for gvr, summaries := range run.succeeded {
-		desc := run.allowedSet[gvr]
-		removeDescriptorEntries(run.newItems, run.newLastSeen, gvr)
-		for _, summary := range summaries {
-			key := catalogKey(desc, summary.Ref.Namespace, summary.Ref.Name)
-			run.newItems[key] = summary
-			run.newLastSeen[key] = now
+func (run *catalogSync) addCollectedRows(gvr string, summaries []Summary, now time.Time) {
+	desc := run.allowedSet[gvr]
+	for _, summary := range summaries {
+		if run.rowDenied(gvr, summary) {
+			continue
 		}
+		key := catalogKey(desc, summary.Ref.Namespace, summary.Ref.Name)
+		run.newItems[key] = summary
+		run.newLastSeen[key] = now
 	}
-	if len(allowedDescriptors) == 0 {
-		return nil
-	}
-	return allowedDescriptors
+}
+
+func (run *catalogSync) rowDenied(gvr string, row Summary) bool {
+	_, preflightDenied := run.deniedNamespaces[gvr][row.Ref.Namespace]
+	gr := schema.GroupResource{Group: row.Ref.Group, Resource: row.Ref.Resource}
+	return preflightDenied || namespaceSetContains(run.listDenials[gr], row.Ref.Namespace)
 }
 
 func (run *catalogSync) orderedAllowedDescriptors() []Descriptor {
@@ -884,44 +952,12 @@ func (run *catalogSync) preflightDenied(gvr string) bool {
 	return !allowed && !failed
 }
 
-func (run *catalogSync) restoreFailedDescriptors() {
-	if len(run.failed) == 0 {
-		return
-	}
-	for gvr := range run.failed {
-		restoreDescriptorEntries(run.newItems, run.newLastSeen, run.previousItems, run.previousLastSeen, gvr)
-	}
-	denied := make(map[string]struct{})
-	for _, desc := range run.descriptors {
-		if key := desc.GVR().String(); run.preflightDenied(key) {
-			denied[key] = struct{}{}
-		}
-	}
-	run.restoreMissingRows(denied)
-}
-
-func (run *catalogSync) restoreMissingRows(denied map[string]struct{}) {
-	for key, summary := range run.previousItems {
-		if _, exists := run.newItems[key]; exists {
-			continue
-		}
-		if _, forbidden := denied[descriptorKeyFromItemKey(key)]; forbidden {
-			continue
-		}
-		run.newItems[key] = summary
-		if timestamp, ok := run.previousLastSeen[key]; ok {
-			run.newLastSeen[key] = timestamp
-		}
-	}
-}
-
 // completeResources are the resources this sync listed completely: collected
-// without error and without a forbidden page. A failed resource keeps its
-// previous rows, so a miss there proves nothing.
-func (run *catalogSync) completeResources(denied map[string]struct{}) map[string]struct{} {
+// without an incomplete read. A scoped denial is checked before completeness.
+func (run *catalogSync) completeResources() map[string]struct{} {
 	complete := make(map[string]struct{}, len(run.succeeded))
 	for gvr := range run.succeeded {
-		if _, forbidden := denied[deniedResourceName(run.allowedSet[gvr])]; !forbidden {
+		if !namespaceSetContains(run.listDenials[run.allowedSet[gvr].GVR().GroupResource()], "") {
 			complete[gvr] = struct{}{}
 		}
 	}
@@ -931,21 +967,22 @@ func (run *catalogSync) completeResources(denied map[string]struct{}) map[string
 func (run *catalogSync) publish(descriptors []Descriptor, collectErr error) {
 	s := run.service
 	s.pruneMissing(run.newLastSeen)
-	denied := s.deniedResourceSet()
-	complete := run.completeResources(denied)
+	complete := run.completeResources()
 	// Collection owns these maps until the complete replacement is ready. Swap
 	// rows, identities, list outcome and query state together under the
 	// reader's lock.
 	s.mu.Lock()
 	s.items, s.lastSeen = run.newItems, run.newLastSeen
 	s.catalogIndex.replaceResources(run.allowedSet)
-	s.catalogIndex.replaceListOutcome(complete, denied)
+	s.catalogIndex.completeResources = complete
+	s.catalogIndex.completeNamespaces = run.completedScopes
 	s.catalogIndex.deniedNamespaces = run.deniedNamespaces
+	s.catalogIndex.listDenials = run.listDenials
 	s.cacheRebuilds.Add(1)
 	s.catalogIndex.rebuildCacheFromItems(run.newItems, descriptors)
 	s.mu.Unlock()
 	s.updateHealth(collectErr == nil, run.discoveryFailure != nil || len(run.failed) > 0, collectErr, len(run.failed))
-	run.publishListedDefinitions(complete, denied)
+	run.publishListedDefinitions(complete)
 	s.publishSyncedAttentionSubsets(run.newItems)
 	// Notify after publishing the complete replacement, including rows retained
 	// for failed descriptors, so readers never observe the intermediate batches.

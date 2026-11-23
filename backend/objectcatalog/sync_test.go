@@ -21,7 +21,6 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/stretchr/testify/require"
 	authorizationv1 "k8s.io/api/authorization/v1"
@@ -544,34 +543,6 @@ func TestSortResourceDescriptorsUsesEveryStableTieBreaker(t *testing.T) {
 	}
 }
 
-func TestCatalogSyncRestoreFailedDescriptorsPreservesPriorTimestamps(t *testing.T) {
-	failedDesc := Descriptor{Group: "apps", Version: "v1", Resource: "deployments"}
-	otherDesc := Descriptor{Version: "v1", Resource: "nodes"}
-	failedKey := catalogKey(failedDesc, "default", "api")
-	otherKey := catalogKey(otherDesc, "", "node-a")
-	untimedKey := catalogKey(otherDesc, "", "node-b")
-	timestamp := time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)
-	run := &catalogSync{
-		failed:      map[string]error{failedDesc.GVR().String(): errors.New("list failed")},
-		newItems:    map[string]Summary{otherKey: {Ref: resourcemodel.ResourceRef{Name: "current"}}},
-		newLastSeen: map[string]time.Time{},
-		previousItems: map[string]Summary{
-			failedKey:  {Ref: resourcemodel.ResourceRef{Name: "api"}},
-			otherKey:   {Ref: resourcemodel.ResourceRef{Name: "previous"}},
-			untimedKey: {Ref: resourcemodel.ResourceRef{Name: "node-b"}},
-		},
-		previousLastSeen: map[string]time.Time{failedKey: timestamp, otherKey: timestamp},
-	}
-
-	run.restoreFailedDescriptors()
-	require.Equal(t, "api", run.newItems[failedKey].Ref.Name)
-	require.Equal(t, timestamp, run.newLastSeen[failedKey])
-	require.Equal(t, "current", run.newItems[otherKey].Ref.Name)
-	require.Equal(t, "node-b", run.newItems[untimedKey].Ref.Name)
-	_, hasUntimedTimestamp := run.newLastSeen[untimedKey]
-	require.False(t, hasUntimedTimestamp)
-}
-
 func TestSyncRetainsDataOnPartialFailure(t *testing.T) {
 	ctx := context.Background()
 	scheme := runtime.NewScheme()
@@ -664,6 +635,9 @@ func TestSyncRetainsDataOnPartialFailure(t *testing.T) {
 	}
 
 	shouldFailStateful = true
+	statefulKey := catalogKey(Descriptor{Group: "apps", Version: "v1", Resource: "statefulsets", Namespaced: true}, "default", "stateful-alpha")
+	before := svc.lastSeen[statefulKey]
+	require.Equal(t, current, before)
 	current = current.Add(30 * time.Second)
 	err := svc.sync(ctx)
 	if err == nil {
@@ -679,6 +653,7 @@ func TestSyncRetainsDataOnPartialFailure(t *testing.T) {
 	if svc.Count() != 2 {
 		t.Fatalf("expected catalog to retain previous entries, got %d", svc.Count())
 	}
+	require.Equal(t, before, svc.lastSeen[statefulKey])
 	health := svc.Health()
 	if health.Status != HealthStateDegraded {
 		t.Fatalf("expected degraded health status, got %s", health.Status)
@@ -1197,6 +1172,7 @@ func TestCatalogReplacementStaysPrivateUntilPublication(t *testing.T) {
 			run := newCatalogSync(svc, svc.now())
 			run.descriptors = []Descriptor{desc}
 			run.prepare(t.Context())
+			run.allow(0, desc)
 			next := summaryFromObject("c1", desc, widgetObject("default", "new", "2"))
 			run.succeeded[desc.GVR().String()] = []Summary{next}
 			descriptors := run.applyCollectionResults()

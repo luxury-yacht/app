@@ -232,6 +232,107 @@ func TestDiscoveryKeepsRecheckingAWatchVersionChange(t *testing.T) {
 	require.Equal(t, 4, freshReads)
 }
 
+func TestDiscoveryKeepsAWithdrawnKindCustomBeforeItsFirstPublication(t *testing.T) {
+	definition := establishedWidgetDefinition()
+	builtin := podOnlyResourceLists()
+	widget := &metav1.APIResourceList{GroupVersion: "example.com/v1", APIResources: []metav1.APIResource{
+		{Name: "widgets", Kind: "Widget", Namespaced: true, Verbs: []string{"list"}},
+	}}
+	source := &stubDiscovery{lists: builtin}
+	svc := NewService(Dependencies{ClusterID: "c1"}, nil)
+	svc.discoveryClient = source
+	svc.discoveryInvalidate = func() {}
+	hook := newCRDDiscoveryHook(newWatchNotifier(svc))
+	hook.ReplaceBundles(nil)
+
+	_, err := svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	hook.UpsertBundle(crdBundle(definition))
+	hook.DeleteBundle(crdBundle(definition))
+	source.lists = append(podOnlyResourceLists(), widget)
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	row := apiResourceByName(t, svc.APIResources().Resources, "example.com", "widgets")
+	require.True(t, row.Custom, "lagging discovery must not classify the withdrawn kind as built-in")
+	require.False(t, row.DefinitionPresent)
+	require.True(t, svc.apiResources.discoveryPending())
+
+	source.lists = builtin
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	require.Len(t, svc.APIResources().Resources, 1)
+	require.False(t, svc.apiResources.discoveryPending())
+}
+
+func TestDiscoveryConfirmsCRDAliasRemovalAndTermination(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		update func(*apiextensionsv1.CustomResourceDefinition)
+		serve  func(*metav1.APIResource)
+	}{
+		{
+			name: "last short name and category removed",
+			update: func(crd *apiextensionsv1.CustomResourceDefinition) {
+				crd.Status.AcceptedNames.ShortNames = nil
+				crd.Status.AcceptedNames.Categories = nil
+			},
+			serve: func(resource *metav1.APIResource) {
+				resource.ShortNames = nil
+				resource.Categories = nil
+			},
+		},
+		{
+			name: "terminating resource still served",
+			update: func(crd *apiextensionsv1.CustomResourceDefinition) {
+				crd.Status.Conditions = append(crd.Status.Conditions, apiextensionsv1.CustomResourceDefinitionCondition{
+					Type: apiextensionsv1.Terminating, Status: apiextensionsv1.ConditionTrue,
+				})
+			},
+			serve: func(resource *metav1.APIResource) { resource.Verbs = []string{"get", "list"} },
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			definition := establishedWidgetDefinition()
+			definition.Status.AcceptedNames = definition.Spec.Names
+			definition.Status.AcceptedNames.ShortNames = []string{"wd"}
+			definition.Status.AcceptedNames.Categories = []string{"all"}
+			v1 := &metav1.APIResourceList{GroupVersion: "example.com/v1", APIResources: []metav1.APIResource{{
+				Name: "widgets", Kind: "Widget", Namespaced: true, ShortNames: []string{"wd"}, Categories: []string{"all"},
+				Verbs: []string{"get", "list", "update", "create", "patch"},
+			}}}
+			source := &stubDiscovery{lists: []*metav1.APIResourceList{v1}}
+			svc := NewService(Dependencies{ClusterID: "c1"}, nil)
+			svc.discoveryClient = source
+			invalidations := 0
+			svc.discoveryInvalidate = func() { invalidations++ }
+			hook := newCRDDiscoveryHook(newWatchNotifier(svc))
+			hook.ReplaceBundles([]ingest.Bundle{crdBundle(definition)})
+			_, err := svc.discoverResources(t.Context())
+			require.NoError(t, err)
+			require.False(t, svc.apiResources.discoveryPending())
+			before := invalidations
+
+			updated := definition.DeepCopy()
+			tc.update(updated)
+			hook.UpsertBundle(crdBundle(updated))
+			_, err = svc.discoverResources(t.Context())
+			require.NoError(t, err)
+			require.True(t, svc.apiResources.discoveryPending(), "the stale response must leave discovery pending")
+			require.Equal(t, before+1, invalidations)
+
+			tc.serve(&v1.APIResources[0])
+			_, err = svc.discoverResources(t.Context())
+			require.NoError(t, err)
+			row := apiResourceByName(t, svc.APIResources().Resources, "example.com", "widgets")
+			require.Equal(t, []string(v1.APIResources[0].Verbs), row.Verbs)
+			require.Equal(t, v1.APIResources[0].ShortNames, row.ShortNames)
+			require.Equal(t, v1.APIResources[0].Categories, row.Categories)
+			require.False(t, svc.apiResources.discoveryPending())
+			require.Equal(t, before+2, invalidations)
+		})
+	}
+}
+
 func discoveredAPIGroup(group, resource, kind string, freshness apidiscovery.DiscoveryFreshness) apidiscovery.APIGroupDiscovery {
 	return apidiscovery.APIGroupDiscovery{
 		ObjectMeta: metav1.ObjectMeta{Name: group},

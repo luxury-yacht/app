@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -29,27 +30,84 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
-func (s *Service) collectResource(ctx context.Context, desc Descriptor, namespaces []string, agg *streamingAggregator) ([]Summary, error) {
+// catalogCollection records the actual LIST decisions for one descriptor.
+// Preflight and a previously admitted watch cannot clear a failed LIST's denial.
+type catalogCollection struct {
+	stream          *streamingAggregator
+	previousDenials map[string]struct{}
+	watchedScopes   map[string]struct{}
+	mu              sync.Mutex
+	listDecisions   map[string]bool
+}
+
+func (c *catalogCollection) needsList(namespace string) bool {
+	return c != nil && namespaceSetContains(c.previousDenials, namespace)
+}
+
+func (c *catalogCollection) recordList(namespace string, allowed bool) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.listDecisions == nil {
+		c.listDecisions = make(map[string]bool)
+	}
+	c.listDecisions[namespace] = allowed
+}
+
+func (c *catalogCollection) aggregator() *streamingAggregator {
+	if c == nil {
+		return nil
+	}
+	return c.stream
+}
+
+func (c *catalogCollection) recordWatch(namespace string) {
+	if c == nil {
+		return
+	}
+	if c.watchedScopes == nil {
+		c.watchedScopes = make(map[string]struct{})
+	}
+	c.watchedScopes[namespace] = struct{}{}
+}
+
+// completedScopes is called after every worker for the descriptor has stopped.
+func (c *catalogCollection) completedScopes() map[string]struct{} {
+	scopes := c.watchedScopes
+	for namespace, allowed := range c.listDecisions {
+		if allowed {
+			if scopes == nil {
+				scopes = make(map[string]struct{})
+			}
+			scopes[namespace] = struct{}{}
+		}
+	}
+	return scopes
+}
+
+func (s *Service) collectResource(ctx context.Context, desc Descriptor, namespaces []string, collection *catalogCollection) ([]Summary, error) {
 	if desc.GVR() == apiextensions.Identity.GVR() && s.apiResources.definitionListDenied() {
 		// Recovery after a definite denial needs a newly authorized LIST.
 		// The old reflector's retained rows cannot establish that access returned.
-		return s.listResource(ctx, desc, namespaces, agg)
+		return s.listResource(ctx, desc, namespaces, collection)
 	}
 	// Built-in kinds' Summaries come from their owned reflectors' stores (projected
 	// at intake), for every namespace scope.
-	if summaries, handled, err := s.collectViaIngest(ctx, desc, namespaces, agg); handled {
+	if summaries, handled, err := s.collectViaIngest(ctx, desc, namespaces, collection); handled {
 		return summaries, err
 	}
 	if planCollectionSource(desc).source == collectionSourceSkip {
 		return nil, nil
 	}
 	confirmedCRD := s.deps.IngestSource != nil && s.deps.IngestSource.ReconcileDiscoveredResource(desc.GVR())
-	if summaries, handled, err := s.collectViaDynamicIngest(ctx, desc, namespaces, agg); handled {
+	if summaries, handled, err := s.collectViaDynamicIngest(ctx, desc, namespaces, collection); handled {
 		return summaries, err
 	}
-	summaries, err := s.listResource(ctx, desc, namespaces, agg)
+	summaries, err := s.listResource(ctx, desc, namespaces, collection)
 	if err != nil {
-		return nil, err
+		return summaries, err
 	}
 	if !confirmedCRD && planCollectionSource(desc).promotable {
 		s.maybePromote(desc, len(summaries))
@@ -57,13 +115,13 @@ func (s *Service) collectResource(ctx context.Context, desc Descriptor, namespac
 	return summaries, nil
 }
 
-func (s *Service) listResource(ctx context.Context, desc Descriptor, namespaces []string, agg *streamingAggregator) ([]Summary, error) {
-	return s.listResourceTargets(ctx, desc, listTargets(desc, namespaces), agg)
+func (s *Service) listResource(ctx context.Context, desc Descriptor, namespaces []string, collection *catalogCollection) ([]Summary, error) {
+	return s.listResourceTargets(ctx, desc, listTargets(desc, namespaces), collection)
 }
 
 // Targets are resolved API scopes: an empty string means all namespaces and
 // must not be normalized again as a user-provided namespace filter.
-func (s *Service) listResourceTargets(ctx context.Context, desc Descriptor, targets []string, agg *streamingAggregator) ([]Summary, error) {
+func (s *Service) listResourceTargets(ctx context.Context, desc Descriptor, targets []string, collection *catalogCollection) ([]Summary, error) {
 	dynamicClient := s.deps.Common.DynamicClient
 	if dynamicClient == nil {
 		return nil, errors.New("dynamic client not available")
@@ -76,10 +134,10 @@ func (s *Service) listResourceTargets(ctx context.Context, desc Descriptor, targ
 	}
 
 	if desc.Namespaced && len(targets) > 1 && s.namespaceWorkerLimit(len(targets)) > 1 {
-		return s.listResourceNamespacedParallel(ctx, namespaceable, desc, targets, agg)
+		return s.listResourceNamespacedParallel(ctx, namespaceable, desc, targets, collection)
 	}
 
-	return s.listResourceSequential(ctx, namespaceable, desc, targets, agg)
+	return s.listResourceSequential(ctx, namespaceable, desc, targets, collection)
 }
 
 // scopeNamespaces returns the cluster's configured namespace scope for
@@ -91,86 +149,78 @@ func (s *Service) scopeNamespaces() []string {
 	return s.deps.AllowedNamespaces
 }
 
-// skipForbiddenNamespaceTarget reports whether a per-target list error is a
-// Forbidden for one REAL namespace target — in which case that namespace is
-// skipped instead of blanking the kind's other namespaces (a scoped identity
-// may legitimately hold grants in only a subset of the configured scope).
-// Cluster-wide targets keep propagating Forbidden so permission denial still
-// surfaces where the whole kind is unreadable.
-func skipForbiddenNamespaceTarget(target string, err error) bool {
-	return target != "" && target != metav1.NamespaceAll && apierrors.IsForbidden(err)
-}
-
-func (s *Service) listResourceSequential(ctx context.Context, namespaceable dynamic.NamespaceableResourceInterface, desc Descriptor, targets []string, agg *streamingAggregator) ([]Summary, error) {
+func (s *Service) listResourceSequential(ctx context.Context, namespaceable dynamic.NamespaceableResourceInterface, desc Descriptor, targets []string, collection *catalogCollection) ([]Summary, error) {
 	results := make([]Summary, 0)
+	var failures []error
 	for _, target := range targets {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
+		if err := ctx.Err(); err != nil {
+			return results, err
 		}
-		resourceInterface := resourceInterfaceForTarget(namespaceable, desc.Namespaced, target)
-		items, err := s.listNamespaceItems(ctx, desc, resourceInterface, agg)
+		items, err := s.listCatalogTarget(ctx, namespaceable, desc, target, collection)
 		if err != nil {
-			if skipForbiddenNamespaceTarget(target, err) {
-				continue
-			}
-			return nil, err
+			failures = append(failures, err)
 		}
-		if len(items) > 0 {
-			results = append(results, items...)
-		}
+		results = append(results, items...)
 	}
-	return results, nil
+	return results, errors.Join(failures...)
 }
 
-func (s *Service) listResourceNamespacedParallel(ctx context.Context, namespaceable dynamic.NamespaceableResourceInterface, desc Descriptor, targets []string, agg *streamingAggregator) ([]Summary, error) {
+func (s *Service) listResourceNamespacedParallel(ctx context.Context, namespaceable dynamic.NamespaceableResourceInterface, desc Descriptor, targets []string, collection *catalogCollection) ([]Summary, error) {
 	results := make([]Summary, 0)
+	var failures []error
 	var mu sync.Mutex
 	limit := s.namespaceWorkerLimit(len(targets))
 	err := parallel.ForEach(ctx, targets, limit, func(taskCtx context.Context, target string) error {
-		resourceInterface := resourceInterfaceForTarget(namespaceable, true, target)
-		items, err := s.listNamespaceItems(taskCtx, desc, resourceInterface, agg)
-		if err != nil {
-			if skipForbiddenNamespaceTarget(target, err) {
-				return nil
-			}
-			return err
-		}
-		if len(items) == 0 {
-			return nil
-		}
+		items, err := s.listCatalogTarget(taskCtx, namespaceable, desc, target, collection)
 		mu.Lock()
+		defer mu.Unlock()
+		if err != nil {
+			// An unreadable namespace must not cancel a sibling's permission decision.
+			failures = append(failures, err)
+		}
 		results = append(results, items...)
-		mu.Unlock()
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	return results, nil
+	return results, errors.Join(append(failures, err)...)
 }
 
-func (s *Service) listNamespaceItems(ctx context.Context, desc Descriptor, resourceInterface dynamic.ResourceInterface, agg *streamingAggregator) ([]Summary, error) {
+func (s *Service) listCatalogTarget(ctx context.Context, namespaceable dynamic.NamespaceableResourceInterface, desc Descriptor, target string, collection *catalogCollection) ([]Summary, error) {
 	batchSize := s.opts.PageSize
 	if s.opts.StreamingBatchSize > 0 && s.opts.StreamingBatchSize < batchSize {
 		batchSize = s.opts.StreamingBatchSize
 	}
+	client := resourceInterfaceForTarget(namespaceable, desc.Namespaced, target)
+	rows, err := s.listNamespaceItems(ctx, desc, client, batchSize)
+	if apierrors.IsForbidden(err) {
+		collection.recordList(target, false)
+		s.logDebug(fmt.Sprintf("permission denied listing %s in namespace %q", desc.GVR(), target))
+		return nil, nil
+	}
+	if err == nil {
+		collection.recordList(target, true)
+		if agg := collection.aggregator(); agg != nil {
+			// Publish only after every page was authorized.
+			for batch := range slices.Chunk(rows, batchSize) {
+				agg.emit(batch)
+			}
+		}
+	}
+	return rows, err
+}
+
+func (s *Service) listNamespaceItems(ctx context.Context, desc Descriptor, resourceInterface dynamic.ResourceInterface, batchSize int) ([]Summary, error) {
 	options := metav1.ListOptions{Limit: int64(batchSize)}
 	results := make([]Summary, 0)
 	for {
-		list, denied, err := s.listCatalogPageWithRetry(ctx, desc, resourceInterface, options)
+		list, err := s.listCatalogPageWithRetry(ctx, resourceInterface, options)
 		if err != nil {
 			return nil, err
-		}
-		if denied {
-			return results, nil
 		}
 		if list == nil {
 			return results, nil
 		}
 
-		results = appendCatalogSummaryPage(results, s.catalogSummaryPage(desc, list), agg)
+		results = append(results, s.catalogSummaryPage(desc, list)...)
 		if !advanceCatalogList(&options, list) {
 			break
 		}
@@ -180,12 +230,11 @@ func (s *Service) listNamespaceItems(ctx context.Context, desc Descriptor, resou
 
 func (s *Service) listCatalogPageWithRetry(
 	ctx context.Context,
-	desc Descriptor,
 	resourceInterface dynamic.ResourceInterface,
 	options metav1.ListOptions,
-) (*unstructuredv1.UnstructuredList, bool, error) {
+) (*unstructuredv1.UnstructuredList, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	timeout := s.opts.ListRequestTimeout
 	if timeout <= 0 {
@@ -196,34 +245,18 @@ func (s *Service) listCatalogPageWithRetry(
 		list, err := resourceInterface.List(requestCtx, options)
 		cancel()
 		if err == nil {
-			return list, false, nil
-		}
-		if apierrors.IsForbidden(err) {
-			s.recordDeniedResource(deniedResourceName(desc))
-			s.logDebug(fmt.Sprintf("permission denied listing %s, skipping", desc.GVR().String()))
-			return nil, true, nil
+			return list, nil
 		}
 		if !shouldRetryList(err) || attempt == config.ObjectCatalogListRetryMaxAttempts-1 {
-			return nil, false, err
+			return nil, err
 		}
 		delay := listRetryBackoff(attempt)
-		s.logDebug(fmt.Sprintf("retrying list for %s after error: %v (backoff=%s)", desc.GVR().String(), err, delay))
+		s.logDebug(fmt.Sprintf("retrying catalog LIST after error: %v (backoff=%s)", err, delay))
 		if err := timeutil.SleepWithContext(ctx, delay); err != nil {
-			return nil, false, err
+			return nil, err
 		}
 	}
-	return nil, false, nil
-}
-
-func appendCatalogSummaryPage(results, page []Summary, agg *streamingAggregator) []Summary {
-	if len(page) == 0 {
-		return results
-	}
-	results = append(results, page...)
-	if agg != nil {
-		agg.emit(page)
-	}
-	return results
+	return nil, nil
 }
 
 func advanceCatalogList(options *metav1.ListOptions, list *unstructuredv1.UnstructuredList) bool {

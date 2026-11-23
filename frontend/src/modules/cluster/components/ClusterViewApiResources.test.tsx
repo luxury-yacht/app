@@ -327,6 +327,48 @@ describe('ClusterViewApiResources', () => {
     expect(rowOf('certificates').getAttribute('data-row-focused')).toBe('true');
   });
 
+  it('abandons a pending CRD jump when leaving API Resources', async () => {
+    await start(() => kinds().slice(0, 1));
+    let release: (() => void) | undefined;
+    const parked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const uid = 'abandoned-uid';
+    app.snapshots.respond((request) =>
+      request.domain === 'cluster-api-resources' && request.scope.includes(`anchor.uid=${uid}`)
+        ? parked.then(() =>
+            snapshotResponse({
+              ...request,
+              version: 100,
+              payload: {
+                rows: kinds().slice(0, 1),
+                total: 1,
+                anchor: { found: false, reason: 'unlisted', rank: -1 },
+              },
+            })
+          )
+        : undefined
+    );
+    const jumps = () =>
+      app.snapshots
+        .reads('cluster-api-resources')
+        .filter(({ scope }) => scope.includes(`anchor.uid=${uid}`));
+
+    const show = requireValue(navigateToView, 'mounted navigation hook');
+    await act(async () => show({ ...certificatesDefinition, clusterId: dev.clusterId, uid }));
+    await app.settle();
+    expect(jumps()).toHaveLength(1);
+
+    await view.goTo({ clusterView: 'overview' });
+    await act(async () => requireValue(release, 'parked anchor response')());
+    await view.goTo({ clusterView: 'api-resources' });
+    await app.settle();
+
+    expect(jumps()).toHaveLength(1);
+    expect(view.owners().viewState?.activeClusterTab).toBe('api-resources');
+    expect(rowOf('deployments').getAttribute('data-row-focused')).toBeNull();
+  });
+
   // The first discovery can fail outright: the identity may not be allowed to
   // read the cluster's API discovery, or the API server may be failing. The
   // table must say what happened rather than look like it is still loading,

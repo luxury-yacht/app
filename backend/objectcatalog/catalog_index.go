@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type catalogIndex struct {
@@ -29,16 +30,17 @@ type catalogIndex struct {
 	cachedDescriptors []Descriptor
 	cachesReady       bool
 	// completeResources (GVR strings) are the resources the published sync
-	// listed completely, and deniedResources (resource[.group]) the ones it
-	// found forbidden. They are published with the rows, so a reader judges a
-	// miss against the same publication it read the rows from.
-	completeResources map[string]struct{}
-	deniedResources   map[string]struct{}
+	// listed completely. Publish it and the LIST denials with the rows so
+	// readers judge a miss against the same publication.
+	completeResources  map[string]struct{}
+	completeNamespaces map[string]map[string]struct{}
 	// Definitive per-namespace LIST denials from preflight also gate live
 	// updates from a reflector admitted before access was revoked.
 	deniedNamespaces map[string]map[string]struct{}
-	kindCounts       map[KindInfo]int
-	namespaceCounts  map[string]int
+	// Actual LIST denials remain in force until a fresh authorized LIST.
+	listDenials     map[schema.GroupResource]map[string]struct{}
+	kindCounts      map[KindInfo]int
+	namespaceCounts map[string]int
 
 	// queryEngineStore is the shared querypage engine view of the catalog. It is the
 	// authoritative query state: replaced at full publication and updated in place
@@ -165,11 +167,16 @@ func (idx *catalogIndex) resourceForGroupResource(group, resource string) (strin
 	return "", nil
 }
 
-// replaceListOutcome publishes which resources a sync listed completely and
-// which it found forbidden. Call it under the same lock as the rows.
-func (idx *catalogIndex) replaceListOutcome(complete, denied map[string]struct{}) {
-	idx.completeResources = complete
-	idx.deniedResources = denied
+func (idx *catalogIndex) listDenied(desc Descriptor, namespace string) bool {
+	_, denied := idx.deniedNamespaces[desc.GVR().String()][namespace]
+	return denied || namespaceSetContains(idx.listDenials[desc.GVR().GroupResource()], namespace)
+}
+
+// In a set of LIST or WATCH targets, the empty target covers the whole resource.
+func namespaceSetContains(scopes map[string]struct{}, namespace string) bool {
+	_, all := scopes[""]
+	_, scoped := scopes[namespace]
+	return all || scoped
 }
 
 // descriptorForGroupKind returns the listed resource for a group and kind. The
