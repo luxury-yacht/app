@@ -190,7 +190,7 @@ export function ApiResourcePanel({
       <PanelLifecycleClusterSurface clusterId={kind.clusterId}>
         <ObjectPanelHeader kind={kindLabel} kindAlias={null} name={name} />
         <ObjectPanelTabs tabs={tabs} activeTab={activeTab} onSelect={selectTab} />
-        {outOfDate ? <ApiResourceOutOfDateNotice /> : null}
+        {details && (outOfDate || error) ? <ApiResourceOutOfDateNotice error={error} /> : null}
         <div className="object-panel-content">
           <ApiResourcePanelContent
             activeTab={activeTab}

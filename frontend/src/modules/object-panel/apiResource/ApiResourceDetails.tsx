@@ -30,17 +30,22 @@ const ABSENCE_MESSAGES: Record<Exclude<KindAbsence, 'pending'>, string> = {
 };
 
 /**
- * Shown above a kind's details while the cluster's API discovery cannot read
- * the kind's group: what the panel shows was read before that, and may no
- * longer be what the cluster serves.
+ * Keeps the failure visible alongside the last known kind details.
  */
-export function ApiResourceOutOfDateNotice() {
+export function ApiResourceOutOfDateNotice({ error }: Readonly<{ error: RefreshFailure | null }>) {
   return (
     <output className="resource-deleted-warning">
       <WarningIcon />
       <span>
-        This kind’s API group could not be read from the cluster. These details are the last ones
-        read and may be out of date.
+        {error ? (
+          <>
+            Kind details could not be refreshed.{' '}
+            <ErrorSurface kind="reported" message={failureMessage(error)} />{' '}
+          </>
+        ) : (
+          'This kind’s API group could not be read from the cluster. '
+        )}
+        These details are the last ones read and may be out of date.
       </span>
     </output>
   );

@@ -441,6 +441,30 @@ describe('ApiResourcePanel', () => {
     ]);
   });
 
+  it('refreshes an already loaded schema at the same version', async () => {
+    await start();
+    await openKindPanel();
+    await click(tab('Explain'));
+    await click(field('apiVersion'));
+    app.backend.answer('ExplainKindSchema', () => ({
+      ...deploymentSchema,
+      revision: 'updated-revision',
+      fields: [{ name: 'newField', type: 'string' }],
+    }));
+    const refresh = requireValue(
+      Array.from(panel().querySelectorAll('button')).find(
+        (button) => button.textContent?.trim() === 'Refresh schema'
+      ),
+      'refresh control for the currently displayed schema'
+    );
+    await click(refresh);
+    await click(field('newField'));
+    expect(app.backend.calls('ExplainKindField').map(([, , revision]) => revision)).toEqual([
+      'original-revision',
+      'updated-revision',
+    ]);
+  });
+
   // Panels share a dock group as tabs, and only the front one reads its data.
   // Bringing the kind panel back to the front must show Explain as it was left:
   // the same fields open, the same field selected, and no second schema read.
@@ -477,6 +501,7 @@ describe('ApiResourcePanel', () => {
 
     expect(field('spec').getAttribute('aria-expanded')).toBe('true');
     expect(panel().querySelector('[role="alert"]')).toBeNull();
+    expect(panel().querySelector('output')?.textContent).toContain('discovery is unavailable');
 
     // The cluster signals a change and the panel reads again, which also fails.
     const readsBeforeSignal = deploymentsReads();

@@ -113,7 +113,7 @@ func (n *watchNotifier) runRecoverySync(ctx context.Context) {
 	if err != nil && !errors.Is(err, context.Canceled) {
 		n.service.logWarn(fmt.Sprintf("catalog recovery sync failed: %v", err))
 	}
-	if err != nil || n.service.apiResources.hasPendingRemoval() {
+	if err != nil || n.service.apiResources.discoveryPending() {
 		n.service.requestCatalogRetry()
 	}
 }
@@ -171,13 +171,14 @@ func (h *crdDiscoveryHook) UpsertBundle(bundle ingest.Bundle) {
 	}
 	previous, seen := h.seen[definition.UID]
 	h.seen[definition.UID] = definition
-	if !seen || definitionResource(previous) != definitionResource(definition) {
+	changed := seen && previous.ChangesDiscovery(definition)
+	if !seen || changed {
 		h.publishCustomResources(false)
 	}
 	switch {
 	case !seen:
 		h.notifier.crdAdded(definition)
-	case previous.ChangesDiscovery(definition):
+	case changed:
 		h.notifier.crdDiscoveryChanged()
 	}
 }
@@ -199,9 +200,9 @@ func definitionResource(definition apiextensions.Definition) schema.GroupResourc
 // publishCustomResources tells the API-resource store which resources the
 // seen definitions define, so the kinds it lists are flagged as custom.
 func (h *crdDiscoveryHook) publishCustomResources(listed bool) {
-	custom := make(map[schema.GroupResource]struct{}, len(h.seen))
+	custom := make(crdDefinitions, len(h.seen))
 	for _, definition := range h.seen {
-		custom[definitionResource(definition)] = struct{}{}
+		custom[definitionResource(definition)] = &definition
 	}
 	h.notifier.service.apiResources.setWatchedCustomResources(custom, listed)
 }
@@ -241,7 +242,7 @@ func (n *watchNotifier) crdAdded(definition apiextensions.Definition) {
 		return
 	}
 	gr := schema.GroupResource{Group: definition.Group, Resource: definition.Names.Plural}
-	if _, desc := n.service.resolveGRToDescriptor(gr); desc != nil {
+	if _, desc := n.service.resolveGRToDescriptor(gr); desc != nil && !n.service.apiResources.discoveryPending() {
 		return
 	}
 	n.requestFullSync()

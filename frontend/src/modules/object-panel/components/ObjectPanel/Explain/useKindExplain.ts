@@ -36,7 +36,7 @@ export type FieldExplanationState =
 export const fieldKey = (path: readonly string[]): string => JSON.stringify(path);
 
 const kindScope = (target: KindReadTarget) =>
-  `${target.clusterId}:${target.group}/${target.version}/${target.resource}`;
+  `${target.clusterId}:${target.group}/${target.version}/${target.resource}/${target.kind}`;
 
 const describeFailure = (error: unknown, action: string, clusterId: string): string =>
   errorHandler.handleInline(error, { action, source: 'ExplainTab', clusterId }).message ||

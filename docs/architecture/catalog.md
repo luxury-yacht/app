@@ -196,20 +196,24 @@ collects (Events, kinds that cannot be listed, the metrics API).
   successful LIST results until the CRD reflector has completed its own list
   and can supply live changes. A subscription to a synced reflector publishes
   its complete CRD set in one replay under the store lock. A WATCH denial
-  still allows LIST-based classification. A complete LIST that sees an API
-  change invalidates cached discovery and brings the next catalog sync
-  forward. A definite LIST denial from permission preflight or the LIST
-  request is reported as a permission issue.
+  still allows LIST-based classification. LIST and WATCH record the API
+  changes they observe. Catalog retries use uncached discovery until a
+  complete response confirms the expected kind and served versions. A
+  definite LIST denial from preflight or the request clears classification,
+  even after an earlier WATCH sync. A fresh authorized LIST reopens
+  classification before a complete watch can resume ownership.
 - A removed definition keeps its Custom classification on published rows
-  until complete discovery confirms its API has disappeared. Discovery
-  keeps reading from the server on the catalog's retry cadence while
-  Kubernetes still advertises the kind.
+  while discovery still advertises the same kind. Its definition link is
+  removed immediately, so the row opens kind details while discovery catches
+  up.
 - A partial discovery (some group versions unreachable) keeps the last
   published resources of every group with a failed version, and lists those
   group versions in `FailedGroupVersions`. Browse continues collecting
-  reachable kinds and keeps previous rows for unread descriptors that pass
-  permission preflight. A missing object for an unread descriptor remains
-  unconfirmed. Browse reports degraded health until a complete sync.
+  reachable kinds and keeps previous rows for unread descriptors. A definite
+  namespace LIST denial removes that partition's retained rows and blocks
+  updates from an earlier watch. A missing object for an unread descriptor
+  remains unconfirmed. Successful empty discovery responses are authoritative.
+  Browse degrades only for failures that can affect the kinds it collects.
 - A discovery that fails outright keeps the last published resources and
   records its error in `DiscoveryFailure` until a discovery succeeds again.
   The first failure's error is kept: retries that fail with other text change
@@ -238,17 +242,20 @@ collects (Events, kinds that cannot be listed, the metrics API).
   by resource name; an empty answer means the kind is gone only when discovery
   read the kind's group. Otherwise the panel keeps the row it holds, or says
   the group could not be read. A row shown while its group is unread (held, or
-  retained by the backend) carries a notice that it may be out of date.
+  retained by the backend) carries a notice that it may be out of date. A
+  failed kind-panel request also leaves its last details visible with the
+  failure attached.
 - A CustomResourceDefinition is listed there as the custom kind it defines:
   every row is keyed as the definition that defines its kind or would
   (`<plural>.<group>`), and an anchor for a CustomResourceDefinition resolves
   to that row, so "show in list" lands on it whether or not the classification
   has arrived. A definition whose kind the cluster does not serve (not
-  Established) has no row. For a CRD anchor miss, the domain checks the exact
-  object through `Service.LookupObject`, the same catalog publication Browse
-  reads. This includes CRDs collected by LIST when WATCH is denied. The result
-  is `unlisted` for a matching object and `not-found` for confirmed absence or
-  a different UID. A pending or denied catalog lookup yields `unavailable`.
+  Established) has no row. The domain checks the exact object through
+  `Service.LookupObject`, the catalog publication Browse reads. A supplied UID
+  must match before a row can be focused or reported filtered, even when
+  already on screen. The result is `unlisted` for a matching object with no
+  kind row and `not-found` for confirmed absence or a different UID. A pending
+  or denied catalog lookup yields `unavailable` when identity must be verified.
   Anchor queries bypass the snapshot cache so a retry sees the current catalog
   even when discovery has not changed.
 - On `unlisted`, API Resources hands the current request to Browse. Browse
@@ -266,8 +273,8 @@ collects (Events, kinds that cannot be listed, the metrics API).
   Kubernetes discovery's version ordering. The tab labels the API version
   returned with the schema. A field read carries the tree's document revision.
   If the document has changed, Explain reloads the tree and clears all cached
-  field descriptions together. Missing schemas and failed reads can be retried
-  from the open tab.
+  field descriptions together. The open tab can refresh an already loaded
+  schema or retry a missing schema or failed request.
 
 ## Discovered resource families
 

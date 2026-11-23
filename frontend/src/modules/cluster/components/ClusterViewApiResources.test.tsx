@@ -164,7 +164,7 @@ describe('ClusterViewApiResources', () => {
   // "Show in list" on a CustomResourceDefinition (Alt+click in Browse, or from
   // its panel) lands here, on the custom kind the definition defines.
   it('focuses the kind a CustomResourceDefinition defines when asked to show it in its list', async () => {
-    await start();
+    await start(kinds, { found: true, rank: 1 });
     await view.goTo({ clusterView: 'overview' });
 
     await act(async () => {
@@ -183,6 +183,22 @@ describe('ClusterViewApiResources', () => {
     expect(view.owners().viewState?.activeClusterTab).toBe('api-resources');
     expect(rowOf('certificates').getAttribute('data-row-focused')).toBe('true');
     expect(rowOf('deployments').getAttribute('data-row-focused')).toBeNull();
+  });
+
+  it('checks a supplied definition UID before focusing a row already on screen', async () => {
+    await start(kinds, { found: false, rank: -1, reason: 'not-found' });
+    const show = requireValue(navigateToView, 'mounted navigation hook');
+    await act(async () =>
+      show({ ...certificatesDefinition, clusterId: dev.clusterId, uid: 'deleted-uid' })
+    );
+    await app.settle();
+    expect(
+      app.snapshots.reads().some(({ scope }) => scope.includes('anchor.uid=deleted-uid'))
+    ).toBe(true);
+    expect(rowOf('certificates').getAttribute('data-row-focused')).toBeNull();
+    expect(
+      app.errors.take((record) => record.context?.source === 'resource-grid-anchor')
+    ).toHaveLength(1);
   });
 
   // Right after connecting, the table is served before the cluster's

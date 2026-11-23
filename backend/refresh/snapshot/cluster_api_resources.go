@@ -128,11 +128,17 @@ func (b *ClusterAPIResourcesBuilder) Build(ctx context.Context, scope string) (*
 	issues := clusterAPIResourceIssues(inventory)
 
 	adapter := clusterAPIResourcesQueryAdapter()
+	miss, allowNameMatch := definitionAnchorOutcome(source, query.Request.Anchor)
+	if !allowNameMatch {
+		adapter.AnchorKey = nil
+	}
 	capabilities := clusterAPIResourcesQueryCapabilities()
 	resolved := resolveTypedSnapshotPageViaStore(ClusterAPIResourcesDomainName, rows, query, adapter,
 		querypageSchemaFromAdapter(adapter, lowerTrimAll(capabilities.SortableFields)),
 		newTypedSnapshotPageConfig(capabilities, config.SnapshotClusterAPIResourcesEntryLimit, "API resources", adapter.Kind, issues))
-	resolveDefinitionAnchor(resolved.Envelope.Anchor, query.Request.Anchor, source)
+	if result := resolved.Envelope.Anchor; result != nil && result.Reason == ResourceQueryAnchorNotFound {
+		result.Reason = miss
+	}
 	return &refresh.Snapshot{
 		Domain:  ClusterAPIResourcesDomainName,
 		Scope:   scope,
@@ -146,22 +152,24 @@ func (b *ClusterAPIResourcesBuilder) Build(ctx context.Context, scope string) (*
 	}, nil
 }
 
-// resolveDefinitionAnchor checks the same catalog publication that Browse uses,
-// including definitions collected by LIST when WATCH is denied.
-func resolveDefinitionAnchor(result *ResourceQueryAnchorResult, anchor *ResourceQueryAnchor, source APIResourceSource) {
-	if result == nil || anchor == nil || result.Found || result.Reason != ResourceQueryAnchorNotFound {
-		return
+// A kind row keys by group/resource. When navigation supplies a concrete
+// definition UID, validate that object before a name match can land or filter.
+func definitionAnchorOutcome(source APIResourceSource, anchor *ResourceQueryAnchor) (miss ResourceQueryAnchorReason, allowNameMatch bool) {
+	if anchor == nil {
+		return ResourceQueryAnchorNotFound, true
 	}
 	identity := apiextensions.Identity
 	if anchor.Group != identity.Group || anchor.Version != identity.Version || anchor.Kind != identity.Kind || anchor.Namespace != "" {
-		return
+		return ResourceQueryAnchorNotFound, false
 	}
 	lookup := source.LookupObject(anchor.Namespace, anchor.Group, anchor.Kind, anchor.Name)
 	switch {
 	case lookup.Found && (anchor.UID == "" || anchor.UID == lookup.Summary.Ref.UID):
-		result.Reason = ResourceQueryAnchorUnlisted
+		return ResourceQueryAnchorUnlisted, true
 	case !lookup.Found && !lookup.Absent:
-		result.Reason = ResourceQueryAnchorUnavailable
+		return ResourceQueryAnchorUnavailable, anchor.UID == ""
+	default:
+		return ResourceQueryAnchorNotFound, anchor.UID == ""
 	}
 }
 
@@ -292,6 +300,9 @@ func newClusterAPIResourceEntry(clusterID string, resource objectcatalog.APIReso
 	case !typesKnown:
 	case resource.Custom:
 		entry.Type = apiResourceTypeCustom
+		if !resource.DefinitionPresent {
+			break
+		}
 		definition := resourcemodel.NewResourceRef(resourcemodel.ResourceRef{
 			ClusterID: clusterID,
 			Group:     apiextensions.Identity.Group,

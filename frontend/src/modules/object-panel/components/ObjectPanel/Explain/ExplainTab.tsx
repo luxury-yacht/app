@@ -186,9 +186,14 @@ export default function ExplainTab({ kind, isActive = true }: Readonly<ExplainTa
   const apiVersion = group ? `${group}/${version}` : version;
   return (
     <div className="object-panel-tab-content explain-tab">
-      <p className="explain-api-version">
-        API version <code>{apiVersion}</code>
-      </p>
+      <div className="explain-toolbar">
+        <p className="explain-api-version">
+          API version <code>{apiVersion}</code>
+        </p>
+        <button type="button" className="button generic small" onClick={retrySchema}>
+          Refresh schema
+        </button>
+      </div>
       <div className="explain-tree">
         <FieldTree
           fields={fields ?? []}

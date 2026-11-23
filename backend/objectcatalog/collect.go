@@ -30,6 +30,11 @@ import (
 )
 
 func (s *Service) collectResource(ctx context.Context, desc Descriptor, namespaces []string, agg *streamingAggregator) ([]Summary, error) {
+	if desc.GVR() == apiextensions.Identity.GVR() && s.apiResources.definitionListDenied() {
+		// Recovery after a definite denial needs a newly authorized LIST.
+		// The old reflector's retained rows cannot establish that access returned.
+		return s.listResource(ctx, desc, namespaces, agg)
+	}
 	// Built-in kinds' Summaries come from their owned reflectors' stores (projected
 	// at intake), for every namespace scope.
 	if summaries, handled, err := s.collectViaIngest(ctx, desc, namespaces, agg); handled {

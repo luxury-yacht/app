@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -27,9 +28,11 @@ type APIResource struct {
 	ShortNames []string `json:"shortNames,omitempty"`
 	Verbs      []string `json:"verbs,omitempty"`
 	Categories []string `json:"categories,omitempty"`
-	// Custom reports that a CustomResourceDefinition visible to this identity
-	// defines the resource. It is not part of discovery; the store sets it.
+	// Custom retains the type of a CRD-backed kind until discovery removes it.
 	Custom bool `json:"custom"`
+	// DefinitionPresent reports whether the current CRD source can still see
+	// that definition. Only a present definition can be opened as an object.
+	DefinitionPresent bool `json:"definitionPresent"`
 }
 
 // buildAPIResources folds a groups-and-resources discovery document into one
@@ -136,16 +139,24 @@ func cloneStrings(values []string) []string {
 // apiResourceStore holds the API surface from the last successful discovery.
 // Subscribers are told only when it changes, so the periodic rediscovery of an
 // unchanged cluster stays silent. The zero value is ready to use.
+type crdDefinitions map[schema.GroupResource]*apiextensions.Definition
+
+type definitionExpectation struct {
+	// A nil definition expects the kind to stop being served.
+	definition *apiextensions.Definition
+	revision   uint64
+}
+
 type apiResourceStore struct {
 	mu sync.RWMutex
 	// custom is the latest CRD set. Published rows retain their Custom flag
 	// until discovery confirms that the API is gone.
-	custom            map[schema.GroupResource]struct{}
-	watched           map[schema.GroupResource]struct{}
-	watchListed       bool
-	listedDefinitions map[schema.GroupResource]*apiextensions.Definition
-	published         APIResourceInventory
-	subscribers       subsetSubscribers
+	custom             crdDefinitions
+	watchListed        bool
+	pendingDefinitions map[schema.GroupResource]definitionExpectation
+	definitionRevision uint64
+	published          APIResourceInventory
+	subscribers        subsetSubscribers
 }
 
 // APIResourceInventory is the cluster's API surface as last published.
@@ -174,19 +185,22 @@ type APIResourceInventory struct {
 // customForDiscovery snapshots the current CRD set before a discovery read.
 // The set is replaced wholesale, so it can be read after releasing the lock.
 // A removal needs uncached discovery, including when it was seen through LIST.
-func (s *apiResourceStore) customForDiscovery() (map[schema.GroupResource]struct{}, bool) {
+func (s *apiResourceStore) customForDiscovery() (crdDefinitions, uint64, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.custom, s.hasPendingRemovalLocked()
+	return s.custom, s.definitionRevision, s.discoveryPendingLocked()
 }
 
-func (s *apiResourceStore) hasPendingRemoval() bool {
+func (s *apiResourceStore) discoveryPending() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.hasPendingRemovalLocked()
+	return s.discoveryPendingLocked()
 }
 
-func (s *apiResourceStore) hasPendingRemovalLocked() bool {
+func (s *apiResourceStore) discoveryPendingLocked() bool {
+	if len(s.pendingDefinitions) > 0 {
+		return true
+	}
 	return slices.ContainsFunc(s.published.Resources, func(resource APIResource) bool {
 		_, present := s.custom[resource.groupResource()]
 		return resource.Custom && !present
@@ -197,10 +211,11 @@ func (s *apiResourceStore) hasPendingRemovalLocked() bool {
 // versions that discovery could not read: a group with a failed version keeps
 // the resources last published for it, because a partial answer would
 // re-describe or drop kinds that are only temporarily unreachable.
-func (s *apiResourceStore) replace(discovered []APIResource, failed []schema.GroupVersion, customAtStart map[schema.GroupResource]struct{}) {
+func (s *apiResourceStore) replace(discovered []APIResource, failed []schema.GroupVersion, customAtStart crdDefinitions, revision uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	next := s.published
+	s.confirmDefinitionsLocked(discovered, failed, revision)
 	// Discovery can still advertise a deleted CRD's API. Keep the Custom flag
 	// until the resource disappears from a complete response for its group.
 	fresh := withCustomResources(discovered, s.custom, customAtStart, false)
@@ -212,15 +227,77 @@ func (s *apiResourceStore) replace(discovered []APIResource, failed []schema.Gro
 	s.publishLocked(next)
 }
 
+func (s *apiResourceStore) confirmDefinitionsLocked(discovered []APIResource, failed []schema.GroupVersion, revision uint64) {
+	if len(s.pendingDefinitions) == 0 {
+		return
+	}
+	unread := failedAPIGroups(failed)
+	resources := make(map[schema.GroupResource]APIResource, len(discovered))
+	for _, resource := range discovered {
+		resources[resource.groupResource()] = resource
+	}
+	for key, expected := range s.pendingDefinitions {
+		_, failed := unread[key.Group]
+		if failed || expected.revision > revision {
+			continue
+		}
+		if expected.matches(resources[key]) {
+			delete(s.pendingDefinitions, key)
+		}
+	}
+}
+
+func (e definitionExpectation) matches(resource APIResource) bool {
+	if e.definition == nil {
+		return resource.Kind == ""
+	}
+	return definitionMatchesDiscovery(*e.definition, resource)
+}
+
+func definitionMatchesDiscovery(definition apiextensions.Definition, resource APIResource) bool {
+	names := definition.AcceptedNames
+	if names.Kind == "" {
+		names = definition.Names
+	}
+	versions := slices.Clone(resource.Versions)
+	sort.Strings(versions)
+	return names.Kind == resource.Kind && slices.Equal(definition.ServedVersions(), versions) &&
+		(definition.Scope == apiextensionsv1.NamespaceScoped) == resource.Namespaced &&
+		(names.Singular == "" || names.Singular == resource.Singular) &&
+		sameDiscoveryNames(names.ShortNames, resource.ShortNames) &&
+		sameDiscoveryNames(names.Categories, resource.Categories)
+}
+
+func sameDiscoveryNames(expected, actual []string) bool {
+	// Test and partially populated CRDs may omit accepted names. Compare
+	// declared values without depending on how an API server orders them.
+	if expected == nil {
+		return true
+	}
+	sorted := slices.Clone(actual)
+	sort.Strings(sorted)
+	declared := slices.Clone(expected)
+	sort.Strings(declared)
+	return slices.Equal(declared, sorted)
+}
+
+func resourceScope(resource APIResource) Scope {
+	if resource.Namespaced {
+		return ScopeNamespace
+	}
+	return ScopeCluster
+}
+
 func retainCustomFlags(previous, fresh []APIResource) {
-	custom := make(map[schema.GroupResource]struct{})
+	custom := make(map[schema.GroupResource]APIResource)
 	for _, resource := range previous {
 		if resource.Custom {
-			custom[resource.groupResource()] = struct{}{}
+			custom[resource.groupResource()] = resource
 		}
 	}
 	for i := range fresh {
-		if _, wasCustom := custom[fresh[i].groupResource()]; wasCustom {
+		resource := &fresh[i]
+		if old, wasCustom := custom[resource.groupResource()]; wasCustom && old.Kind == resource.Kind && old.Namespaced == resource.Namespaced {
 			fresh[i].Custom = true
 		}
 	}
@@ -230,13 +307,14 @@ func (r APIResource) groupResource() schema.GroupResource {
 	return schema.GroupResource{Group: r.Group, Resource: r.Resource}
 }
 
-func withCustomResources(resources []APIResource, current, atDiscoveryStart map[schema.GroupResource]struct{}, retainPublished bool) []APIResource {
+func withCustomResources(resources []APIResource, current, atDiscoveryStart crdDefinitions, retainPublished bool) []APIResource {
 	classified := make([]APIResource, len(resources))
 	for i, resource := range resources {
 		key := resource.groupResource()
 		_, defined := current[key]
 		_, definedAtStart := atDiscoveryStart[key]
 		resource.Custom = defined || definedAtStart || (retainPublished && resource.Custom)
+		resource.DefinitionPresent = defined
 		classified[i] = resource
 	}
 	return classified
@@ -305,35 +383,40 @@ func groupVersionNames(groupVersions []schema.GroupVersion) []string {
 }
 
 // setWatchedCustomResources receives reflector updates and its complete relists.
-func (s *apiResourceStore) setWatchedCustomResources(custom map[schema.GroupResource]struct{}, listed bool) {
+func (s *apiResourceStore) setWatchedCustomResources(custom crdDefinitions, listed bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.watched = custom
+	if s.published.CustomListDenied {
+		return
+	}
 	if listed || s.watchListed {
-		s.useWatchedCustomResourcesLocked()
-	} else if !s.published.CustomKnown && !s.published.CustomListDenied {
+		s.watchListed = true
+		s.publishCustomResourcesLocked(custom, false)
+	} else if !s.published.CustomKnown {
 		// Before a complete list, keep the flags for definitions seen so far.
 		s.publishClassificationLocked(s.published, custom)
 	}
 }
 
-func (s *apiResourceStore) useWatchedCustomResourcesLocked() {
-	s.watchListed = true
-	s.listedDefinitions = nil
-	s.publishCustomResourcesLocked(s.watched, false)
+func (s *apiResourceStore) definitionListDenied() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.published.CustomListDenied
 }
 
-func (s *apiResourceStore) publishCustomResourcesLocked(custom map[schema.GroupResource]struct{}, denied bool) {
+func (s *apiResourceStore) publishCustomResourcesLocked(custom crdDefinitions, denied bool) bool {
 	next := s.published
 	next.CustomKnown = !denied
 	next.CustomListDenied = denied
-	s.publishClassificationLocked(next, custom)
+	return s.publishClassificationLocked(next, custom)
 }
 
-func (s *apiResourceStore) publishClassificationLocked(next APIResourceInventory, custom map[schema.GroupResource]struct{}) {
+func (s *apiResourceStore) publishClassificationLocked(next APIResourceInventory, custom crdDefinitions) bool {
+	changed := s.observeDefinitionsLocked(custom)
 	s.custom = custom
 	next.Resources = withCustomResources(next.Resources, custom, nil, !next.CustomListDenied)
 	s.publishLocked(next)
+	return changed
 }
 
 // applyDefinitionList uses the catalog's completed LIST or explicit denial
@@ -341,52 +424,76 @@ func (s *apiResourceStore) publishClassificationLocked(next APIResourceInventory
 func (s *apiResourceStore) applyDefinitionList(rows []Summary, listed, denied bool) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.watchListed || (!listed && !denied) {
-		return false
-	}
 	if denied {
-		s.listedDefinitions = nil
+		s.watchListed = false
 		s.publishCustomResourcesLocked(nil, true)
+		s.pendingDefinitions = nil
 		return false
 	}
-	custom, definitions := listedCustomResources(rows)
-	changed := definitionListChangesDiscovery(s.listedDefinitions, definitions)
-	s.listedDefinitions = definitions
-	s.publishCustomResourcesLocked(custom, false)
-	return changed
+	if s.watchListed || !listed {
+		return false
+	}
+	return s.publishCustomResourcesLocked(listedCustomResources(rows), false)
 }
 
-func listedCustomResources(rows []Summary) (map[schema.GroupResource]struct{}, map[schema.GroupResource]*apiextensions.Definition) {
-	custom := make(map[schema.GroupResource]struct{}, len(rows))
-	definitions := make(map[schema.GroupResource]*apiextensions.Definition, len(rows))
+func listedCustomResources(rows []Summary) crdDefinitions {
+	custom := make(crdDefinitions, len(rows))
 	for _, row := range rows {
 		// Kubernetes names every CRD <plural>.<group>.
 		plural, group, ok := strings.Cut(row.Ref.Name, ".")
 		if ok && plural != "" && group != "" {
 			key := schema.GroupResource{Group: group, Resource: plural}
-			custom[key] = struct{}{}
-			if row.crdDefinition != nil {
-				definitions[key] = row.crdDefinition
-			}
+			custom[key] = row.crdDefinition
 		}
 	}
-	return custom, definitions
+	return custom
 }
 
-func definitionListChangesDiscovery(previous, current map[schema.GroupResource]*apiextensions.Definition) bool {
-	for key, before := range previous {
-		after := current[key]
-		if before.Established && (after == nil || before.ChangesDiscovery(*after)) {
-			return true
-		}
-	}
+func (s *apiResourceStore) observeDefinitionsLocked(current crdDefinitions) bool {
+	revision := s.definitionRevision
+	s.observeDefinitionWithdrawalsLocked(current)
 	for key, after := range current {
-		before := previous[key]
-		if after.Established && (before == nil || !before.Established) {
-			return true
+		before := s.custom[key]
+		if after != nil && after.Established && (before == nil || before.ChangesDiscovery(*after)) {
+			s.expectDefinitionLocked(key, before, after)
 		}
 	}
-	return false
+	return revision != s.definitionRevision
+}
+
+func (s *apiResourceStore) observeDefinitionWithdrawalsLocked(current crdDefinitions) {
+	for key, before := range s.custom {
+		if before == nil || !before.Established {
+			continue
+		}
+		if after, exists := current[key]; !exists {
+			delete(s.pendingDefinitions, key)
+			s.definitionRevision++
+		} else if after != nil && !after.Established {
+			s.expectDiscoveryLocked(key, nil)
+		}
+	}
+}
+
+func (s *apiResourceStore) expectDefinitionLocked(key schema.GroupResource, before, after *apiextensions.Definition) {
+	if before == nil && len(s.published.FailedGroupVersions) == 0 && s.published.DiscoveryFailure == nil &&
+		slices.ContainsFunc(s.published.Resources, func(resource APIResource) bool {
+			return resource.groupResource() == key && definitionMatchesDiscovery(*after, resource)
+		}) {
+		return
+	}
+	s.expectDiscoveryLocked(key, after)
+}
+
+func (s *apiResourceStore) expectDiscoveryLocked(key schema.GroupResource, definition *apiextensions.Definition) {
+	if definition != nil && len(definition.ServedVersions()) == 0 {
+		definition = nil
+	}
+	if s.pendingDefinitions == nil {
+		s.pendingDefinitions = make(map[schema.GroupResource]definitionExpectation)
+	}
+	s.definitionRevision++
+	s.pendingDefinitions[key] = definitionExpectation{definition: definition, revision: s.definitionRevision}
 }
 
 func (run *catalogSync) publishListedDefinitions(complete, denied map[string]struct{}) {

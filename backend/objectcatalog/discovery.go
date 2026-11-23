@@ -19,8 +19,8 @@ import (
 // cache expires, a CRD changes, or a failed read needs another attempt.
 func (s *Service) discoverResources(ctx context.Context) (discoveryResult, error) {
 	s.ensureDiscovery()
-	customAtStart, pendingRemoval := s.apiResources.customForDiscovery()
-	s.refreshDiscoveryCache(pendingRemoval)
+	customAtStart, revision, pending := s.apiResources.customForDiscovery()
+	s.refreshDiscoveryCache(pending)
 	result, err := discoverFromClient(ctx, s.discoveryClient)
 	if err != nil {
 		s.markDiscoveryStale()
@@ -34,17 +34,17 @@ func (s *Service) discoverResources(ctx context.Context) (discoveryResult, error
 	if result.partialFailure != nil {
 		s.markDiscoveryStale()
 	}
-	s.apiResources.replace(result.apiResources, result.failedGroupVersions, customAtStart)
+	s.apiResources.replace(result.apiResources, result.failedGroupVersions, customAtStart, revision)
 	return result, nil
 }
 
-func (s *Service) refreshDiscoveryCache(pendingRemoval bool) {
+func (s *Service) refreshDiscoveryCache(pending bool) {
 	if s.discoveryInvalidate == nil {
 		return
 	}
 	now := s.now()
 	expires := s.discoveryExpiresAt
-	if s.discoveryStale.Swap(false) || pendingRemoval || (!expires.IsZero() && !now.Before(expires)) {
+	if s.discoveryStale.Swap(false) || pending || (!expires.IsZero() && !now.Before(expires)) {
 		s.discoveryInvalidate()
 	} else if !expires.IsZero() {
 		return
@@ -147,12 +147,36 @@ func discoverFromClient(ctx context.Context, discoveryClient discovery.Discovery
 	}
 
 	apiResources := buildAPIResources(groups, resourceLists)
+	listsByVersion := resourceListsByVersion(resourceLists)
+	err = filterDiscoveryFailures(err, func(gv schema.GroupVersion) bool {
+		// The legacy memory cache attaches an error to a successful empty
+		// list. Actual failed requests return no list for that version.
+		list := listsByVersion[gv]
+		return list != nil && len(list.APIResources) == 0
+	})
 	return discoveryResult{
 		apiResources:        apiResources,
 		descriptors:         catalogDescriptors(apiResources),
 		failedGroupVersions: failedGroupVersions(err),
 		partialFailure:      err,
 	}, nil
+}
+
+func filterDiscoveryFailures(err error, exclude func(schema.GroupVersion) bool) error {
+	groups, ok := discovery.GroupDiscoveryFailedErrorGroups(err)
+	if !ok {
+		return err
+	}
+	remaining := make(map[schema.GroupVersion]error, len(groups))
+	for gv, cause := range groups {
+		if !exclude(gv) {
+			remaining[gv] = cause
+		}
+	}
+	if len(remaining) == 0 {
+		return nil
+	}
+	return &discovery.ErrGroupDiscoveryFailed{Groups: remaining}
 }
 
 // failedGroupVersions names the group versions a partial discovery error says
@@ -191,16 +215,12 @@ func catalogDescriptors(apiResources []APIResource) []Descriptor {
 		if !containsVerb(apiResource.Verbs, "list") {
 			continue
 		}
-		scope := ScopeCluster
-		if apiResource.Namespaced {
-			scope = ScopeNamespace
-		}
 		result = append(result, Descriptor{
 			Group:      apiResource.Group,
 			Version:    apiResource.Version,
 			Resource:   apiResource.Resource,
 			Kind:       apiResource.Kind,
-			Scope:      scope,
+			Scope:      resourceScope(apiResource),
 			Namespaced: apiResource.Namespaced,
 		})
 	}

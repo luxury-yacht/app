@@ -143,6 +143,10 @@ func (s *Service) publishIngestSummary(desc Descriptor, summary Summary, deleted
 	key := catalogKey(desc, summary.Ref.Namespace, summary.Ref.Name)
 
 	s.mu.Lock()
+	if _, forbidden := s.catalogIndex.deniedNamespaces[desc.GVR().String()][summary.Ref.Namespace]; forbidden {
+		s.mu.Unlock()
+		return
+	}
 	var change catalogChange
 	changed := true
 	if deleted {
@@ -173,6 +177,7 @@ func (s *Service) replaceIngestCatalogSummariesLocked(gvr schema.GroupVersionRes
 	now := s.now()
 
 	s.mu.Lock()
+	denied := s.catalogIndex.deniedNamespaces[desc.GVR().String()]
 	changes := make([]catalogChange, 0, len(rows))
 	for key, existing := range s.catalogIndex.items {
 		if !summaryMatchesDescriptor(existing, desc) {
@@ -182,6 +187,9 @@ func (s *Service) replaceIngestCatalogSummariesLocked(gvr schema.GroupVersionRes
 		changes = append(changes, change)
 	}
 	for _, summary := range rows {
+		if _, forbidden := denied[summary.Ref.Namespace]; forbidden {
+			continue
+		}
 		key := catalogKey(desc, summary.Ref.Namespace, summary.Ref.Name)
 		changes = append(changes, s.catalogIndex.setItem(key, summary, now))
 	}

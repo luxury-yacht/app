@@ -429,7 +429,7 @@ function useAnchorOnUnmatchedFocusRequest<TRow>({
         matchesGridTableFocusRequest(row, index, keyExtractor, request)
       );
       const supersedesInFlight = started.current && started.current.target !== anchorResult?.target;
-      if (onPage && !supersedesInFlight) {
+      if (onPage && !supersedesInFlight && !request.requiresAnchor) {
         return;
       }
       const target = focusRequestAnchor(request);
@@ -453,7 +453,7 @@ function useAnchorOnUnmatchedFocusRequest<TRow>({
   ]);
 
   useEffect(() => {
-    if (!anchorResult || anchorResult.found) {
+    if (!anchorResult) {
       return;
     }
     const current = started.current;
@@ -461,9 +461,14 @@ function useAnchorOnUnmatchedFocusRequest<TRow>({
       return;
     }
     const { request } = current;
+    if (anchorResult.found && request.requiresAnchor) {
+      setPendingFocusRequest(null);
+      eventBus.emit('gridtable:focus-request', { ...request, requiresAnchor: false });
+      return;
+    }
     // The object exists but has no row here under any filters. A view that
     // lists the object itself may take over.
-    if (anchorResult.reason === 'unlisted' && handedOff(request)) {
+    if (anchorResult.found || (anchorResult.reason === 'unlisted' && handedOff(request))) {
       return;
     }
     setPendingFocusRequest(null);

@@ -19,6 +19,7 @@ import (
 	authorizationv1 "k8s.io/api/authorization/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	clienttesting "k8s.io/client-go/testing"
@@ -137,6 +138,98 @@ func TestCatalogDiscoveryPreservesStaleGroupsAndRevalidates(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, svc.APIResources().Resources, 2)
 	require.Equal(t, "Gadget", apiResourceByName(t, svc.APIResources().Resources, "new.example.com", "gadgets").Kind)
+}
+
+func TestLegacyDiscoveryAcceptsAnEmptyResourceList(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		var body any
+		switch r.URL.Path {
+		case "/api":
+			body = metav1.APIVersions{Versions: []string{"v1"}}
+		case "/apis":
+			body = metav1.APIGroupList{Groups: []metav1.APIGroup{*apiGroup("example.com", "v1", "v1")}}
+		case "/api/v1":
+			body = podOnlyResourceLists()[0]
+		case "/apis/example.com/v1":
+			body = metav1.APIResourceList{GroupVersion: "example.com/v1", APIResources: []metav1.APIResource{}}
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(body)
+	}))
+	t.Cleanup(server.Close)
+	svc := NewService(Dependencies{ClusterID: "c1", Common: common.Dependencies{RestConfig: &rest.Config{Host: server.URL}}}, nil)
+	result, err := svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	require.NoError(t, result.partialFailure)
+	require.Empty(t, svc.APIResources().FailedGroupVersions)
+}
+
+func TestAPIDiscoveryFailureForAnExcludedGroupDoesNotDegradeBrowse(t *testing.T) {
+	svc := NewService(Dependencies{ClusterID: "c1"}, nil)
+	svc.discoveryClient = &groupedDiscovery{
+		lists: []*metav1.APIResourceList{{GroupVersion: "v1"}},
+		err: &discovery.ErrGroupDiscoveryFailed{Groups: map[schema.GroupVersion]error{
+			{Group: "metrics.k8s.io", Version: "v1beta1"}: context.DeadlineExceeded,
+		}},
+	}
+	require.NoError(t, svc.sync(t.Context()))
+	require.Equal(t, HealthStateOK, svc.Health().Status)
+	require.Equal(t, []string{"metrics.k8s.io/v1beta1"}, svc.APIResources().FailedGroupVersions)
+}
+
+func TestDiscoveryKeepsRecheckingAWatchVersionChange(t *testing.T) {
+	v1 := &metav1.APIResourceList{GroupVersion: "example.com/v1", APIResources: []metav1.APIResource{
+		{Name: "widgets", Kind: "Widget", Namespaced: true, Verbs: []string{"list"}},
+	}}
+	source := &stubDiscovery{lists: []*metav1.APIResourceList{v1}}
+	svc := NewService(Dependencies{ClusterID: "c1"}, nil)
+	svc.discoveryClient = source
+	freshReads := 0
+	svc.discoveryInvalidate = func() {
+		freshReads++
+		switch freshReads {
+		case 2:
+			v2 := v1.DeepCopy()
+			v2.GroupVersion = "example.com/v2"
+			source.lists = []*metav1.APIResourceList{v2}
+		case 4:
+			source.lists = podOnlyResourceLists()
+		}
+	}
+	_, err := svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	hook := newCRDDiscoveryHook(newWatchNotifier(svc))
+	definition := establishedWidgetDefinition()
+	hook.ReplaceBundles([]ingest.Bundle{crdBundle(definition)})
+	require.False(t, svc.apiResources.discoveryPending())
+	replacement := definition.DeepCopy()
+	replacement.Spec.Versions[0].Name = "v2"
+	hook.UpsertBundle(crdBundle(replacement))
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	require.True(t, svc.apiResources.discoveryPending(), "a complete but older response cannot confirm the change")
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, []string{"v2"}, apiResourceByName(t, svc.APIResources().Resources, "example.com", "widgets").Versions)
+	require.False(t, svc.apiResources.discoveryPending())
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, 2, freshReads)
+
+	// A definition can keep its storage version and stop serving it.
+	unserved := replacement.DeepCopy()
+	unserved.Spec.Versions[0].Served = false
+	hook.UpsertBundle(crdBundle(unserved))
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	require.True(t, svc.apiResources.discoveryPending())
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	require.False(t, svc.apiResources.discoveryPending())
+	require.Equal(t, 4, freshReads)
 }
 
 func discoveredAPIGroup(group, resource, kind string, freshness apidiscovery.DiscoveryFreshness) apidiscovery.APIGroupDiscovery {

@@ -386,8 +386,9 @@ func TestAPIResourcesFlagKindsDefinedByCRDs(t *testing.T) {
 	require.True(t, custom("example.io", "widgets"))
 
 	hook.DeleteBundle(crdBundle(updated))
-	requireNoAPIResourcesUpdate(t, updates)
+	requireAPIResourcesUpdate(t, updates)
 	require.True(t, custom("example.io", "widgets"))
+	require.False(t, apiResourceByName(t, svc.APIResources().Resources, "example.io", "widgets").DefinitionPresent)
 
 	// The apiserver can still advertise widgets after the deletion event.
 	_, err = svc.discoverResources(t.Context())
@@ -623,8 +624,9 @@ func TestAPIResourceClassificationUsesListUntilACompleteWatchTakesOver(t *testin
 	require.True(t, inventory.CustomListDenied)
 	require.False(t, apiResourceByName(t, inventory.Resources, "example.io", "widgets").Custom)
 
-	// The reflector recovers with an empty list. A slower catalog LIST cannot
-	// bring a deleted definition back after the complete watch takes over.
+	// Fresh LIST access recovers classification. Once a complete watch takes
+	// over, a slower catalog LIST cannot bring a deleted definition back.
+	svc.apiResources.applyDefinitionList(nil, true, false)
 	hook := newCRDDiscoveryHook(newWatchNotifier(svc))
 	hook.ReplaceBundles(nil)
 	svc.apiResources.applyDefinitionList(listed, true, false)
@@ -841,6 +843,52 @@ func TestBrowseKeepsLastKnownObjectsThroughPartialDiscovery(t *testing.T) {
 	}
 }
 
+func TestPartialDiscoveryDropsDeniedNamespaceFromBrowse(t *testing.T) {
+	widget := widgetDesc()
+	reads := []*metav1.APIResourceList{
+		{GroupVersion: "v1", APIResources: []metav1.APIResource{{Name: "events", Kind: "Event"}}},
+		{GroupVersion: widget.GVR().GroupVersion().String(), APIResources: []metav1.APIResource{
+			{Name: widget.Resource, Kind: widget.Kind, Namespaced: true, Verbs: []string{"list"}},
+		}},
+	}
+	source := &groupedDiscovery{groups: groupsForLists(reads), lists: reads}
+	kube := kubefake.NewClientset()
+	revoked := false
+	kube.PrependReactor("create", "selfsubjectaccessreviews", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		review := action.(clienttesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
+		review.Status.Allowed = !revoked || review.Spec.ResourceAttributes.Namespace != "revoked"
+		review.Status.Denied = !review.Status.Allowed
+		return true, review, nil
+	})
+	revokedObject := widgetObject("revoked", "old", "1")
+	visibleObject := widgetObject("visible", "keep", "1")
+	deps := common.Dependencies{KubernetesClient: kube, DynamicClient: widgetDynamicClient(revokedObject, visibleObject)}
+	svc := NewService(Dependencies{
+		ClusterID: "c1", Common: deps, AllowedNamespaces: []string{"revoked", "visible"},
+		CapabilityFactory: func() *capabilities.Service { return capabilities.NewService(capabilities.Dependencies{Common: deps}) },
+	}, nil)
+	svc.discoveryClient = source
+	require.NoError(t, svc.sync(t.Context()))
+	require.Len(t, svc.Query(QueryOptions{}).Items, 2)
+	revoked = true
+	source.lists = reads[:1]
+	source.err = &discovery.ErrGroupDiscoveryFailed{Groups: map[schema.GroupVersion]error{widget.GVR().GroupVersion(): context.DeadlineExceeded}}
+	require.Error(t, svc.sync(t.Context()))
+	visible := summaryFromObject("c1", widget, visibleObject)
+	hidden := summaryFromObject("c1", widget, revokedObject)
+	require.Equal(t, []Summary{visible}, svc.Query(QueryOptions{}).Items)
+	svc.applyIngestCatalogSummary(widget.GVR(), hidden, false)
+	require.Equal(t, []Summary{visible}, svc.Query(QueryOptions{}).Items)
+	svc.replaceIngestCatalogSummariesLocked(widget.GVR(), []Summary{visible, hidden})
+	require.Equal(t, []Summary{visible}, svc.Query(QueryOptions{}).Items)
+	require.Equal(t, "widgets.example.com", svc.LookupObject("revoked", widget.Group, widget.Kind, "old").Denied)
+
+	revoked = false
+	source.lists, source.err = reads, nil
+	require.NoError(t, svc.sync(t.Context()))
+	require.Len(t, svc.Query(QueryOptions{}).Items, 2)
+}
+
 func TestCatalogRefreshesDiscoveryAfterAListOnlyCRDIsEstablished(t *testing.T) {
 	crd := apiextensions.Identity
 	widget := widgetDesc().GVR()
@@ -870,9 +918,9 @@ func TestCatalogRefreshesDiscoveryAfterAListOnlyCRDIsEstablished(t *testing.T) {
 	var freshReads atomic.Int32
 	svc.discoveryInvalidate = func() {
 		switch freshReads.Add(1) {
-		case 1:
+		case 2:
 			source.lists = []*metav1.APIResourceList{definitions, widgets}
-		case 3:
+		case 4:
 			// One fresh response after deletion still advertises the API.
 			source.lists = []*metav1.APIResourceList{definitions}
 		}
@@ -909,6 +957,27 @@ func TestCatalogRefreshesDiscoveryAfterAListOnlyCRDIsEstablished(t *testing.T) {
 			return resource.groupResource() == widget.GroupResource()
 		})
 	}, time.Second, 5*time.Millisecond, "a still-advertised kind keeps retrying until a complete response confirms deletion")
+}
+
+func TestKnownWatchDoesNotOverrideAnExplicitDefinitionListDenial(t *testing.T) {
+	svc := newTestWatchService()
+	svc.discoveryClient = multiVersionDiscovery()
+	_, err := svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	hook := newCRDDiscoveryHook(newWatchNotifier(svc))
+	definition := exampleWidgetDefinition()
+	hook.ReplaceBundles([]ingest.Bundle{definition})
+	require.True(t, svc.APIResources().CustomKnown)
+
+	svc.apiResources.applyDefinitionList(nil, false, true)
+	require.True(t, svc.APIResources().CustomListDenied)
+	require.False(t, svc.APIResources().CustomKnown)
+	hook.ReplaceBundles([]ingest.Bundle{definition})
+	require.True(t, svc.APIResources().CustomListDenied, "an existing store replay cannot restore permission")
+
+	svc.apiResources.applyDefinitionList(nil, true, false)
+	require.True(t, svc.APIResources().CustomKnown)
+	require.False(t, svc.APIResources().CustomListDenied)
 }
 
 // The same contract through the production owners: a real ingest manager that

@@ -34,8 +34,11 @@ type catalogIndex struct {
 	// miss against the same publication it read the rows from.
 	completeResources map[string]struct{}
 	deniedResources   map[string]struct{}
-	kindCounts        map[KindInfo]int
-	namespaceCounts   map[string]int
+	// Definitive per-namespace LIST denials from preflight also gate live
+	// updates from a reflector admitted before access was revoked.
+	deniedNamespaces map[string]map[string]struct{}
+	kindCounts       map[KindInfo]int
+	namespaceCounts  map[string]int
 
 	// queryEngineStore is the shared querypage engine view of the catalog. It is the
 	// authoritative query state: replaced at full publication and updated in place

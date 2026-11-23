@@ -72,6 +72,9 @@ func (s *Service) LookupObject(namespace, group, kind, name string) ObjectLookup
 		return ObjectLookup{Summary: summary, Found: true}
 	}
 	resource := deniedResourceName(desc)
+	if _, denied := idx.deniedNamespaces[desc.GVR().String()][normalizeLookupNamespace(namespace)]; denied {
+		return ObjectLookup{Denied: resource}
+	}
 	if _, denied := idx.deniedResources[resource]; denied {
 		return ObjectLookup{Denied: resource}
 	}

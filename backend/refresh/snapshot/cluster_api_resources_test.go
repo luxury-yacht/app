@@ -69,8 +69,8 @@ func apiResourceTestSource() *fakeAPIResourceSource {
 			{Group: "", Version: "v1", Versions: []string{"v1"}, Kind: "Pod", Resource: "pods", Singular: "pod", Namespaced: true, ShortNames: []string{"po"}, Categories: []string{"all"}, Verbs: verbs},
 			{Group: "", Version: "v1", Versions: []string{"v1"}, Kind: "Node", Resource: "nodes", ShortNames: []string{"no"}, Verbs: verbs},
 			{Group: "autoscaling", Version: "v2", Versions: []string{"v2", "v1"}, Kind: "HorizontalPodAutoscaler", Resource: "horizontalpodautoscalers", Namespaced: true, ShortNames: []string{"hpa"}, Verbs: verbs},
-			{Group: "cert-manager.io", Version: "v1", Versions: []string{"v1"}, Kind: "Certificate", Resource: "certificates", Namespaced: true, ShortNames: []string{"cert", "certs"}, Verbs: verbs, Custom: true},
-			{Group: "cert-manager.io", Version: "v1", Versions: []string{"v1"}, Kind: "ClusterIssuer", Resource: "clusterissuers", Verbs: verbs, Custom: true},
+			{Group: "cert-manager.io", Version: "v1", Versions: []string{"v1"}, Kind: "Certificate", Resource: "certificates", Namespaced: true, ShortNames: []string{"cert", "certs"}, Verbs: verbs, Custom: true, DefinitionPresent: true},
+			{Group: "cert-manager.io", Version: "v1", Versions: []string{"v1"}, Kind: "ClusterIssuer", Resource: "clusterissuers", Verbs: verbs, Custom: true, DefinitionPresent: true},
 		},
 	}
 	source.ready.Store(true)
@@ -160,6 +160,27 @@ func TestClusterAPIResourcesFiltersByTypeScopeAndSearch(t *testing.T) {
 		facetKeys = append(facetKeys, facet.Key)
 	}
 	require.Equal(t, []string{"types", "scopes"}, facetKeys)
+}
+
+func TestAPIResourcesAnchorChecksUIDEvenWhenTheNameHasARow(t *testing.T) {
+	source := apiResourceTestSource()
+	name := "certificates.cert-manager.io"
+	source.definitions = map[string]objectcatalog.Summary{name: {Ref: resourcemodel.ResourceRef{UID: "replacement"}}}
+	builder := apiResourceTestBuilder(source)
+	for _, filters := range []string{"", "&facet.types=Built-in"} {
+		payload := apiResourceTestBuild(t, builder, "?limit=100&anchor.uid=deleted"+definitionAnchor+name+filters)
+		require.Equal(t, ResourceQueryAnchorNotFound, payload.Anchor.Reason)
+		require.False(t, payload.Anchor.Found)
+	}
+	matched := apiResourceTestBuild(t, builder, "?limit=100&anchor.uid=replacement"+definitionAnchor+name)
+	require.True(t, matched.Anchor.Found)
+}
+
+func TestPendingRemovalHasCustomTypeWithoutAnObjectLink(t *testing.T) {
+	resource := objectcatalog.APIResource{Group: "example.com", Version: "v1", Kind: "Widget", Resource: "widgets", Custom: true}
+	row := newClusterAPIResourceEntry("cluster-a", resource, true)
+	require.Equal(t, "Custom", row.Type)
+	require.Nil(t, row.Definition)
 }
 
 // The kind panel reads one row by its resource identity, the way the identity

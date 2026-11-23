@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
 	"strings"
@@ -39,16 +40,21 @@ func (s *Service) preflightNamespaces(desc Descriptor) []string {
 
 // evaluateDescriptor checks if the given descriptor is allowed by the
 // capabilities service: allowed in ANY of its preflight namespaces.
-func (s *Service) evaluateDescriptor(ctx context.Context, svc *capabilities.Service, desc Descriptor) (bool, error) {
+func (s *Service) evaluateDescriptor(ctx context.Context, svc *capabilities.Service, desc Descriptor) (bool, map[string]bool, error) {
 	if svc == nil {
-		return true, nil
+		return true, nil, nil
 	}
 	reviews := descriptorPreflightReviews(desc, s.preflightNamespaces(desc))
 	results, err := svc.Evaluate(ctx, reviews)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
-	return summarizeDescriptorEvaluation(results)
+	var evaluation descriptorEvaluation
+	for i, result := range results {
+		evaluation.record(result, reviews[i].Attributes.Namespace)
+	}
+	allowed, err := evaluation.result()
+	return allowed, evaluation.namespaces, err
 }
 
 func descriptorPreflightReviews(desc Descriptor, namespaces []string) []capabilities.ReviewAttributes {
@@ -68,26 +74,16 @@ func descriptorPreflightReviews(desc Descriptor, namespaces []string) []capabili
 	return reviews
 }
 
-func summarizeDescriptorEvaluation(results []capabilities.CheckResult) (bool, error) {
-	var evaluation descriptorEvaluation
-	for _, result := range results {
-		evaluation.record(result)
-		if evaluation.allowed {
-			return true, nil
-		}
-	}
-	return evaluation.result()
-}
-
 // Namespace grants are any-of. A definitive answer, including denial, takes
 // precedence over a sibling namespace's error in both batch and fallback checks.
 type descriptorEvaluation struct {
-	allowed  bool
-	answered bool
-	firstErr error
+	allowed    bool
+	answered   bool
+	firstErr   error
+	namespaces map[string]bool
 }
 
-func (e *descriptorEvaluation) record(result capabilities.CheckResult) {
+func (e *descriptorEvaluation) record(result capabilities.CheckResult, namespace string) {
 	message := result.Error
 	if message == "" {
 		message = result.EvaluationError
@@ -100,6 +96,12 @@ func (e *descriptorEvaluation) record(result capabilities.CheckResult) {
 	}
 	e.answered = true
 	e.allowed = e.allowed || result.Allowed
+	if namespace != "" {
+		if e.namespaces == nil {
+			e.namespaces = make(map[string]bool)
+		}
+		e.namespaces[namespace] = result.Allowed
+	}
 }
 
 func (e descriptorEvaluation) result() (bool, error) {
@@ -110,7 +112,7 @@ func (e descriptorEvaluation) result() (bool, error) {
 }
 
 // evaluateDescriptorsBatch checks if the given descriptors are allowed by the capabilities service.
-func (s *Service) evaluateDescriptorsBatch(ctx context.Context, svc *capabilities.Service, descriptors []Descriptor) (map[int]bool, map[int]error, error) {
+func (s *Service) evaluateDescriptorsBatch(ctx context.Context, svc *capabilities.Service, descriptors []Descriptor) (map[int]bool, map[int]map[string]bool, error) {
 	allowed := make(map[int]bool, len(descriptors))
 	if len(descriptors) == 0 {
 		return allowed, nil, nil
@@ -129,13 +131,13 @@ func (s *Service) evaluateDescriptorsBatch(ctx context.Context, svc *capabilitie
 		return nil, nil, err
 	}
 
-	allowed, errorsByIndex := summarizeBatchEvaluation(results, plan.indexes, len(descriptors))
+	allowed, namespaces, errorsByIndex := summarizeBatchEvaluation(results, plan, len(descriptors))
 	s.logDescriptorEvaluation(descriptors, plan.indexes, allowed, errorsByIndex)
 
 	if len(errorsByIndex) == 0 {
-		return allowed, errorsByIndex, nil
+		return allowed, namespaces, nil
 	}
-	return allowed, nil, joinDescriptorEvaluationErrors(descriptors, errorsByIndex)
+	return allowed, namespaces, joinDescriptorEvaluationErrors(descriptors, errorsByIndex)
 }
 
 type descriptorEvaluationBatchPlan struct {
@@ -162,31 +164,35 @@ func (s *Service) descriptorEvaluationPlan(descriptors []Descriptor) descriptorE
 
 func summarizeBatchEvaluation(
 	results []capabilities.CheckResult,
-	indexes []int,
+	plan descriptorEvaluationBatchPlan,
 	descriptorCount int,
-) (map[int]bool, map[int]error) {
+) (map[int]bool, map[int]map[string]bool, map[int]error) {
 	evaluations := make(map[int]descriptorEvaluation, descriptorCount)
 	for i, result := range results {
-		if i >= len(indexes) {
+		if i >= len(plan.indexes) {
 			break
 		}
-		idx := indexes[i]
+		idx := plan.indexes[i]
 		evaluation := evaluations[idx]
-		evaluation.record(result)
+		evaluation.record(result, plan.checks[i].Attributes.Namespace)
 		evaluations[idx] = evaluation
 	}
 	allowed := make(map[int]bool, descriptorCount)
+	namespaces := make(map[int]map[string]bool)
 	errorsByIndex := make(map[int]error)
 	for idx, evaluation := range evaluations {
 		granted, err := evaluation.result()
 		if granted {
 			allowed[idx] = true
 		}
+		if len(evaluation.namespaces) != 0 {
+			namespaces[idx] = evaluation.namespaces
+		}
 		if err != nil {
 			errorsByIndex[idx] = err
 		}
 	}
-	return allowed, errorsByIndex
+	return allowed, namespaces, errorsByIndex
 }
 
 func (s *Service) logDescriptorEvaluation(
@@ -389,7 +395,7 @@ func (s *Service) resyncAndChooseNextInterval(ctx context.Context, current, full
 	if err != nil && !errors.Is(err, context.Canceled) {
 		s.logWarn(fmt.Sprintf("catalog resync failed: %v", err))
 	}
-	reconciled := err == nil && !s.apiResources.hasPendingRemoval()
+	reconciled := err == nil && !s.apiResources.discoveryPending()
 	return nextCatalogResyncInterval(reconciled, current, s.opts.FailedSyncRetryInterval, full)
 }
 
@@ -421,6 +427,7 @@ type catalogSync struct {
 	failed            map[string]error
 	allowedIndices    map[int]Descriptor
 	allowedSet        map[string]Descriptor
+	deniedNamespaces  map[string]map[string]struct{}
 	batchEvaluated    bool
 }
 
@@ -451,12 +458,19 @@ func (s *Service) sync(ctx context.Context) error {
 
 func newCatalogSync(s *Service, start time.Time) *catalogSync {
 	currentItems, currentLastSeen, prevResourceCount := s.captureCurrentState()
+	s.mu.RLock()
+	denied := make(map[string]map[string]struct{}, len(s.catalogIndex.deniedNamespaces))
+	for gvr, namespaces := range s.catalogIndex.deniedNamespaces {
+		denied[gvr] = maps.Clone(namespaces)
+	}
+	s.mu.RUnlock()
 	newItems := cloneSummaryMap(currentItems)
 	return &catalogSync{
 		service: s, start: start, prevResourceCount: prevResourceCount,
 		prevItemCount: len(newItems), newItems: newItems,
 		newLastSeen: cloneTimeMap(currentLastSeen), previousItems: currentItems,
 		previousLastSeen: currentLastSeen,
+		deniedNamespaces: denied,
 	}
 }
 
@@ -466,7 +480,9 @@ func (run *catalogSync) discover(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	run.descriptors = result.descriptors
-	run.discoveryFailure = result.partialFailure
+	run.discoveryFailure = filterDiscoveryFailures(result.partialFailure, func(gv schema.GroupVersion) bool {
+		return catalogExcludedGroups.Has(gv.Group)
+	})
 	run.retainUnreadDescriptors(result.failedGroupVersions)
 	if run.service.identity != nil {
 		run.service.identity.replaceDiscovered(run.descriptors)
@@ -570,13 +586,11 @@ func (run *catalogSync) evaluateCapabilities(ctx context.Context) {
 	if run.capabilityService == nil {
 		return
 	}
-	allowed, batchErrors, err := run.service.evaluateDescriptorsBatch(ctx, run.capabilityService, run.descriptors)
-	if err != nil || len(batchErrors) != 0 {
-		return
-	}
-	run.batchEvaluated = true
+	allowed, namespaces, err := run.service.evaluateDescriptorsBatch(ctx, run.capabilityService, run.descriptors)
+	run.batchEvaluated = err == nil
 	for idx, desc := range run.descriptors {
-		if allowed[idx] {
+		run.applyNamespaceDecisions(desc, namespaces[idx])
+		if run.batchEvaluated && allowed[idx] {
 			run.allow(idx, desc)
 		}
 	}
@@ -677,25 +691,21 @@ func (run *catalogSync) collectDescriptor(ctx context.Context, index int, desc D
 		run.recordFailure(desc, err)
 		return err
 	}
-	if !run.batchEvaluated {
-		allowed, err := run.service.evaluateDescriptor(ctx, run.capabilityService, desc)
-		if err != nil {
-			run.recordFailure(desc, err)
-			return err
-		}
-		if !allowed {
-			return nil
-		}
-		run.allow(index, desc)
-	} else if !run.isAllowed(desc) {
+	allowed, err := run.admitDescriptor(ctx, index, desc)
+	if err != nil {
+		run.recordFailure(desc, err)
+		return err
+	}
+	_, stale := run.staleDescriptors[desc.GVR().String()]
+	if !allowed || stale {
 		return nil
 	}
-	if _, stale := run.staleDescriptors[desc.GVR().String()]; stale {
-		return nil
-	}
+	return run.collectAdmittedDescriptor(ctx, desc)
+}
 
+func (run *catalogSync) collectAdmittedDescriptor(ctx context.Context, desc Descriptor) error {
 	summaries, err := run.service.collectResource(
-		ctx, desc, run.service.scopeNamespaces(), run.aggregator,
+		ctx, desc, run.readableNamespaces(desc), run.aggregator,
 	)
 	if err != nil {
 		// Cancellation and bounded initial-read timeouts are incomplete reads too:
@@ -708,6 +718,57 @@ func (run *catalogSync) collectDescriptor(ctx context.Context, index int, desc D
 	run.succeeded[desc.GVR().String()] = summaries
 	run.resultsMu.Unlock()
 	return nil
+}
+
+func (run *catalogSync) admitDescriptor(ctx context.Context, index int, desc Descriptor) (bool, error) {
+	if run.batchEvaluated {
+		return run.isAllowed(desc), nil
+	}
+	allowed, namespaces, err := run.service.evaluateDescriptor(ctx, run.capabilityService, desc)
+	run.applyNamespaceDecisions(desc, namespaces)
+	if allowed {
+		run.allow(index, desc)
+	}
+	return allowed, err
+}
+
+func (run *catalogSync) applyNamespaceDecisions(desc Descriptor, decisions map[string]bool) {
+	if len(decisions) == 0 {
+		return
+	}
+	run.resultsMu.Lock()
+	defer run.resultsMu.Unlock()
+	key := desc.GVR().String()
+	denied := run.deniedNamespaces[key]
+	if denied == nil {
+		denied = make(map[string]struct{})
+	}
+	for namespace, allowed := range decisions {
+		if allowed {
+			delete(denied, namespace)
+		} else {
+			denied[namespace] = struct{}{}
+		}
+	}
+	if len(denied) == 0 {
+		delete(run.deniedNamespaces, key)
+	} else {
+		run.deniedNamespaces[key] = denied
+	}
+}
+
+func (run *catalogSync) readableNamespaces(desc Descriptor) []string {
+	scope := run.service.scopeNamespaces()
+	run.resultsMu.Lock()
+	defer run.resultsMu.Unlock()
+	denied := run.deniedNamespaces[desc.GVR().String()]
+	if len(denied) == 0 {
+		return scope
+	}
+	return slices.DeleteFunc(slices.Clone(scope), func(namespace string) bool {
+		_, forbidden := denied[namespace]
+		return forbidden
+	})
 }
 
 func (run *catalogSync) allow(index int, desc Descriptor) {
@@ -742,10 +803,23 @@ func (run *catalogSync) finish(runErr error) error {
 	descriptorCache := run.applyCollectionResults()
 	collectErr := run.collectionError(runErr)
 	run.restoreFailedDescriptors()
+	run.removeDeniedNamespaceRows()
 	enrichCatalogActionFacts(run.newItems, run.allowedSet, run.failed, run.staleDescriptors)
 	run.publish(descriptorCache, collectErr)
 	run.recordCompletion(collectErr)
 	return collectErr
+}
+
+func (run *catalogSync) removeDeniedNamespaceRows() {
+	if len(run.deniedNamespaces) == 0 {
+		return
+	}
+	for key, item := range run.newItems {
+		if _, forbidden := run.deniedNamespaces[descriptorKeyFromItemKey(key)][item.Ref.Namespace]; forbidden {
+			delete(run.newItems, key)
+			delete(run.newLastSeen, key)
+		}
+	}
 }
 
 func (run *catalogSync) applyCollectionResults() []Descriptor {
@@ -866,6 +940,7 @@ func (run *catalogSync) publish(descriptors []Descriptor, collectErr error) {
 	s.items, s.lastSeen = run.newItems, run.newLastSeen
 	s.catalogIndex.replaceResources(run.allowedSet)
 	s.catalogIndex.replaceListOutcome(complete, denied)
+	s.catalogIndex.deniedNamespaces = run.deniedNamespaces
 	s.cacheRebuilds.Add(1)
 	s.catalogIndex.rebuildCacheFromItems(run.newItems, descriptors)
 	s.mu.Unlock()
