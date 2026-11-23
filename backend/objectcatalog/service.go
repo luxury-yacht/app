@@ -68,14 +68,12 @@ type Service struct {
 	identity   *resourceIdentityResolver
 
 	// discoveryClient is the per-cluster discovery client the catalog re-discovers through.
-	// In production it is a disk-cached, ETag-revalidating, aggregated-discovery client
-	// (built once via ensureDiscovery → buildDiscoveryClient); tests pre-inject it.
-	// discoveryInvalidate is its cache-invalidation hook (nil for a plain, uncached client),
-	// and discoveryStale latches when a CRD change requires the cache to be invalidated on
-	// the next discover so a newly-created CRD is never hidden behind a stale document.
+	// The production client caches aggregate discovery in memory for one bounded
+	// interval. syncMu owns the expiry, and the CRD watch can request an earlier read.
 	discoveryOnce       sync.Once
 	discoveryClient     discovery.DiscoveryInterface
 	discoveryInvalidate func()
+	discoveryExpiresAt  time.Time
 	discoveryStale      atomic.Bool
 
 	// suspendPublication lets source registration replay every kind before query

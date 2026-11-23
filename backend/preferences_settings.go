@@ -433,7 +433,7 @@ func (p *PreferencesService) getSettingsFilePath() (string, error) {
 }
 
 // cacheDirPath returns the app's cache directory (<UserCacheDir>/luxury-yacht):
-// the single home for transient on-disk caches (API discovery, maintained-store
+// the single home for transient on-disk caches (maintained-store
 // spill, diagnostic dumps). It is the cache-tier sibling of the config dir and
 // the one place that defines the cache base, so Factory Reset can clear the
 // whole subtree in one call.

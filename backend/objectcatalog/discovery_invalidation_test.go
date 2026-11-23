@@ -2,23 +2,31 @@ package objectcatalog
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/ingest/ingesttest"
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 	"github.com/luxury-yacht/app/backend/resources/common"
+	apidiscovery "k8s.io/api/apidiscovery/v2"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	fakediscovery "k8s.io/client-go/discovery/fake"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	clienttesting "k8s.io/client-go/testing"
 
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/rest"
 )
 
 // stubDiscovery is a minimal DiscoveryInterface returning a fixed resource list, so the
@@ -40,13 +48,13 @@ func podOnlyResourceLists() []*metav1.APIResourceList {
 	}}
 }
 
-// TestCatalogDiscoveryInvalidatesAfterCRDChange pins the disk-cache invalidation contract:
+// TestCatalogDiscoveryInvalidatesAfterCRDChange pins the cache invalidation contract:
 // a periodic discover serves from the cache (no Invalidate), but once a CRD change has
 // marked discovery stale the next discover Invalidate()s the cache exactly once, so a
 // newly-created CRD is never hidden behind a stale discovery document.
 func TestCatalogDiscoveryInvalidatesAfterCRDChange(t *testing.T) {
 	invalidations := 0
-	svc := &Service{clusterID: "c1"}
+	svc := NewService(Dependencies{ClusterID: "c1"}, nil)
 	svc.discoveryClient = &stubDiscovery{lists: podOnlyResourceLists()}
 	svc.discoveryInvalidate = func() { invalidations++ }
 
@@ -74,6 +82,88 @@ func TestCatalogDiscoveryInvalidatesAfterCRDChange(t *testing.T) {
 	_, err = svc.discoverResources(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 2, invalidations)
+}
+
+func TestCatalogDiscoveryPreservesStaleGroupsAndRevalidates(t *testing.T) {
+	var external atomic.Pointer[[]apidiscovery.APIGroupDiscovery]
+	setExternal := func(groups ...apidiscovery.APIGroupDiscovery) { external.Store(&groups) }
+	setExternal(discoveredAPIGroup("example.com", "widgets", "Widget", apidiscovery.DiscoveryFreshnessCurrent))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var groups []apidiscovery.APIGroupDiscovery
+		switch r.URL.Path {
+		case "/api":
+			groups = []apidiscovery.APIGroupDiscovery{discoveredAPIGroup("", "pods", "Pod", apidiscovery.DiscoveryFreshnessCurrent)}
+		case "/apis":
+			groups = *external.Load()
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", discovery.AcceptV2)
+		_ = json.NewEncoder(w).Encode(apidiscovery.APIGroupDiscoveryList{
+			TypeMeta: metav1.TypeMeta{APIVersion: apidiscovery.SchemeGroupVersion.String(), Kind: "APIGroupDiscoveryList"},
+			Items:    groups,
+		})
+	}))
+	t.Cleanup(server.Close)
+	now := time.Now()
+	svc := NewService(Dependencies{
+		ClusterID: "discovery-test",
+		Common:    common.Dependencies{RestConfig: &rest.Config{Host: server.URL}},
+		Now:       func() time.Time { return now },
+	}, nil)
+
+	_, err := svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	widget := apiResourceByName(t, svc.APIResources().Resources, "example.com", "widgets")
+
+	setExternal(discoveredAPIGroup("example.com", "widgets", "Widget", apidiscovery.DiscoveryFreshnessStale))
+	svc.markDiscoveryStale()
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	inventory := svc.APIResources()
+	require.Equal(t, []string{"example.com/v1"}, inventory.FailedGroupVersions)
+	require.Equal(t, widget, apiResourceByName(t, inventory.Resources, "example.com", "widgets"))
+
+	setExternal(discoveredAPIGroup("example.com", "widgets", "Widget", apidiscovery.DiscoveryFreshnessCurrent))
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	require.Empty(t, svc.APIResources().FailedGroupVersions, "the next sync must be able to detect recovery")
+
+	// A new aggregated API publishes no CRD event. It must still be picked up.
+	setExternal(discoveredAPIGroup("new.example.com", "gadgets", "Gadget", apidiscovery.DiscoveryFreshnessCurrent))
+	now = now.Add(config.ObjectCatalogDiscoveryCacheTTL)
+	_, err = svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	require.Len(t, svc.APIResources().Resources, 2)
+	require.Equal(t, "Gadget", apiResourceByName(t, svc.APIResources().Resources, "new.example.com", "gadgets").Kind)
+}
+
+func discoveredAPIGroup(group, resource, kind string, freshness apidiscovery.DiscoveryFreshness) apidiscovery.APIGroupDiscovery {
+	return apidiscovery.APIGroupDiscovery{
+		ObjectMeta: metav1.ObjectMeta{Name: group},
+		Versions: []apidiscovery.APIVersionDiscovery{{
+			Version: "v1", Freshness: freshness,
+			Resources: []apidiscovery.APIResourceDiscovery{{
+				Resource:     resource,
+				ResponseKind: &metav1.GroupVersionKind{Group: group, Version: "v1", Kind: kind},
+				Scope:        apidiscovery.ScopeNamespace,
+				Verbs:        []string{"list"},
+			}},
+		}},
+	}
+}
+
+func TestCatalogDiscoveryFallsBackToTheExistingClusterClient(t *testing.T) {
+	kube := kubefake.NewClientset()
+	kube.Discovery().(*fakediscovery.FakeDiscovery).Resources = podOnlyResourceLists()
+	svc := NewService(Dependencies{
+		ClusterID: "fallback-discovery",
+		Common:    common.Dependencies{KubernetesClient: kube, RestConfig: &rest.Config{Host: "%%"}},
+	}, nil)
+	_, err := svc.discoverResources(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, "Pod", apiResourceByName(t, svc.APIResources().Resources, "", "pods").Kind)
 }
 
 // crdBundle is the CRD's ingest bundle half the discovery hook reads, as the

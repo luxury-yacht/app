@@ -126,9 +126,7 @@ func registerWatchHandlers(notifier *watchNotifier, svc *Service) {
 	}
 }
 
-// markDiscoveryStale latches that the discovery document changed (a CRD was added or
-// removed), so the next discoverResources invalidates the disk-cached discovery before
-// re-discovering.
+// markDiscoveryStale asks the next discovery pass to fetch a fresh result.
 func (s *Service) markDiscoveryStale() {
 	s.discoveryStale.Store(true)
 }
@@ -147,7 +145,7 @@ func (s *Service) registerCRDDiscoveryHook(notifier *watchNotifier) func() {
 
 // crdDiscoveryHook marks discovery stale when a CustomResourceDefinition
 // changes what API discovery serves, so the next discover invalidates the
-// disk-cached discovery document and a new CRD's kind is not hidden behind it.
+// cached discovery document and a new CRD's kind is not hidden behind it.
 // Bundle sinks see no previous row, so the hook remembers the last definition
 // it saw for each UID. Only the CRD store's write lock calls it, so seen needs
 // no lock of its own.

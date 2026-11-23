@@ -162,8 +162,6 @@ type ResourceGateway struct {
 
 	// openAPIClientFn returns a cluster's OpenAPI v3 client; tests replace it.
 	openAPIClientFn func(common.Dependencies) (openapi.Client, error)
-	// explainDocuments caches the OpenAPI documents Explain reads.
-	explainDocuments *apiresources.DocumentCache
 }
 
 func newResourceGateway(dependencies resourceGatewayDependencies) *ResourceGateway {
@@ -183,6 +181,7 @@ func newResourceGateway(dependencies resourceGatewayDependencies) *ResourceGatew
 	if refreshProjection == nil {
 		refreshProjection = newRefreshResourceProjection()
 	}
+	explainDocuments := apiresources.NewDocumentCache(explainDocumentCacheSize)
 	return &ResourceGateway{
 		resolveClusterDependenciesFn:       dependencies.resolveClusterDependencies,
 		resourceDependenciesForClusterIDFn: dependencies.resourceDependenciesForClusterID,
@@ -196,9 +195,10 @@ func newResourceGateway(dependencies resourceGatewayDependencies) *ResourceGatew
 		nodeMaintenanceStore:               dependencies.nodeMaintenanceStore,
 		operations:                         dependencies.operations,
 		responseCache:                      newDefaultResponseCache(),
-		openAPIClientFn:                    clusterOpenAPIClient,
-		explainDocuments:                   apiresources.NewDocumentCache(explainDocumentCacheSize),
-		ssrrCaches:                         make(map[string]*capabilities.SSRRCache),
+		openAPIClientFn: func(deps common.Dependencies) (openapi.Client, error) {
+			return clusterOpenAPIClient(deps, explainDocuments)
+		},
+		ssrrCaches: make(map[string]*capabilities.SSRRCache),
 	}
 }
 

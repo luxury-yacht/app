@@ -2,12 +2,8 @@ package objectcatalog
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
@@ -15,22 +11,19 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/discovery"
-	disk "k8s.io/client-go/discovery/cached/disk"
+	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/rest"
 )
 
-// discoverResources re-discovers the cluster's resource kinds through the catalog's
-// per-cluster discovery client, which is disk-cached + ETag-revalidating in production. The
-// cache is invalidated when a CRD change marks discovery stale or a published
-// custom row awaits fresh discovery after its definition disappears.
+// discoverResources runs under syncMu and reuses discovery only until the
+// cache expires, a CRD changes, or a failed read needs another attempt.
 func (s *Service) discoverResources(ctx context.Context) ([]Descriptor, error) {
 	s.ensureDiscovery()
 	customAtStart, pendingRemoval := s.apiResources.customForDiscovery()
-	if s.discoveryInvalidate != nil && (s.discoveryStale.Swap(false) || pendingRemoval) {
-		s.discoveryInvalidate()
-	}
+	s.refreshDiscoveryCache(pendingRemoval)
 	result, err := discoverFromClient(ctx, s.discoveryClient)
 	if err != nil {
+		s.markDiscoveryStale()
 		// A cancelled run (the cluster is disconnecting) says nothing about the
 		// cluster's API; any other failure leaves the inventory out of date.
 		if ctx.Err() == nil {
@@ -38,11 +31,28 @@ func (s *Service) discoverResources(ctx context.Context) ([]Descriptor, error) {
 		}
 		return nil, err
 	}
+	if len(result.failedGroupVersions) != 0 {
+		s.markDiscoveryStale()
+	}
 	s.apiResources.replace(result.apiResources, result.failedGroupVersions, customAtStart)
 	return result.descriptors, nil
 }
 
-// ensureDiscovery builds the per-cluster discovery client once (disk-cached when possible),
+func (s *Service) refreshDiscoveryCache(pendingRemoval bool) {
+	if s.discoveryInvalidate == nil {
+		return
+	}
+	now := s.now()
+	expires := s.discoveryExpiresAt
+	if s.discoveryStale.Swap(false) || pendingRemoval || (!expires.IsZero() && !now.Before(expires)) {
+		s.discoveryInvalidate()
+	} else if !expires.IsZero() {
+		return
+	}
+	s.discoveryExpiresAt = now.Add(config.ObjectCatalogDiscoveryCacheTTL)
+}
+
+// ensureDiscovery builds the per-cluster discovery client once,
 // unless one was already set — pre-injected by a test or built by a prior call. Safe to call
 // on every discover.
 func (s *Service) ensureDiscovery() {
@@ -54,10 +64,8 @@ func (s *Service) ensureDiscovery() {
 	})
 }
 
-// buildDiscoveryClient returns a disk-cached, ETag-revalidating, aggregated-discovery client
-// (with its Invalidate hook) when a REST config and a writable cache dir are available, and
-// falls back to a plain discovery client (no caching, nil invalidate) otherwise — so an
-// unavailable or read-only cache never loses discovery.
+// buildDiscoveryClient uses the memory client because it preserves the
+// aggregated discovery response's stale group versions.
 func (s *Service) buildDiscoveryClient() (discovery.DiscoveryInterface, func()) {
 	cfg := s.deps.Common.RestConfig
 	if cfg == nil {
@@ -68,37 +76,14 @@ func (s *Service) buildDiscoveryClient() (discovery.DiscoveryInterface, func()) 
 	}
 	cfgCopy := rest.CopyConfig(cfg)
 	cfgCopy.Timeout = config.ObjectCatalogDiscoveryRequestTimeout
-	if groupsDir, httpDir, err := s.discoveryCacheDirs(); err == nil {
-		if cached, cerr := disk.NewCachedDiscoveryClientForConfig(cfgCopy, groupsDir, httpDir, config.ObjectCatalogDiscoveryCacheTTL); cerr == nil {
-			return cached, cached.Invalidate
-		} else {
-			applog.Debug(s.deps.Logger, fmt.Sprintf("catalog cached discovery unavailable, using plain client: %v", cerr), componentName)
-		}
-	}
 	if dc, derr := discovery.NewDiscoveryClientForConfig(cfgCopy); derr == nil {
-		return dc, nil
+		cached := memory.NewMemCacheClient(dc)
+		return cached, cached.Invalidate
 	}
 	if s.deps.Common.KubernetesClient != nil {
 		return s.deps.Common.KubernetesClient.Discovery(), nil
 	}
 	return nil, nil
-}
-
-// discoveryCacheDirs returns the per-cluster on-disk discovery-cache directories (the group/
-// resource documents and the HTTP-response/ETag cache), under the user cache dir and keyed by
-// a hash of the clusterID so an arbitrary identifier is filesystem-safe.
-func (s *Service) discoveryCacheDirs() (groupsDir, httpDir string, err error) {
-	cacheDir, err := os.UserCacheDir()
-	if err != nil {
-		return "", "", err
-	}
-	base := filepath.Join(cacheDir, "luxury-yacht", "discovery", hashClusterIDForDiscovery(s.clusterID))
-	return filepath.Join(base, "groups"), filepath.Join(base, "http"), nil
-}
-
-func hashClusterIDForDiscovery(id string) string {
-	sum := sha256.Sum256([]byte(id))
-	return hex.EncodeToString(sum[:8])
 }
 
 // discoverResourceDescriptors discovers via a plain (uncached) client built from deps — the

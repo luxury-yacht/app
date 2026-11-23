@@ -10,6 +10,7 @@ package backend
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/internal/errorstatus"
@@ -17,7 +18,9 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/apiresources"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/openapi"
+	"k8s.io/client-go/rest"
 )
 
 // explainDocumentCacheSize bounds the OpenAPI group-version documents kept for
@@ -64,14 +67,25 @@ func (g *ResourceGateway) explainClient(target resourcemodel.ResourceRef) (opena
 	if err != nil {
 		return nil, gvr, err
 	}
-	return g.explainDocuments.Client(target.ClusterID, client), gvr, nil
+	return client, gvr, nil
 }
 
-// clusterOpenAPIClient is the production OpenAPI v3 client: the cluster's
-// discovery client.
-func clusterOpenAPIClient(deps common.Dependencies) (openapi.Client, error) {
+// clusterOpenAPIClient uses the current cluster transport for conditional
+// schema reads. Without a REST config, the existing client reads directly.
+func clusterOpenAPIClient(deps common.Dependencies, documents *apiresources.DocumentCache) (openapi.Client, error) {
 	if deps.KubernetesClient == nil {
 		return nil, errorstatus.ClusterNotReady(errors.New("kubernetes client is not available"))
 	}
-	return deps.KubernetesClient.Discovery().OpenAPIV3(), nil
+	if deps.RestConfig == nil {
+		return deps.KubernetesClient.Discovery().OpenAPIV3(), nil
+	}
+	cfg := rest.CopyConfig(deps.RestConfig)
+	cfg.Wrap(func(next http.RoundTripper) http.RoundTripper {
+		return documents.WrapTransport(deps.ClusterID, next)
+	})
+	client, err := discovery.NewDiscoveryClientForConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create OpenAPI client: %w", err)
+	}
+	return client.OpenAPIV3(), nil
 }

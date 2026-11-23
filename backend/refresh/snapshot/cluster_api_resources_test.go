@@ -10,6 +10,8 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/errorstatus"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -323,6 +325,30 @@ func TestClusterAPIResourcesCannotConfirmAnUnlistedDefinitionBeforeCatalogCollec
 	source.definitionsPending = false
 	payload = apiResourceTestBuild(t, b, "?limit=100"+definitionAnchor+"gadgets.example.io")
 	require.Equal(t, ResourceQueryAnchorNotFound, payload.Anchor.Reason)
+}
+
+func TestClusterAPIResourcesAnchorRetryReadsCurrentCatalog(t *testing.T) {
+	const name = "gadgets.example.io"
+	source := apiResourceTestSource()
+	source.definitionsPending = true
+	builder := apiResourceTestBuilder(source)
+	registry := domain.New()
+	require.NoError(t, registry.Register(refresh.DomainConfig{
+		Name: ClusterAPIResourcesDomainName, BuildSnapshot: builder.Build,
+	}))
+	service := NewServiceWithPermissions(registry, nil, ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"}, nil)
+	scope := "cluster-a|?limit=100" + definitionAnchor + name
+	first, err := service.Build(t.Context(), ClusterAPIResourcesDomainName, scope)
+	require.NoError(t, err)
+	require.Equal(t, ResourceQueryAnchorUnavailable, first.Payload.(ClusterAPIResourcesSnapshot).Anchor.Reason)
+
+	// The CRD list catches up without changing the discovered API surface.
+	source.definitionsPending = false
+	source.definitions = map[string]objectcatalog.Summary{name: {Ref: resourcemodel.ResourceRef{UID: "definition"}}}
+	second, err := service.Build(t.Context(), ClusterAPIResourcesDomainName, scope)
+	require.NoError(t, err)
+	require.Equal(t, ResourceQueryAnchorUnlisted, second.Payload.(ClusterAPIResourcesSnapshot).Anchor.Reason)
+	require.NotEqual(t, first.SourceVersion, second.SourceVersion)
 }
 
 // Only a CustomResourceDefinition is listed here as a row; an object of any

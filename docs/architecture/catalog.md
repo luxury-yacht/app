@@ -188,7 +188,9 @@ collects (Events, kinds that cannot be listed, the metrics API).
 
 - One `ServerGroupsAndResources` call per discovery feeds both the API
   resources and the catalog descriptors; the descriptors are the listable,
-  non-excluded subset at preferred versions.
+  non-excluded subset at preferred versions. The per-cluster memory cache
+  preserves aggregated discovery failures. A CRD change, a failed discovery,
+  or cache expiry forces a fresh server read on the next sync.
 - A resource is `Custom` when a visible CustomResourceDefinition defines it.
   `CustomKnown` means the catalog has a complete CRD list. The catalog uses
   successful LIST results until the CRD reflector has completed its own list
@@ -242,6 +244,8 @@ collects (Events, kinds that cannot be listed, the metrics API).
   reads. This includes CRDs collected by LIST when WATCH is denied. The result
   is `unlisted` for a matching object and `not-found` for confirmed absence or
   a different UID. A pending or denied catalog lookup yields `unavailable`.
+  Anchor queries bypass the snapshot cache so a retry sees the current catalog
+  even when discovery has not changed.
 - On `unlisted`, API Resources hands the current request to Browse. Browse
   narrows its filters and uses the exact CRD identity, including the UID when
   available, to open and focus the page containing the requested definition.
@@ -251,7 +255,9 @@ collects (Events, kinds that cannot be listed, the metrics API).
 - `kubectl explain` output for a kind comes from
   `backend/resources/apiresources`, read from the cluster's OpenAPI v3
   documents on demand (`ResourceGateway.ExplainKindSchema`,
-  `ExplainKindField`). CRD Explain picks the highest served version using
+  `ExplainKindField`). Schema requests use the cluster's current credentials.
+  A conditional GET reuses cached bytes only after the server confirms the
+  document with a 304. CRD Explain picks the highest served version using
   Kubernetes discovery's version ordering. The tab labels the API version
   returned with the schema. A field read carries the tree's document revision.
   If the document has changed, Explain reloads the tree and clears all cached
