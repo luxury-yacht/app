@@ -24,7 +24,8 @@ export interface InlinePart {
   text: string;
 }
 
-const BULLET = /^\s*[-*]\s+(.*)$/;
+const BULLET_PREFIX = /^\s*[-*]\s+/;
+const LINE_BREAK = /[\r\n\u2028\u2029]/;
 const INDENTED = /^(?: {2,}|\t)/;
 
 const appendToList = (
@@ -33,9 +34,11 @@ const appendToList = (
   line: string,
   index: number
 ) => {
-  const bullet = BULLET.exec(line);
-  if (bullet) {
-    const item = { key: index, text: bullet[1].trim() };
+  // Read the prefix separately so the body cannot backtrack over its whitespace.
+  const prefix = BULLET_PREFIX.exec(line);
+  const text = prefix ? line.slice(prefix[0].length) : undefined;
+  if (text !== undefined && !LINE_BREAK.test(text)) {
+    const item = { key: index, text: text.trimEnd() };
     if (current?.kind === 'list') {
       current.items.push(item);
     } else {
